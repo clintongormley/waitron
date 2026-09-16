@@ -2,7 +2,7 @@
 // `device.pairing_closed` (the shut-window refusal on the knock), `device.unauthorized` (the join-status
 // cookie screen and the station route's no-station fold), `device.forbidden_station` and
 // `device.not_found` (the route-owned faults), `device.binding_invalid` (the assign-device-profile
-// route's composite-FK translation for a bad `deviceProfileId`), `management.request_invalid` (the
+// route's FK translation for a bad `deviceProfileId`), `management.request_invalid` (the
 // body/id screens) and `ticket.invalid_transition` (the malformed-item-id screen). The join-request and
 // device-auth codes reach here through the value imports of the verbs/guard that throw them
 // (`join-requests.js`, `device-session.js`, `working-order.js`); `device.join_rate_limited` reaches here
@@ -12,9 +12,9 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, deviceProfiles, devices, ticketItems, withTenant } from "@waitron/db";
+import { asAppUser, deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { kindOfFormFactor, listDeviceProfiles } from "@waitron/layouts";
@@ -34,9 +34,9 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything `mountDeviceApi` needs. `cfg` is the FULL `TillConfig` (the shape `mountTillApi` receives),
- * NOT a `{ tenantId }` subset: the verbs this surface calls are typed `cfg: TillConfig`
- * (`createJoinRequest` reads `cfg.tenantId`/`cfg.locationId` to stamp the request, `listStationQueue`
- * reads `cfg.nodeId` to scope the queue to this node), so the config has to carry those three fields and
+ * not a narrower subset: the verbs this surface calls are typed `cfg: TillConfig`
+ * (`createJoinRequest` reads `cfg.locationId` to stamp the request, `listStationQueue`
+ * reads `cfg.nodeId` to scope the queue to this node), so the config has to carry both fields and
  * a narrower object would not typecheck. The routes touch NONE of the fiscal ids on it. `secureCookies`
  * marks the device cookie `Secure` only under the TLS transport resolved by `boot.ts` — operator
  * TLS or the persisted box leaf. A leaf-less loopback development host stays usable over HTTP.
@@ -110,7 +110,7 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    `device.station_required`, `device.register_required`, `station.not_found`, `device.join_mismatch`
  *    (a wrong number, 400) and `join_request.not_found` (404).
  *    `device.binding_invalid` is the exception: this surface throws it too, from the
- *    assign-device-profile and hardware routes' composite-FK 23503 translation. The accept route
+ *    assign-device-profile and hardware routes' FK 23503 translation. The accept route
  *    raises it as well, through `requireLiveRegister` (`device.ts`), which is why it is the one code
  *    of this group both surfaces answer.
  *    `device.till_required` is not thrown here either (it is the SALE-path guard, device-session.ts) but
@@ -207,11 +207,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // `ENROL_RATE_WINDOW_MS`), throwing `device.join_rate_limited` (429).
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
   // is applied identically and in exactly one place (purchasing-api's `gated`, permission baked in).
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -220,14 +220,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       return fn(tx);
     });
 
-  // A by-id device predicate that ALSO scopes to this tenant — the one place the by-id management
-  // writes build their `.where`. Since RLS was dropped (#255) `withTenant` no longer isolates by
-  // tenant, so a by-id read OR write must carry its own `tenant_id` scope (CLAUDE.md §3;
-  // till-reroute-S3): a globally-unique device UUID is NOT the query's isolation boundary, so a
-  // request scoped to tenant A must update/read zero of tenant B's rows (→ 404 / omitted), never
-  // reassign or revoke a foreign device.
-  const ownDeviceById = (id: string) =>
-    and(eq(devices.tenantId, deps.cfg.tenantId), eq(devices.id, id));
+  // The by-id device predicate — the one place the by-id management writes build their `.where`. One
+  // tenant per database, so the id alone identifies the device; an unknown id updates 0 rows (→ 404).
+  const ownDeviceById = (id: string) => eq(devices.id, id);
 
   // ── Knock (UNAUTHENTICATED) ────────────────────────────────────────────────────────────────────────
   app.post("/api/device/join", (c) =>
@@ -250,7 +245,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
-      const made = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const made = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
         if (auto) {
@@ -260,7 +255,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           // than leaving a pending row nobody can approve. `listDeviceProfiles` is name-ordered, so the
           // first `till` is the deterministic default. The request's own number is always the match, so
           // accept can only return `{ ok: true }` here — the mismatch arm is unreachable in dev.
-          const till = (await listDeviceProfiles(tx, deps.cfg.tenantId)).find(
+          const till = (await listDeviceProfiles(tx)).find(
             (profile) => profile.formFactor === "till",
           );
           if (till === undefined) throw new AppError("device_profile.not_found", {});
@@ -296,7 +291,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const token = raw.slice(dot + 1);
       // The selector goes into a bare-uuid comparison, where a non-uuid would `22P02` a 500.
       if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
-      const status = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const status = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return readJoinStatus(tx, deps.cfg, joinId, token);
       });
@@ -310,7 +305,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // or invalid cookie folds through `requireDevice` to `device.unauthorized` (401) — no handling here.
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       // Echo the binding verbatim, incl. the SP-A.2 §16 till/hardware fields so the client can
       // (SP-B) boot into its hardware. The canvas is no longer a device field — it resolves through the
       // device profile (`GET /api/till`) after the Task 10 cutover. All non-secret config — the reader's
@@ -334,7 +329,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // ── The bound station's queue (DEVICE-GUARDED) ───────────────────────────────────────────────────────
   app.get("/api/device/station", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       // A `kds_station` device is ALWAYS station-bound: accepting one required its station and
       // `requireLiveStation` confirmed it live (`resolveDeviceBinding`). But `requireDevice`
       // authenticates ANY active
@@ -346,9 +341,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // bound `kds_station`; the handheld kind makes it reachable and it is now covered by a test.)
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
       const stationId = device.stationId;
-      const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const queue = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return listStationQueue(tx, deps.cfg, stationId);
+        return listStationQueue(tx, stationId);
       });
       return c.json({ station: { id: stationId, queue } });
     }),
@@ -364,7 +359,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // adds no protection here today; wiring it awaits KDS devices being provisioned with a kds profile.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME
       // `ticket.invalid_transition` the verb raises for an unknown item, never a `22P02` 500.
@@ -376,7 +371,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // `to` reaches `advanceTicketItem` as-is (cast): the verb owns target validation, refusing
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         // `advanceTicketItem` NEVER checks the station (KDS-1), so the station-ownership guard is
         // the route's job: fetch the item's own station and refuse a foreign one BEFORE the bump.
@@ -401,7 +396,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       // The deployment holds one tenant per database. Newest enrolment first. The device KIND has no
       // column any more — it is DERIVED from the device's profile form factor (`kindOfFormFactor`), read
-      // through an inner join on the tenant-consistent (tenant_id, device_profile_id), which always
+      // through an inner join on `device_profile_id`, which always
       // matches since `device_profile_id` is NOT NULL with a RESTRICT FK.
       const rows = await gated(sessionId, (tx) =>
         tx
@@ -416,17 +411,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             enrolledAt: devices.enrolledAt,
           })
           .from(devices)
-          .innerJoin(
-            deviceProfiles,
-            and(
-              eq(deviceProfiles.tenantId, devices.tenantId),
-              eq(deviceProfiles.id, devices.deviceProfileId),
-            ),
-          )
-          // Scope the list to THIS tenant explicitly — since RLS was dropped (#255) `withTenant` no
-          // longer isolates SELECTs, so without this a manager sees (and, via the by-id writes below,
-          // could reassign/revoke) every tenant's devices in a multi-tenant DB (CLAUDE.md §3).
-          .where(eq(devices.tenantId, deps.cfg.tenantId))
+          .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
           .orderBy(desc(devices.enrolledAt)),
       );
       return c.json(
@@ -475,11 +460,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // `management.request_invalid` 400 naming the field), the shared `requireBodyUuid` screen.
       const body = await readJsonBody<{ deviceProfileId?: unknown }>(c);
       const deviceProfileId = requireBodyUuid(body.deviceProfileId, "deviceProfileId");
-      // A non-null target must be one of THIS tenant's own device profiles. Rather than
+      // A non-null target must name a device profile that exists. Rather than
       // a read-then-write pre-check (which leaves a delete-between-check-and-update race surfacing a
-      // raw FK 500), let the composite FK `devices_device_profile_fk (tenant_id, device_profile_id)` be
-      // the guard: tenant-isolated (a cross-tenant id looks for `(this_tenant, id)` and misses — never
-      // binds, never leaks) AND atomic with the UPDATE (no window). A 23503 on it → `device.binding_invalid`
+      // raw FK 500), let the FK `devices_device_profile_fk (device_profile_id)` be
+      // the guard: it is atomic with the UPDATE (no window). Existence is all it can check — every
+      // profile in the database belongs to the one taxpayer. A 23503 on it → `device.binding_invalid`
       // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper.
       // Any other error rethrows raw.
       let updated: { id: string }[];
@@ -540,10 +525,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       if (Object.keys(set).length === 0) {
         throw new AppError("management.request_invalid", { field: "hardware" });
       }
-      // Tenant + id scope — a by-id write STILL scopes to the tenant (CLAUDE.md §3: one-tenant-per-db
-      // is not the query's isolation boundary), so another tenant's device id updates 0 rows → 404, the
-      // assign-device-profile / revoke by-id idiom. A `receiptPrinterId` naming no printer of this
-      // tenant reaches the composite `devices_receipt_printer_fk` and is translated to
+      // By-id scope — an unknown device id updates 0 rows → 404, the assign-device-profile / revoke
+      // by-id idiom. A `receiptPrinterId` naming no printer at all
+      // reaches `devices_receipt_printer_fk` and is translated to
       // `device.binding_invalid` naming the field (the same `bindingFkField` helper + shape the reassign
       // route uses); any other error rethrows raw.
       let updated: {
@@ -574,19 +558,19 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // Mounted ONLY in devMode, so outside dev this route DOES NOT EXIST (404) — the same fail-closed shape
   // as the override header. The chooser lists the venue's active devices so a browser can adopt one via
   // the dev-override header; the mint-and-adopt and reset routes it used to sit beside are gone. A
-  // browser with no device knocks like any other. The read runs under `withTenant` + `asAppUser`;
+  // browser with no device knocks like any other. The read runs under `withTransaction` + `asAppUser`;
   // nothing here returns a token or reader credential.
   if (deps.devMode) {
     app.get("/api/dev/devices", (c) =>
       run(c, log, async () =>
         c.json(
-          await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await withTransaction(deps.db, async (tx) => {
             await asAppUser(tx);
             // Active-only projection — the switcher chooses among devices a browser can BECOME, and a
             // revoked device is not one. NO token/tokenHash column is selected: the credential never
             // leaves the enrol Set-Cookie header (§device-session), so this list carries only bindings.
             // The device KIND is derived from the profile's form factor (`kindOfFormFactor`) through an
-            // inner join on the tenant-consistent (tenant_id, device_profile_id), always matching since
+            // inner join on `device_profile_id`, always matching since
             // `device_profile_id` is NOT NULL with a RESTRICT FK.
             const deviceRows = await tx
               .select({
@@ -598,13 +582,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
                 active: devices.active,
               })
               .from(devices)
-              .innerJoin(
-                deviceProfiles,
-                and(
-                  eq(deviceProfiles.tenantId, devices.tenantId),
-                  eq(deviceProfiles.id, devices.deviceProfileId),
-                ),
-              )
+              .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
               .where(eq(devices.active, true))
               .orderBy(desc(devices.enrolledAt));
             return {

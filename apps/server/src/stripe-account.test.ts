@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type Stripe from "stripe";
-import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
-import { isAppError } from "@waitron/shared";
+import { isAppError, type AppError } from "@waitron/shared";
 import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
@@ -20,10 +20,9 @@ const ring = loadKeyRing(KEY_ENV);
 
 describe("stripeAccountResolver", () => {
   it("builds the account from the tenant's own secret key", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_tenant_one",
@@ -45,7 +44,7 @@ describe("stripeAccountResolver", () => {
       },
     });
 
-    const account = await resolve(tenantId);
+    const account = await resolve();
     // The KEY is the tenant scoping: a Stripe account is standalone (one per merchant, no Connect),
     // so building the client from the wrong tenant's key settles real money against the wrong
     // merchant with no error anywhere.
@@ -55,20 +54,20 @@ describe("stripeAccountResolver", () => {
   });
 
   it("surfaces the vault's own code when the tenant has no Stripe credential", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     const resolve = stripeAccountResolver({
       db: suite.db,
       ring,
       environment: "preproduction",
       makeStripe: () => ({}) as Stripe,
     });
-    const error = await captureError(() => resolve(tenantId));
+    const error = await captureError(() => resolve());
     expect(isAppError(error) && error.code).toBe("credentials.missing");
   });
 });
 
 describe("stripeSecretKeyFrom", () => {
-  const REF = { tenantId: "11111111-1111-1111-1111-111111111111", purpose: "payments.stripe" };
+  const REF = { purpose: "payments.stripe" };
 
   // Driven directly rather than through a forged database row, the same reasoning as
   // aeat-transport.test.ts's certMaterialFrom cases: `putCredential` validates every required field
@@ -88,13 +87,10 @@ describe("stripeSecretKeyFrom", () => {
     const error = await captureError(() =>
       Promise.resolve(stripeSecretKeyFrom({ secretKey: "sk_test_abc123" }, REF, "production")),
     );
-    expect(error).toMatchObject({
-      code: "payment.credential_environment_mismatch",
-      params: {
-        tenantId: REF.tenantId,
-        keyEnvironment: "preproduction",
-        hostEnvironment: "production",
-      },
+    expect(error).toMatchObject({ code: "payment.credential_environment_mismatch" });
+    expect((error as AppError).params).toEqual({
+      keyEnvironment: "preproduction",
+      hostEnvironment: "production",
     });
   });
 

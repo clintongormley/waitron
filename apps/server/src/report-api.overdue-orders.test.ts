@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -15,7 +15,6 @@ import "./errors.js";
 // Its fixture is separate from the overview suite's current-day sales.
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let tillId: string;
 let nodeId: string;
 let locationId: string;
@@ -30,58 +29,59 @@ async function seedFiredOrder(
   opts: { orderNumber: number; ageMinutes: number; stationId: string; tableLabel?: string },
 ): Promise<string> {
   const catalogue = await db.execute<{ id: string }>(
-    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Test catalogue') returning id`,
+    sql`insert into catalogues (name) values ('Test catalogue') returning id`,
   );
   const product = await db.execute<{ id: string }>(sql`
-    insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-    values (${tenantId}, ${catalogue.rows[0]!.id}, 'Item', 'each', '1.00', 'general')
+    insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+    values (${catalogue.rows[0]!.id}, 'Item', 'each', '1.00', 'general')
     returning id`);
   const order = await db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, node_id, order_number, status)
-    values (${tenantId}, ${tillId}, ${nodeId}, ${opts.orderNumber}, 'open') returning id`);
+    insert into working_orders (till_id, node_id, order_number, status)
+    values (${tillId}, ${nodeId}, ${opts.orderNumber}, 'open') returning id`);
   const orderId = order.rows[0]!.id;
   const line = await db.execute<{ id: string }>(sql`
     insert into working_order_lines (
-      tenant_id, working_order_id, line_no, product_id, name, descriptions, quantity,
+      working_order_id, line_no, product_id, name, descriptions, quantity,
       unit_price, unit_price_gross, vat_rate, line_total
     ) values (
-      ${tenantId}, ${orderId}, 1, ${product.rows[0]!.id}, 'Item', '{"es-ES":"Item"}'::jsonb, '1.000',
+      ${orderId}, 1, ${product.rows[0]!.id}, 'Item', '{"es-ES":"Item"}'::jsonb, '1.000',
       '1.00', '1.00', '10.00', '1.00'
     ) returning id`);
   await db.execute(sql`
-    insert into ticket_items (tenant_id, node_id, working_order_id, working_order_line_id, station_id, queued_at, fired_at)
+    insert into ticket_items (node_id, working_order_id, working_order_line_id, station_id, queued_at, fired_at)
     values (
-      ${tenantId}, ${nodeId}, ${orderId}, ${line.rows[0]!.id}, ${opts.stationId},
+      ${nodeId}, ${orderId}, ${line.rows[0]!.id}, ${opts.stationId},
       now() - (${opts.ageMinutes} * interval '1 minute'), now()
     )`);
   if (opts.tableLabel !== undefined) {
     await db.execute(sql`
-      insert into dining_tables (tenant_id, location_id, label, tab_id)
-      values (${tenantId}, ${locationId}, ${opts.tableLabel}, ${orderId})`);
+      insert into dining_tables (location_id, label, tab_id)
+      values (${locationId}, ${opts.tableLabel}, ${orderId})`);
   }
   return orderId;
 }
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+      insert into tills (location_id, name)
+      values (${locationId}, 'Caja 1') returning id`);
     tillId = till.rows[0]!.id;
     const node = await db.execute<{ id: string }>(sql`
-      insert into nodes (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Nodo 1') returning id`);
+      insert into nodes (location_id, name)
+      values (${locationId}, 'Nodo 1') returning id`);
     nodeId = node.rows[0]!.id;
     const station = await db.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name, is_default)
-      values (${tenantId}, ${locationId}, 'Cocina', true) returning id`);
+      insert into kitchen_stations (location_id, name, is_default)
+      values (${locationId}, 'Cocina', true) returning id`);
     const stationId = station.rows[0]!.id;
 
     // Default thresholds (5/10/15): 20 minutes is well past forgotten.
@@ -89,20 +89,18 @@ const suite = usePgliteDb({
 
     // A MANAGER (role `manager`, holds report.view) and a STAFF person (holds nothing), each with a
     // live management session so the route tests drive the gate through a real cookie.
-    const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -114,7 +112,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId } }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId } }, noopLog);
   return app;
 }
 

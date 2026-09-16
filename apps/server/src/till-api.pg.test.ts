@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTenant, workingOrders } from "@waitron/db";
+import { asAppUser, sales, withTransaction, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -28,7 +28,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { MANUAL_PROVIDER, SimulatorPaymentProvider } from "@waitron/payments";
@@ -64,7 +63,7 @@ const LOCALE = "es-ES";
 
 // A non-superuser LOGIN role that inherits `app_user`'s grants, for Task 7's `/api/pay` tests: the
 // `StripeTerminalProvider` this file wires in for those tests does NOT run its own writes through
-// `withTenant` + `asAppUser` (`insertAttempting`/`captureAttempting`/`failAttempting` execute at
+// `withTransaction` + `asAppUser` (`insertAttempting`/`captureAttempting`/`failAttempting` execute at
 // whatever role its `db` handle carries — see that class's own "Present because…" doc comment), so
 // `suite.admin` there would write the `payments` ledger as a superuser holding every privilege — the
 // same reasoning `till-sale-integrated.pg.test.ts`'s `integratedDeps` documents for its own
@@ -119,7 +118,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -181,16 +179,15 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { available, operatorId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { available, operatorId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
-      select id, seed_key from units
-      where tenant_id = ${cfg.tenantId} and seed_key = 'kg'`);
+      select id, seed_key from units where seed_key = 'kg'`);
     const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
-    const jamon = await createProduct(tx, cfg.tenantId, {
+    const jamon = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: comida.id,
       name: "Jamón cortado",
@@ -198,7 +195,7 @@ async function setupVenue(): Promise<{
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const agua = await createProduct(tx, cfg.tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -207,46 +204,46 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: cat.id,
       name: { es: "Carta" },
     });
-    const jamonItem = await createMenuItem(tx, cfg.tenantId, {
+    const jamonItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: jamon.id,
       sectionId: section.id,
       grossPrice: "24.90",
     });
-    const aguaItem = await createMenuItem(tx, cfg.tenantId, {
+    const aguaItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: agua.id,
       sectionId: section.id,
       grossPrice: "1.50",
     });
     await tx.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
-      select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+      insert into zone_menus (zone_id, menu_id, display_order)
+      select zone_id, ${cat.id}, 0
       from zone_service_policies
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+      where location_id = ${cfg.locationId}
         and is_counter_default`);
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id}
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+      where location_id = ${cfg.locationId}
         and is_counter_default`);
     await tx.execute(sql`
-      insert into preparation_routes (tenant_id, location_id, category_id, station_id)
+      insert into preparation_routes (location_id, category_id, station_id)
       values
-        (${cfg.tenantId}, ${cfg.locationId}, ${comida.id},
+        (${cfg.locationId}, ${comida.id},
           (select id from kitchen_stations
-           where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default)),
-        (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id},
+           where location_id = ${cfg.locationId} and is_default)),
+        (${cfg.locationId}, ${bebidas.id},
           (select id from kitchen_stations
-           where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default))`);
+           where location_id = ${cfg.locationId} and is_default))`);
     // A staff person with a KNOWN PIN ("5555"), inserted on the app role (which holds INSERT on
     // `persons`), so the login route can verify their credential and the sale is attributed to them.
     const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Cajera', ${hashPin("5555")}, 'staff') returning id`);
     const menuItems = new Map([
       [jamon.id, jamonItem.id],
       [agua.id, aguaItem.id],
@@ -263,7 +260,7 @@ async function setupVenue(): Promise<{
 }
 
 /** The till API's deps for a provisioned venue: the owner connection (routes drop to `app_user`
- * themselves via `withTenant` + `asAppUser`), the real fiscal backend + system clock the sale path
+ * themselves via `withTransaction` + `asAppUser`), the real fiscal backend + system clock the sale path
  * files through, and `secureCookies:false` so the session cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TillConfig): TillApiDeps {
   // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
@@ -294,7 +291,7 @@ const RING = loadKeyRing({
  * two-readers-one-provider regression below prove the ref is not baked in. The provider is given its
  * OWN `providerDb` handle (a `PROBE_ROLE` connection the test opens/closes), since the provider's
  * `payments`-ledger writes run at whatever role THAT handle carries (see `PROBE_ROLE` above) — the
- * routes' own DB ops still run through `withTenant` + `asAppUser` off `suite.admin`. This stands in for
+ * routes' own DB ops still run through `withTransaction` + `asAppUser` off `suite.admin`. This stands in for
  * the boot pool (which would build the real seat from a sealed credential) so a capture/decline
  * genuinely round-trips the adapter without a network.
  */
@@ -307,7 +304,6 @@ function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): Ca
         provider = new StripeTerminalProvider({
           client,
           db: providerDb,
-          tenantId: cfg.tenantId,
           nodeId: cfg.nodeId,
           // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
           poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -338,37 +334,29 @@ function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
   };
 }
 
-/** Seed an ACTIVE `card_readers` row (default provider `stripe`) and return its id + `providerRef`.
- * `tenantId` can be overridden to seed ANOTHER tenant's reader (the by-id isolation probe). */
+/** Seed an ACTIVE `card_readers` row (default provider `stripe`) and return its id + `providerRef`. */
 async function seedReader(
-  cfg: TillConfig,
-  opts: { provider?: string; providerRef?: string; tenantId?: string; name?: string } = {},
+  opts: { provider?: string; providerRef?: string; name?: string } = {},
 ): Promise<{ id: string; providerRef: string }> {
   const providerRef = opts.providerRef ?? `reader_${randomUUID()}`;
   const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into card_readers (tenant_id, provider, provider_ref, name)
-    values (${opts.tenantId ?? cfg.tenantId}, ${opts.provider ?? "stripe"}, ${providerRef}, ${opts.name ?? "Front counter"})
+    insert into card_readers (provider, provider_ref, name)
+    values (${opts.provider ?? "stripe"}, ${providerRef}, ${opts.name ?? "Front counter"})
     returning id`);
   return { id: r.rows[0]!.id, providerRef };
 }
 
 /** Point a device at its DEFAULT reader (`device_card_readers`). */
-async function setDefaultReader(
-  cfg: TillConfig,
-  deviceId: string,
-  readerId: string,
-): Promise<void> {
+async function setDefaultReader(deviceId: string, readerId: string): Promise<void> {
   await suite.admin.execute(sql`
-    insert into device_card_readers (tenant_id, device_id, reader_id)
-    values (${cfg.tenantId}, ${deviceId}, ${readerId})`);
+    insert into device_card_readers (device_id, reader_id) values (${deviceId}, ${readerId})`);
 }
 
-/** Seal this tenant's `payments.stripe` credential so the provider counts as CONNECTED (the pay
+/** Seal the `payments.stripe` credential so the provider counts as CONNECTED (the pay
  * path's pre-check reads only its presence). */
-async function connectStripe(cfg: TillConfig): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, (tx) =>
+async function connectStripe(): Promise<void> {
+  await withTransaction(suite.admin, (tx) =>
     putCredential(tx, RING, {
-      tenantId: cfg.tenantId,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_x",
@@ -386,9 +374,9 @@ function deviceIdOf(cookie: string): string {
 }
 
 /** The stamped `payments.reader_id` for a working order (NULL when none), read as app_user. */
-async function readerIdOnPayment(cfg: TillConfig, workingOrderId: string): Promise<string | null> {
+async function readerIdOnPayment(workingOrderId: string): Promise<string | null> {
   const rows = await suite.admin.execute<{ reader_id: string | null }>(sql`
-    select reader_id from payments where tenant_id = ${cfg.tenantId} and working_order_id = ${workingOrderId}`);
+    select reader_id from payments where working_order_id = ${workingOrderId}`);
   return rows.rows[0]?.reader_id ?? null;
 }
 
@@ -412,7 +400,7 @@ async function enrolTillCookie(
   // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the device describes itself
   // at accept, and `resolveDeviceBinding` AUTO-CREATES the register it rings against (named after the
   // device). Each call names the device uniquely so its auto-created register cannot collide.
-  const profileId = deviceProfileId ?? (await seedProfileFF(cfg, "till"));
+  const profileId = deviceProfileId ?? (await seedProfileFF("till"));
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: `Counter till ${tillDeviceCounter}`,
     profileId,
@@ -436,10 +424,10 @@ async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Pro
 }
 
 /** Create a till profile with the reader and drawer capabilities needed by payment tests. */
-async function createTillProfile(cfg: TillConfig): Promise<string> {
+async function createTillProfile(): Promise<string> {
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, 'Counter till', 'till', ${JSON.stringify(["integrated-card-payment", "open-cash-drawer"])}::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values ('Counter till', 'till', ${JSON.stringify(["integrated-card-payment", "open-cash-drawer"])}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -448,14 +436,13 @@ async function createTillProfile(cfg: TillConfig): Promise<string> {
  *  7). A per-suite counter keeps the tenant-unique name from colliding across repeated seeds. */
 let profileCounter = 0;
 async function seedProfileFF(
-  cfg: TillConfig,
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, ${`Profile ${formFactor} ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values (${`Profile ${formFactor} ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -538,25 +525,18 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 
     // 4. A GENUINE chained fiscal record exists for this tenant/node — one, hashed (own tenant, so
     // the count is order-independent).
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(registros.length).toBe(1);
-    expect(registros[0]!.tenantId).toBe(cfg.tenantId);
     expect(registros[0]!.nodeId).toBe(cfg.nodeId);
     expect(registros[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
 
     // 5. The sale is attributed to the logged-in operator — the whole point of the session guard.
-    const saleRows = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const saleRows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select({ operatorId: sales.operatorId })
-        .from(sales)
-        .where(eq(sales.tenantId, cfg.tenantId));
+      return tx.select({ operatorId: sales.operatorId }).from(sales);
     });
     expect(saleRows).toEqual([{ operatorId }]);
   });
@@ -656,7 +636,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       unit_precision: number;
     }>(sql`
       select quantity, unit_name, unit_precision from sale_lines
-      where tenant_id = ${cfg.tenantId} and quantity = 0.200`);
+      where quantity = 0.200`);
     expect(snapshottedLine.rows).toEqual([
       {
         quantity: "0.200",
@@ -686,25 +666,18 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // increments `secuencia` and carries the first record's ACTUAL huella as its predecessor
     // (`anteriorHuella`) — the four-part Encadenamiento link (schema/registros.ts). Both hashes are
     // the stored 64-hex huella the append-only table pins.
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
-        .orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(2);
 
     const [first, second] = registros;
-    expect(first!.tenantId).toBe(cfg.tenantId);
     expect(first!.nodeId).toBe(cfg.nodeId);
     expect(first!.secuencia).toBe(1);
     expect(first!.primerRegistro).toBe(true);
     expect(first!.anteriorHuella).toBeNull();
     expect(first!.huella).toMatch(/^[0-9A-F]{64}$/);
-
-    expect(second!.tenantId).toBe(cfg.tenantId);
     expect(second!.nodeId).toBe(cfg.nodeId);
     expect(second!.secuencia).toBe(2); // the per-node sequence increments
     expect(second!.primerRegistro).toBe(false);
@@ -744,12 +717,9 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(registros).toHaveLength(0);
   });
@@ -765,11 +735,11 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     // device (a kitchen screen) cannot ring a sale. The device authenticates (a real enrolled binding),
     // so this proves the SECOND branch, distinct from the no-cookie `device.unauthorized` above.
     // A distinct, non-default station name — provisioning already seeds the venue's default "Cocina".
-    const station = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const station = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
-    const profileId = await seedProfileFF(cfg, "kds");
+    const profileId = await seedProfileFF("kds");
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Pantalla",
       profileId,
@@ -789,12 +759,9 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(registros).toHaveLength(0);
   });
@@ -856,21 +823,17 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
     // 5. Exactly ONE chained fiscal record; the working order is now `settled` and the sale is filed
     //    under its id and attributed to the logged-in operator.
-    const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const after = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return {
-        registros: await tx
-          .select()
-          .from(registrosFacturacion)
-          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+        registros: await tx.select().from(registrosFacturacion),
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
         saleRows: await tx
           .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
-          .from(sales)
-          .where(eq(sales.tenantId, cfg.tenantId)),
+          .from(sales),
       };
     });
     expect(after.registros).toHaveLength(1);
@@ -900,12 +863,9 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     expect(replayTicket.tender).toEqual({ method: "cash", change: "2.00" });
 
     // Still exactly ONE record — the replay filed nothing.
-    const stillOne = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const stillOne = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(stillOne).toHaveLength(1);
   });
@@ -913,12 +873,12 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
 // POST /api/pay (Task 12 cutover): the integrated-card-terminal pay route now RESOLVES the reader
 // (request `readerId`, else the paying device's default in `device_card_readers`), loads the reader
-// row tenant-scoped by id, PRE-CHECKS the provider is connected, then drives the reader's provider
+// row by id, PRE-CHECKS the provider is connected, then drives the reader's provider
 // (from the pool) through the real `payWorkingOrderIntegrated` split-transaction flow (P1 commit →
 // network collect → P3 file/settle) over a `FakeStripe`-backed `StripeTerminalProvider` — so a
 // capture/decline genuinely round-trips the adapter rather than being stubbed. Real Postgres for the
-// same reason every suite here is (the split flow + the provider's FK-before-attempting ordering +
-// the by-id tenant-isolation probe need a real multi-backend, non-superuser Postgres, CLAUDE.md §4);
+// same reason every suite here is (the split flow + the provider's FK-before-attempting ordering need
+// a real multi-backend, non-superuser Postgres, CLAUDE.md §4);
 // the cookieless refusal is hermetic, in `till-api.test.ts`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   it("routes to the device's DEFAULT reader, captures, and STAMPS payments.reader_id", async () => {
@@ -929,10 +889,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      await connectStripe();
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -949,7 +909,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(outcome.outcome).toBe("captured");
       expect(outcome.ticket?.total).toBe("1.50");
       // The payment records the reader it settled on (Task 12) — proof the pay routed to the default.
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(reader.id);
+      expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
     } finally {
       await providerDb.close();
     }
@@ -963,11 +923,11 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
-      const dflt = await seedReader(cfg, { name: "Default" });
-      const other = await seedReader(cfg, { name: "Other" });
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), dflt.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      await connectStripe();
+      const dflt = await seedReader({ name: "Default" });
+      const other = await seedReader({ name: "Other" });
+      await setDefaultReader(deviceIdOf(deviceCookie), dflt.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -983,7 +943,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(payRes.status).toBe(200);
       expect((await payRes.json()).outcome).toBe("captured");
       // The OVERRIDE reader was charged and stamped, not the default.
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(other.id);
+      expect(await readerIdOnPayment(workingOrderId)).toBe(other.id);
     } finally {
       await providerDb.close();
     }
@@ -1005,10 +965,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       // the SAME cached provider, so the only thing distinguishing the two collects is `readerRef`.
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
-      const readerA = await seedReader(cfg, { name: "Reader A" });
-      const readerB = await seedReader(cfg, { name: "Reader B" });
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      await connectStripe();
+      const readerA = await seedReader({ name: "Reader A" });
+      const readerB = await seedReader({ name: "Reader B" });
 
       const pay = async (readerId: string): Promise<void> => {
         const res = await app.request("/api/pay", {
@@ -1049,10 +1009,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      await connectStripe();
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
       // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
@@ -1071,44 +1031,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
       expect(payRes.status).toBe(200); // not a 500
       expect((await payRes.json()).outcome).toBe("captured");
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(reader.id);
-    } finally {
-      await providerDb.close();
-    }
-  });
-
-  it("naming ANOTHER tenant's reader is reader.not_found (by-id isolation, never chargeable)", async () => {
-    // The by-id read scopes to the till's tenant (CLAUDE.md §3), so a reader id that belongs to a
-    // different tenant is not readable here — refused `reader.not_found`, never charged. Proven by
-    // deleting the `eq(card_readers.tenantId, cfg.tenantId)` predicate in `resolvePayReader` locally
-    // and running this test: the read then LEAKS the foreign reader, the isolation assertion fails,
-    // and the request returns 500 (the payment's composite FK to `card_readers` rejects the
-    // cross-tenant reader) rather than the 404 asserted here — restoring the predicate turns it back
-    // to 404. (Observed 2026-09-12, re-running the run-it probe.)
-    const { cfg: a, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const { cfg: b } = await setupVenue(); // a SECOND tenant, whose reader tenant A must not reach
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(a, fakePool(a, providerDb, new FakeStripe())), noopLog);
-      const cookie = await loginSession(app, a, operatorId);
-      const deviceCookie = await enrolTillCookie(a, await createTillProfile(a));
-      await connectStripe(a);
-      const foreign = await seedReader(b, { tenantId: b.tenantId });
-
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: randomUUID(),
-          readerId: foreign.id,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
-
-      expect(payRes.status).toBe(404);
-      expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
+      expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
     } finally {
       await providerDb.close();
     }
@@ -1122,7 +1045,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
 
       const payRes = await app.request("/api/pay", {
@@ -1152,9 +1075,9 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      const reader = await seedReader(cfg); // active reader, but provider not connected
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const reader = await seedReader(); // active reader, but provider not connected
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const payRes = await app.request("/api/pay", {
         method: "POST",
@@ -1184,10 +1107,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      await connectStripe();
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -1202,13 +1125,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(payRes.status).toBe(200);
       expect(await payRes.json()).toEqual({ outcome: "declined" });
 
-      const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      const after = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return {
-          registros: await tx
-            .select()
-            .from(registrosFacturacion)
-            .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+          registros: await tx.select().from(registrosFacturacion),
           wo: await tx
             .select({ status: workingOrders.status })
             .from(workingOrders)
@@ -1238,12 +1158,12 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
           cfg,
           secureCookies: false,
           venueLocale: cfg.locale,
-          cardProvider: new SimulatorPaymentProvider(providerDb, cfg.tenantId),
+          cardProvider: new SimulatorPaymentProvider(providerDb),
         },
         noopLog,
       );
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -1259,7 +1179,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(payRes.status).toBe(200);
       expect((await payRes.json()).outcome).toBe("captured");
       // A practice sale touches no real reader, so `payments.reader_id` stays NULL.
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBeNull();
+      expect(await readerIdOnPayment(workingOrderId)).toBeNull();
     } finally {
       await providerDb.close();
     }
@@ -1272,10 +1192,10 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      await connectStripe();
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
       const payRes = await app.request("/api/pay", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -1299,9 +1219,9 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     try {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      const reader = await seedReader(cfg); // provider "stripe"
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const reader = await seedReader(); // provider "stripe"
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
@@ -1329,7 +1249,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     try {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
@@ -1355,13 +1275,13 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
           cfg,
           secureCookies: false,
           venueLocale: cfg.locale,
-          cardProvider: new SimulatorPaymentProvider(providerDb, cfg.tenantId),
+          cardProvider: new SimulatorPaymentProvider(providerDb),
         },
         noopLog,
       );
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
@@ -1418,9 +1338,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(placed.status).toBe(200);
     expect(await placed.json()).toEqual({ id: workingOrderId, status: "placed" });
 
-    const noSaleYet = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
+    const noSaleYet = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, modeCfg.tenantId));
+      return tx.select({ id: sales.id }).from(sales);
     });
     expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
 
@@ -1548,17 +1468,14 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(ticket.tender).toEqual({ method: "cash", change: "2.00" });
     expect(ticket.qr.length).toBeGreaterThan(0); // a genuine fresh filing carries the AEAT QR
 
-    const after = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
+    const after = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return {
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx
-          .select()
-          .from(registrosFacturacion)
-          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+        registros: await tx.select().from(registrosFacturacion),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
@@ -1720,7 +1637,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     expect(collect.status).toBe(200);
 
     // collected_at is stamped (direct witness) AND the order is GONE from the station queue.
-    const [wo] = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const [wo] = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ collected: sql<boolean>`collected_at is not null`, status: workingOrders.status })
@@ -1765,7 +1682,7 @@ describe("handheld sales and device capability gates", () => {
   ): Promise<string> {
     // A handheld is DEFINED by a `phone-portrait`/`tablet-landscape` profile (Task 7) and, being
     // sale-capable, binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
-    const profileId = await seedProfileFF(cfg, "phone-portrait", capabilities);
+    const profileId = await seedProfileFF("phone-portrait", capabilities);
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Waiter phone",
       profileId,
@@ -1849,7 +1766,7 @@ describe("handheld sales and device capability gates", () => {
 
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const printer = await createPrinter(tx, cfg, {
         name: "Counter",
@@ -1879,9 +1796,7 @@ describe("handheld sales and device capability gates", () => {
       }),
     });
     expect(res.status).toBe(200);
-    const opens = await suite.admin.execute(
-      sql`select id from drawer_opens where tenant_id = ${cfg.tenantId}`,
-    );
+    const opens = await suite.admin.execute(sql`select id from drawer_opens `);
     expect(opens.rows).toHaveLength(0);
 
     const ticket = await res.json();
@@ -1892,17 +1807,12 @@ describe("handheld sales and device capability gates", () => {
     // node = cfg.nodeId — the SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor
     // pointer, a 64-hex huella), plus the deployment `entorno` this test additionally pins. `tillId` is
     // separate device metadata; it never keys the chain.
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
-        .orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;
-    expect(only!.tenantId).toBe(cfg.tenantId);
     expect(only!.nodeId).toBe(cfg.nodeId);
     expect(only!.secuencia).toBe(1);
     expect(only!.primerRegistro).toBe(true);
@@ -1945,17 +1855,12 @@ describe("handheld sales and device capability gates", () => {
     // chain-opening shape the handheld cash parity test above asserts (own tenant, node = cfg.nodeId — the
     // SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor pointer, a 64-hex
     // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
-        .orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;
-    expect(only!.tenantId).toBe(cfg.tenantId);
     expect(only!.nodeId).toBe(cfg.nodeId);
     expect(only!.secuencia).toBe(1);
     expect(only!.primerRegistro).toBe(true);
@@ -1971,7 +1876,7 @@ describe("handheld sales and device capability gates", () => {
       provider: string;
       state: string;
       payment_ref: string;
-    }>(sql`select provider, state, payment_ref from payments where tenant_id = ${cfg.tenantId}`);
+    }>(sql`select provider, state, payment_ref from payments`);
     expect(paymentRows.rows).toHaveLength(1);
     expect(paymentRows.rows[0]!.provider).toBe(MANUAL_PROVIDER);
     expect(paymentRows.rows[0]!.state).toBe("captured");
@@ -2043,8 +1948,8 @@ describe("handheld sales and device capability gates", () => {
 
     // Author a capability-less handheld device profile and enrol a device bound to it.
     const prof = await suite.admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor, capabilities)
-      values (${cfg.tenantId}, 'Waiter phone', 'phone-portrait', ${JSON.stringify([])}::jsonb)
+      insert into device_profiles (name, form_factor, capabilities)
+      values ('Waiter phone', 'phone-portrait', ${JSON.stringify([])}::jsonb)
       returning id`);
     const deviceProfileId = prof.rows[0]!.id;
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
@@ -2081,7 +1986,7 @@ describe("handheld sales and device capability gates", () => {
     );
     await suite.admin.execute(sql`
       update departments set default_service_mode = 'invoice_first'
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+      where location_id = ${cfg.locationId}`);
     const modeCfg: TillConfig = { ...cfg, orderFlow: "invoice_first" };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -2112,12 +2017,9 @@ describe("handheld sales and device capability gates", () => {
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
-    const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const afterRefused = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(afterRefused.length).toBe(0);
 
@@ -2131,12 +2033,9 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(placed.status).toBe(200);
     expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const afterPlaced = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const afterPlaced = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(afterPlaced.length).toBe(1);
   });
@@ -2184,12 +2083,9 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const afterRefused = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(afterRefused.length).toBe(0);
 
@@ -2204,17 +2100,14 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(collect.status).toBe(200);
     expect((await collect.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const after = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return {
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx
-          .select()
-          .from(registrosFacturacion)
-          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+        registros: await tx.select().from(registrosFacturacion),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
@@ -2262,7 +2155,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const stillPlaced = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const stillPlaced = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
@@ -2278,7 +2171,7 @@ describe("handheld sales and device capability gates", () => {
       body: JSON.stringify({ reason: "customer left" }),
     });
     expect(cancelled.status).toBe(200);
-    const abandoned = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const abandoned = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
@@ -2294,17 +2187,15 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const product = available.find((item) => item.pricingUnit === "each")!;
   const optionId = randomUUID(),
     extraId = randomUUID();
-  const { note, option, extra } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { note, option, extra } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const note = await createModifier(
       tx,
-      cfg.tenantId,
       { type: "text", name: { es: "Nota" }, available: true },
       "es",
     );
     const option = await createModifier(
       tx,
-      cfg.tenantId,
       {
         type: "options",
         name: { es: "Preparación" },
@@ -2316,7 +2207,6 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     );
     const extra = await createModifier(
       tx,
-      cfg.tenantId,
       {
         type: "extras",
         name: { es: "Extras" },
@@ -2337,8 +2227,8 @@ it("files every modifier mode through cash checkout and reprints their saved fac
       },
       "es",
     );
-    await setProductOptionGroups(tx, cfg.tenantId, product.id, [note.id, option.id, extra.id]);
-    await setMenuItemOptionGroups(tx, cfg.tenantId, product.menuItemId, [
+    await setProductOptionGroups(tx, product.id, [note.id, option.id, extra.id]);
+    await setMenuItemOptionGroups(tx, product.menuItemId, [
       { groupId: note.id, options: [] },
       { groupId: option.id, options: [{ optionId, priceDelta: "0.00" }] },
       { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
@@ -2369,21 +2259,19 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await loginSession(app, cfg, operatorId);
-  const profileId = await seedProfileFF(cfg, "till", ["print-receipt"]);
+  const profileId = await seedProfileFF("till", ["print-receipt"]);
   const deviceCookie = await enrolTillCookie(cfg, profileId);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
-  const printerId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const printerId = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const printer = await createPrinter(tx, cfg, {
       name: "Modifier receipts",
       transport: "cloud_poll",
       pollId: `modifiers-${randomUUID()}`,
     });
+    await tx.execute(sql`update tills set receipt_printer_id=${printer.id} `);
     await tx.execute(
-      sql`update tills set receipt_printer_id=${printer.id} where tenant_id=${cfg.tenantId}`,
-    );
-    await tx.execute(
-      sql`update locations set receipt_print_mode='never' where tenant_id=${cfg.tenantId} and id=${cfg.locationId}`,
+      sql`update locations set receipt_print_mode='never' where id=${cfg.locationId}`,
     );
     return printer.id;
   });
@@ -2426,7 +2314,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     { rate: "21.00", base: "2.48", tax: "0.52" },
     { rate: "10.00", base: "1.27", tax: "0.13" },
   ]);
-  const stored = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const stored = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx.execute<{
       quantity: string;
@@ -2435,12 +2323,9 @@ it("files every modifier mode through cash checkout and reprints their saved fac
       unit_name: Record<string, string> | null;
       unit_precision: number | null;
     }>(
-      sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
+      sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines  order by line_no`,
     );
-    const records = await tx
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+    const records = await tx.select().from(registrosFacturacion);
     return { rows: rows.rows, records };
   });
   expect(stored.rows).toEqual([
@@ -2461,11 +2346,10 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   ]);
   expect(stored.records).toHaveLength(1);
   expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await updateModifier(
       tx,
-      cfg.tenantId,
       option.id,
       {
         type: "options",
@@ -2492,10 +2376,10 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     headers,
   });
   expect(reprint.status, await reprint.clone().text()).toBe(200);
-  const printed = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const printed = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ payload: Buffer }>(
-      sql`select payload from print_jobs where tenant_id=${cfg.tenantId} and printer_id=${printerId} and kind='document'`,
+      sql`select payload from print_jobs where printer_id=${printerId} and kind='document'`,
     );
   });
   expect(printed.rows).toHaveLength(1);
@@ -2506,12 +2390,9 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   expect(text).toContain("Frío");
   expect(text).not.toContain("Nuevo frío");
   expect(text).toContain("DUPLICADO");
-  const recordCount = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const recordCount = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return tx
-      .select({ id: registrosFacturacion.id })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+    return tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion);
   });
   expect(recordCount).toHaveLength(1);
 });

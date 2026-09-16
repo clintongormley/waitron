@@ -1,4 +1,3 @@
-import { tenantId as brandTenantId } from "@waitron/shared";
 // Real PostgreSQL checks the demo writes image bytes and product references as app_user.
 
 import { createHash } from "node:crypto";
@@ -7,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -34,7 +33,7 @@ function nextNif(): string {
 }
 
 /** Provision a fresh chained venue (as the owner) and return the ids the seed needs. */
-async function provisionVenue(): Promise<{ tenantId: string; locationId: string }> {
+async function provisionVenue(): Promise<{ locationId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -68,23 +67,23 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  return { tenantId: venue.tenantId, locationId: venue.locationId };
+  return { locationId: venue.locationId };
 }
 
 describe("seedMedia", () => {
   it("stores committed tiles in the library and attaches content-addressed product references", async () => {
-    const { tenantId, locationId } = await provisionVenue();
+    const { locationId } = await provisionVenue();
 
-    const { productsByImage, images } = await withTenant(suite.admin, tenantId, async (tx) => {
+    const { productsByImage, images } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+      const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
       });
-      await seedMedia(tx, { tenantId, productsByImage });
+      await seedMedia(tx, { productsByImage });
       // Read every product's stored image back, as app_user, keyed by product id.
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
-        sql`select id, image from products where tenant_id = ${tenantId}`,
+        sql`select id, image from products `,
       );
       const images = new Map(rows.map((r) => [r.id, r.image]));
       return { productsByImage, images };
@@ -104,9 +103,9 @@ describe("seedMedia", () => {
       const expectedName = `${createHash("sha256").update(srcBytes).digest("hex")}.png`;
       expect(stored).toBe(expectedName);
 
-      const storedImage = await withTenant(suite.admin, tenantId, async (tx) => {
+      const storedImage = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
-        return readImageBytes(tx, tenantId, stored!);
+        return readImageBytes(tx, stored!);
       });
       expect(storedImage?.contentType).toBe("image/png");
       const writtenBytes = storedImage!.bytes;
@@ -116,7 +115,7 @@ describe("seedMedia", () => {
     }
 
     const written = await suite.admin.execute<{ count: number }>(
-      sql`select count(*)::int as count from media_images where tenant_id = ${tenantId}`,
+      sql`select count(*)::int as count from media_images`,
     );
     const distinctHashes = new Set(
       await Promise.all(
@@ -131,20 +130,20 @@ describe("seedMedia", () => {
   });
 
   it("reuses existing image bytes when the media step runs twice", async () => {
-    const { tenantId, locationId } = await provisionVenue();
-    await withTenant(suite.admin, tenantId, async (tx) => {
+    const { locationId } = await provisionVenue();
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+      const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
       });
-      await seedMedia(tx, { tenantId, productsByImage });
+      await seedMedia(tx, { productsByImage });
       const before = await tx.execute(
-        sql`select id, filename, names, alt_text from media_images where tenant_id = ${tenantId} order by id`,
+        sql`select id, filename, names, alt_text from media_images order by id`,
       );
-      await seedMedia(tx, { tenantId, productsByImage });
+      await seedMedia(tx, { productsByImage });
       const after = await tx.execute(
-        sql`select id, filename, names, alt_text from media_images where tenant_id = ${tenantId} order by id`,
+        sql`select id, filename, names, alt_text from media_images order by id`,
       );
       expect(after.rows).toEqual(before.rows);
       expect(after.rows.length).toBeGreaterThan(0);

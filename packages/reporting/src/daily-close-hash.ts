@@ -16,15 +16,14 @@ import type { DailyCloseSnapshot } from "./close-types.js";
 
 /**
  * The identity fields of one close plus its frozen snapshot — everything the `entry_hash` commits
- * to except the predecessor hash, which is passed separately. `tenantId`/`nodeId`/`closedBy` are
- * plain strings (branded ids are assignable), so the hash module stays decoupled from the id brands.
+ * to except the predecessor hash, which is passed separately. `nodeId`/`closedBy` are plain strings
+ * (branded ids are assignable), so the hash module stays decoupled from the id brands.
  */
 export interface CloseHashContent {
-  tenantId: string;
   nodeId: string;
   /** Local calendar date of the business day, "YYYY-MM-DD". */
   businessDay: string;
-  /** 1-based chain position within the (tenant, node) chain. */
+  /** 1-based chain position within the node's chain. */
   sequenceNo: number;
   /** When the close was frozen. Hashed as the INSTANT truncated to whole seconds (see
    * {@link toEpochSeconds}), so the stored `closed_at` and the read-back value recompute the same
@@ -107,12 +106,11 @@ function canonicalSnapshot(snapshot: DailyCloseSnapshot): unknown {
  * The canonical string for one close — the exact bytes SHA-256 digests. The field ORDER is free (no
  * chain data exists yet, so nothing is bound to a prior layout) but FIXED and documented: the
  * identity fields in schema order, then the whole snapshot as one stably-serialized value, then
- * `PrevEntryHash` last so the chain link reads at the end. Changing this order changes every digest,
- * so it must not move once real chains exist.
+ * `PrevEntryHash` last so the chain link reads at the end. Changing this order, or the field list,
+ * changes every digest, so neither may move once real chains exist.
  */
 function canonicalString(content: CloseHashContent, prevEntryHash: string): string {
   return joinFields([
-    ["TenantId", content.tenantId],
     ["NodeId", content.nodeId],
     ["BusinessDay", content.businessDay],
     ["SequenceNo", String(content.sequenceNo)],

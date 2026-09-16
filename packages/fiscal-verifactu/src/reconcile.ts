@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { AppError } from "@waitron/shared";
-import type { SaleId, TenantId, TillId } from "@waitron/shared";
+import type { SaleId, TillId } from "@waitron/shared";
 import type { ReconcileMismatch, ReconcileResult, TrustedClock } from "@waitron/fiscal";
 import type {
   Cabecera,
@@ -17,17 +17,17 @@ import { deleteAck, writeAck } from "./acks.js";
 export interface ReconcileDeps {
   db: Database;
   /**
-   * The tenant's own AEAT transport — resolved LAZILY, inside `reconcile` itself, and only once T1
+   * The venue's AEAT transport — resolved LAZILY, inside `reconcile` itself, and only once T1
    * has confirmed the period holds at least one row (see `reconcile`'s own doc comment on the
    * zero-row early return). Mirrors `DrainDeps.resolveClient`'s "a secret in memory for no reason"
    * reasoning: a certificate decrypted before that check would be decrypted for a period that turns
-   * out to need no network call at all, e.g. a caller auditing last month for a tenant that
-   * fiscalized nothing in it. A FUNCTION, not a resolved client, for the same reason `DrainDeps`'s
-   * field is: this package's real resolver decrypts a per-tenant certificate, and `reconcile`, like
-   * `drain`, must control exactly when that happens rather than have it happen unconditionally at
-   * the caller.
+   * out to need no network call at all, e.g. a caller auditing a last month that fiscalized
+   * nothing. A FUNCTION, not a resolved client, for the same reason `DrainDeps`'s field is: this
+   * package's real resolver decrypts a certificate from the vault, and `reconcile`, like `drain`,
+   * must control exactly when that happens rather than have it happen unconditionally at the
+   * caller.
    */
-  resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
+  resolveClient: () => Promise<VerifactuClient>;
   clock: TrustedClock;
 }
 
@@ -45,7 +45,6 @@ export interface ReconcileDeps {
  */
 type PeriodRow = {
   id: string;
-  tenant_id: string;
   till_id: string;
   sale_id: string;
   estado: string;
@@ -112,7 +111,7 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
 };
 
 /**
- * The reconciliation sweep (plan 3b design §4): audit one tenant's calendar period against what
+ * The reconciliation sweep (plan 3b design §4): audit one calendar period against what
  * AEAT reports back for it, classifying every disagreement into `lostAck`/`noTrace`/`drift` and
  * raising an incident for each `noTrace`/`drift` (never for `lostAck`). The returned lists are the
  * audit finding and are ALWAYS reported, even for a mismatch this sweep also corrects.
@@ -130,11 +129,11 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
  * apply to them — a persistently-annulled or persistently-missing record re-raises its incident
  * every sweep by design, a separate concern carried to the final review.
  *
- * The consulta network call runs OUTSIDE any transaction, between two short `withTenant`
+ * The consulta network call runs OUTSIDE any transaction, between two short `withTransaction`
  * transactions — never held across the round trip, mirroring the drainer's own T1/T2 split (plan
  * 3a, `drain.ts`). T1 reads our period rows; if there are none there is nothing to reconcile and
  * the sweep returns `checked: 0` WITHOUT contacting AEAT at all — and, because `deps.resolveClient`
- * is only ever called AFTER that check, without a credential being resolved for this tenant either
+ * is only ever called AFTER that check, without a credential being resolved either
  * (see `ReconcileDeps.resolveClient`'s own doc comment). Otherwise the client is resolved and the
  * consulta is paged into an authority map, then T2 classifies the already-read rows against that
  * map and writes any incidents, corrections and acks. Classification is pure computation over rows
@@ -164,7 +163,6 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
  */
 export async function reconcile(
   deps: ReconcileDeps,
-  tenantId: TenantId,
   period: { year: string; month: string },
 ): Promise<ReconcileResult> {
   // Normalized BEFORE any use: `to_char(fecha_expedicion_factura, 'MM')` always yields a
@@ -189,31 +187,28 @@ export async function reconcile(
   };
 
   // T1 — read our period rows in a short transaction. No network call inside it.
-  const rows = await withTenant(deps.db, tenantId, (tx) =>
-    rowsForPeriod(tx, tenantId, normalizedPeriod),
-  );
+  const rows = await withTransaction(deps.db, (tx) => rowsForPeriod(tx, normalizedPeriod));
   result.checked = rows.length;
   // Nothing recorded for this period: no consulta at all (there is nothing its answer could
   // change), and no T2 — and, therefore, no need for a credential either. `deps.resolveClient` is
-  // not called above this line, so a tenant with nothing to reconcile for this period never has a
-  // certificate resolved for it at all. Answers the interface's "nothing to check" contract
-  // directly.
+  // not called above this line, so a period with nothing to reconcile never has a certificate
+  // resolved for it at all. Answers the interface's "nothing to check" contract directly.
   if (rows.length === 0) return result;
 
   // Resolved HERE, not at the top of this function: only past the zero-row return above is a
   // network call about to happen at all, so this is the earliest point a certificate is actually
   // needed (see `ReconcileDeps.resolveClient`'s own doc comment). Used exactly once, by
   // `fetchAuthority` below, so there is nothing to memoize.
-  const client = await deps.resolveClient(tenantId);
+  const client = await deps.resolveClient();
 
   // Network — OUTSIDE any transaction. Page AEAT's view for the period, keyed by RefExterna
-  // (= our registro id). All rows share one obligado (the tenant↔NIF invariant), so any row's own
+  // (= our registro id). All rows share one obligado (one database, one taxpayer), so any row's own
   // emisor identity builds the cabecera.
   const authority = await fetchAuthority(client, cabeceraFor(rows[0]!), normalizedPeriod);
 
   // T2 — classify the already-read rows against the authority map and write incidents.
   const detectedAt = deps.clock.now().instant;
-  await withTenant(deps.db, tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     for (const row of rows) {
       const reported = authority.get(row.id) ?? null;
 
@@ -286,31 +281,28 @@ export async function reconcile(
   return result;
 }
 
-/** Our envios for the requested tenant and expedition month, joined to their registros.
+/** Our envios for the expedition month, joined to their registros.
  * Records carry no FechaOperacion, so the period filter uses fecha_expedicion_factura. */
 async function rowsForPeriod(
   tx: Transaction,
-  tenantId: string,
   period: { year: string; month: string },
 ): Promise<PeriodRow[]> {
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
-      r.id, r.tenant_id, r.till_id, r.sale_id,
+      r.id, r.till_id, r.sale_id,
       e.estado, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       to_char(r.fecha_expedicion_factura, 'DD-MM-YYYY') as fecha_expedicion_factura
     from envios e
-    -- Match both ids so the joined registro belongs to the selected tenant.
-    join registros_facturacion r on r.id = e.registro_id and r.tenant_id = e.tenant_id
-    where e.tenant_id = ${tenantId}
-      and to_char(r.fecha_expedicion_factura, 'YYYY') = ${period.year}
+    join registros_facturacion r on r.id = e.registro_id
+    where to_char(r.fecha_expedicion_factura, 'YYYY') = ${period.year}
       and to_char(r.fecha_expedicion_factura, 'MM') = ${period.month}
   `);
   return rows;
 }
 
-/** The obligado emisor for the consulta cabecera — read off any period row (all share one NIF
- * under the tenant↔NIF 1:1 invariant), exactly as the drainer builds its own from a batch row. */
+/** The obligado emisor for the consulta cabecera — read off any period row (all share one NIF:
+ * one database files for one taxpayer), exactly as the drainer builds its own from a batch row. */
 function cabeceraFor(row: PeriodRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
@@ -386,7 +378,7 @@ async function correct(
   if (target === undefined) return; // Anulada / no clean local estado — incident-only.
   await tx.execute(sql`
     update envios set estado = ${target}, confirmado_en = ${now.toISOString()}
-    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+    where registro_id = ${row.id}
   `);
   await writeAck(tx, row.id, now);
 }
@@ -406,7 +398,7 @@ async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Pro
       mensaje_error = null,
       proximo_intento_en = ${now.toISOString()},
       reconciled_resubmit_at = ${now.toISOString()}
-    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+    where registro_id = ${row.id}
   `);
   await deleteAck(tx, row.id);
 }
@@ -418,7 +410,7 @@ async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Pro
 async function clearReconciledMarker(tx: Transaction, row: PeriodRow): Promise<void> {
   await tx.execute(sql`
     update envios set reconciled_resubmit_at = null
-    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+    where registro_id = ${row.id}
   `);
 }
 
@@ -440,7 +432,6 @@ async function raise(
   detectedAt: Date,
 ): Promise<void> {
   await recordIncident(tx, {
-    tenantId: row.tenant_id as TenantId,
     tillId: row.till_id as TillId,
     saleId: row.sale_id as SaleId,
     error: new AppError(code, {
@@ -460,7 +451,7 @@ async function raise(
 async function hasSiblingAnulacion(tx: Transaction, row: PeriodRow): Promise<boolean> {
   const { rows } = await tx.execute<{ one: number }>(sql`
     select 1 as one from registros_facturacion
-    where sale_id = ${row.sale_id} and tenant_id = ${row.tenant_id} and tipo_registro = 'anulacion'
+    where sale_id = ${row.sale_id} and tipo_registro = 'anulacion'
     limit 1
   `);
   return rows.length > 0;
@@ -478,7 +469,6 @@ async function raiseOnce(
   detectedAt: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
-    tenantId: row.tenant_id as TenantId,
     tillId: row.till_id as TillId,
     saleId: row.sale_id as SaleId,
     error: new AppError(code, {

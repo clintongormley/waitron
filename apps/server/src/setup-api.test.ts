@@ -93,8 +93,7 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
   });
 });
 
-// The five VenueResult ids the provision route threads into the response + persisted trading config.
-const TENANT_ID = "11111111-1111-1111-1111-111111111111";
+// The four VenueResult ids the provision route threads into the response + persisted trading config.
 const LOCATION_ID = "22222222-2222-2222-2222-222222222222";
 const TILL_ID = "33333333-3333-3333-3333-333333333333";
 const NODE_ID = "44444444-4444-4444-4444-444444444444";
@@ -103,7 +102,6 @@ const SERIES_ID_1 = "77777777-7777-7777-7777-777777777777";
 
 function makeVenueResult(): VenueResult {
   return {
-    tenantId: TENANT_ID,
     locationId: LOCATION_ID,
     tillId: TILL_ID,
     nodeId: NODE_ID,
@@ -210,7 +208,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   });
   const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
   const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
-  // The regime's provisioning-secret seal runs `withTenant(db, …)` — i.e. `db.transaction(cb)`. A fake
+  // The regime's provisioning-secret seal runs `withTransaction(db, …)` — i.e. `db.transaction(cb)`. A fake
   // db that RECORDS the seal (in order, into `calls`) and resolves stands in for the real vault write.
   // The seal's DB correctness — the sealed row, the right tenant, the round-trip — is covered by the
   // regime's `provisioning-secret.test.ts` and boot.ts's end-to-end live-seal test; here we only assert
@@ -317,7 +315,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       mountSetup(restarted, next.deps, noopLog);
       const replay = await postProvision(restarted, demoBody());
       expect(replay.status).toBe(200);
-      expect(await replay.json()).toMatchObject({ provisioned: true, tenantId: TENANT_ID });
+      expect(await replay.json()).toMatchObject({ provisioned: true });
       expect(next.provision).not.toHaveBeenCalled();
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -357,7 +355,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
       const recoverProvision = vi.fn(async () => makeVenueResult());
       const provision = vi.fn(async () => {
-        throw new AppError("setup.already_provisioned", { tenantId: TENANT_ID });
+        throw new AppError("setup.already_provisioned", {});
       });
       const app = new Hono();
       const deps = makeDeps({ operations, provision, recoverProvision });
@@ -366,7 +364,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       expect((await postProvision(app, body)).status).toBe(200);
       expect(provision).toHaveBeenCalledOnce();
       expect(recoverProvision).toHaveBeenCalledOnce();
-      expect(deps.establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
+      expect(deps.establishIdentity).toHaveBeenCalledWith(NODE_ID);
       expect((await operations.read())?.phase).toBe("complete");
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -424,7 +422,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     const res = await postProvision(app, demoBody());
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ provisioned: true, tenantId: TENANT_ID, restarting: true });
+    expect(await res.json()).toEqual({ provisioned: true, restarting: true });
 
     // The restart is scheduled on the NEXT tick, so it has NOT fired by the time the 200 is returned.
     expect(requestRestart).not.toHaveBeenCalled();
@@ -446,11 +444,11 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ]);
 
     // Membership identity is established for the freshly-minted node (design §4), after provision
-    // returns and before the trading config is persisted — with the VenueResult's tenant + node ids.
+    // returns and before the trading config is persisted — with the VenueResult's node id.
     // The term-0 membership document is then seeded for that same node (design §6 R1), before the
     // trading config is persisted.
-    expect(establishIdentity).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
-    expect(seedMembership).toHaveBeenCalledWith(TENANT_ID, NODE_ID);
+    expect(establishIdentity).toHaveBeenCalledWith(NODE_ID);
+    expect(seedMembership).toHaveBeenCalledWith(NODE_ID);
 
     // Demo → no AEAT cert seal (the seal is never reached), and the fiscal environment is preproduction.
     expect(calls).not.toContain("sealAeat");
@@ -465,7 +463,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
     // The persisted trading config is composed from the VenueResult ids + the injected DB URLs.
     expect(persistTrading.mock.calls[0][0]).toEqual({
-      tenantId: TENANT_ID,
       tillId: TILL_ID,
       nodeId: NODE_ID,
       seriesId: SERIES_ID_0,
@@ -1173,7 +1170,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   it("maps a thrown setup.already_provisioned to 409", async () => {
     const app = new Hono();
     const provision = vi.fn(async () => {
-      throw new AppError("setup.already_provisioned", { tenantId: TENANT_ID });
+      throw new AppError("setup.already_provisioned", {});
     });
     const { deps } = makeDeps({ provision });
     mountSetup(app, deps, noopLog);
@@ -1474,7 +1471,7 @@ function makeAdoptDeps(overrides: Partial<SetupDeps> = {}): {
   const adoptRequests: AdoptRequest[] = [];
   const adopt = vi.fn(async (req: AdoptRequest) => {
     adoptRequests.push(req);
-    return { tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET };
+    return { breakGlassSecret: BREAK_GLASS_SECRET };
   });
   const requestRestart = vi.fn();
   const deps: SetupDeps = {
@@ -1641,7 +1638,6 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       expect(await response.json()).toMatchObject({ breakGlassSecret: BREAK_GLASS_SECRET });
       expect((await operations.read())?.data).toEqual({
         adopted: true,
-        tenantId: TENANT_ID,
         restarting: true,
       });
 
@@ -1649,7 +1645,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       const next = makeAdoptDeps({ operations: createSetupOperationStore(dir) });
       mountSetup(restarted, next.deps, noopLog);
       const replay = await postAdopt(restarted, adoptBody());
-      expect(await replay.json()).toEqual({ adopted: true, tenantId: TENANT_ID, restarting: true });
+      expect(await replay.json()).toEqual({ adopted: true, restarting: true });
       expect(next.adopt).not.toHaveBeenCalled();
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1666,7 +1662,6 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     // The connect response surfaces the minted break-glass secret ONCE, alongside the adopted tenant.
     expect(await res.json()).toEqual({
       adopted: true,
-      tenantId: TENANT_ID,
       breakGlassSecret: BREAK_GLASS_SECRET,
       restarting: true,
     });
@@ -1717,8 +1712,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
 
   it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
     const app = new Hono();
-    let release!: (v: { tenantId: string; breakGlassSecret: string }) => void;
-    const pending = new Promise<{ tenantId: string; breakGlassSecret: string }>((resolve) => {
+    let release!: (v: { breakGlassSecret: string }) => void;
+    const pending = new Promise<{ breakGlassSecret: string }>((resolve) => {
       release = resolve;
     });
     const adopt = vi.fn(() => pending);
@@ -1736,7 +1731,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     });
     expect(adopt).toHaveBeenCalledTimes(1); // the second never reached adopt
 
-    release({ tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET });
+    release({ breakGlassSecret: BREAK_GLASS_SECRET });
     expect((await first).status).toBe(200);
     await tick();
   });
@@ -1746,7 +1741,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const adopt = vi
       .fn()
       .mockRejectedValueOnce(new Error("transient boom"))
-      .mockResolvedValueOnce({ tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET });
+      .mockResolvedValueOnce({ breakGlassSecret: BREAK_GLASS_SECRET });
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
@@ -1893,7 +1888,6 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       });
       const provision = vi.fn(() => pending);
       const adopt = vi.fn(async () => ({
-        tenantId: TENANT_ID,
         breakGlassSecret: BREAK_GLASS_SECRET,
       }));
       const { deps } = makeDeps({ provision, adopt });
@@ -1916,8 +1910,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     // adopt in flight → a concurrent provision is refused 409 (the reverse direction)
     {
       const app = new Hono();
-      let release!: (v: { tenantId: string; breakGlassSecret: string }) => void;
-      const pending = new Promise<{ tenantId: string; breakGlassSecret: string }>((resolve) => {
+      let release!: (v: { breakGlassSecret: string }) => void;
+      const pending = new Promise<{ breakGlassSecret: string }>((resolve) => {
         release = resolve;
       });
       const adopt = vi.fn(() => pending);
@@ -1933,7 +1927,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       });
       expect(provision).not.toHaveBeenCalled(); // the shared latch refused it synchronously
 
-      release({ tenantId: TENANT_ID, breakGlassSecret: BREAK_GLASS_SECRET });
+      release({ breakGlassSecret: BREAK_GLASS_SECRET });
       expect((await first).status).toBe(200);
       await tick();
     }

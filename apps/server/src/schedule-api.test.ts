@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
@@ -12,55 +12,55 @@ import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the schedule routes are LOGIC (session → verb → JSON) over mutable
-// planning rows. Every DB touch runs through `withTenant` + `asAppUser` exactly as production does, but
+// planning rows. Every DB touch runs through `withTransaction` + `asAppUser` exactly as production does, but
 // the app role's grants and — the crux — the "requester is the SESSION's personId, never the
 // body's" identity property need a real non-superuser role to MEAN anything, so they are proven
 // against real Postgres in `schedule-api.pg.test.ts`. Here we prove the route mechanics: the happy
 // paths, the request-shape 400s and the not-logged-in 401.
 
 const noopLog: Logger = () => {};
-let tenantId: string;
 let tillId: string;
 let locationId: string;
 let me: string;
 let colleague: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Till 1') returning id`);
+      insert into tills (location_id, name)
+      values (${locationId}, 'Till 1') returning id`);
     tillId = till.rows[0]!.id;
     const meRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Me', ${hashPin("1111")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Me', ${hashPin("1111")}, 'staff') returning id`);
     me = meRow.rows[0]!.id;
     const colRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Colleague', ${hashPin("2222")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Colleague', ${hashPin("2222")}, 'staff') returning id`);
     colleague = colRow.rows[0]!.id;
   },
 });
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountScheduleApi(app, { db: suite.db, cfg: { tenantId } }, noopLog);
+  mountScheduleApi(app, { db: suite.db }, noopLog);
   return app;
 }
 
 /** Open a real shift session for `personId` (through the production `loginWithPin` path, on the app
  * role) and return the cookie header that carries it — the credential every schedule route gates on. */
 async function cookieFor(personId: string, pin: string): Promise<string> {
-  const session = await withTenant(suite.db, tenantId, async (tx) => {
+  const session = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    return loginWithPin(tx, { tenantId, tillId, personId, pin });
+    return loginWithPin(tx, { tillId, personId, pin });
   });
   return `${SESSION_COOKIE}=${session.id}`;
 }
@@ -83,8 +83,8 @@ async function send(
 
 async function insertShift(personId: string, startsAt: string, endsAt: string): Promise<string> {
   const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, role)
-    values (${tenantId}, ${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0, 'bar') returning id`);
+    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, role)
+    values (${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0, 'bar') returning id`);
   return r.rows[0]!.id;
 }
 
@@ -95,16 +95,16 @@ async function insertSwap(params: {
   status?: string;
 }): Promise<string> {
   const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
-    values (${tenantId}, ${params.requestedBy}, ${params.fromShiftId}, ${params.toPerson}, ${params.status ?? "requested"})
+    insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
+    values (${params.requestedBy}, ${params.fromShiftId}, ${params.toPerson}, ${params.status ?? "requested"})
     returning id`);
   return r.rows[0]!.id;
 }
 
 async function insertAbsence(personId: string, startsOn: string, endsOn: string): Promise<string> {
   const r = await suite.db.execute<{ id: string }>(sql`
-    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
-    values (${tenantId}, ${personId}, 'holiday', ${startsOn}, ${endsOn}) returning id`);
+    insert into absences (person_id, absence_kind, starts_on, ends_on)
+    values (${personId}, 'holiday', ${startsOn}, ${endsOn}) returning id`);
   return r.rows[0]!.id;
 }
 

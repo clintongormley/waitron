@@ -3,9 +3,9 @@
 // value used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { AppError, locationId, nodeId, seriesId, tenantId, tillId } from "@waitron/shared";
-import type { LocationId, NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
-import { asAppUser, locations, nodes, orderFlow, withTenant } from "@waitron/db";
+import { AppError, locationId, nodeId, seriesId, tillId } from "@waitron/shared";
+import type { LocationId, NodeId, SeriesId, TillId } from "@waitron/shared";
+import { asAppUser, locations, nodes, orderFlow, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
@@ -32,7 +32,6 @@ export type OrderFlow = (typeof orderFlow.enumValues)[number];
  * renderer never has to change shape when a second is added.
  */
 export interface TillConfig {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -122,7 +121,6 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
   const tipsEnabled = rawTips === "true" || rawTips === "1";
 
   return {
-    tenantId: brand("WAITRON_TILL_TENANT_ID", tenantId, required(env, "WAITRON_TILL_TENANT_ID")),
     tillId: brand("WAITRON_TILL_TILL_ID", tillId, required(env, "WAITRON_TILL_TILL_ID")),
     nodeId: brand("WAITRON_TILL_NODE_ID", nodeId, required(env, "WAITRON_TILL_NODE_ID")),
     seriesId: brand("WAITRON_TILL_SERIES_ID", seriesId, required(env, "WAITRON_TILL_SERIES_ID")),
@@ -142,14 +140,17 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
 }
 
 /**
- * The five environment variables that carry the till's fiscal identity — the ids `loadTillConfig`
- * `required`s. `tryLoadTillConfig` reads this ONE list to decide none/all/partial, so "which five
+ * The four environment variables that carry the till's fiscal identity — the ids `loadTillConfig`
+ * `required`s. `tryLoadTillConfig` reads this ONE list to decide none/all/partial, so "which four
  * make a provisioned till" lives in exactly one place rather than being re-enumerated per call site.
  * Order matters: a partial set names the FIRST missing var in THIS order, so an operator fixes them
  * top-down.
+ *
+ * `WAITRON_TILL_TENANT_ID` is NOT one of them any more: the database holds one taxpayer, keyed 1,
+ * so there is nothing for the variable to select. A box whose env file still sets it is unaffected
+ * — nothing reads it.
  */
 const TILL_ID_VARS = [
-  "WAITRON_TILL_TENANT_ID",
   "WAITRON_TILL_TILL_ID",
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_SERIES_ID",
@@ -158,18 +159,18 @@ const TILL_ID_VARS = [
 
 /**
  * Setup-mode-aware wrapper over `loadTillConfig` (slice 1b). An unprovisioned box has no venue, so
- * the five `WAITRON_TILL_*_ID` are absent — that is SETUP MODE, not a fault. Three cases, on the SAME
+ * the four `WAITRON_TILL_*_ID` are absent — that is SETUP MODE, not a fault. Three cases, on the SAME
  * absent-or-empty `isUnset` rule `config.ts` applies everywhere (a `VAR=` line counts as unset):
  *
- *  - NONE of the five set → `undefined`. Boot branches on `config.till === undefined` to run the
+ *  - NONE of the four set → `undefined`. Boot branches on `config.till === undefined` to run the
  *    setup surface instead of the trading surface.
- *  - ALL five set → the loaded identity, delegated verbatim to `loadTillConfig` (which `required`s and
+ *  - ALL four set → the loaded identity, delegated verbatim to `loadTillConfig` (which `required`s and
  *    brands each id, throwing `server.till_config_missing` / `server.till_config_invalid` as before —
- *    a set of five that are present-but-malformed still fails there, not here).
+ *    a set of four that are present-but-malformed still fails there, not here).
  *  - SOME but not all set → `server.config_invalid { variable, reason: "till_config_partial" }`,
  *    naming the FIRST missing var. A half-configured server is a MISCONFIGURATION a human must fix,
  *    never a setup box — so it fails loudly rather than silently degrading to setup mode and hiding
- *    four supplied-but-ignored ids. Only the variable NAME travels, never a value: the same no-leak
+ *    the supplied-but-ignored ids. Only the variable NAME travels, never a value: the same no-leak
  *    discipline `loadTillConfig`'s own `required`/`brand` paths keep.
  */
 export function tryLoadTillConfig(
@@ -178,7 +179,7 @@ export function tryLoadTillConfig(
   const present = TILL_ID_VARS.filter((v) => !isUnset(env[v]));
   if (present.length === 0) return undefined;
   if (present.length < TILL_ID_VARS.length) {
-    // Non-null: length is in (0, 5), so at least one is unset and `find` cannot miss.
+    // Non-null: length is in (0, 4), so at least one is unset and `find` cannot miss.
     const missing = TILL_ID_VARS.find((v) => isUnset(env[v]))!;
     throw new AppError("server.config_invalid", {
       variable: missing,
@@ -190,17 +191,16 @@ export function tryLoadTillConfig(
 
 /**
  * Read the venue's pay-timing mode from the till's own LOCATION row — the DB half of the config
- * `loadTillConfig` cannot resolve from the environment. Runs as the app role under the till's
- * tenant (`withTenant` + `asAppUser`), in the database holding this tenant; the `eq(id)` filter
- * selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the
+ * `loadTillConfig` cannot resolve from the environment. Runs as the app role (`withTransaction` +
+ * `asAppUser`); the `eq(id)` filter selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the
  * mode is provisioning-time config, stable for the process lifetime, so re-reading it on every
  * place/collect would be a needless round trip on the till's hottest path.
  */
 export async function readOrderFlow(
   db: Database,
-  cfg: Pick<TillConfig, "tenantId" | "locationId">,
+  cfg: Pick<TillConfig, "locationId">,
 ): Promise<OrderFlow> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
       .select({ orderFlow: locations.orderFlow })
@@ -222,13 +222,13 @@ export async function readOrderFlow(
 /**
  * The node's stamped filing module (`nodes.filing_module`, set by provisioning from the territory's
  * registry), which `fiscalSlot` cross-checks against the enabled fiscal module. Null for a bare
- * fixture node. Read ONCE at boot, as the app role under the till's tenant.
+ * fixture node. Read ONCE at boot, as the app role.
  */
 export async function readFilingModule(
   db: Database,
-  cfg: Pick<TillConfig, "tenantId" | "nodeId">,
+  cfg: Pick<TillConfig, "nodeId">,
 ): Promise<string | null> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
       .select({ filingModule: nodes.filingModule })

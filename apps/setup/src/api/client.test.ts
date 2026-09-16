@@ -104,7 +104,7 @@ describe("SetupApi", () => {
   });
 
   it("provision POSTs the body as JSON and returns the result", async () => {
-    const result = { provisioned: true, tenantId: "t-1", restarting: true };
+    const result = { provisioned: true, restarting: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
     const api = new SetupApi("", fetchImpl);
     expect(await api.provision(provisionBody)).toEqual(result);
@@ -237,7 +237,7 @@ describe("SetupApi", () => {
   };
 
   it("adopt POSTs the body (credential as a nested object) as JSON and returns the result", async () => {
-    const result = { adopted: true, tenantId: "t-1", restarting: true };
+    const result = { adopted: true, restarting: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
     const api = new SetupApi("", fetchImpl);
     expect(await api.adopt(adoptBody)).toEqual(result);

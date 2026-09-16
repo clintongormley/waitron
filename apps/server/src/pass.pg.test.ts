@@ -1,9 +1,9 @@
 // Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { credentialTenants, loadKeyRing, putCredential } from "@waitron/credentials";
+import { credentialProvisioned, loadKeyRing, putCredential } from "@waitron/credentials";
 import { DEFAULTS, runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import { drain } from "@waitron/fiscal-verifactu";
@@ -45,10 +45,9 @@ const emptyStripe = {
 
 describe("one pass as the non-superuser deployment role", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    await withTenant(suite.admin, tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    await withTransaction(suite.admin, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_probe",
@@ -61,11 +60,10 @@ describe("one pass as the non-superuser deployment role", () => {
 
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      // The enrolment list, read cross-tenant through `credential_tenants` as the deployment role.
-      // Under PGlite this would pass while proving nothing: a superuser sees the rows regardless of
-      // whether the SECURITY DEFINER seam or its grant exists.
-      const tenants = await credentialTenants(probe, "payments.stripe");
-      expect(tenants).toContain(tenantId);
+      // The enrolment answer, read through `credential_tenants` as the deployment role. Under
+      // PGlite this would pass while proving nothing: a superuser sees the rows regardless of
+      // whether the seam or its grant exists.
+      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(true);
 
       const reconciler = new StripeReconciler({
         db: probe,
@@ -95,7 +93,7 @@ describe("one pass as the non-superuser deployment role", () => {
               },
               now,
             ),
-          reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, tenants, now),
+          reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, now),
           awaitingCert: { current: false },
           monotonicMs: () => performance.now(),
           log: createLogger(
@@ -110,7 +108,7 @@ describe("one pass as the non-superuser deployment role", () => {
 
       // A `drain.tenant_skipped` or `reconcile.pair_skipped` WARNING is exactly what a missing
       // grant looks like from the outside: `runDue` catches the underlying permission-denied error
-      // per (tenant, duty) and folds it into `TickResult.skipped` rather than throwing, so
+      // per duty and folds it into `TickResult.skipped` rather than throwing, so
       // `report.duties.every(ok)` above stays `true` even when a grant is missing — see the ledger
       // count below, which is what actually catches that case. Nothing above `info` here is the
       // positive control: a real grants problem would show up as a warning line this asserts away.
@@ -123,7 +121,7 @@ describe("one pass as the non-superuser deployment role", () => {
       // as the deployment role, and a missing grant on any one of them is invisible under PGlite.
       const rows = await suite.admin.execute<{ count: string }>(
         sql`select count(*) as count from scheduled_runs
-            where tenant_id = ${tenantId} and duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
+            where duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
       );
       expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);
 
@@ -139,23 +137,22 @@ describe("one pass as the non-superuser deployment role", () => {
   });
 
   it("does not enumerate a tenant provisioned for a different purpose", async () => {
-    const otherPurposeTenant = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     // Provisioned for `fiscal.aeat`, NOT `payments.stripe` — a tenant with no credential at ALL
     // would pass this assertion even if `credential_tenants`'s `WHERE purpose = p_purpose` clause
     // were deleted outright. Giving it a DIFFERENT purpose's credential is what makes the filter,
     // not merely the row's absence, the thing this test depends on.
-    await withTenant(suite.admin, otherPurposeTenant, (tx) =>
+    await withTransaction(suite.admin, (tx) =>
       putCredential(tx, ring, {
-        tenantId: otherPurposeTenant,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      // The vault IS the enrolment list: a tenant provisioned for a different purpose is not
-      // half-served under the wrong one.
-      expect(await credentialTenants(probe, "payments.stripe")).not.toContain(otherPurposeTenant);
+      // The vault IS the enrolment list: a credential provisioned for a different purpose does not
+      // make this one look provisioned.
+      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(false);
     } finally {
       await probe.close();
     }

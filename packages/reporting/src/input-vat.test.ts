@@ -1,27 +1,21 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { TenantId } from "@waitron/shared";
 import { seedPurchaseInvoice, seedVenue } from "../test/fixtures.js";
-import type { SeededVenue } from "../test/fixtures.js";
 import { computeInputVat } from "./input-vat.js";
 import type { InputVatReturn } from "./types.js";
 
-// PGlite exercises deterministic arithmetic and explicit tenant predicates. The final case
-// seeds a second tenant and reads through the owner connection to pin the requested-tenant filter.
+// PGlite exercises deterministic arithmetic under the owner connection.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
-let venue: SeededVenue;
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  await seedVenue(suite.db);
 });
 
-function run(opts: { year: number; month: number; tenantId?: TenantId }): Promise<InputVatReturn> {
-  const tenantId = opts.tenantId ?? venue.tenantId;
-  return withTenant(suite.db, tenantId, async (tx) => {
+function run(opts: { year: number; month: number }): Promise<InputVatReturn> {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeInputVat(tx, {
-      tenantId,
       year: opts.year,
       period: { kind: "month", month: opts.month },
     });
@@ -34,14 +28,14 @@ describe("computeInputVat", () => {
     // round(100 × 21%) = 21.00. The deducible aggregate must sum the FILED cuotas (20.99 + 20.99 =
     // 41.98), never re-round on the monthly base (which would give round(200 × 21%) = 42.00) — the
     // exactness rule inherited from the output side (#76/#66).
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "A1",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-03",
       total: "120.99",
       lines: [{ rate: "21.00", base: "100.00", tax: "20.99" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "A2",
       issuedOn: "2026-08-02",
       receivedOn: "2026-08-04",
@@ -51,7 +45,6 @@ describe("computeInputVat", () => {
     const ret = await run({ year: 2026, month: 8 });
     expect(ret.byRate).toEqual([{ rate: "21.00", base: "200.00", tax: "41.98", kind: "ordinary" }]);
     expect(ret).toMatchObject({
-      tenantId: venue.tenantId,
       year: 2026,
       period: { kind: "month", month: 8 },
       baseTotal: "200.00",
@@ -60,7 +53,7 @@ describe("computeInputVat", () => {
   });
 
   it("splits ordinary and capital-goods lines (casilla 28/29 vs 30/31)", async () => {
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "B1",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-05",
@@ -81,7 +74,7 @@ describe("computeInputVat", () => {
   });
 
   it("excludes equivalence-surcharge regime invoices (non-deductible, off the 303)", async () => {
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "RE1",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-05",
@@ -89,7 +82,7 @@ describe("computeInputVat", () => {
       regime: "equivalence_surcharge",
       lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "GEN1",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-06",
@@ -103,14 +96,14 @@ describe("computeInputVat", () => {
 
   it("buckets by received_on (the deduction period), not issued_on", async () => {
     // Received in July → deduct in July, even though issued in August; and vice versa.
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "JUL",
       issuedOn: "2026-08-02",
       receivedOn: "2026-07-31",
       total: "121.00",
       lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "AUG",
       issuedOn: "2026-07-30",
       receivedOn: "2026-08-01",
@@ -128,7 +121,7 @@ describe("computeInputVat", () => {
   it("applies deductible_proportion per invoice (the prorrata seam), scaling only the tax", async () => {
     // Spec §6/§9: the base is reported in full; only the deductible cuota is scaled by the proportion.
     // 42.00 × 50% = 21.00.
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P1",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-05",
@@ -143,40 +136,12 @@ describe("computeInputVat", () => {
 
   it("returns zeros for a month with no received invoices", async () => {
     expect(await run({ year: 2026, month: 3 })).toEqual({
-      tenantId: venue.tenantId,
       year: 2026,
       period: { kind: "month", month: 3 },
       byRate: [],
       baseTotal: "0.00",
       taxTotal: "0.00",
     });
-  });
-
-  it("scopes to the explicit tenant predicate under a superuser connection", async () => {
-    // Removing the tenant predicate admits the other tenant's 4% line (proved by deletion).
-    const other = await seedVenue(suite.db);
-    await seedPurchaseInvoice(suite.db, other, {
-      supplierInvoiceNumber: "OTHER",
-      issuedOn: "2026-08-01",
-      receivedOn: "2026-08-05",
-      total: "1040.00",
-      lines: [{ rate: "4.00", base: "1000.00", tax: "40.00" }],
-    });
-    await seedPurchaseInvoice(suite.db, venue, {
-      supplierInvoiceNumber: "MINE",
-      issuedOn: "2026-08-01",
-      receivedOn: "2026-08-05",
-      total: "121.00",
-      lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
-    });
-    const ret = await withTenant(suite.db, venue.tenantId, (tx) =>
-      computeInputVat(tx, {
-        tenantId: venue.tenantId,
-        year: 2026,
-        period: { kind: "month", month: 8 },
-      }),
-    );
-    expect(ret.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }]);
   });
 
   it("throws a plain validation Error on an out-of-range month or year", async () => {

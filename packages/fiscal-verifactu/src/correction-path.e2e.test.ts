@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -25,17 +25,16 @@ let backend: VerifactuBackend;
 let till: SeededTill;
 // A SECOND series, `purpose = 'rectificative'`, for the corrective sales — a rectificativa draws
 // its number from its own series (RD 1619/2012 art. 6.1.a), and `sales` is unique on
-// (tenant, series, invoice_number), so the corrective cannot reuse the original's series+number.
+// (series_id, invoice_number), so the corrective cannot reuse the original's series+number.
 let rectificativeSeriesId: string;
 
 beforeEach(async () => {
-  // Each call mints a fresh tenant (and NIF), so tests never collide on the append-only,
+  // Each call mints a fresh node (and NIF), so tests never collide on the append-only,
   // TRUNCATE-blocking `registros_facturacion` — the same reseed-without-truncate reasoning
   // `chain.concurrency.test.ts` documents.
   till = await seedTill(suite.admin, "A");
   const series = await suite.admin.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
-    values (${till.tenantId}, ${till.nodeId}, 'R', 'rectificative', 1)
+    insert into invoice_series (node_id, code, purpose, next_number) values (${till.nodeId}, 'R', 'rectificative', 1)
     returning id
   `);
   rectificativeSeriesId = series.rows[0]!.id;
@@ -52,7 +51,6 @@ beforeEach(async () => {
 /** The corrective's OWN data — a rectificativa por diferencias with negative lines and total. */
 function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -75,7 +73,6 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
  * NumSerieFactura "A/1". */
 function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -95,7 +92,7 @@ function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRe
  * the original sale's id — the `correctsSaleId` a correction points at. */
 async function recordOriginal(): Promise<string> {
   const originalId = await seedSale(suite.admin, till, 1);
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordSale(tx, originalSaleFor(originalId, 1));
   });
@@ -109,10 +106,7 @@ async function seedCorrectiveRow(
   total: string,
 ): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                       issued_offset_minutes, total, vat_breakdown, corrects_sale_id,
-                       locale, invoice_locales, fiscal_backend, fiscal_state)
-    values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${rectificativeSeriesId}, ${invoiceNumber},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, corrects_sale_id, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${rectificativeSeriesId}, ${invoiceNumber},
             '2026-03-02T12:05:00+01:00', 60, ${total}, '[]'::jsonb, ${correctsSaleId},
             'es', array['es'], 'verifactu', 'recorded')
     returning id
@@ -132,7 +126,7 @@ async function correct(
   const total = overrides.total ?? "-123.45";
   const correctiveId = await seedCorrectiveRow(invoiceNumber, correctsSaleId, total);
   const sale = { ...correctiveSaleFor(correctiveId, invoiceNumber), ...overrides };
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordCorrection(tx, sale, { correctsSaleId: brandSaleId(correctsSaleId) });
   });

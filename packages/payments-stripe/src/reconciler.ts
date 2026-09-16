@@ -1,7 +1,6 @@
 import { recordIncidentOnce } from "@waitron/core";
 import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { DEFAULT_SETTLEMENT_LAG_MS, reconcilePayments } from "@waitron/payments";
 import type { PaymentReconcileResult, PaymentReconciler, ReconcilePeriod } from "@waitron/payments";
 import type { StripeReportClient } from "./report-client.js";
@@ -24,12 +23,12 @@ const SESSION_PREFIX = "cs_";
  *
  * The two are resolved TOGETHER, from a single call, rather than by two independent option
  * functions — because they are not independent. A standalone Stripe account (one per merchant, no
- * Connect) holds exactly one tenant's money and issues exactly one secret key, so `report` and
+ * Connect) holds exactly one business's money and issues exactly one secret key, so `report` and
  * `refund` are two views of the SAME credentials. Two independent resolvers would not make a
- * mispairing IMPOSSIBLE — an implementation could still hand back `{ report: forTenantA, refund:
- * forTenantB }` from two separately-called functions — but it would make that mispairing a second
- * invariant for every future caller to uphold by hand, at however many places `resolveAccount` gets
- * invoked from. Resolving both from one call makes the pairing a single decision, made once, at one
+ * mispairing IMPOSSIBLE — an implementation could still hand back a report surface and a refund
+ * surface built from different credentials — but it would make that mispairing a second invariant
+ * for every future caller to uphold by hand, at however many places `resolveAccount` gets invoked
+ * from. Resolving both from one call makes the pairing a single decision, made once, at one
  * call site, instead of an open-ended number of places that must all agree independently; a caller
  * would have to go out of its way to mismatch two credentials it fetched together in one place.
  *
@@ -46,11 +45,10 @@ export interface StripeReconcileAccount {
 
 export interface StripeReconcilerOptions {
   db: Database;
-  /** The tenant's own Stripe account surfaces. A FUNCTION, not fixed clients: a reconciler is built
-   * once and swept across many tenants, while the accounts are standalone (one per merchant, no
-   * Connect), so the resolved account IS the tenant scoping the report source's contract demands.
-   * Provisioning stays deferred. */
-  resolveAccount: (tenantId: TenantId) => Promise<StripeReconcileAccount>;
+  /** The taxpayer's own Stripe account surfaces. A FUNCTION, not fixed clients: the account is
+   * resolved per sweep, so a credential provisioned or rotated while the host runs is picked up on
+   * the next pass rather than after a restart. Provisioning stays deferred. */
+  resolveAccount: () => Promise<StripeReconcileAccount>;
   /** How long the processor may legitimately take to report a settlement. Defaults to the neutral
    * layer's own seven days. */
   settlementLagMs?: number;
@@ -77,24 +75,19 @@ export class StripeReconciler implements PaymentReconciler {
 
   constructor(private readonly opts: StripeReconcilerOptions) {}
 
-  async reconcile(
-    tenantId: TenantId,
-    period: ReconcilePeriod,
-    now: Date,
-  ): Promise<PaymentReconcileResult> {
-    const account = await this.opts.resolveAccount(tenantId);
+  async reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult> {
+    const account = await this.opts.resolveAccount();
     const settlementLagMs = this.opts.settlementLagMs ?? DEFAULT_SETTLEMENT_LAG_MS;
     return reconcilePayments(
       {
         db: this.opts.db,
         provider: PROVIDER,
         report: stripeSettlementReport(account.report, settlementLagMs),
-        reverse: (paymentRef) => this.reverse(account, tenantId, paymentRef),
+        reverse: (paymentRef) => this.reverse(account, paymentRef),
         incidents: recordIncidentOnce,
         settlementLagMs,
         nodeId: this.opts.nodeId,
       },
-      tenantId,
       period,
       now,
     );
@@ -105,25 +98,15 @@ export class StripeReconciler implements PaymentReconciler {
    * `reverseViaStripe` both interactive providers use, so the local pre-check, the failure
    * bookkeeping and the state transitions are shared code rather than a second implementation.
    *
-   * This caller adds two things to the shared helper, and a hosted orphan needs BOTH to be refunded
-   * at all.
-   *
-   * The first is the processor-ref resolver — a Checkout Session id is not something
-   * `stripe.refunds` can address.
-   *
-   * The second is the tenant, threaded from `reconcile`'s argument to the reversal's explicit
-   * tenant check. The callback itself receives only a payment reference.
+   * This caller adds the processor-ref resolver to the shared helper: a hosted orphan stores a
+   * Checkout Session id, which `stripe.refunds` cannot address, so it cannot be refunded without one.
    *
    * Throwing out of the resolver remains the correct failure mode: `reconcilePayments` catches it,
    * records the `AppError` code on `remediationFailures` and folds it into ONE aggregated
    * `payment.reconcile_remediation_failed` incident per till. An under-remediated orphan carrying an
    * open incident is the safe failure, a double refund is not.
    */
-  private async reverse(
-    account: StripeReconcileAccount,
-    tenantId: TenantId,
-    paymentRef: string,
-  ): Promise<void> {
+  private async reverse(account: StripeReconcileAccount, paymentRef: string): Promise<void> {
     await reverseViaStripe(
       this.opts.db,
       account.refund,
@@ -132,7 +115,6 @@ export class StripeReconciler implements PaymentReconciler {
       "refund",
       undefined,
       {
-        tenantId,
         // The sweep's own node id — the reversal's node identity (it once fed sync capture; capture
         // is gone — swap S5).
         nodeId: this.opts.nodeId,

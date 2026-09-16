@@ -23,7 +23,6 @@ function pkceChallenge(verifier: string): string {
 }
 
 interface GoogleStartInput {
-  tenantId: string;
   clientId: string;
   redirectUri: string;
   now?: Date;
@@ -46,16 +45,8 @@ async function begin(
   const nonce = randomBytes(32).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");
   const now = input.now ?? new Date();
-  await tx
-    .delete(googleOidcStates)
-    .where(
-      and(
-        eq(googleOidcStates.tenantId, input.tenantId),
-        lt(googleOidcStates.expiresAt, now.toISOString()),
-      ),
-    );
+  await tx.delete(googleOidcStates).where(lt(googleOidcStates.expiresAt, now.toISOString()));
   await tx.insert(googleOidcStates).values({
-    tenantId: input.tenantId,
     personId,
     mode,
     stateHash: digest(state),
@@ -94,13 +85,12 @@ export async function beginGoogleLink(
 
 export async function claimGoogleState(
   tx: Transaction,
-  input: { tenantId: string; state: string; now?: Date },
+  input: { state: string; now?: Date },
 ): Promise<GoogleOidcClaim> {
   const rows = await tx
     .delete(googleOidcStates)
     .where(
       and(
-        eq(googleOidcStates.tenantId, input.tenantId),
         eq(googleOidcStates.stateHash, digest(input.state)),
         gt(googleOidcStates.expiresAt, (input.now ?? new Date()).toISOString()),
       ),
@@ -120,19 +110,13 @@ export async function claimGoogleState(
 
 export async function completeGoogleLink(
   tx: Transaction,
-  input: { tenantId: string; personId: string; subject: string },
+  input: { personId: string; subject: string },
 ): Promise<void> {
   try {
     const updated = await tx
       .update(persons)
       .set({ googleSubject: input.subject })
-      .where(
-        and(
-          eq(persons.tenantId, input.tenantId),
-          eq(persons.id, input.personId),
-          eq(persons.status, "active"),
-        ),
-      )
+      .where(and(eq(persons.id, input.personId), eq(persons.status, "active")))
       .returning({ id: persons.id });
     if (updated.length !== 1) throw new AppError("google.invalid", {});
   } catch (error) {
@@ -143,13 +127,13 @@ export async function completeGoogleLink(
 
 export async function loginWithGoogle(
   tx: Transaction,
-  input: { tenantId: string; subject: string },
+  input: { subject: string },
 ): Promise<ManagementSession> {
   const [person] = await tx
     .select({ id: persons.id, status: persons.status, totpSecret: persons.totpSecret })
     .from(persons)
-    .where(and(eq(persons.tenantId, input.tenantId), eq(persons.googleSubject, input.subject)));
+    .where(eq(persons.googleSubject, input.subject));
   if (person === undefined || person.status !== "active") throw new AppError("google.invalid", {});
   if (person.totpSecret !== null) throw new AppError("google.second_factor_required", {});
-  return startManagementSession(tx, { tenantId: input.tenantId, personId: person.id });
+  return startManagementSession(tx, { personId: person.id });
 }

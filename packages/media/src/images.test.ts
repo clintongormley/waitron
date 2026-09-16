@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTenant, CORE_MIGRATIONS } from "@waitron/db";
+import { withTransaction, CORE_MIGRATIONS } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -25,12 +25,10 @@ const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 
 describe("image library", () => {
   it("stores bytes with required default metadata and returns the same image for duplicate bytes", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const first = await uploadImage(
         tx,
-        tenantId,
         {
           bytes: photo,
           names: { en: "Bread" },
@@ -44,12 +42,11 @@ describe("image library", () => {
       expect(first.image.labels).toEqual(["Food", "Summer"]);
       const duplicate = await uploadImage(
         tx,
-        tenantId,
         { bytes: photo, names: { en: "Other" }, altText: { en: "Other" }, labels: [] },
         { fallbackLanguage: "es", maxUploadBytes: 100 },
       );
       expect(duplicate).toEqual({ created: false, image: first.image });
-      const stored = await readImageBytes(tx, tenantId, first.image.filename);
+      const stored = await readImageBytes(tx, first.image.filename);
       expect(stored?.bytes).toEqual(photo);
       expect(stored?.contentType).toBe("image/jpeg");
     });
@@ -58,7 +55,6 @@ describe("image library", () => {
 
 describe("metadata, labels and references", () => {
   it("requires a default name, keeps alt text optional, and rejects bad or oversize bytes", async () => {
-    const tenantId = await seedTenant(suite.db);
     const good = { bytes: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] };
     const options = { fallbackLanguage: "en", maxUploadBytes: 100 };
     for (const [input, code] of [
@@ -70,31 +66,26 @@ describe("metadata, labels and references", () => {
       [{ ...good, bytes: new Uint8Array([1, 2, 3]) }, "media.unsupported_type"],
     ] as const) {
       await expect(
-        withTenant(suite.db, tenantId, (tx) =>
-          uploadImage(tx, tenantId, input as typeof good, options),
-        ),
+        withTransaction(suite.db, (tx) => uploadImage(tx, input as typeof good, options)),
       ).rejects.toMatchObject({ code });
     }
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       // Alt text is optional: an upload with no alt text succeeds and stores an empty map.
       const { created, image } = await uploadImage(
         tx,
-        tenantId,
         { bytes: photo, names: { en: "Bread" }, altText: {}, labels: [] },
         options,
       );
       expect(created).toBe(true);
       expect(image.altText).toEqual({});
-      expect(await listImageLabels(tx, tenantId)).toEqual([]);
+      expect(await listImageLabels(tx)).toEqual([]);
     });
   });
 
   it("derives labels from current assignments, edits metadata without changing bytes, and removes unused images", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const first = await uploadImage(
         tx,
-        tenantId,
         {
           bytes: photo,
           names: { en: "Bread" },
@@ -105,7 +96,6 @@ describe("metadata, labels and references", () => {
       );
       const second = await uploadImage(
         tx,
-        tenantId,
         {
           bytes: new Uint8Array([...photo, 4]),
           names: { en: "Cake" },
@@ -114,39 +104,38 @@ describe("metadata, labels and references", () => {
         },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
-      expect(await listImageLabels(tx, tenantId)).toEqual(["Food", "Summer menu"]);
+      expect(await listImageLabels(tx)).toEqual(["Food", "Summer menu"]);
       const edited = await updateImage(
         tx,
-        tenantId,
         first.image.id,
         { names: { en: "Sourdough", fr: "Pain" }, altText: { en: "A loaf" }, labels: ["Winter"] },
         "en",
       );
       expect(edited.filename).toBe(first.image.filename);
       expect(edited.names).toEqual({ en: "Sourdough", fr: "Pain" });
-      expect(await listImageLabels(tx, tenantId)).toEqual(["Food", "Winter"]);
-      expect(await deleteImage(tx, tenantId, second.image.id)).toEqual({ deleted: true, uses: [] });
-      expect(await listImageLabels(tx, tenantId)).toEqual(["Winter"]);
-      expect(await readImageBytes(tx, tenantId, second.image.filename)).toBeNull();
+      expect(await listImageLabels(tx)).toEqual(["Food", "Winter"]);
+      expect(await deleteImage(tx, second.image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await listImageLabels(tx)).toEqual(["Winter"]);
+      expect(await readImageBytes(tx, second.image.filename)).toBeNull();
     });
   });
 
   it("shows active and inactive product uses and blocks deletion until every use is cleared", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        tenantId,
         { bytes: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
       const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+        sql`insert into catalogues (name) values ('Lunch') returning id`,
       );
       const inserted = await tx.execute<{
         id: string;
-      }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image, active)
-        values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general', ${image.filename}, false) returning id`);
+      }>(
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image, active) values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general', ${image.filename}, false) returning id`,
+      );
       const uses = [
         {
           kind: "product",
@@ -156,35 +145,34 @@ describe("metadata, labels and references", () => {
           active: false,
         },
       ];
-      expect(await listImageUsages(tx, tenantId, image.id)).toEqual(uses);
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: false, uses });
-      expect((await readImage(tx, tenantId, image.id)).usageCount).toBe(1);
-      await tx.execute(sql`update products set image = null where tenant_id = ${tenantId}`);
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await listImageUsages(tx, image.id)).toEqual(uses);
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+      expect((await readImage(tx, image.id)).usageCount).toBe(1);
+      await tx.execute(sql`update products set image = null`);
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
     });
   });
 
   it("blocks deletion of a photo a product VARIANT uses, and releases it when cleared", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        tenantId,
         { bytes: photo, names: { en: "Large loaf" }, altText: { en: "Loaf" }, labels: [] },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
       const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+        sql`insert into catalogues (name) values ('Lunch') returning id`,
       );
       // The PRODUCT carries no photo; only its variant does, which is the case a product-only scan
       // misses — the variant photo would be deletable while the variant still points at it.
       const product = await tx.execute<{ id: string }>(
-        sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
       );
       const variant = await tx.execute<{ id: string }>(
-        sql`insert into product_variants (tenant_id, product_id, name, unit_price, image)
-          values (${tenantId}, ${product.rows[0]!.id}, 'Large', '3.00', ${image.filename}) returning id`,
+        sql`insert into product_variants (product_id, name, unit_price, image)
+          values (${product.rows[0]!.id}, 'Large', '3.00', ${image.filename}) returning id`,
       );
       const uses = [
         {
@@ -197,65 +185,28 @@ describe("metadata, labels and references", () => {
           active: true,
         },
       ];
-      expect(await listImageUsages(tx, tenantId, image.id)).toEqual(uses);
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: false, uses });
+      expect(await listImageUsages(tx, image.id)).toEqual(uses);
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
       // The detail read and the list read must agree: the list's count is its own SQL, so a use the
       // scan finds but the count misses would show the library a free photo that refuses to delete.
-      expect((await readImage(tx, tenantId, image.id)).usageCount).toBe(1);
-      expect((await listImages(tx, tenantId, {})).images[0]!.usageCount).toBe(1);
-      await tx.execute(sql`update product_variants set image = null where tenant_id = ${tenantId}`);
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
-    });
-  });
-
-  it("scopes every by-id read and write, filename read, labels and gaps to its tenant", async () => {
-    const a = await seedTenant(suite.db);
-    const b = await seedTenant(suite.db);
-    const input = {
-      bytes: photo,
-      names: { en: "Bread" },
-      altText: { en: "Loaf" },
-      labels: ["food"],
-    };
-    const { image } = await withTenant(suite.db, a, (tx) =>
-      uploadImage(tx, a, input, { fallbackLanguage: "en", maxUploadBytes: 100 }),
-    );
-    for (const action of [
-      (tx: Parameters<typeof readImage>[0]) => readImage(tx, b, image.id),
-      (tx: Parameters<typeof readImage>[0]) => listImageUsages(tx, b, image.id),
-      (tx: Parameters<typeof readImage>[0]) => updateImage(tx, b, image.id, input, "en"),
-      (tx: Parameters<typeof readImage>[0]) => deleteImage(tx, b, image.id),
-    ] as ((tx: Parameters<typeof readImage>[0]) => Promise<unknown>)[])
-      await expect(withTenant(suite.db, b, action)).rejects.toMatchObject({
-        code: "image.not_found",
-      });
-    await withTenant(suite.db, b, async (tx) => {
-      expect(await readImageBytes(tx, b, image.filename)).toBeNull();
-      expect(await listImageLabels(tx, b)).toEqual([]);
-      expect(await listImageTranslationGaps(tx, b, "fr")).toEqual([]);
-    });
-    await withTenant(suite.db, a, async (tx) => {
-      expect(await listImageTranslationGaps(tx, a, "fr")).toEqual([
-        { kind: "image", id: image.id },
-      ]);
-      expect(await listImageTranslationGaps(tx, a, "en")).toEqual([]);
+      expect((await readImage(tx, image.id)).usageCount).toBe(1);
+      expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+      await tx.execute(sql`update product_variants set image = null`);
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
     });
   });
 
   it("reports a missing name but not missing alt text as a translation gap", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       // Alt text is optional, so an image named in French but without French alt text is complete;
       // only a missing name in the target language is a gap that blocks a default-language change.
       await uploadImage(
         tx,
-        tenantId,
         { bytes: photo, names: { en: "Bread", fr: "Pain" }, altText: {}, labels: [] },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
       const nameless = await uploadImage(
         tx,
-        tenantId,
         {
           bytes: new Uint8Array([...photo, 7]),
           names: { en: "Cake" },
@@ -264,7 +215,7 @@ describe("metadata, labels and references", () => {
         },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
-      expect(await listImageTranslationGaps(tx, tenantId, "fr")).toEqual([
+      expect(await listImageTranslationGaps(tx, "fr")).toEqual([
         { kind: "image", id: nameless.image.id },
       ]);
     });
@@ -273,8 +224,7 @@ describe("metadata, labels and references", () => {
 
 describe("search and sorting", () => {
   it("ranks name words above alt words, stems translations, searches labels and combines label filters", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const add = async (
         marker: number,
         names: Record<string, string>,
@@ -284,7 +234,6 @@ describe("search and sorting", () => {
         (
           await uploadImage(
             tx,
-            tenantId,
             { bytes: new Uint8Array([...photo, marker]), names, altText, labels },
             { fallbackLanguage: "en", maxUploadBytes: 100 },
           )
@@ -298,40 +247,37 @@ describe("search and sorting", () => {
       const spanish = await add(4, { en: "Pears", es: "Peras maduras" }, { en: "Fruit" }, [
         "Fruit",
       ]);
+      expect((await listImages(tx, { query: "bread" })).images.map((row) => row.id)).toEqual([
+        name.id,
+        alt.id,
+      ]);
       expect(
-        (await listImages(tx, tenantId, { query: "bread" })).images.map((row) => row.id),
-      ).toEqual([name.id, alt.id]);
-      expect(
-        (await listImages(tx, tenantId, { query: "bread", label: " SUMMER MENU " })).images.map(
+        (await listImages(tx, { query: "bread", label: " SUMMER MENU " })).images.map(
           (row) => row.id,
         ),
       ).toEqual([name.id]);
       expect(
-        (
-          await listImages(tx, tenantId, { query: '"summer menu"', sort: "name", language: "en" })
-        ).images.map((row) => row.id),
+        (await listImages(tx, { query: '"summer menu"', sort: "name", language: "en" })).images.map(
+          (row) => row.id,
+        ),
       ).toEqual([name.id, label.id]);
-      expect(
-        (await listImages(tx, tenantId, { query: "pera" })).images.map((row) => row.id),
-      ).toEqual([spanish.id]);
-      expect(await listImages(tx, tenantId, { query: "bre" })).toEqual({ images: [], total: 0 });
-      expect((await listImages(tx, tenantId, { query: "'; drop table products; --" })).total).toBe(
-        0,
-      );
+      expect((await listImages(tx, { query: "pera" })).images.map((row) => row.id)).toEqual([
+        spanish.id,
+      ]);
+      expect(await listImages(tx, { query: "bre" })).toEqual({ images: [], total: 0 });
+      expect((await listImages(tx, { query: "'; drop table products; --" })).total).toBe(0);
     });
   });
 
   it("sorts by name using the requested translation then site default, date in either direction and stable pages", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const added = [];
       for (let n = 0; n < 3; n++)
         added.push(
           (
             await uploadImage(
               tx,
-              tenantId,
               {
                 bytes: new Uint8Array([...photo, n]),
                 names: {
@@ -347,36 +293,32 @@ describe("search and sorting", () => {
         );
       for (let n = 0; n < 3; n++)
         await tx.execute(
-          sql`update media_images set created_at = ${new Date(2026, 0, n + 1)} where tenant_id = ${tenantId} and id = ${added[n]!.id}`,
+          sql`update media_images set created_at = ${new Date(2026, 0, n + 1)} where id = ${added[n]!.id}`,
         );
       const ids = (result: Awaited<ReturnType<typeof listImages>>) =>
         result.images.map((image) => image.id);
-      expect(ids(await listImages(tx, tenantId))).toEqual([
-        added[2]!.id,
-        added[1]!.id,
-        added[0]!.id,
-      ]);
-      expect(ids(await listImages(tx, tenantId, { sort: "date", direction: "asc" }))).toEqual(
+      expect(ids(await listImages(tx))).toEqual([added[2]!.id, added[1]!.id, added[0]!.id]);
+      expect(ids(await listImages(tx, { sort: "date", direction: "asc" }))).toEqual(
         added.map((image) => image.id),
       );
-      expect(ids(await listImages(tx, tenantId, { sort: "name", language: "de" }))).toEqual([
+      expect(ids(await listImages(tx, { sort: "name", language: "de" }))).toEqual([
         added[1]!.id,
         added[2]!.id,
         added[0]!.id,
       ]);
       expect(
-        ids(await listImages(tx, tenantId, { sort: "name", language: "de", direction: "desc" })),
+        ids(await listImages(tx, { sort: "name", language: "de", direction: "desc" })),
       ).toEqual([added[0]!.id, added[2]!.id, added[1]!.id]);
-      expect(ids(await listImages(tx, tenantId, { sort: "name", language: "fr" }))).toEqual(
+      expect(ids(await listImages(tx, { sort: "name", language: "fr" }))).toEqual(
         added.map((image) => image.id),
       );
-      const first = await listImages(tx, tenantId, { limit: 2 });
-      const second = await listImages(tx, tenantId, { offset: 2, limit: 2 });
+      const first = await listImages(tx, { limit: 2 });
+      const second = await listImages(tx, { offset: 2, limit: 2 });
       expect(first.total).toBe(3);
       expect(second.total).toBe(3);
-      expect([...ids(first), ...ids(second)]).toEqual(ids(await listImages(tx, tenantId)));
+      expect([...ids(first), ...ids(second)]).toEqual(ids(await listImages(tx)));
       expect(first.images[0]).not.toHaveProperty("bytes");
-      expect(await listImages(tx, tenantId, { offset: 9 })).toEqual({ images: [], total: 3 });
+      expect(await listImages(tx, { offset: 9 })).toEqual({ images: [], total: 3 });
     });
   });
 });
@@ -393,10 +335,9 @@ describe("input boundaries", () => {
     { sort: "random" },
     { direction: "sideways" },
   ])("rejects invalid search options %j", async (options) => {
-    const tenantId = await seedTenant(suite.db);
     await expect(
-      withTenant(suite.db, tenantId, (tx) =>
-        listImages(tx, tenantId, options as Parameters<typeof listImages>[2]),
+      withTransaction(suite.db, (tx) =>
+        listImages(tx, options as Parameters<typeof listImages>[1]),
       ),
     ).rejects.toMatchObject({ code: "image.invalid_query" });
   });
@@ -411,20 +352,17 @@ describe("input boundaries", () => {
       contentType: "image/webp",
     },
   ])("serves validated $contentType bytes", async ({ bytes, contentType }) => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        tenantId,
         { bytes, names: { en: "Dish" }, altText: { en: "Plate" }, labels: [] },
         { maxUploadBytes: 100 },
       );
-      expect(await readImageBytes(tx, tenantId, image.filename)).toEqual({ bytes, contentType });
+      expect(await readImageBytes(tx, image.filename)).toEqual({ bytes, contentType });
     });
   });
 
   it("rejects malformed translation maps and reuses label spelling across images", async () => {
-    const tenantId = await seedTenant(suite.db);
     const input = {
       bytes: photo,
       names: { en: "Dish" },
@@ -433,37 +371,33 @@ describe("input boundaries", () => {
     };
     for (const names of [null, [], { zz: "unknown" }, { en: "A", "en-GB": "B" }, { en: 42 }]) {
       await expect(
-        withTenant(suite.db, tenantId, (tx) =>
-          uploadImage(tx, tenantId, { ...input, names } as typeof input, { maxUploadBytes: 100 }),
+        withTransaction(suite.db, (tx) =>
+          uploadImage(tx, { ...input, names } as typeof input, { maxUploadBytes: 100 }),
         ),
       ).rejects.toThrow();
     }
-    await withTenant(suite.db, tenantId, async (tx) => {
-      await uploadImage(tx, tenantId, input, { maxUploadBytes: 100 });
+    await withTransaction(suite.db, async (tx) => {
+      await uploadImage(tx, input, { maxUploadBytes: 100 });
       const { image } = await uploadImage(
         tx,
-        tenantId,
         { ...input, bytes: new Uint8Array([...photo, 9]), labels: ["SUMMER MENU"] },
         { maxUploadBytes: 100 },
       );
       expect(image.labels).toEqual(["Summer menu"]);
-      expect(await listImageLabels(tx, tenantId)).toEqual(["Summer menu"]);
+      expect(await listImageLabels(tx)).toEqual(["Summer menu"]);
     });
   });
 });
 
 it("keeps a name match above repeated alt-text matches when sorting by relevance", async () => {
-  const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     const name = await uploadImage(
       tx,
-      tenantId,
       { bytes: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] },
       { maxUploadBytes: 100 },
     );
     const alt = await uploadImage(
       tx,
-      tenantId,
       {
         bytes: new Uint8Array([...photo, 2]),
         names: { en: "Bakery" },
@@ -472,19 +406,18 @@ it("keeps a name match above repeated alt-text matches when sorting by relevance
       },
       { maxUploadBytes: 100 },
     );
-    expect(
-      (await listImages(tx, tenantId, { query: "bread" })).images.map((image) => image.id),
-    ).toEqual([name.image.id, alt.image.id]);
+    expect((await listImages(tx, { query: "bread" })).images.map((image) => image.id)).toEqual([
+      name.image.id,
+      alt.image.id,
+    ]);
   });
 });
 
 it("sorts by the default when the requested language was disabled while retaining its translations", async () => {
-  const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
-    await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr"] });
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr"] });
     const first = await uploadImage(
       tx,
-      tenantId,
       {
         bytes: photo,
         names: { fr: "Abricot", en: "Zebra" },
@@ -495,7 +428,6 @@ it("sorts by the default when the requested language was disabled while retainin
     );
     const second = await uploadImage(
       tx,
-      tenantId,
       {
         bytes: new Uint8Array([...photo, 8]),
         names: { fr: "Poire", en: "Apple" },
@@ -504,7 +436,7 @@ it("sorts by the default when the requested language was disabled while retainin
       },
       { maxUploadBytes: 100 },
     );
-    const result = await listImages(tx, tenantId, { sort: "name", language: "en" });
+    const result = await listImages(tx, { sort: "name", language: "en" });
     expect(result.images.map((image) => image.id)).toEqual([first.image.id, second.image.id]);
     expect(result.images[0]!.names.en).toBe("Zebra");
   });
@@ -516,11 +448,9 @@ it.each([
 ])(
   "matches $language word forms rather than requiring an exact token",
   async ({ language, plural, singular }) => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        tenantId,
         {
           bytes: photo,
           names: { en: "Photograph", [language]: plural },
@@ -533,9 +463,9 @@ it.each([
         sql`select to_tsvector('pg_catalog.simple', ${plural}) @@ plainto_tsquery('pg_catalog.simple', ${singular}) as matched`,
       );
       expect(exactToken.rows).toEqual([{ matched: false }]);
-      expect(
-        (await listImages(tx, tenantId, { query: singular })).images.map((row) => row.id),
-      ).toEqual([image.id]);
+      expect((await listImages(tx, { query: singular })).images.map((row) => row.id)).toEqual([
+        image.id,
+      ]);
     });
   },
 );
@@ -560,24 +490,22 @@ it("maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages 
 
 it("protects an image used only by a category and releases it after clearing the reference", async () => {
   const { createCategory, updateCategory } = await import("@waitron/catalogue");
-  const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(
       tx,
-      tenantId,
       { bytes: photo, names: { en: "Food" }, altText: { en: "Food on a plate" }, labels: [] },
       { maxUploadBytes: 100 },
     );
-    const category = await createCategory(tx, tenantId, {
+    const category = await createCategory(tx, {
       name: { en: "Food" },
       image: image.filename,
     });
     const menu = await tx.execute<{ id: string }>(sql`
-      insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id
+      insert into catalogues (name) values ('Lunch') returning id
     `);
     const product = await tx.execute<{ id: string }>(sql`
-      insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image)
-      values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', 2, 'general', ${image.filename})
+      insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image) values (${menu.rows[0]!.id}, 'Bread', 'each', 2, 'general', ${image.filename})
       returning id
     `);
     const uses = [
@@ -590,33 +518,12 @@ it("protects an image used only by a category and releases it after clearing the
       },
       { kind: "category" as const, id: category.id, names: category.name },
     ];
-    expect(await listImageUsages(tx, tenantId, image.id)).toEqual(uses);
-    expect((await readImage(tx, tenantId, image.id)).usageCount).toBe(2);
-    expect((await listImages(tx, tenantId, {})).images[0]!.usageCount).toBe(2);
-    expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: false, uses });
-    await updateCategory(tx, tenantId, category.id, { image: null });
-    await tx.execute(
-      sql`update products set image = null where tenant_id = ${tenantId} and id = ${product.rows[0]!.id}`,
-    );
-    expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(2);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    await updateCategory(tx, category.id, { image: null });
+    await tx.execute(sql`update products set image = null where id = ${product.rows[0]!.id}`);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
   });
-});
-
-it("rejects another tenant's category image", async () => {
-  const { createCategory } = await import("@waitron/catalogue");
-  const tenantId = await seedTenant(suite.db);
-  const other = await seedTenant(suite.db);
-  const { image } = await withTenant(suite.db, other, (tx) =>
-    uploadImage(
-      tx,
-      other,
-      { bytes: photo, names: { en: "Food" }, altText: { en: "Plate" }, labels: [] },
-      { maxUploadBytes: 100 },
-    ),
-  );
-  await expect(
-    withTenant(suite.db, tenantId, (tx) =>
-      createCategory(tx, tenantId, { name: { en: "Food" }, image: image.filename }),
-    ),
-  ).rejects.toMatchObject({ code: "category.image_not_found" });
 });

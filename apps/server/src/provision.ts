@@ -1,9 +1,8 @@
 import { sql } from "drizzle-orm";
-import { stampDeployment, withTenant, type Database, type Transaction } from "@waitron/db";
+import { stampDeployment, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   applyVenue,
   assertNoForeignTenant,
-  deriveTenantId,
   planVenue,
   readTenantIdentities,
   venueFiscalSelection,
@@ -76,28 +75,26 @@ export async function recoverProvisionedVenue(
   ownerDb: Database,
   req: ProvisionRequest,
 ): Promise<VenueResult> {
-  const tenantId = deriveTenantId(req.venue.country, req.venue.taxId);
-  const venue = await withTenant(ownerDb, tenantId, (tx) =>
+  const venue = await withTransaction(ownerDb, (tx) =>
     tx.execute<{ locationId: string; tillId: string; nodeId: string }>(sql`
       select l.id as "locationId", t.id as "tillId", n.id as "nodeId"
       from locations l
-      join tills t on t.tenant_id = l.tenant_id and t.location_id = l.id
-      join nodes n on n.tenant_id = l.tenant_id and n.location_id = l.id
-      where l.tenant_id = ${tenantId}
-        and l.name = ${req.venue.location.name}
+      join tills t on t.location_id = l.id
+      join nodes n on n.location_id = l.id
+      where l.name = ${req.venue.location.name}
         and l.fiscal_territory = ${req.venue.location.fiscalTerritory}
         and t.name = ${req.venue.tillName}
         and n.name = ${req.venue.location.name}`),
   );
   if (venue.rows.length !== 1) {
-    throw new AppError("setup.already_provisioned", { tenantId });
+    throw new AppError("setup.already_provisioned", {});
   }
   const row = venue.rows[0]!;
-  const series = await withTenant(ownerDb, tenantId, (tx) =>
+  const series = await withTransaction(ownerDb, (tx) =>
     tx.execute<{ id: string; purpose: string; code: string }>(sql`
       select id, purpose, code
       from invoice_series
-      where tenant_id = ${tenantId} and node_id = ${row.nodeId}`),
+      where node_id = ${row.nodeId}`),
   );
   const standard = series.rows.find(
     (item) => item.purpose === "standard" && item.code === req.venue.seriesCode,
@@ -106,10 +103,9 @@ export async function recoverProvisionedVenue(
     (item) => item.purpose === "rectificative" && item.code === req.venue.rectificativeSeriesCode,
   );
   if (series.rows.length !== 2 || standard === undefined || rectificative === undefined) {
-    throw new AppError("setup.already_provisioned", { tenantId });
+    throw new AppError("setup.already_provisioned", {});
   }
   return {
-    tenantId,
     locationId: row.locationId,
     tillId: row.tillId,
     nodeId: row.nodeId,
@@ -127,8 +123,8 @@ export async function recoverProvisionedVenue(
  * unrecoverable SIF/hash chain, §5): a `provision-only` module that is NOT a fiscal-slot member must
  * not be disabled (`module.provision_only_disabled`), and the fiscal slot must resolve to exactly one
  * enabled module (`module.fiscal_slot_empty` / `module.fiscal_slot_ambiguous`).
- * Callers must serialize provisioning: the existence checks and applyVenue use separate transactions.
- * The setup route supplies a process-local latch; these checks reject sequential retries.
+ * Callers must serialize provisioning: the tenant-exists read is not atomic with `applyVenue`.
+ * The setup route supplies a process-local latch; the checks below reject sequential retries.
  * applyVenue commits the tenant, venue rows and enabled module seeds together. After the mint commits,
  * `provisionVenue` writes the resolved `moduleConfig` to `<stateDir>/modules.json` so the trading boot's
  * fiscal slot resolves. The caller persists the remaining configuration and seals credentials after
@@ -159,27 +155,23 @@ export async function provisionVenue(
 
   // 1. Pure validation — throws before touching the database.
   const plan = planVenue(req.venue, modules);
-  const tenantId = deriveTenantId(req.venue.country, req.venue.taxId);
 
-  // One tenant per database is the post-RLS isolation boundary (§5), enforced here, in the `venue`
-  // CLI and in the mirror `adoptFromPrimary` — every tenant-creation path — through the shared
-  // `assertNoForeignTenant` guard. Read every existing identity ONCE, then decide in order: a
-  // FOREIGN tenant is refused first (`provisioning.foreign_tenant`), because with row-level
-  // security gone a second `(country, tax_id)` would expose one business's rows to the other; only
-  // then, if the SAME identity is already present, is it a re-provision (`setup.already_provisioned`).
-  // The applied identity is the plan's `ensure-tenant` action, canonicalized by planVenue, so it
-  // compares like-for-like with the stored rows. Both reads run before stamping or minting another venue.
+  // One taxpayer per database is the isolation boundary (§5), enforced here, in the `venue` CLI and
+  // in the mirror `adoptFromPrimary` — every taxpayer-creation path — through the shared
+  // `assertNoForeignTenant` guard. ONE read of the existing identities answers both questions, in
+  // this order: a FOREIGN identity is refused first (`provisioning.foreign_tenant`), because the two
+  // businesses' rows would otherwise share one database; only then, if any row is present at all, is
+  // it a re-provision (`setup.already_provisioned`) — `tenants_singleton_ck` pins the id to 1, so
+  // the table holds at most one row and a non-empty read IS the taxpayer. The applied identity is
+  // the plan's `ensure-tenant` action, canonicalized by planVenue, so it compares like-for-like
+  // with the stored row. Both decisions run before stamping or minting another venue.
   const ensure = plan.find((a) => a.kind === "ensure-tenant");
   const present = await readTenantIdentities(deps.ownerDb);
   if (ensure !== undefined && ensure.kind === "ensure-tenant") {
     assertNoForeignTenant(present, { country: ensure.country, taxId: ensure.taxId }, deps.database);
   }
-  const alreadyProvisioned = await withTenant(deps.ownerDb, tenantId, async (tx) => {
-    const rows = await tx.execute(sql`select 1 from tenants where id = ${tenantId}`);
-    return rows.rows.length > 0;
-  });
-  if (alreadyProvisioned) {
-    throw new AppError("setup.already_provisioned", { tenantId });
+  if (present.length > 0) {
+    throw new AppError("setup.already_provisioned", {});
   }
 
   // 3. Stamp the environment (throws deployment.already_stamped on a changed value — let it propagate).

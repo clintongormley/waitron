@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -15,11 +15,11 @@ import { ALL_MODULES } from "./modules.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL, so each seeded person carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
+// (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
@@ -33,14 +33,14 @@ function nextNif(): string {
 }
 
 /** A label unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the status
- *  set accumulates across tests, and `(tenant, label)` is unique, so a fixed label would collide. */
+ *  set accumulates across tests, and `(label)` is unique, so a fixed label would collide. */
 function uniqueLabel(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; managerId: string; staffId: string }> {
-  const venue = await applyVenue(
+export async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -74,22 +74,22 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerId, staffId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
-  return { tenantId: venue.tenantId, managerId, staffId };
+  return { managerId, staffId };
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -97,7 +97,7 @@ function mountApp(tenantId: string): Hono {
       db: suite.admin,
       // The all-zero node id (the capture default): this suite exercises the staff-status routes, not
       // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -127,8 +127,8 @@ let staffCookie: string;
 const json = { "content-type": "application/json" };
 
 beforeAll(async () => {
-  const { tenantId } = await setupTenant();
-  app = mountApp(tenantId);
+  await setupTenant();
+  app = mountApp();
   managerCookie = await login(app, MANAGER_EMAIL);
   staffCookie = await login(app, STAFF_EMAIL);
 });

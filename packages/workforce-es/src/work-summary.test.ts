@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "./convenio.js";
@@ -11,20 +11,20 @@ import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedConvenioConfig, seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
-let tenantId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // Core first (tenants/locations FKs), then identity (persons), then workforce
   // (employments/time_entries, which FK persons) and workforce-es (convenio_config): the end-to-end
   // path reads all four.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
   },
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 async function clockDay(
@@ -37,7 +37,6 @@ async function clockDay(
 ): Promise<void> {
   await run((tx) =>
     backend.clockIn(tx, {
-      tenantId,
       nodeId,
       personId,
       locationId,
@@ -47,7 +46,6 @@ async function clockDay(
   );
   await run((tx) =>
     backend.clockOut(tx, {
-      tenantId,
       nodeId,
       personId,
       locationId,
@@ -64,20 +62,20 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     // hard-coded defaults produced. Five 9h days against a 40h week: 2700 worked, 300 overtime, each
     // day 60 over its 480 target. These are the identical figures clocking.test.ts pins for the
     // pre-D2 path.
-    const locationId = await seedLocation(suite.db, tenantId);
-    const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
-    const personId = await seedPerson(suite.db, tenantId, "es-default");
-    await seedEmployment(suite.db, { tenantId, personId, contractedMinutesPerWeek: 2400 });
-    await seedConvenioConfig(suite.db, { tenantId, locationId });
+    const locationId = await seedLocation(suite.db);
+    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
+    const personId = await seedPerson(suite.db, "es-default");
+    await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
+    await seedConvenioConfig(suite.db, { locationId });
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
       await clockDay(personId, nodeId, locationId, day, "08:00", "17:00");
     }
 
-    const ruleset = await run((tx) => resolveWorkTimeRuleset(tx, { tenantId, locationId }));
+    const ruleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId }));
     const summary = await run((tx) =>
       backend.workSummary(
         tx,
-        { tenantId, personId, period: { start: "2026-01-05", end: "2026-01-12" } },
+        { personId, period: { start: "2026-01-05", end: "2026-01-12" } },
         ruleset,
       ),
     );
@@ -104,18 +102,16 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     // day is 60 daily-accrual but 0 period-net against a full-week baseline. The two rulesets must
     // move ONLY the headline `overtimeMinutes`; both underlying figures are computed regardless and
     // stay identical between the two calls.
-    const dailyLoc = await seedLocation(suite.db, tenantId);
-    const dailyNode = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(dailyLoc));
-    const periodLoc = await seedLocation(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId, "es-model");
-    await seedEmployment(suite.db, { tenantId, personId, contractedMinutesPerWeek: 2400 });
+    const dailyLoc = await seedLocation(suite.db);
+    const dailyNode = await seedNode(suite.db, brandLocationId(dailyLoc));
+    const periodLoc = await seedLocation(suite.db);
+    const personId = await seedPerson(suite.db, "es-model");
+    await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, {
-      tenantId,
       locationId: dailyLoc,
       overtimeModel: "daily_accrual",
     });
     await seedConvenioConfig(suite.db, {
-      tenantId,
       locationId: periodLoc,
       overtimeModel: "period_net",
     });
@@ -123,16 +119,11 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     await clockDay(personId, dailyNode, dailyLoc, "2026-01-06", "09:00", "16:00"); // 7h
 
     const query = {
-      tenantId,
       personId,
       period: { start: "2026-01-05", end: "2026-01-12" },
     } as const;
-    const dailyRuleset = await run((tx) =>
-      resolveWorkTimeRuleset(tx, { tenantId, locationId: dailyLoc }),
-    );
-    const periodRuleset = await run((tx) =>
-      resolveWorkTimeRuleset(tx, { tenantId, locationId: periodLoc }),
-    );
+    const dailyRuleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId: dailyLoc }));
+    const periodRuleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId: periodLoc }));
     const daily = await run((tx) => backend.workSummary(tx, query, dailyRuleset));
     const period = await run((tx) => backend.workSummary(tx, query, periodRuleset));
 

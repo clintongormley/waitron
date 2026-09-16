@@ -10,7 +10,7 @@ import {
   printJobs,
   sales,
   tills,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -34,7 +34,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -100,7 +99,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -113,7 +111,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 function printCfg(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 /** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %). Each test
@@ -155,11 +153,11 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -185,7 +183,7 @@ async function makePrinter(
   cfg: TillConfig,
   { active = true, transport = "cloud_poll" as "cloud_poll" | "network_tcp" } = {},
 ): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
@@ -205,7 +203,7 @@ async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
@@ -225,7 +223,8 @@ async function configureReceipt(
 async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Buffer }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -233,15 +232,15 @@ async function printJobsFor(
         status: printJobs.status,
         payload: printJobs.payload,
       })
-      .from(printJobs)
-      .where(eq(printJobs.tenantId, cfg.tenantId));
+      .from(printJobs);
   });
 }
 
 async function drawerOpensFor(
   cfg: TillConfig,
 ): Promise<{ reason: string; saleId: string | null; personId: string; tillId: string }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -250,18 +249,15 @@ async function drawerOpensFor(
         personId: drawerOpens.personId,
         tillId: drawerOpens.tillId,
       })
-      .from(drawerOpens)
-      .where(eq(drawerOpens.tenantId, cfg.tenantId));
+      .from(drawerOpens);
   });
 }
 
 async function registroCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await tx
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+    const rows = await tx.select().from(registrosFacturacion);
     return rows.length;
   });
 }
@@ -269,12 +265,10 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 /** The id of the tenant's single filed sale — each test provisions its own tenant, so there is exactly
  *  one — for pinning the `drawer_opens.sale_id` back-reference the helper wires. */
 async function onlySaleId(cfg: TillConfig): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await tx
-      .select({ id: sales.id })
-      .from(sales)
-      .where(eq(sales.tenantId, cfg.tenantId));
+    const rows = await tx.select({ id: sales.id }).from(sales);
     return rows[0]!.id;
   });
 }
@@ -314,7 +308,7 @@ describe("receipt grouping after table changes", () => {
       const cfg: TillConfig = { ...base.cfg, orderFlow };
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
-      const { tableId, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      const { tableId, tabId } = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         const table = await createTable(tx, cfg, { label: "Terrace 6" });
         const tab = await openTab(tx, cfg, {
@@ -352,7 +346,7 @@ describe("receipt grouping after table changes", () => {
       expect(decodeTicket(new Uint8Array((await printJobsFor(cfg))[0]!.payload))).toContain(
         "Terrace 6",
       );
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await tx
           .update(diningTables)
@@ -373,7 +367,7 @@ describe("receipt grouping after table changes", () => {
         );
         expect(collected.orderLabel).toBe("Terrace 6");
       }
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await openTab(tx, cfg, { tableId });
       });
@@ -428,7 +422,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it("lays the automatic receipt out for the till printer's paper width and character set", async () => {
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
@@ -505,11 +499,11 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
-        insert into tenant_receipts (tenant_id, receipt)
-        values (${cfg.tenantId}, ${JSON.stringify({ footerMessage: "Gracias por su visita" })}::jsonb)`);
+        insert into tenant_receipts (receipt)
+        values (${JSON.stringify({ footerMessage: "Gracias por su visita" })}::jsonb)`);
     });
 
     await recordTillSale(
@@ -683,12 +677,11 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue();
       const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
-      const deviceTillId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      const deviceTillId = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         const [till] = await tx
           .insert(tills)
           .values({
-            tenantId: cfg.tenantId,
             locationId: cfg.locationId,
             name: "Issuing counter",
           })
@@ -715,7 +708,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue();
       // Placement issues the invoice before any payment; collection retains its separate drawer action.
-      await withTenant(suite.admin, base.cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await tx
           .update(locations)

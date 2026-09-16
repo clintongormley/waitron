@@ -42,11 +42,10 @@ it("ignores malformed notifications and accepts collection identities without ex
   for (const value of [
     null,
     {},
-    { tenantId: 1, resources: [] },
-    { tenantId: null, resources: null },
-    { tenantId: null, resources: [null] },
-    { tenantId: null, resources: [{ type: 1 }] },
-    { tenantId: null, resources: [{ type: "printers", id: 1 }] },
+    { resources: null },
+    { resources: [null] },
+    { resources: [{ type: 1 }] },
+    { resources: [{ type: "printers", id: 1 }] },
   ]) {
     client.emit("notification", { channel: "waitron_changes", payload: JSON.stringify(value) });
   }
@@ -56,12 +55,12 @@ it("ignores malformed notifications and accepts collection identities without ex
   client.emit("notification", {
     channel: "waitron_changes",
     payload: JSON.stringify({
-      tenantId: null,
+      // The parser copies only the fields it knows; anything else the payload carries — `secret`
+      // here — is dropped rather than passed through onto the change.
       resources: [{ type: "printers", secret: "hidden" }],
     }),
   });
   expect(onChange).toHaveBeenCalledExactlyOnceWith({
-    tenantId: null,
     resources: [{ type: "printers" }],
   });
   await listener.close();

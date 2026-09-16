@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -17,7 +17,6 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -42,15 +41,15 @@ let voidSessionId: string;
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the void path
   // under test now needs an authorizer, mirroring packages/core/src/record-correction.test.ts.
   const { rows } = await pg.db.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+    sql`insert into persons (display_name, pin_hash, role)
+        values ('P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const session = await withTenant(pg.db, tenantId, (tx) =>
-    loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
+  const session = await withTransaction(pg.db, (tx) =>
+    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
   backend = new VerifactuBackend({
@@ -62,14 +61,14 @@ beforeEach(async () => {
 });
 
 async function sell() {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
     return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
   });
@@ -104,7 +103,6 @@ describe("alta and anulación interleave in one chain", () => {
     const rows = await pg.db
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId))
       .orderBy(asc(registrosFacturacion.secuencia));
 
     expect(rows.map((r) => r.tipoRegistro)).toEqual(["alta", "alta", "anulacion"]);
@@ -140,7 +138,7 @@ describe("alta and anulación interleave in one chain", () => {
   it("gives the anulación its own pending sidecar row", async () => {
     const a = await sell();
     await voidSale(a.saleId);
-    const rows = await pg.db.select().from(envios).where(eq(envios.tenantId, tenantId));
+    const rows = await pg.db.select().from(envios);
     // Two registros, two sidecars. An anulación that shared the alta's row would be submitted to
     // AEAT never or twice, both unrecoverable.
     expect(rows).toHaveLength(2);

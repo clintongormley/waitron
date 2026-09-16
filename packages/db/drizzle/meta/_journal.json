@@ -225,6 +225,41 @@
       "when": 1789542056543,
       "tag": "0031_variant_descriptions_locales_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789559051240,
+      "tag": "0032_drop_tenant_id_before_sql",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789559054573,
+      "tag": "0033_drop_tenant_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789559058036,
+      "tag": "0034_drop_tenant_id_after_sql",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1789559058517,
+      "tag": "0035_tenants_singleton_before_sql",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1789559064518,
+      "tag": "0036_tenants_singleton",
+      "breakpoints": true
     }
   ]
 }

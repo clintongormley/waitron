@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   asAppUser,
@@ -19,13 +19,14 @@ import {
   setFenceLsnTx,
   setSingletonRoleTx,
   readMirrorConfig,
-  withTenant,
+  withTransaction,
   type Database,
 } from "@waitron/db";
-import { credentialTenants, loadKeyRing, tenantCredentials } from "@waitron/credentials";
+import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, mountLiveApi } from "./live-api.js";
 import { runDue } from "@waitron/scheduler";
+import type { TickResult } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import {
   SimulatorPaymentProvider,
@@ -39,7 +40,7 @@ import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { AlertSource, ModuleRouteContext } from "@waitron/module";
-import { AppError, type TenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import {
   ALL_ALERT_CLAIMS,
   ALL_MODULES,
@@ -317,9 +318,20 @@ export const BOX_HOSTNAME = "waitron.local";
  */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+/** What `reconcile` reports when the Stripe credential is not provisioned: no runs, nothing
+ * deferred, nothing dropped by the horizon, nothing skipped, and no next due time — the same shape
+ * `runDue` returns for a tick with no work, so `runPass` and `health.ts` need no special case. */
+const NOTHING_TO_RECONCILE: TickResult = {
+  ran: [],
+  deferred: 0,
+  beyondHorizon: 0,
+  skipped: [],
+  nextDueAt: null,
+};
+
 /**
  * The card-payment provider a Demo or default-Prepare till drives: the local simulator, built once at
- * boot for this till's tenant. Every OTHER card sale routes to its reader's own provider through the
+ * boot. Every OTHER card sale routes to its reader's own provider through the
  * pool at collect time (Task 12 cutover), so a live/integration till returns `undefined` here — there
  * is no single per-till provider any more. Prepare that explicitly opts into real test providers
  * (`paymentTestProviders`) also returns `undefined` and uses real readers.
@@ -331,13 +343,12 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
  * below carries.
  */
 export async function buildCardProvider(
-  cfg: Pick<TillConfig, "tenantId">,
   db: Database,
   onboardingIntent?: OnboardingIntent,
   paymentTestProviders = false,
 ): Promise<PaymentProvider | undefined> {
   if (onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders)) {
-    return new SimulatorPaymentProvider(db, cfg.tenantId);
+    return new SimulatorPaymentProvider(db);
   }
   return undefined;
 }
@@ -406,7 +417,7 @@ export function withPendingSweep(
  * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
  * plus every pooled card provider this tenant has a SEALED CREDENTIAL for — the same
  * credential-presence signal `payments-api`'s GET providers and `/api/pay`'s connected pre-check use.
- * Read EACH pass, as the app role under the tenant, so a provider connected mid-run is swept next
+ * Read EACH pass, as the app role, so a provider connected mid-run is swept next
  * pass without a restart. A provider with no sealed credential is NOT swept (its `resolvePending`
  * would only fail on a missing credential), which is the negative control the test pins.
  *
@@ -414,7 +425,6 @@ export function withPendingSweep(
  * pool). */
 export function connectedCardProviderSweep(deps: {
   db: Database;
-  tenantId: TenantId;
   pool: CardProviderPool;
   contributions: readonly Pick<CardProviderContribution, "providerId" | "credentialPurpose">[];
   simulator: PaymentProvider | undefined;
@@ -425,17 +435,12 @@ export function connectedCardProviderSweep(deps: {
     const purposes = [...new Set(deps.contributions.map((c) => c.credentialPurpose))];
     // No card seats at all → nothing pooled to sweep (only the simulator, already added).
     if (purposes.length > 0) {
-      const held = await withTenant(deps.db, deps.tenantId, async (tx) => {
+      const held = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const rows = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
-          .where(
-            and(
-              eq(tenantCredentials.tenantId, deps.tenantId),
-              inArray(tenantCredentials.purpose, purposes),
-            ),
-          );
+          .where(inArray(tenantCredentials.purpose, purposes));
         return new Set(rows.map((r) => r.purpose));
       });
       for (const c of deps.contributions) {
@@ -962,7 +967,7 @@ export async function startServer(
   );
 
   if (config.till === undefined) {
-    // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the five WAITRON_TILL_*_ID
+    // SETUP MODE (slice 1b/2a/2b) — this box is bound to no venue (none of the four WAITRON_TILL_*_ID
     // are set). It serves ONLY `/health` and the unauthenticated setup surface: no reconciler/duty, no
     // `readOrderFlow`, no trading routes, no sync transport, and no drain/reconcile workers — there is
     // nothing to submit yet. The DB is migrated all the same (the shared prefix above ran
@@ -1194,7 +1199,7 @@ export async function startServer(
                           await importConfigurationTables(
                             tx,
                             staged.bundle,
-                            { tenantId: result.tenantId, locationId: result.locationId },
+                            { locationId: result.locationId },
                             modules,
                             versions!,
                           );
@@ -1244,15 +1249,9 @@ export async function startServer(
                 await replicationDb.close();
               }
             },
-            establishIdentity: (tenantId, nodeId) =>
-              establishNodeIdentity({ ownerDb, ring }, tenantId, nodeId),
-            seedMembership: (tenantId, nodeId) =>
-              seedTermZeroMembership(
-                { db: ownerDb, ring },
-                tenantId,
-                nodeId,
-                config.advertisedOrigin,
-              ),
+            establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb, ring }, nodeId),
+            seedMembership: (nodeId) =>
+              seedTermZeroMembership({ db: ownerDb, ring }, nodeId, config.advertisedOrigin),
             // The owner DB + vault ring the setup surface seals the regime's provisioning secret with,
             // through the fiscal contribution's `provisioningSecret.seal` seat — so BOOT imports no
             // regime package (module-seams). The seal fires only for a provision whose regime demands
@@ -1352,14 +1351,16 @@ export async function startServer(
   };
 
   // Adoption-pending boot (C6 / derived fact 1): an adopted mirror restarts into a database whose
-  // native initial copy is still running (spec §2.2, "minutes over a WAN"), so its tenant-scoped rows
+  // native initial copy is still running (spec §2.2, "minutes over a WAN"), so the copied rows
   // are not there yet. Boot must NOT touch them until the copy completes — it serves `/health` and a
   // minimal `/api/box/status` reporting `adoption: pending`, ensures the two publications, and starts
   // `runFinishAdoption`, which seals the reserved identity + ambient viewer once every table has
   // copied, then the box restarts into normal mirror mode. It reads no deployment axes / membership,
   // mounts no mirror session and no till/node-scoped read path — `ensureMirrorViewer` in particular
-  // would throw a `persons`→`tenants` FK violation on the still-empty database (mirror-session.ts).
-  // Entered BEFORE the axes read below for that reason.
+  // WRITES into `persons` and `management_sessions` (mirror-session.ts), two tables the initial copy
+  // is still filling. What that write would break is not established: the receipt that stood here
+  // named a foreign key from `persons` to `tenants`, and this repo no longer has one (the open
+  // question is in `docs/backlog.md`). Entered BEFORE the axes read below.
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     // A dedicated small OWNER pool (M8 — `replicationDb`, NEVER `ownerDb`, already declared from a
@@ -1482,7 +1483,7 @@ export async function startServer(
     if (peer !== null) {
       try {
         const [trustSet, held] = await Promise.all([
-          readMembershipTrustSet(db, config.till.tenantId),
+          readMembershipTrustSet(db),
           readNodeMembership(db),
         ]);
         await reconcileMembershipOnBoot({
@@ -1626,14 +1627,14 @@ export async function startServer(
   }
   if (isMirror) {
     try {
-      await ensureMirrorViewer(db, config.till.tenantId);
+      await ensureMirrorViewer(db);
     } catch (error) {
       await db.close();
       throw error;
     }
     app.use(
       "*",
-      mirrorSession(db, config.till.tenantId, secureCookies, () => holders.mode.current),
+      mirrorSession(db, secureCookies, () => holders.mode.current),
     );
   }
 
@@ -1706,7 +1707,6 @@ export async function startServer(
     app,
     {
       db,
-      tenantId: config.till.tenantId,
       bus: liveEvents,
       resourceTypes: liveResourceTypes(changeSources),
     },
@@ -1798,19 +1798,16 @@ export async function startServer(
   // NOT the defaulted `till.locale` (which is `es-ES` and would mask geography). Threaded as a STRING
   // into the till + me mounts below (both surface it via `GET .../locales`), never re-read per request.
   const venueLocale = await readVenueLocale(db, {
-    tenantId: till.tenantId,
     locationId: till.locationId,
     override: till.localeOverride,
   });
   const venueTimeZone = await readVenueTimeZone(db, {
-    tenantId: till.tenantId,
     locationId: till.locationId,
   });
   // Demo and the default Prepare target use the local simulator. Every other card sale routes to its
   // reader's own provider through `cardPool` below (built once, one live provider per id), so a
   // live/integration till gets `undefined` here.
   const cardProvider = await buildCardProvider(
-    till,
     db,
     config.onboardingIntent,
     config.paymentTestProviders,
@@ -1827,7 +1824,6 @@ export async function startServer(
     providers: CARD_PROVIDERS,
     db,
     ring,
-    tenantId: till.tenantId,
     nodeId: till.nodeId,
     environment: config.environment,
     incidents: recordIncidentOnce,
@@ -1917,7 +1913,7 @@ export async function startServer(
     // UNAUTHENTICATED knock and join-status routes, the `requireDevice`-guarded KDS routes (a kitchen
     // screen reads and bumps only its own bound station), and the `device.manage`-gated management routes
     // (list devices, revoke one, rebind one). It reuses the EXACT `db` and — unlike the sibling mounts,
-    // which pass a `{ tenantId }` subset — the FULL `till` config `mountTillApi` receives above, because
+    // which pass only what they read — the FULL `till` config `mountTillApi` receives above, because
     // the device verbs are typed `cfg: TillConfig` and `listStationQueue` scopes the queue by `cfg.nodeId`
     // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
     // device cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
@@ -1976,30 +1972,28 @@ export async function startServer(
       log,
     );
   }
-  // The deployment holds one tenant per database. The dashboard's management HTTP surface
+  // The deployment holds one taxpayer per database. The dashboard's management HTTP surface
   // (manager login, staff/person management, passkey ceremonies) on the SAME app, the identical
   // convention `mountWebhook` and `mountTillApi` above follow. It reuses the EXACT values
-  // `mountTillApi` receives so the two cannot drift: the same `db`, the same tenant
-  // (`till.tenantId`) and the same `secureCookies` binding hoisted above (one value, read by both
-  // mounts — not a re-typed `config.tls !== undefined`). No fiscal backend, clock or card
-  // provider: the management routes read and write only the tenant's own identity records.
+  // `mountTillApi` receives so the two cannot drift: the same `db` and the same `secureCookies`
+  // binding hoisted above (one value, read by both mounts — not a re-typed
+  // `config.tls !== undefined`). No fiscal backend, clock or card provider: the management routes
+  // read and write only this box's own identity records.
   // `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a passkey is bound
   // to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes only — no
   // database work at boot.
   const resolveAccountEmail = () =>
-    resolveEmailDelivery(db, ring, till.tenantId, config.devMode || till.practiceMode === true);
+    resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true);
   mountLocationSettingsApi(app, { db, cfg: till, fiscal: enabledFiscal }, log);
   mountManagementApi(
     app,
     {
       db,
-      // `nodeId` is THIS node's id (the same `till.nodeId` the adjacent `mountCatalogueApi`
-      // receives — one source of truth), carried on the uniform write-path `cfg` shape.
-      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
-      // The venue's own config (tenant + location) the FP-1 zone/table config routes scope to — the
+      cfg: { nodeId: till.nodeId },
+      // The venue's own config (its location) the FP-1 zone/table config routes scope to — the
       // SAME `till` config `mountTillApi` receives above, so the dashboard "Sala" surface and the till
-      // surface CRUD the same `floor_zones`/`dining_tables` under one location. Only tenant + location
-      // are read there (the fiscal ids are inert — these are config routes touching no fiscal path).
+      // surface CRUD the same `floor_zones`/`dining_tables` under one location. Only `locationId` is
+      // read there (the fiscal ids are inert — these are config routes touching no fiscal path).
       venueCfg: till,
       secureCookies,
       rpId: config.managementRpId,
@@ -2025,7 +2019,6 @@ export async function startServer(
       {
         db,
         cfg: {
-          tenantId: till.tenantId,
           locationId: till.locationId,
           tillId: till.tillId,
           nodeId: till.nodeId,
@@ -2040,19 +2033,18 @@ export async function startServer(
     app,
     {
       db,
-      cfg: { tenantId: till.tenantId },
       resolveMode: async () => (await resolveAccountEmail()).mode,
       mailpit: createMailpitClient("http://127.0.0.1:8025"),
     },
     log,
   );
-  // The deployment holds one tenant per database. The dashboard's diagnostics surface (read the
+  // The deployment holds one taxpayer per database. The dashboard's diagnostics surface (read the
   // recent log tail, read + raise verbosity) on the SAME app, the identical convention. It reuses
-  // the EXACT `db` and tenant (`till.tenantId`) `mountManagementApi` above receives, plus the
+  // the EXACT `db` `mountManagementApi` above receives, plus the
   // `reader` over the rotating files and the in-memory `verbosity` controller the logger reads.
   // All three routes are gated behind `diagnostics.view`. Routes only — no database work at boot;
   // the gate runs per request.
-  mountDiagnosticsApi(app, { db, cfg: { tenantId: till.tenantId }, reader, verbosity }, log);
+  mountDiagnosticsApi(app, { db, reader, verbosity }, log);
   // The dashboard alerts surface is mounted lower down, once `backupSupervisor` exists — the backups
   // alert source closes over it. See the `mountAlertsApi` call beside the other management-api mounts.
   // Catalogue writes and language settings share the management permission gate.
@@ -2060,14 +2052,13 @@ export async function startServer(
     app,
     {
       db,
-      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
       // The venue the product editor routes a product's station/course against.
       venueCfg: till,
-      contentTranslationGaps: async (tx, tenantId, language) => {
+      contentTranslationGaps: async (tx, language) => {
         const gaps = [];
         for (const module of setsToMigrate) {
           if (module.contentTranslations)
-            gaps.push(...(await module.contentTranslations.gaps(tx, tenantId, language)));
+            gaps.push(...(await module.contentTranslations.gaps(tx, language)));
         }
         return gaps;
       },
@@ -2075,26 +2066,25 @@ export async function startServer(
     },
     log,
   );
-  mountUnitsApi(app, { db, cfg: { tenantId: till.tenantId }, venueLocale }, log);
-  // The deployment holds one tenant per database. The dashboard's gated purchase-invoice write
+  mountUnitsApi(app, { db, venueLocale }, log);
+  // The deployment holds one taxpayer per database. The dashboard's gated purchase-invoice write
   // group (facturas recibidas: header + VAT desglose) on the SAME app, the identical convention.
-  // Reuses the EXACT `db` and tenant `mountCatalogueApi` above receives (`till.tenantId`) so the
+  // Reuses the EXACT `db` `mountCatalogueApi` above receives so the
   // two cannot drift. No `nodeId` (the purchase tables carry no sync-capture trigger), no fiscal
   // backend, clock, card provider or media store — these routes touch only the two
   // purchase-invoice tables. Routes only — no database work at boot; the `purchase.manage` gate
   // runs per request. This is the #91 fast-follow's capture surface, feeding the headless modelo
   // 303 IVA-deducible reporting.
-  mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  mountPurchasingApi(app, { db }, log);
   // Mount every ENABLED module's routes generically (SP1). `setsToMigrate` is the enabled module
   // set on this trading branch (boot.ts:552), so a module toggled off mounts nothing — no
-  // hand-written guard at the mount site. `routeCtx` binds cfg to the two `TillConfig` fields a
-  // module route reads (`tenantId`/`locationId`); `core.openTab` closes over the FULL `till` HERE,
+  // hand-written guard at the mount site. `routeCtx` binds cfg to the one `TillConfig` field a
+  // module route reads (`locationId`); `core.openTab` closes over the FULL `till` HERE,
   // so `nodeId`/`tillId` never enter the module's cfg. Bookings is the first `*-api.ts` behind the
   // seat; the other `mount*Api` calls stay as they are.
   const routeCtx: ModuleRouteContext = {
     db,
     cfg: {
-      tenantId: till.tenantId,
       locationId: till.locationId,
       contentDefaultLanguage: venueLocale,
     },
@@ -2102,8 +2092,8 @@ export async function startServer(
     core: { openTab: (tx, req) => openTab(tx, till, req) },
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
-  // The deployment holds one tenant per database. The dashboard's gated reporting surface on the
-  // SAME app, the identical convention. Reuses the EXACT `db` and tenant (`till.tenantId`)
+  // The deployment holds one taxpayer per database. The dashboard's gated reporting surface on the
+  // SAME app, the identical convention. Reuses the EXACT `db`
   // `mountPurchasingApi` above receives so the two cannot drift. `nodeId` here is `dataNodeId` —
   // the node whose DATA this server DISPLAYS, not its own identity: on a MIRROR that is the
   // ORIGIN (the primary whose replicated sales it holds), so the per-till/fiscal reports
@@ -2114,33 +2104,31 @@ export async function startServer(
   // store — READ-ONLY routes over the filed commercial record + the venue's dining tables. Routes
   // only — no database work at boot; the `report.export`/`report.view` gates run per request,
   // SELECTs only.
-  mountReportApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: dataNodeId } }, log);
+  mountReportApi(app, { db, cfg: { nodeId: dataNodeId } }, log);
   // The deployment holds one tenant per database. The dashboard's gated shift-planning surface
-  // (roster authoring + publish) on the SAME app, the identical convention. Reuses the EXACT db +
-  // tenant (till.tenantId); no fiscal backend, clock, card provider or media store — these routes
+  // (roster authoring + publish) on the SAME app, the identical convention. Reuses the EXACT db and
+  // this node's id; no fiscal backend, clock, card provider or media store — these routes
   // touch only roster_versions / shifts / convenio_config / locations. Routes only; the
   // schedule.manage gate runs per request.
-  mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
+  mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
   // The STAFF-FACING half of the schedule surface on the SAME app — the till-session-gated request
   // routes (view my shifts/swaps/absences, request a swap or absence, accept a swap offered to me),
-  // the counterpart to mountWorkforceApi's manager approval half. Same minimal deps (db + this venue's
-  // tenant); the till PIN session gates it (requireSession), not a management session. Routes only.
-  mountScheduleApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  // the counterpart to mountWorkforceApi's manager approval half. Minimal deps — `db` alone; the till
+  // PIN session gates it (requireSession), not a management session. Routes only.
+  mountScheduleApi(app, { db }, log);
   // The STAFF SELF-SERVICE half of the management dashboard on the SAME app — the browser twin of the
   // till's mountScheduleApi. Its whoami (`GET /management-api/session/me`) + `/management-api/me/schedule/*`
   // routes gate on the MANAGEMENT session (requireManagementSession + resolveManagementSession), never
-  // authorizeManager, so a staff-role person acts on their own roster/swaps/absences. Same minimal deps
-  // (db + this venue's tenant); no fiscal backend, clock or card provider. Routes only.
+  // authorizeManager, so a staff-role person acts on their own roster/swaps/absences. Minimal deps —
+  // `db` plus this node's id; no fiscal backend, clock or card provider. Routes only.
   mountMeApi(
     app,
-    // `nodeId` is THIS node's id (the same `till.nodeId` `mountManagementApi`/`mountCatalogueApi`
-    // receive), carried on the uniform write-path `cfg` shape.
     // `modules` is the enabled-module set (`setsToMigrate`, boot.ts above) by name — surfaced by
     // `GET /session/me` so the dashboard activates and shows only enabled modules. Includes `core`
     // harmlessly (the browser registry only matches UI-bearing ids).
     {
       db,
-      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
+      cfg: { nodeId: till.nodeId },
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),
@@ -2177,13 +2165,13 @@ export async function startServer(
     environment: config.environment,
     stateDir: config.stateDir,
     jitterSeed: till.nodeId,
-    // The venue's real wall clock (tz + business-day cutover), tenant-scoped and keyed by this node —
+    // The venue's real wall clock (tz + business-day cutover), keyed by this node —
     // the same read `report-api` uses, so an `at: "auto"` / wall-clock schedule fires in the venue's
     // local time rather than the interim UTC placeholder the previous task carried.
     readClock: () =>
-      withTenant(db, till.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        return resolveVenueClock(tx, till.tenantId, till.nodeId);
+        return resolveVenueClock(tx, till.nodeId);
       }),
     outcomes: backupOutcomes,
     log,
@@ -2196,14 +2184,13 @@ export async function startServer(
   // sources below. Route mounts are order-independent among themselves, so sitting beside the other
   // management-api mounts is fine as long as it precedes any catch-all handler.
   //
-  // The runtime context each card-provider seat call takes for the battery read — this tenant's db
-  // handle, the vault key ring, the tenant id — built exactly as `payments-api.ts` builds its
+  // The runtime context each card-provider seat call takes for the battery read — the db handle and
+  // the vault key ring — built exactly as `payments-api.ts` builds its
   // `runtimeDeps`, minus the test-only `fetch` (none is injected on this path, so production uses the
   // global fetch). It reuses the same `db`/`ring` bindings, never a second copy.
-  const cardRuntimeDeps = (tenantId: TenantId): CardProviderRuntimeDeps => ({
+  const cardRuntimeDeps = (): CardProviderRuntimeDeps => ({
     db,
     ring,
-    tenantId,
   });
   // The battery reading is reused for five minutes so an open dashboard's minute-by-minute poll does
   // not hammer the provider; the backup freshness for one minute.
@@ -2229,7 +2216,6 @@ export async function startServer(
     app,
     {
       db,
-      cfg: { tenantId: till.tenantId },
       registry: createAlertRegistry({
         claims: ALL_ALERT_CLAIMS,
         sources: [...enabledAlertSources(setsToMigrate), ...serverAlertSources],
@@ -2262,7 +2248,7 @@ export async function startServer(
     app,
     {
       db,
-      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
+      cfg: { nodeId: till.nodeId },
       environment: config.environment,
       health,
       now,
@@ -2318,7 +2304,6 @@ export async function startServer(
     {
       appDb: db,
       ring,
-      tenantId: till.tenantId,
       nodeId: till.nodeId,
       readSlotDrain: readFenceSlotDrain,
       fenceLsn,
@@ -2332,11 +2317,7 @@ export async function startServer(
   // The recovery-bundle download (slice 4b-i): the same management gate as box-status, packing the
   // box's persisted secret files (config.stateDir) into a passphrase-encrypted bundle. Mounted in the
   // trading branch only — a setup box has no provisioned identity to recover.
-  mountRecoveryBundleApi(
-    app,
-    { db, cfg: { tenantId: till.tenantId }, stateDir: config.stateDir, now },
-    log,
-  );
+  mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
 
   // The authenticated backup admin routes (BR-1 Task 6): the same management gate as box-status,
   // reading and hot-reloading the SAME `backupSupervisor` above so the wizard can enable/rotate
@@ -2347,7 +2328,6 @@ export async function startServer(
     {
       supervisor: backupSupervisor,
       db,
-      cfg: { tenantId: till.tenantId },
       stateDir: config.stateDir,
     },
     log,
@@ -2404,7 +2384,7 @@ export async function startServer(
   // the right dbname to COPY from. `relayUrl` is this primary's own relay coordinates
   // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses
   // `mirror.no_relay`); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
-  // `designated` is `config.till` (the five WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
+  // `designated` is `config.till` (the four WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
   if (isSingletonPrimary) {
     // This primary's own native-replication credential + advertise address (swap spec §2.2), loaded
     // from env here — it rides the mirror bundle, not the sale path, so it is only read on the
@@ -2462,7 +2442,6 @@ export async function startServer(
         holders,
         log,
         ring,
-        tenantId: till.tenantId,
         nodeId: till.nodeId,
       });
     } finally {
@@ -2488,7 +2467,6 @@ export async function startServer(
           // `MirrorPromoteDeps.persistTradingEnv`).
           persistTradingEnv: async (seriesId) => {
             const next: TradingConfig = {
-              tenantId: till.tenantId,
               tillId: till.tillId,
               nodeId: till.nodeId,
               seriesId,
@@ -2541,7 +2519,7 @@ export async function startServer(
 
   // Mount the operator's failover trigger on BOTH modes (spec §6), before the SPA catch-alls. The
   // read-only gate exempts this POST (above), so a mirror AND a fenced node reach the handler.
-  mountPromoteApi(app, { appDb: db, tenantId: config.till.tenantId, run: promoteRun }, log);
+  mountPromoteApi(app, { appDb: db, run: promoteRun }, log);
 
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
   // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,
@@ -2610,7 +2588,7 @@ export async function startServer(
     // singleton fiscal pass on EVERY trading node (primary or sell-only secondary), returning the
     // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header). The
     // providers are enumerated per pass (`connectedCardProviderSweep`): the demo/prepare simulator, if
-    // one was built, plus every pooled provider `till.tenantId` has a sealed credential for — the
+    // one was built, plus every pooled provider this box has a sealed credential for — the
     // money-critical backstop that resolves a SumUp payment whose outcome was lost between the reader
     // push and the first poll (`payment.pending_outcome_unactionable`).
     pass: withPendingSweep(
@@ -2620,7 +2598,7 @@ export async function startServer(
           runPass(
             {
               // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
-              // resolver (one TLS pool per tenant with due work, released in its own `finally`) and runs
+              // resolver (one TLS pool for the pass, released in its own `finally`) and runs
               // the pass. The host injects only the vault ring, the deployment identity and the cadence —
               // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
               // against the database at boot, and the regime's `entorno` guard refuses any due registro
@@ -2641,23 +2619,27 @@ export async function startServer(
                     ),
                   at2,
                 ),
-              // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
-              // on the next pass rather than after a restart.
+              // Asked per pass, not at boot: a credential provisioned while the host runs is served
+              // on the next pass rather than after a restart. An unprovisioned purpose means there
+              // is nothing to reconcile, so the pass reports an empty tick rather than running a
+              // duty that would fail for want of a key — the gate the vault's enrolment list used
+              // to provide by enumerating nobody.
               reconcile: async (at2) =>
-                runDue(
-                  {
-                    db,
-                    duties: [duty],
-                    horizonDays: config.scheduler.horizonDays,
-                    maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                    maxAttempts: config.scheduler.maxAttempts,
-                    backoffBaseMs: config.scheduler.backoffBaseMs,
-                    staleAfterMs: config.scheduler.staleAfterMs,
-                    skipRetryMs: config.skipRetryMs,
-                  },
-                  await credentialTenants(db, "payments.stripe"),
-                  at2,
-                ),
+                (await credentialProvisioned(db, "payments.stripe"))
+                  ? runDue(
+                      {
+                        db,
+                        duties: [duty],
+                        horizonDays: config.scheduler.horizonDays,
+                        maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
+                        maxAttempts: config.scheduler.maxAttempts,
+                        backoffBaseMs: config.scheduler.backoffBaseMs,
+                        staleAfterMs: config.scheduler.staleAfterMs,
+                        skipRetryMs: config.skipRetryMs,
+                      },
+                      at2,
+                    )
+                  : NOTHING_TO_RECONCILE,
               awaitingCert: awaitingFiscalCert,
               monotonicMs: () => performance.now(),
               log,
@@ -2667,7 +2649,6 @@ export async function startServer(
       ),
       connectedCardProviderSweep({
         db,
-        tenantId: till.tenantId,
         pool: cardPool,
         contributions: CARD_PROVIDERS,
         simulator: cardProvider,

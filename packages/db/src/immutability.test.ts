@@ -29,7 +29,6 @@ async function createProtectedProbe(db: Database): Promise<void> {
   await db.execute(sql`
     create table immutability_probe (
       id uuid primary key,
-      tenant_id uuid not null,
       note text not null
     )
   `);
@@ -48,7 +47,6 @@ async function createProtectedProbe(db: Database): Promise<void> {
 }
 
 describe("immutability", () => {
-  const tenantId = "11111111-1111-4111-8111-111111111111";
   const rowId = "22222222-2222-4222-8222-222222222222";
   let db: Database;
 
@@ -56,8 +54,8 @@ describe("immutability", () => {
     db = suite.db;
     await createProtectedProbe(db);
     await db.execute(
-      sql`insert into immutability_probe (id, tenant_id, note)
-          values (${rowId}, ${tenantId}, 'original')`,
+      sql`insert into immutability_probe (id, note)
+          values (${rowId}, 'original')`,
     );
   });
 

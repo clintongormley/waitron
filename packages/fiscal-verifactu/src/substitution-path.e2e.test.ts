@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -24,7 +24,7 @@ const suite = useTemplateDb({ template: "manifest" });
 let backend: VerifactuBackend;
 let till: SeededTill;
 // A SECOND series for the F3 canje invoices. The F3 draws its own number, and `sales` is unique on
-// (tenant, series, invoice_number), so an F3 cannot reuse a ticket's series+number. `purpose` is
+// (series_id, invoice_number), so an F3 cannot reuse a ticket's series+number. `purpose` is
 // 'standard' rather than a bespoke 'substitution' value: the invoice_series CHECK admits only
 // 'standard'/'rectificative' today, and giving F3 its own purpose is a core/Slice-4 decision (plan
 // §5.3) the BACKEND does not enforce — it derives NumSerieFactura from `seriesCode`/`invoiceNumber`,
@@ -38,13 +38,12 @@ const RECIPIENT: Counterparty = {
 };
 
 beforeEach(async () => {
-  // Each call mints a fresh tenant (and NIF), so tests never collide on the append-only,
+  // Each call mints a fresh node (and NIF), so tests never collide on the append-only,
   // TRUNCATE-blocking `registros_facturacion` — the same reseed-without-truncate reasoning
   // `correction-path.e2e.test.ts` documents.
   till = await seedTill(suite.admin, "A");
   const series = await suite.admin.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
-    values (${till.tenantId}, ${till.nodeId}, 'F3', 'standard', 1)
+    insert into invoice_series (node_id, code, purpose, next_number) values (${till.nodeId}, 'F3', 'standard', 1)
     returning id
   `);
   substitutionSeriesId = series.rows[0]!.id;
@@ -66,7 +65,6 @@ function substitutionSaleFor(
   overrides: Partial<SaleForFiscalRecord> = {},
 ): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -89,7 +87,6 @@ function substitutionSaleFor(
  * positive totals. `seriesCode` "A" → NumSerieFactura "A/<n>". */
 function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -109,7 +106,7 @@ function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalReco
  * Returns the ticket sale's id — a `substitutedSaleId` an F3 points at. */
 async function recordTicket(invoiceNumber: number): Promise<string> {
   const ticketId = await seedSale(suite.admin, till, invoiceNumber);
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordSale(tx, ticketSaleFor(ticketId, invoiceNumber));
   });
@@ -119,11 +116,7 @@ async function recordTicket(invoiceNumber: number): Promise<string> {
 /** Insert an F3 sale with counterparty columns as the fixture owner and return its id. */
 async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                       issued_offset_minutes, total, vat_breakdown,
-                       counterparty_tax_id, counterparty_legal_name, counterparty_country_code,
-                       locale, invoice_locales, fiscal_backend, fiscal_state)
-    values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${substitutionSeriesId}, ${invoiceNumber},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, counterparty_tax_id, counterparty_legal_name, counterparty_country_code, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${substitutionSeriesId}, ${invoiceNumber},
             '2026-03-02T12:05:00+01:00', 60, '123.45', '[]'::jsonb,
             ${RECIPIENT.taxId}, ${RECIPIENT.legalName}, ${RECIPIENT.countryCode},
             'es', array['es'], 'verifactu', 'recorded')
@@ -143,7 +136,7 @@ async function substitute(
   const invoiceNumber = overrides.invoiceNumber ?? 1;
   const substitutionId = await seedSubstitutionRow(invoiceNumber);
   const sale = substitutionSaleFor(substitutionId, invoiceNumber, overrides);
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordSubstitution(tx, sale, {
       substitutedSaleIds: substitutedSaleIds.map((id) => brandSaleId(id)),

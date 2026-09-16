@@ -10,7 +10,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -28,7 +27,6 @@ export const availability = pgTable(
   "availability",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     /** Day of week, 0–6. */
     weekday: smallint("weekday").notNull(),
@@ -47,19 +45,13 @@ export const availability = pgTable(
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the
     // sibling schema files document. restrict: an availability window must not be orphaned by a
-    // tenant/person delete.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "availability_tenant_fk",
-    }).onDelete("restrict"),
+    // person delete.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
       name: "availability_person_fk",
     }).onDelete("restrict"),
-    index("availability_tenant_id_idx").on(t.tenantId),
-    index("availability_tenant_person_idx").on(t.tenantId, t.personId),
+    index("availability_person_idx").on(t.personId),
     check("availability_weekday_ck", sql`${t.weekday} between 0 and 6`),
     check("availability_from_minute_ck", sql`${t.availableFromMinute} between 0 and 1440`),
     check("availability_to_minute_ck", sql`${t.availableToMinute} between 0 and 1440`),

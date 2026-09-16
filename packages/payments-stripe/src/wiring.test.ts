@@ -4,7 +4,6 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
@@ -75,7 +74,6 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -112,14 +110,12 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db: pg.db,
-      tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
 
     // 1. The Stripe payment settles the tender.
     const paid = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -130,12 +126,11 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     expect(paid.settledAt).not.toBeNull();
 
     // 2. The sale and the associate-back happen in ONE transaction, so the linkage is atomic with
-    //    the sale it points at (the composite FK `payments_sale_fk` is satisfied within the tx
+    //    the sale it points at (the FK `payments_sale_fk` is satisfied within the tx
     //    because the sale row already exists there).
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));
       await associatePaymentWithSale(tx, {
-        tenantId: s.tenantId,
         provider: "stripe",
         paymentRef: paid.paymentRef,
         saleId: recorded.saleId,
@@ -147,7 +142,6 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     //    captured state, and the PaymentIntent id in `external_ref`.
     const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, {
-        tenantId: s.tenantId,
         provider: "stripe",
         paymentRef: paid.paymentRef,
       }),
@@ -173,12 +167,10 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
     const provider = new StripeTerminalProvider({
       client,
       db: pg.db,
-      tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const args = {
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),

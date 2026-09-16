@@ -6,7 +6,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { Endorsement } from "@waitron/membership";
 import { locationId as brandLocationId } from "@waitron/shared";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 
@@ -19,22 +19,22 @@ const RING: KeyRing = loadKeyRing({
 
 describe("mintNextMembershipDocument", () => {
   const suite = usePgliteDb({
+    resetPerTest: false,
     migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
     timeoutMs: 60_000,
   });
 
   let db: Database;
-  let tenantId: TenantId;
   let nodeId: NodeId;
 
   beforeAll(async () => {
     db = suite.db;
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-    nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
-    await establishNodeIdentity({ ownerDb: db, ring: RING }, tenantId, nodeId);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+    await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
   }, 60_000);
 
   it("forwards endorsements onto the signed document", async () => {
@@ -47,7 +47,6 @@ describe("mintNextMembershipDocument", () => {
     const doc = await mintNextMembershipDocument(
       { db, ring: RING },
       {
-        tenantId,
         heldDocument: null,
         nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
         signerNodeId: nodeId,
@@ -61,7 +60,6 @@ describe("mintNextMembershipDocument", () => {
     const doc = await mintNextMembershipDocument(
       { db, ring: RING },
       {
-        tenantId,
         heldDocument: null,
         nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
         signerNodeId: nodeId,

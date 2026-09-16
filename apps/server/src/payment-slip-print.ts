@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, ne } from "drizzle-orm";
-import { asAppUser, sales, tenders, tenants, withTenant, type Database } from "@waitron/db";
+import { asAppUser, readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
 import { AppError, decimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -15,12 +15,12 @@ export async function printSalePaymentSlip(
   cfg: TillConfig,
   workingOrderId: string,
 ): Promise<void> {
-  await withTenant(db, cfg.tenantId, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const [sale] = await tx
       .select({ id: sales.id })
       .from(sales)
-      .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+      .where(eq(sales.workingOrderId, workingOrderId));
     if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId });
     const [payment] = await tx
       .select({
@@ -33,17 +33,9 @@ export async function printSalePaymentSlip(
         authCode: payments.cardAuthCode,
       })
       .from(payments)
-      .innerJoin(
-        tenders,
-        and(
-          eq(tenders.saleId, payments.saleId),
-          eq(tenders.tenantId, payments.tenantId),
-          eq(tenders.method, "card"),
-        ),
-      )
+      .innerJoin(tenders, and(eq(tenders.saleId, payments.saleId), eq(tenders.method, "card")))
       .where(
         and(
-          eq(payments.tenantId, cfg.tenantId),
           eq(payments.saleId, sale.id),
           eq(payments.workingOrderId, workingOrderId),
           ne(payments.provider, "manual"),
@@ -54,12 +46,9 @@ export async function printSalePaymentSlip(
     if (payment === undefined) return;
     const printer = await resolveReceiptPrinter(tx, cfg);
     if (printer === undefined) return;
-    const [issuer] = await tx
-      .select({ venueName: tenants.legalName, nif: tenants.taxId })
-      .from(tenants)
-      .where(eq(tenants.id, cfg.tenantId));
-    /* v8 ignore next -- sale tenant foreign key guarantees issuer; presentation still degrades */
-    if (issuer === undefined) return;
+    const taxpayer = await readTenant(tx);
+    /* v8 ignore next -- the taxpayer row is the database's one row; presentation still degrades */
+    if (taxpayer === null) return;
     const card: CardDetails | null =
       payment.scheme === null || payment.last4 === null || payment.entryMode === null
         ? null
@@ -72,7 +61,7 @@ export async function printSalePaymentSlip(
     // An associated capture carries its settlement instant; do not invent a payment date if absent.
     if (payment.paidAt === null) return;
     const payload = formatPaymentSlip({
-      issuer,
+      issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
       ...(await readReceiptOrder(tx, cfg, workingOrderId)),
       paidAt: payment.paidAt,
       amount: subtractDecimal(decimal(payment.charged), decimal(payment.tip)),
@@ -82,11 +71,6 @@ export async function printSalePaymentSlip(
       invoiceLocale: cfg.locale,
       printer: { paperWidth: printer.paperWidth, characterSet: printer.characterSet },
     });
-    await enqueuePrintJob(
-      tx,
-      { tenantId: cfg.tenantId, locationId: cfg.locationId },
-      printer.id,
-      payload,
-    );
+    await enqueuePrintJob(tx, { locationId: cfg.locationId }, printer.id, payload);
   });
 }

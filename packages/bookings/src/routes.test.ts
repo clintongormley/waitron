@@ -1,15 +1,14 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { fakeCore } from "./testing/fake-core.js";
-import type { BookingConfig } from "./bookings.js";
 import { BOOKINGS_PERMISSIONS } from "./permissions.js";
 import { BOOKINGS_ROUTES } from "./routes.js";
 
@@ -21,7 +20,7 @@ import { BOOKINGS_ROUTES } from "./routes.js";
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
 // Real Postgres, not PGlite: every DB touch below goes through `BOOKINGS_ROUTES`' `gated` helper
-// (withTenant + asAppUser + authorizeManager), so the booking routes run as the non-superuser
+// (withTransaction + asAppUser + authorizeManager), so the booking routes run as the non-superuser
 // `app_user` and the table GRANTS are actually enforced. PGlite connects as a superuser holding every
 // privilege (CLAUDE.md §4), so a missing grant would pass there and fail only at runtime. The
 // `booking.manage` gate is proven by deletion on the block below. `core.openTab` is `fakeCore` (the
@@ -34,7 +33,7 @@ const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 
 interface Venue {
-  cfg: BookingConfig;
+  cfg: ModuleRouteContext["cfg"];
   /** The route context `BOOKINGS_ROUTES.mount` receives — `core.openTab` bound to this venue. */
   ctx: ModuleRouteContext;
   /** A live MANAGEMENT session cookie for a `manager` (holds `booking.manage`). */
@@ -48,39 +47,35 @@ interface Venue {
  * closing a composition → bookings → composition cycle. The tables come from the `manifest` template. */
 async function setupVenue(): Promise<Venue> {
   const db: Database = suite.admin;
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
 
-  const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId,
       personId: mgr.rows[0]!.id,
     });
-    const staffSession = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf.rows[0]!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
-  const cfg: BookingConfig = {
-    tenantId: brandTenantId(tenantId),
+  const cfg: ModuleRouteContext["cfg"] = {
     locationId: brandLocationId(locationId),
   };
   return {
     cfg,
-    ctx: { db, cfg, core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }) },
+    ctx: { db, cfg, core: fakeCore({ tillId: till.rows[0]!.id, nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
@@ -95,12 +90,11 @@ function mountApp(ctx: ModuleRouteContext): Hono {
 }
 
 /** Insert an ACTIVE dining table for the venue as the app role, returning its id. */
-async function seedTable(cfg: BookingConfig, label = "12"): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<string> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const row = await tx.execute<{ id: string }>(sql`
-      insert into dining_tables (tenant_id, location_id, label, active)
-      values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
+      insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
     return row.rows[0]!.id;
   });
 }

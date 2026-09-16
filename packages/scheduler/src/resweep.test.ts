@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { TenantId } from "@waitron/shared";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { DEFAULTS, type LedgerSnapshot } from "./derive.js";
 import { completeRun, readSnapshot, reclaimStale } from "./store.js";
@@ -15,12 +14,10 @@ const TOMORROW = new Date("2026-07-26T04:00:00Z");
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const DUTY = "test.duty";
 
-let tenantId: TenantId;
-
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
 
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
 });
 
 function deps(duties: SchedulerDeps["duties"]): SchedulerDeps {
@@ -28,8 +25,8 @@ function deps(duties: SchedulerDeps["duties"]): SchedulerDeps {
 }
 
 function snapshotOf(): Promise<LedgerSnapshot> {
-  return withTenant(suite.db, tenantId, (tx) =>
-    readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: HORIZON_START }),
+  return withTransaction(suite.db, (tx) =>
+    readSnapshot(tx, { duty: DUTY, horizonStart: HORIZON_START }),
   );
 }
 
@@ -38,7 +35,7 @@ describe("resweepAfter", () => {
     const duty = new FakeDuty(DUTY, () =>
       Promise.resolve({ summary: { gated: 1 }, resweepAfter: TOMORROW }),
     );
-    await runDue(deps([duty]), [tenantId], NOW);
+    await runDue(deps([duty]), NOW);
 
     const snapshot = await snapshotOf();
     const pending = snapshot.rows.filter((r) => r.state === "pending");
@@ -59,7 +56,7 @@ describe("resweepAfter", () => {
   it("reports the re-sweep it just enqueued as the next due time", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: soon }));
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
     expect(result.nextDueAt).toEqual(soon);
   });
 
@@ -71,9 +68,8 @@ describe("resweepAfter", () => {
   it("does not report a re-sweep time for a successor the guard refused", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
     const duty = new FakeDuty(DUTY, async (call) => {
-      await withTenant(suite.db, tenantId, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.insert(scheduledRuns).values({
-          tenantId,
           duty: DUTY,
           periodFrom: call.period.from.toISOString(),
           periodTo: call.period.to.toISOString(),
@@ -86,7 +82,7 @@ describe("resweepAfter", () => {
       return { summary: {}, resweepAfter: soon };
     });
 
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
     expect(result.ran).toHaveLength(1);
     // The competing row was inserted after the snapshot was read, so derivation never saw it
     // either: the answer is the plain next day boundary.
@@ -104,8 +100,8 @@ describe("resweepAfter", () => {
     const duty = new FakeDuty(DUTY, (_call, index) =>
       Promise.resolve(index === 0 ? { summary: {}, resweepAfter: TOMORROW } : { summary: {} }),
     );
-    await runDue(deps([duty]), [tenantId], NOW);
-    const second = await runDue(deps([duty]), [tenantId], TOMORROW);
+    await runDue(deps([duty]), NOW);
+    const second = await runDue(deps([duty]), TOMORROW);
 
     const reswept = second.ran.filter(
       (r) => r.period.from.toISOString() === "2026-07-24T00:00:00.000Z",
@@ -116,8 +112,8 @@ describe("resweepAfter", () => {
 
   it("does not re-run the period before its due time", async () => {
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: TOMORROW }));
-    await runDue(deps([duty]), [tenantId], NOW);
-    const soon = await runDue(deps([duty]), [tenantId], new Date("2026-07-25T05:00:00Z"));
+    await runDue(deps([duty]), NOW);
+    const soon = await runDue(deps([duty]), new Date("2026-07-25T05:00:00Z"));
     expect(soon.ran).toEqual([]);
   });
 
@@ -134,7 +130,7 @@ describe("resweepAfter", () => {
     );
     let at = NOW;
     for (let i = 0; i < 3; i += 1) {
-      await runDue(deps([duty]), [tenantId], at);
+      await runDue(deps([duty]), at);
       at = new Date(at.getTime() + 120_000);
     }
     const snapshot = await snapshotOf();
@@ -147,9 +143,8 @@ describe("resweepAfter", () => {
     // 90 days back, which no gap derivation would ever reach.
     const old = new Date("2026-04-20T00:00:00Z");
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {} }));
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await tx.insert(scheduledRuns).values({
-        tenantId,
         duty: DUTY,
         periodFrom: old.toISOString(),
         periodTo: new Date(old.getTime() + 86_400_000).toISOString(),
@@ -159,7 +154,7 @@ describe("resweepAfter", () => {
         nextAttemptAt: NOW.toISOString(),
       });
     });
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
     expect(result.ran.map((r) => r.period.from.toISOString())).toContain(
       "2026-04-20T00:00:00.000Z",
     );
@@ -179,12 +174,12 @@ describe("resweepAfter", () => {
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
       )!;
       const reclaimAt = new Date(call.now.getTime() + DEFAULTS.staleAfterMs + 1);
-      const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+      const reclaimed = await withTransaction(suite.db, (tx) =>
         reclaimStale(tx, { id: row.id, now: reclaimAt, staleAfterMs: DEFAULTS.staleAfterMs }),
       );
       expect(reclaimed).not.toBeNull();
       // The reclaiming runner finishes its own attempt first, leaving the row terminal.
-      const won = await withTenant(suite.db, tenantId, (tx) =>
+      const won = await withTransaction(suite.db, (tx) =>
         completeRun(tx, {
           id: reclaimed!.id,
           startedAt: reclaimed!.startedAt,
@@ -199,7 +194,7 @@ describe("resweepAfter", () => {
       return { summary: {}, resweepAfter: TOMORROW };
     });
 
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
     expect(result.ran).toEqual([]);
 
     const snapshot = await snapshotOf();

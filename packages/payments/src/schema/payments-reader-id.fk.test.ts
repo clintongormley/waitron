@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
@@ -13,11 +14,9 @@ import { payments } from "./payments.js";
 // `core_payments` template (CORE + PAYMENTS).
 const postgres = useTemplateDb({ template: "core_payments" });
 
-/** Seeds a tenant/till/working_order (via the shared payments seed helper) plus one card reader
- * for that same tenant, everything `payments.reader_id`'s composite FK needs a real row to point
- * at. */
+/** Seeds a till/working_order (via the shared payments seed helper) plus one card reader — the
+ * rows `payments.reader_id`'s FK points at. */
 async function seedOrderWithReader(db: Database): Promise<{
-  tenantId: string;
   workingOrderId: string;
   readerId: string;
 }> {
@@ -25,14 +24,12 @@ async function seedOrderWithReader(db: Database): Promise<{
   const reader = await db
     .insert(cardReaders)
     .values({
-      tenantId: seeded.tenantId,
       provider: "sumup",
       providerRef: `rdr_${seeded.workingOrderId}`,
       name: "Counter",
     })
     .returning({ id: cardReaders.id });
   return {
-    tenantId: seeded.tenantId,
     workingOrderId: seeded.workingOrderId,
     readerId: reader[0]!.id,
   };
@@ -41,12 +38,11 @@ async function seedOrderWithReader(db: Database): Promise<{
 describe("payments.reader_id", () => {
   it("stores a payment's reader and round-trips it", async () => {
     const db = postgres.admin;
-    const { tenantId, workingOrderId, readerId } = await seedOrderWithReader(db);
+    const { workingOrderId, readerId } = await seedOrderWithReader(db);
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(payments).values({
-        tenantId,
         workingOrderId,
         readerId,
         provider: "sumup",
@@ -56,36 +52,31 @@ describe("payments.reader_id", () => {
       });
     });
 
-    const stored = await withTenant(db, tenantId, async (tx) => {
+    const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(payments)
-        .where(and(eq(payments.tenantId, tenantId), eq(payments.paymentRef, "pay_1")));
+      return tx.select().from(payments).where(eq(payments.paymentRef, "pay_1"));
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
   });
 
-  it("rejects a reader naming a DIFFERENT tenant (composite FK)", async () => {
+  it("refuses a reader that does not exist", async () => {
     const db = postgres.admin;
-    const own = await seedOrderWithReader(db);
-    const foreign = await seedOrderWithReader(db);
-
-    const e = await captureError(() =>
-      withTenant(db, own.tenantId, async (tx) => {
+    const { workingOrderId } = await seedOrderWithReader(db);
+    const error = await captureError(() =>
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(payments).values({
-          tenantId: own.tenantId,
-          workingOrderId: own.workingOrderId,
-          readerId: foreign.readerId,
+          workingOrderId,
+          readerId: randomUUID(),
           provider: "sumup",
-          paymentRef: "pay_cross_tenant",
+          paymentRef: "pay_missing_reader",
           amount: "10.00",
           state: "captured",
         });
       }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorMessage(error)).toMatch(/payments_reader_fk/);
   });
 });

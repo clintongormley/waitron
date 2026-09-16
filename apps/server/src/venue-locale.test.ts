@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
-import * as countryPacks from "@waitron/country-packs";
+import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -9,25 +8,25 @@ import { readVenueLocale } from "./venue-locale.js";
 
 // PGlite, not real Postgres: `readVenueLocale` is a plain two-row read (tenant country + location
 // province) feeding the installed country-pack locale chain, the same LOGIC shape the till/me route
-// mechanics prove on PGlite. It reads under `withTenant` + `asAppUser` exactly as production
+// mechanics prove on PGlite. It reads under `withTransaction` + `asAppUser` exactly as production
 // does; the app_user privilege matrix in @waitron/fiscal-verifactu checks the table grants on
 // real PostgreSQL (`app_user` already holds SELECT on both — `GET /api/till` reads them the same
 // way). CORE_MIGRATIONS alone: both `tenants.country` and `locations.province` live in core, so
 // no identity/workforce schema is needed.
-let tenantId: string;
 let locationId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     // `seedTenant` sets country 'ES' (and legal_name 'Test SL', a generated tax_id).
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI catalogue,
     // so locale resolution falls through to the country default.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, province, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', 'Barcelona', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, province, invoice_locales, operation_description)
+      values ('Counter', 'Barcelona', array['es-ES'], 'Retail') returning id`);
     locationId = loc.rows[0]!.id;
   },
 });
@@ -35,50 +34,37 @@ const suite = usePgliteDb({
 describe("readVenueLocale", () => {
   it("derives the country default when no override and no regional catalogue", async () => {
     // Barcelona → ca-ES unavailable in this build → country ES → es-ES.
-    const got = await readVenueLocale(suite.db, { tenantId, locationId, override: undefined });
+    const got = await readVenueLocale(suite.db, { locationId, override: undefined });
     expect(got).toBe("es-ES");
   });
 
-  it("does not pass another tenant's province to the locale resolver", async () => {
-    const otherTenantId = await seedTenant(suite.db);
-    const resolver = vi.spyOn(countryPacks, "resolveInstalledCountryLocale");
-    try {
-      expect(await readVenueLocale(suite.db, { tenantId: otherTenantId, locationId })).toBe(
-        "es-ES",
-      );
-      // Catalan is unavailable, so the UI result alone cannot distinguish a leaked Barcelona row.
-      expect(resolver).toHaveBeenLastCalledWith(expect.any(Array), {
-        override: undefined,
-        area: null,
-        country: "ES",
-        fallback: "en-GB",
-      });
-    } finally {
-      resolver.mockRestore();
-    }
-  });
-
   it("honours a supported override", async () => {
-    const got = await readVenueLocale(suite.db, { tenantId, locationId, override: "en-GB" });
+    const got = await readVenueLocale(suite.db, { locationId, override: "en-GB" });
     expect(got).toBe("en-GB");
   });
 
   it("ignores an unsupported override, falls to country", async () => {
     // 'ca-ES' has no catalogue (not in SUPPORTED_LOCALES), so the override is dropped and the country
     // default 'ES' → es-ES wins — the same result as no override at all.
-    const got = await readVenueLocale(suite.db, { tenantId, locationId, override: "ca-ES" });
+    const got = await readVenueLocale(suite.db, { locationId, override: "ca-ES" });
     expect(got).toBe("es-ES");
   });
 
-  it("falls to the English floor when neither tenant nor location row is found", async () => {
-    // Absent rows leave both `country` and `province` null, so the installed-country resolver
-    // reaches its `en-GB` floor. Not a production shape (provisioning stamps the till's own tenant +
-    // location), but the graceful `?? null` path exists rather than a throw — this pins it.
-    const got = await readVenueLocale(suite.db, {
-      tenantId: randomUUID(),
-      locationId: randomUUID(),
-      override: undefined,
-    });
-    expect(got).toBe("en-GB");
+  it("falls to the English floor when there is no taxpayer row to read a country from", async () => {
+    // With the taxpayer row deleted BOTH reads come back empty, so `country` and `province` are
+    // null and the installed-country resolver reaches its `en-GB` floor. Not a production shape
+    // (provisioning writes the taxpayer before a till ever boots), but the graceful `?? null` path
+    // exists rather than a throw — this pins it. Restored afterwards so the suite stays
+    // order-independent.
+    await suite.db.execute(sql`delete from tenants`);
+    try {
+      const got = await readVenueLocale(suite.db, {
+        locationId: randomUUID(),
+        override: undefined,
+      });
+      expect(got).toBe("en-GB");
+    } finally {
+      await seedTenant(suite.db);
+    }
   });
 });

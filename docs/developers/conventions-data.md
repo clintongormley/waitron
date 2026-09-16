@@ -143,7 +143,7 @@ derivation at the server boundary. Guarded by `scripts/module-seams.test.ts`; de
 
 ## No new table enters the core migration set without a stated reason in the commit
 
-A `tenant_id`-bearing domain table belongs to its module's own migration set (`migrations.from`),
+A domain table a module owns belongs to that module's own migration set (`migrations.from`),
 where its grants travel with it; a core-set addition is a deliberate exception and says why it is
 not a module's. Same defect class as §1's unstated claims — an unexplained core table is a boundary
 decision no future reader can audit.
@@ -170,7 +170,7 @@ emitted SQL with `.toSQL()`.
 The Products review found that each basket line called `resolveZoneOffer`, which reloaded the whole
 zone offer catalogue, then performed separate product-variant and menu-variant reads. Repeated items
 therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
-and one tenant-scoped batch of product variants before its in-memory line loop. The focused
+and one batch of product variants before its in-memory line loop. The focused
 `working-order.test.ts` probe spies on both contribution methods: one `listZoneOffers` call and no
 per-line `resolveZoneOffer` calls for a repeated-offer basket. Kitchen routing follows the same
 rule: `fireLines` makes one `resolvePreparationRoutes` call per fire, which answers for every product
@@ -200,7 +200,7 @@ updates`. Reproduced on a real PostgreSQL server on 2026-09-13 — `create table
 unique (a, b)); create publication p for table t; insert; update` gives the error above, and the same
 sequence with `primary key (a, b)` instead reports `UPDATE 1`. Cost: `product_units` shipped with only
 a unique `(tenant_id, product_id)`, so creating a product worked and changing its unit answered 500;
-`packages/catalogue/drizzle/0010_product_units_primary_key.sql` promotes that pair to the primary key.
+the table now carries a primary key, created by `packages/catalogue/drizzle/0000_catalogue_baseline.sql`.
 No guard covers this: the defect passed every existing test because no test published the table
 (`packages/catalogue/src/units.pg.test.ts` now creates the publication to reproduce it), and a
 per-table check would have to read each module's `_CLASSIFICATION` list against its schema file's
@@ -257,12 +257,12 @@ also count privileges held only through group membership — a false positive a 
 accept. Role-membership grants are different: they always ERROR. Cost: a Critical plus three fix
 rounds on `feat/provisioning-instance`.
 
-**Transactions and tenant isolation**
+**Transactions**
 
-## Multi-table writes share ONE transaction, and `withTenant` IS that transaction
+## Multi-table writes share ONE transaction, and `withTransaction` IS that transaction
 
 (`packages/db/src/tenancy.ts`). Write-path functions take a `tx: Transaction` and never open their
-own; a route handler opens exactly one `withTenant` per request (`recordSale`'s header says why —
+own; a route handler opens exactly one `withTransaction` per request (`recordSale`'s header says why —
 `packages/core/src/record-sale.ts`). A convention, not a compiler guarantee: `Database` is assignable
 to `Transaction`, and an ESLint backstop was declined (2026-09-03). **Splitting one logical change
 across transactions is a commented decision, never a default** — the two that do it
@@ -286,6 +286,13 @@ preparation-route read-count test count calls and queries; neither can tell whet
 The missing guard is a Track C item in `docs/backlog.md`.
 
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
+
+> **Superseded 2026-09-14.** There is no tenant column to compare against any more: the taxpayer is
+> the one row in `tenants` (`id = 1`), and nothing filters by a tenant. Spec:
+> `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`. The rest of this section is kept as
+> the record of why the rule existed; the probe it describes cannot be written any more, because a
+> second taxpayer row cannot be inserted. What survives it is the habit, not the clause: only the
+> seat that RAN a probe found the defect four reading passes had cleared.
 
 Since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so every read scopes to the
 tenant itself — a by-id read as much as a list read, never trusting a globally-unique UUID or the
@@ -372,6 +379,13 @@ an unclassified driver error in whatever query first touched the changed schema.
 
 ## A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries
 
+> **Superseded 2026-09-14.** `authorizeManager` returns `{ authorizedBy, role }` and no tenant, and
+> there is no configured tenant to compare it with — one database, one taxpayer. Spec:
+> `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`. The two regression cases named below
+> were deleted with the column. What the route still scopes its queries by is the deployed LOCATION
+> — `apps/server/src/location-settings-api.ts` filters on `eq(locations.id, deps.cfg.locationId)` —
+> a separate boundary this change did not touch.
+
 The permission check returns the session's tenant; it does not compare it with the configured tenant.
 A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
 them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, "refuses a manager session
@@ -437,7 +451,8 @@ and enum comparison follows a string type check. Receipt:
 When you generate a table that references a new unique constraint on an existing table, inspect the
 statement order and run the migration. Products' generated catalogue migration created the
 `menu_item_variants` foreign key before adding its `(tenant_id, id, product_id)` unique target to
-`menu_items`. PostgreSQL rejected the migration with `42830`. Moving the generated unique-constraint
+`menu_items` (that target is `(id, product_id)` since the tenant column went, 2026-09-14; the
+ordering rule is unchanged). PostgreSQL rejected the migration with `42830`. Moving the generated unique-constraint
 statement before that foreign key made the real migration succeed; the journal and snapshot were
 unchanged.
 

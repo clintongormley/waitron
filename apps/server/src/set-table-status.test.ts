@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -37,16 +37,15 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -56,14 +55,14 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const seeded = await withTenant(db, tenantId, async (tx) => {
+  const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
     const active = await tx.execute<{ id: string }>(
-      sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantId}, 'Bill requested', '#ef4444') returning id`,
+      sql`insert into table_service_statuses (label, color) values ('Bill requested', '#ef4444') returning id`,
     );
     const inactive = await tx.execute<{ id: string }>(
-      sql`insert into table_service_statuses (tenant_id, label, color, active) values (${tenantId}, 'Retired', '#000', false) returning id`,
+      sql`insert into table_service_statuses (label, color, active) values ('Retired', '#000', false) returning id`,
     );
     return { tableId, activeStatusId: active.rows[0]!.id, inactiveStatusId: inactive.rows[0]!.id };
   });
@@ -71,7 +70,8 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

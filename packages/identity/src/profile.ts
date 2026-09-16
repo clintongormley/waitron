@@ -32,8 +32,10 @@ import {
   type TotpKeyRing,
 } from "./mfa.js";
 
+/** Who is making the change: the management session the routes resolve it from. The two paths that
+ * issue an emailed proof also take the taxpayer id `hashCode` mixes into that proof, declared on
+ * their own inputs rather than here, because nothing else in this file reads one. */
 interface Owner {
-  tenantId: string;
   managementSessionId: string;
 }
 interface Credentials {
@@ -46,18 +48,13 @@ async function ownPerson(tx: Transaction, input: Owner) {
   const [session] = await tx
     .select({ personId: managementSessions.personId })
     .from(managementSessions)
-    .where(
-      and(
-        eq(managementSessions.id, input.managementSessionId),
-        eq(managementSessions.tenantId, input.tenantId),
-      ),
-    );
+    .where(eq(managementSessions.id, input.managementSessionId));
   if (session === undefined) throw new AppError("management_session.required", {});
   // Serialize profile changes before touching session rows: a password change also ends other sessions.
   const [person] = await tx
     .select()
     .from(persons)
-    .where(and(eq(persons.id, session.personId), eq(persons.tenantId, input.tenantId)))
+    .where(eq(persons.id, session.personId))
     .for("update");
   if (person === undefined) throw new AppError("management_session.required", {});
   await resolveManagementSession(tx, input.managementSessionId);
@@ -101,15 +98,10 @@ export async function beginOwnTotpEnrollment(
   verifyCurrent(person, input);
   const secret = generateTotpSecret();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  await tx
-    .delete(totpEnrollments)
-    .where(
-      and(eq(totpEnrollments.tenantId, input.tenantId), eq(totpEnrollments.personId, person.id)),
-    );
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
   const [row] = await tx
     .insert(totpEnrollments)
     .values({
-      tenantId: input.tenantId,
       personId: person.id,
       encryptedSecret: encryptTotpSecret(secret, input.keyRing.current),
       expiresAt,
@@ -134,7 +126,6 @@ export async function finishOwnTotpEnrollment(
     .where(
       and(
         eq(totpEnrollments.id, input.enrollmentId),
-        eq(totpEnrollments.tenantId, input.tenantId),
         eq(totpEnrollments.personId, person.id),
         gt(totpEnrollments.expiresAt, new Date().toISOString()),
       ),
@@ -147,13 +138,9 @@ export async function finishOwnTotpEnrollment(
   await tx
     .update(persons)
     .set({ totpSecret: enrollment!.encryptedSecret })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
-  await tx
-    .delete(totpEnrollments)
-    .where(
-      and(eq(totpEnrollments.tenantId, input.tenantId), eq(totpEnrollments.id, input.enrollmentId)),
-    );
-  return { codes: await replaceRecoveryCodes(tx, input.tenantId, person.id) };
+    .where(eq(persons.id, person.id));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.id, input.enrollmentId));
+  return { codes: await replaceRecoveryCodes(tx, person.id) };
 }
 
 export async function regenerateOwnRecoveryCodes(
@@ -162,7 +149,7 @@ export async function regenerateOwnRecoveryCodes(
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
-  return { codes: await replaceRecoveryCodes(tx, input.tenantId, person.id) };
+  return { codes: await replaceRecoveryCodes(tx, person.id) };
 }
 
 export async function disableOwnTotp(
@@ -171,39 +158,23 @@ export async function disableOwnTotp(
 ): Promise<void> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
-  await tx
-    .update(persons)
-    .set({ totpSecret: null })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
-  await tx
-    .delete(recoveryCodes)
-    .where(and(eq(recoveryCodes.tenantId, input.tenantId), eq(recoveryCodes.personId, person.id)));
-  await tx
-    .delete(totpEnrollments)
-    .where(
-      and(eq(totpEnrollments.tenantId, input.tenantId), eq(totpEnrollments.personId, person.id)),
-    );
+  await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
+  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
 }
 
 export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
-  await tx
-    .update(persons)
-    .set({ googleSubject: null })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+  await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
 }
 
-async function invalidateLinks(tx: Transaction, tenantId: string, personId: string): Promise<void> {
+async function invalidateLinks(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(managementAccountActions)
     .set({ usedAt: sql`now()` })
     .where(
-      and(
-        eq(managementAccountActions.tenantId, tenantId),
-        eq(managementAccountActions.personId, personId),
-        isNull(managementAccountActions.usedAt),
-      ),
+      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
     );
 }
 
@@ -216,12 +187,7 @@ export async function readOwnProfile(tx: Transaction, input: Owner) {
       createdAt: webauthnCredentials.createdAt,
     })
     .from(webauthnCredentials)
-    .where(
-      and(
-        eq(webauthnCredentials.tenantId, input.tenantId),
-        eq(webauthnCredentials.personId, person.id),
-      ),
-    )
+    .where(eq(webauthnCredentials.personId, person.id))
     .orderBy(webauthnCredentials.createdAt, webauthnCredentials.id);
   return {
     displayName: person.displayName,
@@ -268,8 +234,8 @@ export async function saveOwnProfile(
   const locale = assertSupportedLocale(input.locale);
   const changedEmail = email !== person.email;
   if (changedEmail) verifyCurrent(person, input);
-  await assertDisplayNameAvailable(tx, input.tenantId, displayName, person.id);
-  await assertEmailAvailable(tx, input.tenantId, email, person.id);
+  await assertDisplayNameAvailable(tx, displayName, person.id);
+  await assertEmailAvailable(tx, email, person.id);
   try {
     await tx
       .update(persons)
@@ -281,17 +247,16 @@ export async function saveOwnProfile(
         pendingEmail: changedEmail ? email : null,
         locale,
       })
-      .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+      .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
   if (!changedEmail) {
-    if (person.pendingEmail !== null) await invalidateLinks(tx, input.tenantId, person.id);
+    if (person.pendingEmail !== null) await invalidateLinks(tx, person.id);
     return null;
   }
-  await invalidateLinks(tx, input.tenantId, person.id);
+  await invalidateLinks(tx, person.id);
   return issueAccountAction(tx, {
-    tenantId: input.tenantId,
     personId: person.id,
     purpose: "email_change",
     targetEmail: email,
@@ -305,7 +270,6 @@ export async function confirmOwnEmailChange(
 ): Promise<string | null> {
   const person = await ownPerson(tx, input);
   const email = await confirmEmailChangeByCode(tx, {
-    tenantId: input.tenantId,
     personId: person.id,
     code: input.code,
     codeKey: input.codeKey,
@@ -323,17 +287,11 @@ export async function changeOwnPin(
   await tx
     .update(persons)
     .set({ pinHash: hashPin(input.pin) })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+    .where(eq(persons.id, person.id));
   await tx
     .update(sessions)
     .set({ endedAt: sql`now()` })
-    .where(
-      and(
-        eq(sessions.tenantId, input.tenantId),
-        eq(sessions.personId, person.id),
-        isNull(sessions.endedAt),
-      ),
-    );
+    .where(and(eq(sessions.personId, person.id), isNull(sessions.endedAt)));
 }
 
 export async function changeOwnPassword(
@@ -346,14 +304,13 @@ export async function changeOwnPassword(
   await tx
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
-  await invalidateLinks(tx, input.tenantId, person.id);
+    .where(eq(persons.id, person.id));
+  await invalidateLinks(tx, person.id);
   await tx
     .update(managementSessions)
     .set({ endedAt: sql`now()` })
     .where(
       and(
-        eq(managementSessions.tenantId, input.tenantId),
         eq(managementSessions.personId, person.id),
         ne(managementSessions.id, input.managementSessionId),
         isNull(managementSessions.endedAt),
@@ -369,13 +326,7 @@ export async function removeOwnPasskey(
   verifyCurrent(person, input);
   const removed = await tx
     .delete(webauthnCredentials)
-    .where(
-      and(
-        eq(webauthnCredentials.id, input.id),
-        eq(webauthnCredentials.tenantId, input.tenantId),
-        eq(webauthnCredentials.personId, person.id),
-      ),
-    )
+    .where(and(eq(webauthnCredentials.id, input.id), eq(webauthnCredentials.personId, person.id)))
     .returning({ id: webauthnCredentials.id });
   if (removed.length === 0) throw new AppError("passkey.not_registered", {});
 }

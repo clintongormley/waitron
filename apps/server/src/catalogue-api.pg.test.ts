@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { assignCatalogueToLocation, listAvailableProducts } from "@waitron/catalogue";
@@ -14,7 +14,7 @@ import { ALL_MODULES } from "./modules.js";
 // Real Postgres, not PGlite: the route mechanics (body/id screens) are already proven
 // in-process on PGlite (`catalogue-api.test.ts`); what needs the real cluster is the write group run
 // as the non-superuser `app_user` — its table grants are enforced here and held unconditionally by
-// PGlite's superuser (CLAUDE.md §4) — and the tenant-consistent composite FK on the option-group
+// PGlite's superuser (CLAUDE.md §4) — and the by-id FK on the option-group
 // attach. The `person.manage` gate is proven by deletion on the block below.
 const LOCALE = "es-ES";
 
@@ -23,9 +23,10 @@ const suite = useTemplateDb({ template: "manifest" });
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same per-suite counter `management-api.pg.test.ts`
-// uses.
+// A distinct NIF per provisioned venue — the same per-suite counter `management-api.pg.test.ts`
+// uses. Nothing here depends on them differing: `useTemplateDb` resets the clone between tests and
+// `tenants_singleton_ck` allows one row inside one, so every test provisions into an empty
+// `tenants`.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -33,7 +34,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   /**
    * This venue's single location id — the `:locationId` the location-menu routes act on, and the
    * location-scoped read the till uses (`listAvailableProducts`).
@@ -81,47 +81,34 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const staffSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: stf.rows[0]!.id,
     });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
   return {
-    tenantId: venue.tenantId,
     locationId: venue.locationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
 }
 
-/** One Hono app per tenant — `mountCatalogueApi` binds ONE tenant via `cfg.tenantId`, so each venue's
- * routes need their own app (mirrors `management-api.pg.test.ts`). */
-function mountApp(tenantId: string): Hono {
+/** A Hono app carrying the catalogue routes over the suite's owner connection. */
+function mountApp(): Hono {
   const app = new Hono();
-  mountCatalogueApi(
-    app,
-    {
-      db: suite.admin,
-      // These suites assert the gate and the option-group FKs, never the captured origin; any valid node id
-      // satisfies the (now required) cfg.nodeId. Origin attribution is proven in sync-origin.test.ts.
-      cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
-    },
-    noopLog,
-  );
+  mountCatalogueApi(app, { db: suite.admin }, noopLog);
   return app;
 }
 
@@ -186,24 +173,24 @@ describe("category dependants and bulk add over real Postgres", () => {
     // on `preparation_routes`, `kitchen_stations` and `floor_zones` — grants PGlite's superuser
     // holds unconditionally — and its DELETE grant on the module's table when the category goes.
     const v = await setupVenue();
-    const app = mountApp(v.tenantId);
+    const app = mountApp();
     const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Frituras" });
     // Seeded as the OWNER, the way `setupVenue` seeds persons: these are fixture rows, not the
     // behaviour under test. The route reads them back as `app_user`.
     const zone = await suite.admin.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${v.tenantId}, ${v.locationId}, 'Terraza') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${v.locationId}, 'Terraza') returning id`);
     const station = await suite.admin.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name)
-      values (${v.tenantId}, ${v.locationId}, 'Plancha') returning id`);
+      insert into kitchen_stations (location_id, name)
+      values (${v.locationId}, 'Plancha') returning id`);
     const routed = await suite.admin.execute<{ id: string }>(sql`
-      insert into preparation_routes (tenant_id, location_id, zone_id, category_id, station_id)
-      values (${v.tenantId}, ${v.locationId}, ${zone.rows[0]!.id}, ${categoryId}, ${station.rows[0]!.id})
+      insert into preparation_routes (location_id, zone_id, category_id, station_id)
+      values (${v.locationId}, ${zone.rows[0]!.id}, ${categoryId}, ${station.rows[0]!.id})
       returning id`);
     // `no_preparation` routes report a null station — the read's `case` arm.
     const direct = await suite.admin.execute<{ id: string }>(sql`
-      insert into preparation_routes (tenant_id, location_id, category_id, no_preparation)
-      values (${v.tenantId}, ${v.locationId}, ${categoryId}, true) returning id`);
+      insert into preparation_routes (location_id, category_id, no_preparation)
+      values (${v.locationId}, ${categoryId}, true) returning id`);
 
     const res = await send(
       app,
@@ -233,7 +220,7 @@ describe("category dependants and bulk add over real Postgres", () => {
         .status,
     ).toBe(204);
     const left = await suite.admin.execute(
-      sql`select 1 from preparation_routes where tenant_id = ${v.tenantId} and category_id = ${categoryId}`,
+      sql`select 1 from preparation_routes where category_id = ${categoryId}`,
     );
     expect(left.rows).toHaveLength(0);
   });
@@ -242,7 +229,7 @@ describe("category dependants and bulk add over real Postgres", () => {
     // The bulk add's INSERT on `product_categories` and UPDATE on `products` run as `app_user`,
     // whose grants only a real cluster enforces.
     const v = await setupVenue();
-    const app = mountApp(v.tenantId);
+    const app = mountApp();
     const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
     const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Tapas" });
     const first = await createProduct(app, v.managerCookie, catalogueId, "Croquetas");
@@ -254,13 +241,13 @@ describe("category dependants and bulk add over real Postgres", () => {
     ).toBe(204);
     const members = await suite.admin.execute<{ product_id: string }>(
       sql`select product_id from product_categories
-          where tenant_id = ${v.tenantId} and category_id = ${categoryId} order by product_id`,
+          where category_id = ${categoryId} order by product_id`,
     );
     expect(members.rows.map((r) => r.product_id)).toEqual([first, second].sort());
     // Neither product had a reporting category, so each took this one.
     const reporting = await suite.admin.execute<{ category_id: string | null }>(
       sql`select category_id from products
-          where tenant_id = ${v.tenantId} and id in (${first}, ${second})`,
+          where id in (${first}, ${second})`,
     );
     expect(reporting.rows.map((r) => r.category_id)).toEqual([categoryId, categoryId]);
     // A staff session holds no `person.manage`, so the gate refuses the write.
@@ -270,12 +257,12 @@ describe("category dependants and bulk add over real Postgres", () => {
   });
 });
 
-describe("Catalogue API over real Postgres (option groups, gates, tenant-consistent FKs)", () => {
+describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results
     // to a staff session that cannot manage the catalogue.
-    const { tenantId, staffCookie } = await setupVenue();
-    const app = mountApp(tenantId);
+    const { staffCookie } = await setupVenue();
+    const app = mountApp();
 
     const expect403 = async (res: Response) => {
       expect(res.status).toBe(403);
@@ -336,9 +323,9 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     // attach it to a product, then the OPERATOR till read (`listAvailableProducts`, location-scoped)
     // surfaces the same group + active items — the authoring surface and the sale surface agree. Runs
     // on real Postgres because `listAvailableProducts` reads the location's accessible catalogue, which
-    // provisioning set up here; the assign is via `assignCatalogueToLocation` under withTenant+asAppUser.
+    // provisioning set up here; the assign is via `assignCatalogueToLocation` under withTransaction+asAppUser.
     const v = await setupVenue();
-    const app = mountApp(v.tenantId);
+    const app = mountApp();
 
     const catId = await createCatalogue(app, v.managerCookie, "Menú de la casa");
     const groupRes = await send(app, "POST", "/management-api/option-groups", v.managerCookie, {
@@ -390,7 +377,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     expect((await attached.json()) as string[]).toEqual([groupId]);
 
     // Make the catalogue sellable at the location, then the OPERATOR till read reflects the group.
-    const tillView = await withTenant(suite.admin, v.tenantId, async (tx) => {
+    const tillView = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await assignCatalogueToLocation(tx, v.locationId, catId);
       return listAvailableProducts(tx, v.locationId);
@@ -407,62 +394,14 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     expect(sold.optionGroups[0]!.items.map((i) => i.id)).toEqual(itemIds);
   });
 
-  it("refuses attaching another tenant's option-group id — the tenant-consistent FK rejects it and nothing lands", async () => {
-    // The composite `(tenant_id, group_id)` FK on `product_option_groups`, exercised on its
-    // exists-but-foreign arm: the group id names a REAL row, just one owned by another tenant — the
-    // only arm a single-column FK to `option_groups(id)` would accept. The attach must be refused
-    // (a 4xx/5xx, never a silent success) and nothing may land.
-    const a = await setupVenue();
-    const b = await setupVenue();
-    const appA = mountApp(a.tenantId);
-    const appB = mountApp(b.tenantId);
-
-    const bGroupRes = await send(appB, "POST", "/management-api/option-groups", b.managerCookie, {
-      name: { [LOCALE]: "Grupo de B" },
-    });
-    expect(bGroupRes.status).toBe(201);
-    const bGroupId = ((await bGroupRes.json()) as { id: string }).id;
-
-    // A authors its own catalogue + product, then tries to attach B's foreign group id. The
-    // tenant-consistent (tenant_id, group_id) FK finds no such group under A's tenant, so the insert
-    // raises 23503 → an opaque 500 (the deliberately-opaque foreign-id posture the catalogue STATUS map
-    // documents); the attach never lands.
-    const catA = await createCatalogue(appA, a.managerCookie, "Carta A");
-    const prodRes = await send(appA, "POST", "/management-api/products", a.managerCookie, {
-      catalogueId: catA,
-      categoryId: null,
-      name: "Producto A",
-      pricingUnit: "each",
-      unitPrice: "1.00",
-      vatClass: "general",
-    });
-    const productId = ((await prodRes.json()) as { id: string }).id;
-    const attachRes = await send(
-      appA,
-      "PATCH",
-      `/management-api/products/${productId}`,
-      a.managerCookie,
-      { optionGroupIds: [bGroupId] },
-    );
-    // The cross-tenant FK is refused (never a silent success); the attach did not land.
-    expect(attachRes.status).toBeGreaterThanOrEqual(400);
-    const attached = await send(
-      appA,
-      "GET",
-      `/management-api/products/${productId}/option-groups`,
-      a.managerCookie,
-    );
-    expect((await attached.json()) as string[]).toEqual([]);
-  });
-
   it("refuses every option-group write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Pinned test 3: the `person.manage` gate covers the new authoring routes, proved the same way the
     // catalogue-write test above proves it — by DELETION. A `staff` session holds no `person.manage`,
     // so `authorizeManager` inside `gated` throws before any option-group op runs. Dropping that
     // `authorizeManager` from `catalogue-api.ts`'s `gated` helper flips each `toBe(403)` green→red (the
     // same guard-by-deletion receipt the catalogue-write block records).
-    const { tenantId, staffCookie } = await setupVenue();
-    const app = mountApp(tenantId);
+    const { staffCookie } = await setupVenue();
+    const app = mountApp();
     const dummy = "00000000-0000-0000-0000-000000000000";
 
     const expect403 = async (res: Response) => {
@@ -500,7 +439,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
 describe("canonical modifier routes", () => {
   it("saves and reads each type canonically, and keeps a failed multi-choice save atomic", async () => {
     const venue = await setupVenue();
-    const app = mountApp(venue.tenantId);
+    const app = mountApp();
     const name = { es: "Personalización" };
     const choiceId = crypto.randomUUID();
     const bodies = [
@@ -556,27 +495,26 @@ describe("canonical modifier routes", () => {
       ).modifiers,
     ).toHaveLength(3);
   });
-  it("refuses another tenant's manager and staff", async () => {
+  it("refuses a staff-role session", async () => {
     const venue = await setupVenue();
-    const other = await setupVenue();
-    const app = mountApp(venue.tenantId);
-    for (const cookie of [other.managerCookie, venue.staffCookie]) {
-      expect((await send(app, "GET", "/management-api/modifiers", cookie)).status).toBe(403);
-      expect(
-        (
-          await send(app, "POST", "/management-api/modifiers", cookie, {
-            type: "text",
-            name: { es: "Nota" },
-          })
-        ).status,
-      ).toBe(403);
-    }
+    const app = mountApp();
+    expect((await send(app, "GET", "/management-api/modifiers", venue.staffCookie)).status).toBe(
+      403,
+    );
+    expect(
+      (
+        await send(app, "POST", "/management-api/modifiers", venue.staffCookie, {
+          type: "text",
+          name: { es: "Nota" },
+        })
+      ).status,
+    ).toBe(403);
   });
 });
 
 it("accepts ordered modifierIds in the product contract and reads them back", async () => {
   const venue = await setupVenue();
-  const app = mountApp(venue.tenantId);
+  const app = mountApp();
   const cookie = venue.managerCookie;
   const modifierIds: string[] = [];
   for (const label of ["First", "Second"]) {

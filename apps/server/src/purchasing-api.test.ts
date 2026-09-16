@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -14,38 +14,36 @@ import "./errors.js";
 // id/date screens, the permission-gate wiring and the STATUS map — end to end in-process, the same way
 // `catalogue-api.test.ts` proves the catalogue routes. The purchase-invoice tables live in
 // CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs
-// `withTenant` + `asAppUser` exactly as production does. The gate-by-DELETION proof, run as the
+// `withTransaction` + `asAppUser` exactly as production does. The gate-by-DELETION proof, run as the
 // non-superuser app role, is the real-Postgres suite (`purchasing-api.pg.test.ts`); PGlite connects as
 // a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let managerCookie: string;
 let staffCookie: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     // Seed a MANAGER (role `manager`, holds `purchase.manage`) and a STAFF person (role `staff`, holds
     // nothing) as the app role under the tenant, then mint a live management session for each so the
     // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
     // supplied even though these sessions are minted directly rather than via a PIN/password login.
-    const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -57,7 +55,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountPurchasingApi(app, { db: suite.db, cfg: { tenantId } }, noopLog);
+  mountPurchasingApi(app, { db: suite.db }, noopLog);
   return app;
 }
 

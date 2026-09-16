@@ -44,21 +44,20 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // this is an idempotent re-run the app role could not do (it lacks CREATE — boot.test.ts's PROBE_ROLE
 // note). The pull worker is pointed at an UNREACHABLE relay, so it backs off and the box still serves.
 
-const mirror = useTemplateDb({ template: "manifest" });
-const primary = useTemplateDb({ template: "manifest" });
+const mirror = useTemplateDb({ template: "manifest", resetPerTest: false });
+const primary = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A fourth clone for the adoption-pending boot (C6): migrated but with NO identity seeded — it models
 // a mirror that has just adopted and whose native initial copy has not yet brought the tenant rows.
-const adopting = useTemplateDb({ template: "manifest" });
+const adopting = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A third mirror-stamped clone that is NEVER seeded with a `mirror_config` row — the fail-closed
 // control: a box stamped `deployment.mode='mirror'` with no DB connection config must refuse to boot
 // (server.config_invalid), never serve a mirror that can never reach its primary.
-const noConfig = useTemplateDb({ template: "manifest" });
+const noConfig = useTemplateDb({ template: "manifest", resetPerTest: false });
 
-// The till's fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING mode. Distinct
+// The till's fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING mode. Distinct
 // per field. Seeded on BOTH clones in `beforeAll` (tenant/location/node/till/series) so a successful
 // boot's `readOrderFlow` / `readVenueLocale` reads resolve.
 const TILL_ENV = {
-  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -113,23 +112,23 @@ let primaryDatabaseUrl: string;
 let adoptingDatabaseUrl: string;
 
 /**
- * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
- * clone, as the container superuser.
+ * Seed the venue identity — the taxpayer row, then the location, node, till and series the
+ * WAITRON_TILL_*_ID name — on one clone, as the container superuser.
  */
 async function seedIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90222222J', 'Mirror SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Loc',
+    values (1, 'ES', '90222222J', 'Mirror SL') on conflict do nothing`);
+  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
+    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
             array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into nodes (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Node') on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into tills (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, tenant_id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into invoice_series (id, node_id, code)
+    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
             ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
 }
 
@@ -313,10 +312,9 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // A replicated pending envío this node must NOT submit (fresh FK closure + registro + a 'pendiente'
     // `envios` row). `entorno` matches this box's stamp so the row is genuinely due for the environment
     // the primary control below drains for — `resolveClient` is resolved BEFORE the entorno guard
-    // regardless (drain.ts:226), so the tripwire fires on the tenant either way.
+    // regardless (drain.ts:187), so the tripwire fires either way.
     const seeded = await seedFiscalRegistro(mirror.admin, {
       ids: {
-        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
@@ -329,8 +327,8 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     });
 
     let resolveClientCalled = false;
-    // The reject-if-called tripwire: drain resolves one of these per tenant with due work
-    // (drain.ts:226). Reaching it at all on a mirror is the failure this gate catches.
+    // The reject-if-called tripwire: a drain pass that finds due work resolves one of these
+    // (drain.ts:187). Reaching it at all on a mirror is the failure this gate catches.
     const tripwireResolveClient = (): Promise<never> => {
       resolveClientCalled = true;
       return Promise.reject(new Error("mirror must not contact AEAT"));
@@ -375,7 +373,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     expect(role).toBe("secondary");
 
     // Drive the pass an hour ahead of wall-clock so the seeded envío is unambiguously DUE for the
-    // primary control below (`envios_tenants_with_work` gates on `proximo_intento_en <= now`, whose
+    // primary control below (`envios_work_due` gates on `proximo_intento_en <= now`, whose
     // default is the CONTAINER's `now()` at insert — which can sit microseconds ahead of the host's
     // `new Date()`, leaving the row not-yet-due and the tripwire silent for a clock-skew reason). The
     // mirror direction ignores `now` (the gate short-circuits), so one instant serves both.
@@ -399,12 +397,12 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // fires. (Documented RED confirmed in a scratch run before this control was added; see the report.)
     const primaryReport = await buildPass(() => "primary")(drainAt);
     expect(resolveClientCalled).toBe(true);
-    // drain contains the tripwire rejection per-tenant (drain.ts:228 → `skipped`), so the pass still
+    // drain contains the tripwire rejection (drain.ts:192 → `skipped`), so the pass still
     // completes with a drain duty entry rather than throwing — the drainer genuinely RAN on the primary.
     expect(primaryReport.duties.some((d) => d.duty === DRAIN_DUTY)).toBe(true);
 
-    // The envío is STILL 'pendiente' even on the primary run: `resolveClient` throws before `drainTenant`
-    // (drain.ts:226-227), so nothing was ever submitted — the tripwire proves reachability, not filing.
+    // The envío is STILL 'pendiente' even on the primary run: `resolveClient` throws before `drainDue`
+    // (drain.ts:187-188), so nothing was ever submitted — the tripwire proves reachability, not filing.
     const afterPrimary = await mirror.admin.execute<{ estado: string }>(
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
     );
@@ -559,13 +557,14 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
 
   it("boots adoption-pending on an EMPTY database with status and public certificate help", async () => {
     // C6 / derived fact 1: an adopted mirror restarts while its native initial copy is still running,
-    // so the tenant rows are absent. A pending-adoption.json is present. Boot must enter the
-    // adoption-pending branch and serve a minimal status surface WITHOUT touching tenant-scoped rows.
+    // so the copied rows are absent. A pending-adoption.json is present. Boot must enter the
+    // adoption-pending branch and serve a minimal status surface WITHOUT reading any of them.
     //
-    // FAILING CASE (proven by the empty database here): without the adoption-pending guard, boot would
-    // reach `ensureMirrorViewer(db, tenantId)`, whose `persons` insert FKs to a `tenants` row the copy
-    // has not brought — a foreign-key violation that would throw out of `startServer`. That this boot
-    // returns a serving box instead is the guard working: the identity was never seeded on `adopting`.
+    // WHAT THE EMPTY DATABASE PROVES: that this boot returns a serving box at all, and that the
+    // mirror viewer was never seeded, so nothing on the pending branch read a row the copy has not
+    // brought. It no longer proves a particular failure without the guard: the receipt that used to
+    // stand here named a foreign key from `persons` to `tenants`, and this branch removed every
+    // foreign key to that table. What would break without the guard is not re-derived here.
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
     // A `modules.json` resolving the fiscal slot, matching the suite convention (the shared prefix
     // migrates the enabled set before the branch is entered).
@@ -579,7 +578,6 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({
-        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         standby: {
           nodeId: "88888888-8888-4888-8888-888888888888",

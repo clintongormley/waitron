@@ -1,7 +1,6 @@
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { generateSecret, generateSync } from "otplib";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -23,37 +22,33 @@ vi.mock("./verify-password.js", async (importOriginal) => {
 // PGlite, not real Postgres: this suite tests the verifier LOGIC — the password/TOTP/suspended
 // branches and the role gate. A PGlite connection is superuser holding every grant, so a privilege
 // or trigger assertion would be a false pass here (CLAUDE.md §4); nothing below makes one.
-let tenantId: string;
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
-const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-  withTenant(suite.db, tenantId, fn);
+const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
 describe("loginManager", () => {
   it("logs in with a correct email + password (no TOTP enrolled)", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "owner-basic@x.com" });
+    const personId = await seedManager(suite.db, { email: "owner-basic@x.com" });
     const session = await run((tx) =>
-      loginManager(tx, { tenantId, email: "owner-basic@x.com", password: "correct horse" }),
+      loginManager(tx, { email: "owner-basic@x.com", password: "correct horse" }),
     );
     expect(session.personId).toBe(personId);
   });
   it("logs in case-insensitively (email normalised before lookup)", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "owner-ci@x.com" });
+    const personId = await seedManager(suite.db, { email: "owner-ci@x.com" });
     const session = await run((tx) =>
-      loginManager(tx, { tenantId, email: "  OWNER-CI@X.com  ", password: "correct horse" }),
+      loginManager(tx, { email: "  OWNER-CI@X.com  ", password: "correct horse" }),
     );
     expect(session.personId).toBe(personId);
   });
   it("throws password.invalid for an unknown email (no enumeration)", async () => {
     // Unknown email must be indistinguishable from a wrong password on the public login form — a
     // distinct code would leak which addresses have accounts.
-    await seedManager(suite.db, tenantId, { email: "owner-known@x.com" });
+    await seedManager(suite.db, { email: "owner-known@x.com" });
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { tenantId, email: "ghost@x.com", password: "correct horse" })),
+      codeOf(() => loginManager(tx, { email: "ghost@x.com", password: "correct horse" })),
     );
     expect(code).toBe("password.invalid");
   });
@@ -63,45 +58,32 @@ describe("loginManager", () => {
     // latency. Delete the dummy-verify call in loginManager's not-found branch and this goes red.
     const spy = vi.mocked(verifyPassword);
     spy.mockClear();
-    await seedManager(suite.db, tenantId, { email: "owner-timing@x.com" });
+    await seedManager(suite.db, { email: "owner-timing@x.com" });
     const code = await run((tx) =>
-      codeOf(() =>
-        loginManager(tx, { tenantId, email: "nobody-timing@x.com", password: "some password" }),
-      ),
+      codeOf(() => loginManager(tx, { email: "nobody-timing@x.com", password: "some password" })),
     );
     expect(code).toBe("password.invalid");
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith("some password", expect.any(String));
   });
-  it("does not authenticate a person from another tenant (tenant filter)", async () => {
-    // A person with a valid email + password, but in a DIFFERENT tenant. The explicit tenant filter must not find them, so loginManager cannot
-    // mint a session with a mismatched tenant_id. The hardened code is the same
-    // `password.invalid` an unknown email yields.
-    const otherTenant = await seedTenant(suite.db);
-    await seedManager(suite.db, otherTenant, { email: "owner@x.com" });
-    const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { tenantId, email: "owner@x.com", password: "correct horse" })),
-    );
-    expect(code).toBe("password.invalid");
-  });
   it("rejects a wrong password with password.invalid", async () => {
-    await seedManager(suite.db, tenantId, { email: "owner-wrongpw@x.com" });
+    await seedManager(suite.db, { email: "owner-wrongpw@x.com" });
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { tenantId, email: "owner-wrongpw@x.com", password: "wrong" })),
+      codeOf(() => loginManager(tx, { email: "owner-wrongpw@x.com", password: "wrong" })),
     );
     expect(code).toBe("password.invalid");
   });
   it("rejects password.invalid when no password is set, and still runs one KDF", async () => {
     // A till-only person with an email but a null password_hash: still cannot sign in on the
     // dashboard, and the code must not distinguish them from a wrong password.
-    const personId = await seedPerson(suite.db, tenantId, "manager");
+    const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
       tx.execute(sql`update persons set email = 'owner-nopw@x.com' where id = ${personId}`),
     );
     const spy = vi.mocked(verifyPassword);
     spy.mockClear();
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { tenantId, email: "owner-nopw@x.com", password: "anything" })),
+      codeOf(() => loginManager(tx, { email: "owner-nopw@x.com", password: "anything" })),
     );
     expect(code).toBe("password.invalid");
     // Timing equalization: the null-password branch still pays for one KDF (against the dummy hash),
@@ -111,7 +93,7 @@ describe("loginManager", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
   it("makes a pending account pay for one KDF and return the generic password failure", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "manager");
+    const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
       tx.execute(
         sql`update persons set email = 'owner-pending@x.com', status = 'pending' where id = ${personId}`,
@@ -122,7 +104,6 @@ describe("loginManager", () => {
     const code = await run((tx) =>
       codeOf(() =>
         loginManager(tx, {
-          tenantId,
           email: "owner-pending@x.com",
           password: "anything",
         }),
@@ -132,7 +113,7 @@ describe("loginManager", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
   it("requires a valid TOTP when one is enrolled", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "owner-totp@x.com" });
+    const personId = await seedManager(suite.db, { email: "owner-totp@x.com" });
     const secret = generateSecret();
     const totpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 8) } };
     await run((tx) =>
@@ -143,7 +124,6 @@ describe("loginManager", () => {
     const missing = await run((tx) =>
       codeOf(() =>
         loginManager(tx, {
-          tenantId,
           email: "owner-totp@x.com",
           password: "correct horse",
           totpKeyRing,
@@ -153,7 +133,6 @@ describe("loginManager", () => {
     expect(missing).toBe("totp.required");
     const session = await run((tx) =>
       loginManager(tx, {
-        tenantId,
         email: "owner-totp@x.com",
         password: "correct horse",
         totp: generateSync({ secret }),
@@ -163,13 +142,11 @@ describe("loginManager", () => {
     expect(session.personId).toBe(personId);
   });
   it("makes a suspended email login indistinguishable from a wrong password", async () => {
-    await seedManager(suite.db, tenantId, { email: "owner-suspended@x.com", status: "suspended" });
+    await seedManager(suite.db, { email: "owner-suspended@x.com", status: "suspended" });
     const spy = vi.mocked(verifyPassword);
     spy.mockClear();
     const code = await run((tx) =>
-      codeOf(() =>
-        loginManager(tx, { tenantId, email: "owner-suspended@x.com", password: "correct horse" }),
-      ),
+      codeOf(() => loginManager(tx, { email: "owner-suspended@x.com", password: "correct horse" })),
     );
     expect(code).toBe("password.invalid");
     expect(spy).toHaveBeenCalledTimes(1);
@@ -183,9 +160,9 @@ describe("loginManager", () => {
 // errors, while the public email path deliberately folds those account-state distinctions away.
 describe("loginManagerById", () => {
   it("logs in a low-level fixture by id + password without depending on email", async () => {
-    const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
+    const personId = await seedPersonWithPassword(suite.db, "admin");
     const session = await run((tx) =>
-      loginManagerById(tx, { tenantId, personId, password: "correct horse" }),
+      loginManagerById(tx, { personId, password: "correct horse" }),
     );
     expect(session.personId).toBe(personId);
   });
@@ -193,7 +170,6 @@ describe("loginManagerById", () => {
     const code = await run((tx) =>
       codeOf(() =>
         loginManagerById(tx, {
-          tenantId,
           personId: "00000000-0000-0000-0000-000000000000",
           password: "correct horse",
         }),
@@ -202,21 +178,21 @@ describe("loginManagerById", () => {
     expect(code).toBe("person.not_found");
   });
   it("rejects a wrong password with password.invalid", async () => {
-    const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
+    const personId = await seedPersonWithPassword(suite.db, "admin");
     const code = await run((tx) =>
-      codeOf(() => loginManagerById(tx, { tenantId, personId, password: "wrong" })),
+      codeOf(() => loginManagerById(tx, { personId, password: "wrong" })),
     );
     expect(code).toBe("password.invalid");
   });
   it("rejects a suspended person with person.suspended", async () => {
     // Seed a low-level person WITH a password, then suspend. This trusted by-id path retains the
     // explicit suspension result that the public email path deliberately hides.
-    const personId = await seedPersonWithPassword(suite.db, tenantId, "admin");
+    const personId = await seedPersonWithPassword(suite.db, "admin");
     await run((tx) =>
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),
     );
     const code = await run((tx) =>
-      codeOf(() => loginManagerById(tx, { tenantId, personId, password: "correct horse" })),
+      codeOf(() => loginManagerById(tx, { personId, password: "correct horse" })),
     );
     expect(code).toBe("person.suspended");
   });
@@ -224,12 +200,12 @@ describe("loginManagerById", () => {
 
 describe("authorizeManager", () => {
   it("permits a manager for person.manage", async () => {
-    const personId = await seedManager(suite.db, tenantId, {
+    const personId = await seedManager(suite.db, {
       email: "manager@x.com",
       role: "manager",
     });
     const session = await run((tx) =>
-      loginManager(tx, { tenantId, email: "manager@x.com", password: "correct horse" }),
+      loginManager(tx, { email: "manager@x.com", password: "correct horse" }),
     );
     const auth = await run((tx) =>
       authorizeManager(tx, { managementSessionId: session.id, permission: "person.manage" }),
@@ -237,9 +213,9 @@ describe("authorizeManager", () => {
     expect(auth.authorizedBy).toBe(personId);
   });
   it("refuses a staff role for person.manage", async () => {
-    await seedManager(suite.db, tenantId, { email: "staff@x.com", role: "staff" });
+    await seedManager(suite.db, { email: "staff@x.com", role: "staff" });
     const session = await run((tx) =>
-      loginManager(tx, { tenantId, email: "staff@x.com", password: "correct horse" }),
+      loginManager(tx, { email: "staff@x.com", password: "correct horse" }),
     );
     const code = await run((tx) =>
       codeOf(() =>

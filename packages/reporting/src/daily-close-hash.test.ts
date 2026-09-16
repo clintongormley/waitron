@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { decimal, nodeId, tenantId, tillId } from "@waitron/shared";
+import { decimal, nodeId, tillId } from "@waitron/shared";
 import { computeCloseEntryHash, type CloseHashContent } from "./daily-close-hash.js";
 import type { DailyCloseSnapshot, TillReconciliation } from "./close-types.js";
 import type { DailyClose } from "./types.js";
 
-const TENANT = tenantId("11111111-1111-4111-8111-111111111111");
 const NODE = nodeId("22222222-2222-4222-8222-222222222222");
 const TILL_A = tillId("33333333-3333-4333-8333-333333333333");
 const TILL_B = tillId("44444444-4444-4444-8444-444444444444");
@@ -13,7 +12,6 @@ const CLOSED_BY = "55555555-5555-4555-8555-555555555555";
 /** A complete VAT-exact close over one day at one node — the `computeDailyClose` output shape. */
 function dailyClose(): DailyClose {
   return {
-    tenantId: TENANT,
     nodeId: NODE,
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
@@ -71,7 +69,6 @@ function snapshot(over: Partial<DailyCloseSnapshot> = {}): DailyCloseSnapshot {
 /** The identity + snapshot the close hash commits to. `prevEntryHash` is passed separately. */
 function content(over: Partial<CloseHashContent> = {}): CloseHashContent {
   return {
-    tenantId: TENANT,
     nodeId: NODE,
     businessDay: "2026-08-04",
     sequenceNo: 1,
@@ -187,7 +184,6 @@ describe("computeCloseEntryHash", () => {
   });
 
   it.each([
-    ["tenantId", { tenantId: "99999999-9999-4999-8999-999999999999" }],
     ["nodeId", { nodeId: "88888888-8888-4888-8888-888888888888" }],
     ["businessDay", { businessDay: "2026-08-05" }],
     ["sequenceNo", { sequenceNo: 2 }],

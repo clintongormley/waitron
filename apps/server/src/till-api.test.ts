@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant, writeNodeMembership } from "@waitron/db";
+import { asAppUser, withTransaction, writeNodeMembership } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -33,7 +33,7 @@ import {
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
-import type { Modifier, ModifierSelection, ModifierSnapshot, TenantId } from "@waitron/shared";
+import type { Modifier, ModifierSelection, ModifierSnapshot } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -46,7 +46,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
-// path runs through `withTenant` + `asAppUser` exactly as production does. Sessions/persons live in
+// path runs through `withTransaction` + `asAppUser` exactly as production does. Sessions/persons live in
 // identity; the schema is the whole manifest (the tables here span modules that FK into core, so the
 // shared ordered set is the fixture). What `app_user` may do to those
 // tables is pinned by packages/fiscal-verifactu's privileges.expected.ts, not here.
@@ -86,15 +86,16 @@ let hiddenAguaOfferId: string;
 let tillDeviceCookie: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    const tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedTenant(db);
+    await seedLegacySellingUnits(db);
     // `seedTenant` sets legal_name = 'Test SL' and a generated tax_id; read the tax_id back so the
     // `GET /api/till` assertion can pin the exact NIF the route must echo.
     const tenant = await db.execute<{ tax_id: string }>(
-      sql`select tax_id from tenants where id = ${tenantId}`,
+      sql`select tax_id from tenants where id = 1`,
     );
     venueTaxId = tenant.rows[0]!.tax_id;
     // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row
@@ -105,48 +106,46 @@ const suite = usePgliteDb({
     // working-order-line insert `POST /api/working-orders` fires `check_locales`, which demands a
     // line's `descriptions` keys equal the location's locales EXACTLY.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
     // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are.
     const defaultStationId = await seedKitchenStation(db, {
-      tenantId,
       locationId: brandLocationId(loc.rows[0]!.id),
     });
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+      insert into tills (location_id, name)
+      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
-    // (its composite FK `(tenant_id, node_id) → nodes(tenant_id, id)` requires a real row), and
+    // (its FK `(node_id) → nodes(id)` requires a real row), and
     // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
-    const nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
     // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
     const person = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
     // Abel: ACTIVE, inserted after Ana but sorts before her. Zoe: SUSPENDED, must be excluded.
     const abelRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Abel', ${hashPin("1111")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Abel', ${hashPin("1111")}, 'staff') returning id`);
     abel = { id: abelRow.rows[0]!.id };
     await db.execute(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role, status)
-      values (${tenantId}, 'Zoe', ${hashPin("2222")}, 'staff', 'suspended')`);
+      insert into persons (display_name, pin_hash, role, status)
+      values ('Zoe', ${hashPin("2222")}, 'staff', 'suspended')`);
     // One product in the location's DEFAULT catalogue (`assignCatalogueToLocation`), plus a second
     // product in a SECOND catalogue attached as a non-default accessible menu
     // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list. Seeded
-    // on the APP role via the catalogue helpers — the same `withTenant` + `asAppUser` path the route
+    // on the APP role via the catalogue helpers — the same `withTransaction` + `asAppUser` path the route
     // reads them back through — so the active/assignment filters are real, not bypassed by a
     // superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
-    const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTenant(
+    const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTransaction(
       db,
-      tenantId,
       async (tx) => {
         await asAppUser(tx);
-        const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-        const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-        const p = await createProduct(tx, tenantId, {
+        const cat = await createCatalogue(tx, { name: "Carta" });
+        const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+        const p = await createProduct(tx, {
           catalogueId: cat.id,
           categoryId: bebidas.id,
           name: "Agua mineral",
@@ -159,8 +158,8 @@ const suite = usePgliteDb({
         });
         await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
 
-        const cat2 = await createCatalogue(tx, tenantId, { name: "Happy Hour" });
-        const p2 = await createProduct(tx, tenantId, {
+        const cat2 = await createCatalogue(tx, { name: "Happy Hour" });
+        const p2 = await createProduct(tx, {
           catalogueId: cat2.id,
           categoryId: bebidas.id,
           name: "Cerveza",
@@ -168,43 +167,43 @@ const suite = usePgliteDb({
           unitPrice: "2.50",
           vatClass: "general",
         });
-        await addCatalogueToLocation(tx, tenantId, loc.rows[0]!.id, cat2.id);
+        await addCatalogueToLocation(tx, loc.rows[0]!.id, cat2.id);
 
         const department = await tx.execute<{ id: string }>(sql`
         insert into departments
-          (tenant_id, location_id, name, trading_name, default_service_mode)
-        values (${tenantId}, ${loc.rows[0]!.id}, 'Restaurant', 'Restaurant', 'prepay')
+          (location_id, name, trading_name, default_service_mode)
+        values (${loc.rows[0]!.id}, 'Restaurant', 'Restaurant', 'prepay')
         returning id`);
         const zone = await tx.execute<{ id: string }>(sql`
-        insert into floor_zones (tenant_id, location_id, name)
-        values (${tenantId}, ${loc.rows[0]!.id}, 'Counter') returning id`);
+        insert into floor_zones (location_id, name)
+        values (${loc.rows[0]!.id}, 'Counter') returning id`);
         await tx.execute(sql`
         insert into zone_service_policies
-          (tenant_id, location_id, zone_id, department_id, default_menu_id, is_counter_default)
-        values (${tenantId}, ${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
+          (location_id, zone_id, department_id, default_menu_id, is_counter_default)
+        values (${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
         await tx.execute(sql`
-        insert into zone_menus (tenant_id, zone_id, menu_id)
-        values (${tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
-        const section = await createMenuSection(tx, tenantId, {
+        insert into zone_menus (zone_id, menu_id)
+        values (${zone.rows[0]!.id}, ${cat.id})`);
+        const section = await createMenuSection(tx, {
           menuId: cat.id,
           name: { es: "Bebidas" },
         });
-        const offer = await createMenuItem(tx, tenantId, {
+        const offer = await createMenuItem(tx, {
           menuId: cat.id,
           productId: p.id,
           sectionId: section.id,
           grossPrice: "1.75",
         });
         await tx.execute(sql`
-          insert into preparation_routes (tenant_id, location_id, product_id, station_id)
-          values (${tenantId}, ${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
+          insert into preparation_routes (location_id, product_id, station_id)
+          values (${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
 
-        const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
-        const hiddenSection = await createMenuSection(tx, tenantId, {
+        const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
+        const hiddenSection = await createMenuSection(tx, {
           menuId: hiddenMenu.id,
           name: { es: "Staff" },
         });
-        const hiddenOffer = await createMenuItem(tx, tenantId, {
+        const hiddenOffer = await createMenuItem(tx, {
           menuId: hiddenMenu.id,
           productId: p.id,
           sectionId: hiddenSection.id,
@@ -226,7 +225,7 @@ const suite = usePgliteDb({
     counterZoneId = zoneId;
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
-    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
 
@@ -251,14 +250,8 @@ function collect(
  * write and filter by; `seriesId` is unused by these routes (the chained sale write is proven over
  * real Postgres in `till-api.pg.test.ts`), so it carries a fresh uuid; `locationId` is the seeded
  * one the sale/catalogue routes read. */
-function makeCfg(
-  tenantId: TenantId,
-  tillId: string,
-  locationId: string,
-  nodeId: string,
-): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
-    tenantId,
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -321,14 +314,13 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
  * `loginWithPin` path the login route runs — and returns its id, so a test can hand `requireSession`
  * or the logout route a cookie that names a genuine row. */
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       personId: ana.id,
       pin: "5555",
@@ -339,7 +331,7 @@ async function openSession(db: Database): Promise<string> {
 
 /** Ends a session out of band on the app role, so a cookie can be made to name a CLOSED row. */
 async function closeSession(db: Database, id: string): Promise<void> {
-  await withTenant(db, cfg.tenantId, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await endSession(tx, id);
   });
@@ -382,11 +374,11 @@ async function seedDeviceProfile(
   canvasId: string | null,
   inactivityTimeoutSeconds: number | null = null,
 ): Promise<string> {
-  const { rows } = await withTenant(db, cfg.tenantId, async (tx) => {
+  const { rows } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds)
-      values (${cfg.tenantId}, ${name}, 'till', ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb, ${inactivityTimeoutSeconds})
+      insert into device_profiles (name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds)
+      values (${name}, 'till', ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb, ${inactivityTimeoutSeconds})
       returning id`);
   });
   return rows[0]!.id;
@@ -443,8 +435,8 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const mgr = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'Marta', ${hashPin("9999")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Marta', ${hashPin("9999")}, 'manager') returning id`);
     const managerId = mgr.rows[0]!.id;
 
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
@@ -474,8 +466,8 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const row = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role, locale)
-      values (${cfg.tenantId}, 'Beatriz', ${hashPin("7777")}, 'staff', 'en-GB') returning id`);
+      insert into persons (display_name, pin_hash, role, locale)
+      values ('Beatriz', ${hashPin("7777")}, 'staff', 'en-GB') returning id`);
     const personId = row.rows[0]!.id;
 
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
@@ -888,12 +880,12 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
   async function loginFresh(pin: string): Promise<{ personId: string; sessionId: string }> {
     const row = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'Locale User', ${hashPin(pin)}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Locale User', ${hashPin(pin)}, 'staff') returning id`);
     const personId = row.rows[0]!.id;
-    const session = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const session = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      return loginWithPin(tx, { tenantId: cfg.tenantId, tillId: cfg.tillId, personId, pin });
+      return loginWithPin(tx, { tillId: cfg.tillId, personId, pin });
     });
     return { personId, sessionId: session.id };
   }
@@ -1245,10 +1237,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // the bump_mode seed above); cleaned up in `finally` so the shared-location default `[]` case
     // stays order-independent.
     await suite.db.execute(
-      sql`insert into kitchen_courses (tenant_id, location_id, name, display_order, active) values
-        (${cfg.tenantId}, ${cfg.locationId}, 'Postres', 2, true),
-        (${cfg.tenantId}, ${cfg.locationId}, 'Entrantes', 1, true),
-        (${cfg.tenantId}, ${cfg.locationId}, 'Retirado', 0, false)`,
+      sql`insert into kitchen_courses (location_id, name, display_order, active) values
+        (${cfg.locationId}, 'Postres', 2, true),
+        (${cfg.locationId}, 'Entrantes', 1, true),
+        (${cfg.locationId}, 'Retirado', 0, false)`,
     );
     try {
       const app = new Hono();
@@ -1278,8 +1270,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // stays order-independent (CLAUDE.md §4).
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
     await suite.db.execute(sql`
-      insert into tenant_receipts (tenant_id, receipt)
-      values (${cfg.tenantId}, ${JSON.stringify(authoredReceipt)}::jsonb)`);
+      insert into tenant_receipts (receipt)
+      values (${JSON.stringify(authoredReceipt)}::jsonb)`);
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
@@ -1290,7 +1282,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.receipt).toEqual(authoredReceipt); // from tenant_receipts
       expect(body).not.toHaveProperty("layout");
     } finally {
-      await suite.db.execute(sql`delete from tenant_receipts where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from tenant_receipts `);
     }
   });
 
@@ -1302,8 +1294,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // profile, and prove `GET /api/till` resolves + returns both. Cleaned up in `finally` so the
     // shared-tenant no-cookie assertion above stays order-independent (CLAUDE.md §4).
     const prof = await suite.db.execute<{ id: string }>(sql`
-      insert into canvases (tenant_id, name, definition)
-      values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
+      insert into canvases (name, definition)
+      values ('Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
       returning id`);
     const canvasId = prof.rows[0]!.id;
     const deviceProfileId = await seedDeviceProfile(
@@ -1337,9 +1329,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
-      await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
-      await suite.db.execute(sql`delete from device_profiles where tenant_id = ${cfg.tenantId}`);
-      await suite.db.execute(sql`delete from canvases where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from devices `);
+      await suite.db.execute(sql`delete from device_profiles `);
+      await suite.db.execute(sql`delete from canvases `);
     }
   });
 
@@ -1369,8 +1361,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // This profile was seeded with no timeout, so the boot payload carries null (the app default).
       expect(body.inactivityTimeoutSeconds).toBeNull();
     } finally {
-      await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
-      await suite.db.execute(sql`delete from device_profiles where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from devices `);
+      await suite.db.execute(sql`delete from device_profiles `);
     }
   });
 
@@ -1398,7 +1390,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
-      await suite.db.execute(sql`delete from devices where tenant_id = ${cfg.tenantId}`);
+      await suite.db.execute(sql`delete from devices `);
     }
   });
 
@@ -1445,20 +1437,20 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const deviceId = deviceCookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0]!;
     const second = await suite.db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${cfg.tenantId}, ${cfg.locationId}, ${`Device zone ${deviceId}`}) returning id`);
+      insert into floor_zones (location_id, name)
+      values (${cfg.locationId}, ${`Device zone ${deviceId}`}) returning id`);
     await suite.db.execute(sql`
       insert into zone_service_policies
-        (tenant_id, location_id, zone_id, department_id, service_mode)
-      select ${cfg.tenantId}, ${cfg.locationId}, ${second.rows[0]!.id}, department_id, 'prepay'
+        (location_id, zone_id, department_id, service_mode)
+      select ${cfg.locationId}, ${second.rows[0]!.id}, department_id, 'prepay'
       from zone_service_policies
-      where tenant_id = ${cfg.tenantId} and zone_id = ${counterZoneId}`);
+      where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id)
-      values (${cfg.tenantId}, ${second.rows[0]!.id}, ${aguaProduct.catalogueId})`);
+      insert into zone_menus (zone_id, menu_id)
+      values (${second.rows[0]!.id}, ${aguaProduct.catalogueId})`);
     await suite.db.execute(sql`
-      insert into device_zone_defaults (tenant_id, device_id, zone_id)
-      values (${cfg.tenantId}, ${deviceId}, ${second.rows[0]!.id})`);
+      insert into device_zone_defaults (device_id, zone_id)
+      values (${deviceId}, ${second.rows[0]!.id})`);
 
     const res = await app.request("/api/default-service-zone/offers", {
       headers: { cookie: `${SESSION_COOKIE}=${sessionId}; ${deviceCookie}` },
@@ -1791,7 +1783,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { id: string; orderNumber: number };
     expect(body.id).toBe(id);
-    // Per-(tenant,node) counter shared across this suite's tests, so assert the shape, not the value.
+    // Per-NODE counter shared across this suite's tests, so assert the shape, not the value.
     expect(Number.isInteger(body.orderNumber)).toBe(true);
     expect(body.orderNumber).toBeGreaterThanOrEqual(1);
 
@@ -2529,29 +2521,29 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     // the app role, and the table-create must accept it, so those two paths — not this insert — are
     // under test. This is the only zone-seeding test in the suite, so "Comedor" cannot collide.
     const zoneRow = await suite.db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${cfg.tenantId}, ${cfg.locationId}, 'Comedor') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${cfg.locationId}, 'Comedor') returning id`);
     const zoneId = zoneRow.rows[0]!.id;
     await suite.db.execute(sql`
       with department as (
         insert into departments
-          (tenant_id, location_id, name, trading_name, default_service_mode)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Dining room', 'Restaurant', 'table_tab')
+          (location_id, name, trading_name, default_service_mode)
+        values (${cfg.locationId}, 'Dining room', 'Restaurant', 'table_tab')
         returning id
       )
       insert into zone_service_policies
-        (tenant_id, location_id, zone_id, department_id)
-      select ${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, department.id
+        (location_id, zone_id, department_id)
+      select ${cfg.locationId}, ${zoneId}, department.id
       from department`);
     await suite.db.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id)
-      values (${cfg.tenantId}, ${zoneId}, ${aguaProduct.catalogueId})`);
+      insert into zone_menus (zone_id, menu_id)
+      values (${zoneId}, ${aguaProduct.catalogueId})`);
     await suite.db.execute(sql`
       update zone_service_policies set default_menu_id = ${aguaProduct.catalogueId}
-      where tenant_id = ${cfg.tenantId} and zone_id = ${zoneId}`);
+      where zone_id = ${zoneId}`);
 
     // Create a table IN that zone through the till route, so `createTable`'s zoneId assignment (and its
-    // composite zone FK) is exercised — not a raw insert.
+    // zone FK) is exercised — not a raw insert.
     const tableRes = await app.request("/api/tables", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -2766,13 +2758,12 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
 
   beforeAll(async () => {
     const managerRow = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'Manolo (manager)', ${hashPin("9999")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Manolo (manager)', ${hashPin("9999")}, 'manager') returning id`);
     managerPersonId = managerRow.rows[0]!.id;
-    const managerSession = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const managerSession = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
-        tenantId: cfg.tenantId,
         tillId: cfg.tillId,
         personId: managerPersonId,
         pin: "9999",
@@ -2784,8 +2775,8 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     staffCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
     const zoneRow = await suite.db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${cfg.tenantId}, ${cfg.locationId}, 'Sala') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${cfg.locationId}, 'Sala') returning id`);
     zoneId = zoneRow.rows[0]!.id;
   });
 
@@ -3034,9 +3025,9 @@ async function modifierOfferFixture() {
   const choiceId = randomUUID(),
     otherChoiceId = randomUUID(),
     extraId = randomUUID();
-  const data = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+  const data = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const product = await createProduct(tx, cfg.tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,
       categoryId: null,
       name: "Prueba de modificadores",
@@ -3045,17 +3036,15 @@ async function modifierOfferFixture() {
       vatClass: "general",
     });
     await tx.execute(
-      sql`insert into preparation_routes (tenant_id,location_id,product_id,station_id) select tenant_id,location_id,${product.id},station_id from preparation_routes where tenant_id=${cfg.tenantId} and product_id=${aguaProduct.id}`,
+      sql`insert into preparation_routes (location_id,product_id,station_id) select location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
     );
     const note = await createModifier(
       tx,
-      cfg.tenantId,
       { type: "text", name: { es: "Nota" }, available: true },
       "es",
     );
     const option = await createModifier(
       tx,
-      cfg.tenantId,
       {
         type: "options",
         name: { es: "Preparación" },
@@ -3070,7 +3059,6 @@ async function modifierOfferFixture() {
     );
     const extra = await createModifier(
       tx,
-      cfg.tenantId,
       {
         type: "extras",
         name: { es: "Extras" },
@@ -3090,18 +3078,18 @@ async function modifierOfferFixture() {
       },
       "es",
     );
-    await setProductOptionGroups(tx, cfg.tenantId, product.id, [note.id, option.id, extra.id]);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    await setProductOptionGroups(tx, product.id, [note.id, option.id, extra.id]);
+    const section = await createMenuSection(tx, {
       menuId: aguaProduct.catalogueId,
       name: { es: "Pruebas" },
     });
-    const offer = await createMenuItem(tx, cfg.tenantId, {
+    const offer = await createMenuItem(tx, {
       menuId: aguaProduct.catalogueId,
       sectionId: section.id,
       productId: product.id,
       grossPrice: "1.75",
     });
-    await setMenuItemOptionGroups(tx, cfg.tenantId, offer.id, [
+    await setMenuItemOptionGroups(tx, offer.id, [
       { groupId: note.id, options: [] },
       { groupId: option.id, options: [{ optionId: choiceId, priceDelta: "0.00" }] },
       { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
@@ -3192,11 +3180,10 @@ describe("canonical modifier HTTP serialization", () => {
     expect(body.lines[0]!.modifierSnapshots).toEqual(f.snapshots);
     const listed = await f.app.request("/api/working-orders", { headers: f.headers });
     expect(await listed.json()).toContainEqual(expect.objectContaining({ id, total: "4.90" }));
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await updateModifier(
         tx,
-        cfg.tenantId,
         f.option.id,
         {
           type: "options",
@@ -3246,12 +3233,11 @@ describe("canonical modifier HTTP serialization", () => {
       const f = await modifierOfferFixture();
       let choiceId = kind === "unpublished" ? f.otherChoiceId : randomUUID();
       if (kind === "foreign") {
-        const foreignTenant = await seedTenant(suite.db);
-        await withTenant(suite.db, foreignTenant, async (tx) => {
+        await seedTenant(suite.db);
+        await withTransaction(suite.db, async (tx) => {
           await asAppUser(tx);
           await createModifier(
             tx,
-            foreignTenant,
             {
               type: "options",
               name: { es: "Otro local" },
@@ -3265,13 +3251,12 @@ describe("canonical modifier HTTP serialization", () => {
       }
       if (kind === "unavailable") {
         choiceId = f.choiceId;
-        await withTenant(suite.db, cfg.tenantId, async (tx) => {
+        await withTransaction(suite.db, async (tx) => {
           await asAppUser(tx);
           if (f.option.type !== "options") throw new Error("options fixture");
           const { id, ...input } = f.option;
           await updateModifier(
             tx,
-            cfg.tenantId,
             id,
             {
               ...input,
@@ -3303,17 +3288,17 @@ describe("canonical modifier HTTP serialization", () => {
   it("carries all modes through table opening and a later round", async () => {
     const f = await modifierOfferFixture();
     const zone = await suite.db.execute<{ id: string }>(
-      sql`insert into floor_zones (tenant_id,location_id,name) values (${cfg.tenantId},${cfg.locationId},'Modifier tables') returning id`,
+      sql`insert into floor_zones (location_id,name) values (${cfg.locationId},'Modifier tables') returning id`,
     );
     const zoneId = zone.rows[0]!.id;
     await suite.db.execute(
-      sql`with department as (insert into departments (tenant_id,location_id,name,trading_name,default_service_mode) values (${cfg.tenantId},${cfg.locationId},'Modifier tables','Restaurant','table_tab') returning id) insert into zone_service_policies (tenant_id,location_id,zone_id,department_id) select ${cfg.tenantId},${cfg.locationId},${zoneId},department.id from department`,
+      sql`with department as (insert into departments (location_id,name,trading_name,default_service_mode) values (${cfg.locationId},'Modifier tables','Restaurant','table_tab') returning id) insert into zone_service_policies (location_id,zone_id,department_id) select ${cfg.locationId},${zoneId},department.id from department`,
     );
     await suite.db.execute(
-      sql`insert into zone_menus (tenant_id,zone_id,menu_id) values (${cfg.tenantId},${zoneId},${aguaProduct.catalogueId})`,
+      sql`insert into zone_menus (zone_id,menu_id) values (${zoneId},${aguaProduct.catalogueId})`,
     );
     await suite.db.execute(
-      sql`update zone_service_policies set default_menu_id=${aguaProduct.catalogueId} where tenant_id=${cfg.tenantId} and zone_id=${zoneId}`,
+      sql`update zone_service_policies set default_menu_id=${aguaProduct.catalogueId} where zone_id=${zoneId}`,
     );
     const table = await f.app.request("/api/tables", {
       method: "POST",
@@ -3372,9 +3357,7 @@ describe("canonical modifier checkout refusal", () => {
       });
       expect(response.status, await response.clone().text()).toBe(400);
       expect(await response.json()).toMatchObject({ error: { code: "modifier.invalid" } });
-      const stored = await suite.db.execute(
-        sql`select id from working_orders where tenant_id=${cfg.tenantId} and id=${id}`,
-      );
+      const stored = await suite.db.execute(sql`select id from working_orders where id=${id}`);
       expect(stored.rows).toEqual([]);
     },
   );

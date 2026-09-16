@@ -50,8 +50,6 @@ const NOT_RECORDED = new Set([
   "sale.total_mismatch",
   "sale.void",
   "sale.voided",
-  "stripe.tenant_mismatch",
-  "sumup.tenant_mismatch",
 ]);
 
 const WRITES_INCIDENT = /\b(?:recordIncident|recordIncidentOnce)\(|\bincidents\(tx\b/;

@@ -17,7 +17,7 @@ import {
   asAppUser,
   fireControlMode,
   readNodeMembership,
-  withTenant,
+  withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -130,24 +130,21 @@ import {
 
 /**
  * Everything the dashboard's management HTTP routes need. The management surface reads and writes only
- * the tenant's own identity records, so — unlike `TillApiDeps` — it wires no fiscal backend, clock or
- * card provider. `cfg.tenantId` is the dashboard's own tenant (provisioning stamped it), scoping every
- * `withTenant` below. `secureCookies` follows the resolved trading transport (operator TLS, persisted
+ * this box's own identity records, so — unlike `TillApiDeps` — it wires no fiscal backend, clock or
+ * card provider. `secureCookies` follows the resolved trading transport (operator TLS, persisted
  * box leaf, or leaf-less HTTP development), mirroring `TillApiDeps.secureCookies`.
  */
 export interface ManagementApiDeps {
   db: Database;
-  /** `cfg.tenantId` is the dashboard's own tenant, scoping every `withTenant` below. `nodeId` is
-   * this node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no
-   * longer stamps a capture origin (the application outbox and its capture triggers were removed). */
-  cfg: { tenantId: string; nodeId: string };
+  /** This node's own id. */
+  cfg: { nodeId: string };
   /**
-   * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
+   * The venue's own config — the LOCATION the floor-zone and table config routes (FP-1) scope
    * their reads and writes to. The zone/table verbs are location-scoped (`floor_zones` / `dining_tables`
-   * carry a `location_id`), so those routes need the venue's location, which `cfg.tenantId` alone cannot
-   * give; `boot.ts` threads the deployed `till` config here, the SAME value `mountTillApi` receives, so
+   * carry a `location_id`), so those routes need the venue's location, which the `cfg` above does not
+   * carry; `boot.ts` threads the deployed `till` config here, the SAME value `mountTillApi` receives, so
    * the dashboard "Sala" config surface and the operator till surface CRUD the same tables under one
-   * scope. Only `tenantId` + `locationId` are read on this surface (the fiscal ids a `TillConfig` also
+   * scope. Only `locationId` is read on this surface (the fiscal ids a `TillConfig` also
    * carries are inert here — these are config routes that touch no fiscal path). OPTIONAL so the
    * identity/passkey unit-test harnesses, which never exercise the zone/table routes, can omit it; a
    * request that reaches one of those routes without it fails closed (see `requireVenueCfg`).
@@ -226,7 +223,7 @@ async function deliverAccountAction(
  *
  * `shared.invalid_id` is listed for completeness of the branded-id family but is not, on today's
  * routes, reachable on this surface: request ids are screened with `isUuid` and passed to the identity
- * functions as plain strings, and `cfg.tenantId` arrives pre-validated from boot — the only thrower is
+ * functions as plain strings — the only thrower is
  * `@waitron/shared`'s branded-id constructor, which no route here calls with request input. Left in
  * rather than dropped so a future route that DOES construct a branded id gets the 400 rather than the
  * `?? 400` default; see this task's report for the reviewer note.
@@ -256,7 +253,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
   // A duplicate credential on register/verify: `finishPasskeyRegistration` translated a
-  // `(tenant_id, credential_id)` 23505 into this code. 409 Conflict, the house convention for a
+  // `credential_id` 23505 into this code. 409 Conflict, the house convention for a
   // "already exists" collision (`table.label_taken`, `tab.already_open`, `roster.already_published`,
   // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
   // wrong one.
@@ -269,7 +266,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.self_deactivation": 403,
   "person.not_found": 404,
   // The email write boundary: a malformed address is a request-shape
-  // fault (400), a per-tenant `persons_tenant_email_uq` collision is a "already exists" conflict
+  // fault (400), a `persons_tenant_email_uq` collision (one `lower(email)` per database) is a
+  // "already exists" conflict
   // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
   // not the `?? 400` default).
   "person.email_invalid": 400,
@@ -290,14 +288,14 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "receipt.invalid": 400,
   // Canvas CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
   // `requireCanvasId`) that names no canvas the tenant owns → 404 (`canvas.not_found`); a duplicate
-  // canvas name collides on the `(tenant, name)` unique, translated from 23505 by `canvas-store.ts`
+  // canvas name collides on the `(name)` unique, translated from 23505 by `canvas-store.ts`
   // → 409 (`canvas.name_taken`), the same conflict shape a taken station/zone name has. An invalid
   // `definition`/`theme` payload is refused by the store's validator → 400 (`canvas.invalid` /
   // `theme.invalid`), the same family as the layout/receipt validation faults above. The `?? 400`
   // default already covers the two 400s, but they are listed explicitly as the house style requires.
   "canvas.not_found": 404,
   "canvas.name_taken": 409,
-  // A DELETE of a canvas a device profile still references (the composite FK `device_profiles_canvas_fk`,
+  // A DELETE of a canvas a device profile still references (the FK `device_profiles_canvas_fk`,
   // ON DELETE RESTRICT) → 409, translated from the driver's 23001 by `canvas-store.ts`. The house
   // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
   "canvas.in_use": 409,
@@ -306,16 +304,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.invalid_id": 400,
   // Service-status config CRUD (TS-2). An unknown status id (or a malformed one screened to it at the
   // PATCH/DELETE routes) names no status → 404 (`status.not_found`); a duplicate label collides on the
-  // `(tenant, label)` unique → 409 (`status.label_taken`), the same conflict shape a taken table label
+  // `(label)` unique → 409 (`status.label_taken`), the same conflict shape a taken table label
   // has on the till surface. (`status.inactive` is a till-surface set-time fault, not reachable on this
   // config surface, so it is deliberately absent here.)
   "status.not_found": 404,
   "status.label_taken": 409,
   // Floor-zone + table config CRUD (FP-1). An unknown zone/table id (or a malformed one screened to it
   // at the PATCH/DELETE routes) names no row → 404 (`zone.not_found` / `table.not_found`); a duplicate
-  // name/label collides on the `(tenant, location, …)` unique → 409 (`zone.name_taken` /
+  // name/label collides on the `(location, …)` unique → 409 (`zone.name_taken` /
   // `table.label_taken`), the same conflict shape a taken status label has. `zone.not_found` is ALSO
-  // surfaced by the table routes when a `zoneId` names no `floor_zones` row (the composite FK, mapped in
+  // surfaced by the table routes when a `zoneId` names no `floor_zones` row (the FK, mapped in
   // the verb). The code's own semantics already imply these statuses, but they are listed explicitly as
   // the house style requires (see this map's doc) — an unmapped code would default to 400, the wrong 4xx.
   "zone.not_found": 404,
@@ -331,7 +329,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "placement.invalid": 400,
   // Kitchen-station config CRUD (KDS-1). An unknown station id (or a malformed one screened to it at the
   // PATCH/DELETE/default routes), OR a deactivated station named as a routing/default target, names no
-  // LIVE station → 404 (`station.not_found`); a duplicate name collides on the `(tenant, location, name)`
+  // LIVE station → 404 (`station.not_found`); a duplicate name collides on the `(location, name)`
   // unique → 409 (`station.name_taken`), the same conflict shape a taken zone name has. (`station.no_default`
   // is a FIRE-time code on the till surface, never thrown by these config routes, so it is absent here.)
   "station.not_found": 404,
@@ -339,7 +337,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Kitchen-course config CRUD (KDS-2, design §3a). An unknown course id (or a malformed one screened to
   // it at the PATCH/DELETE routes), OR a retired/cross-venue course named as a product's default route,
   // names no LIVE course → 404 (`course.not_found`); a duplicate name collides on the
-  // `(tenant, location, name)` unique → 409 (`course.name_taken`), the same conflict shape a taken
+  // `(location, name)` unique → 409 (`course.name_taken`), the same conflict shape a taken
   // station name has. Courses are a management/config concern, so both codes are mapped HERE — beside the
   // station codes above; `course.not_found` is ALSO mapped on the till surface (`till-api.ts`), where the
   // OPERATIONAL fire route surfaces it. The code's own semantics imply these statuses, but they are
@@ -348,15 +346,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "course.name_taken": 409,
   // Device-profile CRUD (Task 4, design 2026-09-05 §5.1). A GET/PUT/DELETE-by-id (or a malformed id
   // screened to it by `requireDeviceProfileId`) that names no profile the tenant owns → 404
-  // (`device_profile.not_found`); a duplicate profile name collides on the `(tenant, name)` unique,
+  // (`device_profile.not_found`); a duplicate profile name collides on the `(name)` unique,
   // translated from 23505 by `device-profile-store.ts` → 409 (`device_profile.name_taken`), the same
   // conflict shape a taken canvas name has. An unknown capability flag (fail-closed `validateCapabilities`)
-  // OR a `canvasId` naming no canvas (the composite FK 23503) is refused → 400 (`device_profile.invalid`,
+  // OR a `canvasId` naming no canvas (the FK 23503) is refused → 400 (`device_profile.invalid`,
   // params `{ reason: "bad_capabilities" | "bad_canvas_ref" }`), the same 400 family as `canvas.invalid`.
   // The `?? 400` default already covers the 400, but it is listed explicitly as the house style requires.
   "device_profile.not_found": 404,
   "device_profile.name_taken": 409,
-  // A DELETE of a profile a device still references (the composite FK `devices_device_profile_fk`, ON
+  // A DELETE of a profile a device still references (the FK `devices_device_profile_fk`, ON
   // DELETE RESTRICT) → 409, translated from the driver's 23001 by `device-profile-store.ts`. The house
   // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
   // Mirrors `canvas.in_use`.
@@ -377,7 +375,7 @@ const run = createErrorBoundary(STATUS, "management.failed");
  * it here as `person.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a
  * clean 404. This screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names
  * no row passes this guard; the identity operation then returns `person.not_found`. Every staff
- * route that takes a person id shares this shape guard before its tenant-scoped lookup.
+ * route that takes a person id shares this shape guard before its lookup.
  */
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
@@ -486,13 +484,13 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
 
 /**
  * The one authorize gate every floor-zone + table config route (FP-1) runs its DB work through: open a
- * tenant-scoped transaction as the app role, confirm the caller's management session carries
+ * transaction as the app role, confirm the caller's management session carries
  * `venue.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
  * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
  * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
- * `withTenant` + `asAppUser` + `authorizeManager` block that followed it. `cfg` is the venue config the
- * route resolved via `requireVenueCfg`, whose `tenantId` scopes the transaction (the zone/table verbs
- * are location-scoped, so they take `cfg`, unlike the status verbs).
+ * `withTransaction` + `asAppUser` + `authorizeManager` block that followed it. `cfg` is the venue config the
+ * route resolved via `requireVenueCfg`, whose `locationId` the zone/table verbs scope to (they take
+ * `cfg`, unlike the status verbs).
  */
 function withVenueAuth<T>(
   deps: ManagementApiDeps,
@@ -500,7 +498,8 @@ function withVenueAuth<T>(
   sessionId: string,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.configure" });
     return fn(tx);
@@ -611,8 +610,7 @@ async function parsePasskeyVerifyBody(
  * Mounts the dashboard's management-session routes on an existing Hono app: the staff roster
  * (read post-login by `my-schedule-screen.ts`), login and logout. Task 4 adds the gated staff
  * CRUD routes to THIS same function, each handler wrapped in `run` (above) so the whole surface
- * maps errors identically. Mirrors `mountTillApi`'s shape — `withTenant(deps.db,
- * deps.cfg.tenantId, …)` + `asAppUser(tx)` on every DB touch, in the database holding this
+ * maps errors identically. Mirrors `mountTillApi`'s shape — `withTransaction(deps.db, …)` + `asAppUser(tx)` on every DB touch, in the database holding this
  * dashboard's tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
@@ -634,7 +632,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     sessionId: string,
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const { personId } = await resolveManagementSession(tx, sessionId);
       const finish = credentialChangeThrottle.begin(personId);
@@ -668,10 +666,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/google/login", (c) =>
     run(c, log, async () => {
       if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
-      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const out = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return beginGoogleLogin(tx, {
-          tenantId: deps.cfg.tenantId,
           clientId: deps.googleOidc!.clientId,
           redirectUri: deps.googleOidc!.redirectUri,
         });
@@ -688,7 +685,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const body = await readJsonBody<Record<string, unknown>>(c);
       const out = await withCredentialChange(sessionId, async (tx) => {
         return beginGoogleLink(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           ...(typeof body.currentPassword === "string"
             ? { currentPassword: body.currentPassword }
@@ -715,9 +711,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const boundState = getCookie(c, googleFlowCookie);
       deleteCookie(c, googleFlowCookie, { path: "/management-api/google/callback" });
       if (boundState !== state) throw new AppError("google.invalid", {});
-      const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const claimed = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return claimGoogleState(tx, { tenantId: deps.cfg.tenantId, state });
+        return claimGoogleState(tx, { state });
       });
       // The provider exchange is a network call, so it sits between the one-time state claim and
       // the account/session write instead of holding a database transaction open across the network.
@@ -733,26 +729,25 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       if (claimed.mode === "link") {
         if (claimed.personId === null) throw new AppError("google.invalid", {});
-        await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           await completeGoogleLink(tx, {
-            tenantId: deps.cfg.tenantId,
             personId: claimed.personId!,
             subject,
           });
         });
         return c.redirect(`${deps.origin}/manage/profile?google=linked`);
       }
-      const completion = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const completion = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return loginWithGoogle(tx, { tenantId: deps.cfg.tenantId, subject });
+        return loginWithGoogle(tx, { subject });
       });
       setManagementCookie(c, completion.id, deps.secureCookies);
       return c.redirect(`${deps.origin}/manage/?login=google`);
     }),
   );
   // The deployment holds one tenant per database. Roster of active persons. Deliberately
-  // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTenant` +
+  // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTransaction` +
   // `asAppUser` rather than `requireManagementSession`. One dashboard screen fetches it via
   // `api.getStaffRoster()` at HEAD: `my-schedule-screen.ts`'s staff self-service view (the
   // colleague picker + name resolution). The login screen no longer uses it — spec §4.4's
@@ -764,7 +759,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // bystander must not see.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
-      const roster = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const roster = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listActiveStaff(tx);
       });
@@ -774,7 +769,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // The deployment holds one tenant per database. Login: EMAIL + password (+ TOTP iff the person
   // is enrolled) → management-session cookie. Runs as the app role under the dashboard's tenant
-  // (`withTenant` + `asAppUser`), in this database. `loginManager` resolves the person by EMAIL
+  // (`withTransaction` + `asAppUser`), in this database. `loginManager` resolves the person by EMAIL
   // (not a client-supplied id) and hardens against enumeration: an unknown email and a wrong
   // password BOTH surface as `password.invalid` (401), so the response never reveals which
   // addresses have accounts. A suspended person gets that same result. Once the password succeeds,
@@ -817,16 +812,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("password.invalid", {});
       }
       // Bind the validated fields to locals: the guard narrows `body.email`/`body.password` to
-      // `string` HERE, but that narrowing does not survive into the `withTenant` closure below (TS
+      // `string` HERE, but that narrowing does not survive into the `withTransaction` closure below (TS
       // resets a captured property to its declared `string | undefined`), so the closure reads these.
       const { email, password, totp, recoveryCode } = body;
       const finishAttempt = passwordThrottle.begin(email);
       let session;
       try {
-        session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        session = await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           const opened = await loginManager(tx, {
-            tenantId: deps.cfg.tenantId,
             email,
             password,
             totp,
@@ -844,7 +838,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           return {
             ...opened,
             offerPasskey: await shouldOfferPasskey(tx, {
-              tenantId: deps.cfg.tenantId,
               personId: opened.personId,
             }),
           };
@@ -875,10 +868,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return c.body(null, 202);
       }
       if (typeof body.email === "string") {
-        const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        const issued = await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           return requestAccountRecoveryAction(tx, {
-            tenantId: deps.cfg.tenantId,
             email: body.email as string,
           });
         });
@@ -907,10 +899,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("account_action.invalid", {});
       }
       const purpose = body.purpose;
-      const inspection = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const inspection = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return inspectAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           token: body.token as string,
           purpose,
         });
@@ -939,10 +930,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const purpose: "invitation" | "password_reset" = body.purpose;
       const password = body.password;
-      const completion = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const completion = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const common = {
-          tenantId: deps.cfg.tenantId,
           purpose,
           password,
           ...(purpose === "invitation" ? { pin: body.pin as string } : {}),
@@ -959,13 +949,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // one whose cookie is not even UUID-shaped (so it names no `uuid` row), still clears the cookie and
   // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionId` +
   // `isUuid` skip the DB touch in exactly those cases (the till's `/api/session` logout shape); a valid
-  // id ends its session under `withTenant` + `asAppUser`, and `endManagementSession` is itself a no-op
+  // id ends its session under `withTransaction` + `asAppUser`, and `endManagementSession` is itself a no-op
   // on an already-ended one.
   app.delete("/management-api/session", (c) =>
     run(c, log, async () => {
       const id = readManagementSessionId(c);
       if (id !== null && isUuid(id)) {
-        await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           await endManagementSession(tx, id);
         });
@@ -1014,10 +1004,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("password.invalid", {});
       }
       const { personId, password, totp } = credential;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const session = await loginManagerById(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           password,
           totp,
@@ -1041,7 +1030,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.get("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const people = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const people = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listPersons(tx, { managementSessionId: sessionId });
       });
@@ -1050,7 +1039,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Create a pending person and issue their invitation in the same transaction. Body validation
-  // happens before the transaction; identity owns authorization and tenant-wide uniqueness.
+  // happens before the transaction; identity owns authorization and the uniqueness check.
   app.post("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1079,10 +1068,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "email" });
       }
       const { displayName, firstNames, lastNames, telephone = null, role, email } = body;
-      const { created, issued } = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const { created, issued } = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const created = await invitePerson(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           displayName,
           firstNames,
@@ -1092,7 +1080,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           email,
         });
         const issued = await issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId: created.id,
           purpose: "invitation",
         });
@@ -1107,20 +1094,19 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "person.manage",
         });
       });
-      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+      if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
-      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const issued = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
         });
@@ -1152,7 +1138,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const role = requireEnum(body.role, "role", ["staff", "supervisor", "manager", "admin"]);
       const status = requireEnum(body.status, "status", ["pending", "active", "suspended"]);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await updatePersonDetails(tx, {
           managementSessionId: sessionId,
@@ -1176,7 +1162,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await clearPersonPin(tx, { managementSessionId: sessionId, personId: id });
       });
@@ -1188,7 +1174,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await deactivatePerson(tx, { managementSessionId: sessionId, personId });
       });
@@ -1200,21 +1186,20 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "person.manage",
         });
       });
-      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+      if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
-      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const issued = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
         });
@@ -1227,21 +1212,20 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "person.manage",
         });
       });
-      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+      if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
-      const issued = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const issued = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
         });
@@ -1251,10 +1235,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Receipt configuration (Task 7; receipt rehomed in SP-B4) ──────────────────────────────────
-  // The deployment holds one tenant per database. The dashboard's receipt-trim editor
+  // The deployment holds one taxpayer per database. The dashboard's receipt-trim editor
   // surface. Both routes are gated (`requireManagementSession` first, 401 before any DB work) and
-  // every DB touch runs under `withTenant` + `asAppUser`, in this database; the receipt store
-  // explicitly keys rows by tenant id. The receipt routes read/write the tenant's own
+  // every DB touch runs under `withTransaction` + `asAppUser`, in this database; the receipt store
+  // upserts on `id = 1`. The receipt routes read/write the database's one
   // `tenant_receipts` row (SP-B4 — the trim moved out of the old widget-layout model, now
   // removed). The PUT delegates the authorize + validate + upsert to `@waitron/layouts`'s
   // `putReceipt`; the GET calls `getReceipt`, which does NOT authorize (it is shared with the
@@ -1270,13 +1254,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const receipt = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const receipt = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getReceipt(tx, deps.cfg.tenantId);
+        return getReceipt(tx);
       });
       return c.json({ receipt });
     }),
@@ -1299,11 +1283,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "receipt" });
       }
       const { receipt } = body;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await putReceipt(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           receipt,
         });
       });
@@ -1312,11 +1295,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Canvases + tenant theme (Task 11) ──────────────────────────────────────────────────────
-  // The deployment holds one tenant per database. The dashboard's reusable-canvas CRUD
-  // and the tenant's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
+  // The deployment holds one taxpayer per database. The dashboard's reusable-canvas CRUD
+  // and the box's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
   // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs
-  // `withTenant` + `asAppUser`, in this database; the canvas/theme stores explicitly filter or
-  // key rows by tenant id. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
+  // `withTransaction` + `asAppUser`, in this database; the theme store upserts on `id = 1` and
+  // the canvas store reads by id alone. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
   // explicit `authorizeManager(..., "layout.configure")` — `listCanvases`/`getCanvas`/
   // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the
   // WRITES delegate the gate to the store fns
@@ -1329,13 +1312,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.get("/management-api/canvases", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const canvases = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const canvases = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return listCanvases(tx, deps.cfg.tenantId);
+        return listCanvases(tx);
       });
       return c.json({ canvases });
     }),
@@ -1347,13 +1330,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireCanvasId(c.req.param("id"));
-      const canvas = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const canvas = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getCanvas(tx, deps.cfg.tenantId, id);
+        return getCanvas(tx, id);
       });
       if (canvas === undefined) throw new AppError("canvas.not_found", {});
       return c.json(canvas);
@@ -1378,14 +1361,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "definition" });
       }
       // Bind the narrowed fields to locals: the `typeof`/`in` guards narrow `body.name` HERE, but that
-      // narrowing does not survive into the `withTenant` closure (TS resets a captured property to its
+      // narrowing does not survive into the `withTransaction` closure (TS resets a captured property to its
       // declared type), so the closure reads these — the create-person/create-status pattern above.
       const { name, definition } = body;
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return createCanvas(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           name,
           definition,
         });
@@ -1414,11 +1396,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "definition" });
       }
       const { name, definition } = body;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await updateCanvas(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
           name,
           definition,
@@ -1435,11 +1416,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireCanvasId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await deleteCanvas(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
         });
       });
@@ -1453,13 +1433,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.get("/management-api/theme", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const theme = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const theme = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getTenantTheme(tx, deps.cfg.tenantId);
+        return getTenantTheme(tx);
       });
       return c.json({ theme: theme ?? null });
     }),
@@ -1478,11 +1458,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "theme" });
       }
       const { theme } = body;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await putTenantTheme(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           theme,
         });
       });
@@ -1495,8 +1474,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // device-profile CRUD (design 2026-09-05 §5.1) — a named capability set + optional default
   // canvas that a device (a later task's reassign route) points at. Mirrors the canvas block: all
   // routes are gated (`requireManagementSession` first, 401 before any DB work) and every DB
-  // touch runs `withTenant` + `asAppUser`, in this database; the device-profile store explicitly
-  // filters rows by tenant id. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
+  // touch runs `withTransaction` + `asAppUser`, in this database; the device-profile store reads by
+  // id alone. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
   // their own explicit `authorizeManager(..., "layout.configure")` —
   // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while
   // the WRITES delegate the gate to the store fns (`createDeviceProfile`/`updateDeviceProfile`/
@@ -1510,13 +1489,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.get("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const deviceProfiles = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const deviceProfiles = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return listDeviceProfiles(tx, deps.cfg.tenantId);
+        return listDeviceProfiles(tx);
       });
       return c.json({ deviceProfiles });
     }),
@@ -1529,13 +1508,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
-      const profile = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const profile = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getDeviceProfile(tx, deps.cfg.tenantId, id);
+        return getDeviceProfile(tx, id);
       });
       if (profile === undefined) throw new AppError("device_profile.not_found", {});
       return c.json(profile);
@@ -1568,7 +1547,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "capabilities" });
       }
       // Bind the narrowed fields to locals: the `typeof`/`in` guards narrow the properties HERE, but
-      // that narrowing does not survive into the `withTenant` closure (TS resets a captured property to
+      // that narrowing does not survive into the `withTransaction` closure (TS resets a captured property to
       // its declared type), so the closure reads these — the create-canvas pattern above. `canvasId` is
       // screened for UUID SHAPE via the shared `requireBodyUuid` (an omitted or `null` key → `null`; a
       // malformed string → 400 `management.request_invalid`, never a downstream `22P02` 500 on the
@@ -1585,11 +1564,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // `FORM_FACTORS` set (`management.request_invalid` naming the field on a bad/absent value), so the
       // `device_form_factor` enum column never sees a value it cannot hold.
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return createDeviceProfile(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           name,
           formFactor,
           canvasId,
@@ -1638,11 +1616,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
       // The device's FORM FACTOR — screened against the closed `FORM_FACTORS` set, the same as POST.
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return updateDeviceProfile(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
           name,
           formFactor,
@@ -1662,11 +1639,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await deleteDeviceProfile(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
         });
       });
@@ -1697,15 +1673,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "color" });
       const displayOrder = parseDisplayOrder(body.displayOrder);
       // Bind the validated fields to locals: the `typeof` guards narrow `body.label`/`body.color` to
-      // `string` HERE, but that narrowing does not survive into the `withTenant` closure (TS resets a
+      // `string` HERE, but that narrowing does not survive into the `withTransaction` closure (TS resets a
       // captured property to its declared type), so the closure reads these — the login/create-person
       // pattern above.
       const { label, color } = body;
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return createStatus(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           label,
           color,
           displayOrder,
@@ -1719,9 +1694,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.get("/management-api/service-statuses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const statuses = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const statuses = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return listStatuses(tx, { managementSessionId: sessionId, tenantId: deps.cfg.tenantId });
+        return listStatuses(tx, { managementSessionId: sessionId });
       });
       return c.json(statuses);
     }),
@@ -1744,7 +1719,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const patch: {
         managementSessionId: string;
-        tenantId: string;
         id: string;
         label?: string;
         color?: string;
@@ -1752,7 +1726,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         active?: boolean;
       } = {
         managementSessionId: sessionId,
-        tenantId: deps.cfg.tenantId,
         id,
       };
       if (body.label !== undefined) {
@@ -1788,7 +1761,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         return c.body(null, 204);
       }
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await updateStatus(tx, patch);
       });
@@ -1802,11 +1775,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStatusId(c.req.param("id"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await deactivateStatus(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
         });
       });
@@ -1818,7 +1790,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Sala" config screen (design §3d): CRUD the venue's floor zones and — as thin
   // wrappers over TS-1's table verbs — its dining tables. All eight routes are gated exactly like the
   // layout `GET` above: `requireManagementSession` first (401 before any DB work), then each route calls
-  // `authorizeManager(…, "venue.configure")` EXPLICITLY inside `withTenant` + `asAppUser` (unlike the
+  // `authorizeManager(…, "venue.configure")` EXPLICITLY inside `withTransaction` + `asAppUser` (unlike the
   // status verbs, the zone/table verbs do NOT authorize themselves — they take a plain venue `cfg` — so
   // the gate lives at the route, the layout-`GET` shape). The verbs are location-scoped, so each reads
   // the venue's config via `requireVenueCfg`. Body-shape screens mirror the service-status routes above.
@@ -1838,7 +1810,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "name" });
       const displayOrder = parseDisplayOrder(body.displayOrder);
       // Bind the validated field to a local: the `typeof` guard narrows `body.name` to `string` HERE,
-      // but that narrowing does not survive into the `withTenant` closure (TS resets a captured property
+      // but that narrowing does not survive into the `withTransaction` closure (TS resets a captured property
       // to its declared type), so the closure reads this — the login/create-person pattern above.
       const { name } = body;
       const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
@@ -1912,7 +1884,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Create a table (thin wrapper over TS-1's `createTable`). Body { label, zoneId?, capacity? }; a bad
   // shape → management.request_invalid naming the FIELD; a duplicate label → table.label_taken (409); a
-  // `zoneId` naming no floor_zones row (or another tenant's) → zone.not_found (404), mapped in the verb
+  // `zoneId` naming no floor_zones row → zone.not_found (404), mapped in the verb
   // (`isZoneFkViolation`) and NOT re-mapped here. Returns the new id at 201 (the management-surface
   // create convention; TS-1's till POST returns 200, but this surface is 201 throughout).
   app.post("/management-api/tables", (c) =>
@@ -1931,14 +1903,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           throw new AppError("management.request_invalid", { field: "zoneId" });
         // A string-typed but MALFORMED zoneId passes the `typeof` screen above, then un-screened reaches
         // the `zone_id` uuid column → `22P02` → opaque 500. Screen it as a UUID and give it the SAME
-        // `zone.not_found` a well-formed-but-missing zoneId gets (the composite FK's 23503, mapped in the
+        // `zone.not_found` a well-formed-but-missing zoneId gets (the FK's 23503, mapped in the
         // verb) — the till surface's create/patch routes screen it identically.
         if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         zoneId = body.zoneId;
       }
       const capacity = parseCapacity(body.capacity);
       // Bind the validated `label` to a local: the `typeof` guard narrows `body.label` to `string` HERE,
-      // but that narrowing does not survive into the `withTenant` closure (a captured property resets to
+      // but that narrowing does not survive into the `withTransaction` closure (a captured property resets to
       // its declared type), so the closure reads this local — the login/create-person pattern above.
       const { label } = body;
       const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
@@ -2014,7 +1986,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Sala" editor's place / un-place actions (design §placement): thin wrappers over Task
   // 2's `setTablePlacement` / `clearPlacement`. Same gating and mapping as the FP-1 zone/table routes
   // above — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb
-  // under `withTenant` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is
+  // under `withTransaction` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is
   // refused 403 before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof
   // the test names). `requireTableId` screens `:id` (malformed → table.not_found, not an opaque 22P02
   // 500); the verbs own the placement VALUE validation (`placement.invalid`) and the live-table /
@@ -2087,7 +2059,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Cocina" config screen: CRUD the venue's kitchen stations, pick the default, route
   // categories/products to a station, and set the whole-ticket `bump_mode`. All gated exactly like the
   // FP-1 zone/table routes above — `requireManagementSession` first (401 before any DB work), then
-  // `withVenueAuth` runs the verb under `withTenant` + `asAppUser` + `authorizeManager(…, "venue.configure")`,
+  // `withVenueAuth` runs the verb under `withTransaction` + `asAppUser` + `authorizeManager(…, "venue.configure")`,
   // so a staff session is refused 403 before any write (proven by dropping the authorize in `withVenueAuth`,
   // the deletion-proof the tests name). The verbs are location-scoped, so each reads the venue's config via
   // `requireVenueCfg`. Body-shape screens mirror the service-status / zone routes above.
@@ -2324,7 +2296,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Cursos" panel: CRUD the venue's coursing sequence, route a product to its default
   // course, and read/write the fire-control setting. All gated exactly like the KDS-1 station routes above
   // — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb under
-  // `withTenant` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is refused 403
+  // `withTransaction` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is refused 403
   // before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof the tests
   // name). The verbs are location-scoped, so each reads the venue's config via `requireVenueCfg`.
   // Body-shape screens mirror the station / service-status routes above.
@@ -2501,7 +2473,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const out = await withCredentialChange(sessionId, async (tx) => {
         await verifyOwnCredentials(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           currentPassword: body.currentPassword as string,
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
@@ -2509,7 +2480,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         });
         return beginPasskeyRegistration(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           rpId: deps.rpId,
           rpName: "Waitron",
         });
@@ -2538,12 +2508,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { challengeHandle, response, name } = await parsePasskeyVerifyBody(c);
-      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const out = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        await readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId: sessionId });
+        await readOwnProfile(tx, { managementSessionId: sessionId });
         return finishPasskeyRegistration(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           challengeHandle,
           response: response as never,
           name,
@@ -2559,9 +2528,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // options. No session and no body: the person is unknown until the assertion is verified on finish.
   app.post("/management-api/passkey/auth/options", (c) =>
     run(c, log, async () => {
-      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const out = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return beginPasskeyAuthentication(tx, { tenantId: deps.cfg.tenantId, rpId: deps.rpId });
+        return beginPasskeyAuthentication(tx, { rpId: deps.rpId });
       });
       return c.json(out);
     }),
@@ -2585,10 +2554,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
-      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const session = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return finishPasskeyAuthentication(tx, {
-          tenantId: deps.cfg.tenantId,
           challengeHandle,
           response: response as never,
           rpId: deps.rpId,

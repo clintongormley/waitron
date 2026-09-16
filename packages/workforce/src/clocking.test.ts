@@ -1,12 +1,8 @@
-import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -26,31 +22,31 @@ const DEFAULT_RULESET = {
   dailyTargetMinutes: null,
 } as const;
 
-let tenantId: string;
 let locationId: string;
 let nodeId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
-    nodeId = await seedNode(db, brandTenantId(tenantId), brandLocationId(locationId));
+    await seedTenant(db);
+    locationId = await seedLocation(db);
+    nodeId = await seedNode(db, brandLocationId(locationId));
   },
 });
 
 /** A fresh person per test, so each test's clock state is isolated in the shared append-only table. */
 async function freshPerson(name: string): Promise<string> {
-  return seedPerson(suite.db, tenantId, name);
+  return seedPerson(suite.db, name);
 }
 
 function event(personId: string, at: string): ClockEventInput {
-  return { tenantId, nodeId, personId, locationId, at, offsetMinutes: 0 };
+  return { nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
 /** Runs a backend call inside a tenant transaction, the shape a till caller uses. */
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | undefined> {
@@ -138,7 +134,6 @@ describe("clock state machine", () => {
     const supervisor = await freshPerson("supervisor");
     await run((tx) =>
       backend.clockIn(tx, {
-        tenantId,
         nodeId,
         personId: p,
         locationId,
@@ -165,7 +160,7 @@ describe("workSummary", () => {
     // Five 9h days against a 40h (2400) week. Every day is 60 over its 8h (480) target, so the two
     // models agree at 300 here; the daily target is 2400 ÷ 5 = 480 (`dailyContractedTargetMinutes`).
     const p = await freshPerson("summary-over");
-    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
       await nineHourDay(p, day);
     }
@@ -173,7 +168,6 @@ describe("workSummary", () => {
       backend.workSummary(
         tx,
         {
-          tenantId,
           personId: p,
           period: { start: "2026-01-05", end: "2026-01-12" },
         },
@@ -203,13 +197,12 @@ describe("workSummary", () => {
     // period-length-scaled, not a bare weekly figure. The daily model is unaffected by period length:
     // that same day is still 60 over its 8h target, so the two figures legitimately diverge here.
     const p = await freshPerson("summary-scaled");
-    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
     const summary = await run((tx) =>
       backend.workSummary(
         tx,
         {
-          tenantId,
           personId: p,
           period: { start: "2026-01-05", end: "2026-01-19" },
         },
@@ -239,12 +232,12 @@ describe("workSummary", () => {
     // gives 480 and 60. Passing the resolved WorkTimeRuleset's working_days_per_week is what changes
     // it.
     const p = await freshPerson("summary-6day");
-    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
     const summary = await run((tx) =>
       backend.workSummary(
         tx,
-        { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
+        { personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
         { ...DEFAULT_RULESET, workingDaysPerWeek: 6 },
       ),
     );
@@ -260,12 +253,12 @@ describe("workSummary", () => {
     // DEFAULT `convenio_config` row → derivation, the 2700/2400/300 case) is pinned by the
     // default-ruleset tests above, which carry `dailyTargetMinutes: null` and stay green.
     const p = await freshPerson("summary-daily-override");
-    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
     const summary = await run((tx) =>
       backend.workSummary(
         tx,
-        { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
+        { personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
         { ...DEFAULT_RULESET, dailyTargetMinutes: 400 },
       ),
     );
@@ -278,12 +271,12 @@ describe("workSummary", () => {
     // daily-accrual but 0 period-net against a full-week baseline. Flipping the model must move ONLY
     // the headline `overtimeMinutes`; the two underlying figures are computed regardless and stay put.
     const p = await freshPerson("summary-model");
-    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await run((tx) => backend.clockIn(tx, event(p, "2026-01-05T08:00:00Z"))); // 9h
     await run((tx) => backend.clockOut(tx, event(p, "2026-01-05T17:00:00Z")));
     await run((tx) => backend.clockIn(tx, event(p, "2026-01-06T09:00:00Z"))); // 7h
     await run((tx) => backend.clockOut(tx, event(p, "2026-01-06T16:00:00Z")));
-    const query = { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } };
+    const query = { personId: p, period: { start: "2026-01-05", end: "2026-01-12" } };
 
     const daily = await run((tx) =>
       backend.workSummary(tx, query, { ...DEFAULT_RULESET, overtimeModel: "daily-accrual" }),
@@ -308,7 +301,6 @@ describe("workSummary", () => {
         backend.workSummary(
           tx,
           {
-            tenantId,
             personId: p,
             period: { start: "2026-01-05", end: "2026-01-12" },
           },

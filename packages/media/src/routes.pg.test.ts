@@ -11,7 +11,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { tenantId as brandTenantId, locationId } from "@waitron/shared";
+import { locationId } from "@waitron/shared";
 import { MEDIA_ROUTES } from "./routes.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
@@ -48,26 +48,25 @@ function uploadBody() {
   for (const [key, value] of Object.entries(original)) form.set(key, JSON.stringify(value));
   return form;
 }
-async function session(tenantId: string, role: "manager" | "staff") {
+async function session(role: "manager" | "staff") {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, ${role}, ${hashPin("1234")}, ${role}) returning id
+    insert into persons (display_name, pin_hash, role)
+    values (${role}, ${hashPin("1234")}, ${role}) returning id
   `);
   const session = await suite.admin.transaction((tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return { Cookie: `${MANAGEMENT_COOKIE}=${session.id}` };
 }
 async function fixture() {
-  const tenantId = await seedTenant(suite.admin);
-  const headers = await session(tenantId, "manager");
+  await seedTenant(suite.admin);
+  const headers = await session("manager");
   const app = new Hono();
   MEDIA_ROUTES.mount(
     app,
     {
       db: suite.admin,
       cfg: {
-        tenantId: brandTenantId(tenantId),
         locationId: locationId("00000000-0000-4000-8000-000000000001"),
         contentDefaultLanguage: "en",
       },
@@ -87,7 +86,7 @@ async function fixture() {
   });
   expect(created.status).toBe(201);
   const { image } = (await created.json()) as { image: { id: string; filename: string } };
-  return { app, headers, tenantId, image };
+  return { app, headers, image };
 }
 
 it("allows its own manager to upload, read, edit and delete using non-superuser app_user", async () => {
@@ -114,12 +113,11 @@ it("allows its own manager to upload, read, edit and delete using non-superuser 
   expect(await deletion.json()).toEqual({ deleted: true, uses: [] });
 });
 
-it.each(["staff", "foreign manager"] as const)(
+it.each(["staff"] as const)(
   "denies every library operation to a %s and preserves existing image data",
   async (actor) => {
-    const { app, tenantId, image } = await fixture();
-    const actorTenant = actor === "staff" ? tenantId : await seedTenant(suite.admin);
-    const headers = await session(actorTenant, actor === "staff" ? "staff" : "manager");
+    const { app, image } = await fixture();
+    const headers = await session(actor);
     const requests: [string, RequestInit][] = [
       ["/management-api/images", { headers }],
       ["/management-api/image-labels", { headers }],
@@ -143,11 +141,11 @@ it.each(["staff", "foreign manager"] as const)(
       });
     }
     const images = await suite.admin.execute(
-      sql`select id, filename, names, alt_text as "altText", labels from media_images where tenant_id = ${tenantId}`,
+      sql`select id, filename, names, alt_text as "altText", labels from media_images`,
     );
     expect(images.rows).toEqual([{ id: image.id, filename: image.filename, ...original }]);
     const data = await suite.admin.execute<{ count: number }>(
-      sql`select count(*)::int as count from media_image_data where tenant_id = ${tenantId} and image_id = ${image.id}`,
+      sql`select count(*)::int as count from media_image_data where image_id = ${image.id}`,
     );
     expect(data.rows).toEqual([{ count: 1 }]);
   },

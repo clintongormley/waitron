@@ -18,7 +18,7 @@
 //   pnpm --filter @waitron/server build
 //   DATABASE_URL=postgres://... WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/record-one-sale.js \
-//     <tenantId> <tillId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
+//     <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
 //
 // `baseAmount` is the line's tax-EXCLUSIVE amount (quantity is always 1 — this script records one
 // line, never a basket). `vatRate` is a percentage literal, e.g. "10.00" meaning 10%. `tipAmount`
@@ -38,7 +38,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { createPostgresDb, withTenant } from "@waitron/db";
+import { createPostgresDb, withTransaction } from "@waitron/db";
 import { deploymentEnvironment } from "../src/config.js";
 import {
   addDecimal,
@@ -46,7 +46,6 @@ import {
   percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 
@@ -59,7 +58,7 @@ function usageError(message: string): never {
   console.error(
     "usage: DATABASE_URL=<...> WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/record-one-sale.js " +
-      "<tenantId> <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
+      "<tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
   );
   process.exit(1);
 }
@@ -96,11 +95,10 @@ function systemClock(): TrustedClock {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 7 && args.length !== 8) {
-    usageError(`expected 7 or 8 arguments, got ${args.length}`);
+  if (args.length !== 6 && args.length !== 7) {
+    usageError(`expected 6 or 7 arguments, got ${args.length}`);
   }
-  const [tenantArg, tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] =
-    args;
+  const [tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === "") {
@@ -117,7 +115,6 @@ async function main(): Promise<void> {
     usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
   }
 
-  const tenant = brandTenantId(tenantArg);
   const till = brandTillId(tillArg);
   const node = brandNodeId(nodeArg);
   const series = brandSeriesId(seriesArg);
@@ -167,7 +164,6 @@ async function main(): Promise<void> {
     });
 
     const input: RecordSaleInput = {
-      tenantId: tenant,
       tillId: till,
       nodeId: node,
       seriesId: series,
@@ -200,7 +196,7 @@ async function main(): Promise<void> {
       clock,
     };
 
-    const result = await withTenant(db, tenant, (tx) => recordSale(tx, backend, input));
+    const result = await withTransaction(db, (tx) => recordSale(tx, backend, input));
 
     console.log(`saleId: ${result.saleId}`);
     console.log(`fiscalRecordId: ${result.fiscal.recordId}`);

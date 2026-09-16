@@ -2,8 +2,7 @@
 // because each sale opens its own transaction and reads the committed products.
 // Image bytes share the database transaction. Fiscal sales are preproduction.
 
-import { tenantId as brandTenantId } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -18,7 +17,6 @@ import type { SeedLocale } from "./menu.js";
 /** The provisioned venue's ids the orchestrator threads into the sub-seeds — the shape `applyVenue`
  *  returns (with `seriesId` picked from its `seriesIds`, the standard series being first). */
 export interface SeedDemoVenue {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -37,38 +35,34 @@ export interface SeedDemoInput {
 
 /**
  * Seed the whole demo restaurant onto an already-provisioned venue: catalogues, floor, staff and
- * media inside one tenant/`app_user` transaction, then the historical sales on their own connections.
+ * media inside one `app_user` transaction, then the historical sales on their own connections.
  */
 export async function seedDemoRestaurant(
   db: Database,
   { venue, locale, salesDays }: SeedDemoInput,
 ): Promise<void> {
-  const { tenantId, locationId } = venue;
+  const { locationId } = venue;
 
-  // One tenant/app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
+  // One app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
-  const products = await withTenant(db, tenantId, async (tx) => {
+  const products = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const { productsByImage, menuItemsByProduct, menuIds } = await seedCatalogues(
-      tx,
-      brandTenantId(tenantId),
-      {
-        locationId,
-        locale,
-      },
-    );
-    await seedOptions(tx, brandTenantId(tenantId), {
+    const { productsByImage, menuItemsByProduct, menuIds } = await seedCatalogues(tx, {
+      locationId,
+      locale,
+    });
+    await seedOptions(tx, {
       productsByImage,
       menuItemsByProduct,
       locale,
     });
-    await seedFloor(tx, { tenantId, locationId, locale, menuIds });
-    await seedStaff(tx, brandTenantId(tenantId));
-    await seedMedia(tx, { tenantId, productsByImage });
+    await seedFloor(tx, { locationId, locale, menuIds });
+    await seedStaff(tx);
+    await seedMedia(tx, { productsByImage });
     return (await listAvailableProducts(tx, locationId)).products;
   });
 
-  // AFTER the tx commits: seedSales opens its own per-sale `withTenant`, so it must see the committed
+  // AFTER the tx commits: seedSales opens its own per-sale `withTransaction`, so it must see the committed
   // catalogue. It maps the available products onto the fields the generator needs (id/name/customerName/
   // gross unitPrice/vatClass/optionGroups); the rest of `AvailableProduct` is unused here.
   // `optionGroups` carries straight through — `listAvailableProducts` already resolved it from the
@@ -84,7 +78,6 @@ export async function seedDemoRestaurant(
 
   await seedSales(db, {
     venue: {
-      tenantId: venue.tenantId,
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,

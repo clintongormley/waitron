@@ -1,15 +1,15 @@
 // No `import "./errors.js"`: this file throws no AppError code (it reads two rows and defers to the
 // country-pack locale resolver), so it is not in the throw graph the sibling route/config files load
 // the registry for.
-import { and, eq } from "drizzle-orm";
-import { asAppUser, locations, tenants, withTenant, type Database } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { asAppUser, locations, readTenant, withTransaction, type Database } from "@waitron/db";
 import { resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
 
 /**
  * The venue's default UI locale, resolved ONCE at boot from geography + an optional env override.
- * Reads the tenant's country and the till location's province under the app role (`withTenant` +
- * `asAppUser`, with the location scoped to the tenant), then applies the shared `override →
+ * Reads the tenant's country and the till location's province under the app role (`withTransaction` +
+ * `asAppUser`), then applies the shared `override →
  * area → country → English` chain (the installed-country resolver returns an AVAILABLE
  * code, so nothing here post-processes its result).
  *
@@ -23,18 +23,15 @@ import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@
  */
 export async function readVenueLocale(
   db: Database,
-  params: { tenantId: string; locationId: string; override?: string },
+  params: { locationId: string; override?: string },
 ): Promise<SupportedLocale> {
-  return withTenant(db, params.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const [t] = await tx
-      .select({ country: tenants.country })
-      .from(tenants)
-      .where(eq(tenants.id, params.tenantId));
+    const t = await readTenant(tx);
     const [loc] = await tx
       .select({ province: locations.province })
       .from(locations)
-      .where(and(eq(locations.id, params.locationId), eq(locations.tenantId, params.tenantId)));
+      .where(eq(locations.id, params.locationId));
     return resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
       override: params.override,
       area: loc?.province ?? null,

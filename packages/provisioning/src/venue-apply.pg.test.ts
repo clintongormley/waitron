@@ -2,7 +2,7 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { createPostgresDb, withTenant, type Database } from "@waitron/db";
+import { createPostgresDb, withTransaction, type Database } from "@waitron/db";
 import { withRole } from "./identifiers.js";
 import { applyInstance, withDatabase } from "./instance-apply.js";
 import { planInstance } from "./instance-plan.js";
@@ -135,8 +135,8 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       },
     ]);
 
-    // Read the committed venue back in one transaction with explicit tenant and node predicates.
-    const { counts, node, sif, profiles } = await withTenant(owner, result.tenantId, async (tx) => {
+    // Read the committed venue back in one transaction, by the ids the apply returned.
+    const { counts, node, sif, profiles } = await withTransaction(owner, async (tx) => {
       const counts = await tx.execute<{
         tenants: number;
         nodes: number;
@@ -144,7 +144,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
         sif: number;
       }>(sql`
         select
-          (select count(*) from tenants where id = ${result.tenantId})::int as tenants,
+          (select count(*) from tenants where id = 1)::int as tenants,
           (select count(*) from nodes where id = ${result.nodeId})::int as nodes,
           (select count(*) from invoice_series where node_id = ${result.nodeId})::int as series,
           (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif`);
@@ -165,7 +165,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       }>(sql`
         select name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds
         from device_profiles
-        where tenant_id = ${result.tenantId} order by name`);
+         order by name`);
       return { counts, node, sif, profiles };
     });
 

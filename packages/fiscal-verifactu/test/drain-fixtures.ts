@@ -1,12 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import {
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, TenantId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
+import type { NodeId, TillId } from "@waitron/shared";
 import { currentSif, registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
 import { seedTenantWithSif } from "./fixtures.js";
@@ -23,7 +19,7 @@ const DEFAULT_ENTORNO: Entorno = "production";
 export interface SeededDrainOptions {
   count: number;
   /** Reuse an operational venue's fiscal identity instead of creating another venue. */
-  identity?: { tenantId: string; tillId: string; nodeId: string; nif: string };
+  identity?: { tillId: string; nodeId: string; nif: string };
   /**
    * Future task hook (Task 9's error-2004/AceptadoConErrores path) — the fake AEAT this suite
    * uses defaults `serverNow` to 2026-07-21T00:00:00Z, so a `futureDated` row is stamped
@@ -50,7 +46,6 @@ export interface SeededDrainOptions {
  * Do not narrow this interface for one task's convenience.
  */
 export interface SeededDrain {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   sifId: string;
@@ -90,7 +85,6 @@ function toAeatDate(isoDate: string): string {
 export async function insertPendingAlta(
   db: Database,
   params: {
-    tenantId: string;
     tillId: string;
     nodeId: string;
     sifId: string;
@@ -106,19 +100,12 @@ export async function insertPendingAlta(
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code)
-    values (${params.tenantId}, ${params.nodeId}, ${"S" + String(params.secuencia)})
+    insert into invoice_series (node_id, code) values (${params.nodeId}, ${"S" + String(params.secuencia)})
     returning id
   `);
   const seriesId = series.rows[0]?.id;
   const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (
-      tenant_id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes,
-      total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
       '0.00', '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
@@ -144,13 +131,12 @@ export async function insertPendingAlta(
   ]);
   const registro = await db.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
-    ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
+    ) values (${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
       ${params.nif}, ${numSerieFactura}, ${params.fecha}, 'Waitron SL',
       'F2', 'Venta en establecimiento', ${desglose}::jsonb, '2.10', '12.10',
       true, '{}'::jsonb,
@@ -170,13 +156,13 @@ export async function insertPendingAlta(
   await db.execute(sql`
     update cadenas
     set secuencia = ${params.secuencia}, ultimo_registro_id = ${registroId}, ultima_huella = ${params.huella}
-    where tenant_id = ${params.tenantId} and node_id = ${params.nodeId}
+    where node_id = ${params.nodeId}
   `);
   return { registroId, numSerieFactura };
 }
 
 /**
- * Seeds a tenant + till + live SIF identity (`seedTenantWithSif`), then `opts.count` pending
+ * Seeds a till + live SIF identity (`seedTenantWithSif`), then `opts.count` pending
  * altas: a `registros_facturacion` row per `insertPendingAlta` above, plus the `envios` sidecar
  * row `seedSoldRegistro`/`seedTenantWithSif` do not create — `estado` takes the column's own
  * `'pendiente'` default, `proximo_intento_en` is stamped `2026-07-21T00:00:00Z` to match this
@@ -194,26 +180,20 @@ export async function seedPendingEnvios(
     opts.identity === undefined
       ? await seedTenantWithSif(db)
       : {
-          tenantId: brandTenantId(opts.identity.tenantId),
           tillId: brandTillId(opts.identity.tillId),
           nodeId: brandNodeId(opts.identity.nodeId),
         };
-  const { tenantId, tillId, nodeId } = seeded;
+  const { tillId, nodeId } = seeded;
   const sif = await db.transaction((tx) =>
     opts.identity === undefined
-      ? currentSif(tx, tenantId, nodeId)
-      : registerSif(tx, {
-          tenantId,
-          nodeId,
-          nif: opts.identity.nif,
-          idSistemaInformatico: "WT",
-        }),
+      ? currentSif(tx, nodeId)
+      : registerSif(tx, { nodeId, nif: opts.identity.nif, idSistemaInformatico: "WT" }),
   );
   const firstSequence = opts.identity === undefined ? 1 : reusedIdentitySequence;
   if (opts.identity !== undefined) reusedIdentitySequence += opts.count;
 
   const tenantRow = await db.execute<{ legal_name: string }>(sql`
-    select legal_name from tenants where id = ${tenantId}
+    select legal_name from tenants limit 1
   `);
   const legalName = tenantRow.rows[0]?.legal_name ?? "Waitron SL";
 
@@ -230,7 +210,6 @@ export async function seedPendingEnvios(
     // alone already satisfy that character class, so no hex letters are needed.
     const huella = String(sequence).padStart(64, "0");
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-      tenantId,
       tillId,
       nodeId,
       sifId: sif.id,
@@ -243,13 +222,12 @@ export async function seedPendingEnvios(
     registroIds.push(registroId);
     facturaKeys.push(`${sif.nif}|${numSerieFactura}|${toAeatDate(fecha)}`);
     await db.execute(sql`
-      insert into envios (registro_id, tenant_id, proximo_intento_en)
-      values (${registroId}, ${tenantId}, '2026-07-21T00:00:00Z')
+      insert into envios (registro_id, proximo_intento_en)
+      values (${registroId}, '2026-07-21T00:00:00Z')
     `);
   }
 
   return {
-    tenantId,
     tillId,
     nodeId,
     sifId: sif.id,
@@ -280,7 +258,6 @@ export async function appendPendingAlta(
   // chain must agree with it too, or Task 6's drain guard would refuse it for a reason entirely
   // unrelated to whatever THIS helper's own caller is testing.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    tenantId: seeded.tenantId,
     tillId: seeded.tillId,
     nodeId: seeded.nodeId,
     sifId: seeded.sifId,
@@ -291,8 +268,8 @@ export async function appendPendingAlta(
     entorno: DEFAULT_ENTORNO,
   });
   await db.execute(sql`
-    insert into envios (registro_id, tenant_id, proximo_intento_en)
-    values (${registroId}, ${seeded.tenantId}, '2026-07-21T00:00:00Z')
+    insert into envios (registro_id, proximo_intento_en)
+    values (${registroId}, '2026-07-21T00:00:00Z')
   `);
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }
@@ -300,12 +277,12 @@ export async function appendPendingAlta(
 /**
  * Adds a SECOND, entirely independent chain — a new till, its own live SIF registration (same
  * `nif`, a new `IdSistemaInformatico`/installation pair, so its own distinct `sif_id`) — under an
- * ALREADY-seeded tenant, with one pending alta on it at `secuencia`.
+ * ALREADY-seeded venue, with one pending alta on it at `secuencia`.
  *
- * For tests that need to prove one tenant's chains are isolated from one another: Task 9's
+ * For tests that need to prove one venue's chains are isolated from one another: Task 9's
  * `haltOpenChainClaims` (./src/drain.ts) must halt a claim on a chain with an open
  * `rechazado`/`detenido` row WITHOUT also halting or skipping a claim on a DIFFERENT, healthy
- * chain of the SAME tenant claimed in the same batch — a property `seedPendingEnvios`'s
+ * chain claimed in the same batch — a property `seedPendingEnvios`'s
  * single-chain shape cannot exercise on its own.
  */
 export async function seedSecondChain(
@@ -317,22 +294,21 @@ export async function seedSecondChain(
   // calls; only `currentSif`/`registerSif`, which are typed against `Transaction`, get their own
   // `db.transaction(...)` wrapper below).
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${seeded.tenantId}, 'Sala B', array['es'], 'Venta en establecimiento')
+    insert into locations (name, invoice_locales, operation_description) values ('Sala B', array['es'], 'Venta en establecimiento')
     returning id
   `);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Till B')
+    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till B')
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
   const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Node B')
+    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node B')
     returning id
   `);
   const nodeId = brandNodeId(node.rows[0]!.id);
   await db.execute(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${seeded.tenantId}, ${nodeId}, 'B')
+    insert into invoice_series (node_id, code) values (${nodeId}, 'B')
   `);
   // Same `nif`, same `idSistemaInformatico` ("WT" — `seedTenantWithSif`'s own literal) as
   // `seeded`'s own chain: `registerSif` mints installation numbers per (nif,
@@ -340,19 +316,13 @@ export async function seedSecondChain(
   // independent chain for the SAME obligado, exactly like two nodes at one shop (node-id rekey,
   // 2026-08-03: the chain is the node's).
   const sif = await db.transaction((tx) =>
-    registerSif(tx, {
-      tenantId: seeded.tenantId,
-      nodeId,
-      nif: seeded.nif,
-      idSistemaInformatico: "WT",
-    }),
+    registerSif(tx, { nodeId, nif: seeded.nif, idSistemaInformatico: "WT" }),
   );
 
   const huella = `B${String(secuencia).padStart(63, "0")}`;
-  // `DEFAULT_ENTORNO` — same reasoning as `appendPendingAlta` above: this second chain shares
-  // `seeded`'s own tenant, and every existing caller seeds that tenant at the default.
+  // `DEFAULT_ENTORNO` — same reasoning as `appendPendingAlta` above: this second chain sits beside
+  // `seeded`'s own, and every existing caller seeds that one at the default.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    tenantId: seeded.tenantId,
     tillId,
     nodeId,
     sifId: sif.id,
@@ -363,8 +333,8 @@ export async function seedSecondChain(
     entorno: DEFAULT_ENTORNO,
   });
   await db.execute(sql`
-    insert into envios (registro_id, tenant_id, proximo_intento_en)
-    values (${registroId}, ${seeded.tenantId}, '2026-07-21T00:00:00Z')
+    insert into envios (registro_id, proximo_intento_en)
+    values (${registroId}, '2026-07-21T00:00:00Z')
   `);
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }
@@ -390,7 +360,7 @@ export async function seedSecondChain(
  * decides it, regardless of what follows), or ties through byte 5 and then reaches byte 6, where
  * `0x4X < 0xFF` unconditionally. There is no path by which a real v4 UUID reaches or exceeds this
  * literal — the "does not starve..." test in drain.test.ts relies on this to put this chain's one
- * healthy row LAST, behind a large same-tenant backlog of refused rows, with certainty rather than
+ * healthy row LAST, behind a large backlog of refused rows, with certainty rather than
  * probability.
  */
 export async function seedIndependentChain(
@@ -399,30 +369,29 @@ export async function seedIndependentChain(
   params: { sifId: string; secuencia: number; entorno?: Entorno | null },
 ): Promise<{ registroId: string; facturaKey: string }> {
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${seeded.tenantId}, 'Sala Z', array['es'], 'Venta en establecimiento')
+    insert into locations (name, invoice_locales, operation_description) values ('Sala Z', array['es'], 'Venta en establecimiento')
     returning id
   `);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Till Z')
+    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till Z')
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
   const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Node Z')
+    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node Z')
     returning id
   `);
   const nodeId = brandNodeId(node.rows[0]!.id);
   await db.execute(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${seeded.tenantId}, ${nodeId}, 'Z')
+    insert into invoice_series (node_id, code) values (${nodeId}, 'Z')
   `);
   // A fresh nif (not `seeded.nif`), so this row's own installation number can just be a fixed
   // literal with no risk of colliding with `seeded`'s real, `registerSif`-minted chain — this
   // chain's own NIF is never asserted on anywhere, only its sif_id ordering.
-  const nif = `ZZ${String(seeded.tenantId).replace(/-/g, "").slice(0, 7)}`;
+  const nif = `ZZ${String(seeded.nodeId).replace(/-/g, "").slice(0, 7)}`;
   await db.execute(sql`
-    insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${params.sifId}, ${seeded.tenantId}, ${nodeId}, ${nif}, 'INDEP', 1)
+    insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion)
+    values (${params.sifId}, ${nodeId}, ${nif}, 'INDEP', 1)
   `);
 
   const entorno = params.entorno === undefined ? DEFAULT_ENTORNO : params.entorno;
@@ -430,7 +399,6 @@ export async function seedIndependentChain(
   // distinct valid hex letter from `seedSecondChain`'s own "B" prefix.
   const huella = `E${String(params.secuencia).padStart(63, "0")}`;
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
-    tenantId: seeded.tenantId,
     tillId,
     nodeId,
     sifId: params.sifId,
@@ -441,8 +409,8 @@ export async function seedIndependentChain(
     entorno,
   });
   await db.execute(sql`
-    insert into envios (registro_id, tenant_id, proximo_intento_en)
-    values (${registroId}, ${seeded.tenantId}, '2026-07-21T00:00:00Z')
+    insert into envios (registro_id, proximo_intento_en)
+    values (${registroId}, '2026-07-21T00:00:00Z')
   `);
   return { registroId, facturaKey: `${nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }

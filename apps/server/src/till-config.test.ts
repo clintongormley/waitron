@@ -5,14 +5,12 @@ import { loadTillConfig, tryLoadTillConfig } from "./till-config.js";
 // Distinct per field so a mis-wired mapping (e.g. locationId reading the series variable) fails the
 // happy-path assertion rather than passing by coincidence — every id is the SAME shape but a
 // DIFFERENT value. Version/variant nibbles are irrelevant: the brand only checks 8-4-4-4-12 hex.
-const TENANT = "11111111-1111-4111-8111-111111111111";
 const TILL = "22222222-2222-4222-8222-222222222222";
 const NODE = "33333333-3333-4333-8333-333333333333";
 const SERIES = "44444444-4444-4444-8444-444444444444";
 const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base = {
-  WAITRON_TILL_TENANT_ID: TENANT,
   WAITRON_TILL_TILL_ID: TILL,
   WAITRON_TILL_NODE_ID: NODE,
   WAITRON_TILL_SERIES_ID: SERIES,
@@ -21,9 +19,8 @@ const base = {
 
 /** The env-var name each id is sourced from — the same list `loadTillConfig` walks. Table-driven so
  * every id, including the later-folded-in `locationId` (WAITRON_TILL_LOCATION_ID), gets the missing
- * and invalid cases without five copies of each. */
+ * and invalid cases without a copy of each per variable. */
 const ID_VARS = [
-  "WAITRON_TILL_TENANT_ID",
   "WAITRON_TILL_TILL_ID",
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_SERIES_ID",
@@ -46,14 +43,13 @@ function captureThrow(fn: () => unknown): unknown {
 }
 
 describe("loadTillConfig", () => {
-  it("brands the five ids from their env vars and defaults locale to es-ES", () => {
+  it("brands the four ids from their env vars and defaults locale to es-ES", () => {
     const config = loadTillConfig(base);
     // toEqual, not toMatchObject: it also asserts there is no SIXTH id field and nothing extra. The
     // env card selection is gone (Task 12 — a card sale now routes to its reader through the pool), so
     // the config carries NO `cardProvider`/`stripeReaderId`/`sumupReaderId` key at all; `tipsEnabled`
     // defaults to false.
     expect(config).toEqual({
-      tenantId: TENANT,
       tillId: TILL,
       nodeId: NODE,
       seriesId: SERIES,
@@ -83,7 +79,7 @@ describe("loadTillConfig", () => {
   });
 
   it("treats an empty WAITRON_TILL_LOCALE as unset, defaulting to es-ES (and localeOverride undefined)", () => {
-    // Same "absent OR empty string is unset" rule the five ids' `required` uses — an operator's
+    // Same "absent OR empty string is unset" rule the four ids' `required` uses — an operator's
     // `WAITRON_TILL_LOCALE=` line must not push an empty locale into `invoiceLocales`, which
     // downstream invoice rendering consumes, NOR an empty override into the venue-default derivation.
     const config = loadTillConfig({ ...base, WAITRON_TILL_LOCALE: "" });
@@ -157,25 +153,24 @@ describe("loadTillConfig", () => {
 });
 
 describe("tryLoadTillConfig", () => {
-  it("returns undefined when NONE of the five till ids are set (setup mode)", () => {
-    // An unprovisioned box has no venue, so the five WAITRON_TILL_*_ID are absent — that is SETUP
+  it("returns undefined when NONE of the four till ids are set (setup mode)", () => {
+    // An unprovisioned box has no venue, so the four WAITRON_TILL_*_ID are absent — that is SETUP
     // MODE, not a misconfiguration, so the load returns undefined rather than throwing. (Boot branches
     // on `config.till === undefined` in a later slice-1b task.)
     expect(tryLoadTillConfig({})).toBeUndefined();
   });
 
-  it("treats all five present-but-empty (VAR=) as none set → undefined", () => {
+  it("treats all four present-but-empty (VAR=) as none set → undefined", () => {
     // `isUnset` is absent-OR-empty, so an env file writing every WAITRON_TILL_*_ID= blank is still
     // "none set" (setup mode) — the same VAR=-means-unset rule the ids' own `required` applies.
     const allEmpty = Object.fromEntries(ID_VARS.map((v) => [v, ""]));
     expect(tryLoadTillConfig(allEmpty)).toBeUndefined();
   });
 
-  it("loads the full config when ALL five are set (the same shape loadTillConfig returns)", () => {
+  it("loads the full config when ALL four are set (the same shape loadTillConfig returns)", () => {
     // Spot-checks nothing: `toEqual` the whole object, so a wrapper that dropped or reshaped a field
     // relative to `loadTillConfig` (the delegate) would fail here, not slip through on one field.
     expect(tryLoadTillConfig(base)).toEqual({
-      tenantId: TENANT,
       tillId: TILL,
       nodeId: NODE,
       seriesId: SERIES,
@@ -200,7 +195,7 @@ describe("tryLoadTillConfig", () => {
     });
   });
 
-  it("names the FIRST missing variable (in WAITRON_TILL_{TENANT,TILL,NODE,SERIES,LOCATION}_ID order) when several are absent", () => {
+  it("names the FIRST missing variable (in WAITRON_TILL_{TILL,NODE,SERIES,LOCATION}_ID order) when several are absent", () => {
     // NODE and SERIES both absent → NODE is named (it comes first in the list), so an operator fixes
     // them top-down rather than one error at a time from an arbitrary one.
     const error = captureThrow(() =>

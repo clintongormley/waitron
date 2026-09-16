@@ -4,21 +4,16 @@ import type { Database, Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { tenants } from "./tenants.js";
 
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-0000-4000-8000-000000000011";
-const TILL_B = "bbbbbbbb-0000-4000-8000-000000000011";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
-const PRINTER_B = "bbbbbbbb-0000-4000-8000-000000000021";
 // The acting operator recorded in `person_id` — an identity person id, plain uuid, no FK (the person
 // schema is a separate slice; a raw uuid keeps this audit table independent of it).
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
@@ -29,10 +24,9 @@ const AUTHORIZER = "cccccccc-0000-4000-8000-000000000002";
 class RollbackSignal extends Error {}
 async function rollBackAfter(
   admin: Database,
-  tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
+  await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
   }).catch((error: unknown) => {
@@ -40,54 +34,38 @@ async function rollBackAfter(
   });
 }
 
-describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, composite FKs)", () => {
-  const suite = useTemplateDb({ template: "core" });
+describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, FKs)", () => {
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     await suite.admin.execute(sql`
-      insert into tills (id, tenant_id, location_id, name)
-      values
-        (${TILL_A}, ${TENANT_A}, ${LOCATION_A}, 'Till A'),
-        (${TILL_B}, ${TENANT_B}, ${LOCATION_B}, 'Till B')
+      insert into tills (id, location_id, name) values (${TILL_A}, ${LOCATION_A}, 'Till A')
       on conflict (id) do nothing`);
     await suite.admin.execute(sql`
-      insert into printers (id, tenant_id, location_id, name, transport, poll_id)
-      values
-        (${PRINTER_A}, ${TENANT_A}, ${LOCATION_A}, 'Impresora A', 'cloud_poll', 'poll-a'),
-        (${PRINTER_B}, ${TENANT_B}, ${LOCATION_B}, 'Impresora B', 'cloud_poll', 'poll-b')
+      insert into printers (id, location_id, name, transport, poll_id) values (${PRINTER_A}, ${LOCATION_A}, 'Impresora A', 'cloud_poll', 'poll-a')
       on conflict (id) do nothing`);
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
-  function tillOf(tenant: string): string {
-    return tenant === TENANT_A ? TILL_A : TILL_B;
-  }
-
   async function seedOpen(
-    tenant: string,
     reason: "cash_sale" | "manual",
     saleId: string | null = null,
   ): Promise<void> {
-    await asApp(tenant, (tx) =>
+    await asApp((tx) =>
       tx.execute(
-        sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, sale_id)
-            values (${tenant}, ${tillOf(tenant)}, ${PERSON}, ${reason}, ${saleId})`,
+        sql`insert into drawer_opens (till_id, person_id, reason, sale_id) values (${TILL_A}, ${PERSON}, ${reason}, ${saleId})`,
       ),
     );
   }
@@ -98,14 +76,13 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // (sale_id NULL), which is the common accountability case. Read back through the
     // Drizzle `drawerOpens` export (not raw SQL) — exercises the produced table export and its column
     // mapping under the app role.
-    await seedOpen(TENANT_A, "manual");
-    const [row] = await asApp(TENANT_A, (tx) =>
+    await seedOpen("manual");
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(drawerOpens)
         .where(sql`person_id = ${PERSON} and reason = 'manual'`),
     );
-    expect(row!.tenantId).toBe(TENANT_A);
     expect(row!.tillId).toBe(TILL_A);
     expect(row!.personId).toBe(PERSON);
     expect(row!.reason).toBe("manual");
@@ -123,13 +100,12 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // behalf of an operator (PERSON) who lacks cash.drawer — authorized_by set, via_override true. app_user
     // holds INSERT (append-only), so this exercises the write grant AND the produced column mapping when
     // both are populated. Read back through the Drizzle `drawerOpens` export.
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(
-        sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, authorized_by, via_override)
-            values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'manual', ${AUTHORIZER}, true)`,
+        sql`insert into drawer_opens (till_id, person_id, reason, authorized_by, via_override) values (${TILL_A}, ${PERSON}, 'manual', ${AUTHORIZER}, true)`,
       ),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(drawerOpens)
@@ -142,53 +118,38 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   it("the reason CHECK accepts 'cash_sale' and rejects an unknown reason (23514)", async () => {
     // 'manual' is exercised by the positive control above; this pins that 'cash_sale' is also accepted
     // and that the closed vocabulary bites — an unknown reason is refused by drawer_opens_reason_ck.
-    await seedOpen(TENANT_A, "cash_sale"); // accepted (reason CHECK allows it; sale_id is optional)
+    await seedOpen("cash_sale"); // accepted (reason CHECK allows it; sale_id is optional)
     const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason)
-              values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'refund')`,
+          sql`insert into drawer_opens (till_id, person_id, reason) values (${TILL_A}, ${PERSON}, 'refund')`,
         ),
       ),
     );
     expect(pgErrorCode(e)).toBe("23514"); // check_violation on drawer_opens_reason_ck
   });
 
-  it("the till binding is tenant-consistent (composite FK to tills)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason)
-              values (${TENANT_A}, ${TILL_B}, ${PERSON}, 'manual')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, till_id)
-  });
-
-  it("the sale binding is enforced (composite FK to sales)", async () => {
-    // Proves the (tenant_id, sale_id) → sales composite FK exists and bites: a non-existent sale_id for
-    // A's own tenant → foreign_key_violation. A's tenant_id + (A, TILL_A) isolate the sale FK. A full
-    // cross-tenant sale fixture is disproportionate for a schema task (a sale needs a series + node +
-    // ~15 columns); a non-existent id proves the composite FK is wired all the same, and NULL (the
+  it("the sale binding is enforced (FK to sales)", async () => {
+    // Proves the (sale_id) → sales FK exists and bites: a sale_id naming no row →
+    // foreign_key_violation. A full sale fixture is disproportionate for a schema task (a sale
+    // needs a series + node + ~15 columns); a non-existent id proves the FK is wired all the same, and NULL (the
     // manual case) is proven to skip it by the positive control above.
     const missingSale = "dddddddd-0000-4000-8000-0000000000ff";
     const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, sale_id)
-              values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'cash_sale', ${missingSale})`,
+          sql`insert into drawer_opens (till_id, person_id, reason, sale_id) values (${TILL_A}, ${PERSON}, 'cash_sale', ${missingSale})`,
         ),
       ),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, sale_id)
+    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (sale_id)
   });
 
-  it("the app role can set and read tills.receipt_printer_id (new column, composite FK to printers)", async () => {
+  it("the app role can set and read tills.receipt_printer_id (new column, FK to printers)", async () => {
     // The new bare column on tills, visible + writable under the app role (app_user holds UPDATE on
-    // tills), and its hand-written (tenant_id, receipt_printer_id) → printers composite FK accepts a
+    // tills), and its hand-written (receipt_printer_id) → printers FK accepts a
     // printer of the same tenant. Rolled back so the shared template clone is untouched.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update tills set receipt_printer_id = ${PRINTER_A} where id = ${TILL_A}`,
@@ -200,20 +161,11 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     });
   });
 
-  it("tills.receipt_printer_id is tenant-consistent (rejects a foreign-tenant printer, 23503)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(sql`update tills set receipt_printer_id = ${PRINTER_B} where id = ${TILL_A}`),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503");
-  });
-
   it("locations.receipt_print_mode defaults to 'auto' and is settable under the app role", async () => {
     // The new enum column: the seeded locations carry no explicit value, so they take the DEFAULT
     // 'auto'; and the app role (app_user holds UPDATE on locations) can move it. Rolled back so the
     // shared template clone keeps its default.
-    const mode = await asApp(TENANT_A, (tx) =>
+    const mode = await asApp((tx) =>
       tx
         .execute<{ receipt_print_mode: string }>(
           sql`select receipt_print_mode from locations where id = ${LOCATION_A}`,
@@ -221,7 +173,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
         .then((r) => r.rows[0]!.receipt_print_mode),
     );
     expect(mode).toBe("auto");
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update locations set receipt_print_mode = 'on_request' where id = ${LOCATION_A}`,
@@ -238,7 +190,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // DEFAULT 'gated' — the SECURE default (an unconfigured venue gets cash accountability, not an open
     // drawer), deliberately unlike receipt_print_mode's inert 'auto'. The app role (app_user holds UPDATE
     // on locations) can move it to 'open'. Rolled back so the shared template clone keeps its default.
-    const policy = await asApp(TENANT_A, (tx) =>
+    const policy = await asApp((tx) =>
       tx
         .execute<{ drawer_open_policy: string }>(
           sql`select drawer_open_policy from locations where id = ${LOCATION_A}`,
@@ -246,7 +198,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
         .then((r) => r.rows[0]!.drawer_open_policy),
     );
     expect(policy).toBe("gated");
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update locations set drawer_open_policy = 'open' where id = ${LOCATION_A}`,

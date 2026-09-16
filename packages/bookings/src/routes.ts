@@ -7,7 +7,7 @@
 import "./errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
@@ -150,7 +150,7 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
  * The bookings module's `routes` seat. The deployment holds one tenant per database. Mounts the
  * dashboard's gated booking write group on the shared Hono app boot passes — every route wraps its
  * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside
- * `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
+ * `withTransaction` + `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
  * this database. The `booking.manage` gate runs on every route through one constant. No fiscal path
  * is touched: `seatBooking` opens a pre-fiscal working order only, via `ctx.core.openTab` (boot
  * bound the venue's `TillConfig` into `core`). The seven route paths are byte-identical to the
@@ -160,7 +160,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const { db, cfg, core } = ctx;
 
-    // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+    // Open a transaction as the app role, confirm the caller's management session carries
     // BOOKING_WRITE, then run `fn` with the tx AND the authorization result. Every route funnels its DB
     // work through here so the gate is applied identically and in exactly one place. `fn` receives
     // `{ authorizedBy }` (the person id the session resolved to) so the create route can stamp
@@ -169,7 +169,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
       sessionId: string,
       fn: (tx: Transaction, auth: { authorizedBy: string }) => Promise<T>,
     ): Promise<T> =>
-      withTenant(db, cfg.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         const auth = await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -181,7 +181,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
     // The three no-body lifecycle moves (cancel / no-show / complete) are byte-for-byte identical apart
     // from the URL suffix and the verb — `mountCourseVerb`'s booking parallel (till-api.ts). Session gate
     // first (→ 401), `:id` screened to a uuid (→ `shared.invalid_id` 400 before any DB work), then the verb
-    // under `gated` (BOOKING_WRITE + tenant/`app_user` scope), 204 on success. `gated`/`cfg` are captured.
+    // under `gated` (BOOKING_WRITE + `app_user` scope), 204 on success. `gated`/`cfg` are captured.
     const mountBookingLifecycleVerb = (
       suffix: string,
       verb: (tx: Transaction, cfg: BookingConfig, id: string) => Promise<void>,

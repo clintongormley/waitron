@@ -1,12 +1,8 @@
-import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
@@ -28,21 +24,21 @@ import {
 // floor itself is immutability.test.ts.
 const backend = new WorkforceBackend();
 
-let tenantId: string;
 let locationId: string;
 let personId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
-    personId = await seedPerson(db, tenantId);
+    await seedTenant(db);
+    locationId = await seedLocation(db);
+    personId = await seedPerson(db);
   },
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | undefined> {
@@ -59,12 +55,10 @@ async function attachedVersion(shiftId: string): Promise<string | null> {
 
 describe("publishRoster", () => {
   it("flips a draft version to published, stamps published_at and published_by, and attaches its in-period shift", async () => {
-    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
-    const shiftId = await insertDraftShift(suite.db, { tenantId, personId, locationId });
+    const versionId = await insertRosterVersion(suite.db, { locationId });
+    const shiftId = await insertDraftShift(suite.db, { personId, locationId });
 
-    await run((tx) =>
-      backend.publishRoster(tx, { tenantId, versionId, publishedByPersonId: personId }),
-    );
+    await run((tx) => backend.publishRoster(tx, { versionId, publishedByPersonId: personId }));
 
     const version = await suite.db.execute<{
       status: string;
@@ -85,36 +79,32 @@ describe("publishRoster", () => {
     // Period 2–8 March; three draft shifts differing in exactly one attribute each. Also the
     // published_by-omitted path — publishedByPersonId is left off here, covering the null branch.
     const versionId = await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-03-02",
       periodEnd: "2026-03-08",
     });
-    const otherLocation = await seedLocation(suite.db, tenantId);
+    const otherLocation = await seedLocation(suite.db);
 
     const inPeriod = await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId,
       startsAt: "2026-03-03T09:00:00Z",
       endsAt: "2026-03-03T17:00:00Z",
     });
     const outOfPeriod = await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId,
       startsAt: "2026-04-01T09:00:00Z",
       endsAt: "2026-04-01T17:00:00Z",
     });
     const wrongLocation = await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId: otherLocation,
       startsAt: "2026-03-03T09:00:00Z",
       endsAt: "2026-03-03T17:00:00Z",
     });
 
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    await run((tx) => backend.publishRoster(tx, { versionId }));
 
     expect(await attachedVersion(inPeriod)).toBe(versionId);
     expect(await attachedVersion(outOfPeriod)).toBeNull();
@@ -126,13 +116,11 @@ describe("publishRoster", () => {
     // that begins 2026-03-02, even though the UTC date (03-01) is before it. Proves publishRoster
     // resolves the local date via the offset, not the raw instant.
     const versionId = await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-03-02",
       periodEnd: "2026-03-08",
     });
     const shiftId = await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId,
       startsAt: "2026-03-01T23:30:00Z",
@@ -141,14 +129,14 @@ describe("publishRoster", () => {
       endsOffsetMinutes: 120,
     });
 
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    await run((tx) => backend.publishRoster(tx, { versionId }));
 
     expect(await attachedVersion(shiftId)).toBe(versionId);
   });
 
-  it("throws roster.not_found for a version that does not exist under the tenant", async () => {
+  it("throws roster.not_found for a version that does not exist", async () => {
     const code = await codeOfRejection(() =>
-      run((tx) => backend.publishRoster(tx, { tenantId, versionId: crypto.randomUUID() })),
+      run((tx) => backend.publishRoster(tx, { versionId: crypto.randomUUID() })),
     );
     expect(code).toBe("roster.not_found");
   });
@@ -156,12 +144,10 @@ describe("publishRoster", () => {
   it("throws roster.already_published when republishing a published version", async () => {
     // The guard: publishing twice is refused. Prove by deletion — remove the status check in
     // publishRoster and this stops throwing (the second publish silently re-stamps instead).
-    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    const versionId = await insertRosterVersion(suite.db, { locationId });
+    await run((tx) => backend.publishRoster(tx, { versionId }));
 
-    const code = await codeOfRejection(() =>
-      run((tx) => backend.publishRoster(tx, { tenantId, versionId })),
-    );
+    const code = await codeOfRejection(() => run((tx) => backend.publishRoster(tx, { versionId })));
     expect(code).toBe("roster.already_published");
   });
 
@@ -173,14 +159,14 @@ describe("publishRoster", () => {
     // index roster_versions_published_period_uq then rejects v2's publish (roster.period_already_published)
     // instead, so this test fails whichever way the supersede is broken.
     const period = { periodStart: "2026-02-02", periodEnd: "2026-02-08" };
-    const v1 = await insertRosterVersion(suite.db, { tenantId, locationId, ...period });
-    const v2 = await insertRosterVersion(suite.db, { tenantId, locationId, ...period });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v1 }));
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v2 }));
+    const v1 = await insertRosterVersion(suite.db, { locationId, ...period });
+    const v2 = await insertRosterVersion(suite.db, { locationId, ...period });
+    await run((tx) => backend.publishRoster(tx, { versionId: v1 }));
+    await run((tx) => backend.publishRoster(tx, { versionId: v2 }));
 
     const rows = await suite.db.execute<{ id: string; status: string }>(sql`
       select id, status from roster_versions
-      where tenant_id = ${tenantId} and location_id = ${locationId}
+      where location_id = ${locationId}
         and period_start = ${period.periodStart} and period_end = ${period.periodEnd}`);
     const byId = new Map(rows.rows.map((r) => [r.id, r.status]));
     expect(byId.get(v1)).toBe("superseded");
@@ -194,10 +180,10 @@ describe("publishRoster", () => {
     // that no other test in this shared-DB suite touches, so the two published rows never collide.
     const p1 = { periodStart: "2026-04-13", periodEnd: "2026-04-19" };
     const p2 = { periodStart: "2026-04-20", periodEnd: "2026-04-26" };
-    const v1 = await insertRosterVersion(suite.db, { tenantId, locationId, ...p1 });
-    const v2 = await insertRosterVersion(suite.db, { tenantId, locationId, ...p2 });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v1 }));
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v2 }));
+    const v1 = await insertRosterVersion(suite.db, { locationId, ...p1 });
+    const v2 = await insertRosterVersion(suite.db, { locationId, ...p2 });
+    await run((tx) => backend.publishRoster(tx, { versionId: v1 }));
+    await run((tx) => backend.publishRoster(tx, { versionId: v2 }));
 
     const rows = await suite.db.execute<{ status: string }>(
       sql`select status from roster_versions where id = ${v1}`,
@@ -210,20 +196,17 @@ describe("publishRoster", () => {
     // the breaches are surfaced in the return value, never thrown. Two shifts 8h apart breach the
     // 12h (720-min) inter-shift rest — publishRoster must report that and flip the version regardless.
     const versionId = await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
     });
     await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
     });
     await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId,
       startsAt: "2026-01-06T01:00:00Z", // 8h after the first shift's 17:00 end — under the 12h floor
@@ -232,7 +215,6 @@ describe("publishRoster", () => {
 
     const breaches = await run((tx) =>
       backend.publishRoster(tx, {
-        tenantId,
         versionId,
         ruleset: makeRuleset({ minInterShiftRestMinutes: 720 }),
       }),
@@ -246,9 +228,9 @@ describe("publishRoster", () => {
   });
 
   it("returns no breaches when no ruleset is supplied (guardrails are opt-in on publish)", async () => {
-    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
-    await insertDraftShift(suite.db, { tenantId, personId, locationId });
-    const breaches = await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    const versionId = await insertRosterVersion(suite.db, { locationId });
+    await insertDraftShift(suite.db, { personId, locationId });
+    const breaches = await run((tx) => backend.publishRoster(tx, { versionId }));
     expect(breaches).toEqual([]);
   });
 
@@ -257,9 +239,9 @@ describe("publishRoster", () => {
     // rather than blocking (restrict) or cascading the shifts away. Attach via publish, delete the
     // version, then assert the shift row SURVIVES with roster_version_id back to null. Changing the FK
     // to `restrict` fails the delete here; changing it to `cascade` fails the survives-assertion.
-    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
-    const shiftId = await insertDraftShift(suite.db, { tenantId, personId, locationId });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    const versionId = await insertRosterVersion(suite.db, { locationId });
+    const shiftId = await insertDraftShift(suite.db, { personId, locationId });
+    await run((tx) => backend.publishRoster(tx, { versionId }));
     expect(await attachedVersion(shiftId)).toBe(versionId);
 
     await suite.db.execute(sql`delete from roster_versions where id = ${versionId}`);
@@ -275,7 +257,7 @@ describe("publishRoster", () => {
 describe("createRosterVersion", () => {
   it("inserts a draft for the week (period_start = the Monday, period_end = +6 days) and returns its id", async () => {
     const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-02" }),
+      backend.createRosterVersion(tx, { locationId, period: "2026-03-02" }),
     );
     const row = await suite.db.execute<{
       status: string;
@@ -290,22 +272,18 @@ describe("createRosterVersion", () => {
     expect(row.rows[0]!.published_at).toBeNull();
   });
 
-  it("refuses a second draft for the same (tenant, location, week) — roster.draft_exists", async () => {
-    await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-09" }),
-    );
+  it("refuses a second draft for the same (location, week) — roster.draft_exists", async () => {
+    await run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-03-09" }));
     const code = await codeOfRejection(() =>
-      run((tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-09" })),
+      run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-03-09" })),
     );
     expect(code).toBe("roster.draft_exists");
   });
 
   it("allows a draft for a DIFFERENT week at the same location", async () => {
-    await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-16" }),
-    );
+    await run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-03-16" }));
     const other = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-23" }),
+      backend.createRosterVersion(tx, { locationId, period: "2026-03-23" }),
     );
     expect(other).toEqual(expect.any(String));
   });
@@ -314,7 +292,7 @@ describe("createRosterVersion", () => {
     // A date picker (or a direct API caller) can hand any day of the week. The engine snaps it to the
     // canonical Monday so the roster is a whole Mon–Sun week, never a mid-week Wed–Tue one.
     const versionId = await run(
-      (tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-04" }), // a Wednesday
+      (tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-04" }), // a Wednesday
     );
     const row = await suite.db.execute<{ period_start: string; period_end: string }>(
       sql`select period_start, period_end from roster_versions where id = ${versionId}`,
@@ -327,11 +305,9 @@ describe("createRosterVersion", () => {
     // The duplicate-draft hole: without normalization the draft_exists guard keys on the exact
     // period_start, so two different mid-week days would each fork a draft for one calendar week.
     // Normalized, both map to the same Monday and the second collides.
-    await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-11" }),
-    ); // Wednesday
+    await run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-11" })); // Wednesday
     const code = await codeOfRejection(() =>
-      run((tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-12" })),
+      run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-12" })),
     ); // Thursday, same week
     expect(code).toBe("roster.draft_exists");
   });
@@ -340,19 +316,16 @@ describe("createRosterVersion", () => {
 describe("getRoster / getRosterVersion", () => {
   it("returns the draft version and its attached shifts for the week", async () => {
     const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-04-06" }),
+      backend.createRosterVersion(tx, { locationId, period: "2026-04-06" }),
     );
     const shiftId = await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId,
       startsAt: "2026-04-06T09:00:00Z",
       endsAt: "2026-04-06T17:00:00Z",
       rosterVersionId: versionId,
     });
-    const snapshot = await run((tx) =>
-      backend.getRoster(tx, { tenantId, locationId, period: "2026-04-06" }),
-    );
+    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2026-04-06" }));
     expect(snapshot.version?.id).toBe(versionId);
     expect(snapshot.version?.status).toBe("draft");
     expect(snapshot.shifts.map((s) => s.id)).toEqual([shiftId]);
@@ -363,46 +336,40 @@ describe("getRoster / getRosterVersion", () => {
     // getRoster must snap to the same canonical Monday createRosterVersion does, or a non-Monday query
     // (from a date picker) would miss the week's draft and report an empty grid.
     const versionId = await run(
-      (tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-16" }), // Monday
+      (tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-16" }), // Monday
     );
     const snapshot = await run(
-      (tx) => backend.getRoster(tx, { tenantId, locationId, period: "2026-11-18" }), // Wednesday, same week
+      (tx) => backend.getRoster(tx, { locationId, period: "2026-11-18" }), // Wednesday, same week
     );
     expect(snapshot.version?.id).toBe(versionId);
   });
 
   it("returns { version: null, shifts: [] } for a week with no roster", async () => {
-    const snapshot = await run((tx) =>
-      backend.getRoster(tx, { tenantId, locationId, period: "2026-05-04" }),
-    );
+    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2026-05-04" }));
     expect(snapshot).toEqual({ version: null, shifts: [] });
   });
 
   it("falls back to the PUBLISHED version when there is no draft", async () => {
     const versionId = await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-06-01",
       periodEnd: "2026-06-07",
     });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
-    const snapshot = await run((tx) =>
-      backend.getRoster(tx, { tenantId, locationId, period: "2026-06-01" }),
-    );
+    await run((tx) => backend.publishRoster(tx, { versionId }));
+    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2026-06-01" }));
     expect(snapshot.version?.id).toBe(versionId);
     expect(snapshot.version?.status).toBe("published");
   });
 
   it("getRosterVersion returns the row, or throws roster.not_found for an unknown id", async () => {
     const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-07-06" }),
+      backend.createRosterVersion(tx, { locationId, period: "2026-07-06" }),
     );
-    const row = await run((tx) => backend.getRosterVersion(tx, { tenantId, versionId }));
+    const row = await run((tx) => backend.getRosterVersion(tx, { versionId }));
     expect(row.locationId).toBe(locationId);
     const code = await codeOfRejection(() =>
       run((tx) =>
         backend.getRosterVersion(tx, {
-          tenantId,
           versionId: "00000000-0000-0000-0000-000000000000",
         }),
       ),
@@ -417,7 +384,6 @@ describe("addShift", () => {
     overrides: Partial<import("./clocking.js").AddShiftInput> = {},
   ) {
     return {
-      tenantId,
       versionId,
       personId,
       locationId,
@@ -432,7 +398,7 @@ describe("addShift", () => {
 
   it("inserts a shift attached to the draft version and returns its id", async () => {
     const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-08-03" }),
+      backend.createRosterVersion(tx, { locationId, period: "2026-08-03" }),
     );
     const shiftId = await run((tx) => backend.addShift(tx, shiftInput(versionId, { role: "bar" })));
     const row = await suite.db.execute<{ roster_version_id: string; role: string | null }>(
@@ -451,12 +417,11 @@ describe("addShift", () => {
 
   it("rejects a PUBLISHED version — roster.not_draft", async () => {
     const versionId = await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-08-10",
       periodEnd: "2026-08-16",
     });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    await run((tx) => backend.publishRoster(tx, { versionId }));
     const code = await codeOfRejection(() =>
       run((tx) => backend.addShift(tx, shiftInput(versionId))),
     );
@@ -465,7 +430,7 @@ describe("addShift", () => {
 
   it("rejects a non-positive interval (starts >= ends) — shift.invalid", async () => {
     const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-08-17" }),
+      backend.createRosterVersion(tx, { locationId, period: "2026-08-17" }),
     );
     const code = await codeOfRejection(() =>
       run((tx) =>
@@ -487,7 +452,7 @@ describe("addShift", () => {
     // `NaN >= NaN` interval guard is false, so without the explicit NaN check the bad value reaches the
     // `timestamptz` column as a driver error instead of `shift.invalid`.
     const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-10-05" }),
+      backend.createRosterVersion(tx, { locationId, period: "2026-10-05" }),
     );
     expect(
       await codeOfRejection(() =>
@@ -504,12 +469,9 @@ describe("addShift", () => {
 
 describe("updateShift / removeShift", () => {
   async function draftShift(period: string): Promise<{ versionId: string; shiftId: string }> {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { tenantId, locationId, period }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { locationId, period }));
     const shiftId = await run((tx) =>
       backend.addShift(tx, {
-        tenantId,
         versionId,
         personId,
         locationId,
@@ -527,7 +489,6 @@ describe("updateShift / removeShift", () => {
     const { shiftId } = await draftShift("2026-09-07");
     await run((tx) =>
       backend.updateShift(tx, {
-        tenantId,
         shiftId,
         endsAt: "2026-09-07T15:00:00Z",
         role: "kitchen",
@@ -547,19 +508,19 @@ describe("updateShift / removeShift", () => {
     const { shiftId } = await draftShift("2026-10-12");
     expect(
       await codeOfRejection(() =>
-        run((tx) => backend.updateShift(tx, { tenantId, shiftId, startsAt: "not-a-timestamp" })),
+        run((tx) => backend.updateShift(tx, { shiftId, startsAt: "not-a-timestamp" })),
       ),
     ).toBe("shift.invalid");
     expect(
       await codeOfRejection(() =>
-        run((tx) => backend.updateShift(tx, { tenantId, shiftId, endsAt: "bogus" })),
+        run((tx) => backend.updateShift(tx, { shiftId, endsAt: "bogus" })),
       ),
     ).toBe("shift.invalid");
   });
 
   it("removes a shift", async () => {
     const { shiftId } = await draftShift("2026-09-14");
-    await run((tx) => backend.removeShift(tx, { tenantId, shiftId }));
+    await run((tx) => backend.removeShift(tx, { shiftId }));
     const row = await suite.db.execute(sql`select id from shifts where id = ${shiftId}`);
     expect(row.rows).toEqual([]);
   });
@@ -568,40 +529,34 @@ describe("updateShift / removeShift", () => {
     const missing = "00000000-0000-0000-0000-000000000000";
     expect(
       await codeOfRejection(() =>
-        run((tx) => backend.updateShift(tx, { tenantId, shiftId: missing, role: "x" })),
+        run((tx) => backend.updateShift(tx, { shiftId: missing, role: "x" })),
       ),
     ).toBe("shift.not_found");
     expect(
-      await codeOfRejection(() =>
-        run((tx) => backend.removeShift(tx, { tenantId, shiftId: missing })),
-      ),
+      await codeOfRejection(() => run((tx) => backend.removeShift(tx, { shiftId: missing }))),
     ).toBe("shift.not_found");
   });
 
   it("rejects editing/removing a shift whose version is PUBLISHED — roster.not_draft", async () => {
     const versionId = await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-09-21",
       periodEnd: "2026-09-27",
     });
     const shiftId = await insertDraftShift(suite.db, {
-      tenantId,
       personId,
       locationId,
       startsAt: "2026-09-21T09:00:00Z",
       endsAt: "2026-09-21T17:00:00Z",
       rosterVersionId: versionId,
     });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    await run((tx) => backend.publishRoster(tx, { versionId }));
     expect(
-      await codeOfRejection(() =>
-        run((tx) => backend.updateShift(tx, { tenantId, shiftId, role: "x" })),
-      ),
+      await codeOfRejection(() => run((tx) => backend.updateShift(tx, { shiftId, role: "x" }))),
     ).toBe("roster.not_draft");
-    expect(
-      await codeOfRejection(() => run((tx) => backend.removeShift(tx, { tenantId, shiftId }))),
-    ).toBe("roster.not_draft");
+    expect(await codeOfRejection(() => run((tx) => backend.removeShift(tx, { shiftId })))).toBe(
+      "roster.not_draft",
+    );
   });
 });
 
@@ -614,9 +569,8 @@ describe("getPlannedVsActual", () => {
     inAt: string,
     outAt: string,
   ): Promise<void> {
-    const node = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(loc));
+    const node = await seedNode(suite.db, brandLocationId(loc));
     await insertTimeEntry(suite.db, {
-      tenantId,
       nodeId: node,
       personId: person,
       locationId: loc,
@@ -624,7 +578,6 @@ describe("getPlannedVsActual", () => {
       eventAt: inAt,
     });
     await insertTimeEntry(suite.db, {
-      tenantId,
       nodeId: node,
       personId: person,
       locationId: loc,
@@ -636,19 +589,17 @@ describe("getPlannedVsActual", () => {
   // null-version draft shift AT `loc`, so the planned side (published-only) then sees them.
   async function publishWeek(loc: string): Promise<void> {
     const versionId = await insertRosterVersion(suite.db, {
-      tenantId,
       locationId: loc,
       periodStart: week.start,
       periodEnd: "2026-03-08",
     });
-    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    await run((tx) => backend.publishRoster(tx, { versionId }));
   }
 
   it("matches a PUBLISHED planned shift to its worked session, and reports late minutes", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `pva-${crypto.randomUUID()}`);
+    const loc = await seedLocation(suite.db);
+    const p = await seedPerson(suite.db, `pva-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
-      tenantId,
       personId: p,
       locationId: loc,
       startsAt: "2026-03-02T09:00:00Z",
@@ -658,7 +609,7 @@ describe("getPlannedVsActual", () => {
     // Clocked in 15 min late, worked to 13:00 → 225 worked minutes, lateMinutes 15.
     await seedSession(p, loc, "2026-03-02T09:15:00Z", "2026-03-02T13:00:00Z");
     const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
     );
     const row = rows.find((r) => r.personId === p && r.workDate === "2026-03-02")!;
     expect(row.plannedMinutes).toBe(240);
@@ -669,20 +620,19 @@ describe("getPlannedVsActual", () => {
   });
 
   it("flags a no-show (published shift, not worked) and an unplanned day (worked, not planned)", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
-    const noShowPerson = await seedPerson(suite.db, tenantId, `ns-${crypto.randomUUID()}`);
+    const loc = await seedLocation(suite.db);
+    const noShowPerson = await seedPerson(suite.db, `ns-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
-      tenantId,
       personId: noShowPerson,
       locationId: loc,
       startsAt: "2026-03-03T09:00:00Z",
       endsAt: "2026-03-03T17:00:00Z",
     });
     await publishWeek(loc);
-    const unplannedPerson = await seedPerson(suite.db, tenantId, `up-${crypto.randomUUID()}`);
+    const unplannedPerson = await seedPerson(suite.db, `up-${crypto.randomUUID()}`);
     await seedSession(unplannedPerson, loc, "2026-03-04T09:00:00Z", "2026-03-04T12:00:00Z");
     const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
     );
     const noShow = rows.find((r) => r.personId === noShowPerson)!;
     expect(noShow.noShow).toBe(true);
@@ -695,11 +645,10 @@ describe("getPlannedVsActual", () => {
   it("counts only the PUBLISHED version's shifts — excludes drafts and superseded versions", async () => {
     // Owner decision (2026-08-15): "planned" = the currently-published roster, so an in-progress draft
     // and a retired (superseded) version must NOT manufacture phantom no-shows.
-    const loc = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `pub-${crypto.randomUUID()}`);
+    const loc = await seedLocation(suite.db);
+    const p = await seedPerson(suite.db, `pub-${crypto.randomUUID()}`);
     // Version A: a shift on 2026-03-02, published.
     await insertDraftShift(suite.db, {
-      tenantId,
       personId: p,
       locationId: loc,
       startsAt: "2026-03-02T09:00:00Z",
@@ -709,7 +658,6 @@ describe("getPlannedVsActual", () => {
     // Version B: a NEW shift on 2026-03-03, published for the SAME (location, period) → B supersedes A.
     // publishWeek attaches only null-version in-period shifts, so B gets 03-03 (03-02 is now on A).
     await insertDraftShift(suite.db, {
-      tenantId,
       personId: p,
       locationId: loc,
       startsAt: "2026-03-03T09:00:00Z",
@@ -719,14 +667,13 @@ describe("getPlannedVsActual", () => {
     // A standalone DRAFT shift on 2026-03-04 (roster_version_id null) — never published (inserted AFTER
     // the last publish, so publishRoster never attaches it).
     await insertDraftShift(suite.db, {
-      tenantId,
       personId: p,
       locationId: loc,
       startsAt: "2026-03-04T09:00:00Z",
       endsAt: "2026-03-04T17:00:00Z",
     });
     const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
     );
     // Only 03-03 (version B, published) is planned; 03-02 (superseded A) and 03-04 (draft) are not.
     const plannedDays = rows
@@ -736,8 +683,8 @@ describe("getPlannedVsActual", () => {
   });
 
   it("excludes a session whose local day is OUTSIDE the window, includes one inside", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `bound-${crypto.randomUUID()}`);
+    const loc = await seedLocation(suite.db);
+    const p = await seedPerson(suite.db, `bound-${crypto.randomUUID()}`);
     // One day BEFORE the window (2026-03-01) — must be excluded even though the widened fetch grabs it.
     await seedSession(p, loc, "2026-03-01T09:00:00Z", "2026-03-01T12:00:00Z");
     // The last in-window day (2026-03-08) — included.
@@ -746,18 +693,17 @@ describe("getPlannedVsActual", () => {
     // half-open `< end` filter drops it. Exercises the upper boundary alongside the lower one.
     await seedSession(p, loc, "2026-03-09T09:00:00Z", "2026-03-09T12:00:00Z");
     const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
     );
     const days = rows.filter((r) => r.personId === p).map((r) => r.workDate);
     expect(days).toEqual(["2026-03-08"]);
   });
 
   it("scopes to the queried location — another location's published shifts and entries do not leak in", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
-    const other = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `scope-${crypto.randomUUID()}`);
+    const loc = await seedLocation(suite.db);
+    const other = await seedLocation(suite.db);
+    const p = await seedPerson(suite.db, `scope-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
-      tenantId,
       personId: p,
       locationId: other,
       startsAt: "2026-03-05T09:00:00Z",
@@ -766,16 +712,15 @@ describe("getPlannedVsActual", () => {
     await publishWeek(other);
     await seedSession(p, other, "2026-03-05T09:00:00Z", "2026-03-05T13:00:00Z");
     const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
     );
     expect(rows.filter((r) => r.personId === p)).toEqual([]);
   });
 
   it("returns [] for a window with no shifts and no sessions", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
+    const loc = await seedLocation(suite.db);
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, {
-        tenantId,
         locationId: loc,
         period: { start: "2026-12-07", end: "2026-12-14" },
       }),

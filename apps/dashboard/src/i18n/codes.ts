@@ -358,7 +358,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   // Kitchen-station configuration (apps/server/src/kitchen.ts, KDS-1). The Cocina editor's per-item
   // mutations (and the catalogue routing selects) reject with these when a station name collides, or
-  // when a station — or a routing/default target — can no longer be found (absent, another tenant's,
+  // when a station — or a routing/default target — can no longer be found (absent,
   // another venue's, or deactivated, all folded into the one code server-side).
   "station.name_taken": {
     en: "A station with that name already exists",
@@ -370,7 +370,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   // Kitchen-course configuration (apps/server/src/kitchen.ts, KDS-2). The Cursos editor's per-item
   // mutations (and the product-course select) reject with these when a course name collides, or when a
-  // course — or a product's default-course target — can no longer be found (absent, another tenant's,
+  // course — or a product's default-course target — can no longer be found (absent,
   // another venue's, or deactivated, all folded into the one code server-side). Mirrors `station.*`.
   "course.name_taken": {
     en: "A course with that name already exists",
@@ -381,7 +381,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese curso ya no existe",
   },
   // Device management (apps/server/src/device-api.ts, device-identity-1). The revoke route rejects with
-  // this when the addressed device id names no device (absent, another tenant's, or a malformed id).
+  // this when the addressed device id names no device (absent, or a malformed id).
   "device.not_found": {
     en: "That device no longer exists",
     es: "Ese dispositivo ya no existe",

@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
 import type { Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { fromRegistroRow, toRegistroRow } from "./registro-row.js";
@@ -20,7 +20,7 @@ const suite = useTemplateDb({ template: "manifest" });
 let till: SeededTill;
 
 beforeEach(async () => {
-  // Each call mints a fresh tenant (and NIF), so tests never collide on the append-only,
+  // Each call mints a fresh node (and NIF), so tests never collide on the append-only,
   // TRUNCATE-blocking `registros_facturacion` — the same reseed-without-truncate reasoning
   // `correction-path.e2e.test.ts` documents.
   till = await seedTill(suite.admin, "A");
@@ -68,7 +68,6 @@ function f3CanjeRecord(): RegistroAlta {
 async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
   const saleId = await seedSale(suite.admin, till, 1);
   const row = toRegistroRow(record, {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     sifId: till.sifId,
@@ -79,7 +78,7 @@ async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
     offsetMinutes: 120,
     entorno: "production",
   });
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.insert(registrosFacturacion).values(row);
   });

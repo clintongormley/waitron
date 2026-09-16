@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -15,7 +15,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { TenantId } from "@waitron/shared";
 import { createTable } from "./tables.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -38,35 +37,36 @@ let STATUS_ID: string;
 let INACTIVE_STATUS_ID: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // The whole manifest: the tables here span modules that FK into core, so the shared ordered set is
   // the fixture.
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    const tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-    const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+      insert into tills (location_id, name)
+      values (${locationId}, 'Caja 1') returning id`);
+    const nodeId = await seedNode(db, brandLocationId(locationId));
     // Ana logs in with PIN "5555"; the session cookie the route requires names her shift.
     const person = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(tenantId, till.rows[0]!.id, locationId, nodeId);
+    cfg = makeCfg(till.rows[0]!.id, locationId, nodeId);
     // Seed a table and active/inactive statuses through the application transaction.
-    const seeded = await withTenant(db, tenantId, async (tx) => {
+    const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
       const active = await tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantId}, 'Bill requested', '#ef4444') returning id`,
+        sql`insert into table_service_statuses (label, color) values ('Bill requested', '#ef4444') returning id`,
       );
       const inactive = await tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (tenant_id, label, color, active) values (${tenantId}, 'Retired', '#000', false) returning id`,
+        sql`insert into table_service_statuses (label, color, active) values ('Retired', '#000', false) returning id`,
       );
       return {
         tableId,
@@ -89,14 +89,8 @@ function collect(
 
 /** The till's config for the seeded tenant. `seriesId` is unused by this route (no fiscal write on the
  *  status path) so it carries a fresh uuid; `nodeId`/`locationId` are the seeded rows the reads scope by. */
-function makeCfg(
-  tenantId: TenantId,
-  tillId: string,
-  locationId: string,
-  nodeId: string,
-): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
-    tenantId,
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -141,13 +135,12 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
  *  `loginWithPin` path the login route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       personId: ana.id,
       pin: "5555",

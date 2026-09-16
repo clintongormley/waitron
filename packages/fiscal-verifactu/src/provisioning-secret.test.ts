@@ -1,8 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   CREDENTIALS_MIGRATIONS,
   getCredential,
@@ -13,9 +12,11 @@ import { hasCode, isAppError } from "@waitron/shared";
 import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-secret.js";
 
 // PGlite, not real Postgres: this suite exercises the SHAPE validator and the seal ROUND-TRIP (write
-// then read back the three fields), never RLS DENIAL as the deployment role — so the lighter target
-// applies (CLAUDE.md §4). `seedTenant` inserts the FK target row and `withTenant` sets `app.tenant_id`
-// exactly as production does; the same pattern this package's `aeat-transport.test.ts` seals under.
+// then read back the three fields), never a privilege as the deployment role — so the lighter target
+// applies (CLAUDE.md §4). Nothing here needs a taxpayer row: `tenant_credentials` is keyed by
+// `purpose` alone and references no other table, and `withTransaction` only opens a transaction —
+// it sets no session variable (`packages/db/src/tenancy.test.ts` asserts that).
+
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 120_000,
@@ -42,13 +43,12 @@ function aeatCert(overrides: Partial<AeatCert> = {}): AeatCert {
 describe("sealAeatSecret", () => {
   it("seals the cert into fiscal.aeat and reads back the three fields intact", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     const cert = aeatCert({ certKind: "representante" });
 
-    await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
+    await sealAeatSecret({ db: suite.db, ring }, cert);
 
-    const readBack = await withTenant(suite.db, tenant, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+    const readBack = await withTransaction(suite.db, (tx) =>
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     );
     expect(readBack).toEqual({
       pfxBase64: cert.pfxBase64,
@@ -59,22 +59,19 @@ describe("sealAeatSecret", () => {
 
   it("refuses a certKind outside {sello, representante} and seals nothing", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     // `bogus` is a non-empty string, so `putCredential`'s own `validatePayload` would ACCEPT it —
     // only this module's certKind guard rejects it (the deletion-proof for that guard).
     const cert = aeatCert({ certKind: "bogus" as AeatCert["certKind"] });
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, tenant, cert).catch(
-      (e: unknown) => e,
-    );
+    const error = await sealAeatSecret({ db: suite.db, ring }, cert).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "certKind",
     );
 
     // Nothing was written — a read finds no row.
-    const missing = await withTenant(suite.db, tenant, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+    const missing = await withTransaction(suite.db, (tx) =>
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });
@@ -93,52 +90,47 @@ describe("sealAeatSecret", () => {
     { label: "a malformed base64 length", pfxBase64: "QQ" },
   ])("refuses a pfxBase64 that is $label and seals nothing", async ({ pfxBase64 }) => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     const cert = aeatCert({ pfxBase64 });
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, tenant, cert).catch(
-      (e: unknown) => e,
-    );
+    const error = await sealAeatSecret({ db: suite.db, ring }, cert).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "pfxBase64",
     );
 
-    const missing = await withTenant(suite.db, tenant, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+    const missing = await withTransaction(suite.db, (tx) =>
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });
 
   it("accepts a short, canonically-padded base64 pfxBase64 (the tightened regex does not over-reject)", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     // "aGVsbG8=" is `Buffer.from("hello").toString("base64")` — a real 5-byte payload whose base64
     // carries a 3-char padded tail (`bG8=`), the branch a length-only check would never reach. The
     // seal must accept it, proving the length/padding-enforcing regex rejects no genuine encoding.
     const cert = aeatCert({ pfxBase64: "aGVsbG8=" });
 
-    await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
+    await sealAeatSecret({ db: suite.db, ring }, cert);
 
-    const readBack = await withTenant(suite.db, tenant, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+    const readBack = await withTransaction(suite.db, (tx) =>
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     );
     expect(readBack.pfxBase64).toBe("aGVsbG8=");
   });
 
   it("refuses a non-object raw blob naming aeatCert and seals nothing", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, tenant, "not-an-object").catch(
+    const error = await sealAeatSecret({ db: suite.db, ring }, "not-an-object").catch(
       (e: unknown) => e,
     );
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "aeatCert",
     );
 
-    const missing = await withTenant(suite.db, tenant, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+    const missing = await withTransaction(suite.db, (tx) =>
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });

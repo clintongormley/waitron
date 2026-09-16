@@ -10,7 +10,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -52,7 +51,6 @@ export const absences = pgTable(
   "absences",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     kind: absenceKind("absence_kind").notNull(),
     /** First day of the absence, inclusive. */
@@ -75,12 +73,7 @@ export const absences = pgTable(
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
     // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI
     // process, never during vitest run). restrict, not cascade: an absence must not be silently
-    // orphaned or discarded by a tenant/person delete.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "absences_tenant_fk",
-    }).onDelete("restrict"),
+    // orphaned or discarded by a person delete.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
@@ -92,9 +85,8 @@ export const absences = pgTable(
       foreignColumns: [persons.id],
       name: "absences_decided_by_person_fk",
     }).onDelete("restrict"),
-    index("absences_tenant_id_idx").on(t.tenantId),
-    // The overlap check queries by (tenant, person) over the date range — this index serves it.
-    index("absences_tenant_person_idx").on(t.tenantId, t.personId, t.startsOn),
+    // The overlap check queries by person over the date range — this index serves it.
+    index("absences_person_idx").on(t.personId, t.startsOn),
     // An absence ends on or after it starts — a single day is starts_on = ends_on.
     check("absences_range_ck", sql`${t.endsOn} >= ${t.startsOn}`),
   ],

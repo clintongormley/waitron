@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant, workingOrderLines } from "@waitron/db";
+import { asAppUser, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -24,7 +24,7 @@ import "./errors.js";
 
 // REAL Postgres, NOT PGlite: this proves a LOCK interaction between two concurrent backends, and PGlite
 // serialises every query onto one backend — it CANNOT reach the race and would be a false pass
-// (CLAUDE.md §4). The fire tx runs at READ COMMITTED (`withTenant` = `db.transaction()`), so without the
+// (CLAUDE.md §4). The fire tx runs at READ COMMITTED (`withTransaction` = `db.transaction()`), so without the
 // `FOR SHARE` lock a `deactivatePrinter` committing between enqueueKitchenTickets' mapping read and
 // `enqueuePrintJob`'s own `active = true` re-check would flip the printer inactive and throw
 // `printer.not_found`, aborting the fire (a §5 never-block violation). With the lock, the deactivation
@@ -78,24 +78,23 @@ async function waitForABlockedBackend(): Promise<void> {
 }
 
 function printCfg(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
   it("a concurrent deactivatePrinter WAITS for the fire to commit instead of aborting it", async () => {
     // ---- Setup, committed on the admin connection so both racing backends see it ----
-    const tenantId = await seedTenant(suite.admin);
-    await seedLegacySellingUnits(suite.admin, tenantId);
+    await seedTenant(suite.admin);
+    await seedLegacySellingUnits(suite.admin);
     const loc = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-    const nodeId = await seedNode(suite.admin, tenantId, brandLocationId(locationId));
+      insert into tills (location_id, name)
+      values (${locationId}, 'Caja 1') returning id`);
+    const nodeId = await seedNode(suite.admin, brandLocationId(locationId));
     const cfg: TillConfig = {
-      tenantId,
       tillId: brandTillId(till.rows[0]!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
@@ -105,12 +104,11 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
       tipsEnabled: false,
       orderFlow: "prepay",
     };
-    const { cocinaId, printerId, orderId, lineId } = await withTenant(
+    const { cocinaId, printerId, orderId, lineId } = await withTransaction(
       suite.admin,
-      tenantId,
       async (tx) => {
         await asAppUser(tx);
-        const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+        const cat = await createCatalogue(tx, { name: "Carta" });
         await assignCatalogueToLocation(tx, locationId, cat.id);
         const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
         const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
@@ -118,8 +116,8 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
           transport: "cloud_poll",
           pollId: `poll-${randomUUID()}`,
         });
-        await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
-        const { id: product } = await createProduct(tx, tenantId, {
+        await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+        const { id: product } = await createProduct(tx, {
           catalogueId: cat.id,
           categoryId: null,
           name: "Chuleton",
@@ -144,7 +142,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
     // then HOLD the transaction open — so the FOR SHARE lock is still held when B tries to deactivate.
     const readDone = gate();
     const releaseA = gate();
-    const firePromise = withTenant(a, tenantId, async (txA) => {
+    const firePromise = withTransaction(a, async (txA) => {
       await asAppUser(txA);
       await enqueueKitchenTickets(txA, cfg, orderId, firedItems);
       readDone.open(); // lock taken + job enqueued; tx deliberately NOT committed yet
@@ -155,7 +153,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
     // Connection B: deactivate the SAME printer. Its UPDATE needs a FOR NO KEY UPDATE row lock, which
     // conflicts with A's FOR SHARE, so it MUST block until A commits.
     let deactivateDone = false;
-    const deactivatePromise = withTenant(b, tenantId, async (txB) => {
+    const deactivatePromise = withTransaction(b, async (txB) => {
       await asAppUser(txB);
       await deactivatePrinter(txB, printCfg(cfg), printerId);
     }).then(() => {

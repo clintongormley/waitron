@@ -6,12 +6,12 @@
 // The drain runs as the non-superuser deployment role (`server_pass_probe`, an `app_user` member
 // created cluster-wide by apps/server's globalSetup) — the credential read + fiscal-table SELECTs are
 // exercised through the grants a real box runs under, not a superuser that sees everything (CLAUDE.md
-// §4). The `getCredential` seam returns nothing for a tenant with no `fiscal.aeat` vault row, so the
-// regime's `resolveClient` throws `credentials.missing`, which `drain` contains as a per-tenant skip.
+// §4). The `getCredential` seam returns nothing when there is no `fiscal.aeat` vault row, so the
+// regime's `resolveClient` throws `credentials.missing`, which `drain` contains as a skipped pass.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -49,24 +49,24 @@ afterAll(async () => {
 
 /** Insert a manager (with a dashboard login email) into a seeded tenant so the box-status route's
  * `authorizeManager("system.manage")` gate resolves — `app_user` holds INSERT on `persons`. */
-async function seedManager(tenantId: string): Promise<void> {
-  await withTenant(suite.admin, tenantId, async (tx) => {
+async function seedManager(): Promise<void> {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
   });
 }
 
 /** A Hono app carrying the management API (for its login route) and the box-status route, both wired to
  * the SAME awaiting-cert holder the fiscal pass writes — exactly boot.ts's shared-holder wiring. */
-function buildApp(tenantId: string, nodeId: string, awaitingCert: { current: boolean }): Hono {
+function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -77,7 +77,7 @@ function buildApp(tenantId: string, nodeId: string, awaitingCert: { current: boo
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       environment: "production",
       health: createHealthState(NOW),
       now: () => NOW,
@@ -133,7 +133,7 @@ describe("promoted primary awaiting the fiscal certificate (real postgres)", () 
   it("surfaces awaiting-cert on box-status, does not crash the drain, does not submit, leaves the chain untouched", async () => {
     // A due registro + `envios` row, with NO `fiscal.aeat` credential sealed for the tenant.
     const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
-    await seedManager(seeded.tenantId);
+    await seedManager();
     const registroId = seeded.registroIds[0]!;
     const registroBefore = await readRegistro(registroId);
 
@@ -162,15 +162,15 @@ describe("promoted primary awaiting the fiscal certificate (real postgres)", () 
       NOW,
     );
 
-    // The drain did NOT crash: a missing cert is contained as a per-tenant skip, so the duty is `ok`
-    // and its one due tenant is counted as skipped (so `/health` still sees the unmet obligation).
+    // The drain did NOT crash: a missing cert is contained as a skip, so the duty is `ok` and the
+    // pass is counted as skipped (so `/health` still sees the unmet obligation).
     const drainReport = report.duties.find((entry) => entry.duty === DRAIN_DUTY)!;
     expect(drainReport.ok).toBe(true);
     expect(drainReport.skipped).toBe(1);
 
     // The awaiting-cert state is explicit: the flag is set and `fiscal.awaiting_certificate` is logged
     // exactly ONCE (the edge-triggered "log once" surface), alongside the per-pass drain.tenant_skipped
-    // trace that records which tenant was skipped and why.
+    // trace that records why the pass was skipped.
     expect(awaitingCert.current).toBe(true);
     expect(lines.filter((line) => line.includes("fiscal.awaiting_certificate"))).toHaveLength(1);
     expect(
@@ -186,11 +186,11 @@ describe("promoted primary awaiting the fiscal certificate (real postgres)", () 
       incidencia: false,
     });
     // Local chaining is untouched: the registro's chain columns are exactly as seeded (the drain never
-    // reached `drainTenant`, and chaining happens on the sale path, not here).
+    // reached `drainDue`, and chaining happens on the sale path, not here).
     expect(await readRegistro(registroId)).toEqual(registroBefore);
 
     // box-status surfaces the flag to an authenticated manager — the operator-visible signal.
-    const app = buildApp(seeded.tenantId, seeded.nodeId, awaitingCert);
+    const app = buildApp(seeded.nodeId, awaitingCert);
     const cookie = await login(app);
     const res = await app.request("/api/box/status", { headers: { cookie } });
     expect(res.status).toBe(200);

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -43,16 +43,15 @@ beforeAll(() => {
 });
 
 async function setupVenue(): Promise<TillConfig> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -65,7 +64,8 @@ async function setupVenue(): Promise<TillConfig> {
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -252,19 +252,19 @@ async function productCourse(productId: string): Promise<string | null> {
   );
   return rows[0]!.course_id;
 }
-async function seedCategory(cfg: TillConfig): Promise<string> {
+async function seedCategory(): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(
-    sql`insert into categories (tenant_id, name) values (${cfg.tenantId}, '{"en":"Food"}'::jsonb) returning id`,
+    sql`insert into categories (name) values ('{"en":"Food"}'::jsonb) returning id`,
   );
   return rows[0]!.id;
 }
-async function seedProduct(cfg: TillConfig): Promise<string> {
+async function seedProduct(): Promise<string> {
   const cat = await db.execute<{ id: string }>(
-    sql`insert into catalogues (tenant_id, name) values (${cfg.tenantId}, 'Menu') returning id`,
+    sql`insert into catalogues (name) values ('Menu') returning id`,
   );
   const { rows } = await db.execute<{ id: string }>(sql`
-    insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-    values (${cfg.tenantId}, ${cat.rows[0]!.id}, 'Routed product', 'each', 1.00, 'general')
+    insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+    values (${cat.rows[0]!.id}, 'Routed product', 'each', 1.00, 'general')
     returning id`);
   return rows[0]!.id;
 }
@@ -272,7 +272,7 @@ async function seedProduct(cfg: TillConfig): Promise<string> {
 describe("routing config", () => {
   it("setCategoryStation sets then clears the category's default station", async () => {
     const cfg = await setupVenue();
-    const categoryId = await seedCategory(cfg);
+    const categoryId = await seedCategory();
     const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Cocina" }));
     await asApp(cfg, (tx) => setCategoryStation(tx, cfg, categoryId, stationId));
     expect(await categoryStation(categoryId)).toBe(stationId);
@@ -280,26 +280,9 @@ describe("routing config", () => {
     expect(await categoryStation(categoryId)).toBeNull();
   });
 
-  // One tenant per database is NOT the query's isolation boundary (CLAUDE.md §3): a by-id write needs
-  // its own tenant predicate. Both venues live in the SAME database here, exactly as a mis-wired mount
-  // would, so a write that keyed on the id alone would land on the other venue's product.
-  it("refuses to route ANOTHER venue's product, even with a live station of its own", async () => {
-    const cfg = await setupVenue();
-    const other = await setupVenue();
-    const foreignProductId = await seedProduct(other);
-    const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Pase" }));
-    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" }));
-
-    await asApp(cfg, (tx) => setProductStation(tx, cfg, foreignProductId, stationId));
-    await asApp(cfg, (tx) => setProductCourse(tx, cfg, foreignProductId, courseId));
-
-    expect(await productStation(foreignProductId)).toBeNull();
-    expect(await productCourse(foreignProductId)).toBeNull();
-  });
-
   it("setProductStation sets then clears the product's override station", async () => {
     const cfg = await setupVenue();
-    const productId = await seedProduct(cfg);
+    const productId = await seedProduct();
     const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
     await asApp(cfg, (tx) => setProductStation(tx, cfg, productId, stationId));
     expect(await productStation(productId)).toBe(stationId);
@@ -309,8 +292,8 @@ describe("routing config", () => {
 
   it("setCategoryStation / setProductStation reject an inactive or absent station with station.not_found", async () => {
     const cfg = await setupVenue();
-    const categoryId = await seedCategory(cfg);
-    const productId = await seedProduct(cfg);
+    const categoryId = await seedCategory();
+    const productId = await seedProduct();
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => setCategoryStation(tx, cfg, categoryId, missing)),
@@ -415,7 +398,7 @@ describe("kitchen-course config", () => {
 describe("product-course config", () => {
   it("setProductCourse sets then clears the product's default course", async () => {
     const cfg = await setupVenue();
-    const productId = await seedProduct(cfg);
+    const productId = await seedProduct();
     const { id: courseId } = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Principales" }),
     );
@@ -427,7 +410,7 @@ describe("product-course config", () => {
 
   it("setProductCourse rejects an inactive or absent course with course.not_found", async () => {
     const cfg = await setupVenue();
-    const productId = await seedProduct(cfg);
+    const productId = await seedProduct();
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, missing)),

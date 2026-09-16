@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Transaction } from "./client.js";
 import { computeAmendmentHash } from "./order-amendment-hash.js";
 import { orderAmendments } from "./schema/order-amendments.js";
@@ -15,11 +15,11 @@ import { workingOrders } from "./schema/orders.js";
  * order is placed before it is amended), so THAT row is the serialisation point: a `SELECT … FOR
  * UPDATE` on it blocks a concurrent appender until this transaction commits, after which the loser
  * reads the advanced max sequence. `order_amendments_chain_position_key`
- * (UNIQUE(tenant, working_order, sequence_no)) is the backstop if two writers ever reach the insert
+ * (UNIQUE(working_order, sequence_no)) is the backstop if two writers ever reach the insert
  * with the same number, but under the row lock they cannot.
  */
 export interface AppendAmendmentInput {
-  tenantId: string;
+  /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
   workingOrderId: string;
   kind: "order_placed" | "order_cancelled";
   /** The accountable actor (the operator uuid from the open session). */
@@ -56,20 +56,13 @@ export async function appendOrderAmendment(
   await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
-    .where(
-      and(eq(workingOrders.tenantId, input.tenantId), eq(workingOrders.id, input.workingOrderId)),
-    )
+    .where(eq(workingOrders.id, input.workingOrderId))
     .for("update");
 
   const [prev] = await tx
     .select({ sequenceNo: orderAmendments.sequenceNo, entryHash: orderAmendments.entryHash })
     .from(orderAmendments)
-    .where(
-      and(
-        eq(orderAmendments.tenantId, input.tenantId),
-        eq(orderAmendments.workingOrderId, input.workingOrderId),
-      ),
-    )
+    .where(eq(orderAmendments.workingOrderId, input.workingOrderId))
     .orderBy(desc(orderAmendments.sequenceNo))
     .limit(1);
 
@@ -94,7 +87,6 @@ export async function appendOrderAmendment(
   const [inserted] = await tx
     .insert(orderAmendments)
     .values({
-      tenantId: input.tenantId,
       workingOrderId: input.workingOrderId,
       sequenceNo,
       kind: input.kind,

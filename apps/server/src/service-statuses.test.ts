@@ -1,4 +1,4 @@
-import { asAppUser, captureError, withTenant } from "@waitron/db";
+import { asAppUser, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -14,22 +14,22 @@ import "./errors.js";
 // management_sessions as the app role) and upserts table_service_statuses as that same role — grants
 // a PGlite superuser connection holds unconditionally — so it needs the real cluster the shared
 // container provides; a Docker-absent run fails at the package globalSetup, not here.
-const suite = useTemplateDb({ template: "core_identity" });
+const suite = useTemplateDb({ template: "core_identity", resetPerTest: false });
 
-function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
 }
 
 /** Seed a person of `role` and an open management session; returns the session id. */
-async function seedSession(tenantId: string, role: PersonRoleValue): Promise<string> {
+async function seedSession(role: PersonRoleValue): Promise<string> {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, ${`${role} operator`}, 'seed-pin-hash', ${role}) returning id`);
-  const session = await withTenant(suite.admin, tenantId, (tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    insert into persons (display_name, pin_hash, role)
+    values (${`${role} operator`}, 'seed-pin-hash', ${role}) returning id`);
+  const session = await withTransaction(suite.admin, (tx) =>
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return session.id;
 }
@@ -40,52 +40,42 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
 }
 
 describe("service-status config CRUD (venue.configure)", () => {
-  let tenantId: string;
   let managerSession: string;
   beforeAll(async () => {
-    tenantId = await seedTenant(suite.admin);
-    managerSession = await seedSession(tenantId, "manager");
+    await seedTenant(suite.admin);
+    managerSession = await seedSession("manager");
   });
 
   it("creates, lists (by display_order then label), updates, and deactivates a status", async () => {
-    const { id } = await asApp(tenantId, (tx) =>
+    const { id } = await asApp((tx) =>
       createStatus(tx, {
         managementSessionId: managerSession,
-        tenantId,
         label: "Bill requested",
         color: "#ef4444",
         displayOrder: 1,
       }),
     );
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       createStatus(tx, {
         managementSessionId: managerSession,
-        tenantId,
         label: "Needs cleaning",
         color: "amber",
         displayOrder: 0,
       }),
     );
-    const list = await asApp(tenantId, (tx) =>
-      listStatuses(tx, { managementSessionId: managerSession, tenantId }),
-    );
+    const list = await asApp((tx) => listStatuses(tx, { managementSessionId: managerSession }));
     expect(list.map((s) => s.label)).toEqual(["Needs cleaning", "Bill requested"]); // display_order 0, 1
 
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       updateStatus(tx, {
         managementSessionId: managerSession,
-        tenantId,
         id,
         color: "#22c55e",
         displayOrder: 5,
       }),
     );
-    await asApp(tenantId, (tx) =>
-      deactivateStatus(tx, { managementSessionId: managerSession, tenantId, id }),
-    );
-    const after = await asApp(tenantId, (tx) =>
-      listStatuses(tx, { managementSessionId: managerSession, tenantId }),
-    );
+    await asApp((tx) => deactivateStatus(tx, { managementSessionId: managerSession, id }));
+    const after = await asApp((tx) => listStatuses(tx, { managementSessionId: managerSession }));
     expect(after.find((s) => s.id === id)).toMatchObject({
       color: "#22c55e",
       displayOrder: 5,
@@ -94,20 +84,18 @@ describe("service-status config CRUD (venue.configure)", () => {
   });
 
   it("refuses a duplicate label (status.label_taken) on create and on update", async () => {
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       createStatus(tx, {
         managementSessionId: managerSession,
-        tenantId,
         label: "Reserved",
         color: "#3b82f6",
       }),
     );
     expect(
       await codeOf(() =>
-        asApp(tenantId, (tx) =>
+        asApp((tx) =>
           createStatus(tx, {
             managementSessionId: managerSession,
-            tenantId,
             label: "Reserved",
             color: "#000",
           }),
@@ -118,20 +106,18 @@ describe("service-status config CRUD (venue.configure)", () => {
     // ...and on update: a second status renamed onto the taken label trips the same unique, so
     // updateStatus maps its 23505 to status.label_taken too (the catch branch the create case cannot
     // reach). The test's title promises both directions; this is the update half.
-    const { id } = await asApp(tenantId, (tx) =>
+    const { id } = await asApp((tx) =>
       createStatus(tx, {
         managementSessionId: managerSession,
-        tenantId,
         label: "Occupied",
         color: "#f97316",
       }),
     );
     expect(
       await codeOf(() =>
-        asApp(tenantId, (tx) =>
+        asApp((tx) =>
           updateStatus(tx, {
             managementSessionId: managerSession,
-            tenantId,
             id,
             label: "Reserved",
           }),
@@ -144,10 +130,9 @@ describe("service-status config CRUD (venue.configure)", () => {
     const missing = "00000000-0000-4000-8000-000000000000";
     expect(
       await codeOf(() =>
-        asApp(tenantId, (tx) =>
+        asApp((tx) =>
           updateStatus(tx, {
             managementSessionId: managerSession,
-            tenantId,
             id: missing,
             label: "X",
           }),
@@ -156,9 +141,7 @@ describe("service-status config CRUD (venue.configure)", () => {
     ).toBe("status.not_found");
     expect(
       await codeOf(() =>
-        asApp(tenantId, (tx) =>
-          deactivateStatus(tx, { managementSessionId: managerSession, tenantId, id: missing }),
-        ),
+        asApp((tx) => deactivateStatus(tx, { managementSessionId: managerSession, id: missing })),
       ),
     ).toBe("status.not_found");
   });
@@ -166,10 +149,9 @@ describe("service-status config CRUD (venue.configure)", () => {
   it("rejects a malformed color (management.request_invalid, naming the field)", async () => {
     expect(
       await codeOf(() =>
-        asApp(tenantId, (tx) =>
+        asApp((tx) =>
           createStatus(tx, {
             managementSessionId: managerSession,
-            tenantId,
             label: "Bad",
             color: "red; drop table x",
           }),
@@ -179,13 +161,12 @@ describe("service-status config CRUD (venue.configure)", () => {
   });
 
   it("gates every verb on venue.configure — a staff-role session is refused (authorization.not_permitted)", async () => {
-    const staffSession = await seedSession(tenantId, "staff");
+    const staffSession = await seedSession("staff");
     expect(
       await codeOf(() =>
-        asApp(tenantId, (tx) =>
+        asApp((tx) =>
           createStatus(tx, {
             managementSessionId: staffSession,
-            tenantId,
             label: "Nope",
             color: "#000",
           }),
@@ -193,9 +174,7 @@ describe("service-status config CRUD (venue.configure)", () => {
       ),
     ).toBe("authorization.not_permitted");
     expect(
-      await codeOf(() =>
-        asApp(tenantId, (tx) => listStatuses(tx, { managementSessionId: staffSession, tenantId })),
-      ),
+      await codeOf(() => asApp((tx) => listStatuses(tx, { managementSessionId: staffSession }))),
     ).toBe("authorization.not_permitted");
   });
 });

@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { locations, tenants, tills } from "./tenants.js";
 
@@ -18,7 +18,6 @@ import { locations, tenants, tills } from "./tenants.js";
 // about the role that will actually run these statements. It rides the container tier the sibling
 // `park-retrieve.test.ts` already uses (CLAUDE.md §4).
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
@@ -28,7 +27,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 // require_open_parent — the trigger this suite's composition-freeze case exercises.
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo", ca: "Cafè sol" });
 
-// Captured at seed time — the ids the raw inserts below need for tenant-consistent FKs.
+// Captured at seed time — the ids the raw inserts below need as foreign-key targets.
 let nodeA = "";
 let productA = "";
 // working_orders carries no UNIQUE on order_number in this slice (the allocator owns distinctness),
@@ -36,10 +35,10 @@ let productA = "";
 let nextOrderNumber = 1;
 
 describe("working_orders state machine (enforce_transition)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, TENANT_A, async (tx) => {
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -48,8 +47,7 @@ describe("working_orders state machine (enforce_transition)", () => {
   async function open(): Promise<string> {
     const orderNumber = nextOrderNumber++;
     const result = await suite.admin.execute<{ id: string }>(
-      sql`insert into working_orders (tenant_id, till_id, node_id, order_number, status, opened_at)
-          values (${TENANT_A}, ${TILL_A1}, ${nodeA}, ${orderNumber}, 'open', ${AT}) returning id`,
+      sql`insert into working_orders (till_id, node_id, order_number, status, opened_at) values (${TILL_A1}, ${nodeA}, ${orderNumber}, 'open', ${AT}) returning id`,
     );
     return result.rows[0]!.id;
   }
@@ -59,10 +57,7 @@ describe("working_orders state machine (enforce_transition)", () => {
   function insertLine(orderId: string, lineNo: number): Promise<unknown> {
     return asApp((tx) =>
       tx.execute(
-        sql`insert into working_order_lines
-              (tenant_id, working_order_id, line_no, product_id, name, descriptions,
-               quantity, unit_price, unit_price_gross, vat_rate, line_total)
-            values (${TENANT_A}, ${orderId}, ${lineNo}, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
+        sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${orderId}, ${lineNo}, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
                '1.000', '1.00', '1.10', '10.00', '1.00')`,
       ),
     );
@@ -72,28 +67,24 @@ describe("working_orders state machine (enforce_transition)", () => {
     const admin = suite.admin;
     await admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Fixture Location A",
         invoiceLocales: ["es", "ca"],
         operationDescription: "Hostelería",
       },
     ]);
-    await admin
-      .insert(tills)
-      .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
-    nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
+    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
     const [catalogue] = await admin
       .insert(catalogues)
-      .values({ tenantId: TENANT_A, name: "Deli" })
+      .values({ name: "Deli" })
       .returning({ id: catalogues.id });
     const [product] = await admin
       .insert(products)
       .values({
-        tenantId: TENANT_A,
         catalogueId: catalogue.id,
         name: "Café solo",
         pricingUnit: "each",

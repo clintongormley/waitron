@@ -3,7 +3,6 @@ import {
   boolean,
   check,
   foreignKey,
-  index,
   integer,
   numeric,
   pgEnum,
@@ -12,7 +11,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "@waitron/db";
+import { locations } from "@waitron/db";
 
 /**
  * The overtime-model reading a convenio selects (art. 35 daily-accrual vs art. 34.2 distribución
@@ -23,7 +22,7 @@ export const overtimeModel = pgEnum("overtime_model", ["daily_accrual", "period_
 
 /**
  * `convenio_config` — the Spain-specific configuration surface that supplies the overtime rule and
- * the ET/convenio guardrails as data, one row per (tenant, location). It lives in
+ * the ET/convenio guardrails as data, one row per location. It lives in
  * `packages/workforce-es` (exempt from the english-only guard) because `convenio` is a Spanish
  * labour token; the generic engine never imports it, and the workforce-es resolver maps a row into
  * the neutral `WorkTimeRuleset` (`packages/workforce`).
@@ -43,7 +42,6 @@ export const convenioConfig = pgTable(
   "convenio_config",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     locationId: uuid("location_id").notNull(),
 
     // Overtime / projection inputs (plan §3.1) — the two D2.0 consumes plus the period-net terms.
@@ -98,20 +96,14 @@ export const convenioConfig = pgTable(
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
     // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI
-    // process). restrict, so a config row is never silently orphaned by a tenant/location delete.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "convenio_config_tenant_fk",
-    }).onDelete("restrict"),
+    // process). restrict, so a config row is never silently orphaned by a location delete.
     foreignKey({
       columns: [t.locationId],
       foreignColumns: [locations.id],
       name: "convenio_config_location_fk",
     }).onDelete("restrict"),
-    // One convenio_config per (tenant, location): the resolver looks a row up by this key.
-    unique("convenio_config_tenant_location_uq").on(t.tenantId, t.locationId),
-    index("convenio_config_tenant_id_idx").on(t.tenantId),
+    // One convenio_config per location: the resolver looks a row up by this key.
+    unique("convenio_config_location_uq").on(t.locationId),
     // The load-bearing check: the projection divides the contracted week by working_days_per_week, so
     // it must be 1..7 (never zero) or a resolved ruleset would produce a NaN daily target.
     check("convenio_config_working_days_ck", sql`${t.workingDaysPerWeek} between 1 and 7`),

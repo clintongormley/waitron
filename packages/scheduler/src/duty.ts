@@ -1,5 +1,3 @@
-import type { TenantId } from "@waitron/shared";
-
 /** Half-open `[from, to)`. Structurally identical to payments' `ReconcilePeriod`, deliberately:
  * a `PaymentReconciler` must adapt to a `PeriodDuty` without either package importing the other. */
 export interface RunPeriod {
@@ -36,11 +34,9 @@ export interface DutyOutcome {
  * due work in `derive` plus a migration". That prediction was wrong, and the two duties turn out
  * not to have the same answer:
  *
- *   - **`drain` cannot use this ledger at all.** It takes NO tenant and enumerates its own across
- *     `envios_tenants_with_work`, while every row here is `tenant_id NOT NULL`; it
- *     already owns durable schedule state (`envio_flujo.proximo_envio_en`, `envios.
- *     proximo_intento_en`); and `parked` is terminal, so three throws would silently end a LEGAL
- *     hourly retry. What it needs is a caller, which the `apps/*` host is anyway.
+ *   - **`drain` cannot use this ledger at all.** It already owns durable schedule state
+ *     (`envio_flujo.proximo_envio_en`, `envios.proximo_intento_en`); and `parked` is terminal, so
+ *     three throws would silently end a LEGAL hourly retry. What it needs is a caller, which the `apps/*` host is anyway.
  *   - **`forward` is deferred, not ruled out.** None of the above applies to it: it is a
  *     per-tenant object, it owns no durable cadence (just an in-process constant in the adapter),
  *     and its failure is not legally required. It is waiting on a consumer for the `nextDueAt`
@@ -53,5 +49,5 @@ export interface PeriodDuty {
    * that duty's history and restarts derivation from the most recent complete period. */
   readonly name: string;
   readonly cadence: "daily";
-  run(tenantId: TenantId, period: RunPeriod, now: Date): Promise<DutyOutcome>;
+  run(period: RunPeriod, now: Date): Promise<DutyOutcome>;
 }

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -15,7 +15,6 @@ import "./errors.js";
 // Keep current-day sales in this fixture separate from the fixed-period VAT-return fixture.
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let tillId: string;
 let nodeId: string;
 let secondNodeId: string;
@@ -48,21 +47,21 @@ const SEED = {
 async function seedTodaySale(db: Database): Promise<void> {
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
-      tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
+      till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
       total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
-      ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, 1, now(), 0,
+      ${tillId}, ${nodeId}, ${seriesId}, 1, now(), 0,
       '121.00', ${JSON.stringify([{ rate: "21.00", base: SEED.base, tax: SEED.tax }])}::jsonb,
       'es-ES', array['es-ES'], 'fake', 'recorded'
     ) returning id`);
   const saleId = sale.rows[0]!.id;
   await db.execute(sql`
-    insert into tenders (tenant_id, sale_id, method, amount, tip_amount, settled_at)
-    values (${tenantId}, ${saleId}, 'cash', ${SEED.tenderAmount}, ${SEED.tipAmount}, now())`);
+    insert into tenders (sale_id, method, amount, tip_amount, settled_at)
+    values (${saleId}, 'cash', ${SEED.tenderAmount}, ${SEED.tipAmount}, now())`);
   await db.execute(sql`
     insert into sale_lines
-      (tenant_id, sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
-    values (${tenantId}, ${saleId}, 1, ${SEED.name},
+      (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
+    values (${saleId}, 1, ${SEED.name},
             ${JSON.stringify(SEED.descriptions)}::jsonb,
             ${SEED.lineQuantity}, '3.50', '21.00', ${SEED.lineTotal})`);
 }
@@ -71,60 +70,61 @@ async function seedTodaySale(db: Database): Promise<void> {
  * + FREE (tab_id null), and one INACTIVE (active = false) that ALSO carries an open tab → the route's
  * openTables must be {open:1, total:2} because `countOpenTables`'s `and dt.active = true` predicate
  * excludes the inactive table from BOTH the total and the open count. The open tables need real
- * working_orders rows because dining_tables.tab_id carries a composite FK (0046_tab_link_fks).
+ * working_orders rows because dining_tables.tab_id carries a FK (0046_tab_link_fks).
  *
  * Proven by deletion: removing `and dt.active = true` from `countOpenTables` makes the inactive table
  * count, so openTables becomes {open:2, total:3} and the route test's {open:1, total:2} assertion
  * fails on both fields; restore it and the test passes. */
 async function seedDiningTables(db: Database): Promise<void> {
   const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, node_id, order_number, status)
-    values (${tenantId}, ${tillId}, ${nodeId}, 1, 'open') returning id`);
+    insert into working_orders (till_id, node_id, order_number, status)
+    values (${tillId}, ${nodeId}, 1, 'open') returning id`);
   const tabId = wo.rows[0]!.id;
   await db.execute(sql`
-    insert into dining_tables (tenant_id, location_id, label, tab_id)
-    values (${tenantId}, ${locationId}, 'Mesa 1', ${tabId})`);
+    insert into dining_tables (location_id, label, tab_id)
+    values (${locationId}, 'Mesa 1', ${tabId})`);
   await db.execute(sql`
-    insert into dining_tables (tenant_id, location_id, label, tab_id)
-    values (${tenantId}, ${locationId}, 'Mesa 2', null)`);
+    insert into dining_tables (location_id, label, tab_id)
+    values (${locationId}, 'Mesa 2', null)`);
   // An INACTIVE table with an open tab — must be excluded from openTables.total AND .open.
   const inactiveWo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, node_id, order_number, status)
-    values (${tenantId}, ${tillId}, ${nodeId}, 2, 'open') returning id`);
+    insert into working_orders (till_id, node_id, order_number, status)
+    values (${tillId}, ${nodeId}, 2, 'open') returning id`);
   await db.execute(sql`
-    insert into dining_tables (tenant_id, location_id, label, tab_id, active)
-    values (${tenantId}, ${locationId}, 'Mesa 3 (baja)', ${inactiveWo.rows[0]!.id}, false)`);
+    insert into dining_tables (location_id, label, tab_id, active)
+    values (${locationId}, 'Mesa 3 (baja)', ${inactiveWo.rows[0]!.id}, false)`);
 }
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     // Default time_zone (Europe/Madrid) + day_cutover (06:00:00) — resolveVenueClock reads them back
     // and currentBusinessDay anchors the overview on the venue clock.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+      insert into tills (location_id, name)
+      values (${locationId}, 'Caja 1') returning id`);
     tillId = till.rows[0]!.id;
     const node = await db.execute<{ id: string }>(sql`
-      insert into nodes (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Nodo 1') returning id`);
+      insert into nodes (location_id, name)
+      values (${locationId}, 'Nodo 1') returning id`);
     nodeId = node.rows[0]!.id;
     // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
     // below mounts report-api pointed at THIS node to prove the overview aggregates the other node's
     // sale (venue-wide) while the per-till daily-close scoped to this node stays empty.
     const node2 = await db.execute<{ id: string }>(sql`
-      insert into nodes (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Nodo 2') returning id`);
+      insert into nodes (location_id, name)
+      values (${locationId}, 'Nodo 2') returning id`);
     secondNodeId = node2.rows[0]!.id;
     const series = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (tenant_id, node_id, code)
-      values (${tenantId}, ${nodeId}, 'A') returning id`);
+      insert into invoice_series (node_id, code)
+      values (${nodeId}, 'A') returning id`);
     seriesId = series.rows[0]!.id;
 
     await seedTodaySale(db);
@@ -132,20 +132,18 @@ const suite = usePgliteDb({
 
     // A MANAGER (role `manager`, holds report.view) and a STAFF person (holds nothing) as the app
     // role, each with a live management session so the route tests drive the gate through a real cookie.
-    const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -157,7 +155,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId } }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId } }, noopLog);
   return app;
 }
 
@@ -220,7 +218,7 @@ describe("mountReportApi — /reports/overview", () => {
     // sales; if the overview still resolves the sale under a node it is NOT pointed at, it resolves it
     // on a mirror too.
     const app = new Hono();
-    mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId: secondNodeId } }, noopLog);
+    mountReportApi(app, { db: suite.db, cfg: { nodeId: secondNodeId } }, noopLog);
 
     const ov = await app.request("/management-api/reports/overview", {
       method: "GET",

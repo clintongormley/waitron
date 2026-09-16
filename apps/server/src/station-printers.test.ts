@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -24,7 +24,7 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these are CONFIG verbs — a live-check SELECT plus an INSERT/DELETE with no
 // privilege or concurrency dimension. The `printer.manage` gate lives on the ROUTE (Task 5), the
-// composite PK and both tenant-consistent FKs are proven against real Postgres in packages/db's
+// composite PK and both by-id FKs are proven against real Postgres in packages/db's
 // station-printers.test.ts (Task 1), and `app_user`'s grant is pinned by the privilege matrix in
 // packages/fiscal-verifactu. PGlite serialises every query onto
 // one backend, so it would be a FALSE PASS for a concurrency test — but there is no concurrency here,
@@ -41,16 +41,15 @@ beforeAll(() => {
  *  `TillConfig`; the station→printer verbs take the narrower `PrintConfig` (its tenant + location),
  *  derived by {@link printCfg}. Mirrors kitchen.test.ts's `setupVenue`. */
 async function setupVenue(): Promise<TillConfig> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -64,11 +63,12 @@ async function setupVenue(): Promise<TillConfig> {
 
 /** The station→printer verbs' scope — the tenant + location the till carries. */
 function printCfg(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -93,18 +93,14 @@ describe("station→printer mapping verbs", () => {
     const s1 = await station(cfg, "Cocina");
     const p1 = await printer(cfg, "Kitchen");
 
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
     expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([
       { stationId: s1, printerId: p1 },
     ]);
 
     // Re-attaching the SAME pair is a silent no-op (ON CONFLICT DO NOTHING), not a duplicate row nor a
     // throw — the idempotency the config UI relies on.
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
     expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([
       { stationId: s1, printerId: p1 },
     ]);
@@ -114,9 +110,7 @@ describe("station→printer mapping verbs", () => {
     const cfg = await setupVenue();
     const s1 = await station(cfg, "Cocina");
     const p1 = await printer(cfg, "Kitchen");
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
 
     await asApp(cfg, (tx) =>
       detachPrinterFromStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
@@ -135,9 +129,7 @@ describe("station→printer mapping verbs", () => {
     const p1 = await printer(cfg, "Kitchen");
     const missing = randomUUID();
     await expect(
-      asApp(cfg, (tx) =>
-        attachPrinterToStation(tx, printCfg(cfg), { stationId: missing, printerId: p1 }),
-      ),
+      asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: missing, printerId: p1 })),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
   });
 
@@ -146,9 +138,7 @@ describe("station→printer mapping verbs", () => {
     const s1 = await station(cfg, "Cocina");
     const missing = randomUUID();
     await expect(
-      asApp(cfg, (tx) =>
-        attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: missing }),
-      ),
+      asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: missing })),
     ).rejects.toMatchObject({ code: "printer.not_found", params: { id: missing } });
   });
 
@@ -164,7 +154,7 @@ describe("station→printer mapping verbs", () => {
       [s1, p2],
       [s2, p1],
     ] as const) {
-      await asApp(cfg, (tx) => attachPrinterToStation(tx, printCfg(cfg), { stationId, printerId }));
+      await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
     }
 
     // No filter → every mapping in the tenant.

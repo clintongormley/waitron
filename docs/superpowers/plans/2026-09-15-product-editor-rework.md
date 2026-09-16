@@ -1,5 +1,12 @@
 # Product editor rework — Implementation Plan
 
+> **2026-09-14 — the tenant column is gone.** The tenant-id removal this document anticipates has
+> landed: every `tenant_id` column, every tenant argument and the `withTenant` helper are gone
+> (`withTransaction` replaces it), one database holds one taxpayer as the single row of `tenants`,
+> and nothing filters by a tenant. Read every tenant-carrying signature, tenant predicate and
+> "a by-id read scopes to the tenant" rule below as the shape at the time of writing. Spec:
+> [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rework the dashboard product editor into a short, collapsible form; make a product's Name plain staff-facing text with a separate optional translated customer-facing name; give variants their own kitchen name, customer names and image; turn variants into a drag-sortable table; and save station/course in the product transaction.

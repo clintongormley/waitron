@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
@@ -17,7 +17,6 @@ import type { PersonRoleValue } from "./permissions.js";
  */
 export async function verifyPersonCredential(
   tx: Transaction,
-  tenantId: string,
   personId: string,
   pin: string,
 ): Promise<{ role: PersonRoleValue; locale: string | null }> {
@@ -29,7 +28,7 @@ export async function verifyPersonCredential(
       locale: persons.locale,
     })
     .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, personId)));
+    .where(eq(persons.id, personId));
   if (person === undefined) throw new AppError("person.not_found", { personId });
   if (person.status === "suspended") throw new AppError("person.suspended", { personId });
   if (person.status === "pending" || person.pinHash === null || !verifyPin(pin, person.pinHash)) {

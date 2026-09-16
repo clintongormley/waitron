@@ -2,7 +2,7 @@
  * An env var is "unset" if it is absent OR the empty string — an operator's `VAR=` in an env file
  * (as opposed to omitting the line entirely) must fall back to the same default as no line at all,
  * not be rejected as an invalid value for whatever type that variable holds. Every fallback and
- * default in `config.ts`, plus `till-config.ts`'s `tryLoadTillConfig` gate on the five
+ * default in `config.ts`, plus `till-config.ts`'s `tryLoadTillConfig` gate on the four
  * `WAITRON_TILL_*_ID`, goes through this, so "unset" has exactly ONE definition rather than a
  * second, subtly-different one living in each file.
  *

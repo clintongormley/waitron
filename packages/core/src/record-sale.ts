@@ -4,7 +4,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 // mechanical check that keeps errors.ts reachable from this package's own public barrel
 // (index.ts).
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   invoiceSeries,
@@ -28,7 +28,6 @@ import type {
   NodeId,
   SaleId,
   SeriesId,
-  TenantId,
   TillId,
   WorkingOrderId,
 } from "@waitron/shared";
@@ -96,7 +95,6 @@ export interface RecordSaleTender {
 }
 
 export interface RecordSaleInput {
-  tenantId: TenantId;
   /** Where the sale rings — written to `sales.till_id` and the fiscal record's `till_id` snapshot,
    * and used for incidents (which stay till-keyed). */
   tillId: TillId;
@@ -107,10 +105,10 @@ export interface RecordSaleInput {
   /**
    * The parked working order this sale is FILED from (park & retrieve, sub-project 7b), written to
    * `sales.working_order_id` — the sale-idempotency key `sales_working_order_id_key`, and the FK
-   * target `(tenant_id, working_order_id) → working_orders`. OPTIONAL: only the till's
+   * target `(working_order_id) → working_orders(id)`. OPTIONAL: only the till's
    * retrieve-and-file path supplies one; an ordinary walk-up sale (and every non-till caller — a
    * correction, an F3, a void, a demo script) omits it, and the column inserts NULL. When supplied
-   * it MUST name a real `working_orders` row of this tenant, or the composite FK rejects the insert.
+   * it MUST name a real `working_orders` row, or the FK rejects the insert.
    */
   workingOrderId?: WorkingOrderId;
   locale: string;
@@ -199,10 +197,10 @@ export async function recordSale(
   }
 
   // Steps 1 and 2, one call and deliberately so. A real backend's `checkIntegrity` takes the
-  // (tenant, node) chain-head row lock as its own first statement and holds it until commit, so
+  // node's chain-head row lock as its own first statement and holds it until commit, so
   // art. 7.i verification runs against exactly the state this transaction is about to extend
   // rather than a snapshot another writer may already have moved past.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
+  const verification = await backend.checkIntegrity(tx, input.nodeId);
   // Nothing branches on `verification.ok`. A failed check records an incident (below, once
   // `saleId` exists) and the sale is chained anyway — no fiscal condition may block a sale. If a
   // later change adds `if (!verification.ok) throw ...` here, it has implemented the one
@@ -212,7 +210,7 @@ export async function recordSale(
   // `incidents.sale_id` is what ties a chain failure to the receipt a customer is holding, and it
   // cannot be set before the sale row is. All of this call's issues are aggregated into a single
   // `chain.verification_failed` — the table-wide `incidents_open_dedup` index holds at most one open
-  // incident per (tenant, till, code, sale), so emitting one row per issue (all sharing this sale +
+  // incident per (till, code, sale), so emitting one row per issue (all sharing this sale +
   // code) would collapse to a single row and drop every issue after the first; carrying them in
   // `params.issues` keeps them all. Collected here rather than recorded immediately, so this stays
   // the single place that decides WHAT counts as an incident on this write path.
@@ -239,12 +237,11 @@ export async function recordSale(
       retiredAt: invoiceSeries.retiredAt,
     })
     .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.id, input.seriesId), eq(invoiceSeries.tenantId, input.tenantId)));
+    .where(eq(invoiceSeries.id, input.seriesId));
 
   if (series === undefined) {
     throw new AppError("sale.series_not_found", {
       seriesId: input.seriesId,
-      tenantId: input.tenantId,
     });
   }
   if (series.nodeId !== input.nodeId) {
@@ -309,7 +306,6 @@ export async function recordSale(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
@@ -345,7 +341,6 @@ export async function recordSale(
   // ./incidents.ts's own doc comment on recordIncident.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       saleId,
       detectedAt: now.instant,
@@ -353,7 +348,7 @@ export async function recordSale(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(input.tenantId, saleId, input.lines));
+  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
 
   if (input.settlement.kind === "immediate") {
     // The one settlement implementation both modes take (design D6): pay-first hands its tenders
@@ -363,7 +358,6 @@ export async function recordSale(
     // rather than by an early pre-check. Placed before `backend.recordSale` so the fiscal write is
     // never reached on a settlement that cannot complete.
     await settleSale(tx, {
-      tenantId: input.tenantId,
       saleId,
       tenders: input.settlement.tenders,
     });
@@ -373,15 +367,14 @@ export async function recordSale(
     .select({ operationDescription: locations.operationDescription })
     .from(tills)
     .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(and(eq(tills.id, input.tillId), eq(tills.tenantId, input.tenantId)));
+    .where(eq(tills.id, input.tillId));
 
   /* v8 ignore start */
   if (location === undefined) {
     // Structurally unreachable given the schema's own invariants: `tills.location_id` is a NOT
     // NULL foreign key onto `locations.id`, so a till that exists at all always joins to exactly
-    // one location. Reaching here means `input.tillId` does not exist, or the tenant predicate
-    // excluded it — a caller programming error, not a fiscal condition, so there is no `sale.*`
-    // code reserved for it.
+    // one location. Reaching here means `input.tillId` does not exist — a caller programming error,
+    // not a fiscal condition, so there is no `sale.*` code reserved for it.
     throw new Error(`recordSale: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */
@@ -391,7 +384,6 @@ export async function recordSale(
   // the fiscal record, advancing whatever internal chain the regime keeps, and inserting its own
   // pending-submission row all happen behind this one call, on this transaction.
   const fiscal = await backend.recordSale(tx, {
-    tenantId: input.tenantId,
     tillId: input.tillId,
     nodeId: input.nodeId,
     saleId,

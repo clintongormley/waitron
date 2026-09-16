@@ -29,22 +29,25 @@ The till is a same-origin front end: run the server's till API on `:8080` and th
 `:5190`. The proxy inspects the shared box state and sends `/api` and `/media` to HTTP for a
 leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite.config.ts`).
 
-1. **Provision a venue.** `waitron-provision venue` creates the tenant, location, till, node (SIF)
-   and invoice series a sellable venue needs — see
+1. **Provision a venue.** `waitron-provision venue` creates the taxpayer row, location, till, node
+   (SIF) and invoice series a sellable venue needs — see
    ["Provisioning a venue"](../server/README.md#provisioning-a-venue) in the server README.
 
-2. **Read its five ids.** The `venue` command prints the tenant and node ids; read all five the till
-   needs (verified against a provisioned `postgres:18`) with, for a venue whose NIF is `50000000K`:
+2. **Read its four ids.** The `venue` command prints the node id; read all four the till needs with
+   the query below. There is one taxpayer per database and no tenant column, so nothing here is
+   scoped by a tenant — the location is the only thing that narrows it, and a single-location venue
+   has just the one:
 
    ```sql
-   select t.id as tenant_id, l.id as location_id, ti.id as till_id, n.id as node_id, s.id as series_id
-   from tenants t
-   join locations l on l.tenant_id = t.id
-   join tills ti on ti.tenant_id = t.id and ti.location_id = l.id
-   join nodes n on n.tenant_id = t.id and n.location_id = l.id
-   join invoice_series s on s.tenant_id = t.id and s.node_id = n.id and s.purpose = 'standard' and s.retired_at is null
-   where t.tax_id = '50000000K';
+   select l.id as location_id, ti.id as till_id, n.id as node_id, s.id as series_id
+   from locations l
+   join tills ti on ti.location_id = l.id
+   join nodes n on n.location_id = l.id
+   join invoice_series s on s.node_id = n.id and s.purpose = 'standard' and s.retired_at is null;
    ```
+
+   Run against a database carrying the core migrations plus one seeded venue on 2026-09-16, it
+   returns exactly those four columns and one row.
 
    A cold restore rewrites `trading.env` with your new live series id automatically.
 
@@ -55,7 +58,6 @@ leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite
    ```bash
    DATABASE_URL=postgres://app_user_role@127.0.0.1:5432/waitron \
    WAITRON_CREDENTIALS_KEY=<base64, 32 bytes> \
-   WAITRON_TILL_TENANT_ID=<tenant_id> \
    WAITRON_TILL_LOCATION_ID=<location_id> \
    WAITRON_TILL_TILL_ID=<till_id> \
    WAITRON_TILL_NODE_ID=<node_id> \
@@ -78,7 +80,6 @@ leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite
 
 | Variable                   | Required | Default | What it is                                                        |
 | -------------------------- | -------- | ------- | ----------------------------------------------------------------- |
-| `WAITRON_TILL_TENANT_ID`   | yes      | —       | The venue's tenant.                                               |
 | `WAITRON_TILL_LOCATION_ID` | yes      | —       | The location this till sells from.                                |
 | `WAITRON_TILL_TILL_ID`     | yes      | —       | This physical till.                                               |
 | `WAITRON_TILL_NODE_ID`     | yes      | —       | The compute node whose SIF/chain it files to.                     |

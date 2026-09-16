@@ -2,7 +2,7 @@
 // throws them — the reachability convention every code-throwing file in the tree follows, guarded
 // tree-wide by scripts/errors-reachable.test.ts. See errors.ts.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -14,7 +14,7 @@ import type { PaperWidth, Resolution } from "./layout.js";
  * driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
  * `printers_transport_fields_ck` CHECK (a transport whose required fields are absent — the DB backstop
  * behind `REQUIRED_FIELDS`); `23505` is the partial UNIQUE `printers_local_key_key` on
- * `(tenant_id, location_id, local_key)` (a create/re-key whose device id already names a printer in
+ * `(location_id, local_key)` (a create/re-key whose device id already names a printer in
  * this venue). Both are matched down the cause chain by `@waitron/db`'s shared `isPgError` (Drizzle
  * wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined — the SQLSTATE lives
  * on `.cause.code` under node-postgres, or one level deeper under PGlite). */
@@ -43,12 +43,11 @@ function translatePrinterWriteError(error: unknown, localKey: string | undefined
 
 /**
  * The tenant + venue scope every central printing verb (`createPrinter`, `enqueuePrintJob`) runs
- * under. The route resolves it (single-tenant deli deployment, `deps.tenantId` + the location) and
+ * under. The route resolves it (single-venue deli deployment, the location) and
  * passes it down, so these verbs never derive scope from client input — the same discipline
  * `PrintAgentConfig` (agent.ts) states for the agent verbs, and structurally identical to it.
  */
 export interface PrintConfig {
-  tenantId: string;
   locationId: string;
 }
 
@@ -120,7 +119,6 @@ export async function createPrinter(
     const [row] = await tx
       .insert(printers)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         transport: input.transport,
@@ -187,11 +185,10 @@ export interface PrinterRow {
 /**
  * Apply a partial edit to a printer (design §6). Only the fields PRESENT in `patch` are written —
  * an absent field is left unchanged, an explicit `null` clears a nullable one — so the caller's
- * screen decides what changes. `0` rows updated (an unknown id or one excluded by the tenant
- * predicate) → `printer.not_found`. The transport-fields CHECK / local_key UNIQUE are the DB backstop,
- * translated to `printer.invalid_config` / `printer.already_registered` (`createPrinter`'s reasoning,
- * for the update path). The explicit tenant predicate limits the update to `cfg.tenantId`; all values
- * bind as `$n`.
+ * screen decides what changes. `0` rows updated (an unknown id) → `printer.not_found`. The
+ * transport-fields CHECK / local_key UNIQUE are the DB backstop, translated to
+ * `printer.invalid_config` / `printer.already_registered` (`createPrinter`'s reasoning, for the
+ * update path). One tenant per database, so the id alone selects the row; all values bind as `$n`.
  */
 export async function updatePrinter(
   tx: Transaction,
@@ -199,6 +196,7 @@ export async function updatePrinter(
   id: string,
   patch: UpdatePrinterInput,
 ): Promise<void> {
+  void cfg;
   // The SET is `patch` with every undefined-valued key dropped, so it carries ONLY the fields the edit
   // names — an absent field is left untouched, an explicit `null` is written to clear a nullable one.
   // Filtering here (rather than trusting the caller to omit undefined keys) keeps the empty-patch
@@ -214,10 +212,7 @@ export async function updatePrinter(
   // present one a no-op. `printers` carries no `updated_at`, so there is nothing an empty edit would
   // touch anyway.
   if (Object.keys(set).length === 0) {
-    const [exists] = await tx
-      .select({ id: printers.id })
-      .from(printers)
-      .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)));
+    const [exists] = await tx.select({ id: printers.id }).from(printers).where(eq(printers.id, id));
     if (exists === undefined) throw new AppError("printer.not_found", { id });
     return;
   }
@@ -227,7 +222,7 @@ export async function updatePrinter(
     updated = await tx
       .update(printers)
       .set(set)
-      .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)))
+      .where(eq(printers.id, id))
       .returning({ id: printers.id });
   } catch (error) {
     return translatePrinterWriteError(error, patch.localKey ?? undefined);
@@ -238,8 +233,8 @@ export async function updatePrinter(
 /**
  * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a
  * `print_jobs` history references it and `app_user` holds no DELETE on `printers`. `0` rows
- * (unknown id or one excluded by the tenant predicate) → `printer.not_found`. The explicit tenant
- * predicate limits the update to `cfg.tenantId`; values bind as `$n`.
+ * (unknown id) → `printer.not_found`. One tenant per database, so the id alone selects the row;
+ * values bind as `$n`.
  *
  * `active = false` DISABLES the printer for both directions, not a soft-hide from the list: enqueue
  * rejects it as `printer.not_found` (`enqueuePrintJob`'s `active = true` pre-check) and the agent stops
@@ -251,22 +246,23 @@ export async function deactivatePrinter(
   cfg: PrintConfig,
   id: string,
 ): Promise<void> {
+  void cfg;
   const updated = await tx
     .update(printers)
     .set({ active: false })
-    .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)))
+    .where(eq(printers.id, id))
     .returning({ id: printers.id });
   if (updated.length === 0) throw new AppError("printer.not_found", { id });
 }
 
 /**
  * List this tenant's printers by name (design §6, the Impresoras surface). `printers` carries no
- * created_at, so the stable order for a config list is `name` rather than an insertion proxy. The
- * explicit tenant predicate limits the read to `cfg.tenantId`, matching `authenticateAgent` and
- * `enqueuePrintJob`. Returns both active and deactivated printers so the surface can show and
+ * created_at, so the stable order for a config list is `name` rather than an insertion proxy. Every
+ * printer in the database is this tenant's, so the read carries no tenant predicate. Returns both active and deactivated printers so the surface can show and
  * reactivate them.
  */
 export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
+  void cfg;
   return tx
     .select({
       id: printers.id,
@@ -283,6 +279,5 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       active: printers.active,
     })
     .from(printers)
-    .where(eq(printers.tenantId, cfg.tenantId))
     .orderBy(printers.name);
 }

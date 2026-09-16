@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import {
   activeSalesClause,
@@ -18,18 +18,17 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
  * The shared VAT-aggregation core behind every per-rate summary. Reads the filed per-rate desglose
  * from `sales.vat_breakdown` — the exact cuota AEAT received, whichever method (direct or difference)
  * filed it — by unnesting the jsonb array and summing base and tax per rate. Corrections (negative
- * breakdowns) net in for free; voided sales and F3-canje substitutes are excluded. The explicit
- * tenant predicate scopes the tenant (mirrors listOutstandingSales); the node predicate
- * is applied only when `scope.nodeId` is given (a tenant-wide aggregate — e.g. modelo 303 — omits it,
- * relying on the tenant predicate). Callers differ only in their issuance-date `dateFilter` and
- * whether a node is fixed.
+ * breakdowns) net in for free; voided sales and F3-canje substitutes are excluded. The node predicate
+ * is applied only when `scope.nodeId` is given; a tenant-wide aggregate — e.g. modelo 303 — omits it
+ * and reads every sale in the database, which holds one tenant. Callers differ only in their
+ * issuance-date `dateFilter` and whether a node is fixed.
  *
  * Exported for `vat-return.ts`'s modelo 303 aggregate to reuse; package-internal, deliberately NOT in
  * the public barrel (`index.ts`).
  */
 export async function aggregateVatByRate(
   tx: Transaction,
-  scope: { tenantId: TenantId; nodeId?: NodeId; dateFilter: SQL },
+  scope: { nodeId?: NodeId; dateFilter: SQL },
 ): Promise<VatSummary> {
   const nodeClause = nodeScopeClause(scope.nodeId);
   // The rate is grouped as `numeric(5,2)::text`, not the raw jsonb string, so two spellings of the
@@ -42,10 +41,9 @@ export async function aggregateVatByRate(
       sum((b->>'tax')::numeric(12, 2))::numeric(12, 2)::text as tax
     from sales s
     cross join lateral jsonb_array_elements(s.vat_breakdown) as b
-    where s.tenant_id = ${scope.tenantId}
+    where ${scope.dateFilter}
       ${nodeClause}
-      and ${scope.dateFilter}
-      and ${activeSalesClause({ tenantId: scope.tenantId })}
+      and ${activeSalesClause()}
     group by (b->>'rate')::numeric(5, 2)::text
   `);
 
@@ -71,7 +69,7 @@ export async function aggregateVatByRate(
 }
 
 /**
- * VAT summary for one (tenant, node) over one business day, anchored on issuance. Delegates to the
+ * VAT summary for one node over one business day, anchored on issuance. Delegates to the
  * shared `aggregateVatByRate` core with the daily-close's `= businessDay` date filter, so its suite is
  * the behaviour-preserving guard for the extraction.
  */
@@ -80,7 +78,6 @@ export async function computeVatSummary(
   input: DailyCloseInput,
 ): Promise<VatSummary> {
   return aggregateVatByRate(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     dateFilter: businessDayClause(sql`s.issued_at`, input),
   });
@@ -102,7 +99,6 @@ export async function computeVatSummaryForPeriod(
   validateCutover(input.dayCutover);
   validateBusinessDayRange(input);
   return aggregateVatByRate(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     dateFilter: businessDayRangeClause(sql`s.issued_at`, input),
   });

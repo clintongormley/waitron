@@ -1,5 +1,15 @@
 # schema-equivalence.sh — how to read a non-empty diff
 
+> 2026-09-15, widened 2026-09-16: TWO of the five seam functions named below no longer exist. The
+> branch that dropped `tenant_id` from every table replaced `envios_tenants_with_work` with
+> `envios_work_due` (which answers whether any envío is due, rather than which tenants have work) and
+> DELETED `resolve_payment_tenant` outright — the webhook's tenant lookup, which had nothing left to
+> look up (`packages/payments/src/migrations.test.ts` asserts it is gone). `credential_tenants`,
+> `sales_assert_tenders_cover` and `sale_settlements_check_coverage` are unchanged. This file and the
+> script's own seam lists describe the tree as it stood when they were written; a `--gate-new` run
+> against a checkout after that branch reports BOTH old names missing from the NEW dump, which is the
+> rename and the deletion, not a lost grant.
+
 `scripts/schema-equivalence.sh <OLD_ROOT> <NEW_ROOT> <OUT_DIR> [--gate-new]` applies every migration
 set of each checkout to its own `postgres:18-alpine` container as `waitron_migrator` (a
 non-superuser owner, the shape the provisioner produces), takes `pg_dump --schema-only --no-owner` of

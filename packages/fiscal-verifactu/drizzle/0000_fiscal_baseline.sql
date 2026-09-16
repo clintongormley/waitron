@@ -1,6 +1,5 @@
 CREATE TABLE "acks" (
 	"registro_id" uuid PRIMARY KEY NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"submitted_at" timestamp with time zone NOT NULL,
 	"csv" text,
 	"state" text NOT NULL,
@@ -9,13 +8,12 @@ CREATE TABLE "acks" (
 );
 --> statement-breakpoint
 CREATE TABLE "cadenas" (
-	"tenant_id" uuid NOT NULL,
 	"node_id" uuid NOT NULL,
 	"secuencia" integer DEFAULT 0 NOT NULL,
 	"ultimo_registro_id" uuid,
 	"ultima_huella" text,
 	"actualizado_en" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "cadenas_tenant_id_node_id_pk" PRIMARY KEY("tenant_id","node_id"),
+	CONSTRAINT "cadenas_node_id_pk" PRIMARY KEY("node_id"),
 	CONSTRAINT "cadenas_puntero_ck" CHECK (("cadenas"."ultimo_registro_id" is null) = ("cadenas"."ultima_huella" is null))
 );
 --> statement-breakpoint
@@ -27,14 +25,14 @@ CREATE TABLE "contadores_instalacion" (
 );
 --> statement-breakpoint
 CREATE TABLE "envio_flujo" (
-	"tenant_id" uuid PRIMARY KEY NOT NULL,
+	"id" integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	"proximo_envio_en" timestamp with time zone NOT NULL,
-	"tiempo_espera_seg" integer NOT NULL
+	"tiempo_espera_seg" integer NOT NULL,
+	CONSTRAINT "envio_flujo_singleton_ck" CHECK ("envio_flujo"."id" = 1)
 );
 --> statement-breakpoint
 CREATE TABLE "envios" (
 	"registro_id" uuid PRIMARY KEY NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"estado" text DEFAULT 'pendiente' NOT NULL,
 	"intentos" integer DEFAULT 0 NOT NULL,
 	"proximo_intento_en" timestamp with time zone DEFAULT now() NOT NULL,
@@ -50,7 +48,6 @@ CREATE TABLE "envios" (
 --> statement-breakpoint
 CREATE TABLE "registro_sif" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"node_id" uuid NOT NULL,
 	"nif" text NOT NULL,
 	"id_sistema_informatico" text NOT NULL,
@@ -62,7 +59,6 @@ CREATE TABLE "registro_sif" (
 --> statement-breakpoint
 CREATE TABLE "registros_facturacion" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"till_id" uuid NOT NULL,
 	"node_id" uuid NOT NULL,
 	"sif_id" uuid NOT NULL,
@@ -116,24 +112,18 @@ CREATE TABLE "registros_facturacion" (
 );
 --> statement-breakpoint
 ALTER TABLE "acks" ADD CONSTRAINT "acks_registro_id_registros_facturacion_id_fk" FOREIGN KEY ("registro_id") REFERENCES "public"."registros_facturacion"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "acks" ADD CONSTRAINT "acks_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cadenas" ADD CONSTRAINT "cadenas_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "cadenas" ADD CONSTRAINT "cadenas_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "cadenas" ADD CONSTRAINT "cadenas_ultimo_registro_id_registros_facturacion_id_fk" FOREIGN KEY ("ultimo_registro_id") REFERENCES "public"."registros_facturacion"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "envio_flujo" ADD CONSTRAINT "envio_flujo_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "envios" ADD CONSTRAINT "envios_registro_id_registros_facturacion_id_fk" FOREIGN KEY ("registro_id") REFERENCES "public"."registros_facturacion"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "envios" ADD CONSTRAINT "envios_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "registro_sif" ADD CONSTRAINT "registro_sif_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "registro_sif" ADD CONSTRAINT "registro_sif_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_facturacion_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_facturacion_till_id_tills_id_fk" FOREIGN KEY ("till_id") REFERENCES "public"."tills"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_facturacion_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_facturacion_sif_id_registro_sif_id_fk" FOREIGN KEY ("sif_id") REFERENCES "public"."registro_sif"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_facturacion_sale_id_sales_id_fk" FOREIGN KEY ("sale_id") REFERENCES "public"."sales"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "envios_drenaje_idx" ON "envios" USING btree ("tenant_id","estado","proximo_intento_en");--> statement-breakpoint
+CREATE INDEX "envios_drenaje_idx" ON "envios" USING btree ("estado","proximo_intento_en");--> statement-breakpoint
 CREATE UNIQUE INDEX "registro_sif_instalacion_uq" ON "registro_sif" USING btree ("nif","id_sistema_informatico","numero_instalacion");--> statement-breakpoint
-CREATE UNIQUE INDEX "registro_sif_activo_uq" ON "registro_sif" USING btree ("tenant_id","node_id") WHERE "registro_sif"."revocado_en" is null;--> statement-breakpoint
-CREATE UNIQUE INDEX "registros_tenant_node_secuencia_uq" ON "registros_facturacion" USING btree ("tenant_id","node_id","secuencia");--> statement-breakpoint
-CREATE UNIQUE INDEX "registros_identidad_uq" ON "registros_facturacion" USING btree ("tenant_id","id_emisor_factura","num_serie_factura","fecha_expedicion_factura","tipo_registro");--> statement-breakpoint
-CREATE INDEX "registros_sale_idx" ON "registros_facturacion" USING btree ("tenant_id","sale_id");--> statement-breakpoint
-CREATE INDEX "registros_node_secuencia_idx" ON "registros_facturacion" USING btree ("tenant_id","node_id","secuencia");
+CREATE UNIQUE INDEX "registro_sif_activo_uq" ON "registro_sif" USING btree ("node_id") WHERE "registro_sif"."revocado_en" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX "registros_tenant_node_secuencia_uq" ON "registros_facturacion" USING btree ("node_id","secuencia");--> statement-breakpoint
+CREATE UNIQUE INDEX "registros_identidad_uq" ON "registros_facturacion" USING btree ("id_emisor_factura","num_serie_factura","fecha_expedicion_factura","tipo_registro");--> statement-breakpoint
+CREATE INDEX "registros_sale_idx" ON "registros_facturacion" USING btree ("sale_id");--> statement-breakpoint
+CREATE INDEX "registros_node_secuencia_idx" ON "registros_facturacion" USING btree ("node_id","secuencia");

@@ -8,7 +8,7 @@ import {
   joinRequests,
   printAgents,
   printJobs,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -19,7 +19,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   type SupportedLocale,
 } from "@waitron/shared";
@@ -64,26 +63,25 @@ const EXPECTED_SERVERS = [
   { nodeId: "cloud", url: "https://cloud.deli.test", standing: "serving-secondary" },
 ];
 
-let tenantId: string;
 let locationId: string;
 let cfg: TillConfig;
 let managerCookie: string;
 let staffCookie: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
-    // The FULL TillConfig the print verbs are typed on (branded ids). Only tenantId/locationId are read
+    // The FULL TillConfig the print verbs are typed on (branded ids). Only locationId is read
     // by the join verbs and the routes; nodeId is echoed on the pull; the other fiscal ids are unused
     // here, so a branded random uuid stands in.
     cfg = {
-      tenantId: brandTenantId(tenantId),
       tillId: brandTillId(randomUUID()),
       nodeId: brandNodeId(randomUUID()),
       seriesId: brandSeriesId(randomUUID()),
@@ -93,20 +91,18 @@ const suite = usePgliteDb({
       tipsEnabled: false,
       orderFlow: "ticket_then_pay",
     };
-    const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -172,7 +168,7 @@ async function joinAndAccept(
   label = "Cocina agent",
 ): Promise<{ agentId: string; token: string }> {
   const { token, verificationNumber, joinId } = await knock(app, label);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfg, joinId, {
       choice: verificationNumber,
@@ -266,9 +262,9 @@ async function pull(
 /** Enqueue one job on `printerId` (directly via the outbox verb — there is no enqueue ROUTE in this
  * slice; a fire/sale enqueues in-process). Returns the job id. */
 async function enqueue(printerId: string, payload: Uint8Array): Promise<string> {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const { jobId } = await enqueuePrintJob(tx, { tenantId, locationId }, printerId, payload);
+    const { jobId } = await enqueuePrintJob(tx, { locationId }, printerId, payload);
     return jobId;
   });
 }
@@ -298,7 +294,7 @@ describe("POST /print-api/agent/join (the knock)", () => {
       error: { code: "device.pairing_closed" },
     });
     // Nothing was written — the window guard runs before any DB work.
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(joinRequests).where(eq(joinRequests.label, name));
     });
@@ -315,7 +311,7 @@ describe("POST /print-api/agent/join (the knock)", () => {
     // `${joinId}.${secret}` — a uuid selector, a dot, then the base64url secret.
     expect(body.token).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]+$/);
     const joinId = body.token.slice(0, body.token.indexOf("."));
-    const [pending] = await withTenant(suite.db, tenantId, async (tx) => {
+    const [pending] = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ kind: joinRequests.kind })
@@ -324,7 +320,7 @@ describe("POST /print-api/agent/join (the knock)", () => {
     });
     expect(pending).toMatchObject({ kind: "print_agent" });
     // The knock alone never creates the real row — that is the admin's accept.
-    const agents = await withTenant(suite.db, tenantId, async (tx) => {
+    const agents = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(printAgents).where(eq(printAgents.name, name));
     });
@@ -370,7 +366,7 @@ describe("GET /print-api/agent/join/status", () => {
     expect((await pending.json()) as { status: string }).toEqual({ status: "pending" });
 
     // Accept in-process (the route is proven in join-api.pg.test.ts).
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await acceptPrintAgentJoinRequest(tx, cfg, joinId, { choice: verificationNumber });
       expect(r.ok).toBe(true);
@@ -644,7 +640,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     // A unique serial per test — the suite shares one tenant/location and the partial UNIQUE is on
-    // (tenant_id, location_id, local_key), so a fixed key would clash with a sibling test's printer.
+    // (location_id, local_key), so a fixed key would clash with a sibling test's printer.
     const serial = `SN-${randomUUID()}`;
     const printerId = await createUsbPrinter(app, serial, "Cocina USB");
     const payload = esc().text("Mesa 4").cut().bytes();
@@ -1365,7 +1361,7 @@ describe("mountPrintApi — management: test-print", () => {
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
-  it("returns a tenant-scoped preview only to printer managers", async () => {
+  it("returns a job preview only to printer managers", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused");
     const jobId = await enqueue(
@@ -1425,28 +1421,9 @@ describe("mountPrintApi — management: recent jobs", () => {
     expect(await widePreview.json()).toMatchObject({ columns: 42, dpi: 180 });
   });
 
-  it("refuses to preview another tenant's print job by id", async () => {
+  it("answers print_job.not_found when previewing an unknown print job id", async () => {
     const app = mountApp();
-    // A real job that exists — but under a DIFFERENT tenant. A globally-unique id is not the
-    // isolation boundary (CLAUDE.md §3): tenant A's manager must get print_job.not_found, never
-    // tenant B's bytes.
-    const foreignTenant = await seedTenant(suite.db);
-    const foreignLocation = randomUUID();
-    const foreignPrinter = randomUUID();
-    const foreignJob = randomUUID();
-    await suite.db.execute(
-      sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-        values (${foreignLocation}, ${foreignTenant}, 'Other', array['es-ES'], 'Other')`,
-    );
-    await suite.db.execute(
-      sql`insert into printers (id, tenant_id, location_id, name, transport, host)
-        values (${foreignPrinter}, ${foreignTenant}, ${foreignLocation}, 'Other', 'network_tcp', 'other.local')`,
-    );
-    await suite.db.execute(
-      sql`insert into print_jobs (id, tenant_id, location_id, printer_id, payload)
-        values (${foreignJob}, ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'))`,
-    );
-    const preview = await send(app, "GET", `/management-api/print-jobs/${foreignJob}/preview`, {
+    const preview = await send(app, "GET", `/management-api/print-jobs/${randomUUID()}/preview`, {
       cookie: managerCookie,
     });
     expect(preview.status).toBe(404);
@@ -1457,8 +1434,8 @@ describe("mountPrintApi — management: recent jobs", () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Timestamp printer");
     await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
-      values (${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
+      insert into print_jobs (location_id, printer_id, payload, status, delivered_at)
+      values (${locationId}, ${printerId}, decode('01', 'hex'), 'done',
         '2020-01-02T03:04:05.678+02:00')`);
     try {
       await suite.db.execute(sql`set datestyle = 'SQL, DMY'`);
@@ -1475,47 +1452,19 @@ describe("mountPrintApi — management: recent jobs", () => {
     }
   });
 
-  it("summarises all printer jobs and excludes foreign tenant activity", async () => {
+  it("summarises all printer jobs", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Summary printer");
     const emptyId = await createPrinterVia(app, "unused", "Empty printer");
     await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload)
-      select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex') from generate_series(1, 101)`);
+      insert into print_jobs (location_id, printer_id, payload)
+      select ${locationId}, ${printerId}, decode('01', 'hex') from generate_series(1, 101)`);
     await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at, delivered_at)
-      values (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'done', 0, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z'),
-             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 4, now(), null),
-             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 5, now(), null),
-             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'printing', 0, now(), null)`);
-    const foreignTenant = await seedTenant(suite.db);
-    const foreignLocation = randomUUID();
-    const foreignPrinter = randomUUID();
-    const foreignJob = randomUUID();
-    await suite.db
-      .execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${foreignLocation}, ${foreignTenant}, 'Other', array['es-ES'], 'Other')`);
-    await suite.db
-      .execute(sql`insert into printers (id, tenant_id, location_id, name, transport, host)
-      values (${foreignPrinter}, ${foreignTenant}, ${foreignLocation}, 'Other', 'network_tcp', 'other.local')`);
-    await suite.db
-      .execute(sql`insert into print_jobs (id, tenant_id, location_id, printer_id, payload)
-      values (${foreignJob}, ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'))`);
-    await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
-      select ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'), 'done', '2199-01-01'
-      from generate_series(1, 101)`);
-    await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-      select ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'), 'failed', 5, '2199-01-01'
-      from generate_series(1, 101)`);
-    const foreignPreview = await send(
-      app,
-      "GET",
-      `/management-api/print-jobs/${foreignJob}/preview`,
-      { cookie: managerCookie },
-    );
-    expect(foreignPreview.status).toBe(404);
+      insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at, delivered_at)
+      values (${locationId}, ${printerId}, decode('01','hex'), 'done', 0, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z'),
+             (${locationId}, ${printerId}, decode('01','hex'), 'failed', 4, now(), null),
+             (${locationId}, ${printerId}, decode('01','hex'), 'failed', 5, now(), null),
+             (${locationId}, ${printerId}, decode('01','hex'), 'printing', 0, now(), null)`);
     const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
     const printers = (await result.json()) as {
       id: string;
@@ -1528,13 +1477,11 @@ describe("mountPrintApi — management: recent jobs", () => {
       pendingJobs: 0,
       lastPrintAt: null,
     });
-    expect(printers.some((p) => p.id === foreignPrinter)).toBe(false);
     const jobsResult = await send(app, "GET", "/management-api/print-jobs", {
       cookie: managerCookie,
     });
     const jobs = (await jobsResult.json()) as { id: string; printerId: string }[];
     expect(jobs.filter((job) => job.printerId === printerId)).toHaveLength(105);
-    expect(jobs.some((j) => j.id === foreignJob)).toBe(false);
   });
 
   it("keeps every unfinished job alongside the last 100 completed jobs by delivery time", async () => {
@@ -1547,14 +1494,14 @@ describe("mountPrintApi — management: recent jobs", () => {
       const existing = (await before.json()) as { id: string; status: string }[];
       const existingPending = existing.filter((job) => job.status !== "done");
       const pending = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
+        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
           attempts, '2020-01-01T00:00:00Z'
         from (values ('queued', 0), ('printing', 0), ('failed', 4), ('failed', 5)) as jobs(status, attempts)
         returning id`);
       const completed = await suite.db.execute<{ id: string; delivered_at: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, created_at, delivered_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
+        insert into print_jobs (location_id, printer_id, payload, status, created_at, delivered_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
           '2021-01-01T00:00:00Z'::timestamptz - n * interval '1 second',
           '2099-01-01T00:00:00Z'::timestamptz + n * interval '1 second'
         from generate_series(1, 101) as jobs(n)
@@ -1596,15 +1543,15 @@ describe("mountPrintApi — management: recent jobs", () => {
     const printerId = await createPrinterVia(app, "unused");
     try {
       const pending = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
+        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
           attempts, '2020-01-01'
         from (values ('queued', 0), ('printing', 0), ('failed', 4)) as jobs(status, attempts)
         cross join generate_series(1, 101)
         returning id`);
       const failed = await suite.db.execute<{ id: string; created_at: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'failed', 5,
+        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), 'failed', 5,
           '2099-01-01'::timestamptz + n * interval '1 second'
         from generate_series(1, 101) as jobs(n)
         returning id, created_at`);
@@ -1648,12 +1595,12 @@ describe("mountPrintApi — management: recent jobs", () => {
     const printerId = await createPrinterVia(app, "unused");
     try {
       await suite.db.execute(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done'
+        insert into print_jobs (location_id, printer_id, payload, status)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), 'done'
         from generate_series(1, 101)`);
       const completed = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
-        values (${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done', '2099-01-01')
+        insert into print_jobs (location_id, printer_id, payload, status, delivered_at)
+        values (${locationId}, ${printerId}, decode('01', 'hex'), 'done', '2099-01-01')
         returning id`);
       const response = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,

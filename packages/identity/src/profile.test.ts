@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -28,19 +28,17 @@ import {
 // PGlite covers profile behavior; the me API's real-PG suite exercises deployment-role writes.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 async function fixture() {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const email = `${randomUUID()}@example.com`;
-  const personId = await seedManager(suite.db, tenantId, { email });
-  const session = await withTenant(suite.db, tenantId, (tx) =>
-    startManagementSession(tx, { tenantId, personId }),
-  );
-  return { tenantId, personId, email, managementSessionId: session.id };
+  const personId = await seedManager(suite.db, { email });
+  const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  return { personId, email, managementSessionId: session.id };
 }
 
 describe("your profile", () => {
-  it("returns only profile and passkey metadata, and refuses a session from another tenant", async () => {
+  it("returns only profile and passkey metadata", async () => {
     const f = await fixture();
-    const profile = await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f));
+    const profile = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
     expect(profile).toEqual({
       displayName: expect.any(String),
       firstNames: null,
@@ -54,16 +52,11 @@ describe("your profile", () => {
       hasGoogle: false,
       passkeys: [],
     });
-    await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
-        readOwnProfile(tx, { ...f, tenantId: randomUUID() }),
-      ),
-    ).rejects.toMatchObject({ code: "management_session.required" });
   });
 
   it("saves details, requires current credentials for email changes, and invalidates old reset links", async () => {
     const f = await fixture();
-    const issued = await withTenant(suite.db, f.tenantId, (tx) =>
+    const issued = await withTransaction(suite.db, (tx) =>
       issueAccountAction(tx, { ...f, purpose: "password_reset" }),
     );
     const details = {
@@ -74,9 +67,9 @@ describe("your profile", () => {
       email: f.email,
       locale: "en-GB",
     };
-    await withTenant(suite.db, f.tenantId, (tx) => saveOwnProfile(tx, { ...f, ...details }));
+    await withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...f, ...details }));
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         saveOwnProfile(tx, {
           ...f,
           ...details,
@@ -86,7 +79,7 @@ describe("your profile", () => {
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
     const codeKey = Buffer.alloc(32, 19);
-    const emailChange = await withTenant(suite.db, f.tenantId, (tx) =>
+    const emailChange = await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, {
         ...f,
         ...details,
@@ -96,7 +89,7 @@ describe("your profile", () => {
       }),
     );
     expect(emailChange).toMatchObject({ email: "changed@example.com", code: expect.any(String) });
-    expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       displayName: "New Name",
       firstNames: "Ada Augusta",
       lastNames: "Lovelace",
@@ -106,21 +99,21 @@ describe("your profile", () => {
       locale: "en-GB",
     });
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         confirmOwnEmailChange(tx, { ...f, code: "000000", codeKey }),
       ),
     ).resolves.toBeNull();
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         confirmOwnEmailChange(tx, { ...f, code: emailChange!.code!, codeKey }),
       ),
     ).resolves.toBe("changed@example.com");
-    expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       email: "changed@example.com",
       pendingEmail: null,
     });
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         completeAccountAction(tx, {
           ...f,
           token: issued.token,
@@ -133,7 +126,7 @@ describe("your profile", () => {
 
   it("validates details and maps duplicate emails without changing the profile", async () => {
     const f = await fixture();
-    await seedManager(suite.db, f.tenantId, { email: "taken@example.com" });
+    await seedManager(suite.db, { email: "taken@example.com" });
     const details = {
       ...f,
       displayName: "Name",
@@ -152,7 +145,7 @@ describe("your profile", () => {
       [{ email: "taken@example.com" }, "person.email_taken"],
     ] as const) {
       await expect(
-        withTenant(suite.db, f.tenantId, (tx) => saveOwnProfile(tx, { ...details, ...patch })),
+        withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...details, ...patch })),
       ).rejects.toMatchObject({ code });
     }
   });
@@ -168,31 +161,29 @@ describe("your profile", () => {
       locale: "en-GB",
       currentPassword: "correct horse",
     };
-    await withTenant(suite.db, f.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, { ...base, telephone: "  +34 600 000 000  " }),
     );
-    expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       telephone: "+34 600 000 000",
     });
-    await withTenant(suite.db, f.tenantId, (tx) =>
-      saveOwnProfile(tx, { ...base, telephone: null }),
-    );
-    expect(await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).toMatchObject({
+    await withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...base, telephone: null }));
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       telephone: null,
     });
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) => saveOwnProfile(tx, { ...base, telephone: "123" })),
+      withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...base, telephone: "123" })),
     ).rejects.toMatchObject({ code: "person.telephone_invalid" });
   });
 
   it("rejects a display name already used by an active person", async () => {
     const f = await fixture();
-    const otherId = await seedManager(suite.db, f.tenantId, { email: "other@example.com" });
+    const otherId = await seedManager(suite.db, { email: "other@example.com" });
     await suite.db.execute(
       sql`update persons set display_name = 'Already Here' where id = ${otherId}`,
     );
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         saveOwnProfile(tx, {
           ...f,
           displayName: " already here ",
@@ -205,47 +196,45 @@ describe("your profile", () => {
 
   it("changes the password and ends other sessions while preserving this one", async () => {
     const f = await fixture();
-    const other = await withTenant(suite.db, f.tenantId, (tx) => startManagementSession(tx, f));
+    const other = await withTransaction(suite.db, (tx) => startManagementSession(tx, f));
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, { ...f, currentPassword: "wrong", password: "new password" }),
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, { ...f, currentPassword: "correct horse", password: "short" }),
       ),
     ).rejects.toMatchObject({ code: "password.too_short" });
-    await withTenant(suite.db, f.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       changeOwnPassword(tx, { ...f, currentPassword: "correct horse", password: "new password" }),
     );
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         readOwnProfile(tx, { ...f, managementSessionId: other.id }),
       ),
     ).rejects.toMatchObject({ code: "management_session.required" });
+    await expect(withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).resolves.toMatchObject({
+      hasPassword: true,
+    });
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f)),
-    ).resolves.toMatchObject({ hasPassword: true });
-    await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
-        loginManager(tx, { ...f, password: "new password" }),
-      ),
+      withTransaction(suite.db, (tx) => loginManager(tx, { ...f, password: "new password" })),
     ).resolves.toMatchObject({ personId: f.personId });
   });
 
   it("changes the PIN and ends open till sessions", async () => {
     const f = await fixture();
-    const tillId = await seedTill(suite.db, f.tenantId);
+    const tillId = await seedTill(suite.db);
     const till = await suite.db.execute<{ id: string }>(
-      sql`insert into sessions (tenant_id, person_id, till_id) values (${f.tenantId}, ${f.personId}, ${tillId}) returning id`,
+      sql`insert into sessions (person_id, till_id) values (${f.personId}, ${tillId}) returning id`,
     );
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         changeOwnPin(tx, { ...f, currentPassword: "correct horse", pin: "12" }),
       ),
     ).rejects.toMatchObject({ code: "pin.too_short" });
-    await withTenant(suite.db, f.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       changeOwnPin(tx, { ...f, currentPassword: "correct horse", pin: "9876" }),
     );
     const rows = await suite.db.execute<{ ended_at: string | null }>(
@@ -256,33 +245,31 @@ describe("your profile", () => {
 
   it("lists and removes only your own passkeys", async () => {
     const f = await fixture();
-    const colleague = await seedManager(suite.db, f.tenantId, { email: "colleague@example.com" });
+    const colleague = await seedManager(suite.db, { email: "colleague@example.com" });
     const credentialId = randomUUID();
     const otherId = randomUUID();
     await suite.db.execute(
-      sql`insert into webauthn_credentials (id,tenant_id,person_id,credential_id,public_key,name) values (${credentialId},${f.tenantId},${f.personId},'own','public','Work laptop'),(${otherId},${f.tenantId},${colleague},'other','public','Colleague laptop')`,
+      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name) values (${credentialId},${f.personId},'own','public','Work laptop'),(${otherId},${colleague},'other','public','Colleague laptop')`,
     );
-    expect(
-      (await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).passkeys,
-    ).toEqual([{ id: credentialId, name: "Work laptop", createdAt: expect.any(String) }]);
+    expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([
+      { id: credentialId, name: "Work laptop", createdAt: expect.any(String) },
+    ]);
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         removeOwnPasskey(tx, { ...f, id: otherId, currentPassword: "correct horse" }),
       ),
     ).rejects.toMatchObject({ code: "passkey.not_registered" });
-    await withTenant(suite.db, f.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       removeOwnPasskey(tx, { ...f, id: credentialId, currentPassword: "correct horse" }),
     );
-    expect(
-      (await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).passkeys,
-    ).toEqual([]);
+    expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([]);
   });
 
   it("requires recovery without a password and a TOTP code when enrolled", async () => {
     const f = await fixture();
     await suite.db.execute(sql`update persons set password_hash=null where id=${f.personId}`);
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, { ...f, currentPassword: "", password: "new password" }),
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
@@ -292,7 +279,7 @@ describe("your profile", () => {
       sql`update persons set totp_secret=${encryptTotpSecret("JBSWY3DPEHPK3PXP", keyRing.current)} where id=${g.personId}`,
     );
     await expect(
-      withTenant(suite.db, g.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, {
           ...g,
           currentPassword: "correct horse",
@@ -306,7 +293,7 @@ describe("your profile", () => {
   it("encrypts authenticator secrets and issues single-use recovery codes", async () => {
     const f = await fixture();
     const keyRing = { current: { version: 1, key: Buffer.alloc(32, 9) } };
-    const pending = await withTenant(suite.db, f.tenantId, (tx) =>
+    const pending = await withTransaction(suite.db, (tx) =>
       beginOwnTotpEnrollment(tx, {
         ...f,
         currentPassword: "correct horse",
@@ -314,7 +301,7 @@ describe("your profile", () => {
       }),
     );
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         finishOwnTotpEnrollment(tx, {
           ...f,
           enrollmentId: pending.enrollmentId,
@@ -323,10 +310,8 @@ describe("your profile", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "totp.invalid" });
-    expect((await withTenant(suite.db, f.tenantId, (tx) => readOwnProfile(tx, f))).hasTotp).toBe(
-      false,
-    );
-    const recovery = await withTenant(suite.db, f.tenantId, (tx) =>
+    expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).hasTotp).toBe(false);
+    const recovery = await withTransaction(suite.db, (tx) =>
       finishOwnTotpEnrollment(tx, {
         ...f,
         enrollmentId: pending.enrollmentId,
@@ -342,7 +327,7 @@ describe("your profile", () => {
     expect(stored.rows[0]!.totp_secret).not.toContain(pending.secret);
 
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         loginManager(tx, {
           ...f,
           password: "correct horse",
@@ -352,7 +337,7 @@ describe("your profile", () => {
       ),
     ).resolves.toMatchObject({ personId: f.personId });
     await expect(
-      withTenant(suite.db, f.tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         loginManager(tx, {
           ...f,
           password: "correct horse",
@@ -362,7 +347,7 @@ describe("your profile", () => {
       ),
     ).rejects.toMatchObject({ code: "totp.invalid" });
 
-    const replacement = await withTenant(suite.db, f.tenantId, (tx) =>
+    const replacement = await withTransaction(suite.db, (tx) =>
       regenerateOwnRecoveryCodes(tx, {
         ...f,
         currentPassword: "correct horse",
@@ -380,7 +365,7 @@ describe("your profile", () => {
     await suite.db.execute(
       sql`update persons set totp_secret = ${encryptTotpSecret(secret, keyRing.current)} where id = ${f.personId}`,
     );
-    await withTenant(suite.db, f.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       disableOwnTotp(tx, {
         ...f,
         currentPassword: "correct horse",
@@ -399,7 +384,7 @@ describe("your profile", () => {
     await suite.db.execute(
       sql`update persons set google_subject = 'google-subject' where id = ${f.personId}`,
     );
-    await withTenant(suite.db, f.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       unlinkOwnGoogle(tx, { ...f, currentPassword: "correct horse" }),
     );
     const rows = await suite.db.execute<{ google_subject: string | null }>(

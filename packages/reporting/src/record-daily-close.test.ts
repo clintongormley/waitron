@@ -1,6 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  captureError,
+  pgErrorCode,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -34,7 +40,6 @@ beforeEach(async () => {
 
 function closeInput(businessDay: string) {
   return {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay,
     timeZone: "Europe/Madrid",
@@ -43,14 +48,14 @@ function closeInput(businessDay: string) {
 }
 
 function record(businessDay: string, cashCounts: CashCountInput[]): Promise<DailyCloseRecord> {
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, { ...closeInput(businessDay), closedBy: CLOSED_BY, cashCounts });
   });
 }
 
 function runCompute(businessDay: string) {
-  return withTenant(suite.db, venue.tenantId, async (tx: Transaction) => {
+  return withTransaction(suite.db, async (tx: Transaction) => {
     await asAppUser(tx);
     return computeDailyClose(tx, closeInput(businessDay));
   });
@@ -64,7 +69,7 @@ async function seedCashSale(till: TillId, amount: string): Promise<void> {
   const at = "2026-08-04T10:00:00Z"; // 12:00 Madrid, after the 05:00 cutover → business day 2026-08-04
   const saleId = await seedSale(
     suite.db,
-    { tenantId: venue.tenantId, tillId: till, nodeId: venue.nodeId, seriesId: venue.seriesId },
+    { tillId: till, nodeId: venue.nodeId, seriesId: venue.seriesId },
     {
       invoiceNumber: invoiceNo,
       issuedAt: at,
@@ -74,7 +79,7 @@ async function seedCashSale(till: TillId, amount: string): Promise<void> {
   );
   await seedTender(
     suite.db,
-    { tenantId: venue.tenantId, saleId },
+    { saleId },
     { method: "cash", amount, tipAmount: "0.00", settledAt: at },
   );
 }
@@ -90,8 +95,8 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     // Three tills at one node, each with cash takings, crafted so the reconciliation exercises all
     // three signs: A over, B short, C exact.
     const tillA = venue.tillId;
-    const tillB = await seedTill(suite.db, venue.tenantId, venue.locationId);
-    const tillC = await seedTill(suite.db, venue.tenantId, venue.locationId);
+    const tillB = await seedTill(suite.db, venue.locationId);
+    const tillC = await seedTill(suite.db, venue.locationId);
     await seedCashSale(tillA, "123.45");
     await seedCashSale(tillB, "48.00");
     await seedCashSale(tillC, "20.00");
@@ -136,7 +141,6 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
       expect(rec.entryHash).toBe(
         computeCloseEntryHash(
           {
-            tenantId: rec.tenantId,
             nodeId: rec.nodeId,
             businessDay: rec.businessDay,
             sequenceNo: rec.sequenceNo,
@@ -246,7 +250,6 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     const saleId = await seedSale(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         seriesId: venue.seriesId,
@@ -260,7 +263,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     );
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "card", amount: "60.50", tipAmount: "0.00", settledAt: at },
     );
 
@@ -284,7 +287,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     expect(first.sequenceNo).toBe(1);
     await suite.db.execute(sql`
       update daily_close_chain set sequence_no = 0
-       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+       where node_id = ${venue.nodeId}`);
 
     const error = await captureError(() => record("2026-08-05", []));
     expect(isAppError(error)).toBe(false); // NOT translated to close.already_closed

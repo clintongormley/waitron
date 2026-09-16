@@ -59,7 +59,7 @@ import "@waitron/shared";
  * it is this translation, done in `packages/core`, that needs the registered `ErrorCode`.
  * Aggregating rather than emitting a row per issue is what makes the incident write agree with the
  * table-wide `incidents_open_dedup` invariant: that partial unique index holds at most one open
- * incident per (tenant, till, code, sale), so N same-key rows would silently collapse to one and
+ * incident per (till, code, sale), so N same-key rows would silently collapse to one and
  * lose detail — carrying every issue under one row keeps all of it. `clock.degraded`
  * needs no such addition here: it is already registered by `packages/fiscal/src/errors.ts` (Task
  * 10), and `./record-sale.ts` reuses `TrustedReading.warning` — an `AppError` already carrying
@@ -111,9 +111,8 @@ declare module "@waitron/shared" {
       due: string;
       charged: string;
     };
-    /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names no row in `invoice_series` —
-     * either it never existed, or the tenant predicate excluded it. */
-    "sale.series_not_found": { seriesId: string; tenantId: string };
+    /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names no row in `invoice_series`. */
+    "sale.series_not_found": { seriesId: string };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names a real series, but one that
      * belongs to a DIFFERENT node than `RecordSaleInput.nodeId` (node-id rekey, 2026-08-03: a
      * series is owned by a node — the SIF — not a till, #33). A node may own several series, but a
@@ -134,8 +133,8 @@ declare module "@waitron/shared" {
      * from it would re-issue an invoice identity the tax agency may already hold. `retiredAt` is the
      * ISO timestamp, for the operator's message. Same shape as its `sale.series_*` siblings. */
     "sale.series_retired": { seriesId: string; retiredAt: string };
-    /** Reserved for the constraint-violation translation `UNIQUE (tenant_id, series_id,
-     * invoice_number)` produces when something outside the ordinary write path tries to reuse a
+    /** Reserved for the constraint-violation translation `UNIQUE (series_id, invoice_number)`
+     * produces when something outside the ordinary write path tries to reuse a
      * number that already reached a committed sale. Still not thrown anywhere in this package:
      * Task 17's own "burned number" test (`record-void.test.ts`) proves the constraint fires by
      * reading the raw SQLSTATE off the rejected INSERT directly (`captureError`/`pgErrorCode`),
@@ -157,7 +156,7 @@ declare module "@waitron/shared" {
     /** Thrown by `settleSale` when the sale is already settled. Three sources converge on this one
      * code (`packages/db/drizzle/0001_db_baseline_sql.sql`): the sequential retry is caught by the
      * prior SELECT, and a concurrent loser is caught at *whichever* insert it reaches — the
-     * `sale_settlements` `UNIQUE (tenant_id, sale_id)` violation (`sale_settlements_sale_key`,
+     * `sale_settlements` `UNIQUE (sale_id)` violation (`sale_settlements_sale_key`,
      * detected via `isUniqueViolation`) when it collides on the settlement row, OR the `tenders`
      * post-settlement trigger (SQLSTATE `WT002`, detected via a local predicate) when it inserts a
      * tender after the winner has committed. A constraint, not a prior SELECT, is the control for
@@ -180,7 +179,7 @@ declare module "@waitron/shared" {
      * `sale_substitutions_substituted_key`'s unique violation
      * (`packages/db/src/schema/sales.ts`), which is the actual control against exchanging one
      * ticket twice: were the same ticket substituted by two F3s, the underlying operation would
-     * appear in two canje invoices. The unique `(tenant_id, substituted_sale_id)` — not the
+     * appear in two canje invoices. The unique `(substituted_sale_id)` — not the
      * INSERT's success — is what makes it impossible under concurrency (two callers both pass any
      * prior SELECT, only one passes the constraint), exactly as `sale_voids_sale_id_key` backs
      * `sale.already_voided`. A "substitute at most once" operational failure, not a fiscal one, so
@@ -209,7 +208,7 @@ declare module "@waitron/shared" {
       tillId: string;
       /** All `IntegrityIssue`s from one failed `checkIntegrity` call, aggregated into a single
        * incident: the table-wide open-incident invariant (`incidents_open_dedup`) holds at most one
-       * open incident per (tenant, till, code, sale), so a chain that fails multiple checks at once
+       * open incident per (till, code, sale), so a chain that fails multiple checks at once
        * records one incident carrying every issue rather than N same-key rows (of which the index
        * would keep only one). Each entry preserves the module's own diagnostic detail verbatim. */
       issues: Array<{

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { productOptionGroups, type Transaction } from "@waitron/db";
 import { type Modifier } from "@waitron/shared";
 import { listModifiers } from "./modifiers.js";
@@ -30,23 +30,15 @@ function projectModifier(modifier: Modifier, prices?: Map<string, string>): Modi
 
 export async function readProductModifiers(
   tx: Transaction,
-  tenantId: string,
   productIds: string[],
 ): Promise<Map<string, Modifier[]>> {
   const result = new Map<string, Modifier[]>();
   if (productIds.length === 0) return result;
-  const definitions = new Map(
-    (await listModifiers(tx, tenantId)).map((modifier) => [modifier.id, modifier]),
-  );
+  const definitions = new Map((await listModifiers(tx)).map((modifier) => [modifier.id, modifier]));
   const attachments = await tx
     .select({ productId: productOptionGroups.productId, modifierId: productOptionGroups.groupId })
     .from(productOptionGroups)
-    .where(
-      and(
-        eq(productOptionGroups.tenantId, tenantId),
-        inArray(productOptionGroups.productId, productIds),
-      ),
-    )
+    .where(inArray(productOptionGroups.productId, productIds))
     .orderBy(productOptionGroups.sort, productOptionGroups.groupId);
   for (const attachment of attachments) {
     const definition = definitions.get(attachment.modifierId);
@@ -60,33 +52,23 @@ export async function readProductModifiers(
 
 export async function readMenuModifiers(
   tx: Transaction,
-  tenantId: string,
   menuItemIds: string[],
 ): Promise<Map<string, Modifier[]>> {
   const result = new Map<string, Modifier[]>();
   if (menuItemIds.length === 0) return result;
-  const definitions = new Map(
-    (await listModifiers(tx, tenantId)).map((modifier) => [modifier.id, modifier]),
-  );
+  const definitions = new Map((await listModifiers(tx)).map((modifier) => [modifier.id, modifier]));
   const publications = await tx
     .select({
       menuItemId: menuItemOptionGroups.menuItemId,
       modifierId: menuItemOptionGroups.groupId,
     })
     .from(menuItemOptionGroups)
-    .where(
-      and(
-        eq(menuItemOptionGroups.tenantId, tenantId),
-        inArray(menuItemOptionGroups.menuItemId, menuItemIds),
-      ),
-    )
+    .where(inArray(menuItemOptionGroups.menuItemId, menuItemIds))
     .orderBy(menuItemOptionGroups.displayOrder, menuItemOptionGroups.groupId);
   const options = await tx
     .select()
     .from(menuItemOptions)
-    .where(
-      and(eq(menuItemOptions.tenantId, tenantId), inArray(menuItemOptions.menuItemId, menuItemIds)),
-    );
+    .where(inArray(menuItemOptions.menuItemId, menuItemIds));
   for (const publication of publications) {
     const definition = definitions.get(publication.modifierId);
     if (!definition) continue;

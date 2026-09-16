@@ -17,7 +17,7 @@ import {
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
-import { tenants, tills } from "./tenants.js";
+import { tills } from "./tenants.js";
 
 /**
  * The classification of a sale AT ISSUANCE, written once and never updated.
@@ -78,10 +78,6 @@ export const sales = pgTable(
     // never-invoked function — drizzle-kit resolves it in a separate CLI
     // process, never during `vitest run`. `v8 ignore` here keeps the explicit
     // `onDelete` rather than dropping it for coverage's sake.
-    tenantId: uuid("tenant_id")
-      .notNull()
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
     tillId: uuid("till_id")
       .notNull()
       /* v8 ignore next */
@@ -91,11 +87,9 @@ export const sales = pgTable(
       /* v8 ignore next */
       .references(() => invoiceSeries.id, { onDelete: "restrict" }),
     // Which node processed and chained this sale (node-id rekey, 2026-08-03).
-    // NOT NULL — the fiscal write path always supplies it. The tenant-consistent
-    // composite `(tenant_id, node_id) → nodes(tenant_id, id)` FK is declared in
-    // `extraConfig` below (mirroring `sale_lines_sale_fk`/`tenders_sale_fk`), so
-    // this column carries NO plain single-column `.references()` of its own —
-    // the composite is the FK. `till_id` STAYS (where the sale rang); this adds
+    // NOT NULL — the fiscal write path always supplies it. The `(node_id) → nodes(id)` FK is
+    // declared in `extraConfig` below (mirroring `sale_lines_sale_fk`/`tenders_sale_fk`), so this
+    // column carries no `.references()` of its own. `till_id` STAYS (where the sale rang); this adds
     // the node beside it, it does not replace it.
     nodeId: uuid("node_id").notNull(),
     invoiceNumber: integer("invoice_number").notNull(),
@@ -120,7 +114,7 @@ export const sales = pgTable(
     // and `fiscal_state`/`fiscal_backend` are (see this table's own comment
     // above): core reads nothing fiscal from it, it exists so a
     // Z-report/receipt/till can answer "is this a correction, and of what?" with
-    // no cross-boundary join. The tenant-consistent FK below mirrors
+    // no cross-boundary join. The FK below mirrors
     // `sale_lines_sale_fk`/`tenders_sale_fk`; NULLABLE with no backfill
     // (pre-production, no deployed data), and immutable table-wide like every
     // other column here.
@@ -151,51 +145,49 @@ export const sales = pgTable(
     operatorId: uuid("operator_id"),
     // The parked working order this sale was FILED from (park & retrieve, sub-project 7b), or NULL
     // for a walk-up sale rung with no draft. This is the SALE-IDEMPOTENCY KEY: `sales_working_order_id_key`
-    // below makes (tenant_id, working_order_id) unique, so a retrieved order that is submitted twice
+    // below makes (working_order_id) unique, so a retrieved order that is submitted twice
     // (double-tap, two registers racing) files exactly one sale — the second INSERT collides 23505
     // rather than minting a second invoice number for the same order. NULLABLE: MATCH SIMPLE skips
     // the FK for a NULL, and NULLs are distinct under the UNIQUE, so any number of walk-up sales
-    // coexist. The tenant-consistent composite FK is in extraConfig below, so this bare column
+    // coexist. The FK is in extraConfig below, so this bare column
     // carries no single-column `.references()`. Write-once and immutable table-wide like the rest.
     workingOrderId: uuid("working_order_id"),
   },
   (t) => [
-    unique("sales_series_invoice_number_key").on(t.tenantId, t.seriesId, t.invoiceNumber),
-    // Composite target for tenant-consistent foreign keys from sale_lines and
-    // tenders: a child row cannot point at a sale belonging to another tenant.
-    unique("sales_tenant_id_key").on(t.tenantId, t.id),
-    index("sales_tenant_issued_idx").on(t.tenantId, t.issuedAt),
-    index("sales_fiscal_state_idx").on(t.tenantId, t.fiscalState),
-    // A corrective invoice points at the sale it corrects, within its own tenant.
+    unique("sales_series_invoice_number_key").on(t.seriesId, t.invoiceNumber),
+    // Composite target for foreign keys from sale_lines and
+    index("sales_tenant_issued_idx").on(t.issuedAt),
+    index("sales_fiscal_state_idx").on(t.fiscalState),
+    // A corrective invoice points at the sale it corrects.
     // MATCH SIMPLE (the default) means a NULL `corrects_sale_id` satisfies the
     // FK, so ordinary sales are unaffected. NOT unique — unlike
     // `sale_voids_sale_id_key` (one void per sale), a sale may be corrected more
     // than once by successive corrective invoices; the plain index below is for the
     // lookup, not a uniqueness guard.
     foreignKey({
-      columns: [t.tenantId, t.correctsSaleId],
-      foreignColumns: [t.tenantId, t.id],
+      columns: [t.correctsSaleId],
+      foreignColumns: [t.id],
       name: "sales_corrects_fk",
     }).onDelete("restrict"),
-    index("sales_corrects_idx").on(t.tenantId, t.correctsSaleId),
+    index("sales_corrects_idx").on(t.correctsSaleId),
     foreignKey({
-      columns: [t.tenantId, t.nodeId],
-      foreignColumns: [nodes.tenantId, nodes.id],
+      columns: [t.nodeId],
+      foreignColumns: [nodes.id],
       name: "sales_node_fk",
     }).onDelete("restrict"),
-    // Tenant-consistent composite FK to the parked order this sale was filed from (park & retrieve):
-    // a sale cannot point at a working order of another tenant. MATCH SIMPLE (the default) means a
+    // FK to the parked order this sale was filed from (park & retrieve):
+    // MATCH SIMPLE (the default) means a
     // NULL working_order_id — an ordinary walk-up sale — skips the check, so the column stays
     // nullable. onDelete "restrict": the settled draft is not deleted out from under its sale.
     foreignKey({
-      columns: [t.tenantId, t.workingOrderId],
-      foreignColumns: [workingOrders.tenantId, workingOrders.id],
+      columns: [t.workingOrderId],
+      foreignColumns: [workingOrders.id],
       name: "sales_working_order_fk",
     }).onDelete("restrict"),
-    // The sale-idempotency key: at most one sale per (tenant, working order). NULLs are distinct in
+    // The sale-idempotency key: at most one sale per working order. NULLs are distinct in
     // a UNIQUE, so unlimited walk-up sales (working_order_id NULL) coexist; only a retrieved order
     // filed twice collides. See the column comment above.
-    unique("sales_working_order_id_key").on(t.tenantId, t.workingOrderId),
+    unique("sales_working_order_id_key").on(t.workingOrderId),
     // `total >= 0` for an ordinary sale, but a `rectificativa por diferencias`
     // carries a NEGATIVE total (findings §10.2): `record-sale` passes `total`
     // verbatim into the fiscal record's `ImporteTotal`, which the fiscal fingerprint hashes,
@@ -214,7 +206,6 @@ export const saleLines = pgTable(
   "sale_lines",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     saleId: uuid("sale_id").notNull(),
     lineNo: integer("line_no").notNull(),
     // Frozen staff-facing product name (products.name at sale time) — snapshotted, never read live.
@@ -252,9 +243,8 @@ export const saleLines = pgTable(
     // points at the dish line it belongs to; a top-level line leaves it NULL. Presentation/reporting
     // metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`, never from
     // `sale_lines`, so this never reaches the fiscal fingerprint (design §4). Bare NULLABLE uuid: the
-    // tenant-consistent self-FK (tenant_id, parent_line_id) → sale_lines(tenant_id, id) is
-    // hand-written in the --custom migration (drizzle does not emit a self-referential composite FK —
-    // the same split sales_corrects_fk uses), targeting sale_lines_tenant_id_key below. MATCH SIMPLE
+    // self-FK (parent_line_id) → sale_lines(id) is
+    // hand-written in the --custom migration (the same split sales_corrects_fk uses). MATCH SIMPLE
     // means a NULL parent satisfies it. NO option/catalogue reference is added here: filed records
     // stay decoupled from the mutable catalogue (option_group_item_id lives on working_order_lines
     // only). Write-once at sale time and immutable table-wide like every other column here.
@@ -262,14 +252,10 @@ export const saleLines = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.saleId],
-      foreignColumns: [sales.tenantId, sales.id],
+      columns: [t.saleId],
+      foreignColumns: [sales.id],
       name: "sale_lines_sale_fk",
     }).onDelete("restrict"),
-    // Composite (tenant_id, id) UNIQUE — the target for the tenant-consistent self-FK
-    // (tenant_id, parent_line_id) added in the --custom migration, the same role
-    // sales_tenant_id_key plays for sales' children. Neither existed before Task 2.
-    unique("sale_lines_tenant_id_key").on(t.tenantId, t.id),
     unique("sale_lines_line_no_key").on(t.saleId, t.lineNo),
     check(
       "sale_lines_unit_precision_ck",
@@ -298,7 +284,6 @@ export const tenders = pgTable(
   "tenders",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     saleId: uuid("sale_id").notNull(),
     method: tenderMethod("method").notNull(),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
@@ -309,8 +294,8 @@ export const tenders = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.saleId],
-      foreignColumns: [sales.tenantId, sales.id],
+      columns: [t.saleId],
+      foreignColumns: [sales.id],
       name: "tenders_sale_fk",
     }).onDelete("restrict"),
     index("tenders_sale_idx").on(t.saleId),
@@ -337,17 +322,16 @@ export const saleSettlements = pgTable(
   "sale_settlements",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     saleId: uuid("sale_id").notNull(),
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }).notNull(),
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.saleId],
-      foreignColumns: [sales.tenantId, sales.id],
+      columns: [t.saleId],
+      foreignColumns: [sales.id],
       name: "sale_settlements_sale_fk",
     }).onDelete("restrict"),
-    unique("sale_settlements_sale_key").on(t.tenantId, t.saleId),
+    unique("sale_settlements_sale_key").on(t.saleId),
   ],
 );
 
@@ -359,7 +343,7 @@ export const saleSettlements = pgTable(
  * `corrects_sale_id` is 1:1 and means "corrects" (a corrective invoice), canje is N:1 and means
  * "substitutes".
  *
- * `unique(tenant_id, substituted_sale_id)` is the DB control for "a ticket is substituted at most
+ * `unique(substituted_sale_id)` is the DB control for "a ticket is substituted at most
  * once" (§5, decision 4): were the same ticket substituted by two F3s, the underlying operation
  * would appear in two canje invoices. There is deliberately NO unique on `substitution_sale_id` —
  * one F3 substitutes MANY tickets (N rows, the fan-out).
@@ -368,7 +352,6 @@ export const saleSubstitutions = pgTable(
   "sale_substitutions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     // The F3 canje sale — the substitute.
     substitutionSaleId: uuid("substitution_sale_id").notNull(),
     // One substituted simplified ticket. N of these per F3.
@@ -376,18 +359,18 @@ export const saleSubstitutions = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.substitutionSaleId],
-      foreignColumns: [sales.tenantId, sales.id],
+      columns: [t.substitutionSaleId],
+      foreignColumns: [sales.id],
       name: "sale_substitutions_substitution_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.tenantId, t.substitutedSaleId],
-      foreignColumns: [sales.tenantId, sales.id],
+      columns: [t.substitutedSaleId],
+      foreignColumns: [sales.id],
       name: "sale_substitutions_substituted_fk",
     }).onDelete("restrict"),
     // A ticket is substituted at most once (§5, decision 4). This also indexes the substituted
     // side; the plain index below covers the substitution (F3 → its tickets) lookup.
-    unique("sale_substitutions_substituted_key").on(t.tenantId, t.substitutedSaleId),
-    index("sale_substitutions_substitution_idx").on(t.tenantId, t.substitutionSaleId),
+    unique("sale_substitutions_substituted_key").on(t.substitutedSaleId),
+    index("sale_substitutions_substitution_idx").on(t.substitutionSaleId),
   ],
 );

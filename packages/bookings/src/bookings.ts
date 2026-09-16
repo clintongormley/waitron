@@ -1,13 +1,11 @@
 // Booking operations run on the caller's transaction. Creation and day lists use the
 // configured location; table assignments also check that location. Route handlers
-// own authorization. Every by-id booking read and write scopes cfg.tenantId (creation stamps
-// it) — the id is a globally-unique UUID and withTenant no longer isolates SELECTs (#255), so
-// it is never the isolation boundary.
+// own authorization. A by-id read or write needs only the id.
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
 import { diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
@@ -15,10 +13,9 @@ import { bookings } from "./schema/bookings.js";
 export type Booking = InferSelectModel<typeof bookings>;
 
 /**
- * tenantId stamps new reservations; locationId scopes day lists and table assignments.
+ * locationId stamps new reservations and scopes day lists and table assignments.
  */
 export interface BookingConfig {
-  tenantId: TenantId;
   locationId: LocationId;
 }
 
@@ -97,7 +94,6 @@ export async function createBooking(
   const [row] = await tx
     .insert(bookings)
     .values({
-      tenantId: cfg.tenantId,
       locationId: cfg.locationId,
       bookingDate: input.bookingDate,
       bookingTime: input.bookingTime,
@@ -123,30 +119,21 @@ export async function listBookings(
   return tx
     .select()
     .from(bookings)
-    .where(
-      and(
-        eq(bookings.tenantId, cfg.tenantId),
-        eq(bookings.locationId, cfg.locationId),
-        eq(bookings.bookingDate, date),
-      ),
-    )
+    .where(and(eq(bookings.locationId, cfg.locationId), eq(bookings.bookingDate, date)))
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
 
 /**
- * Read one reservation by id WITHIN the caller's tenant, returning undefined when absent. The id is a
- * globally-unique UUID and `withTenant` no longer isolates SELECTs (#255), so the read scopes tenantId
- * itself (CLAUDE.md §3). Lifecycle verbs translate absence into booking.not_found.
+ * Read one reservation by id, returning undefined when absent. The id
+ * alone identifies the row. Lifecycle verbs translate absence into booking.not_found.
  */
 export async function getBooking(
   tx: Transaction,
   cfg: BookingConfig,
   id: string,
 ): Promise<Booking | undefined> {
-  const [row] = await tx
-    .select()
-    .from(bookings)
-    .where(and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId)));
+  void cfg;
+  const [row] = await tx.select().from(bookings).where(eq(bookings.id, id));
   return row;
 }
 
@@ -179,9 +166,7 @@ export async function updateBooking(
       notes: patch.notes,
       tableId: patch.tableId,
     })
-    .where(
-      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), eq(bookings.status, "booked")),
-    )
+    .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
     .returning({ id: bookings.id });
   if (updated.length === 0) {
     throw new AppError("booking.not_found", { bookingId: id });
@@ -199,20 +184,16 @@ async function advanceStatus(
   from: readonly ("booked" | "seated" | "completed" | "no_show" | "cancelled")[],
   to: "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<void> {
+  void cfg;
   const updated = await tx
     .update(bookings)
     .set({ status: to })
-    .where(
-      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), inArray(bookings.status, from)),
-    )
+    .where(and(eq(bookings.id, id), inArray(bookings.status, from)))
     .returning({ id: bookings.id });
   if (updated.length > 0) {
     return;
   }
-  const [row] = await tx
-    .select({ id: bookings.id })
-    .from(bookings)
-    .where(and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId)));
+  const [row] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, id));
   if (row === undefined) {
     throw new AppError("booking.not_found", { bookingId: id });
   }
@@ -289,9 +270,7 @@ export async function seatBooking(
   const seated = await tx
     .update(bookings)
     .set({ tableId, tabId, status: "seated" })
-    .where(
-      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), eq(bookings.status, "booked")),
-    )
+    .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
     .returning({ id: bookings.id });
   if (seated.length === 0) {
     throw new AppError("booking.invalid_transition", { bookingId: id });

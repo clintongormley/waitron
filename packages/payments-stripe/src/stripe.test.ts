@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -34,12 +33,10 @@ describe("the stripe terminal adapter against a real database", () => {
       const provider = new StripeTerminalProvider({
         client: new FakeStripe(),
         db: probe,
-        tenantId: brandTenantId(t.tenantId),
         nodeId: "11111111-1111-4111-8111-111111111111",
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
       const result = await provider.collect({
-        tenantId: brandTenantId(t.tenantId),
         tillId: brandTillId(t.tillId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("10.00"),

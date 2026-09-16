@@ -3,11 +3,11 @@
 // local code follows (./chain.ts, ./registro-sif.ts). `fiscal.sale_not_recorded`, also thrown
 // here, is `@waitron/fiscal`'s and arrives with its types.
 import "./errors.js";
-import { eq, sql } from "drizzle-orm";
-import { tenants, withTenant } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, decimal, sumDecimals } from "@waitron/shared";
-import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TillId } from "@waitron/shared";
 import type {
   Counterparty,
   FiscalBackend,
@@ -47,7 +47,7 @@ const BACKEND_ID = "verifactu";
 
 /**
  * Software-identity fields of `SistemaInformatico` that describe THIS PRODUCT rather than any
- * one tenant, till, or sale — Waitron's own claims about what it is and how it may be used.
+ * one venue, till, or sale — Waitron's own claims about what it is and how it may be used.
  * `IdSistemaInformatico` and `NumeroInstalacion` are deliberately absent from this shape: both
  * are per-(NIF, node) facts already minted by `registerSif` and read back from `registro_sif` via
  * `currentSif`, never configuration.
@@ -57,7 +57,7 @@ const BACKEND_ID = "verifactu";
  * Q5(b)"): `tipoUsoPosibleSoloVerifactu`/`tipoUsoPosibleMultiOT`/`indicadorMultiplesOT` describe
  * how this specific product may be used under Veri*Factu — whether it is Veri*Factu-only capable,
  * whether it can serve multiple obligados, and whether it currently does. The defaults below are
- * a plausible starting point for a single-tenant-per-installation POS, not a value taken from a
+ * a plausible starting point for a one-taxpayer-per-installation POS, not a value taken from a
  * primary source, and are overridable via `VerifactuBackendOptions.systemInfo` for exactly that
  * reason.
  */
@@ -83,7 +83,7 @@ export interface VerifactuBackendOptions {
    * `issuedAt`/`offsetMinutes` by its caller instead and must not read the clock a second time
    * (see `record-sale.ts`'s own "one clock reading for the whole transaction" note in
    * `packages/core`). `recordVoid` has no caller-supplied timestamp on its signature at all
-   * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(tenantId,
+   * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(
    * nodeId)` takes no transaction at all, so it needs its OWN `db` handle below rather than one a
    * caller passes in.
    */
@@ -92,13 +92,13 @@ export interface VerifactuBackendOptions {
    * parameter at all, so it cannot participate in a caller's transaction. */
   db: Database;
   /**
-   * The AEAT transport, per tenant. Accepted so the composition root's construction shape is stable,
+   * The AEAT transport. Accepted so the composition root's construction shape is stable,
    * but NOT consumed by this class: nothing on the sale path contacts AEAT (spec §4). The submission
    * pass and the reconciliation sweep are the standalone `drain`/`reconcile` functions
    * (`./drain.ts`/`./reconcile.ts`), reached through the `FISCAL_SLOT` seats, each taking its own
    * `DrainDeps`/`ReconcileDeps` resolver — see `DrainDeps.resolveClient`.
    */
-  resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
+  resolveClient: () => Promise<VerifactuClient>;
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
    * `"production"`. */
   environment?: Environment;
@@ -139,18 +139,13 @@ export interface VerifactuBackendOptions {
  */
 type OriginalAlta = Pick<
   RegistroRow,
-  | "tenant_id"
-  | "till_id"
-  | "node_id"
-  | "id_emisor_factura"
-  | "num_serie_factura"
-  | "fecha_expedicion_factura"
+  "till_id" | "node_id" | "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
 >;
 
 /**
  * The columns `recordCorrection` reads off the alta being corrected. Narrower than `OriginalAlta`
- * in one axis and wider in another: no `tenant_id`/`till_id` (the corrective's OWN `sale` carries
- * those, unlike a void which must recover them), but `tipo_factura` too — the R-type is derived
+ * in one axis and wider in another: no `till_id` (the corrective's OWN `sale` carries it, unlike a
+ * void which must recover it), but `tipo_factura` too — the R-type is derived
  * from it (F2 → R5), so it is read here rather than assumed. The three identity columns feed
  * `FacturasRectificadas` directly, the same shortcut `recordVoid` takes for the anulada identity.
  */
@@ -196,8 +191,8 @@ export class VerifactuBackend implements FiscalBackend {
    * Confirms — rather than performs — a node's Veri*Factu provisioning (node-id rekey, 2026-08-03:
    * the SIF is the node, #33).
    *
-   * The generic `FiscalBackend.registerNode(tx, nodeId, { tenantId })` signature carries no NIF
-   * and no `IdSistemaInformatico`, so it cannot mint a NEW SIF identity: `registerSif`
+   * The generic `FiscalBackend.registerNode(tx, nodeId)` signature carries no NIF and no
+   * `IdSistemaInformatico`, so it cannot mint a NEW SIF identity: `registerSif`
    * (`./registro-sif.ts`) genuinely needs both, and both are regime-specific provisioning
    * inputs the generic interface has no room for. `registerSif`'s own doc comment already frames
    * first-time (and re-)registration as a rare, sequential, admin-only action performed once,
@@ -205,12 +200,8 @@ export class VerifactuBackend implements FiscalBackend {
    * established via `currentSif`, and reports `sif.not_registered` (thrown by `currentSif`
    * itself) exactly like any other caller that reaches a node with no live SIF identity.
    */
-  async registerNode(
-    tx: Transaction,
-    nodeId: NodeId,
-    params: { tenantId: TenantId },
-  ): Promise<NodeRegistration> {
-    const sif = await currentSif(tx, params.tenantId, nodeId);
+  async registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
+    const sif = await currentSif(tx, nodeId);
     return {
       backend: this.id,
       nodeId,
@@ -231,8 +222,8 @@ export class VerifactuBackend implements FiscalBackend {
    * instant for one event.
    */
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
-    const sif = await currentSif(tx, sale.tenantId, sale.nodeId);
-    const tenant = await this.legalNameFor(tx, sale.tenantId);
+    const sif = await currentSif(tx, sale.nodeId);
+    const tenant = await this.taxpayer(tx);
 
     const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
       BaseImponibleOimporteNoSujeto: line.base,
@@ -282,7 +273,6 @@ export class VerifactuBackend implements FiscalBackend {
 
     const appended = await appendToChain(
       tx,
-      sale.tenantId,
       sale.nodeId,
       {
         tipo: "alta",
@@ -297,7 +287,7 @@ export class VerifactuBackend implements FiscalBackend {
     // Step 6. `pendiente`, `intentos: 0`, `csv: null` are every one of this column's own
     // defaults (`./schema/envios.ts`) — nothing here has been sent anywhere, which is the whole
     // point of a write path that must never contact AEAT.
-    await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
+    await tx.insert(envios).values({ registroId: appended.id });
 
     return {
       backend: this.id,
@@ -397,7 +387,7 @@ export class VerifactuBackend implements FiscalBackend {
     void reason;
 
     const { rows } = await tx.execute<OriginalAlta>(sql`
-      select tenant_id, till_id, node_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura
+      select till_id, node_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
       limit 1
@@ -407,13 +397,12 @@ export class VerifactuBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
 
-    const tenantId = original.tenant_id as TenantId;
     // The anulación extends the ORIGINAL's chain, keyed by its node (node-id rekey, 2026-08-03),
     // and inherits the original's `till_id` as its own informational snapshot.
     const tillId = original.till_id as TillId;
     const nodeId = original.node_id as NodeId;
-    const sif = await currentSif(tx, tenantId, nodeId);
-    const tenant = await this.legalNameFor(tx, tenantId);
+    const sif = await currentSif(tx, nodeId);
+    const tenant = await this.taxpayer(tx);
     const now = this.clock.now();
 
     const input: Omit<AnulacionInput, "Encadenamiento"> = {
@@ -454,13 +443,12 @@ export class VerifactuBackend implements FiscalBackend {
 
     const appended = await appendToChain(
       tx,
-      tenantId,
       nodeId,
       { tipo: "anulacion", saleId, tillId, entorno: this.deploymentEnvironment, input },
       sif,
     );
 
-    await tx.insert(envios).values({ registroId: appended.id, tenantId });
+    await tx.insert(envios).values({ registroId: appended.id });
 
     return {
       backend: this.id,
@@ -516,8 +504,8 @@ export class VerifactuBackend implements FiscalBackend {
       });
     }
 
-    const sif = await currentSif(tx, sale.tenantId, sale.nodeId);
-    const tenant = await this.legalNameFor(tx, sale.tenantId);
+    const sif = await currentSif(tx, sale.nodeId);
+    const tenant = await this.taxpayer(tx);
 
     const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
       BaseImponibleOimporteNoSujeto: line.base,
@@ -571,7 +559,6 @@ export class VerifactuBackend implements FiscalBackend {
 
     const appended = await appendToChain(
       tx,
-      sale.tenantId,
       sale.nodeId,
       {
         tipo: "alta",
@@ -583,7 +570,7 @@ export class VerifactuBackend implements FiscalBackend {
       sif,
     );
 
-    await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
+    await tx.insert(envios).values({ registroId: appended.id });
 
     return {
       backend: this.id,
@@ -697,8 +684,8 @@ export class VerifactuBackend implements FiscalBackend {
       });
     }
 
-    const sif = await currentSif(tx, sale.tenantId, sale.nodeId);
-    const tenant = await this.legalNameFor(tx, sale.tenantId);
+    const sif = await currentSif(tx, sale.nodeId);
+    const tenant = await this.taxpayer(tx);
 
     const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
       BaseImponibleOimporteNoSujeto: line.base,
@@ -733,7 +720,6 @@ export class VerifactuBackend implements FiscalBackend {
 
     const appended = await appendToChain(
       tx,
-      sale.tenantId,
       sale.nodeId,
       {
         tipo: "alta",
@@ -745,7 +731,7 @@ export class VerifactuBackend implements FiscalBackend {
       sif,
     );
 
-    await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
+    await tx.insert(envios).values({ registroId: appended.id });
 
     return {
       backend: this.id,
@@ -757,32 +743,25 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
-  /**
-   * Delegates to `verifyChain` (art. 7.i). `tenantId` is supplied by the caller (always inside a
-   * `withTenant`-scoped transaction), so there is no `tenants`/`tills` lookup to recover it.
-   */
-  async checkIntegrity(
-    tx: Transaction,
-    tenantId: TenantId,
-    nodeId: NodeId,
-  ): Promise<IntegrityReport> {
-    return verifyChain(tx, tenantId, nodeId);
+  /** Delegates to `verifyChain` (art. 7.i), on the node whose chain the caller is about to extend. */
+  async checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
+    return verifyChain(tx, nodeId);
   }
 
   /**
    * How many of this node's records AEAT has not yet confirmed — the art. 16.4 unsent count
    * (node-id rekey, 2026-08-03: the chain is per-node, so the unsent count is per-node too).
    *
-   * Filters on `tenant_id` explicitly, and opens its OWN `withTenant` because it takes no caller
+   * Opens its OWN `withTransaction` because it takes no caller
    * transaction (unlike `filedReceiptFor` and `checkIntegrity`, which are handed one).
    */
-  async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
-    return withTenant(this.db, tenantId, async (tx) => {
+  async pendingCount(nodeId: NodeId): Promise<number> {
+    return withTransaction(this.db, async (tx) => {
       const rows = await tx.execute<{ count: string }>(sql`
         select count(*)::text as count
         from envios e
         join registros_facturacion r on r.id = e.registro_id
-        where r.node_id = ${nodeId} and e.tenant_id = ${tenantId} and e.estado = 'pendiente'
+        where r.node_id = ${nodeId} and e.estado = 'pendiente'
       `);
       return Number(rows.rows[0]!.count);
     });
@@ -839,19 +818,22 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
-  private async legalNameFor(tx: Transaction, tenantId: TenantId): Promise<{ legalName: string }> {
-    const [row] = await tx
-      .select({ legalName: tenants.legalName })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId));
-    /* v8 ignore start */
-    if (row === undefined) {
-      // Structurally unreachable: `sale.tenantId`/a void's own recovered `tenantId` both come
-      // from `tenants.id` foreign keys elsewhere in the schema, so a row that exists at all
-      // always has a tenant.
-      throw new Error(`VerifactuBackend: no tenant found for ${tenantId}`);
+  /**
+   * The one taxpayer row, for the `NombreRazonEmisor` every record carries. Read from the table on
+   * each filing rather than cached: a legal-name correction must reach the next record.
+   *
+   * An empty `tenants` table is a database that files sales for nobody. Provisioning writes that row
+   * before anything can sell, and no foreign key enforces it any more (they went with the tenant
+   * columns), so this is reachable only by a corrupt or half-provisioned database — a plain `Error`
+   * naming that state, not a domain code, for the same reason `readStandardSeriesIdTx`
+   * (`@waitron/db`) uses one. It must fail LOUDLY: filing a record under a blank or guessed issuer
+   * name is unrepairable (CLAUDE.md §5).
+   */
+  private async taxpayer(tx: Transaction): Promise<{ legalName: string }> {
+    const row = await readTenant(tx);
+    if (row === null) {
+      throw new Error("tenants is empty: a venue cannot file a record with no taxpayer to file as");
     }
-    /* v8 ignore stop */
     return row;
   }
 }

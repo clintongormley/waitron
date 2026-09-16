@@ -37,16 +37,21 @@ import { recordDailyClose, verifyDailyCloseChain } from "@waitron/reporting";
 import type { CashCountInput, DailyCloseRecord } from "@waitron/reporting";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  createPgliteDb,
+  runMigrations,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
@@ -83,7 +88,6 @@ function fixedClock(instant: Date): TrustedClock {
 }
 
 interface Venue {
-  tenantId: TenantId;
   nodeId: NodeId;
   seriesId: SeriesId;
   caja1: TillId;
@@ -98,35 +102,35 @@ interface Venue {
  * running POS cannot create tenants).
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  const t = await db.execute<{ id: string }>(
-    sql`insert into tenants (country, tax_id, legal_name) values ('ES', '50000000K', 'Deli Demo SL') returning id`,
+  await db.execute(
+    sql`insert into tenants (id, country, tax_id, legal_name)
+          values (1, 'ES', '50000000K', 'Deli Demo SL') on conflict (id) do nothing`,
   );
-  const tenantId = brandTenantId(t.rows[0]!.id);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till1 = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`,
   );
   const caja1 = brandTillId(till1.rows[0]!.id);
   const till2 = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 2') returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, 'Caja 2') returning id`,
   );
   const caja2 = brandTillId(till2.rows[0]!.id);
   const node = await db.execute<{ id: string }>(
-    sql`insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Nodo 1') returning id`,
+    sql`insert into nodes (location_id, name) values (${locationId}, 'Nodo 1') returning id`,
   );
   const nodeId = brandNodeId(node.rows[0]!.id);
   const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A') returning id`,
+    sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
   );
   const seriesId = brandSeriesId(series.rows[0]!.id);
   const tillNames = new Map<string, string>([
     [caja1, "Caja 1"],
     [caja2, "Caja 2"],
   ]);
-  return { tenantId, nodeId, seriesId, caja1, caja2, tillNames };
+  return { nodeId, seriesId, caja1, caja2, tillNames };
 }
 
 interface SaleSpec {
@@ -147,7 +151,6 @@ async function ringSale(
   spec: SaleSpec,
 ): Promise<void> {
   const input: RecordSaleInput = {
-    tenantId: venue.tenantId,
     tillId: spec.till,
     nodeId: venue.nodeId,
     seriesId: venue.seriesId,
@@ -171,7 +174,7 @@ async function ringSale(
       tenders: [{ method: spec.method, amount: spec.total, tipAmount: "0.00", settledAt: spec.at }],
     },
   };
-  await withTenant(db, venue.tenantId, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await recordSale(tx, backend, input);
   });
@@ -184,10 +187,9 @@ function closeDay(
   businessDay: string,
   cashCounts: CashCountInput[],
 ): Promise<DailyCloseRecord> {
-  return withTenant(db, venue.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, {
-      tenantId: venue.tenantId,
       nodeId: venue.nodeId,
       businessDay,
       timeZone: TIME_ZONE,
@@ -199,9 +201,9 @@ function closeDay(
 }
 
 function verifyChain(db: Database, venue: Venue) {
-  return withTenant(db, venue.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    return verifyDailyCloseChain(tx, venue.tenantId, venue.nodeId);
+    return verifyDailyCloseChain(tx, venue.nodeId);
   });
 }
 
@@ -268,9 +270,9 @@ async function main(): Promise<void> {
 
     // Register the node once (a one-time admin action recordSale itself never performs), as app_user
     // in its own committed transaction so the later write transactions see it.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      await backend.registerNode(tx, venue.nodeId, { tenantId: venue.tenantId });
+      await backend.registerNode(tx, venue.nodeId);
     });
 
     // Ring the day's trade across the two tills — a cash and a card tender at each.

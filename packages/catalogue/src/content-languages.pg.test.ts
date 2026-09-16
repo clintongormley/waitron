@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -10,25 +10,21 @@ import {
 } from "./content-languages.js";
 
 const suite = useTemplateDb({ template: "core" });
-function app<T>(
-  db: Database,
-  tenantId: string,
-  action: (tx: Transaction) => Promise<T>,
-): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+function app<T>(db: Database, action: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return action(tx);
   });
 }
 async function configuredTenant() {
-  const tenantId = await seedTenant(suite.admin);
-  await app(suite.admin, tenantId, (tx) =>
-    writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] }),
+  await seedTenant(suite.admin);
+  await app(suite.admin, (tx) =>
+    writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }),
   );
   const menu = await suite.admin.execute<{ id: string }>(
-    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+    sql`insert into catalogues (name) values ('Lunch') returning id`,
   );
-  return { tenantId, menuId: menu.rows[0]!.id };
+  return { menuId: menu.rows[0]!.id };
 }
 async function blocked(pid: number) {
   await expect
@@ -44,25 +40,20 @@ async function blocked(pid: number) {
     .toBe(true);
 }
 
-it("reads and edits only the requested tenant as app_user with SELECT/INSERT/UPDATE grants", async () => {
-  const { tenantId } = await configuredTenant();
-  const other = await seedTenant(suite.admin);
-  await app(suite.admin, other, async (tx) => {
+it("reads and edits its content languages as app_user with SELECT/INSERT/UPDATE grants", async () => {
+  await seedTenant(suite.admin);
+  await app(suite.admin, async (tx) => {
     const role = await tx.execute<{ role: string; superuser: boolean }>(
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
     );
     expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-    expect(await readContentLanguages(tx, other, "it-IT")).toEqual({
+    expect(await readContentLanguages(tx, "it-IT")).toEqual({
       defaultLanguage: "it",
       languages: ["it"],
     });
-    await writeContentLanguages(tx, other, { defaultLanguage: "it", languages: ["it", "de"] });
-    await writeContentLanguages(tx, other, { defaultLanguage: "de", languages: ["it", "de"] });
-    expect(await readContentLanguages(tx, tenantId, "es")).toEqual({
-      defaultLanguage: "en",
-      languages: ["en", "fr"],
-    });
-    expect(await readContentLanguages(tx, other, "es")).toEqual({
+    await writeContentLanguages(tx, { defaultLanguage: "it", languages: ["it", "de"] });
+    await writeContentLanguages(tx, { defaultLanguage: "de", languages: ["it", "de"] });
+    expect(await readContentLanguages(tx, "es")).toEqual({
       defaultLanguage: "de",
       languages: ["de", "it"],
     });
@@ -74,14 +65,12 @@ it("reads and edits only the requested tenant as app_user with SELECT/INSERT/UPD
     expect(grants.rows).toEqual([{ privileges: "INSERT,SELECT,UPDATE" }]);
   });
   await expect(
-    app(suite.admin, other, (tx) =>
-      tx.execute(sql`delete from content_languages where tenant_id = ${other}`),
-    ),
+    app(suite.admin, (tx) => tx.execute(sql`delete from content_languages`)),
   ).rejects.toThrow();
 });
 
 it("a default switch waits for an authoring transaction and rejects its newly committed missing translation", async () => {
-  const { tenantId, menuId } = await configuredTenant();
+  const { menuId } = await configuredTenant();
   const [author, configuration] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let release!: () => void;
   const wait = new Promise<void>((resolve) => {
@@ -94,16 +83,17 @@ it("a default switch waits for an authoring transaction and rejects its newly co
   try {
     const pid = (await configuration.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
-    const writing = app(author, tenantId, async (tx) => {
-      await validateContentTranslations(tx, tenantId, { en: "Bread" }, "es");
+    const writing = app(author, async (tx) => {
+      await validateContentTranslations(tx, { en: "Bread" }, "es");
       ready();
       await wait;
-      await tx.execute(sql`insert into products (tenant_id, catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menuId}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', '2', 'general')`);
+      await tx.execute(
+        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menuId}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', '2', 'general')`,
+      );
     });
     await validated;
-    const changing = app(configuration, tenantId, (tx) =>
-      writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] }),
+    const changing = app(configuration, (tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
     );
     const settled = Promise.allSettled([changing, writing]);
     try {
@@ -119,10 +109,9 @@ it("a default switch waits for an authoring transaction and rejects its newly co
         code: "content.default_missing",
         params: { language: "fr", count: 1 },
       });
-    expect(
-      (await app(suite.admin, tenantId, (tx) => readContentLanguages(tx, tenantId, "es")))
-        .defaultLanguage,
-    ).toBe("en");
+    expect((await app(suite.admin, (tx) => readContentLanguages(tx, "es"))).defaultLanguage).toBe(
+      "en",
+    );
   } finally {
     release();
     await Promise.all([author.close(), configuration.close()]);
@@ -130,7 +119,7 @@ it("a default switch waits for an authoring transaction and rejects its newly co
 });
 
 it("an authoring transaction waits for the default switch and validates against the committed new language", async () => {
-  const { tenantId } = await configuredTenant();
+  await configuredTenant();
   const [author, configuration] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let release!: () => void;
   const wait = new Promise<void>((resolve) => {
@@ -143,15 +132,13 @@ it("an authoring transaction waits for the default switch and validates against 
   try {
     const pid = (await author.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
-    const changing = app(configuration, tenantId, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] });
+    const changing = app(configuration, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] });
       ready();
       await wait;
     });
     await changed;
-    const writing = app(author, tenantId, (tx) =>
-      validateContentTranslations(tx, tenantId, { en: "Bread" }, "es"),
-    );
+    const writing = app(author, (tx) => validateContentTranslations(tx, { en: "Bread" }, "es"));
     const settled = Promise.allSettled([writing, changing]);
     try {
       await blocked(pid);

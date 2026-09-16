@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
 // subpath (no `exports` map entry, no such folder). `packages/fiscal/src/index.ts`'s own closing
 // comment states the real path: "packages/core imports it from
@@ -17,7 +17,7 @@ import {
   pgErrorCode,
   saleVoids,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -28,7 +28,6 @@ import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -53,7 +52,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // A manager (holds `sale.void`), a supervisor (holds it too — the override authorizer), and a
   // staff member (holds nothing). Seeded as the superuser owner exactly like `seedTenant` above:
   // Seed directly on the fixture connection.
@@ -71,16 +70,16 @@ beforeEach(async () => {
  * display name distinct because this fixture creates several live people in one tenant. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, ${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
+    sql`insert into persons (display_name, pin_hash, role)
+        values (${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
   );
   return rows[0]!.id;
 }
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
-  const session = await withTenant(suite.db, tenantId, (tx) =>
-    loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+  const session = await withTransaction(suite.db, (tx) =>
+    loginWithPin(tx, { tillId, personId, pin: "1234" }),
   );
   return session.id;
 }
@@ -109,7 +108,6 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -153,9 +151,9 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  * (`fiscal.node_not_registered`), matching a real backend. Mirrors record-sale.test.ts's own `run`.
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
 }
@@ -166,15 +164,17 @@ async function voidSale(
   reason = "Wrong table",
   authz: AuthzInput = { sessionId: managerSessionId },
 ) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordVoid(tx, backend, saleId, reason, authz);
   });
 }
 
+/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
+ * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -188,14 +188,14 @@ async function countRows(table: string): Promise<number> {
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
     id: fake.id,
-    registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
+    registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
     recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
-    checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
-    pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
+    checkIntegrity: (tx, node) => fake.checkIntegrity(tx, node),
+    pendingCount: (node) => fake.pendingCount(node),
     ...overrides,
   };
 }
@@ -291,10 +291,9 @@ describe("recordVoid — numbering", () => {
     expect(row?.invoiceNumber).toBe(2);
 
     const error = await captureError(() =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(sales).values({
-          tenantId,
           tillId,
           nodeId,
           seriesId,
@@ -386,7 +385,7 @@ describe("recordVoid — authorization", () => {
   });
 
   it("returns sale.not_found before the gate — a missing sale never leaks an authz error", async () => {
-    // Ordering: `authorize` runs AFTER the sale-exists lookup, so a cross-tenant or missing sale is
+    // Ordering: `authorize` runs AFTER the sale-exists lookup, so a missing sale is
     // still `sale.not_found` and never `authorization.not_permitted`, even under a staff session that
     // could not have voided it anyway. A gate placed before the lookup would leak which sales exist.
     await expect(
@@ -420,7 +419,7 @@ describe("recordVoid — error propagation", () => {
     // exposes both. One row carrying every field either path reads (plus a `manager` role that holds
     // `sale.void`) lets authorize pass on the operator path so control reaches the failing insert
     // this test is actually about.
-    const row = [{ tenantId, tillId, nodeId, personId: "operator", role: "manager" }];
+    const row = [{ tillId, nodeId, personId: "operator", role: "manager" }];
     const fakeTx = {
       select: () => ({
         from: () => ({
@@ -454,10 +453,10 @@ describe("recordVoid — error propagation", () => {
         throw new Error("not used by this test");
       },
       checkIntegrity: async () => ({ ok: true, checked: 0, issues: [] }),
-      // Both params are part of FiscalBackend's real signature; this override never reads
-      // either, mirroring fake-backend.ts's identical `_reason` convention.
+      // The node id is part of FiscalBackend's real signature; this override never reads it,
+      // mirroring fake-backend.ts's identical `_reason` convention.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      pendingCount: (_tenant, _node) => {
+      pendingCount: (_node) => {
         throw new Error("not used by this test");
       },
     };
@@ -476,7 +475,7 @@ describe("recordVoid — atomicity", () => {
   it("rolls back the sale_voids projection when the fiscal step fails", async () => {
     // Mirrors record-sale.test.ts's identical "recordSale — atomicity" test for the write path.
     // `sale_voids` is appended BEFORE `backend.recordVoid` is even called (record-void.ts's own
-    // ordering comment), both inside the ONE transaction `voidSale`'s `withTenant` opens. Left
+    // ordering comment), both inside the ONE transaction `voidSale`'s `withTransaction` opens. Left
     // uncovered, a future refactor that split those two writes across separate transactions would
     // pass every OTHER test in this file — none of them fails the fiscal step AFTER the projection
     // insert has already run — while producing a corrupt half-void in production: a `sale_voids`
@@ -557,9 +556,9 @@ describe("recordVoid — no fiscal condition blocks a void", () => {
     const observed: string[] = [];
     const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, tenant, node) {
+      async checkIntegrity(tx, node) {
         observed.push("checkIntegrity");
-        return fake.checkIntegrity(tx, tenant, node);
+        return fake.checkIntegrity(tx, node);
       },
       async recordVoid(tx, id, reason) {
         observed.push("recordVoid");

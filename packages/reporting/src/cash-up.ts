@@ -11,12 +11,12 @@ import type {
 } from "./types.js";
 
 /**
- * Operational cash-up for one (tenant, node) — or the whole tenant when `input.nodeId` is omitted —
+ * Operational cash-up for one node — or the whole venue when `input.nodeId` is omitted —
  * over one business day, anchored on settlement. Reads `tenders` joined to `sales` (for node scoping
  * and till_id); groups by (till, method). `cashTakings` per till is Σ cash-method amount (design §5).
  * The node predicate is applied via `nodeScopeClause` only when a node is fixed (a venue-wide overview
- * omits it, relying on the tenant predicate). Post-settlement refunds are out of scope (tenders
- * are always positive). Explicit predicates scope the tenant and optional node.
+ * omits it and reads the whole database, which holds one tenant). Post-settlement refunds are out of
+ * scope (tenders are always positive).
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
   const { rows } = await tx.execute<{
@@ -31,10 +31,9 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
       sum(t.amount)::numeric(12, 2)::text as amount,
       sum(t.tip_amount)::numeric(12, 2)::text as tip
     from tenders t
-    join sales s on s.id = t.sale_id and s.tenant_id = ${input.tenantId}
-    where t.tenant_id = ${input.tenantId}
+    join sales s on s.id = t.sale_id
+    where ${businessDayClause(sql`t.settled_at`, input)}
       ${nodeScopeClause(input.nodeId)}
-      and ${businessDayClause(sql`t.settled_at`, input)}
     group by s.till_id, t.method
     -- ::text so byMethod is alphabetical (card, cash, other, ...). Ordering the tender_method ENUM
     -- directly sorts by its DECLARED order (cash, card, voucher, ...), which is arbitrary here.

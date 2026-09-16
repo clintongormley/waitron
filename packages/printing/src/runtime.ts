@@ -56,10 +56,8 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
-  /** A tenant-scoped transaction (the Task-6 route wraps this in `withTenant` + `asAppUser`). */
+  /** The caller's transaction (the Task-6 route wraps this in `withTransaction` + `asAppUser`). */
   tx: Transaction;
-  /** The tenant the agent belongs to, enforced by the pull's explicit tenant predicate. */
-  cfg: { tenantId: string };
   /** The calling agent. NOT an eligibility filter (printers carry no agent binding) — it is stamped
    * into `claimed_by` on every claim and is what authorises the later report (only the claimer reports
    * its own job). */
@@ -105,7 +103,7 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * PULL (design §3c step 1) — atomically CLAIM a batch of this agent's due jobs, flipping them
  * `queued`/`failed`→`printing`, and RETURN each with its printer's connection facts. Extracted from
  * `runAgentOnce` (Controller Ruling 6) so the SERVER path can claim-and-COMMIT within one HTTP request
- * (the route's `withTenant` transaction is the commit boundary) and then return the claimed jobs to a
+ * (the route's `withTransaction` transaction is the commit boundary) and then return the claimed jobs to a
  * remote agent, holding NO lock or transaction across that agent's socket write. `runAgentOnce` (local
  * mode) still calls this, then pushes+reports in the SAME transaction.
  *
@@ -114,7 +112,7 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * UNAMBIGUOUSLY load-bearing. Delete the lock and two agents' SELECTs both return the same row, and
  * both UPDATEs (keyed only on `id`) then re-mark it — a double claim (runtime.race.test.ts proves
  * exactly this by deletion). All values bind as `$n` (Drizzle-parameterised), never concatenated. The
- * join to `printers` on `(tenant_id, id)` reads each job's connection facts; it is NOT the
+ * join to `printers` on its id reads each job's connection facts; it is NOT the
  * authorization scope. Eligibility is DERIVED (design §3): a `network_tcp` printer is claimable by any
  * agent reporting this venue (`p.location_id = ctx.locationId`), a `usb`/`bluetooth` printer only when
  * its `local_key` is one the agent currently SEES (`ctx.visibleKeys`). An empty `visibleKeys` degenerates
@@ -150,7 +148,6 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  */
 export async function claimPrintJobs(
   tx: Transaction,
-  cfg: { tenantId: string },
   agentId: string,
   ctx: { locationId: string; visibleKeys: string[] },
 ): Promise<ClaimedJob[]> {
@@ -165,9 +162,8 @@ export async function claimPrintJobs(
       : sql`false`;
   const picked = await tx.execute<{ id: string }>(sql`
     select j.id from print_jobs j
-    join printers p on p.tenant_id = j.tenant_id and p.id = j.printer_id
-    where j.tenant_id = ${cfg.tenantId}
-      and p.active = true
+    join printers p on p.id = j.printer_id
+    where p.active = true
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       and (
         j.status = 'queued'
@@ -195,8 +191,7 @@ export async function claimPrintJobs(
   const claimed = await tx.execute<ClaimedJob>(sql`
     update print_jobs set status = 'printing', claimed_at = now(), claimed_by = ${agentId}
     from printers p
-    where print_jobs.tenant_id = p.tenant_id
-      and print_jobs.printer_id = p.id
+    where print_jobs.printer_id = p.id
       and print_jobs.id in ${ids}
     returning print_jobs.id, print_jobs.printer_id, print_jobs.payload,
               p.transport, p.host, p.port, p.local_key
@@ -238,11 +233,10 @@ export async function claimPrintJobs(
  */
 export async function reportPrintJob(
   tx: Transaction,
-  cfg: { tenantId: string },
   input: { agentId: string; jobId: string; outcome: JobOutcome },
 ): Promise<{ updated: boolean }> {
   const { agentId, jobId, outcome } = input;
-  // Only the SET clause differs by outcome; the WHERE — the tenant predicate, the `status = 'printing'`
+  // Only the SET clause differs by outcome; the WHERE — the job id, the `status = 'printing'`
   // idempotency guard and the `claimed_by` claimer-scope — is IDENTICAL for both, so it is written
   // once. `done` stamps `delivered_at`; `failed` records `last_error` and bumps the bounded-retry
   // `attempts`. `${outcome.error}` binds as `$n` like every other value here, never concatenated.
@@ -252,8 +246,7 @@ export async function reportPrintJob(
       : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}
-    where print_jobs.tenant_id = ${cfg.tenantId}
-      and print_jobs.id = ${jobId}
+    where print_jobs.id = ${jobId}
       and print_jobs.status = 'printing'
       and print_jobs.claimed_by = ${agentId}
     returning print_jobs.id`);
@@ -261,12 +254,12 @@ export async function reportPrintJob(
 }
 
 export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResult> {
-  const { tx, cfg, agentId, locationId, visibleKeys, transport } = deps;
+  const { tx, agentId, locationId, visibleKeys, transport } = deps;
 
   // 1. PULL — claim a batch of due jobs (the locking `claimPrintJobs`, flipping them to `printing`),
   //    returning each with its printer's connection facts so the push needs no second read. Eligibility
   //    is the venue + this agent's visible device keys; `agentId` is stamped as `claimed_by`.
-  const claimed = await claimPrintJobs(tx, cfg, agentId, { locationId, visibleKeys });
+  const claimed = await claimPrintJobs(tx, agentId, { locationId, visibleKeys });
 
   // 2/3. PUSH each job, then REPORT its outcome. Per-job try/catch ISOLATES a down/erroring printer:
   //      its failure marks only that job `failed` and the loop moves on, so one dead printer never
@@ -296,11 +289,11 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       // interface deals in Uint8Array and the fake sink's capture compares byte-for-byte against an
       // `esc().bytes()` (also a Uint8Array), free of any Buffer-vs-Uint8Array identity mismatch.
       await transport.send(target, new Uint8Array(job.payload));
-      await reportPrintJob(tx, cfg, { agentId, jobId: job.id, outcome: { status: "done" } });
+      await reportPrintJob(tx, { agentId, jobId: job.id, outcome: { status: "done" } });
       delivered += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await reportPrintJob(tx, cfg, {
+      await reportPrintJob(tx, {
         agentId,
         jobId: job.id,
         outcome: { status: "failed", error: message },

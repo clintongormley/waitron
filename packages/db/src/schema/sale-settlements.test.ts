@@ -1,9 +1,9 @@
 // Real PostgreSQL: exercises reads/writes or triggers after SET ROLE app_user.
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
@@ -97,7 +97,6 @@ describeEachTarget("sale settlements — schema shape", (target) => {
 
 // Behavioural guard matrix, proved by deletion (design §7); see the matrix header this file
 // carried before the baseline squash in its git history.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
@@ -109,21 +108,18 @@ let nodeA = "";
 async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
-    .values({ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" });
+    .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" });
   await db.insert(locations).values({
     id: LOCATION_A,
-    tenantId: TENANT_A,
     name: "Fixture Location A",
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });
-  await db
-    .insert(tills)
-    .values({ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" });
-  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  await db.insert(tills).values({ id: TILL_A1, locationId: LOCATION_A, name: "A1" });
+  nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
+    .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
 }
@@ -141,7 +137,6 @@ async function recordSale(
     const [sale] = await tx
       .insert(sales)
       .values({
-        tenantId: TENANT_A,
         tillId: TILL_A1,
         nodeId: nodeA,
         seriesId: seriesA,
@@ -159,7 +154,6 @@ async function recordSale(
       })
       .returning({ id: sales.id });
     await tx.insert(saleLines).values({
-      tenantId: TENANT_A,
       saleId: sale.id,
       lineNo: 1,
       name: "Café solo",
@@ -171,7 +165,6 @@ async function recordSale(
     });
     await tx.insert(tenders).values(
       tenderRows.map((t) => ({
-        tenantId: TENANT_A,
         saleId: sale.id,
         method: t.method,
         amount: t.amount,
@@ -203,17 +196,14 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
     const saleId = await recordSale(db, "70.00", [
       { method: "card", amount: "75.00", tipAmount: "5.00" },
     ]);
-    const [row] = await db
-      .insert(saleSettlements)
-      .values({ tenantId: TENANT_A, saleId, settledAt: AT })
-      .returning();
+    const [row] = await db.insert(saleSettlements).values({ saleId, settledAt: AT }).returning();
     expect(row.saleId).toBe(saleId);
   });
 
   it("refuses a settlement whose tenders do not sum to total plus tips", async () => {
     const saleId = await recordSale(db, "70.00", [{ method: "cash", amount: "50.00" }]);
     const error = await captureError(() =>
-      db.insert(saleSettlements).values({ tenantId: TENANT_A, saleId, settledAt: AT }),
+      db.insert(saleSettlements).values({ saleId, settledAt: AT }),
     );
     // P0001 is the default PL/pgSQL RAISE code. Pin it and the coverage message so a privilege
     // denial (42501) or CHECK failure (23514) cannot pass as a coverage refusal.
@@ -235,7 +225,7 @@ describeEachTarget("sale settlements — append-only", (target) => {
     const saleId = await recordSale(db, "10.00", [{ method: "card", amount: "10.00" }]);
     const [row] = await db
       .insert(saleSettlements)
-      .values({ tenantId: TENANT_A, saleId, settledAt: AT })
+      .values({ saleId, settledAt: AT })
       .returning({ id: saleSettlements.id });
     settlementId = row.id;
   });
@@ -291,7 +281,7 @@ describeEachTarget("sale settlements — no tender after settlement", (target) =
     db = await target.create();
     await seed(db);
     saleId = await recordSale(db, "10.00", [{ method: "card", amount: "10.00" }]);
-    await db.insert(saleSettlements).values({ tenantId: TENANT_A, saleId, settledAt: AT });
+    await db.insert(saleSettlements).values({ saleId, settledAt: AT });
   });
 
   afterEach(async () => {
@@ -300,11 +290,9 @@ describeEachTarget("sale settlements — no tender after settlement", (target) =
 
   it("rejects a tender inserted after the sale is settled", async () => {
     const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        return tx
-          .insert(tenders)
-          .values({ tenantId: TENANT_A, saleId, method: "cash", amount: "5.00", settledAt: AT });
+        return tx.insert(tenders).values({ saleId, method: "cash", amount: "5.00", settledAt: AT });
       }),
     );
     expect(pgErrorCode(error)).toBe("WT002");

@@ -1,4 +1,4 @@
-import { asAppUser, captureError, withTenant } from "@waitron/db";
+import { asAppUser, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -18,20 +18,20 @@ import {
 } from "./device-profile-store.js";
 
 // Real Postgres, not PGlite: every store call below runs as a non-superuser member of `app_user`
-// (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
+// (`withTransaction` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
 // holding every grant, so a missing GRANT on `device_profiles` — or on the
 // `persons`/`management_sessions` reads `authorizeManager` performs — is invisible there (CLAUDE.md
 // §4). The suite retains these app-role grant checks. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
 // migrations so authorizeManager's tables and `device_profiles` both exist.
-// It also exercises the tenant-consistent composite FK `device_profiles_canvas_fk`, which rejects a
-// canvas row keyed to a different tenant — a constraint, not a policy.
+// It also exercises `device_profiles_canvas_fk`, which rejects a `canvas_id` naming no canvas — a
+// constraint, not a policy.
 
 const suite = useTemplateDb({ template: "core_identity" });
 
-/** Run `fn` as the non-owner app role, scoped to `tenantId` — the shape the management routes wrap
- * every store call in (withTenant + asAppUser). */
-function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+/** Run `fn` as the non-owner app role — the shape the management routes wrap every store call in
+ * (withTransaction + asAppUser). */
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -39,12 +39,12 @@ function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promis
 
 /** Seed a person of `role` and an open management session for them, as the superuser owner. Returns
  * the session id the store's authorizeManager gate resolves. */
-async function seedSession(tenantId: string, role: PersonRoleValue): Promise<string> {
+async function seedSession(role: PersonRoleValue): Promise<string> {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, 'Operator', 'seed-pin-hash', ${role}) returning id`);
-  const session = await withTenant(suite.admin, tenantId, (tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    insert into persons (display_name, pin_hash, role)
+    values ('Operator', 'seed-pin-hash', ${role}) returning id`);
+  const session = await withTransaction(suite.admin, (tx) =>
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return session.id;
 }
@@ -62,28 +62,27 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return typeof error === "string" ? error : error.code;
 }
 
-/** Rows for `tenantId` counted as the owner, independently of anything the app role's own reads
- * return — so a refused or rolled-back write is visible here as an absence. */
-async function rowCount(tenantId: string): Promise<number> {
+/** Rows counted as the owner, independently of anything the app role's own reads return — so a
+ * refused or rolled-back write is visible here as an absence. */
+async function rowCount(): Promise<number> {
   const rows = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from device_profiles where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from device_profiles`,
   );
   return rows.rows[0]!.n;
 }
 
-/** Delete every device profile of `tenantId` as the owner — a `finally` teardown so a
- * suite reusing the shared managerTenant is order-independent (CLAUDE.md §4). */
-async function purgeProfiles(tenantId: string): Promise<void> {
-  await suite.admin.execute(sql`delete from device_profiles where tenant_id = ${tenantId}`);
+/** Delete every device profile as the owner — a `finally` teardown so the suite is
+ * order-independent (CLAUDE.md §4). */
+async function purgeProfiles(): Promise<void> {
+  await suite.admin.execute(sql`delete from device_profiles`);
 }
 
-/** Create a real canvas for `tenantId` (as a manager) and return its id — the target the FK check
- * accepts, and the wrong-tenant target that FK-rejects a cross-tenant reference. */
-async function seedCanvas(tenantId: string, session: string, name: string): Promise<string> {
-  const { id } = await asApp(tenantId, (tx) =>
+/** Create a real canvas (as a manager) and return its id — the target the FK check accepts. A
+ * canvas id naming no row is what the FK rejects; there is no cross-tenant case to write. */
+async function seedCanvas(session: string, name: string): Promise<string> {
+  const { id } = await asApp((tx) =>
     createCanvas(tx, {
       managementSessionId: session,
-      tenantId,
       name,
       definition: DEFAULT_CANVASES["till"],
     }),
@@ -92,20 +91,18 @@ async function seedCanvas(tenantId: string, session: string, name: string): Prom
 }
 
 describe("device-profile store on real Postgres, as the app role", () => {
-  let managerTenant: string;
   let managerSession: string;
 
   beforeAll(async () => {
-    managerTenant = await seedTenant(suite.admin);
-    managerSession = await seedSession(managerTenant, "manager");
+    await seedTenant(suite.admin);
+    managerSession = await seedSession("manager");
   });
 
   it("round-trips a manager-authored profile through create → get with validated capabilities", async () => {
     try {
-      const created = await asApp(managerTenant, (tx) =>
+      const created = await asApp((tx) =>
         createDeviceProfile(tx, {
           managementSessionId: managerSession,
-          tenantId: managerTenant,
           name: "Front counter",
           formFactor: "till",
           canvasId: null,
@@ -121,22 +118,19 @@ describe("device-profile store on real Postgres, as the app role", () => {
         capabilities: ["open-cash-drawer", "integrated-card-payment"],
         inactivityTimeoutSeconds: null, // omitted on create ⇒ NULL (never)
       });
-      const fetched = await asApp(managerTenant, (tx) =>
-        getDeviceProfile(tx, managerTenant, created.id),
-      );
+      const fetched = await asApp((tx) => getDeviceProfile(tx, created.id));
       expect(fetched).toEqual(created);
     } finally {
-      await purgeProfiles(managerTenant);
+      await purgeProfiles();
     }
   });
 
   it("carries the device form factor through create → get → list", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const created = await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const created = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Kitchen display",
         canvasId: null,
         capabilities: ["act-as-kds"],
@@ -151,10 +145,8 @@ describe("device-profile store on real Postgres, as the app role", () => {
       formFactor: "kds",
       inactivityTimeoutSeconds: null,
     });
-    expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id))).toEqual(
-      created,
-    );
-    const listed = await asApp(tenantId, (tx) => listDeviceProfiles(tx, tenantId));
+    expect(await asApp((tx) => getDeviceProfile(tx, created.id))).toEqual(created);
+    const listed = await asApp((tx) => listDeviceProfiles(tx));
     expect(listed).toEqual([created]);
   });
 
@@ -162,12 +154,11 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // The auto-logout timeout persists and reads back for a non-exempt form factor; a kds create is
     // coerced to null by validateInactivityTimeout even when a value is passed (a display never logs
     // out). Proof-by-deletion: drop the `formFactor === "kds"` guard and the kds row reads 600.
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const handheld = await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const handheld = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Handheld",
         formFactor: "phone-portrait",
         canvasId: null,
@@ -176,14 +167,11 @@ describe("device-profile store on real Postgres, as the app role", () => {
       }),
     );
     expect(handheld.inactivityTimeoutSeconds).toBe(300);
-    expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, handheld.id))).toEqual(
-      handheld,
-    );
+    expect(await asApp((tx) => getDeviceProfile(tx, handheld.id))).toEqual(handheld);
 
-    const kds = await asApp(tenantId, (tx) =>
+    const kds = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Kitchen",
         formFactor: "kds",
         canvasId: null,
@@ -194,14 +182,13 @@ describe("device-profile store on real Postgres, as the app role", () => {
     expect(kds.inactivityTimeoutSeconds).toBeNull();
   });
 
-  it("stores and returns a canvas reference that satisfies the composite FK", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const canvasId = await seedCanvas(tenantId, session, "The canvas");
-    const created = await asApp(tenantId, (tx) =>
+  it("stores and returns a canvas reference that satisfies the FK", async () => {
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const canvasId = await seedCanvas(session, "The canvas");
+    const created = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Bound",
         formFactor: "till",
         canvasId,
@@ -219,58 +206,54 @@ describe("device-profile store on real Postgres, as the app role", () => {
   });
 
   it("lists a tenant's device profiles by name", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const first = await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const first = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "P1",
         formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
     );
-    const second = await asApp(tenantId, (tx) =>
+    const second = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "P2",
         formFactor: "till",
         canvasId: null,
         capabilities: ["act-as-kds"],
       }),
     );
-    const listed = await asApp(tenantId, (tx) => listDeviceProfiles(tx, tenantId));
+    const listed = await asApp((tx) => listDeviceProfiles(tx));
     expect(listed.map((p) => p.id)).toEqual([first.id, second.id]);
     expect(listed.map((p) => p.name)).toEqual(["P1", "P2"]);
   });
 
   it("returns undefined for an unknown device-profile id", async () => {
-    const missing = await asApp(managerTenant, (tx) =>
-      getDeviceProfile(tx, managerTenant, "00000000-0000-4000-8000-000000000000"),
+    const missing = await asApp((tx) =>
+      getDeviceProfile(tx, "00000000-0000-4000-8000-000000000000"),
     );
     expect(missing).toBeUndefined();
   });
 
   it("updates a profile's name, canvas and capabilities in place", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const canvasId = await seedCanvas(tenantId, session, "Target canvas");
-    const created = await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const canvasId = await seedCanvas(session, "Target canvas");
+    const created = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Original",
         formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
     );
-    const updated = await asApp(tenantId, (tx) =>
+    const updated = await asApp((tx) =>
       updateDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         id: created.id,
         name: "Renamed",
         formFactor: "till",
@@ -286,47 +269,39 @@ describe("device-profile store on real Postgres, as the app role", () => {
       capabilities: ["integrated-card-payment"],
       inactivityTimeoutSeconds: null,
     });
-    expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id))).toEqual(
-      updated,
-    );
-    expect(await rowCount(tenantId)).toBe(1); // update, never insert a duplicate
+    expect(await asApp((tx) => getDeviceProfile(tx, created.id))).toEqual(updated);
+    expect(await rowCount()).toBe(1); // update, never insert a duplicate
   });
 
   it("deletes an unreferenced profile", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const created = await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const created = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Doomed",
         formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
     );
-    await asApp(tenantId, (tx) =>
-      deleteDeviceProfile(tx, { managementSessionId: session, tenantId, id: created.id }),
-    );
-    expect(
-      await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id)),
-    ).toBeUndefined();
-    expect(await rowCount(tenantId)).toBe(0);
+    await asApp((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }));
+    expect(await asApp((tx) => getDeviceProfile(tx, created.id))).toBeUndefined();
+    expect(await rowCount()).toBe(0);
   });
 
   it("translates a delete of a device-referenced profile to device_profile.in_use (23001 → 409), profile survives", async () => {
-    // Task 5 added devices.device_profile_id → device_profiles(tenant_id, id) ON DELETE RESTRICT. The
+    // Task 5 added devices.device_profile_id → device_profiles(id) ON DELETE RESTRICT. The
     // delete of a still-referenced profile trips a 23001 restrict_violation, which deleteDeviceProfile
     // now translates (via translateWriteError) into the domain device_profile.in_use — a clean 409, not
     // the raw DB error a 500 would surface. Proof-by-deletion: remove the try/catch in
     // deleteDeviceProfile and this fails with a raw 23001 instead of the AppError. RESTRICT means the
     // profile survives, asserted via rowCount as the owner.
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    const created = await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const created = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Referenced",
         formFactor: "till",
         canvasId: null,
@@ -337,36 +312,30 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // thing under test. A device is defined by its profile's form factor (no device_kind column); the
     // `till` profile means the binding rule (0004_device_binding_rule) requires a register, not a station.
     const location = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Loc', array['es'], 'Hostelería') returning id`);
     const till = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${location.rows[0]!.id}, 'Register 1') returning id`);
+      insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Register 1') returning id`);
     await suite.admin.execute(sql`
-      insert into devices (tenant_id, location_id, till_id, label, token_hash, device_profile_id)
-      values (${tenantId}, ${location.rows[0]!.id}, ${till.rows[0]!.id}, 'Bound device', 'scrypt$00$00', ${created.id})`);
+      insert into devices (location_id, till_id, label, token_hash, device_profile_id) values (${location.rows[0]!.id}, ${till.rows[0]!.id}, 'Bound device', 'scrypt$00$00', ${created.id})`);
     const error = await errorOf(() =>
-      asApp(tenantId, (tx) =>
-        deleteDeviceProfile(tx, { managementSessionId: session, tenantId, id: created.id }),
-      ),
+      asApp((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id })),
     );
     expect(typeof error).not.toBe("string"); // it threw an AppError, not a raw 23001
     expect((error as AppError).code).toBe("device_profile.in_use");
     expect((error as AppError).params).toEqual({}); // the fact of the reference is the whole message
-    expect(await rowCount(tenantId)).toBe(1); // the profile survived the refused delete (RESTRICT)
+    expect(await rowCount()).toBe(1); // the profile survived the refused delete (RESTRICT)
   });
 
   it("throws device_profile.not_found when updating an absent id", async () => {
     // The write-path no-row guard: `.returning({ id })` comes back empty, so updateDeviceProfile
     // throws rather than reporting a silent success. Proof-by-deletion: drop the length === 0 check and
     // this resolves, failing the assertion.
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
     const code = await codeOf(() =>
-      asApp(tenantId, (tx) =>
+      asApp((tx) =>
         updateDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           id: "00000000-0000-4000-8000-000000000000",
           name: "Ghost",
           formFactor: "till",
@@ -379,13 +348,12 @@ describe("device-profile store on real Postgres, as the app role", () => {
   });
 
   it("throws device_profile.not_found when deleting an absent id", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
     const code = await codeOf(() =>
-      asApp(tenantId, (tx) =>
+      asApp((tx) =>
         deleteDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           id: "00000000-0000-4000-8000-000000000000",
         }),
       ),
@@ -397,13 +365,12 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // Staff holds no layout.configure, so authorizeManager throws authorization.not_permitted BEFORE any
     // write. Deleting the authorizeManager call from createDeviceProfile makes this succeed → a row
     // lands, failing both assertions.
-    const staffTenant = await seedTenant(suite.admin);
-    const staffSession = await seedSession(staffTenant, "staff");
+    await seedTenant(suite.admin);
+    const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
-      asApp(staffTenant, (tx) =>
+      asApp((tx) =>
         createDeviceProfile(tx, {
           managementSessionId: staffSession,
-          tenantId: staffTenant,
           name: "Nope",
           formFactor: "till",
           canvasId: null,
@@ -412,19 +379,18 @@ describe("device-profile store on real Postgres, as the app role", () => {
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-    expect(await rowCount(staffTenant)).toBe(0); // the gate ran before the write
+    expect(await rowCount()).toBe(0); // the gate ran before the write
   });
 
   it("rejects an unknown capability with device_profile.invalid {bad_capabilities} before any INSERT", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
     // authorize FIRST (manager is permitted), THEN validate — so an unknown flag from an AUTHORISED
     // actor is what proves validate runs before the write.
     const error = await errorOf(() =>
-      asApp(tenantId, (tx) =>
+      asApp((tx) =>
         createDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           name: "Bad caps",
           formFactor: "till",
           canvasId: null,
@@ -435,44 +401,15 @@ describe("device-profile store on real Postgres, as the app role", () => {
     expect(typeof error).not.toBe("string");
     expect((error as AppError).code).toBe("device_profile.invalid");
     expect((error as AppError).params).toEqual({ reason: "bad_capabilities" });
-    expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
-  });
-
-  it("maps a cross-tenant canvas reference to device_profile.invalid {bad_canvas_ref} via the FK", async () => {
-    // The tenant-consistent composite FK device_profiles_canvas_fk → canvases(tenant_id, id) rejects a
-    // canvas_id that belongs to ANOTHER tenant: (tenantB, A's canvas id) has no matching canvases row,
-    // so Postgres raises 23503, which the store translates. Real Postgres only — PGlite bypasses this.
-    const tenantA = await seedTenant(suite.admin);
-    const sessionA = await seedSession(tenantA, "manager");
-    const foreignCanvas = await seedCanvas(tenantA, sessionA, "A's canvas");
-
-    const tenantB = await seedTenant(suite.admin);
-    const sessionB = await seedSession(tenantB, "manager");
-    const error = await errorOf(() =>
-      asApp(tenantB, (tx) =>
-        createDeviceProfile(tx, {
-          managementSessionId: sessionB,
-          tenantId: tenantB,
-          name: "Stolen canvas",
-          formFactor: "till",
-          canvasId: foreignCanvas, // belongs to tenantA
-          capabilities: [],
-        }),
-      ),
-    );
-    expect(typeof error).not.toBe("string");
-    expect((error as AppError).code).toBe("device_profile.invalid");
-    expect((error as AppError).params).toEqual({ reason: "bad_canvas_ref" });
-    expect(await rowCount(tenantB)).toBe(0); // the FK rejected the row
+    expect(await rowCount()).toBe(0); // validate threw before the INSERT
   });
 
   it("translates a duplicate name to device_profile.name_taken (23505 → clean 409), no second row", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Twin",
         formFactor: "till",
         canvasId: null,
@@ -480,10 +417,9 @@ describe("device-profile store on real Postgres, as the app role", () => {
       }),
     );
     const code = await codeOf(() =>
-      asApp(tenantId, (tx) =>
+      asApp((tx) =>
         createDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           name: "Twin",
           formFactor: "till",
           canvasId: null,
@@ -492,26 +428,24 @@ describe("device-profile store on real Postgres, as the app role", () => {
       ),
     );
     expect(code).toBe("device_profile.name_taken");
-    expect(await rowCount(tenantId)).toBe(1); // the duplicate never landed
+    expect(await rowCount()).toBe(1); // the duplicate never landed
   });
 
   it("translates a duplicate name on UPDATE to device_profile.name_taken", async () => {
-    const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
-    await asApp(tenantId, (tx) =>
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Keep",
         formFactor: "till",
         canvasId: null,
         capabilities: [],
       }),
     );
-    const second = await asApp(tenantId, (tx) =>
+    const second = await asApp((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Move",
         formFactor: "till",
         canvasId: null,
@@ -519,10 +453,9 @@ describe("device-profile store on real Postgres, as the app role", () => {
       }),
     );
     const code = await codeOf(() =>
-      asApp(tenantId, (tx) =>
+      asApp((tx) =>
         updateDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           id: second.id,
           name: "Keep", // collides with the first profile's name
           formFactor: "till",

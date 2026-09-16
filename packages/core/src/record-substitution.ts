@@ -4,7 +4,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 // mechanical check that keeps errors.ts reachable from this package's own public barrel
 // (index.ts). Mirrors ./record-sale.ts / ./record-correction.ts's identical convention.
 import "./errors.js";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   invoiceSeries,
@@ -18,7 +18,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
@@ -26,7 +26,6 @@ import { buildVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordSubstitutionInput {
-  tenantId: TenantId;
   /**
    * The till this F3 rings at — an informational snapshot only (written to `sales.till_id` and the
    * fiscal record's `till_id`, and used for incidents). NOT checked against the series; see `nodeId`
@@ -45,7 +44,7 @@ export interface RecordSubstitutionInput {
   /**
    * The series the F3 draws its own new number from. v1 REUSES the ordinary `standard` series (owner
    * decision — no separate `'substitution'` purpose is added), so it is guarded exactly as
-   * `recordSale`'s series is: it must exist for this tenant (`sale.series_not_found`), belong to
+   * `recordSale`'s series is: it must exist (`sale.series_not_found`), belong to
    * this node (`sale.series_wrong_node`) AND be `purpose='standard'` (`sale.series_wrong_purpose`) —
    * a series reserved for another purpose must not number an F3 (step 2). Supplied by the caller
    * exactly as `recordSale` is; no series is auto-provisioned.
@@ -163,8 +162,7 @@ export async function recordSubstitution(
   // (a `rectificative` one) numbers a different kind of document «en todo caso» (RD 1619/2012 art.
   // 6.1.a), and drawing an F3's number from it would corrupt a legally significant, unrepairable
   // series. The purpose guard is the mirror of the one `./record-correction.ts` applies from its
-  // side (which demands `rectificative`). The explicit tenant predicate mirrors `recordSale` and is
-  // applied to the series lookup.
+  // side (which demands `rectificative`). The series lookup is by id alone, as in `recordSale`.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -173,12 +171,11 @@ export async function recordSubstitution(
       retiredAt: invoiceSeries.retiredAt,
     })
     .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.id, input.seriesId), eq(invoiceSeries.tenantId, input.tenantId)));
+    .where(eq(invoiceSeries.id, input.seriesId));
 
   if (series === undefined) {
     throw new AppError("sale.series_not_found", {
       seriesId: input.seriesId,
-      tenantId: input.tenantId,
     });
   }
   if (series.nodeId !== input.nodeId) {
@@ -204,10 +201,10 @@ export async function recordSubstitution(
 
   // Step 3. Art. 7.i verification, exactly as for a sale record. Nothing branches on `verification.ok` — a
   // failed check records ONE aggregated incident (below, once `saleId` exists) and the F3 is chained
-  // anyway. The table-wide `incidents_open_dedup` index holds at most one open incident per (tenant,
-  // till, code, sale), so emitting one row per issue would collapse to a single row and drop every
+  // anyway. The table-wide `incidents_open_dedup` index holds at most one open incident per
+  // (till, code, sale), so emitting one row per issue would collapse to a single row and drop every
   // issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
+  const verification = await backend.checkIntegrity(tx, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
     pending.push({
@@ -253,7 +250,6 @@ export async function recordSubstitution(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
@@ -286,7 +282,6 @@ export async function recordSubstitution(
   // this call created), matching `recordSale`/`recordCorrection`'s own deferral until `saleId` exists.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       saleId,
       detectedAt: now.instant,
@@ -294,10 +289,10 @@ export async function recordSubstitution(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(input.tenantId, saleId, input.lines));
+  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
 
   // One `sale_substitutions` row per ticket — the N:1 fan-out. Inserted one at a time so a
-  // `unique(tenant_id, substituted_sale_id)` violation NAMES the exact ticket that collides. That
+  // `unique(substituted_sale_id)` violation NAMES the exact ticket that collides. That
   // unique — not this insert's success — is the real "substituted at most once" control: two
   // concurrent F3s exchanging one ticket both pass any prior SELECT, and only one passes the
   // constraint. Ordered BEFORE the fiscal write so a rejected substitution consumes no chain work,
@@ -305,7 +300,6 @@ export async function recordSubstitution(
   for (const substitutedSaleId of input.substitutedSaleIds) {
     try {
       await tx.insert(saleSubstitutions).values({
-        tenantId: input.tenantId,
         substitutionSaleId: saleId,
         substitutedSaleId,
       });
@@ -324,13 +318,13 @@ export async function recordSubstitution(
     .select({ operationDescription: locations.operationDescription })
     .from(tills)
     .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(and(eq(tills.id, input.tillId), eq(tills.tenantId, input.tenantId)));
+    .where(eq(tills.id, input.tillId));
 
   /* v8 ignore start */
   if (location === undefined) {
     // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
     // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // or the tenant predicate excluded it — a caller programming error, not a fiscal condition.
+    // — a caller programming error, not a fiscal condition.
     throw new Error(`recordSubstitution: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */
@@ -344,7 +338,6 @@ export async function recordSubstitution(
   const fiscal = await backend.recordSubstitution(
     tx,
     {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       saleId,

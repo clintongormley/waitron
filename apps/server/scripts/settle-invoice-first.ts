@@ -3,15 +3,16 @@
 // amount outstanding, settles at the net, prints an empty outstanding list. There is no till app yet
 // — this is the only way to see the deferred/settle path run against the real backend.
 //
-// Prerequisites, same as record-one-sale.ts plus a rectificative series: the tenant/till/node/
-// standard-series/rectificative-series must already exist and the node's SIF be registered.
+// Prerequisites, same as record-one-sale.ts plus a rectificative series: the taxpayer row, the till,
+// the node, the standard series and the rectificative series must already exist, and the node's SIF
+// be registered.
 //
 // Usage — build first (this repo's .js-suffixed relative imports resolve through esbuild's bundler,
 // not plain `node <file>.ts`):
 //   pnpm --filter @waitron/server build
 //   DATABASE_URL=postgres://... WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/settle-invoice-first.js \
-//     <tenantId> <tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>
+//     <tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>
 //
 // The connection string is read ONLY from DATABASE_URL. WAITRON_ENV is REQUIRED (it stamps the
 // unrecoverable `entorno` onto the chain) — see record-one-sale.ts's header for why no default.
@@ -19,7 +20,7 @@ import { listOutstandingSales, recordCorrection, recordSale, settleSale } from "
 import type { OutstandingSale, RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { createPostgresDb, withTenant } from "@waitron/db";
+import { createPostgresDb, withTransaction } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { deploymentEnvironment } from "../src/config.js";
 import {
@@ -29,7 +30,6 @@ import {
   percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -41,7 +41,7 @@ function usageError(message: string): never {
   console.error(
     "usage: DATABASE_URL=<...> WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/settle-invoice-first.js " +
-      "<tenantId> <tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>",
+      "<tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>",
   );
   process.exit(1);
 }
@@ -69,10 +69,10 @@ function systemClock(): TrustedClock {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 5) {
-    usageError(`expected 5 arguments, got ${args.length}`);
+  if (args.length !== 4) {
+    usageError(`expected 4 arguments, got ${args.length}`);
   }
-  const [tenantArg, tillArg, nodeArg, stdSeriesArg, rectSeriesArg] = args;
+  const [tillArg, nodeArg, stdSeriesArg, rectSeriesArg] = args;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === "") {
@@ -83,7 +83,6 @@ async function main(): Promise<void> {
     usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
   }
 
-  const tenant = brandTenantId(tenantArg);
   const till = brandTillId(tillArg);
   const node = brandNodeId(nodeArg);
   const stdSeries = brandSeriesId(stdSeriesArg);
@@ -119,7 +118,6 @@ async function main(): Promise<void> {
 
     // 1. Issue invoice-first (deferred): the invoice is chained + filed, unpaid.
     const saleInput: RecordSaleInput = {
-      tenantId: tenant,
       tillId: till,
       nodeId: node,
       seriesId: stdSeries,
@@ -140,24 +138,23 @@ async function main(): Promise<void> {
       settlement: { kind: "deferred" },
       clock,
     };
-    const sale = await withTenant(db, tenant, (tx) => recordSale(tx, backend, saleInput));
+    const sale = await withTransaction(db, (tx) => recordSale(tx, backend, saleInput));
     console.log(
       `1. issued invoice-first sale ${sale.saleId} (total ${saleTotal}), fiscal ${sale.fiscal.recordId}`,
     );
 
     // 2. Outstanding: the full total.
-    const before = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
+    const before = await withTransaction(db, (tx) => listOutstandingSales(tx));
     console.log(`2. outstanding: ${formatOutstanding(before)}`);
 
     // Seed a supervisor (holds `sale.rectify`) and open a shift session — the authorizer
     // recordCorrection's gate now requires (Task 10). Task 13's venue-seed comes later, so this
     // runbook creates its own. Written as its own transaction so the session is committed and
     // visible to the correction's own transaction below.
-    const authorizerSession = await withTenant(db, tenant, async (tx) => {
+    const authorizerSession = await withTransaction(db, async (tx) => {
       const [person] = await tx
         .insert(persons)
         .values({
-          tenantId: tenant,
           displayName: "Supervisora",
           email: "supervisor@invoice-first.demo",
           pinHash: hashPin("1234"),
@@ -165,7 +162,6 @@ async function main(): Promise<void> {
         })
         .returning({ id: persons.id });
       return loginWithPin(tx, {
-        tenantId: tenant,
         tillId: till,
         personId: person!.id,
         pin: "1234",
@@ -174,7 +170,6 @@ async function main(): Promise<void> {
 
     // 3. Correct it down by 11.00 (net 110.00 → 99.00) via a rectificativa on the rectificative series.
     const corrInput: RecordCorrectionInput = {
-      tenantId: tenant,
       tillId: till,
       nodeId: node,
       seriesId: rectSeries,
@@ -194,19 +189,18 @@ async function main(): Promise<void> {
       clock,
       authz: { sessionId: authorizerSession.id },
     };
-    const corr = await withTenant(db, tenant, (tx) => recordCorrection(tx, backend, corrInput));
+    const corr = await withTransaction(db, (tx) => recordCorrection(tx, backend, corrInput));
     console.log(
       `3. issued rectificativa ${corr.saleId} (total ${corrTotal}), fiscal ${corr.fiscal.recordId}`,
     );
 
     // 4. Outstanding: now the net.
-    const afterCorrection = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
+    const afterCorrection = await withTransaction(db, (tx) => listOutstandingSales(tx));
     console.log(`4. outstanding: ${formatOutstanding(afterCorrection)}`);
 
     // 5. Settle at the net.
-    await withTenant(db, tenant, (tx) =>
+    await withTransaction(db, (tx) =>
       settleSale(tx, {
-        tenantId: tenant,
         saleId: sale.saleId,
         tenders: [
           { method: "cash", amount: net, tipAmount: "0.00", settledAt: clock.now().instant },
@@ -216,7 +210,7 @@ async function main(): Promise<void> {
     console.log(`5. settled ${sale.saleId} at ${net}`);
 
     // 6. Outstanding: empty.
-    const afterSettle = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
+    const afterSettle = await withTransaction(db, (tx) => listOutstandingSales(tx));
     console.log(`6. outstanding: ${formatOutstanding(afterSettle)}`);
   } finally {
     await db.close();

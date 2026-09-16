@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { asAppUser, saleLines, sales, withTenant, workingOrderLines } from "@waitron/db";
+import { asAppUser, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -18,7 +18,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -72,7 +71,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -135,12 +133,12 @@ async function setupVenue(): Promise<Seeded> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const seeded = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    const jamon = await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const jamon = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: comida.id,
       name: "Jamón cortado",
@@ -148,7 +146,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const agua = await createProduct(tx, cfg.tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -167,7 +165,8 @@ async function setupVenue(): Promise<Seeded> {
  * Run fn in one transaction as app_user.
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -272,9 +271,7 @@ describe("split-bill: pay each check files its own registro", () => {
     // emptied origin is abandoned in Task 3, it files nothing).
 
     // (1) EXACTLY THREE registros_facturacion for this tenant — one per check, none from the origin.
-    const rows = await asApp(cfg, (tx) =>
-      tx.select().from(registrosFacturacion).where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
-    );
+    const rows = await asApp(cfg, (tx) => tx.select().from(registrosFacturacion));
     expect(rows.length).toBe(3);
 
     // (2) Contiguous invoice numbers from the tab's series (fresh series ⇒ 1,2,3 in pay order).
@@ -314,10 +311,7 @@ describe("split-bill: pay each check files its own registro", () => {
 
     // (5) Each registro is tied to its OWN check via sales.working_order_id (the idempotency key).
     const filedFor = await asApp(cfg, (tx) =>
-      tx
-        .select({ workingOrderId: sales.workingOrderId })
-        .from(sales)
-        .where(eq(sales.tenantId, cfg.tenantId)),
+      tx.select({ workingOrderId: sales.workingOrderId }).from(sales),
     );
     expect(new Set(filedFor.map((s) => s.workingOrderId))).toEqual(new Set([a, b, c]));
   });
@@ -348,8 +342,7 @@ describe("split-bill: pay each check files its own registro", () => {
           quantity: saleLines.quantity,
         })
         .from(saleLines)
-        .innerJoin(sales, eq(sales.id, saleLines.saleId))
-        .where(eq(saleLines.tenantId, cfg.tenantId));
+        .innerJoin(sales, eq(sales.id, saleLines.saleId));
       const filedForOrigin = await tx
         .select({ id: sales.id })
         .from(sales)
@@ -395,7 +388,7 @@ describe("split-bill: pay each check files its own registro", () => {
     // Pay the SAME check twice (a lost-response retry), SEQUENTIALLY. A check is a working order (it
     // already has a `working_orders` row), so the second pay locks it `FOR UPDATE`, sees `settled`, and
     // `payWorkingOrder` returns the EXISTING ticket (till-sale.ts ~line 290) — a replay, not a second
-    // filing. The #61 `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) is the
+    // filing. The #61 `sales_working_order_id_key` UNIQUE (working_order_id) is the
     // CONCURRENCY backstop for the shape that has no pre-existing row to lock (till-sale.ts ~line 356);
     // this sequential retry never reaches it. The whole point of the split-bill split is that a check
     // gets the same settled-status replay as any tab.

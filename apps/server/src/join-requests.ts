@@ -15,43 +15,43 @@ export type JoinRequestKind = "device" | "print_agent";
  * cannot outlive the window that admitted it by more than one window. */
 export const JOIN_TTL_MS = 15 * 60 * 1000;
 
-/** Pending rows per (tenant, kind). Ten is enough for the largest install anyone runs at once, and it
- * bounds both the admin's attention and the numbers the decoy rule must avoid. */
+/** Pending rows per kind, across the whole database. Ten is enough for the largest install anyone
+ * runs at once, and it bounds both the admin's attention and the numbers the decoy rule must avoid. */
 export const PENDING_CAP = 10;
 
-/** Advisory-lock namespace (the first arg of the two-int `pg_advisory_xact_lock`) for per-tenant join
+/** Advisory-lock namespace (the first arg of the two-int `pg_advisory_xact_lock`) for join
  * allocation. A fixed small integer, distinct from every other advisory-lock namespace in the repo
- * (`packages/migrations/src/apply.ts` holds the migration lock in the SEPARATE one-int space); the
- * second arg is `hashtext(tenantId)`, so distinct tenants take distinct locks. A `hashtext` collision
- * between two tenant ids would only over-serialise them — a harmless wait, never a wrong lock — so the
- * hash's cross-version stability the migration lock avoids does not matter here. */
+ * (`packages/migrations/src/apply.ts` holds the migration lock in the SEPARATE one-int space). */
 const JOIN_ALLOC_LOCK_NAMESPACE = 4_915_071;
 
-/** Delete this tenant's lapsed requests. Called at the head of every verb that reads or counts them, so
- * a lapsed row never occupies the cap, never blocks a number, and never appears in the pending list.
- * Swept opportunistically at read, not by a background job. */
+/** The second arg of the two-int lock, and a CONSTANT on purpose: every read this lock protects —
+ * the cap count and `pendingNumbers` — spans the whole `join_requests` table with no location or
+ * kind predicate, so ONE key per database is the key that matches them. Keying it to anything
+ * narrower (a location, say) lets two creators at different keys run concurrently while still
+ * reading each other's table, which is the exact race the lock exists to stop. */
+const JOIN_ALLOC_LOCK_KEY = 1;
+
+/** Delete every lapsed request in the database. Called at the head of every verb that reads or counts
+ * them, so a lapsed row never occupies the cap, never blocks a number, and never appears in the
+ * pending list. Swept opportunistically at read, not by a background job. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
+  void cfg;
   await tx
     .delete(joinRequests)
-    .where(
-      and(
-        eq(joinRequests.tenantId, cfg.tenantId),
-        lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()),
-      ),
-    );
+    .where(lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()));
 }
 
-/** Every number currently spoken for in this tenant, EITHER kind, split by role. The cross-surface
+/** Every number currently spoken for in this database, EITHER kind, split by role. The cross-surface
  * scope is the point (design §1.2 rule 3): an agent request and a device request must never show the
  * same number, or an admin comparing across two screens can be honestly misled. */
 export async function pendingNumbers(
   tx: Transaction,
   cfg: TillConfig,
 ): Promise<{ reals: Set<string>; decoys: Set<string> }> {
+  void cfg;
   const rows = await tx
     .select({ n: joinRequests.verificationNumber, d: joinRequests.decoyNumbers })
-    .from(joinRequests)
-    .where(eq(joinRequests.tenantId, cfg.tenantId));
+    .from(joinRequests);
   return {
     reals: new Set(rows.map((r) => r.n)),
     decoys: new Set(rows.flatMap((r) => r.d)),
@@ -66,18 +66,22 @@ function twoDigits(n: number): string {
 
 /**
  * Mint a pending join request: one real number and two decoys, obeying the cross-surface exclusion
- * (design §1.2 rule 3) and the per-(tenant, kind) cap.
+ * (design §1.2 rule 3) and the per-kind cap.
  *
- * INVARIANT: number allocation and the cap are serialised per TENANT (across BOTH kinds). A
- * transaction-scoped advisory lock on the tenant is taken FIRST, so the whole sweep → count →
- * pendingNumbers → pick → insert sequence is atomic against other creators in the same tenant. WHY:
- * two concurrent creators otherwise cannot see each other's uncommitted rows, so both pick off a
- * stale reserved-set — one's real can collide with the other's (rule 3, the guarantee the one-in-three
- * guess rate rests on), and both can pass a count of 9 and insert to 11 (bypassing the cap and the
- * decoy budget). The key is the TENANT, not (tenant, kind): the exclusion and the ≤20-pending budget
- * span both `device` and `print_agent`. `pg_advisory_xact_lock` releases at commit/rollback and blocks
- * until acquired, so the second creator waits for the first to commit, then reads its row. It is
- * PUBLIC-executable, so `app_user` (the route's role) may call it.
+ * INVARIANT: number allocation and the cap are serialised across the WHOLE DATABASE (both kinds,
+ * every location). One transaction-scoped advisory lock, on a constant key, is taken FIRST, so the
+ * whole sweep → count → pendingNumbers → pick → insert sequence is atomic against every other
+ * creator. WHY: two concurrent creators otherwise cannot see each other's uncommitted rows, so both
+ * pick off a stale reserved-set — one's real can collide with the other's (rule 3, the guarantee the
+ * one-in-three guess rate rests on), and both can pass a count of 9 and insert to 11 (bypassing the
+ * cap and the decoy budget).
+ *
+ * The key is a CONSTANT, not a hash of anything on the config, because the two reads it protects are
+ * database-wide: the count below filters on `kind` alone, and `pendingNumbers` reads every row. A
+ * narrower key would let two creators take different locks and still read the same table — the guard
+ * would stop guarding, silently, with no error anywhere. `pg_advisory_xact_lock` releases at
+ * commit/rollback and blocks until acquired, so the second creator waits for the first to commit,
+ * then reads its row. It is PUBLIC-executable, so `app_user` (the route's role) may call it.
  */
 export async function createJoinRequest(
   tx: Transaction,
@@ -91,14 +95,14 @@ export async function createJoinRequest(
   },
 ): Promise<{ joinId: string; verificationNumber: string; token: string }> {
   await tx.execute(
-    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, hashtext(${cfg.tenantId}))`,
+    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, ${JOIN_ALLOC_LOCK_KEY})`,
   );
   await sweepLapsed(tx, cfg);
 
   const [{ count }] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.kind, input.kind)));
+    .where(eq(joinRequests.kind, input.kind));
   if (count >= PENDING_CAP) throw new AppError("device.join_full", {});
 
   // The REAL number avoids every existing real AND every issued decoy; the DECOYS avoid every real.
@@ -138,7 +142,6 @@ export async function createJoinRequest(
   const [row] = await tx
     .insert(joinRequests)
     .values({
-      tenantId: cfg.tenantId,
       locationId: cfg.locationId,
       kind: input.kind,
       label: input.label,
@@ -175,12 +178,12 @@ export async function listPendingJoinRequests(
       createdAt: joinRequests.createdAt,
     })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.kind, kind)))
+    .where(eq(joinRequests.kind, kind))
     .orderBy(joinRequests.createdAt);
 }
 
-/** Fetch one pending request, tenant-scoped, or throw. A globally-unique UUID is not the isolation
- * boundary (CLAUDE.md §3): every by-id read still carries its own tenant predicate. */
+/** Fetch one pending request by id, or throw. One tenant per database, so the id alone identifies
+ * the row. */
 async function requirePending(
   tx: Transaction,
   cfg: TillConfig,
@@ -206,7 +209,7 @@ async function requirePending(
       locationId: joinRequests.locationId,
     })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+    .where(eq(joinRequests.id, id));
   if (row === undefined) throw new AppError("join_request.not_found", {});
   return row;
 }
@@ -220,7 +223,7 @@ async function requirePending(
  * enumerates the venue's pending requests one guess at a time. That needs the miss as a VALUE the
  * route can hold until after the gate, not as a control-flow exit taken before it.
  *
- * Tenant-scoped like every by-id read here (CLAUDE.md §3), and it sweeps first, so a lapsed row reads
+ * It sweeps first, so a lapsed row reads
  * as absent exactly as it does to `requirePending` and the verbs that follow.
  */
 export async function joinRequestKind(
@@ -232,7 +235,7 @@ export async function joinRequestKind(
   const [row] = await tx
     .select({ kind: joinRequests.kind })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+    .where(eq(joinRequests.id, id));
   return row?.kind;
 }
 
@@ -276,16 +279,14 @@ export async function readJoinStatus(
   const [pending] = await tx
     .select({ tokenHash: joinRequests.tokenHash })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, joinId)));
+    .where(eq(joinRequests.id, joinId));
   if (pending !== undefined) {
     return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
   }
   const [accepted] = await tx
     .select({ tokenHash: devices.tokenHash })
     .from(devices)
-    .where(
-      and(eq(devices.tenantId, cfg.tenantId), eq(devices.id, joinId), eq(devices.active, true)),
-    );
+    .where(and(eq(devices.id, joinId), eq(devices.active, true)));
   if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
   return "not_approved";
 }
@@ -311,15 +312,15 @@ export type AcceptResult =
  * double-clicking Accept, or one admin with two tabs, must not reach a 500).
  *
  * The kind predicate rides the SAME delete, not a separate check: a `print_agent` row (or none, or
- * another tenant's, or already decided) all return zero rows and fold into the one
+ * one already decided) all return zero rows and fold into the one
  * `join_request.not_found` — a device accept can never consume an agent's request.
  *
- * ONE transaction: the caller's `withTenant` covers the consuming delete, the register
+ * ONE transaction: the caller's `withTransaction` covers the consuming delete, the register
  * auto-creation and the device insert, so a LATER failure (an unknown profile, a station that does
  * not exist, the register insert) rolls the consumption back too — the request survives for a
  * genuine retry, only a wrong number or a successful accept ever makes the delete stick.
  *
- * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTenant` IS the
+ * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTransaction` IS the
  * transaction (`packages/db/src/tenancy.ts:15`, `db.transaction((tx) => fn(tx))`), so an `AppError`
  * thrown from here rolls the (already-consumed) row back into existence and a wrong tap becomes an
  * unlimited retry — the exact opposite of the property that makes one-in-three an acceptable guess
@@ -341,13 +342,7 @@ export async function acceptDeviceJoinRequest(
 
   const [row] = await tx
     .delete(joinRequests)
-    .where(
-      and(
-        eq(joinRequests.tenantId, cfg.tenantId),
-        eq(joinRequests.id, id),
-        eq(joinRequests.kind, "device"),
-      ),
-    )
+    .where(and(eq(joinRequests.id, id), eq(joinRequests.kind, "device")))
     .returning({
       id: joinRequests.id,
       label: joinRequests.label,
@@ -372,7 +367,6 @@ export async function acceptDeviceJoinRequest(
 
   await tx.insert(devices).values({
     id: row.id,
-    tenantId: cfg.tenantId,
     locationId: row.locationId,
     stationId: binding.stationId,
     tillId: binding.tillId,
@@ -394,10 +388,10 @@ export type AgentAcceptResult =
 /**
  * Approve a print agent's ask-to-join. The mirror of {@link acceptDeviceJoinRequest}, minus the device
  * binding: consume the request with a locking `DELETE … RETURNING` whose `kind = "print_agent"`
- * predicate rides along (a device row, another tenant's, or an already-decided one all fold into
+ * predicate rides along (a device row, or an already-decided one, both fold into
  * `join_request.not_found`), then — only on a matching choice — insert the real `print_agents` row with
  * the request's own id and token hash, so the bearer the agent has held since join keeps working.
- * ONE transaction: the caller's `withTenant` covers the delete and the insert together.
+ * ONE transaction: the caller's `withTransaction` covers the delete and the insert together.
  */
 export async function acceptPrintAgentJoinRequest(
   tx: Transaction,
@@ -408,13 +402,7 @@ export async function acceptPrintAgentJoinRequest(
   await sweepLapsed(tx, cfg);
   const [row] = await tx
     .delete(joinRequests)
-    .where(
-      and(
-        eq(joinRequests.tenantId, cfg.tenantId),
-        eq(joinRequests.id, id),
-        eq(joinRequests.kind, "print_agent"),
-      ),
-    )
+    .where(and(eq(joinRequests.id, id), eq(joinRequests.kind, "print_agent")))
     .returning({
       id: joinRequests.id,
       label: joinRequests.label,
@@ -430,7 +418,6 @@ export async function acceptPrintAgentJoinRequest(
 
   await tx.insert(printAgents).values({
     id: row.id,
-    tenantId: cfg.tenantId,
     locationId: row.locationId,
     name: row.label,
     tokenHash: row.tokenHash,
@@ -444,7 +431,7 @@ export async function acceptPrintAgentJoinRequest(
  * {@link readJoinStatus}, resolving the approved fallback against `print_agents` rather than `devices`
  * — the id is carried through accept, so one selector answers both questions. Denied, lapsed and
  * never-existed all fold into `not_approved`; the agent's recovery (restart → re-join) is identical in
- * every case. Both by-id reads carry their own tenant predicate (CLAUDE.md §3).
+ * every case. One tenant per database, so both by-id reads need only the id.
  */
 export async function readAgentJoinStatus(
   tx: Transaction,
@@ -456,20 +443,14 @@ export async function readAgentJoinStatus(
   const [pending] = await tx
     .select({ tokenHash: joinRequests.tokenHash })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, joinId)));
+    .where(eq(joinRequests.id, joinId));
   if (pending !== undefined) {
     return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
   }
   const [accepted] = await tx
     .select({ tokenHash: printAgents.tokenHash })
     .from(printAgents)
-    .where(
-      and(
-        eq(printAgents.tenantId, cfg.tenantId),
-        eq(printAgents.id, joinId),
-        eq(printAgents.active, true),
-      ),
-    );
+    .where(and(eq(printAgents.id, joinId), eq(printAgents.active, true)));
   if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
   return "not_approved";
 }
@@ -484,9 +465,7 @@ export async function denyJoinRequest(
   id: string,
 ): Promise<JoinRequestKind> {
   const row = await requirePending(tx, cfg, id);
-  await tx
-    .delete(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+  await tx.delete(joinRequests).where(eq(joinRequests.id, id));
   return row.kind;
 }
 
@@ -497,8 +476,7 @@ export async function denyJoinRequest(
  * survive. A row that has been REVOKED (`active = false`) is NOT silently reactivated: self-enrol
  * refuses with `device.join_revoked` so a deliberate revoke sticks (spec §4); an admin's "allow again"
  * is the only way back. The returned token is the accept-shape `${agentId}.${secret}` so it
- * authenticates through `authenticateAgent` exactly like a knock-and-accept token. By-id/by-node reads
- * carry the tenant predicate (CLAUDE.md §3).
+ * authenticates through `authenticateAgent` exactly like a knock-and-accept token.
  */
 export async function selfEnrolNodeAgent(
   tx: Transaction,
@@ -508,7 +486,7 @@ export async function selfEnrolNodeAgent(
   const [existing] = await tx
     .select({ id: printAgents.id, active: printAgents.active })
     .from(printAgents)
-    .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.nodeId, input.nodeId)));
+    .where(eq(printAgents.nodeId, input.nodeId));
 
   // A revoked row (`active = false`) is refused, never silently reactivated (spec §4) — checked BEFORE
   // minting the token so a refused re-enrol does not spend a scrypt (`hashSecret`) it will throw away.
@@ -518,22 +496,18 @@ export async function selfEnrolNodeAgent(
   const tokenHash = hashSecret(secret);
 
   if (existing !== undefined) {
-    await tx
-      .update(printAgents)
-      .set({ tokenHash })
-      .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.id, existing.id)));
+    await tx.update(printAgents).set({ tokenHash }).where(eq(printAgents.id, existing.id));
     return { agentId: existing.id, token: `${existing.id}.${secret}` };
   }
 
   // First enrol for this node. No advisory lock (unlike createJoinRequest): exactly one agent process
   // runs per box, so two concurrent first-time enrols for the SAME node are not a real shape. If they
-  // ever raced, the loser hits the `(tenant, node_id)` unique index as a 23505 and its agent simply
+  // ever raced, the loser hits the `(node_id)` unique index as a 23505 and its agent simply
   // re-asks next tick, finding the row and refreshing — no wrong row, no duplicate. That backstop, not
   // a lock, is what keeps the invariant.
   const agentId = randomUUID();
   await tx.insert(printAgents).values({
     id: agentId,
-    tenantId: cfg.tenantId,
     locationId: cfg.locationId,
     nodeId: input.nodeId,
     name: input.name,

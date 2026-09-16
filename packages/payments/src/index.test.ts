@@ -2,7 +2,7 @@ import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { is } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import type { TenantId, WorkingOrderId } from "@waitron/shared";
+import type { WorkingOrderId } from "@waitron/shared";
 import {
   associatePaymentWithSale,
   classify,
@@ -73,7 +73,6 @@ describe("package public surface (./index.js)", () => {
     expect(typeof listAttempting).toBe("function");
     expect(typeof stampAttemptingRef).toBe("function");
     const attempting: AttemptingPayment = {
-      tenantId: "t",
       paymentRef: "ref-a",
       workingOrderId: "w",
       amount: "10.00",
@@ -89,7 +88,6 @@ describe("package public surface (./index.js)", () => {
     expect(typeof recordManualRefund).toBe("function");
 
     const params: ManualCardPaymentParams = {
-      tenantId: "t",
       workingOrderId: "w",
       amount: decimal("1.00"),
       settledAt: new Date("2026-07-23T09:00:00Z"),
@@ -100,7 +98,7 @@ describe("package public surface (./index.js)", () => {
       settledAt: params.settledAt,
     };
     expect(result.provider).toBe("manual");
-    expect(params.tenantId).toBe("t");
+    expect(params.workingOrderId).toBe("w");
   });
 
   it("re-exports the provider types (PaymentProvider, PaymentResult) from the package root", () => {
@@ -137,7 +135,6 @@ describe("package public surface (./index.js)", () => {
       url: "https://pay/hosted-1",
     };
     const params: InitiateParams = {
-      tenantId: "t" as TenantId,
       workingOrderId: "w" as WorkingOrderId,
       amount: decimal("12.10"),
       paymentRef: "pay-1",
@@ -171,7 +168,7 @@ describe("the reconcile surface", () => {
     // package's own reconciler has to satisfy, so it must be reachable and complete from here.
     const reconciler: PaymentReconciler = {
       provider: "fake",
-      reconcile: async (_tenantId, period): Promise<PaymentReconcileResult> => ({
+      reconcile: async (period): Promise<PaymentReconcileResult> => ({
         period,
         checked: 0,
         unsettled: [],
@@ -200,9 +197,9 @@ describe("the reconcile surface", () => {
     // Both arguments named, not elided: the tenant is what a real source has to filter its report
     // by, so the surface test has to prove the barrel still hands it one.
     const source: SettlementReportSource = {
-      fetch: async (tenantId, window): Promise<SettlementRecord[]> => [
+      fetch: async (window): Promise<SettlementRecord[]> => [
         {
-          references: [tenantId, window.from.toISOString()],
+          references: [window.from.toISOString()],
           amount: decimal("1.00"),
           settledAt: new Date(),
         },
@@ -234,8 +231,7 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
     const config = getTableConfig(payments);
 
     const uniqueNames = config.uniqueConstraints.map((u) => u.getName());
-    expect(uniqueNames).toContain("payments_tenant_id_key");
-    expect(uniqueNames).toContain("payments_provider_ref_key");
+    expect(uniqueNames).toEqual(["payments_provider_ref_key"]);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toContain("payments_working_order_fk");
@@ -262,13 +258,13 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
     expect(checkNames).toContain("payment_refunds_amount_ck");
   });
 
-  it("declares the payment_policy table's foreign-key and check constraints", () => {
+  it("declares the payment_policy table's one-row and value check constraints", () => {
     const config = getTableConfig(paymentPolicy);
 
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("payment_policy_tenant_fk");
+    expect(config.foreignKeys).toEqual([]);
 
     const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("payment_policy_singleton_ck");
     expect(checkNames).toContain("payment_policy_offline_mode_ck");
     expect(checkNames).toContain("payment_policy_cap_ck");
   });

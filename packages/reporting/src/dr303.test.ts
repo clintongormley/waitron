@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { DR303_LAYOUT, type Dr303Segment } from "./dr303-layout.js";
 import { formatAlfa, formatNumericField, normalizeAlfa, toDr303Record } from "./dr303.js";
 import type { Modelo303 } from "./modelo-303.js";
 
 const d = (s: string): Decimal => decimal(s);
-const TENANT = "11111111-1111-1111-1111-111111111111" as unknown as TenantId;
 
 // ── Field-formatting units (proven by deletion; each rule from the AEAT manual, manual_uso.txt) ──
 
@@ -95,7 +94,6 @@ describe("normalizeAlfa / formatAlfa — alfanumeric (upper, accents stripped, �
  * serializer from mapModelo303). */
 function deliMonth(): Modelo303 {
   return {
-    tenantId: TENANT,
     year: 2026,
     period: { kind: "month", month: 8 },
     boxes: {

@@ -3,7 +3,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -21,7 +21,7 @@ import type {
   CardProviderRuntimeDeps,
   ReaderStatus,
 } from "@waitron/payments";
-import { AppError, tillId as brandTillId, type TenantId, type TillId } from "@waitron/shared";
+import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
 import {
   awaitingCertAlertSource,
@@ -62,7 +62,6 @@ const NOW = new Date("2026-09-14T12:00:00.000Z");
 const noopLog: Logger = () => {};
 
 interface Venue {
-  tenantId: TenantId;
   tillId: TillId;
   manager: string;
   supervisor: string;
@@ -70,24 +69,23 @@ interface Venue {
 }
 
 async function seedVenue(): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Caja 1') returning id`);
+    insert into tills (location_id, name)
+    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
   const cookie = (role: string, name: string) =>
-    withTenant(db, tenantId, async (tx) => {
+    withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const p = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, ${name}, ${hashPin("1234")}, ${role}) returning id`);
-      const session = await startManagementSession(tx, { tenantId, personId: p.rows[0]!.id });
+        insert into persons (display_name, pin_hash, role)
+        values (${name}, ${hashPin("1234")}, ${role}) returning id`);
+      const session = await startManagementSession(tx, { personId: p.rows[0]!.id });
       return `${MANAGEMENT_COOKIE}=${session.id}`;
     });
   return {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     manager: await cookie("manager", "Marta"),
     supervisor: await cookie("supervisor", "Sergio"),
@@ -100,24 +98,20 @@ async function raise(
   code: string,
   severity: "warning" | "error" = "error",
 ): Promise<string> {
-  return withTenant(db, v.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await recordIncident(tx, {
-      tenantId: v.tenantId,
       tillId: v.tillId,
       error: new AppError(code as never, {} as never),
       severity,
       detectedAt: NOW,
     });
-    const open = await listOpenIncidents(tx, v.tenantId);
+    const open = await listOpenIncidents(tx);
     return open.find((i) => i.code === code)!.id;
   });
 }
 
-function appFor(
-  v: Pick<Venue, "tenantId">,
-  registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] }),
-): Hono {
+function appFor(registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] })): Hono {
   const app = new Hono();
   // Mirror boot.ts: a GET carrying `x-waitron-live: 1` runs under a passive read, so an automatic
   // dashboard poll verifies the session without sliding its idle window. Requests without the header
@@ -131,7 +125,6 @@ function appFor(
     app,
     {
       db,
-      cfg: { tenantId: v.tenantId },
       registry,
       now: () => NOW,
     },
@@ -147,8 +140,7 @@ const post = (app: Hono, path: string, cookie: string) =>
 
 describe("alert routes", () => {
   it("refuses a request with no session", async () => {
-    const v = await seedVenue();
-    const res = await get(appFor(v), "/management-api/alerts");
+    const res = await get(appFor(), "/management-api/alerts");
     expect(res.status).toBe(401);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
       "management_session.required",
@@ -159,7 +151,7 @@ describe("alert routes", () => {
     const v = await seedVenue();
     await raise(v, "payment.offline_forward_declined");
     await raise(v, "chain.verification_failed");
-    const res = await get(appFor(v), "/management-api/alerts", v.manager);
+    const res = await get(appFor(), "/management-api/alerts", v.manager);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { visible: boolean; alerts: { code: string }[] };
     expect(body.visible).toBe(true);
@@ -172,51 +164,15 @@ describe("alert routes", () => {
   it("answers not visible and empty to a session holding no alert permission", async () => {
     const v = await seedVenue();
     await raise(v, "payment.offline_forward_declined");
-    const res = await get(appFor(v), "/management-api/alerts", v.supervisor);
+    const res = await get(appFor(), "/management-api/alerts", v.supervisor);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ visible: false, alerts: [] });
-  });
-
-  it("answers not visible and empty to another tenant's manager", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    await raise(a, "payment.offline_forward_declined");
-    const res = await get(appFor(a), "/management-api/alerts", b.manager);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ visible: false, alerts: [] });
-  });
-
-  it("answers not visible and empty to another tenant's manager asking for handled alerts", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const id = await raise(a, "payment.offline_forward_declined");
-    const app = appFor(a);
-    expect(
-      (await post(app, `/management-api/alerts/incidents/${id}/handled`, a.manager)).status,
-    ).toBe(204);
-    const res = await get(app, "/management-api/alerts/handled", b.manager);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ visible: false, alerts: [] });
-  });
-
-  it("refuses another tenant's manager to handle this tenant's incident, leaving it open", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const id = await raise(a, "payment.offline_forward_declined");
-    const res = await post(appFor(a), `/management-api/alerts/incidents/${id}/handled`, b.manager);
-    expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("alert.not_found");
-    const stillOpen = await withTenant(db, a.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return listOpenIncidents(tx, a.tenantId);
-    });
-    expect(stillOpen.map((i) => i.id)).toEqual([id]);
   });
 
   it("marks an incident handled; it moves from open to handled with who and when", async () => {
     const v = await seedVenue();
     const id = await raise(v, "payment.offline_forward_declined");
-    const app = appFor(v);
+    const app = appFor();
     const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
     expect(res.status).toBe(204);
     expect(
@@ -245,7 +201,7 @@ describe("alert routes", () => {
   it("succeeds when the incident is already handled", async () => {
     const v = await seedVenue();
     const id = await raise(v, "payment.offline_forward_declined");
-    const app = appFor(v);
+    const app = appFor();
     expect(
       (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status,
     ).toBe(204);
@@ -266,7 +222,7 @@ describe("alert routes", () => {
     });
     const v = await seedVenue();
     const id = await raise(v, "fiscal.registro_rechazado");
-    const app = appFor(v, registry);
+    const app = appFor(registry);
     const refused = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({
@@ -287,7 +243,7 @@ describe("alert routes", () => {
       await raise(v, "clock.jump_detected"),
       await raise(v, "printing.mystery"),
     ];
-    const app = appFor(v);
+    const app = appFor();
     const codes = async (path: string) =>
       ((await (await get(app, path, v.supervisor)).json()) as { alerts: { code: string }[] }).alerts
         .map((a) => a.code)
@@ -326,7 +282,7 @@ describe("alert routes", () => {
     const v = await seedVenue();
     const id = await raise(v, "fiscal.registro_rechazado");
     const res = await post(
-      appFor(v),
+      appFor(),
       `/management-api/alerts/incidents/${id}/handled`,
       v.supervisor,
     );
@@ -334,23 +290,16 @@ describe("alert routes", () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("alert.not_found");
   });
 
-  it("answers alert.not_found for an unknown, a malformed, and another tenant's id", async () => {
+  it("answers alert.not_found for an unknown and a malformed id", async () => {
     const a = await seedVenue();
-    const b = await seedVenue();
-    const theirs = await raise(b, "payment.offline_forward_declined");
-    const app = appFor(a);
-    for (const id of ["00000000-0000-4000-8000-000000000000", "not-a-uuid", theirs]) {
+    const app = appFor();
+    for (const id of ["00000000-0000-4000-8000-000000000000", "not-a-uuid"]) {
       const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, a.manager);
       expect(res.status).toBe(404);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
         "alert.not_found",
       );
     }
-    const stillOpen = await withTenant(db, b.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return listOpenIncidents(tx, b.tenantId);
-    });
-    expect(stillOpen.map((i) => i.id)).toEqual([theirs]);
   });
 });
 
@@ -377,16 +326,15 @@ function stubCardProvider(): CardProviderContribution {
   };
 }
 
-const cardRuntimeDeps = (tenantId: TenantId): CardProviderRuntimeDeps => ({
+const cardRuntimeDeps = (): CardProviderRuntimeDeps => ({
   db,
   ring: {} as never,
-  tenantId,
 });
 
 /**
  * The four server-owned ongoing sources, wired as boot does, so a route test exercises the real
  * registry composition. By default the two in-memory sources are quiet (backup configured with no
- * destinations, certificate present) and only the two tenant-scoped DB sources — printing and
+ * destinations, certificate present) and only the two DB sources — printing and
  * card-reader battery — can fire; flip `backupDisabled`/`awaitingCert` to make those two fire too.
  */
 function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolean } = {}) {
@@ -410,24 +358,24 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
   });
 }
 
-async function seedLowReader(tenantId: TenantId, name = "Datafono"): Promise<void> {
+async function seedLowReader(name = "Datafono"): Promise<void> {
   await db.execute(sql`
-    insert into card_readers (tenant_id, provider, provider_ref, name, active)
-    values (${tenantId}, 'stub', ${`ref-${name}`}, ${name}, true)`);
+    insert into card_readers (provider, provider_ref, name, active)
+    values ('stub', ${`ref-${name}`}, ${name}, true)`);
 }
 
 /** A document print job old enough to count as stuck, on an active printer, so `printingAlertSource`
  * fires `printer.jobs_waiting` for this tenant. */
-async function seedStuckPrintJob(tenantId: TenantId): Promise<void> {
+async function seedStuckPrintJob(): Promise<void> {
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Retail') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Retail') returning id`);
   const printer = await db.execute<{ id: string }>(sql`
-    insert into printers (tenant_id, location_id, name, transport, host, active)
-    values (${tenantId}, ${loc.rows[0]!.id}, 'Barra', 'network_tcp', '10.0.0.1', true) returning id`);
+    insert into printers (location_id, name, transport, host, active)
+    values (${loc.rows[0]!.id}, 'Barra', 'network_tcp', '10.0.0.1', true) returning id`);
   await db.execute(sql`
-    insert into print_jobs (tenant_id, location_id, printer_id, payload, kind, status, attempts, created_at)
-    values (${tenantId}, ${loc.rows[0]!.id}, ${printer.rows[0]!.id}, decode('01', 'hex'),
+    insert into print_jobs (location_id, printer_id, payload, kind, status, attempts, created_at)
+    values (${loc.rows[0]!.id}, ${printer.rows[0]!.id}, decode('01', 'hex'),
             'document', 'queued', 0, ${new Date(NOW.getTime() - 5 * 60_000).toISOString()})`);
 }
 
@@ -443,9 +391,9 @@ describe("ongoing alert sources through the route", () => {
     // permission tests do, then fire all four areas.
     roleOverride.set("supervisor", ["payments.manage"]);
     const v = await seedVenue();
-    await seedLowReader(v.tenantId);
-    await seedStuckPrintJob(v.tenantId);
-    const app = appFor(v, ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
+    await seedLowReader();
+    await seedStuckPrintJob();
+    const app = appFor(ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
 
     // Control: a manager holds every source permission, so all four areas actually fire — the
     // payments-only assertion below is filtering at work, not four empty sources.
@@ -489,7 +437,7 @@ describe("ongoing alert sources through the route", () => {
     };
     const registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [working, failing] });
     const body = (await (
-      await get(appFor(v, registry), "/management-api/alerts", v.manager)
+      await get(appFor(registry), "/management-api/alerts", v.manager)
     ).json()) as { alerts: { code: string; area: string; params: unknown }[] };
 
     // The working source's alert is untouched by the other source's failure…
@@ -509,14 +457,14 @@ describe("ongoing alert sources through the route", () => {
 
   it("polls passively: the x-waitron-live GET does not extend the session, an ordinary GET does", async () => {
     const v = await seedVenue();
-    const app = appFor(v, ongoingRegistry());
+    const app = appFor(ongoingRegistry());
     const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
     // Age the session so a touch would visibly move its expiry away from the aged baseline.
     await db.execute(
       sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${sid}`,
     );
     const expiryOf = () =>
-      withTenant(db, v.tenantId, (tx) => resolveManagementSession(tx, sid, { touch: false }));
+      withTransaction(db, (tx) => resolveManagementSession(tx, sid, { touch: false }));
     const before = (await expiryOf()).expiresAt;
 
     // The live poll verifies the session but does not slide its idle window.
@@ -526,33 +474,5 @@ describe("ongoing alert sources through the route", () => {
     // Control: the same GET without the live header counts as human activity and slides it forward.
     expect((await get(app, "/management-api/alerts", v.manager)).status).toBe(200);
     expect(Date.parse((await expiryOf()).expiresAt)).toBeGreaterThan(Date.parse(before));
-  });
-
-  it("scopes ongoing sources to the route's tenant: tenant A's session sees none of tenant B's ongoing alerts", async () => {
-    // While `tenant_id` still exists, every source carries its own tenant predicate (CLAUDE.md §3: one
-    // database per tenant is NOT the query's isolation boundary). If tenant_id is dropped
-    // (docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md), this case retires with it.
-    const a = await seedVenue();
-    const b = await seedVenue();
-    await seedLowReader(b.tenantId);
-    await seedStuckPrintJob(b.tenantId);
-
-    // Control: through tenant B's own route the seeded rows fire on both DB sources…
-    const bAreas = (
-      (await (
-        await get(appFor(b, ongoingRegistry()), "/management-api/alerts", b.manager)
-      ).json()) as {
-        alerts: { area: string }[];
-      }
-    ).alerts
-      .map((alert) => alert.area)
-      .sort();
-    expect(bAreas).toEqual(["card_reader", "printing"]);
-
-    // …but tenant A's route, with nothing of its own, sees none of tenant B's ongoing alerts.
-    const aBody = (await (
-      await get(appFor(a, ongoingRegistry()), "/management-api/alerts", a.manager)
-    ).json()) as { alerts: unknown[] };
-    expect(aBody.alerts).toEqual([]);
   });
 });

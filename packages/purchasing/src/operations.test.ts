@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { usePurchasingDb } from "../test/fixtures.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hasCode, isAppError } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import {
   createPurchaseInvoice,
   deletePurchaseInvoice,
@@ -37,13 +37,12 @@ function baseInput(): CreatePurchaseInvoiceInput {
 }
 
 describe("purchase-invoice operations", () => {
-  let tenantId: TenantId;
   beforeEach(async () => {
-    tenantId = await seedTenant(fx.db);
+    await seedTenant(fx.db);
   });
 
-  async function asApp<T>(fn: Parameters<typeof withTenant<T>>[2]): Promise<T> {
-    return withTenant(fx.db, tenantId, async (tx) => {
+  async function asApp<T>(fn: Parameters<typeof withTransaction<T>>[1]): Promise<T> {
+    return withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -51,7 +50,7 @@ describe("purchase-invoice operations", () => {
 
   it("creates an invoice with lines and reads it back", async () => {
     const { created, fetched } = await asApp(async (tx) => {
-      const created = await createPurchaseInvoice(tx, tenantId, {
+      const created = await createPurchaseInvoice(tx, {
         header: {
           supplierTaxId: "B12345678",
           supplierName: "Proveedor SL",
@@ -87,7 +86,7 @@ describe("purchase-invoice operations", () => {
     // asc(id))`. They must be line-for-line identical — proving the JS id compare reproduces
     // PostgreSQL's uuid ordering, which is the ordering the old insert-then-re-read guaranteed.
     const { created, fetched } = await asApp(async (tx) => {
-      const created = await createPurchaseInvoice(tx, tenantId, {
+      const created = await createPurchaseInvoice(tx, {
         header: { ...baseInput().header, supplierInvoiceNumber: "SAME-RATE" },
         lines: [
           { rate: d("21.00"), base: d("200.00"), tax: d("42.00") },
@@ -106,7 +105,7 @@ describe("purchase-invoice operations", () => {
     // A difference-method supplier VAT amount: 20.99, not round(100 × 21%) = 21.00. We file what they
     // charged (the exactness rule the sales/output side follows).
     const fetched = await asApp(async (tx) => {
-      const c = await createPurchaseInvoice(tx, tenantId, {
+      const c = await createPurchaseInvoice(tx, {
         header: {
           supplierTaxId: "B99999999",
           supplierName: "Otro SL",
@@ -124,11 +123,11 @@ describe("purchase-invoice operations", () => {
 
   it("lists invoices, optionally filtered by received_on", async () => {
     await asApp(async (tx) => {
-      await createPurchaseInvoice(tx, tenantId, {
+      await createPurchaseInvoice(tx, {
         header: { ...baseInput().header, supplierInvoiceNumber: "JUL", receivedOn: "2026-07-31" },
         lines: baseInput().lines,
       });
-      await createPurchaseInvoice(tx, tenantId, {
+      await createPurchaseInvoice(tx, {
         header: { ...baseInput().header, supplierInvoiceNumber: "AUG", receivedOn: "2026-08-15" },
         lines: baseInput().lines,
       });
@@ -145,8 +144,8 @@ describe("purchase-invoice operations", () => {
 
   it("updates header fields without touching the lines", async () => {
     const after = await asApp(async (tx) => {
-      const c = await createPurchaseInvoice(tx, tenantId, baseInput());
-      await updatePurchaseInvoice(tx, tenantId, c.id, {
+      const c = await createPurchaseInvoice(tx, baseInput());
+      await updatePurchaseInvoice(tx, c.id, {
         header: {
           supplierName: "Renombrado SL",
           deductibleProportion: d("50.00"),
@@ -163,8 +162,8 @@ describe("purchase-invoice operations", () => {
 
   it("replaces the VAT lines when the update supplies them (fix a mis-keyed rate)", async () => {
     const after = await asApp(async (tx) => {
-      const c = await createPurchaseInvoice(tx, tenantId, baseInput());
-      await updatePurchaseInvoice(tx, tenantId, c.id, {
+      const c = await createPurchaseInvoice(tx, baseInput());
+      await updatePurchaseInvoice(tx, c.id, {
         lines: [
           { rate: d("10.00"), base: d("200.00"), tax: d("20.00") },
           { rate: d("21.00"), base: d("10.00"), tax: d("2.10"), kind: "capital" },
@@ -178,7 +177,7 @@ describe("purchase-invoice operations", () => {
 
   it("deletes an invoice and cascades to its VAT lines", async () => {
     const gone = await asApp(async (tx) => {
-      const c = await createPurchaseInvoice(tx, tenantId, baseInput());
+      const c = await createPurchaseInvoice(tx, baseInput());
       await deletePurchaseInvoice(tx, c.id);
       return getPurchaseInvoice(tx, c.id);
     });
@@ -199,9 +198,7 @@ describe("purchase-invoice operations", () => {
   it("throws purchase.not_found updating or deleting an unknown id", async () => {
     const unknown = "00000000-0000-0000-0000-000000000000";
     const onUpdate = await asApp((tx) =>
-      captureAppError(() =>
-        updatePurchaseInvoice(tx, tenantId, unknown, { header: { note: "x" } }),
-      ),
+      captureAppError(() => updatePurchaseInvoice(tx, unknown, { header: { note: "x" } })),
     );
     expect(hasCode(onUpdate, "purchase.not_found") && onUpdate.params.id).toBe(unknown);
     const onDelete = await asApp((tx) => captureAppError(() => deletePurchaseInvoice(tx, unknown)));
@@ -210,9 +207,7 @@ describe("purchase-invoice operations", () => {
 
   it("rejects an invoice with no VAT lines (purchase.invalid: no_lines)", async () => {
     const error = await asApp((tx) =>
-      captureAppError(() =>
-        createPurchaseInvoice(tx, tenantId, { header: baseInput().header, lines: [] }),
-      ),
+      captureAppError(() => createPurchaseInvoice(tx, { header: baseInput().header, lines: [] })),
     );
     expect(hasCode(error, "purchase.invalid") && error.params.reason).toBe("no_lines");
   });
@@ -220,7 +215,7 @@ describe("purchase-invoice operations", () => {
   it("rejects a negative base, a negative tax, and an out-of-range rate", async () => {
     const negBase = await asApp((tx) =>
       captureAppError(() =>
-        createPurchaseInvoice(tx, tenantId, {
+        createPurchaseInvoice(tx, {
           header: baseInput().header,
           lines: [{ rate: d("21.00"), base: d("-1.00"), tax: d("0.00") }],
         }),
@@ -230,7 +225,7 @@ describe("purchase-invoice operations", () => {
 
     const negTax = await asApp((tx) =>
       captureAppError(() =>
-        createPurchaseInvoice(tx, tenantId, {
+        createPurchaseInvoice(tx, {
           header: baseInput().header,
           lines: [{ rate: d("21.00"), base: d("1.00"), tax: d("-0.01") }],
         }),
@@ -240,7 +235,7 @@ describe("purchase-invoice operations", () => {
 
     const badRate = await asApp((tx) =>
       captureAppError(() =>
-        createPurchaseInvoice(tx, tenantId, {
+        createPurchaseInvoice(tx, {
           header: baseInput().header,
           lines: [{ rate: d("101.00"), base: d("1.00"), tax: d("0.00") }],
         }),
@@ -252,7 +247,7 @@ describe("purchase-invoice operations", () => {
   it("rejects a deductible_proportion outside 0..100 (purchase.invalid)", async () => {
     const error = await asApp((tx) =>
       captureAppError(() =>
-        createPurchaseInvoice(tx, tenantId, {
+        createPurchaseInvoice(tx, {
           header: { ...baseInput().header, deductibleProportion: d("150.00") },
           lines: baseInput().lines,
         }),
@@ -270,7 +265,7 @@ describe("purchase-invoice operations", () => {
     // reached.
     const error = await asApp((tx) =>
       captureThrown(() =>
-        createPurchaseInvoice(tx, tenantId, {
+        createPurchaseInvoice(tx, {
           header: { ...baseInput().header, total: d("1000000000000.00") },
           lines: baseInput().lines,
         }),
@@ -281,8 +276,8 @@ describe("purchase-invoice operations", () => {
 
   it("maps a duplicate supplier invoice to purchase.duplicate", async () => {
     const error = await asApp(async (tx) => {
-      await createPurchaseInvoice(tx, tenantId, baseInput());
-      return captureAppError(() => createPurchaseInvoice(tx, tenantId, baseInput()));
+      await createPurchaseInvoice(tx, baseInput());
+      return captureAppError(() => createPurchaseInvoice(tx, baseInput()));
     });
     expect(hasCode(error, "purchase.duplicate") && error.params.supplierInvoiceNumber).toBe(
       "F-2026/001",

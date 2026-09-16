@@ -108,17 +108,31 @@ describe("migration composition across packages", () => {
 });
 
 describe("envio_flujo migration", () => {
-  it("creates envio_flujo with a tenant PK and both value columns not-null", async () => {
+  it("creates envio_flujo as a one-row table with both value columns not-null", async () => {
     const db = pg.db;
     const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
       select column_name, is_nullable from information_schema.columns where table_name = 'envio_flujo'
     `);
     const byName = Object.fromEntries(cols.rows.map((c) => [c.column_name, c.is_nullable]));
     expect(byName).toMatchObject({
-      tenant_id: "NO",
+      id: "NO",
       proximo_envio_en: "NO",
       tiempo_espera_seg: "NO",
     });
+
+    // The one-row constraint: a second row is refused by the singleton check, whatever id it names.
+    await db.execute(sql`
+      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      values (1, '2026-07-21T00:00:00Z', 60)
+    `);
+    const second = await captureError(() =>
+      db.execute(sql`
+        insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+        values (2, '2026-07-21T00:00:00Z', 60)
+      `),
+    );
+    expect(pgErrorCode(second)).toBe("23514"); // check_violation: envio_flujo_singleton_ck
+    await db.execute(sql`delete from envio_flujo`);
   });
 });
 
@@ -131,7 +145,6 @@ describe("acks migration", () => {
     const by = Object.fromEntries(cols.rows.map((c) => [c.column_name, c.is_nullable]));
     expect(by).toMatchObject({
       registro_id: "NO",
-      tenant_id: "NO",
       submitted_at: "NO",
       state: "NO",
       delivered_at: "YES",
@@ -163,11 +176,11 @@ describe("registros_facturacion.entorno migration", () => {
     const db = pg.db;
     const error = await captureError(() =>
       db.execute(sql`
-        insert into registros_facturacion (tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+        insert into registros_facturacion (till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
           id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
           primer_registro, sistema_informatico,
           fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno)
-        values (${"00000000-0000-4000-8000-000000000000"}, ${"00000000-0000-4000-8000-000000000000"},
+        values (${"00000000-0000-4000-8000-000000000000"},
           ${"00000000-0000-4000-8000-000000000000"}, ${"00000000-0000-4000-8000-000000000000"},
           ${"00000000-0000-4000-8000-000000000000"}, 1,
           'alta', '89890001K', 'A/1', '2026-07-20', 'Waitron SL', true, '{}'::jsonb,
@@ -186,10 +199,10 @@ describe("envios drainer enumeration", () => {
     const [exec] = (
       await db.execute<{ app_user_exec: boolean; public_exec: boolean }>(sql`
         select
-          has_function_privilege('app_user', 'envios_tenants_with_work(timestamptz)', 'EXECUTE') as app_user_exec,
+          has_function_privilege('app_user', 'envios_work_due(timestamptz)', 'EXECUTE') as app_user_exec,
           exists (
             select 1 from pg_proc p, aclexplode(p.proacl) acl
-            where p.proname = 'envios_tenants_with_work'
+            where p.proname = 'envios_work_due'
               and acl.grantee = 0 and acl.privilege_type = 'EXECUTE'
           ) as public_exec
       `)
@@ -197,20 +210,21 @@ describe("envios drainer enumeration", () => {
     expect(exec).toEqual({ app_user_exec: true, public_exec: false });
   });
 
-  it("enumerates only tenants with DUE work, matching drain.ts's predicate", async () => {
+  it("reports work as due only from its due time, matching drain.ts's predicate", async () => {
     // The same row is excluded before its due time and included at that time.
     const db = pg.db;
-    const seeded = await seedPendingEnvios(db, { count: 1 });
+    await seedPendingEnvios(db, { count: 1 });
 
-    const due = await db.execute<{ tenant_id: string }>(
-      sql`select tenant_id from envios_tenants_with_work('2026-07-21T00:00:00Z'::timestamptz) as t(tenant_id)`,
+    const due = await db.execute<{ due: boolean }>(
+      sql`select envios_work_due('2026-07-21T00:00:00Z'::timestamptz) as due`,
     );
-    expect(due.rows.map((r) => r.tenant_id)).toEqual([seeded.tenantId]);
+    expect(due.rows.map((r) => r.due)).toEqual([true]);
 
-    const notYet = await db.execute<{ tenant_id: string }>(
-      sql`select tenant_id from envios_tenants_with_work('2026-07-20T23:59:59Z'::timestamptz) as t(tenant_id)`,
+    const notYet = await db.execute<{ due: boolean }>(
+      sql`select envios_work_due('2026-07-20T23:59:59Z'::timestamptz) as due`,
     );
-    expect(notYet.rows).toHaveLength(0);
+    expect(notYet.rows.map((r) => r.due)).toEqual([false]);
+    await db.execute(sql`delete from envios`);
   });
 
   it("enumerates a lone stale enviando row (no pendiente row) exactly at RECUPERACION_ENVIANDO_MS, pinning the SQL interval to the TS constant", async () => {
@@ -218,37 +232,35 @@ describe("envios drainer enumeration", () => {
     // (5 * 60_000 ms) are two separate literals across the TS/SQL boundary that "MUST stay in
     // sync" but cannot be derived from one source. Nothing before this test called that out — a
     // one-sided edit to either literal would drift silently, and if the SQL interval grew, a
-    // stale `enviando` tenant would stop being enumerated and never reach `recoverStaleClaims`
-    // (drain.ts's own doc comment on `tenantsWithWork` explains why that path must not be
-    // skipped: a lone stuck `enviando` row has zero `pendiente` rows by definition).
+    // stale `enviando` row would stop counting as due work and never reach `recoverStaleClaims`
+    // (drain.ts's own doc comment on `workIsDue` explains why that path must not be skipped: a
+    // lone stuck `enviando` row has zero `pendiente` rows by definition).
     //
-    // Two distinct tenants (seedPendingEnvios mints a fresh one per call), each flipped from its
-    // seeded `pendiente` row to a lone `enviando` row so NEITHER has a `pendiente` row alongside —
-    // one stamped just PAST the threshold, one just WITHIN it. If either literal drifts from the
-    // other, one of the two assertions below fails.
+    // One seeded row at a time, flipped from `pendiente` to a lone `enviando` row so no `pendiente`
+    // row sits alongside it — stamped just PAST the threshold, then just WITHIN it. If either
+    // literal drifts from the other, one of the two assertions below fails.
     const db = pg.db;
 
     const now = new Date("2026-07-21T00:00:00Z");
 
-    const stale = await seedPendingEnvios(db, { count: 1 });
+    await seedPendingEnvios(db, { count: 1 });
     await db.execute(sql`
       update envios set estado = 'enviando',
         enviado_en = ${new Date(now.getTime() - (RECUPERACION_ENVIANDO_MS + 1000)).toISOString()}
-      where tenant_id = ${stale.tenantId}
     `);
+    const stale = await db.execute<{ due: boolean }>(
+      sql`select envios_work_due(${now.toISOString()}::timestamptz) as due`,
+    );
+    expect(stale.rows.map((r) => r.due)).toEqual([true]);
 
-    const fresh = await seedPendingEnvios(db, { count: 1 });
     await db.execute(sql`
       update envios set estado = 'enviando',
         enviado_en = ${new Date(now.getTime() - (RECUPERACION_ENVIANDO_MS - 1000)).toISOString()}
-      where tenant_id = ${fresh.tenantId}
     `);
-
-    const due = await db.execute<{ tenant_id: string }>(
-      sql`select tenant_id from envios_tenants_with_work(${now.toISOString()}::timestamptz) as t(tenant_id)`,
+    const fresh = await db.execute<{ due: boolean }>(
+      sql`select envios_work_due(${now.toISOString()}::timestamptz) as due`,
     );
-    const tenantIds = due.rows.map((r) => r.tenant_id);
-    expect(tenantIds).toContain(stale.tenantId);
-    expect(tenantIds).not.toContain(fresh.tenantId);
+    expect(fresh.rows.map((r) => r.due)).toEqual([false]);
+    await db.execute(sql`delete from envios`);
   });
 });

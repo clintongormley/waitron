@@ -33,10 +33,13 @@ const NODE_DB = "waitron_repl_node";
 const SUB = "waitron_sub_over_tunnel";
 const PREPROD_PUBS = ["waitron_preproduction_ledger", "waitron_preproduction_state"];
 
-const insertTenant = (marker: string) =>
-  sql`insert into tenants (country, tax_id, legal_name) values ('ES', ${marker}, 'Tunnel SL')`;
-const countTenant = (marker: string) =>
-  sql`select count(*)::int as c from tenants where tax_id = ${marker}`;
+// A root state table with no FK parents. The taxpayer row cannot serve as the probe any more:
+// there is exactly one of it per database.
+const insertProbe = (marker: string) =>
+  sql`insert into locations (name, invoice_locales, operation_description)
+      values (${marker}, array['es-ES'], 'Hospitality')`;
+const countProbe = (marker: string) =>
+  sql`select count(*)::int as c from locations where name = ${marker}`;
 
 // No Docker gate: without Docker, `startTwoNodeWireguardCluster` throws before starting anything
 // (packages/db/src/testing/two-node-wireguard.ts:236), so this describe's `beforeAll` throws and the run fails.
@@ -95,11 +98,10 @@ describe("native replication over a WireGuard tunnel", () => {
     });
 
     const marker = "TUNNEL_PROBE";
-    await nodeA.ownerDb.execute(insertTenant(marker));
+    await nodeA.ownerDb.execute(insertProbe(marker));
     await expect
       .poll(
-        async () =>
-          (await nodeB.superuserDb.execute<{ c: number }>(countTenant(marker))).rows[0]?.c,
+        async () => (await nodeB.superuserDb.execute<{ c: number }>(countProbe(marker))).rows[0]?.c,
         { timeout: 30_000 },
       )
       .toBe(1);

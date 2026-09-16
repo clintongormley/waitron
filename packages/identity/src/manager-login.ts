@@ -1,7 +1,7 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { persons } from "./schema/persons.js";
 import { normalizeEmail } from "./email.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";
@@ -47,7 +47,6 @@ type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 async function completeManagerLogin(
   tx: Transaction,
   input: {
-    tenantId: string;
     password: string;
     totp?: string;
     recoveryCode?: string;
@@ -85,20 +84,19 @@ async function completeManagerLogin(
     const recoveryOk =
       !totpOk &&
       input.recoveryCode !== undefined &&
-      (await consumeRecoveryCode(tx, input.tenantId, person.id, input.recoveryCode));
+      (await consumeRecoveryCode(tx, person.id, input.recoveryCode));
     if (!totpOk && !recoveryOk) {
       throw new AppError("totp.invalid", {});
     }
   }
   // Verifier seam: password (+ TOTP when enrolled) is one way to mint a management session; slice 1d's
   // finishPasskeyAuthentication is a sibling entry point that likewise ends in startManagementSession.
-  return startManagementSession(tx, { tenantId: input.tenantId, personId: person.id });
+  return startManagementSession(tx, { personId: person.id });
 }
 
 export async function loginManager(
   tx: Transaction,
   input: {
-    tenantId: string;
     email: string;
     password: string;
     totp?: string;
@@ -107,13 +105,11 @@ export async function loginManager(
   },
 ): Promise<ManagementSession> {
   // Dashboard sign-in resolves the person by EMAIL, not by a client-supplied id. The lookup matches
-  // the same normalised (trim + lowercase) form the write boundary stores under the per-tenant
+  // the same normalised (trim + lowercase) form the write boundary stores under the
   // case-insensitive unique index (persons_tenant_email_uq), so `lower(email)` here mirrors the index
   // and login is case-insensitive.
   const email = normalizeEmail(input.email);
-  const [person] = await selectPersonLogin(tx).where(
-    and(eq(persons.tenantId, input.tenantId), eq(sql`lower(${persons.email})`, email)),
-  );
+  const [person] = await selectPersonLogin(tx).where(eq(sql`lower(${persons.email})`, email));
   // Enumeration hardening: an unknown email is indistinguishable from a wrong password on the public
   // login form — both throw `password.invalid`, so the response never reveals which addresses have
   // accounts. We run one `verifyPassword` against a dummy hash first so the not-found path costs the
@@ -135,7 +131,6 @@ export async function loginManager(
 export async function loginManagerById(
   tx: Transaction,
   input: {
-    tenantId: string;
     personId: string;
     password: string;
     totp?: string;
@@ -150,9 +145,7 @@ export async function loginManagerById(
   // surface to hide here — a caller either holds a valid primary admin id or does not — so an unknown
   // id is a straight `person.not_found` (no dummy-KDF equalisation). Everything after the lookup is
   // identical to `loginManager`, via `completeManagerLogin`.
-  const [person] = await selectPersonLogin(tx).where(
-    and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)),
-  );
+  const [person] = await selectPersonLogin(tx).where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   return completeManagerLogin(tx, input, person, "totp.invalid");
 }
@@ -163,10 +156,10 @@ export async function authorizeManager(
   // (registerModulePermissions, e.g. bookings' booking.manage) type-checks here; `Permission` stays
   // the closed core union everywhere else. `roleHasPermission` resolves either kind.
   args: { managementSessionId: string; permission: Permission | (string & {}) },
-): Promise<{ authorizedBy: string; tenantId: string; role: PersonRoleValue }> {
-  const { personId, role, tenantId } = await resolveManagementSession(tx, args.managementSessionId);
+): Promise<{ authorizedBy: string; role: PersonRoleValue }> {
+  const { personId, role } = await resolveManagementSession(tx, args.managementSessionId);
   if (!roleHasPermission(role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
-  return { authorizedBy: personId, tenantId, role };
+  return { authorizedBy: personId, role };
 }

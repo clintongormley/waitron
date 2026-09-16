@@ -1,5 +1,5 @@
 {
-  "id": "1b869027-0398-4ba9-8379-4a285b6ccc38",
+  "id": "5c6b78a6-b79b-4d94-a6e7-fa549fc48cfb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "department_id": {
           "name": "department_id",
@@ -53,11 +47,9 @@
           "tableFrom": "department_hours",
           "tableTo": "departments",
           "columnsFrom": [
-            "tenant_id",
             "department_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "cascade",
@@ -70,7 +62,6 @@
           "name": "department_hours_interval_key",
           "nullsNotDistinct": false,
           "columns": [
-            "tenant_id",
             "department_id",
             "weekday",
             "opens_at",
@@ -98,12 +89,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "location_id": {
           "name": "location_id",
           "type": "uuid",
@@ -128,6 +113,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "active": {
           "name": "active",
           "type": "boolean",
@@ -145,29 +137,14 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "departments_tenant_fk": {
-          "name": "departments_tenant_fk",
-          "tableFrom": "departments",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "departments_location_fk": {
           "name": "departments_location_fk",
           "tableFrom": "departments",
           "tableTo": "locations",
           "columnsFrom": [
-            "tenant_id",
             "location_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -176,19 +153,10 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "departments_tenant_id_key": {
-          "name": "departments_tenant_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        },
         "departments_location_name_key": {
           "name": "departments_location_name_key",
           "nullsNotDistinct": false,
           "columns": [
-            "tenant_id",
             "location_id",
             "name"
           ]
@@ -207,12 +175,6 @@
       "name": "device_zone_defaults",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "device_id": {
           "name": "device_id",
           "type": "uuid",
@@ -233,11 +195,9 @@
           "tableFrom": "device_zone_defaults",
           "tableTo": "devices",
           "columnsFrom": [
-            "tenant_id",
             "device_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -248,11 +208,9 @@
           "tableFrom": "device_zone_defaults",
           "tableTo": "floor_zones",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -263,7 +221,6 @@
         "device_zone_defaults_pk": {
           "name": "device_zone_defaults_pk",
           "columns": [
-            "tenant_id",
             "device_id"
           ]
         }
@@ -277,12 +234,6 @@
       "name": "order_service_contexts",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "working_order_id": {
           "name": "working_order_id",
           "type": "uuid",
@@ -321,11 +272,9 @@
           "tableFrom": "order_service_contexts",
           "tableTo": "working_orders",
           "columnsFrom": [
-            "tenant_id",
             "working_order_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "cascade",
@@ -336,11 +285,9 @@
           "tableFrom": "order_service_contexts",
           "tableTo": "floor_zones",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -351,11 +298,9 @@
           "tableFrom": "order_service_contexts",
           "tableTo": "departments",
           "columnsFrom": [
-            "tenant_id",
             "department_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -366,7 +311,6 @@
         "order_service_contexts_pk": {
           "name": "order_service_contexts_pk",
           "columns": [
-            "tenant_id",
             "working_order_id"
           ]
         }
@@ -391,12 +335,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "location_id": {
           "name": "location_id",
@@ -441,12 +379,6 @@
           "name": "preparation_routes_lookup_idx",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "location_id",
               "isExpression": false,
               "asc": true,
@@ -483,11 +415,9 @@
           "tableFrom": "preparation_routes",
           "tableTo": "locations",
           "columnsFrom": [
-            "tenant_id",
             "location_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -498,11 +428,9 @@
           "tableFrom": "preparation_routes",
           "tableTo": "floor_zones",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -526,11 +454,9 @@
           "tableFrom": "preparation_routes",
           "tableTo": "products",
           "columnsFrom": [
-            "tenant_id",
             "product_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -541,11 +467,9 @@
           "tableFrom": "preparation_routes",
           "tableTo": "kitchen_stations",
           "columnsFrom": [
-            "tenant_id",
             "station_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -553,16 +477,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "preparation_routes_tenant_id_key": {
-          "name": "preparation_routes_tenant_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "preparation_routes_subject_ck": {
@@ -580,12 +495,6 @@
       "name": "working_line_contexts",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "working_order_line_id": {
           "name": "working_order_line_id",
           "type": "uuid",
@@ -627,6 +536,60 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_name": {
+          "name": "unit_name",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_precision": {
+          "name": "unit_precision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hardware_unit": {
+          "name": "hardware_unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vat_class": {
+          "name": "vat_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "allergens": {
+          "name": "allergens",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diet": {
+          "name": "diet",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diet_derivation": {
+          "name": "diet_derivation",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diet_override": {
+          "name": "diet_override",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -636,11 +599,9 @@
           "tableFrom": "working_line_contexts",
           "tableTo": "working_order_lines",
           "columnsFrom": [
-            "tenant_id",
             "working_order_line_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "cascade",
@@ -651,11 +612,9 @@
           "tableFrom": "working_line_contexts",
           "tableTo": "menu_items",
           "columnsFrom": [
-            "tenant_id",
             "menu_item_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -666,26 +625,32 @@
         "working_line_contexts_pk": {
           "name": "working_line_contexts_pk",
           "columns": [
-            "tenant_id",
             "working_order_line_id"
           ]
         }
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "working_line_contexts_unit_precision_ck": {
+          "name": "working_line_contexts_unit_precision_ck",
+          "value": "\"working_line_contexts\".\"unit_precision\" between 0 and 3"
+        },
+        "working_line_contexts_hardware_unit_ck": {
+          "name": "working_line_contexts_hardware_unit_ck",
+          "value": "\"working_line_contexts\".\"hardware_unit\" is null or \"working_line_contexts\".\"hardware_unit\" in ('kg','g','mg')"
+        },
+        "working_line_contexts_vat_class_ck": {
+          "name": "working_line_contexts_vat_class_ck",
+          "value": "\"working_line_contexts\".\"vat_class\" in ('general','reduced','super_reduced','zero')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.zone_menus": {
       "name": "zone_menus",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "zone_id": {
           "name": "zone_id",
           "type": "uuid",
@@ -711,12 +676,6 @@
           "name": "zone_menus_order_idx",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "zone_id",
               "isExpression": false,
               "asc": true,
@@ -741,11 +700,9 @@
           "tableFrom": "zone_menus",
           "tableTo": "zone_service_policies",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "zone_id"
           ],
           "onDelete": "cascade",
@@ -756,11 +713,9 @@
           "tableFrom": "zone_menus",
           "tableTo": "catalogues",
           "columnsFrom": [
-            "tenant_id",
             "menu_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -771,7 +726,6 @@
         "zone_menus_pk": {
           "name": "zone_menus_pk",
           "columns": [
-            "tenant_id",
             "zone_id",
             "menu_id"
           ]
@@ -786,12 +740,6 @@
       "name": "zone_service_policies",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "location_id": {
           "name": "location_id",
           "type": "uuid",
@@ -821,6 +769,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "is_counter_default": {
+          "name": "is_counter_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},
@@ -830,11 +785,9 @@
           "tableFrom": "zone_service_policies",
           "tableTo": "locations",
           "columnsFrom": [
-            "tenant_id",
             "location_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -845,11 +798,9 @@
           "tableFrom": "zone_service_policies",
           "tableTo": "floor_zones",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -860,11 +811,9 @@
           "tableFrom": "zone_service_policies",
           "tableTo": "departments",
           "columnsFrom": [
-            "tenant_id",
             "department_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -875,11 +824,9 @@
           "tableFrom": "zone_service_policies",
           "tableTo": "catalogues",
           "columnsFrom": [
-            "tenant_id",
             "default_menu_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -890,7 +837,6 @@
         "zone_service_policies_pk": {
           "name": "zone_service_policies_pk",
           "columns": [
-            "tenant_id",
             "zone_id"
           ]
         }

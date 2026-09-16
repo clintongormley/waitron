@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
-  withTenant,
+  withTransaction,
   installChangeFeed,
   startChangeListener,
   CORE_CHANGE_SOURCES,
@@ -17,7 +17,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
@@ -38,7 +37,6 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 
 interface Tenant {
-  tenantId: string;
   locationId: string;
 }
 
@@ -46,7 +44,7 @@ let tenantA: Tenant;
 let managerCookie: string;
 let staffCookie: string;
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared clone and `tenants_country_tax_id_key` is unique, so
 // each needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
@@ -57,46 +55,29 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  const tenantId = randomUUID();
   await suite.admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${tenantId}, 'ES', ${nextNif()}, 'Deli Test SL')`);
+    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
   const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { tenantId, locationId: loc.rows[0]!.id };
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+  return { locationId: loc.rows[0]!.id };
 }
-
-it("refuses another tenant's manager before checking an address or reading printer inventory", async () => {
-  const foreign = await seedTenantWithLocation();
-  const app = mountApp(foreign);
-  const response = await send(app, "POST", "/management-api/printer-discovery/probe", {
-    cookie: managerCookie,
-    body: { host: "192.168.20.247" },
-  });
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-  expect(
-    (await send(app, "GET", "/management-api/printers", { cookie: managerCookie })).status,
-  ).toBe(403);
-});
 
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
-  const { managerSid, staffSid } = await withTenant(suite.admin, tenantA.tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantA.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantA.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId: tenantA.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const staffSession = await startManagementSession(tx, {
-      tenantId: tenantA.tenantId,
       personId: stf.rows[0]!.id,
     });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -105,11 +86,10 @@ beforeAll(async () => {
   staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
 });
 
-/** The FULL TillConfig for a seeded tenant. Only tenantId/locationId are read by the join verbs and
+/** The FULL TillConfig for a seeded venue. Only locationId is read by the join verbs and
  * routes here; nodeId is echoed on the pull and the rest are unused, so branded random uuids stand in. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
-    tenantId: brandTenantId(tenant.tenantId),
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
@@ -174,7 +154,7 @@ async function joinAndAccept(
     verificationNumber: string;
   };
   const joinId = token.slice(0, token.indexOf("."));
-  await withTenant(suite.admin, tenant.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
       choice: verificationNumber,
@@ -204,7 +184,7 @@ async function createUsbPrinter(app: Hono, localKey: string, name: string): Prom
 }
 
 async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): Promise<string> {
-  return withTenant(suite.admin, tenant.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { jobId } = await enqueuePrintJob(tx, tenant, printerId, payload);
     return jobId;
@@ -216,8 +196,8 @@ async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): 
  * shared clone. */
 async function seedStation(tenant: Tenant, name: string): Promise<string> {
   const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name, is_default, active)
-    values (${tenant.tenantId}, ${tenant.locationId}, ${name}, false, true) returning id`);
+    insert into kitchen_stations (location_id, name, is_default, active)
+    values (${tenant.locationId}, ${name}, false, true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -236,8 +216,8 @@ async function agentActive(agentId: string): Promise<boolean> {
  * (unique on the non-NULL node) happy across the shared clone. */
 async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
   const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into print_agents (tenant_id, location_id, name, node_id, token_hash)
-    values (${tenant.tenantId}, ${tenant.locationId}, 'Self-enrolled', ${nodeId}, 'x') returning id`);
+    insert into print_agents (location_id, name, node_id, token_hash)
+    values (${tenant.locationId}, 'Self-enrolled', ${nodeId}, 'x') returning id`);
   return row.rows[0]!.id;
 }
 
@@ -298,7 +278,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(untouched.rows[0]!.status).toBe("queued");
   });
 
-  it("persists the agent host and edits names under the app role without touching another tenant", async () => {
+  it("persists the agent host and edits names under the app role", async () => {
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Name before edit");
     const pulled = await send(app, "POST", "/print-api/agent/jobs", {
@@ -317,17 +297,6 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(await listed.json()).toContainEqual(
       expect.objectContaining({ id: agentId, name: "Kitchen", host: "kitchen.local" }),
     );
-    const tenantB = await seedTenantWithLocation();
-    const foreignId = await seedNodeAgent(tenantB, randomUUID());
-    const foreignEdit = await send(app, "PATCH", `/management-api/print-agents/${foreignId}`, {
-      cookie: managerCookie,
-      body: { name: "Not allowed" },
-    });
-    expect(foreignEdit.status).toBe(404);
-    const row = await suite.admin.execute<{ name: string }>(
-      sql`select name from print_agents where id = ${foreignId}`,
-    );
-    expect(row.rows[0]!.name).not.toBe("Not allowed");
   });
 
   it("discovered-printers reads registered keys + agent names as the app role (grants)", async () => {
@@ -484,22 +453,6 @@ describe("Print API over real Postgres (as the app role)", () => {
     const rows = (await res.json()) as Array<{ id: string; nodeId: string | null }>;
     expect(rows.find((r) => r.id === id)?.nodeId).toBe(someNode);
   });
-
-  it("the agents list is tenant-scoped — tenant A's manager never sees tenant B's agents (CLAUDE.md §3)", async () => {
-    // Since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so the list route must carry
-    // its own `tenantId` predicate; without it tenant A's manager reads EVERY tenant's agents in a
-    // multi-tenant DB. Proven by DELETION: drop the `.where(eq(printAgents.tenantId, …))` from the list
-    // route and tenant B's row appears in tenant A's list below. Both agents seeded directly (owner SQL).
-    const app = mountApp(tenantA);
-    const mineId = await seedNodeAgent(tenantA, randomUUID());
-    const tenantB = await seedTenantWithLocation();
-    const theirsId = await seedNodeAgent(tenantB, randomUUID());
-    const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
-    expect(res.status).toBe(200);
-    const ids = ((await res.json()) as Array<{ id: string }>).map((r) => r.id);
-    expect(ids).toContain(mineId);
-    expect(ids).not.toContain(theirsId);
-  });
 });
 
 describe("Station ↔ printer mapping routes over real Postgres (printer.manage)", () => {
@@ -614,8 +567,8 @@ describe("Station ↔ printer mapping routes over real Postgres (printer.manage)
 /** Seed one till for `tenant` directly (owner SQL) — the target the receipt-printer route configures. */
 async function seedTill(tenant: Tenant, name: string): Promise<string> {
   const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenant.tenantId}, ${tenant.locationId}, ${name}) returning id`);
+    insert into tills (location_id, name)
+    values (${tenant.locationId}, ${name}) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -906,11 +859,7 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
 it("delivers enqueue and agent completion events with fresh printer aggregates", async () => {
   const app = mountApp(tenantA);
   const bus = new LiveEvents();
-  mountLiveApi(
-    app,
-    { db: suite.admin, tenantId: tenantA.tenantId, bus, resourceTypes: ["printers", "print_jobs"] },
-    noopLog,
-  );
+  mountLiveApi(app, { db: suite.admin, bus, resourceTypes: ["printers", "print_jobs"] }, noopLog);
   const { agentId, token } = await joinAndAccept(app, "Live agent");
   const printerId = await createPrinter(app, agentId, "Live printer");
   await installChangeFeed(suite.admin, CORE_CHANGE_SOURCES);
@@ -1025,25 +974,6 @@ describe("print job resend as the deployment role", () => {
         (job) => job.id === originalId,
       )?.canResend,
     ).toBe(false);
-    const foreign = await seedTenantWithLocation();
-    const foreignSession = await withTenant(suite.admin, foreign.tenantId, async (tx) => {
-      await asAppUser(tx);
-      const person = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${foreign.tenantId}, 'Other manager', ${hashPin("1234")}, 'manager') returning id`);
-      return startManagementSession(tx, {
-        tenantId: foreign.tenantId,
-        personId: person.rows[0]!.id,
-      });
-    });
-    // Use this tenant's own manager so the assertion reaches the job's tenant predicate.
-    expect(
-      (
-        await send(mountApp(foreign), "POST", path, {
-          cookie: `${MANAGEMENT_COOKIE}=${foreignSession.id}`,
-        })
-      ).status,
-    ).toBe(404);
     expect(
       (
         await send(app, "POST", `/management-api/print-jobs/${randomUUID()}/resend`, {

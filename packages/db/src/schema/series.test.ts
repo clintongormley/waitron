@@ -1,8 +1,8 @@
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
@@ -20,21 +20,16 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from tenants`);
 });
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_A2 = "aaaaaaaa-1111-4000-8000-000000000002";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 
 // A series is keyed on its NODE since the node-id rekey (2026-08-03): invoice_series dropped
-// till_id and now carries a NOT NULL node_id. seed() creates two nodes for tenant A (so the
-// per-node uniqueness tests have a second node to collide against) and one for tenant B. The tills
-// stay seeded — sales still ring on a till — but nothing in invoice_series references them.
+// till_id and now carries a NOT NULL node_id. seed() creates two nodes for tenant A so the
+// per-node uniqueness tests have a second node to collide against. The tills stay seeded — sales
+// still ring on a till — but nothing in invoice_series references them.
 let nodeA1 = "";
 let nodeA2 = "";
-let nodeB1 = "";
 
 /** Normalise the query result before reading catalog rows. */
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
@@ -43,34 +38,23 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-    {
-      id: LOCATION_B,
-      tenantId: TENANT_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
   ]);
   await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_A2, tenantId: TENANT_A, locationId: LOCATION_A, name: "A2" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
+    { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
+    { id: TILL_A2, locationId: LOCATION_A, name: "A2" },
   ]);
-  nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeA2 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeB1 = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
+  nodeA2 = await seedNode(db, brandLocationId(LOCATION_A));
 }
 
 describe("invoice_series schema", () => {
@@ -83,8 +67,8 @@ describe("invoice_series schema", () => {
 
   it("holds several series on one node", async () => {
     await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard", nextNumber: 1 },
-      { tenantId: TENANT_A, nodeId: nodeA1, code: "RA", purpose: "rectificative", nextNumber: 1 },
+      { nodeId: nodeA1, code: "FA", purpose: "standard", nextNumber: 1 },
+      { nodeId: nodeA1, code: "RA", purpose: "rectificative", nextNumber: 1 },
     ]);
     const found = await db
       .select({ code: invoiceSeries.code })
@@ -100,13 +84,9 @@ describe("invoice_series schema", () => {
     // (see tenancy.test.ts's `rejectsWithCauseMatching` for the same finding).
     // `toThrow` only reads `.message`, so it would pass against any rejection
     // at all, not specifically this one.
-    await db
-      .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" });
+    await db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" });
     const error = await captureError(() =>
-      db
-        .insert(invoiceSeries)
-        .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" }),
+      db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" }),
     );
     expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
   });
@@ -115,8 +95,8 @@ describe("invoice_series schema", () => {
     // Series codes are a per-node numbering concern (node-id rekey, 2026-08-03). Two nodes in one
     // venue both running series "FA" is normal, and their numbers are independent.
     await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" },
-      { tenantId: TENANT_A, nodeId: nodeA2, code: "FA", purpose: "standard" },
+      { nodeId: nodeA1, code: "FA", purpose: "standard" },
+      { nodeId: nodeA2, code: "FA", purpose: "standard" },
     ]);
     const found = await db.select({ id: invoiceSeries.id }).from(invoiceSeries);
     expect(found).toHaveLength(2);
@@ -126,9 +106,7 @@ describe("invoice_series schema", () => {
     // Same wrapper issue as the duplicate-code test above: match the
     // unwrapped Postgres message, not the DrizzleQueryError's own.
     const error = await captureError(() =>
-      db
-        .insert(invoiceSeries)
-        .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "XX", purpose: "invented" }),
+      db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "XX", purpose: "invented" }),
     );
     expect(pgErrorMessage(error)).toMatch(/invoice_series_purpose_ck/);
   });
@@ -152,7 +130,6 @@ describe("invoice_series schema", () => {
       "node_id",
       "purpose",
       "retired_at",
-      "tenant_id",
     ]);
   });
 
@@ -161,7 +138,7 @@ describe("invoice_series schema", () => {
     // This supersedes Task 3's scaffolding assertion that the column was nullable. Raw SQL for the
     // inserts so a mis-migrated run fails on the real cause rather than a drizzle column-object error
     // — the same reason sales.test.ts's corrective-link tests use a raw insert.
-    const node = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    const node = await seedNode(db, brandLocationId(LOCATION_A));
     const meta = await rows<{ is_nullable: string }>(
       db,
       sql`select is_nullable from information_schema.columns
@@ -171,48 +148,29 @@ describe("invoice_series schema", () => {
     // Accepts a valid node id.
     const withNode = await rows<{ node_id: string | null }>(
       db,
-      sql`insert into invoice_series (tenant_id, node_id, code)
-           values (${TENANT_A}, ${node}, 'FN') returning node_id`,
+      sql`insert into invoice_series (node_id, code) values (${node}, 'FN') returning node_id`,
     );
     expect(withNode).toEqual([{ node_id: node }]);
     // And a row WITHOUT it is now refused (NOT NULL), the flip Task 4 introduces.
     const error = await captureError(() =>
-      db.execute(sql`insert into invoice_series (tenant_id, code) values (${TENANT_A}, 'FM')`),
+      db.execute(sql`insert into invoice_series (code) values ('FM')`),
     );
     expect(pgErrorMessage(error)).toMatch(/null value in column "node_id"|not-null/i);
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
-    // The composite (tenant_id, node_id) FK guarantees referential existence too: a node id with
+    // The (node_id) FK guarantees referential existence too: a node id with
     // no `nodes` row is refused.
     const error = await captureError(() =>
       db.execute(
-        sql`insert into invoice_series (tenant_id, node_id, code)
-             values (${TENANT_A}, '99999999-9999-4999-8999-999999999999', 'FX')`,
+        sql`insert into invoice_series (node_id, code) values ('99999999-9999-4999-8999-999999999999', 'FX')`,
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
 
-  it("rejects a node_id belonging to another tenant with a foreign-key violation", async () => {
-    // The composite (tenant_id, node_id) → nodes(tenant_id, id) FK bites: nodeB1 EXISTS but under
-    // TENANT_B, so the (TENANT_A, nodeB1) pair has no matching parent row and the insert is
-    // rejected 23503. node_id here is NOT NULL, so this composite FK ALWAYS checks — the strongest
-    // tenant-consistency, and the fiscally load-bearing one (the series↔node guard reads
-    // series.node_id). This is what a plain single-column node_id FK could NOT enforce — it would
-    // have accepted the cross-tenant node because the id exists in `nodes`. Mirrors `sales_node_fk`
-    // / `working_orders_node_fk` / `payments_node_fk`.
-    const error = await captureError(() =>
-      db.execute(
-        sql`insert into invoice_series (tenant_id, node_id, code)
-             values (${TENANT_A}, ${nodeB1}, 'FX')`,
-      ),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
-  });
-
-  it("has no unique constraint on (tenant_id, node_id) alone", async () => {
-    // The subtle coupling: a unique index on the pair would silently reimpose
+  it("has no unique constraint on node_id alone", async () => {
+    // The subtle coupling: a unique index on node_id would silently reimpose
     // one series per node, which is the thing N-series-from-day-one exists to
     // avoid (node-id rekey, 2026-08-03: the pair moved from till to node). It
     // reads as a harmless index, so only a test catches it.
@@ -221,7 +179,7 @@ describe("invoice_series schema", () => {
       sql`select indexdef from pg_indexes where tablename = 'invoice_series'`,
     );
     const pairOnly = found.filter(
-      (i) => /UNIQUE/i.test(i.indexdef) && /\(tenant_id, node_id\)/.test(i.indexdef),
+      (i) => /UNIQUE/i.test(i.indexdef) && /\(node_id\)/.test(i.indexdef),
     );
     expect(pairOnly).toEqual([]);
   });

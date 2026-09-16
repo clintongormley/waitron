@@ -10,9 +10,9 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   createPurchaseInvoice,
   deletePurchaseInvoice,
@@ -39,15 +39,14 @@ import {
 import type { Logger } from "./logger.js";
 
 /**
- * Everything the dashboard's purchase-invoice routes need: `db` + this venue's own `cfg.tenantId`
- * are passed to every `withTenant` below. The deployment holds one tenant per database. No
+ * Everything the dashboard's purchase-invoice routes need: `db` is what every `withTransaction`
+ * below runs on. The deployment holds one taxpayer per database. No
  * `nodeId` (unlike `CatalogueApiDeps`): these routes need no write-path node id. No card provider,
  * clock or media store either — they touch only the two purchase-invoice tables via the headless
  * `@waitron/purchasing` ops.
  */
 export interface PurchasingApiDeps {
   db: Database;
-  cfg: { tenantId: string };
 }
 
 /**
@@ -186,20 +185,16 @@ function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
  * The deployment holds one tenant per database. Mounts the dashboard's gated purchase-invoice
  * write group on an existing Hono app — `mountCatalogueApi`'s sibling, attached to the SAME app
  * (the `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
- * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTenant` +
+ * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTransaction` +
  * `asAppUser`, `authorizeManager(...)` (→ 403) before the headless `@waitron/purchasing` op, in
  * this database. The `purchase.manage` gate runs on every route through one constant.
  */
 export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logger): void {
-  // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
-  // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
-  // string }, the sibling convention).
-  const tenantId = brandTenantId(deps.cfg.tenantId);
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // PURCHASE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -247,9 +242,7 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       const body = await readJsonBody<{ header?: unknown; lines?: unknown }>(c);
       const header = screenHeaderCreate(body.header);
       const lines = screenLines(body.lines);
-      const created = await gated(sessionId, (tx) =>
-        createPurchaseInvoice(tx, tenantId, { header, lines }),
-      );
+      const created = await gated(sessionId, (tx) => createPurchaseInvoice(tx, { header, lines }));
       return c.json(created, 201);
     }),
   );
@@ -266,7 +259,7 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       const patch: UpdatePurchaseInvoiceInput = {};
       if (body.header !== undefined) patch.header = screenHeaderPatch(body.header);
       if (body.lines !== undefined) patch.lines = screenLines(body.lines);
-      await gated(sessionId, (tx) => updatePurchaseInvoice(tx, tenantId, id, patch));
+      await gated(sessionId, (tx) => updatePurchaseInvoice(tx, id, patch));
       return c.body(null, 204);
     }),
   );

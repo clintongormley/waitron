@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   asAppUser,
-  withTenant,
+  withTransaction,
   type Database,
   type DeploymentEnvironment,
   type DeploymentMode,
@@ -202,7 +202,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
 
 export type BoxStatusDeps = {
   db: Database;
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
   environment: DeploymentEnvironment;
   health: HealthState;
   now: () => Date;
@@ -239,8 +239,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 /**
  * Registers `GET /api/box/status` on the shared trading app. Gated exactly like the FP-1 status routes:
- * `requireManagementSession` → 401 before any DB work, then `withTenant` + `asAppUser` +
- * `authorizeManager("system.manage")` for the tenant-scoped chain read (a `manager`-role person holds
+ * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
+ * `authorizeManager("system.manage")` for the chain read (a `manager`-role person holds
  * it). The composed status is assembled by `collectBoxStatus` from the sibling slice-4a readers; a cert
  * path absent (plain-HTTP boot) yields `cert.available:false`, a lag reader absent (sync off, or Task 6
  * not yet wired) yields `replication.configured:false`.
@@ -250,7 +250,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
   app.get("/api/box/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c); // throws 401 if absent
-      const chain = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const chain = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,

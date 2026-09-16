@@ -1,35 +1,28 @@
 // The STANDALONE node-provisioning path: a node with no fiscal identity, or a reimaged one getting a
 // fresh chain. `waitron-provision venue` covers a fresh venue, seeding its first node as it stands
 // the venue up. `scripts/register-till.ts` is the argv/stdout shim over this module.
-import { and, eq } from "drizzle-orm";
-import { nodes, withTenant } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { nodes, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { SeedReport, WaitronModule } from "@waitron/module";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import "./errors.js";
 
 export interface ProvisionNodeParams {
-  tenantId: TenantId;
   nodeId: NodeId;
 }
 
 /**
- * Refuses a node this tenant does not own, and returns its location. `registro_sif` carries
- * separate foreign keys onto `tenants` and `nodes` and no composite one, so a row naming tenant A
- * and a node of tenant B satisfies both. Matching on `nodes.tenant_id` explicitly enforces tenant
- * consistency regardless of the connection role.
+ * Returns an existing node's location, throwing `node.not_found` when the id matches no node. One
+ * tenant per database, so the id alone names the node.
  */
-async function ownedNodeLocation(
-  tx: Transaction,
-  tenantId: TenantId,
-  nodeId: NodeId,
-): Promise<string> {
+async function nodeLocation(tx: Transaction, nodeId: NodeId): Promise<string> {
   const [row] = await tx
     .select({ locationId: nodes.locationId })
     .from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.tenantId, tenantId)));
-  if (row === undefined) throw new AppError("node.not_found", { id: nodeId, tenantId });
+    .where(eq(nodes.id, nodeId));
+  if (row === undefined) throw new AppError("node.not_found", { id: nodeId });
   return row.locationId;
 }
 
@@ -43,10 +36,9 @@ export async function provisionNode(
   params: ProvisionNodeParams,
   modules: readonly WaitronModule[],
 ): Promise<readonly SeedReport[]> {
-  return withTenant(db, params.tenantId, async (tx) => {
-    const locationId = await ownedNodeLocation(tx, params.tenantId, params.nodeId);
+  return withTransaction(db, async (tx) => {
+    const locationId = await nodeLocation(tx, params.nodeId);
     const node = {
-      tenantId: params.tenantId,
       locationId: brandLocationId(locationId),
       nodeId: params.nodeId,
     };

@@ -1,8 +1,8 @@
 // Real PostgreSQL exercises sale writes and receipt reads after SET ROLE app_user.
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, sales, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -23,7 +23,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -81,7 +80,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -138,11 +136,11 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { product, operatorId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { product, operatorId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    const created = await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const created = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -151,33 +149,33 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: cat.id,
       name: { es: "Bebidas" },
     });
-    const menuItem = await createMenuItem(tx, cfg.tenantId, {
+    const menuItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: created.id,
       sectionId: section.id,
       grossPrice: "1.50",
     });
     await tx.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
-      select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+      insert into zone_menus (zone_id, menu_id, display_order)
+      select zone_id, ${cat.id}, 0
       from zone_service_policies
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+      where location_id = ${cfg.locationId}
         and is_counter_default`);
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id}
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+      where location_id = ${cfg.locationId}
         and is_counter_default`);
     await tx.execute(sql`
       insert into preparation_routes
-        (tenant_id, location_id, category_id, station_id, no_preparation)
-      values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id}, null, true)`);
+        (location_id, category_id, station_id, no_preparation)
+      values (${cfg.locationId}, ${bebidas.id}, null, true)`);
     const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Cajera', ${hashPin("5555")}, 'staff') returning id`);
     const available = (await listAvailableProducts(tx, cfg.locationId)).products;
     return {
       product: {
@@ -193,22 +191,22 @@ async function setupVenue(): Promise<{
 /** A SECOND `tills` row in the SAME tenant and location as the venue's own till — the register a
  *  re-homed / second device would ring against. Inserted on the owner connection directly (fixture
  *  setup, not the code under test), returning its id. */
-async function insertTill(cfg: TillConfig, locationId: string, name: string): Promise<string> {
+async function insertTill(locationId: string, name: string): Promise<string> {
   const till = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${cfg.tenantId}, ${locationId}, ${name}) returning id`);
+    insert into tills (location_id, name)
+    values (${locationId}, ${name}) returning id`);
   return till.rows[0]!.id;
 }
 
-/** Seed a `phone-portrait` (handheld) `device_profiles` row for the tenant — the sale-capable form
- *  factor that binds an EXISTING register at enrol (Task 7), the register-under-test here. A per-call
- *  counter keeps the tenant-unique name from colliding. */
+/** Seed a `phone-portrait` (handheld) `device_profiles` row — the sale-capable form factor that
+ *  binds an EXISTING register at enrol (Task 7), the register-under-test here. A per-call counter
+ *  keeps the venue-unique name from colliding. */
 let profileCounter = 0;
-async function seedHandheldProfile(cfg: TillConfig): Promise<string> {
+async function seedHandheldProfile(): Promise<string> {
   profileCounter += 1;
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor)
-    values (${cfg.tenantId}, ${`Handheld ${profileCounter}`}, 'phone-portrait') returning id`);
+    insert into device_profiles (name, form_factor)
+    values (${`Handheld ${profileCounter}`}, 'phone-portrait') returning id`);
   return rows[0]!.id;
 }
 
@@ -219,7 +217,7 @@ async function seedHandheldProfile(cfg: TillConfig): Promise<string> {
  *  SPECIFIC existing register is the handheld leg (`registerId`); the sale route resolves `till_id`
  *  from THIS device (`requireSaleTillId`) either way. */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
-  const profileId = await seedHandheldProfile(cfg);
+  const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: "Counter device",
     profileId,
@@ -232,7 +230,7 @@ async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<st
  *  SP-C dev-override header (`x-waitron-dev-device`) carries in place of the cookie. Same genuine
  *  join-and-accept enrol path as {@link enrolTillCookie}. */
 async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<string> {
-  const profileId = await seedHandheldProfile(cfg);
+  const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: "Dev-override device",
     profileId,
@@ -298,7 +296,8 @@ interface Registro {
 
 /** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
 async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({
@@ -310,8 +309,7 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
         entorno: registrosFacturacion.entorno,
         numSerieFactura: registrosFacturacion.numSerieFactura,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      .from(registrosFacturacion);
     return rows.sort((a, b) => a.secuencia - b.secuencia);
   });
 }
@@ -319,12 +317,12 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
 /** Each sale's stored `sales.till_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
  *  lines up with the registros ordered by `secuencia`. */
 async function saleTillIds(cfg: TillConfig): Promise<string[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })
-      .from(sales)
-      .where(eq(sales.tenantId, cfg.tenantId));
+      .from(sales);
     return rows.sort((a, b) => a.invoiceNumber - b.invoiceNumber).map((r) => r.tillId);
   });
 }
@@ -356,7 +354,7 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
     // equal `cfg.nodeId`.
     const { cfg, locationId, product, operatorId } = await setupVenue();
     const tillX = cfg.tillId;
-    const tillY = await insertTill(cfg, locationId, "Caja 2");
+    const tillY = await insertTill(locationId, "Caja 2");
     expect(tillY).not.toBe(tillX);
 
     const app = new Hono();
@@ -417,7 +415,7 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     // via the header is the new surface, so only that is asserted here.
     const { cfg, locationId, product, operatorId } = await setupVenue();
     const tillX = cfg.tillId;
-    const tillY = await insertTill(cfg, locationId, "Caja override");
+    const tillY = await insertTill(locationId, "Caja override");
     expect(tillY).not.toBe(tillX);
 
     // devMode ON: `mountTillApi`'s deps forward `devMode` to `requireSaleTillId`, which is what makes the

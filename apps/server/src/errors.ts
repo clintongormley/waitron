@@ -64,7 +64,7 @@ declare module "@waitron/shared" {
     "server.till_config_missing": { key: string };
     /**
      * A `WAITRON_TILL_*` value is present but not usable — a branded-id constructor
-     * (`@waitron/shared`'s `tenantId`/`tillId`/`nodeId`/`seriesId`/`locationId`) rejected it as not a
+     * (`@waitron/shared`'s `tillId`/`nodeId`/`seriesId`/`locationId`) rejected it as not a
      * uuid. `key` names the variable and is again the only field; the rejected value is NOT carried,
      * for the same reason as `server.till_config_missing` above, and `server.*` for the same reason
      * too.
@@ -77,7 +77,7 @@ declare module "@waitron/shared" {
      * is the read-side half of `rotate`'s coupling to the registry, and it fails one tenant loudly
      * rather than defaulting to a wrong AEAT host in silence.
      */
-    "server.credential_unusable": { tenantId: string; purpose: string; field: string };
+    "server.credential_unusable": { purpose: string; field: string };
     /**
      * No such tenant. `id` is echoed because it is an operator-supplied argument and not a secret —
      * a mistyped UUID identifies nothing on its own, so an error that withheld it would be
@@ -93,28 +93,28 @@ declare module "@waitron/shared" {
      * a package ever needs to throw them.
      *
      * It has NO production thrower today: the last one was `provisionNode`'s own tenant read, which
-     * SP-3c moved into the fiscal module's seed (that seed reads `tenants.tax_id` and throws a plain
-     * Error for an absent row, since the node's FK makes it unreachable). It stays because this
+     * SP-3c moved into the fiscal module's seed (`packages/fiscal-verifactu/src/provisioning.ts`
+     * reads `tenants.tax_id` and throws a plain `Error` for an absent row — an empty `tenants` is a
+     * half-provisioned database, not a domain state). It stays because this
      * file's other codes cite the note above as their naming rule, and because the error-boundary
      * and till-api suites use it as their sample code.
      */
     "tenant.not_found": { id: string };
     /**
-     * No such node *for this tenant*. The SIF is the compute node (#33), so provisioning registers a
-     * node, not a till (node-id rekey, 2026-08-03). A node belonging to ANOTHER tenant reports this
-     * same code rather than a distinct "wrong owner" one: to a caller scoped to one tenant the two are
-     * the same fact, and a separate code would confirm the existence of another tenant's node to
-     * whoever asked.
+     * No such node with this id. The SIF is the compute node (#33), so provisioning registers a
+     * node, not a till (node-id rekey, 2026-08-03). One tenant per database, so a node is named by
+     * its id alone: `nodeLocation`, called by `provisionNode`, looks the node up by id and
+     * throws this when the id matches no row.
      *
-     * This is enforced by comparing `nodes.tenant_id` in `ownedNodeLocation`, called by
-     * `provisionNode`, including on a superuser connection. `node.*`, not `server.*`:
-     * it is a fact about a node, the rule
+     * The id is echoed because it is a caller-supplied uuid the caller already holds, not a secret —
+     * an id that matches nothing is unactionable if withheld, the same fail-closed reasoning the
+     * codes citing this note rely on. `node.*`, not `server.*`: it is a fact about a node, the rule
      * `tenant.not_found`'s own note gives.
      *
      * (The former `till.not_found` was removed with the rekey — pre-production, no bwc — since its
      * only thrower, `provisionTill`'s ownership check, is now `provisionNode`'s and throws this.)
      */
-    "node.not_found": { id: string; tenantId: string };
+    "node.not_found": { id: string };
     /**
      * A write reached a node running as a read-only MIRROR. The mirror serves the dashboard read-only
      * and pulls + applies a primary's rows; it refuses every non-GET at the HTTP layer (the read-only
@@ -263,30 +263,16 @@ declare module "@waitron/shared" {
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
     /**
-     * An inbound hosted-payment webhook failed signature verification for the tenant named in the
-     * path. The signature is the sole gate (design §2): the path tenant is attacker-controllable,
-     * so nothing acts on the event until THAT tenant's own `webhookSecret` verifies the raw bytes.
-     * A caller who names a real tenant but cannot produce a body signed by that tenant's secret gets
-     * this and an HTTP 400.
+     * An inbound hosted-payment webhook failed signature verification. The signature is the sole
+     * gate (design §2): nothing acts on the event until the database's `payments.stripe`
+     * `webhookSecret` verifies the raw bytes. Answered with HTTP 400.
      *
      * `payment.*`, not `server.*`: a signature failure is a fact about a payment event, not about
-     * the process (`tenant.not_found`'s note above gives the rule). Carries ONLY the `tenantId` —
-     * never the signature, the raw body or the secret, the same no-leak discipline
+     * the process (`tenant.not_found`'s note above gives the rule). Carries NOTHING — never the
+     * signature, the raw body or the secret, the same no-leak discipline
      * `server.credential_unusable` follows.
      */
-    "payment.webhook_signature_invalid": { tenantId: string };
-    /**
-     * A webhook verified against the path tenant's secret, but the payment it settles resolves
-     * (`resolve_payment_tenant`, the #26 seam) to a DIFFERENT tenant — reachable only when two
-     * tenants share a Stripe account, i.e. a cross-tenant misconfiguration. Refused with HTTP 400
-     * rather than settling a row across the tenant boundary. Defence-in-depth on top of the
-     * signature gate, which keeps the seam load-bearing even though the path already names a tenant.
-     */
-    "payment.webhook_tenant_mismatch": {
-      pathTenantId: string;
-      resolvedTenantId: string;
-      externalRef: string;
-    };
+    "payment.webhook_signature_invalid": Record<string, never>;
     /**
      * A verified webhook whose `external_ref` resolves to no local `initiated` payment — a crash
      * between minting the Checkout Session and writing its row, or an event for a session this host
@@ -543,7 +529,7 @@ declare module "@waitron/shared" {
     // `table.not_found` is declared in @waitron/db's errors.ts (dining_tables is a core table with a
     // cross-package thrower). Codes are never renamed, only relocated.
     /**
-     * A dining table label already exists in this venue — the `(tenant_id, location_id, label)` unique
+     * A dining table label already exists in this venue — the `(location_id, label)` unique
      * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
      * human id ("12", "Terraza 3"), not a secret, so echoing it is what makes the error actionable.
      * `table.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
@@ -717,7 +703,7 @@ declare module "@waitron/shared" {
      */
     "status.inactive": { statusId: string };
     /**
-     * A service-status label already exists in this venue — the `(tenant_id, label)` unique
+     * A service-status label already exists in this venue — the `(label)` unique
      * (`table_service_statuses_tenant_label_key`) rejected the insert/update. `label` is the
      * operator-supplied human name ("Bill requested"), not a secret, so echoing it is what makes the
      * error actionable. `status.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
@@ -739,7 +725,7 @@ declare module "@waitron/shared" {
     "zone.not_found": { zoneId: string };
     /**
      * A floor-plan zone (FP-1) name already exists in this venue — the
-     * `(tenant_id, location_id, name)` unique (`floor_zones_name_key`, `floor-zones.ts`) rejects the
+     * `(location_id, name)` unique (`floor_zones_name_key`, `floor-zones.ts`) rejects the
      * insert/update. `name` is the operator-supplied human label ("Comedor", "Terraza"), not a
      * secret, so echoing it is what makes the error actionable — the same shape `table.label_taken`'s
      * `label` and `status.label_taken`'s `label` use, renamed here to match the column
@@ -749,7 +735,7 @@ declare module "@waitron/shared" {
      */
     "zone.name_taken": { name: string };
     /**
-     * A kitchen-station name already exists in this venue (KDS-1) — the `(tenant_id, location_id, name)`
+     * A kitchen-station name already exists in this venue (KDS-1) — the `(location_id, name)`
      * unique (`kitchen_stations_name_key`) rejected the insert/update. `name` is the operator-supplied
      * human label ("Cocina", "Plancha", "Barra"), not a secret, so echoing it is what makes the error
      * actionable — the same shape `zone.name_taken`'s `name` and `table.label_taken`'s `label` use,
@@ -823,7 +809,7 @@ declare module "@waitron/shared" {
      * A line was fired to the kitchen that ALREADY has a ticket item (KDS-1) — a re-fire. Every fire
      * point funnels through `fireLines` (`working-order.ts`), which inserts one `ticket_items` row per
      * line; a second fire of a line already sent collides on `ticket_items`' per-line
-     * `(tenant_id, working_order_line_id)` unique (23505). `fireLines` catches that violation
+     * `(working_order_line_id)` unique (23505). `fireLines` catches that violation
      * (`isUniqueViolation`) and throws THIS instead of letting the raw constraint error surface as an
      * opaque `server.internal` 500. The reachable path is a double `sendToPrep` (Mode-P's pickup fires a
      * settled order's lines; sending the same order twice re-fires them); `placeOrder` can't re-fire (its
@@ -902,7 +888,7 @@ declare module "@waitron/shared" {
      */
     "ticket.already_started": { ticketItemId: string };
     /**
-     * A kitchen-course name already exists in this venue (KDS-2) — the `(tenant_id, location_id, name)`
+     * A kitchen-course name already exists in this venue (KDS-2) — the `(location_id, name)`
      * unique (`kitchen_courses_name_key`) rejected the insert/update. `name` is the operator-supplied
      * human label ("Entrantes", "Principales", "Postres"), not a secret, so echoing it is what makes the
      * error actionable — the same shape `station.name_taken`'s `name` and `zone.name_taken`'s `name` use,
@@ -1098,12 +1084,11 @@ declare module "@waitron/shared" {
     "device.register_name_taken": Record<string, never>;
     /**
      * A request named a device binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
-     * that matches no row of THIS tenant (absent, or another tenant's, which the tenant-consistent
-     * composite FK rejects too). Surfaced by translating the `23503` a composite FK on `devices` raises
+     * that matches no row in this database. Surfaced by translating the `23503` an FK on `devices` raises
      * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the CONSTRAINT NAME
      * (`devices_device_profile_fk` / `devices_receipt_printer_fk`) — the `isZoneFkViolation` idiom
      * (`tables.ts`) — or raised directly by the accept path's explicit register read, which sees the
-     * venue a composite FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
+     * venue a FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
      * never reaches this, and a 23503 on any OTHER constraint is rethrown raw rather than mislabelled.
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
@@ -1134,9 +1119,9 @@ declare module "@waitron/shared" {
      */
     "device.pairing_closed": Record<string, never>;
     /**
-     * The tenant already holds the cap of pending DEVICE join requests (design §1.2's decoy rule needs
-     * room, and an uncapped pending list is a denial-of-service on the admin's attention). Per (tenant,
-     * kind), so ten agents mid-install cannot lock devices out. HTTP 429.
+     * This database already holds the cap of pending DEVICE join requests (design §1.2's decoy rule
+     * needs room, and an uncapped pending list is a denial-of-service on the admin's attention). Per
+     * KIND, so ten agents mid-install cannot lock devices out. HTTP 429.
      */
     "device.join_full": Record<string, never>;
     /**
@@ -1186,16 +1171,15 @@ declare module "@waitron/shared" {
     "setup.cert_hostnames_empty": Record<string, never>;
     /**
      * A setup-mode provision was asked to run on a box that ALREADY holds this tenant — a second
-     * `provisionVenue` for the same tenant (country + NIF, which derives a deterministic tenant id).
+     * `provisionVenue` for the same taxpayer (country + NIF).
      * `applyVenue`'s location/till/node/SIF carry no business key, so a re-run would ADD a shop and
      * mint a FRESH SIF/hash chain rather than resume the existing venue (venue-apply.ts's own header),
      * and a stray fiscal chain is unrecoverable (CLAUDE.md §5). So `provisionVenue` refuses here,
      * BEFORE stamping or minting anything — the double-POST guard the boot-mode flip only protects
      * across a restart, not within one setup session.
      *
-     * `tenantId` is the DERIVED tenant id (a deterministic uuid, not a secret) and is echoed because
-     * it is what makes the refusal actionable — it names exactly which tenant the box is already bound
-     * to; the same non-leaking, id-echoing discipline `tenant.not_found` follows.
+     * Carries nothing: the box holds ONE taxpayer, so there is no id that would tell the operator
+     * anything their own request did not already say.
      *
      * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
      * `setup.cert_hostnames_empty` and `setup-api.ts` name), never the throwing file — `server.*` is
@@ -1203,7 +1187,7 @@ declare module "@waitron/shared" {
      * about the setup, not the process (the rule `tenant.not_found`'s note above gives). Never renamed
      * once shipped.
      */
-    "setup.already_provisioned": { tenantId: string };
+    "setup.already_provisioned": Record<string, never>;
     /** A setup or provisioning field cannot be used. Fiscal venue validators also raise this code;
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
@@ -1801,14 +1785,14 @@ declare module "@waitron/shared" {
      */
     "restore.unexpected_entry": { name: string };
     /** The artifact's `secrets/trading.env` is absent or lacks one of the identity keys the restore
-     * hooks need (`WAITRON_TILL_TENANT_ID`/`NODE_ID`/`LOCATION_ID`/`SERIES_ID`; an empty value is
+     * hooks need (`WAITRON_TILL_NODE_ID`/`LOCATION_ID`/`SERIES_ID`; an empty value is
      * missing). Validation refuses with the target intact, before identity set-aside or database
      * restore. A backup of a box that never finished provisioning has no node to re-register.
      * `missing` is the fixed key or file name. Never renamed once shipped. */
     "restore.identity_incomplete": { missing: string };
     /** The artifact's identity names a node the restored database does not hold: the identity must
      * be one this backup knows. Both ids are uuids, not secrets. Never renamed once shipped. */
-    "restore.identity_unknown": { tenantId: string; nodeId: string };
+    "restore.identity_unknown": { nodeId: string };
     /** More than one module's restore hook returned replacement series; only one may own the node's
      * numbering. `modules` is the comma-joined list of their names. Never renamed once shipped. */
     "restore.series_conflict": { modules: string };

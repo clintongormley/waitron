@@ -1,5 +1,4 @@
 import type { ReconcilePeriod, SettlementRecord, SettlementReportSource } from "@waitron/payments";
-import type { TenantId } from "@waitron/shared";
 import { fromMinorUnits } from "./client.js";
 import type { StripeReportClient } from "./report-client.js";
 
@@ -34,14 +33,14 @@ const SESSION_LOOKBACK_FLOOR_MS = 24 * 60 * 60 * 1000;
  *
  * Tenant scoping is structural rather than a filter: `client` is resolved per tenant by the caller
  * and a standalone Stripe account holds exactly one tenant's money, which is how this implementation
- * honours `SettlementReportSource`'s contract that a source return only `tenantId`'s settlements.
+ * honours `SettlementReportSource`'s contract that a source return only this taxpayer's settlements.
  */
 export function stripeSettlementReport(
   client: StripeReportClient,
   settlementLagMs: number,
 ): SettlementReportSource {
   return {
-    async fetch(_tenantId: TenantId, window: ReconcilePeriod): Promise<SettlementRecord[]> {
+    async fetch(window: ReconcilePeriod): Promise<SettlementRecord[]> {
       // The ledger pass takes the sweep's window as given — the sweep has already widened it
       // forwards by the lag, because a payment captured at the end of a period settles after it.
       const settlements = await client.listSettlements(window);

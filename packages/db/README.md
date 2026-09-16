@@ -4,11 +4,10 @@ Use this package for the PostgreSQL schema and database client. PGlite (embedded
 and real PostgreSQL use one dialect; there is no SQLite path. See
 `docs/superpowers/specs/2026-07-19-sales-spine-and-fiscal-layer-design.md` §3.
 
-Each database holds one tenant.
-`withTenant(db, tenantId, fn)` runs your work in one transaction and keeps the tenant argument
-explicit at call sites. One tenant per database is the isolation boundary, so it sets no tenant
-session variable; `tenantId` is retained as the explicit write-path parameter every write path
-threads.
+Each database holds one taxpayer, as the single row of `tenants` (`id` pinned to 1). No table
+carries a tenant column and no query filters by one: a read that wants "this tenant's rows" reads
+the table. `withTransaction(db, fn)` runs your work in one transaction and nothing else — it sets no
+session variable — and a write path takes the `tx` it opens rather than opening its own.
 
 ## Commands
 
@@ -48,8 +47,9 @@ and migrating PostgreSQL. Shared-fixture suites migrate once.
 Core has two baselines: `0000_db_baseline.sql` contains the generated schema, and
 `0001_db_baseline_sql.sql` contains the additional tables, constraints, grants, functions and
 triggers. `app_user` is a non-login role; it receives only the grants in the custom baseline.
-You still supply `tenant_id` on writes, and composite foreign keys still reject inconsistent
-references between tenants.
+Migrations `0030`–`0032` drop the tenant column from this set and `0033`–`0034` make `tenants` a
+one-row table; the baselines above still create the column, because a drizzle migration is never
+edited after it ships.
 
 Keep `out: "./drizzle"` in `drizzle.config.ts` as a **single string**, not an array. One config
 produces one folder and one journal; each package that owns tables has its own config and journal.

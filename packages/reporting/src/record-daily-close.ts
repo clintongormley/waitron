@@ -4,9 +4,9 @@
 // its registry directly) — not ./errors.reachability.test.ts, which per CLAUDE.md §4 is only a smoke
 // test that the codes construct and does NOT prove barrel reachability.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
-import type { Decimal, NodeId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { dailyCloseChain, dailyCloses } from "@waitron/db";
 import { computeDailyClose } from "./daily-close.js";
@@ -22,7 +22,7 @@ import type { DailyClose } from "./types.js";
 
 /**
  * The single active writer's path for one frozen daily close (cierre Z, design §"The close
- * operation"), run inside the caller's transaction. It locks the (tenant, node) chain head, computes
+ * operation"), run inside the caller's transaction. It locks the node's chain head, computes
  * the VAT-exact close (8a), reconciles the physical cash counts against it per till, and appends one
  * immutable, hash-chained `daily_closes` row — advancing the head under the same lock.
  *
@@ -42,13 +42,12 @@ export async function recordDailyClose(
   // 1. Validate the supplied cash counts up front — fail before taking the chain lock or reading.
   const counts = validateCashCounts(input.cashCounts);
 
-  // 2. Serialise this (tenant, node)'s closes on the chain head. FOR UPDATE, not FOR SHARE: two
+  // 2. Serialise this node's closes on the chain head. FOR UPDATE, not FOR SHARE: two
   //    closers must not both read the same head and then both assign the same next sequence number.
-  const head = await lockChainHead(tx, input.tenantId, input.nodeId);
+  const head = await lockChainHead(tx, input.nodeId);
 
   // 3. Compute the VAT-exact close (8a): a deterministic read over the day's immutable records.
   const close = await computeDailyClose(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     businessDay: input.businessDay,
     timeZone: input.timeZone,
@@ -67,7 +66,6 @@ export async function recordDailyClose(
   const closedAt = truncateToWholeSecond(new Date());
   const entryHash = computeCloseEntryHash(
     {
-      tenantId: input.tenantId,
       nodeId: input.nodeId,
       businessDay: input.businessDay,
       sequenceNo,
@@ -82,7 +80,6 @@ export async function recordDailyClose(
   //    daily_closes_business_day_key (23505) → close.already_closed; the savepoint confines that abort
   //    to the failed insert so the caller's enclosing transaction is not poisoned by it.
   const id = await insertClose(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     businessDay: input.businessDay,
     sequenceNo,
@@ -97,14 +94,11 @@ export async function recordDailyClose(
   await tx
     .update(dailyCloseChain)
     .set({ sequenceNo, lastEntryHash: entryHash })
-    .where(
-      and(eq(dailyCloseChain.tenantId, input.tenantId), eq(dailyCloseChain.nodeId, input.nodeId)),
-    );
+    .where(eq(dailyCloseChain.nodeId, input.nodeId));
 
   // 8.
   return {
     id,
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     businessDay: input.businessDay,
     sequenceNo,
@@ -234,7 +228,6 @@ interface ChainHead {
 
 async function selectHeadForUpdate(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<ChainHead | undefined> {
   const [row] = await tx
@@ -243,7 +236,7 @@ async function selectHeadForUpdate(
       lastEntryHash: dailyCloseChain.lastEntryHash,
     })
     .from(dailyCloseChain)
-    .where(and(eq(dailyCloseChain.tenantId, tenantId), eq(dailyCloseChain.nodeId, nodeId)))
+    .where(eq(dailyCloseChain.nodeId, nodeId))
     .for("update");
   return row;
 }
@@ -253,22 +246,18 @@ async function selectHeadForUpdate(
  * do nothing` then a locking re-select, not an upsert-returning: when a concurrent transaction has
  * inserted the head but not committed, this transaction's speculative insert waits on it and then does
  * nothing on the conflict, so the re-select observes the COMMITTED row rather than one that might roll
- * back. Same shape as workforce's `lockChainHead`, keyed by (tenant, node).
+ * back. Same shape as workforce's `lockChainHead`, keyed by node.
  */
-async function lockChainHead(
-  tx: Transaction,
-  tenantId: TenantId,
-  nodeId: NodeId,
-): Promise<ChainHead> {
-  const existing = await selectHeadForUpdate(tx, tenantId, nodeId);
+async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
+  const existing = await selectHeadForUpdate(tx, nodeId);
   if (existing !== undefined) return existing;
 
   await tx
     .insert(dailyCloseChain)
-    .values({ tenantId, nodeId })
-    .onConflictDoNothing({ target: [dailyCloseChain.tenantId, dailyCloseChain.nodeId] });
+    .values({ nodeId })
+    .onConflictDoNothing({ target: [dailyCloseChain.nodeId] });
 
-  const created = await selectHeadForUpdate(tx, tenantId, nodeId);
+  const created = await selectHeadForUpdate(tx, nodeId);
   /* v8 ignore start */
   if (created === undefined) {
     // Unreachable: the insert commits a fresh row or a concurrent insert wins the conflict and
@@ -280,7 +269,6 @@ async function lockChainHead(
 }
 
 interface CloseRow {
-  tenantId: TenantId;
   nodeId: NodeId;
   businessDay: string;
   sequenceNo: number;
@@ -321,7 +309,7 @@ async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
 
 /**
  * Is this (or anything it wraps) a unique violation on `daily_closes_business_day_key` — a second
- * close of the same (tenant, node, business day)? Walks the cause chain because Drizzle wraps every
+ * close of the same (node, business day)? Walks the cause chain because Drizzle wraps every
  * failed query in a `DrizzleQueryError` whose own `.code` is undefined; the real SQLSTATE and the
  * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite. Stops at a
  * fixed depth so a self-referential `cause` cannot spin forever. Reads the CONSTRAINT NAME, not just

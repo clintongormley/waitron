@@ -33,10 +33,10 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.code).toBe("device_profile.name_taken");
   });
 
-  // A 23505 on a DIFFERENT constraint (the composite (tenant_id, id) key, or any added later) must NOT
-  // be mislabelled name_taken — it is re-thrown untouched. Proof-by-deletion: drop the constraint gate.
+  // A 23505 on a DIFFERENT constraint (the primary key, or any added later) must NOT be
+  // mislabelled name_taken — it is re-thrown untouched. Proof-by-deletion: drop the constraint gate.
   it("re-throws a 23505 whose constraint is not the name key", () => {
-    const original = { cause: { code: "23505", constraint: "device_profiles_tenant_id_key" } };
+    const original = { cause: { code: "23505", constraint: "device_profiles_pkey" } };
     let thrown: unknown;
     try {
       translateWriteError(original);

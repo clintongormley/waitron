@@ -1,16 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
+import { check, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /**
  * A person's role. A single `role` column is this slice's permission-assignment mechanism (design
@@ -34,7 +23,6 @@ export const persons = pgTable(
   "persons",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     displayName: text("display_name").notNull(),
     firstNames: text("first_names"),
     lastNames: text("last_names"),
@@ -60,8 +48,8 @@ export const persons = pgTable(
     passkeyOfferedAt: timestamp("passkey_offered_at", { withTimezone: true, mode: "string" }),
     /** The person's login email — required at every human-account boundary and used for dashboard
      * sign-in, activation, and recovery. The column stays nullable for internal principals and
-     * low-level fixtures. Unique per tenant, case-insensitively, through the custom migration's
-     * functional partial index. */
+     * low-level fixtures. Unique case-insensitively, through the custom migration's functional
+     * partial index. */
     email: text("email"),
     /** A requested replacement address. It does not become a login identifier until the person
      * proves they control it. */
@@ -79,20 +67,11 @@ export const persons = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // The array `foreignKey({...})` form, not `.references(() => tenants.id)`: the thunk form makes
-    // v8 count a never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate
-    // CLI process). restrict, not cascade: deleting a tenant must not silently discard its people.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "persons_tenant_fk",
-    }).onDelete("restrict"),
-    index("persons_tenant_id_idx").on(t.tenantId),
     uniqueIndex("persons_tenant_google_subject_uq")
-      .on(t.tenantId, t.googleSubject)
+      .on(t.googleSubject)
       .where(sql`${t.googleSubject} is not null`),
     uniqueIndex("persons_tenant_pending_email_uq")
-      .on(t.tenantId, sql`lower(${t.pendingEmail})`)
+      .on(sql`lower(${t.pendingEmail})`)
       .where(sql`${t.pendingEmail} is not null`),
     check("persons_display_name_ck", sql`length(${t.displayName}) > 0`),
     check("persons_first_names_ck", sql`${t.firstNames} is null or length(${t.firstNames}) > 0`),

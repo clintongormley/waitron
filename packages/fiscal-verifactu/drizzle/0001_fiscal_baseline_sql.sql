@@ -33,21 +33,27 @@ REVOKE ALL ON "envio_flujo" FROM app_user;
 --> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "envio_flujo" TO app_user;
 --> statement-breakpoint
-CREATE FUNCTION envios_tenants_with_work(p_now timestamptz)
-  RETURNS setof uuid
+-- Is there anything to send right now? Read before the drain opens its own transaction, with the
+-- caller's grants. Lone stale claims count, so a drain can recover them even with no pending row;
+-- the interval below matches RECUPERACION_ENVIANDO_MS in drain.ts, and migrations.test.ts checks
+-- both sides of that threshold.
+CREATE FUNCTION envios_work_due(p_now timestamptz)
+  RETURNS boolean
   LANGUAGE sql
   STABLE
   SET search_path = pg_catalog, public
 AS $$
-  SELECT DISTINCT tenant_id
-  FROM envios
-  WHERE (estado = 'pendiente' AND proximo_intento_en <= p_now)
-     OR (estado = 'enviando' AND enviado_en < p_now - interval '300000 milliseconds')
+  SELECT EXISTS (
+    SELECT 1
+    FROM envios
+    WHERE (estado = 'pendiente' AND proximo_intento_en <= p_now)
+       OR (estado = 'enviando' AND enviado_en < p_now - interval '300000 milliseconds')
+  )
 $$;
 --> statement-breakpoint
-REVOKE EXECUTE ON FUNCTION envios_tenants_with_work(timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION envios_work_due(timestamptz) FROM PUBLIC;
 --> statement-breakpoint
-GRANT EXECUTE ON FUNCTION envios_tenants_with_work(timestamptz) TO app_user;
+GRANT EXECUTE ON FUNCTION envios_work_due(timestamptz) TO app_user;
 --> statement-breakpoint
 REVOKE ALL ON "acks" FROM app_user;
 --> statement-breakpoint

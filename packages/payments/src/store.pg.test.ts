@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import {
@@ -7,8 +7,10 @@ import {
   captureAttempting,
   findCapturedPaymentForWorkingOrder,
   findCapturedPaymentForWorkingOrderAnyProvider,
+  hasPaymentWithExternalRef,
   insertAttempting,
   insertCapturedPayment,
+  insertInitiated,
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 
@@ -37,15 +39,13 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const orderKey = {
-        tenantId: tenant.tenantId,
         provider: "stripe",
         workingOrderId: tenant.workingOrderId,
       };
-      const paymentKey = { tenantId: tenant.tenantId, provider: "stripe", paymentRef: "replay-1" };
+      const paymentKey = { provider: "stripe", paymentRef: "replay-1" };
 
-      await withTenant(probe, tenant.tenantId, (tx) =>
+      await withTransaction(probe, (tx) =>
         insertCapturedPayment(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
           provider: "stripe",
           paymentRef: "replay-1",
@@ -55,20 +55,18 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       );
 
       // Before association: the RESUME branch — captured but P3 never ran, saleId null.
-      const beforeAssoc = await withTenant(probe, tenant.tenantId, (tx) =>
+      const beforeAssoc = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrder(tx, orderKey),
       );
       expect(beforeAssoc?.saleId).toBeNull();
 
-      await withTenant(probe, tenant.tenantId, (tx) =>
-        associatePaymentWithSale(tx, { ...paymentKey, saleId }),
-      );
+      await withTransaction(probe, (tx) => associatePaymentWithSale(tx, { ...paymentKey, saleId }));
 
       // After association: the REPLAY branch — the sale is already filed, saleId populated. This is
       // the branch the whole return shape exists for, and the only assertion of it anywhere:
       // store.test.ts pins the resume branch (`saleId: null`) and reads the associated value back
       // through getPaymentByRef instead.
-      const afterAssoc = await withTenant(probe, tenant.tenantId, (tx) =>
+      const afterAssoc = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrder(tx, orderKey),
       );
       expect(afterAssoc?.saleId).toBe(saleId);
@@ -85,16 +83,14 @@ describe("payments card columns", () => {
     const tenant = await seedWorkingOrder(postgres.admin, freshNif());
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const row = await withTenant(probe, tenant.tenantId, async (tx) => {
+      const row = await withTransaction(probe, async (tx) => {
         await insertAttempting(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-1",
           amount: decimal("1.00"),
         });
         return captureAttempting(tx, {
-          tenantId: tenant.tenantId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-1",
           settledAt: new Date("2026-09-11T10:53:58Z"),
@@ -116,16 +112,14 @@ describe("payments card columns", () => {
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await expect(
-        withTenant(probe, tenant.tenantId, async (tx) => {
+        withTransaction(probe, async (tx) => {
           await insertAttempting(tx, {
-            tenantId: tenant.tenantId,
             workingOrderId: tenant.workingOrderId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-2",
             amount: decimal("1.00"),
           });
           await captureAttempting(tx, {
-            tenantId: tenant.tenantId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-2",
             settledAt: new Date(),
@@ -144,16 +138,14 @@ describe("payments card columns", () => {
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await expect(
-        withTenant(probe, tenant.tenantId, async (tx) => {
+        withTransaction(probe, async (tx) => {
           await insertAttempting(tx, {
-            tenantId: tenant.tenantId,
             workingOrderId: tenant.workingOrderId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-3",
             amount: decimal("1.00"),
           });
           await captureAttempting(tx, {
-            tenantId: tenant.tenantId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-3",
             settledAt: new Date(),
@@ -173,16 +165,14 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
     const tenant = await seedWorkingOrder(postgres.admin, freshNif());
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      await withTenant(probe, tenant.tenantId, async (tx) => {
+      await withTransaction(probe, async (tx) => {
         await insertAttempting(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
           provider: "sumup_cloud",
           paymentRef: "any-ref-1",
           amount: decimal("1.00"),
         });
         await captureAttempting(tx, {
-          tenantId: tenant.tenantId,
           provider: "sumup_cloud",
           paymentRef: "any-ref-1",
           settledAt: SETTLED,
@@ -191,9 +181,8 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
         });
       });
 
-      const row = await withTenant(probe, tenant.tenantId, (tx) =>
+      const row = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrderAnyProvider(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
         }),
       );
@@ -212,13 +201,34 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
     const tenant = await seedWorkingOrder(postgres.admin, freshNif());
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const row = await withTenant(probe, tenant.tenantId, (tx) =>
+      const row = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrderAnyProvider(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
         }),
       );
       expect(row).toBeNull();
+    } finally {
+      await probe.close();
+    }
+  });
+});
+
+describe("hasPaymentWithExternalRef", () => {
+  it("answers through app_user's SELECT grant on payments, on a plain connection", async () => {
+    const seeded = await seedWorkingOrder(postgres.admin, freshNif());
+    await withTransaction(postgres.admin, (tx) =>
+      insertInitiated(tx, {
+        workingOrderId: seeded.workingOrderId,
+        provider: "stripe",
+        paymentRef: "hosted-probe",
+        externalRef: "cs_probe",
+        amount: decimal("10.00"),
+      }),
+    );
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      expect(await hasPaymentWithExternalRef(probe, "stripe", "cs_probe")).toBe(true);
+      expect(await hasPaymentWithExternalRef(probe, "stripe", "cs_absent")).toBe(false);
     } finally {
       await probe.close();
     }

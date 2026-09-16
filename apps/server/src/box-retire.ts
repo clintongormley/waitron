@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { SlotDrain } from "@waitron/sync";
 import type { KeyRing } from "@waitron/credentials";
@@ -16,9 +16,8 @@ export type BoxRetireDeps = {
   appDb: Database;
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;
-  /** This node's tenant — scopes the identity-key read the mint performs. */
-  tenantId: string;
-  /** THIS (departing) node — the node that becomes `evicted`, and the eviction document's signer. */
+  /** THIS (departing) node — the node that becomes `evicted`, the eviction document's signer, and
+   * what the identity-key read the mint performs is keyed on. */
   nodeId: string;
   /** The native slot-drain reader (the same slot box-status's `disposal` surface reads), or `undefined`
    * when the held document names no carrier — which retireSelf refuses as `node.retire_no_carrier`. */
@@ -59,7 +58,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 /**
  * Registers `POST /api/box/retire` on the shared trading app — the management action a fully-drained
  * fenced node self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
- * `requireManagementSession` → 401 before any DB work, then `withTenant` + `asAppUser` +
+ * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
  * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it), then
  * `retireSelf` runs on the app pool. `retireSelf` owns all retire SEMANTICS — the four ordered refusals,
  * idempotency, the abort-before-write mint; this route is only the auth + status-mapping glue.
@@ -73,7 +72,7 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
   app.post("/api/box/retire", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c); // throws 401 if absent
-      await withTenant(deps.appDb, deps.tenantId, async (tx) => {
+      await withTransaction(deps.appDb, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -83,7 +82,6 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
       const result = await retireSelf({
         appDb: deps.appDb,
         ring: deps.ring,
-        tenantId: deps.tenantId,
         nodeId: deps.nodeId,
         readSlotDrain: deps.readSlotDrain,
         fenceLsn: deps.fenceLsn,

@@ -7,7 +7,7 @@ import {
   optionGroups,
   productOptionGroups,
   ticketItems,
-  withTenant,
+  withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -70,20 +70,19 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  const tenantId = await seedTenant(db);
-  await seedLegacySellingUnits(db, tenantId);
+  await seedTenant(db);
+  await seedLegacySellingUnits(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
   // superuser here, as the surrounding venue rows are (fixture setup).
-  await seedKitchenStation(db, { tenantId, locationId: brandLocationId(locationId) });
+  await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -94,11 +93,11 @@ async function setupVenue(): Promise<Seeded> {
     orderFlow: "prepay",
   };
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } =
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-      const cafe = await createProduct(tx, tenantId, {
+      const cat = await createCatalogue(tx, { name: "Carta" });
+      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const cafe = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Café",
@@ -106,7 +105,7 @@ async function setupVenue(): Promise<Seeded> {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      const agua = await createProduct(tx, tenantId, {
+      const agua = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua",
@@ -115,17 +114,17 @@ async function setupVenue(): Promise<Seeded> {
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
-      const section = await createMenuSection(tx, tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: cat.id,
         name: { [LOCALE]: "Bebidas" },
       });
-      const cafeMenuItem = await createMenuItem(tx, tenantId, {
+      const cafeMenuItem = await createMenuItem(tx, {
         menuId: cat.id,
         productId: cafe.id,
         sectionId: section.id,
         grossPrice: "1.50",
       });
-      const aguaMenuItem = await createMenuItem(tx, tenantId, {
+      const aguaMenuItem = await createMenuItem(tx, {
         menuId: cat.id,
         productId: agua.id,
         sectionId: section.id,
@@ -146,7 +145,8 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -272,8 +272,8 @@ describe("openTab", () => {
 /** Insert a bare OPEN working order that NO table points at (a walk-up) — for the "not a tab" case. */
 async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
   await db.execute(sql`
-    insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
-    values (${id}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
+    insert into working_orders (id, till_id, node_id, order_number, status)
+    values (${id}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
 }
 
 describe("addTabRound (append-only, no re-price)", () => {
@@ -314,7 +314,6 @@ describe("addTabRound (append-only, no re-price)", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -325,7 +324,6 @@ describe("addTabRound (append-only, no re-price)", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -334,7 +332,6 @@ describe("addTabRound (append-only, no re-price)", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,
@@ -706,7 +703,6 @@ describe("readTabLines", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -717,7 +713,6 @@ describe("readTabLines", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -726,7 +721,6 @@ describe("readTabLines", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,
@@ -861,23 +855,23 @@ describe("listTablesWithState (occupancy)", () => {
     await asApp(cfg, async (tx) => {
       const department = await tx.execute<{ id: string }>(sql`
         insert into departments
-          (tenant_id, location_id, name, trading_name, default_service_mode)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
+          (location_id, name, trading_name, default_service_mode)
+        values (${cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
         returning id`);
       await tx.execute(sql`
         insert into zone_service_policies
-          (tenant_id, location_id, zone_id, department_id, service_mode, default_menu_id)
+          (location_id, zone_id, department_id, service_mode, default_menu_id)
         values (
-          ${cfg.tenantId}, ${cfg.locationId}, ${zone.id}, ${department.rows[0]!.id},
+          ${cfg.locationId}, ${zone.id}, ${department.rows[0]!.id},
           'table_tab', ${menuId}
         )`);
       await tx.execute(sql`
-        insert into zone_menus (tenant_id, zone_id, menu_id)
-        values (${cfg.tenantId}, ${zone.id}, ${menuId})`);
+        insert into zone_menus (zone_id, menu_id)
+        values (${zone.id}, ${menuId})`);
       await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, category_id, station_id, no_preparation)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${categoryId}, null, true)`);
+          (location_id, category_id, station_id, no_preparation)
+        values (${cfg.locationId}, ${categoryId}, null, true)`);
     });
     // A SECOND table with no tab — exercises the LEFT-join-reads-0 branch for a free table.
     const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));

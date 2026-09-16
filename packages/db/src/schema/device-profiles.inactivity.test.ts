@@ -8,17 +8,16 @@ import { usePgliteDb } from "../testing/lifecycle.js";
 // `inactivity_timeout_seconds` integer to `device_profiles`. PGlite is sufficient here: this is about
 // column shape and nullability, not grants or triggers (CLAUDE.md §4). The real-PG grant path is
 // covered by the app-role suites in packages/layouts.
-const TENANT = "11111111-1111-4111-8111-111111111111";
 
 describe("device_profiles.inactivity_timeout_seconds", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
   beforeAll(async () => {
     admin = suite.db;
     await admin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name)
-      values (${TENANT}, 'ES', 'B00000000', 'Fixture Tenant')
+      values (1, 'ES', 'B00000000', 'Fixture Tenant')
       on conflict (id) do nothing`);
   });
 
@@ -34,14 +33,12 @@ describe("device_profiles.inactivity_timeout_seconds", () => {
 
   it("defaults to NULL when omitted on insert, and round-trips a value", async () => {
     const omitted = await admin.execute<{ inactivity_timeout_seconds: number | null }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor)
-      values (${TENANT}, 'No timeout', 'till')
+      insert into device_profiles (name, form_factor) values ('No timeout', 'till')
       returning inactivity_timeout_seconds`);
     expect(omitted.rows[0]!.inactivity_timeout_seconds).toBeNull();
 
     const withValue = await admin.execute<{ inactivity_timeout_seconds: number | null }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor, inactivity_timeout_seconds)
-      values (${TENANT}, 'Five minutes', 'phone-portrait', 300)
+      insert into device_profiles (name, form_factor, inactivity_timeout_seconds) values ('Five minutes', 'phone-portrait', 300)
       returning inactivity_timeout_seconds`);
     expect(withValue.rows[0]!.inactivity_timeout_seconds).toBe(300);
   });

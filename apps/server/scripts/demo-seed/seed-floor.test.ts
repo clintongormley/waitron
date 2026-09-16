@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -30,7 +30,7 @@ function nextNif(): string {
 }
 
 /** Provision a fresh chained venue (as the owner) and return the ids the seed needs. */
-async function provisionVenue(): Promise<{ tenantId: string; locationId: string }> {
+async function provisionVenue(): Promise<{ locationId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -64,16 +64,16 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  return { tenantId: venue.tenantId, locationId: venue.locationId };
+  return { locationId: venue.locationId };
 }
 
 describe("seedFloor", () => {
   it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {
-    const { tenantId, locationId } = await provisionVenue();
+    const { locationId } = await provisionVenue();
 
-    const res = await withTenant(suite.admin, tenantId, async (tx) => {
+    const res = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await seedFloor(tx, { tenantId, locationId, locale: LOCALE });
+      await seedFloor(tx, { locationId, locale: LOCALE });
 
       const { rows: zones } = await tx.execute<{ name: string; active: boolean }>(
         sql`select name, active from floor_zones where location_id = ${locationId} order by display_order`,

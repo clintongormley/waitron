@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   seedFiredLine,
@@ -23,7 +23,6 @@ let stationId: string;
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
   stationId = await seedKitchenStation(suite.db, {
-    tenantId: venue.tenantId,
     locationId: brandLocationId(venue.locationId),
     name: "Cocina",
   });
@@ -31,11 +30,10 @@ beforeEach(async () => {
 
 function run(overrides: Partial<OverdueOrdersInput> = {}): Promise<OverdueOrder[]> {
   const input: OverdueOrdersInput = {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     ...overrides,
   };
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeOverdueOrders(tx, input);
   });
@@ -47,7 +45,6 @@ describe("computeOverdueOrders", () => {
     const overdue = await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -58,7 +55,6 @@ describe("computeOverdueOrders", () => {
     const forgotten = await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -69,7 +65,6 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -82,7 +77,6 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -116,7 +110,6 @@ describe("computeOverdueOrders", () => {
     const { orderId } = await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -128,7 +121,7 @@ describe("computeOverdueOrders", () => {
     // to this worse line, not stay at the first (fresh) line.
     await seedFiredLine(
       suite.db,
-      { tenantId: venue.tenantId, nodeId: venue.nodeId, stationId },
+      { nodeId: venue.nodeId, stationId },
       { orderId, lineNo: 2, ageMinutes: 16 },
     );
 
@@ -141,7 +134,6 @@ describe("computeOverdueOrders", () => {
     const { orderId } = await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -155,7 +147,7 @@ describe("computeOverdueOrders", () => {
     // (the tied-age test above exercises the opposite, equal-age branch).
     await seedFiredLine(
       suite.db,
-      { tenantId: venue.tenantId, nodeId: venue.nodeId, stationId },
+      { nodeId: venue.nodeId, stationId },
       { orderId, lineNo: 2, ageMinutes: 25 },
     );
 
@@ -169,14 +161,13 @@ describe("computeOverdueOrders", () => {
     // A second station in the same location — the fixture the tie needs, since the beforeEach station
     // only gives us one. `isDefault: false` avoids colliding with the beforeEach station's own default.
     const barra = await seedKitchenStation(suite.db, {
-      tenantId: venue.tenantId,
       locationId: brandLocationId(venue.locationId),
       name: "Barra",
       isDefault: false,
     });
     const { orderId } = await seedOpenOrder(
       suite.db,
-      { tenantId: venue.tenantId, tillId: venue.tillId, nodeId: venue.nodeId },
+      { tillId: venue.tillId, nodeId: venue.nodeId },
       1,
     );
     // ONE shared instant for BOTH lines — a real multi-station fire inserts every line in ONE
@@ -196,12 +187,12 @@ describe("computeOverdueOrders", () => {
     // correct, line_no-ordered answer is "Cocina" (line_no 1).
     await seedFiredLine(
       suite.db,
-      { tenantId: venue.tenantId, nodeId: venue.nodeId, stationId: barra },
+      { nodeId: venue.nodeId, stationId: barra },
       { orderId, lineNo: 2, ageMinutes: 11, queuedAt: tiedQueuedAt },
     );
     await seedFiredLine(
       suite.db,
-      { tenantId: venue.tenantId, nodeId: venue.nodeId, stationId },
+      { nodeId: venue.nodeId, stationId },
       { orderId, lineNo: 1, ageMinutes: 11, queuedAt: tiedQueuedAt },
     );
 
@@ -214,7 +205,6 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -229,7 +219,6 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -244,7 +233,6 @@ describe("computeOverdueOrders", () => {
     const seeded = await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -260,7 +248,6 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -275,7 +262,6 @@ describe("computeOverdueOrders", () => {
   it("scopes to nodeId: another node's overdue order in the same tenant is excluded", async () => {
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     const stationB = await seedKitchenStation(suite.db, {
-      tenantId: venue.tenantId,
       locationId: brandLocationId(venue.locationId),
       name: "Barra",
       isDefault: false,
@@ -283,32 +269,10 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: nodeB.nodeId,
         locationId: venue.locationId,
         stationId: stationB,
-      },
-      { orderNumber: 1, ageMinutes: 20 },
-    );
-    expect(await run()).toEqual([]);
-  });
-
-  it("excludes another tenant's overdue order (the explicit tenant predicate)", async () => {
-    const other = await seedVenue(suite.db);
-    const otherStation = await seedKitchenStation(suite.db, {
-      tenantId: other.tenantId,
-      locationId: brandLocationId(other.locationId),
-      name: "Cocina",
-    });
-    await seedFiredOrder(
-      suite.db,
-      {
-        tenantId: other.tenantId,
-        tillId: other.tillId,
-        nodeId: other.nodeId,
-        locationId: other.locationId,
-        stationId: otherStation,
       },
       { orderNumber: 1, ageMinutes: 20 },
     );
@@ -326,7 +290,6 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
@@ -337,7 +300,6 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,

@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
@@ -18,7 +17,7 @@ import {
   PAYMENTS_MIGRATIONS,
   associatePaymentWithSale,
   getPaymentByRef,
-  resolvePaymentTenant,
+  hasPaymentWithExternalRef,
   settleInitiated,
 } from "@waitron/payments";
 import { freshNif, seedForSale } from "@waitron/payments/test/seed.js";
@@ -52,7 +51,6 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -91,7 +89,6 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
 
     // 1. initiate — mints the session, writes the initiated row (working order stays open).
     const init = await provider.initiate({
-      tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,
@@ -107,12 +104,11 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     const event = provider.verifyAndParse(payload, "good");
     expect(event?.outcome).toBe("settled");
 
-    // 3. The (deferred) app-level orchestrator: resolve the tenant untenanted, then settle + chain +
-    //    associate in one tenant-scoped transaction.
-    const tenantId = await resolvePaymentTenant(pg.db, event!.provider, event!.externalRef);
-    expect(tenantId).toBe(s.tenantId);
+    // 3. The app-level orchestrator: confirm a local payment carries the session, then settle +
+    //    chain + associate in one transaction.
+    expect(await hasPaymentWithExternalRef(pg.db, event!.provider, event!.externalRef)).toBe(true);
 
-    const saleId = await withTenant(pg.db, tenantId!, async (tx) => {
+    const saleId = await withTransaction(pg.db, async (tx) => {
       const row = await settleInitiated(tx, {
         provider: event!.provider,
         externalRef: event!.externalRef,
@@ -125,7 +121,6 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
         buildInput(s, { amount: "12.10", settledAt: event!.settledAt }),
       );
       await associatePaymentWithSale(tx, {
-        tenantId: tenantId!,
         provider: "stripe",
         paymentRef,
         saleId: recorded.saleId,
@@ -135,7 +130,7 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
 
     // 4. After commit: the payment is captured, associated, and still carries the session external_ref.
     const finalRow = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );
     expect(finalRow?.state).toBe("captured");
     expect(finalRow?.saleId).toBe(saleId);

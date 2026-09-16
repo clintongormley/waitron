@@ -32,11 +32,11 @@
 // `registros_facturacion` row AS THE APP ROLE — which PGlite's superuser-only connection cannot
 // prove (CLAUDE.md §4). `applyVenue` runs as the connection owner (this superuser owns the tables
 // it just migrated). `payWorkingOrderIntegrated`'s own P1/P3 phases drop to `app_user` via
-// `withTenant` + `asAppUser` internally, the same as the deployed host (`till-sale.ts:644-645`
+// `withTransaction` + `asAppUser` internally, the same as the deployed host (`till-sale.ts:644-645`
 // for P1, inside the function itself; `821-822` for P3, inside `finalizeCapture`, which it
 // calls). The PROVIDER's own writes do not, here: `collect`'s T1/T2
 // (`insertAttempting`/`captureAttempting`/ `failAttempting`) go through
-// `StripeTerminalProvider`'s private `inTenant`, which calls only `withTenant(this.opts.db, …)` —
+// `StripeTerminalProvider`'s private `inTransaction`, which calls only `withTransaction(this.opts.db, …)` —
 // never `asAppUser` (`provider.ts:97-98`). `this.opts.db` is the plain connection-owner `db` this
 // script passes into the provider's constructor below, so in THIS demo those particular writes
 // run as the connection owner, not as `app_user`. This demo therefore proves the fiscal record
@@ -65,7 +65,7 @@ import {
   asAppUser,
   createPostgresDb,
   runMigrations,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
@@ -87,7 +87,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../src/config.js";
@@ -288,7 +287,6 @@ async function main(): Promise<void> {
     // row resolved by `/api/pay` (added from the dashboard), not from the till config; this demo
     // pins the one fake reader id (`READER_ID`) directly into the pay deps below.
     const cfg: TillConfig = {
-      tenantId: brandTenantId(venue.tenantId),
       tillId: brandTillId(venue.tillId),
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -302,11 +300,11 @@ async function main(): Promise<void> {
 
     // Seed one each-priced product as the application role (not the owner). Spanish names are fine —
     // apps/* is out of the english-only guard's scope.
-    const cafe = await withTenant(db, cfg.tenantId, async (tx) => {
+    const cafe = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: { es: "Bebidas" } });
-      const product = await createProduct(tx, cfg.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const bebidas = await createCategory(tx, { name: { es: "Bebidas" } });
+      const product = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Café",
@@ -348,7 +346,6 @@ async function main(): Promise<void> {
     const capturedProvider = new StripeTerminalProvider({
       client: new NarratingStripeClient(capturedClient, "reader"),
       db,
-      tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
@@ -393,7 +390,6 @@ async function main(): Promise<void> {
     const declinedProvider = new StripeTerminalProvider({
       client: new NarratingStripeClient(declinedClient, "reader"),
       db,
-      tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

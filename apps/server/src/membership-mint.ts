@@ -25,14 +25,13 @@ import { readNodeIdentityKey } from "./node-identity.js";
 export async function mintNextMembershipDocument(
   deps: { db: Database; ring: KeyRing },
   args: {
-    tenantId: string;
     heldDocument: SignedMembershipDocument | null;
     nodes: readonly MembershipNode[];
     signerNodeId: string;
     endorsements?: readonly Endorsement[];
   },
 ): Promise<SignedMembershipDocument> {
-  const signerPrivateKey = await readNodeIdentityKey(deps.db, deps.ring, args.tenantId);
+  const signerPrivateKey = await readNodeIdentityKey(deps.db, deps.ring);
   return buildNextMembershipDocument({
     heldDocument: args.heldDocument,
     nodes: args.nodes,

@@ -8,7 +8,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
 
 /**
  * A venue-configured KITCHEN STATION (KDS-1) — "Cocina", "Plancha", "Barra". The routing target a
@@ -16,14 +16,13 @@ import { locations, tenants } from "./tenants.js";
  * venue is the DEFAULT (`is_default`): the counter/pass fallback that lines with no product- or
  * category-level route land on, and the home of #63's counter prep-queue after the ticket rework.
  *
- * Location-scoped, exactly like `floor_zones` (FP-1) and unlike TS-2's tenant-wide
- * `table_service_statuses`: a station belongs to one venue, so the composite (tenant_id, location_id)
- * → locations(tenant_id, id) FK ties it to its venue and `kitchen_stations_name_key` makes a name
- * unique within that venue. `categories.station_id` / `products.station_id` / `ticket_items.station_id`
- * carry the tenant-consistent (tenant_id, station_id) → kitchen_stations(tenant_id, id) FK, hand-written
- * in the paired --custom migration (the `kitchen_stations_tenant_id_key` UNIQUE below is that FK's target).
+ * Location-scoped, exactly like `floor_zones` (FP-1) and unlike the venue-wide
+ * `table_service_statuses`: a station belongs to one venue, so the (location_id) → locations(id) FK
+ * ties it to its venue and `kitchen_stations_name_key` makes a name unique within that venue.
+ * `categories.station_id` / `products.station_id` / `ticket_items.station_id` carry the (station_id)
+ * → kitchen_stations(id) FK, hand-written in the paired --custom migration.
  *
- * "Exactly one default per location" is a PARTIAL unique — `UNIQUE (tenant_id, location_id) WHERE
+ * "Exactly one default per location" is a PARTIAL unique — `UNIQUE (location_id) WHERE
  * is_default` — which drizzle-kit does not model, so it is hand-written in the --custom migration
  * alongside the app_user grants.
  */
@@ -31,14 +30,8 @@ export const kitchenStations = pgTable(
   "kitchen_stations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      // Two-arg `.references()` so v8 tracks this thunk as its own never-invoked function (drizzle-kit
-      // resolves it in a separate CLI process), the reason floor-zones.ts / orders.ts use this form.
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    // Bare column: the FK is the tenant-consistent COMPOSITE (tenant_id, location_id) →
-    // locations(tenant_id, id) declared below (mirroring floor_zones_location_fk).
+    // Bare column: the FK is the (location_id) →
+    // locations(id) declared below (mirroring floor_zones_location_fk).
     locationId: uuid("location_id").notNull(),
     // The human label ("Cocina", "Plancha", "Barra"). Unique within a venue.
     name: text("name").notNull(),
@@ -60,15 +53,11 @@ export const kitchenStations = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // Composite (tenant_id, id) UNIQUE — the target for the tenant-consistent (tenant_id, station_id)
-    // FKs on categories/products/ticket_items (hand-written --custom migration), the same role
-    // floor_zones_tenant_id_key plays for dining_tables_zone_fk.
-    unique("kitchen_stations_tenant_id_key").on(t.tenantId, t.id),
     // No two stations share a name within a venue.
-    unique("kitchen_stations_name_key").on(t.tenantId, t.locationId, t.name),
+    unique("kitchen_stations_name_key").on(t.locationId, t.name),
     foreignKey({
-      columns: [t.tenantId, t.locationId],
-      foreignColumns: [locations.tenantId, locations.id],
+      columns: [t.locationId],
+      foreignColumns: [locations.id],
       name: "kitchen_stations_location_fk",
     }),
   ],

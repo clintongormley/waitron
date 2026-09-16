@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_TIME_ZONE, asAppUser, withTenant } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -35,14 +35,13 @@ beforeAll(() => {
 const LOCALE = "es-ES";
 
 async function setupVenue(): Promise<TillConfig> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento', ${DEFAULT_TIME_ZONE}) returning id`);
+    insert into locations (name, invoice_locales, operation_description, time_zone)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento', ${DEFAULT_TIME_ZONE}) returning id`);
   const locationId = loc.rows[0]!.id;
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tenantId,
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -55,7 +54,8 @@ async function setupVenue(): Promise<TillConfig> {
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -65,9 +65,9 @@ async function insertBooking(cfg: TillConfig, tableId: string, time: string): Pr
   await asApp(cfg, (tx) =>
     tx.execute(sql`
       insert into bookings
-        (tenant_id, location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
+        (location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
       values
-        (${cfg.tenantId}, ${cfg.locationId}, ${tableId}, '2026-09-15', ${time}, 2, 'Ana', ${randomUUID()}, 'booked')`),
+        (${cfg.locationId}, ${tableId}, '2026-09-15', ${time}, 2, 'Ana', ${randomUUID()}, 'booked')`),
   );
 }
 

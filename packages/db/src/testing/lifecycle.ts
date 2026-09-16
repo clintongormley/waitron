@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, inject } from "vitest";
+import { afterAll, afterEach, beforeAll, inject } from "vitest";
 import { createPgliteDb, createPostgresDb, type Database } from "../client.js";
 import { runMigrations, type MigrationOptions } from "../migrate.js";
 import { assertSafeIdentifier, probeRoleStatement, type ProbeRole } from "./identifiers.js";
@@ -28,6 +28,17 @@ export interface PgliteSuiteOptions {
   setup?: (db: Database) => Promise<void>;
   /** Override when a suite's own setup is slower than the default. */
   timeoutMs?: number;
+  /**
+   * Empty every data table after each test so the suite is order-independent even though no query
+   * filters by tenant. Default `true`.
+   *
+   * Set `false` for a suite that seeds shared rows ONCE — in `setup` or its own `beforeAll` — and
+   * reads them across several `it`s; a per-test reset would wipe that fixture out from under the
+   * second test. Schema (including tables `setup` creates, e.g. a fake backend's) always survives;
+   * only DATA is cleared. The reset leaves the append-only tables' `ENABLE ALWAYS` triggers exactly
+   * as it found them (see {@link buildResetPlan}).
+   */
+  resetPerTest?: boolean;
 }
 
 export interface PgliteSuite {
@@ -35,9 +46,90 @@ export interface PgliteSuite {
   readonly db: Database;
 }
 
-/** Registers `beforeAll`/`afterAll` for one PGlite database shared by the calling suite. */
+/**
+ * Empties every data table between tests. TRUNCATE fires only TRUNCATE-level triggers, not the
+ * row-level `reject_mutation` immutability triggers — but the append-only tables ALSO carry a
+ * `BEFORE TRUNCATE` trigger that is `ENABLE ALWAYS` (`0001_db_baseline_sql.sql`), which fires even
+ * under `session_replication_role = replica` and blocks the TRUNCATE. So each such trigger is
+ * disabled around the TRUNCATE and restored to its EXACT prior `tgenabled` — an ALWAYS trigger
+ * downgraded to a plain ENABLE would silently weaken the append-only guarantee (CLAUDE.md §5).
+ *
+ * Captured once (schema is stable after migration) so each reset is three cheap statements.
+ * Table and trigger names come from the catalog and are quoted by Postgres's own `format('%I')` /
+ * `quote_ident`, the escape a utility statement needs since it cannot bind an identifier
+ * (CLAUDE.md §3). The `__drizzle_migrations*` journal tables are left alone — the migration state
+ * must outlive the data (every set names its own, `__drizzle_migrations_<set>` in `public`, all
+ * caught by the trailing wildcard).
+ *
+ * Target-agnostic: {@link buildResetPlan}/{@link applyReset} take a `Database`, so the same plan
+ * drives the PGlite helper (on its superuser `db`) and the real-Postgres helpers (on the clone's
+ * admin/superuser connection — `app_user` can neither TRUNCATE nor ALTER TRIGGER). The catalog
+ * queries and identifier quoting are identical on both engines.
+ */
+interface ResetPlan {
+  truncate: string | undefined;
+  disable: string[];
+  restore: string[];
+}
+
+async function buildResetPlan(db: Database): Promise<ResetPlan> {
+  const tables = await db.execute<{ ident: string }>(sql`
+    select format('%I.%I', schemaname, tablename) as ident
+    from pg_tables
+    where schemaname not in ('pg_catalog', 'information_schema')
+      and tablename not like '\\_\\_drizzle\\_migrations%'`);
+  const idents = tables.rows.map((row) => row.ident);
+  const truncate =
+    idents.length === 0 ? undefined : `truncate ${idents.join(", ")} restart identity cascade`;
+
+  // `tgtype & 32` is TRIGGER_TYPE_TRUNCATE; `tgisinternal` excludes FK constraint triggers.
+  const triggers = await db.execute<{ tbl: string; name: string; tgenabled: string }>(sql`
+    select format('%I.%I', n.nspname, c.relname) as tbl,
+           quote_ident(t.tgname) as name,
+           t.tgenabled::text as tgenabled
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where not t.tgisinternal and (t.tgtype & 32) = 32`);
+  // No `?? "enable"` fallback: an unrecognised tgenabled must throw, never silently restore an
+  // append-only trigger as a plain ENABLE (CLAUDE.md §5). 'O','D','R','A' are the only values
+  // Postgres records; a future one is a bug to surface, not to paper over.
+  const enableForm: Record<string, string> = {
+    A: "enable always",
+    R: "enable replica",
+    D: "disable",
+    O: "enable",
+  };
+  const disable: string[] = [];
+  const restore: string[] = [];
+  for (const { tbl, name, tgenabled } of triggers.rows) {
+    const form = enableForm[tgenabled];
+    if (form === undefined) throw new Error(`unexpected tgenabled: ${tgenabled} on ${tbl}.${name}`);
+    disable.push(`alter table ${tbl} disable trigger ${name}`);
+    restore.push(`alter table ${tbl} ${form} trigger ${name}`);
+  }
+  return { truncate, disable, restore };
+}
+
+async function applyReset(db: Database, plan: ResetPlan): Promise<void> {
+  if (plan.truncate === undefined) return;
+  try {
+    // The disable loop is INSIDE the try so a throw partway through it still reaches the finally
+    // that restores every trigger — a trigger left disabled would let the next test mutate an
+    // append-only table.
+    for (const statement of plan.disable) await db.execute(sql.raw(statement));
+    await db.execute(sql.raw(plan.truncate));
+  } finally {
+    for (const statement of plan.restore) await db.execute(sql.raw(statement));
+  }
+}
+
+/** Registers `beforeAll`/`afterAll` (and, unless opted out, a per-test data reset) for one PGlite
+ * database shared by the calling suite. */
 export function usePgliteDb(options: PgliteSuiteOptions): PgliteSuite {
   let db: Database | undefined;
+  let resetPlan: ResetPlan | undefined;
+  const resetPerTest = options.resetPerTest ?? true;
 
   // Assigned the instant it exists, BEFORE migrations or setup can throw. Assigning at the end of
   // the hook instead leaves `db` undefined when a later step fails, so `afterAll` closes nothing and
@@ -48,7 +140,15 @@ export function usePgliteDb(options: PgliteSuiteOptions): PgliteSuite {
     db = await createPgliteDb();
     for (const migrations of options.migrations) await runMigrations(db, migrations);
     if (options.setup !== undefined) await options.setup(db);
+    // After setup so a fake backend's tables are in the truncate set; the plan records only names
+    // and trigger state, so setup's own seeded rows (present now) do not affect it.
+    if (resetPerTest) resetPlan = await buildResetPlan(db);
   }, options.timeoutMs ?? DEFAULT_SETUP_TIMEOUT_MS);
+
+  afterEach(async () => {
+    if (resetPerTest && db !== undefined && resetPlan !== undefined)
+      await applyReset(db, resetPlan);
+  });
 
   afterAll(async () => {
     const started = db;
@@ -83,6 +183,17 @@ export interface RealPostgresSuiteOptions {
    * `hookTimeout: 180_000` config with `beforeAll(fn, 50)` failed after 54ms, not 180s.
    */
   timeoutMs?: number;
+  /**
+   * Empty every data table after each test, exactly as {@link PgliteSuiteOptions.resetPerTest} —
+   * so a real-PG container suite is order-independent even though no query filters by tenant. Default
+   * `true`. The reset runs on the `admin` (superuser) connection, the only one that may TRUNCATE and
+   * toggle the append-only `ENABLE ALWAYS` triggers.
+   *
+   * Set `false` for a suite that seeds shared rows ONCE — in `setup` or its own `beforeAll` — and
+   * reads them across several `it`s; a per-test reset would wipe that fixture. Only DATA is cleared;
+   * schema and the append-only triggers survive exactly as found (see {@link buildResetPlan}).
+   */
+  resetPerTest?: boolean;
 }
 
 // `ProbeRole`, `probeRoleStatement` and `assertSafeIdentifier` now live in the vitest-FREE
@@ -102,6 +213,8 @@ export interface RealPostgresSuite {
 export function useRealPostgres(options: RealPostgresSuiteOptions): RealPostgresSuite {
   let pg: RealPostgres | undefined;
   let admin: Database | undefined;
+  let resetPlan: ResetPlan | undefined;
+  const resetPerTest = options.resetPerTest ?? true;
 
   // Assign each handle as soon as it exists so teardown can close it after a later setup failure.
   // TESTCONTAINERS_RYUK_DISABLED=true disables automatic Ryuk cleanup.
@@ -112,7 +225,15 @@ export function useRealPostgres(options: RealPostgresSuiteOptions): RealPostgres
       await admin.execute(sql.raw(probeRoleStatement(options.probeRole)));
     }
     if (options.setup !== undefined) await options.setup({ admin, pg });
+    // After setup so any tables it creates are in the truncate set; built on the admin connection,
+    // the only one privileged to TRUNCATE and toggle the append-only triggers. See usePgliteDb.
+    if (resetPerTest) resetPlan = await buildResetPlan(admin);
   }, options.timeoutMs);
+
+  afterEach(async () => {
+    if (resetPerTest && admin !== undefined && resetPlan !== undefined)
+      await applyReset(admin, resetPlan);
+  });
 
   // Ordered: the connection is closed before the container it lives in is stopped. Each is guarded
   // independently, so a failure to open the connection still stops the container.
@@ -269,6 +390,12 @@ export interface TemplateDbSuiteOptions {
    * globalSetup to exercise end to end.
    */
   getHandle?: () => SharedContainerHandle;
+  /**
+   * Empty every data table after each test, exactly as {@link RealPostgresSuiteOptions.resetPerTest}
+   * — order-independence without a tenant filter on any read, run on the clone's `admin` connection. Default
+   * `true`. Set `false` for a suite that seeds shared rows once and reads them across tests.
+   */
+  resetPerTest?: boolean;
 }
 
 /**
@@ -286,6 +413,8 @@ export interface TemplateDbSuiteOptions {
 export function useTemplateDb(options: TemplateDbSuiteOptions): RealPostgresSuite {
   let pg: RealPostgres | undefined;
   let admin: Database | undefined;
+  let resetPlan: ResetPlan | undefined;
+  const resetPerTest = options.resetPerTest ?? true;
 
   // Same discipline as useRealPostgres: each handle is assigned the instant it exists, so a later
   // throw (a failing clone, a throwing setup) still leaves it closable in afterAll rather than
@@ -297,7 +426,14 @@ export function useTemplateDb(options: TemplateDbSuiteOptions): RealPostgresSuit
     pg = await cloneTemplate(handle.uri, pickTemplate(handle, options.template), nextCloneName());
     admin = await pg.connect();
     if (options.setup !== undefined) await options.setup({ admin, pg });
+    // On the admin connection, after setup — same reset the PGlite helper runs. See usePgliteDb.
+    if (resetPerTest) resetPlan = await buildResetPlan(admin);
   }, options.timeoutMs);
+
+  afterEach(async () => {
+    if (resetPerTest && admin !== undefined && resetPlan !== undefined)
+      await applyReset(admin, resetPlan);
+  });
 
   // Ordered and independently guarded, exactly as useRealPostgres: the admin connection is closed
   // before the clone it lives in is dropped. pg.stop() here DROPs the clone, not the container.

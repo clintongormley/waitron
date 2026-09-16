@@ -44,7 +44,7 @@ describe("PGlite cannot test lock contention", () => {
     await Promise.all(
       sales.map((saleId, i) =>
         pg.db.transaction((tx) =>
-          appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, saleId, i + 1, i)),
+          appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, i + 1, i)),
         ),
       ),
     );

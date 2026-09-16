@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError, decimal } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import type { Decimal } from "@waitron/shared";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentResult } from "@waitron/payments";
 import {
@@ -26,18 +26,12 @@ export interface StripeRefunder {
  * `reverseViaStripe`'s trailing options, gathered into one named object rather than trailing
  * positional parameters.
  *
- * The function already takes six positional arguments, four of them strings, and these two options
- * are unrelated to each other — a reference resolver and a tenant scope — so no ordering between
- * them reads naturally. Naming them removes the problem and leaves room for the next option (a
- * persisted per-reversal idempotency key is the known one) without re-litigating argument order.
+ * The function already takes six positional arguments, four of them strings, and these options are
+ * unrelated to each other, so no ordering between them reads naturally. Naming them removes the
+ * problem and leaves room for the next option (a persisted per-reversal idempotency key is the known
+ * one) without re-litigating argument order.
  */
 export interface ReverseViaStripeOptions {
-  /**
-   * The tenant whose payment is being reversed. Both database phases use `withTenant`.
-   * The first lookup uses only the payment reference; its returned tenant id must match this
-   * value before any refund is issued or local state is changed.
-   */
-  tenantId: TenantId;
   /**
    * The reversing node's id, carried on the shared options — every live caller (the reconcile sweep
    * and both interactive providers) has a node id in hand and passes it; it identifies the reversing
@@ -68,7 +62,7 @@ export interface ReverseViaStripeOptions {
  * real refund; SAME-reversal retry-safety (a persisted per-reversal id) is deferred, and reconcile
  * backstops Stripe-vs-local drift.
  *
- * Both database phases run through `withTenant` with the required tenant id. */
+ * Both database phases run through `withTransaction`. */
 export async function reverseViaStripe(
   db: Database,
   client: StripeRefunder,
@@ -76,45 +70,28 @@ export async function reverseViaStripe(
   ref: string,
   kind: "void" | "refund",
   /** Required but nullable, NOT optional (`amount?`): TypeScript forbids an optional parameter
-   * before a required one, and the options object below is required now that `tenantId` is. Every
-   * caller already passed an explicit `undefined` here, so the shape is unchanged in practice —
-   * this only stops a new caller silently omitting the tail that carries the tenant. */
+   * before a required one, and the options object below is required (`nodeId`). */
   amount: Decimal | undefined,
-  /** See `ReverseViaStripeOptions` for why these are an object and not two more positional
-   * parameters. No default: `tenantId` is required, so every caller passes this. */
-  {
-    tenantId,
-    resolveProcessorRef = (externalRef) => Promise.resolve(externalRef),
-  }: ReverseViaStripeOptions,
+  /** See `ReverseViaStripeOptions` for why these are an object and not more positional parameters. */
+  { resolveProcessorRef = (externalRef) => Promise.resolve(externalRef) }: ReverseViaStripeOptions,
 ): Promise<PaymentResult> {
   // The ONE opener for every database phase below — the T1 pre-check and whichever T2 write the
-  // outcome selects — so they cannot drift apart. `withTenant` OPENS a transaction, which is why
+  // outcome selects — so they cannot drift apart. `withTransaction` OPENS a transaction, which is why
   // this wraps only those short phases: the processor refund between them is a network call and
   // stays outside every transaction (T1/T2), as does the `resolveProcessorRef` lookup feeding it.
-  //
-  // There used to be a second, untenanted branch here (`tenantId === undefined ? db.transaction(fn)
-  // : …`). It is gone with the option's optionality: it was the mechanism by which every
-  // interactive-provider reversal failed closed under a real role.
   const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(db, tenantId, fn);
+    withTransaction(db, fn);
 
   const found = await inTransaction(async (tx) => {
     const f = await findPaymentByRef(tx, provider, ref);
     if (f === undefined || f.externalRef === null) {
       throw new AppError("payment.not_found", { provider, paymentRef: ref });
     }
-    // findPaymentByRef has no tenant predicate. Refuse a mismatched tenant before issuing a
-    // refund or changing local state, using the same not_found code as an absent payment.
-    // Case-insensitive: Postgres renders `uuid` canonical-lowercase while `tenantId()` accepts and
-    // preserves either case, so a caller holding `A1B2…` would be denied its OWN payment.
-    if (f.tenantId.toLowerCase() !== tenantId.toLowerCase()) {
-      throw new AppError("payment.not_found", { provider, paymentRef: ref });
-    }
     const externalRef = f.externalRef;
-    await assertReversible(tx, { tenantId: f.tenantId, provider, paymentRef: ref, kind, amount });
+    await assertReversible(tx, { provider, paymentRef: ref, kind, amount });
     return { ...f, externalRef };
   });
-  const key = { tenantId: found.tenantId, provider, paymentRef: ref };
+  const key = { provider, paymentRef: ref };
 
   // Resolution is (potentially) a NETWORK call, so it belongs here: after the read-only pre-check
   // has committed and OUTSIDE every transaction, next to the refund it feeds. Doing it inside T1

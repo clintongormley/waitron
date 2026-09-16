@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
@@ -25,7 +25,6 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
  */
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
-let tenantId: string;
 let personId: string;
 let locationId: string;
 let nodeId: string;
@@ -34,15 +33,15 @@ let nodeId: string;
 // makes the table un-wipeable even by its owner, so each test mints new rows in a new tenant and
 // relies on the location scope to keep a previous test's committed rows out of view.
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.admin);
-  personId = await seedPerson(suite.admin, tenantId);
-  locationId = await seedLocation(suite.admin, tenantId);
-  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+  await seedTenant(suite.admin);
+  personId = await seedPerson(suite.admin);
+  locationId = await seedLocation(suite.admin);
+  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
 });
 
-/** The chain key for this suite's default (tenant, node, location). */
+/** The chain key for this suite's default (node, location). */
 function key(): ChainKey {
-  return { tenantId, nodeId, locationId };
+  return { nodeId, locationId };
 }
 
 /** A base `in` clock event's append input at a given instant. */
@@ -56,7 +55,7 @@ function inputAt(at: string): TimeEntryAppend {
   };
 }
 
-/** Reads the (tenant, node, location) chain head — what a backup carries verbatim into the restore. */
+/** Reads the (node, location) chain head — what a backup carries verbatim into the restore. */
 async function readHead(): Promise<{
   sequence_no: number;
   last_entry_id: string | null;
@@ -68,22 +67,21 @@ async function readHead(): Promise<{
     last_entry_hash: string | null;
   }>(sql`
     select sequence_no, last_entry_id, last_entry_hash from workforce_chains
-    where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+    where node_id = ${nodeId} and location_id = ${locationId}`);
   return rows[0]!;
 }
 
 /**
- * A raw insert claiming `position` on this (tenant, node, location) chain — the survivor's copy
+ * A raw insert claiming `position` on this (node, location) chain — the survivor's copy
  * arriving at drain. Every column but the position is a valid non-genesis row (prev_entry_hash set,
  * whole-second timestamps, hex hash), so the ONLY constraint it can trip is the chain-position uq.
  */
 function rawForkInsertAt(position: number): Promise<unknown> {
   return suite.admin.execute(sql`
     insert into time_entries (
-      tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+      person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-    ) values (
-      ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T20:00:00Z', 0,
+    ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T20:00:00Z', 0,
       ${personId}, '2026-01-05T20:00:00Z', ${"B".repeat(64)}, ${"A".repeat(64)}, ${position}, false)`);
 }
 
@@ -132,7 +130,7 @@ describe("cold restore continues the working-time chain (no hook)", () => {
     }
     await suite.admin.transaction((tx) => appendToChain(tx, k, inputAt("2026-01-06T09:00:00Z")));
 
-    // A survivor (a promoted cloud) also wrote position 4 on this same (tenant, node, location)
+    // A survivor (a promoted cloud) also wrote position 4 on this same (node, location)
     // lineage. Its copy arriving at drain lands on a position the box already holds and is refused
     // LOUDLY — never merged into a fork. This is the local proxy for the replication drain the swap
     // S1 two-node fixture proves end to end (spec §6).

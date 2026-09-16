@@ -27,20 +27,19 @@ export function withPassiveManagementRead<T>(read: () => T): T {
 
 export interface ManagementSession {
   id: string;
-  tenantId: string;
   personId: string;
 }
 
 /** Open a management session for a person. The caller has already authenticated them. */
 export async function startManagementSession(
   tx: Transaction,
-  input: { tenantId: string; personId: string },
+  input: { personId: string },
 ): Promise<ManagementSession> {
   const [row] = await tx
     .insert(managementSessions)
-    .values({ tenantId: input.tenantId, personId: input.personId })
+    .values({ personId: input.personId })
     .returning({ id: managementSessions.id });
-  return { id: row!.id, tenantId: input.tenantId, personId: input.personId };
+  return { id: row!.id, personId: input.personId };
 }
 
 /**
@@ -55,7 +54,6 @@ export async function resolveManagementSession(
   sessionId: string,
   options: { touch?: boolean } = {},
 ): Promise<{
-  tenantId: string;
   personId: string;
   role: PersonRoleValue;
   email: string | null;
@@ -64,7 +62,6 @@ export async function resolveManagementSession(
 }> {
   const [row] = await tx
     .select({
-      tenantId: managementSessions.tenantId,
       personId: managementSessions.personId,
       lastSeenAt: managementSessions.lastSeenAt,
       role: persons.role,
@@ -91,7 +88,6 @@ export async function resolveManagementSession(
       .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
   }
   return {
-    tenantId: row.tenantId,
     personId: row.personId,
     role: row.role as PersonRoleValue,
     email: row.email,

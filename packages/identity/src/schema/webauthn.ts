@@ -8,7 +8,6 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -22,11 +21,9 @@ export const webauthnCredentials = pgTable(
   "webauthn_credentials",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
-    /** The credential id the authenticator returned, base64url. Unique per tenant so a login lookup
-     * resolves exactly one credential; the (tenant_id, credential_id) composite is the seam the
-     * verifier keys on. */
+    /** The credential id the authenticator returned, base64url. Unique, so a login lookup resolves
+     * exactly one credential; `credential_id` is the seam the verifier keys on. */
     credentialId: text("credential_id").notNull(),
     name: text("name"),
     /** base64url of the COSE public key — used to verify the authentication assertion's signature. */
@@ -45,19 +42,14 @@ export const webauthnCredentials = pgTable(
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count a
     // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI
     // process), the same reason persons.ts and management-sessions.ts use this form. restrict, not
-    // cascade: removing a tenant or person must never silently discard a registered passkey.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "webauthn_credentials_tenant_fk",
-    }).onDelete("restrict"),
+    // cascade: removing a person must never silently discard a registered passkey.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
       name: "webauthn_credentials_person_fk",
     }).onDelete("restrict"),
-    unique("webauthn_credentials_credential_id_uq").on(t.tenantId, t.credentialId),
-    index("webauthn_credentials_person_idx").on(t.tenantId, t.personId),
+    unique("webauthn_credentials_credential_id_uq").on(t.credentialId),
+    index("webauthn_credentials_person_idx").on(t.personId),
   ],
 );
 
@@ -73,25 +65,11 @@ export const webauthnCredentials = pgTable(
  * and rolls the transaction back — NOT swept: there is no sweep job (a background sweep is a possible
  * future follow-up).
  */
-export const webauthnChallenges = pgTable(
-  "webauthn_challenges",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
-    /** null for a login (discoverable) ceremony — the person is resolved from the returned
-     * credential, not known when the challenge is minted. */
-    personId: uuid("person_id"),
-    challenge: text("challenge").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "webauthn_challenges_tenant_fk",
-    }).onDelete("restrict"),
-    index("webauthn_challenges_tenant_idx").on(t.tenantId),
-  ],
-);
+export const webauthnChallenges = pgTable("webauthn_challenges", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** null for a login (discoverable) ceremony — the person is resolved from the returned
+   * credential, not known when the challenge is minted. */
+  personId: uuid("person_id"),
+  challenge: text("challenge").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+});

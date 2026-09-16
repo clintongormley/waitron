@@ -23,7 +23,7 @@ declare module "@waitron/shared" {
     "unit.precision_invalid": Record<string, never>;
     /** A quantity is malformed, non-positive, too precise, or outside numeric(12,3). */
     "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
-    /** A unit id is absent from the caller's tenant. */
+    /** A unit id names no unit. */
     "unit.not_found": { unitId: string };
     /** A unit cannot be deleted while products retain real assignments to it; each product carries
      * its id and availability so a caller can list them and link to each product's editor. */
@@ -65,8 +65,7 @@ declare module "@waitron/shared" {
      */
     "media.too_large": { size: number; limit: number };
     /** A location-menu write names no catalogue. The trust-boundary check returns 404 before
-     * the composite FK backstop would reject the missing reference with 23503. Composite FKs also
-     * reject tenant-inconsistent references; catalogue existence alone does not check that. */
+     * the foreign-key backstop would reject the missing reference with 23503. */
     "catalogue.not_found": { catalogueId: string };
     /** A menu offer operation names no active item; menuId is present when the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };

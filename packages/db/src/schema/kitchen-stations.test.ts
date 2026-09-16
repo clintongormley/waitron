@@ -4,7 +4,7 @@ import type { Database, Transaction } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { tenants } from "./tenants.js";
 
@@ -12,7 +12,6 @@ import { tenants } from "./tenants.js";
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
@@ -23,7 +22,8 @@ async function rollBackAfter(
   tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
+  void tenant;
+  await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
   }).catch((error: unknown) => {
@@ -32,24 +32,22 @@ async function rollBackAfter(
 }
 
 describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_A2}, ${TENANT_A}, 'Loc A2', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería'),
+        (${LOCATION_A2}, 'Loc A2', array['es'], 'Hostelería'),
+        (${LOCATION_B}, 'Loc B', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
   function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+    void tenant;
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -63,8 +61,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   ): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into kitchen_stations (tenant_id, location_id, name, is_default)
-            values (${tenant}, ${location}, ${name}, ${isDefault}) returning id`,
+        sql`insert into kitchen_stations (location_id, name, is_default) values (${location}, ${name}, ${isDefault}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -118,7 +115,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     // Exactly one default per location: the first is_default row is accepted, a second at the SAME
     // location is a unique_violation (23505). A non-default second row is fine (only is_default rows
     // are indexed), and a default at a DIFFERENT location is fine (the index keys on location too) —
-    // both asserted so the failure is the partial predicate, not a plain (tenant, location) unique.
+    // both asserted so the failure is the partial predicate, not a plain (location_id, name) unique.
     await seedStation(TENANT_A, LOCATION_A, "Default one", true);
     // A non-default sibling at the same location — permitted (not covered by the partial index).
     await seedStation(TENANT_A, LOCATION_A, "Non-default sibling", false);
@@ -136,8 +133,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     // to whatever the test above committed.
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${probeLocation}, ${TENANT_A}, 'Loc A3', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${probeLocation}, 'Loc A3', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     await seedStation(TENANT_A, probeLocation, "Probe default", true);
     await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
@@ -145,8 +141,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       await tx.execute(sql`set local role app_user`);
       // With the index gone, a second default at the same location goes through — no 23505.
       await tx.execute(
-        sql`insert into kitchen_stations (tenant_id, location_id, name, is_default)
-            values (${TENANT_A}, ${probeLocation}, 'Probe default two', true)`,
+        sql`insert into kitchen_stations (location_id, name, is_default) values (${probeLocation}, 'Probe default two', true)`,
       );
       const n = await tx
         .execute<{ n: number }>(

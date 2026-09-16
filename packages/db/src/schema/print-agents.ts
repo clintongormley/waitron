@@ -1,5 +1,5 @@
 import { boolean, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
 
 /**
  * An approved local print worker. Its bearer secret stays in the worker; the database holds only a
@@ -10,13 +10,7 @@ export const printAgents = pgTable(
   "print_agents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      // Two-arg `.references()` so v8 tracks this thunk as its own never-invoked function (drizzle-kit
-      // resolves it in a separate CLI process), the reason devices.ts / kitchen-stations.ts use this form.
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    // The venue the agent lives in — a required scope, like tenant_id. A DIRECT location_id →
+    // The venue the agent lives in — a required scope. A DIRECT location_id →
     // locations.id FK with onDelete restrict, the `shifts`/`devices` shape (§2a).
     locationId: uuid("location_id")
       .notNull()
@@ -43,10 +37,9 @@ export const printAgents = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // Target of the tenant-consistent print_jobs.claimed_by foreign key.
-    unique("print_agents_tenant_id_key").on(t.tenantId, t.id),
+    // Target of the print_jobs.claimed_by foreign key.
     // At most one self-enrolled agent per node. Postgres treats NULLs as DISTINCT by default, so the
     // many manual (NULL) agents are unconstrained; only non-NULL node_ids are deduplicated.
-    unique("print_agents_tenant_node_key").on(t.tenantId, t.nodeId),
+    unique("print_agents_tenant_node_key").on(t.nodeId),
   ],
 );

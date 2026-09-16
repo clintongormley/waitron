@@ -10,7 +10,7 @@ import {
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { verifyMembershipDocument } from "@waitron/membership";
-import { locationId as brandLocationId, type NodeId, type TenantId } from "@waitron/shared";
+import { locationId as brandLocationId, type NodeId } from "@waitron/shared";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 
@@ -27,27 +27,26 @@ describe("seedTermZeroMembership", () => {
     timeoutMs: 60_000,
   });
   let db: Database;
-  let tenantId: TenantId;
   let nodeId: NodeId;
 
   beforeAll(async () => {
     db = suite.db;
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-    nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
-    await establishNodeIdentity({ ownerDb: db, ring: RING }, tenantId, nodeId);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+    await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
   }, 60_000);
 
   it("seeds a signed term-0 document naming this node serving-primary", async () => {
-    await seedTermZeroMembership({ db, ring: RING }, tenantId, nodeId, "https://box.deli.test");
+    await seedTermZeroMembership({ db, ring: RING }, nodeId, "https://box.deli.test");
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(0);
     expect(held?.body.nodes).toEqual([
       { nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
     ]);
-    const trust = await readMembershipTrustSet(db, tenantId);
+    const trust = await readMembershipTrustSet(db);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
   });
 });

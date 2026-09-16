@@ -10,7 +10,7 @@
 // Usage — build first, exactly like `dist/server.js`, for the reason `record-one-sale.ts`'s header
 // records:
 //   pnpm --filter @waitron/server build
-//   DATABASE_URL=postgres://... node apps/server/dist/register-till.js <tenantId> <nodeId>
+//   DATABASE_URL=postgres://... node apps/server/dist/register-till.js <nodeId>
 //
 // The connection string is read ONLY from `DATABASE_URL`, never accepted as an argument, so it stays
 // out of shell history and process listings.
@@ -18,24 +18,22 @@
 // Re-running this against an already-registered node is how a REIMAGED node is re-provisioned. It
 // closes the previous chain either way, so do not run it to "check" anything.
 import { createPostgresDb } from "@waitron/db";
-import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
 import { provisionNode } from "../src/provision-till.js";
 
 function usageError(message: string): never {
   console.error(`register-till: ${message}`);
-  console.error(
-    "usage: DATABASE_URL=<...> node apps/server/dist/register-till.js <tenantId> <nodeId>",
-  );
+  console.error("usage: DATABASE_URL=<...> node apps/server/dist/register-till.js <nodeId>");
   process.exit(1);
 }
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 2) {
-    usageError(`expected 2 arguments, got ${args.length}`);
+  if (args.length !== 1) {
+    usageError(`expected 1 argument, got ${args.length}`);
   }
-  const [tenantArg, nodeArg] = args;
+  const [nodeArg] = args;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === "") {
@@ -44,11 +42,7 @@ async function main(): Promise<void> {
 
   const db = await createPostgresDb(databaseUrl);
   try {
-    const seeded = await provisionNode(
-      db,
-      { tenantId: brandTenantId(tenantArg), nodeId: brandNodeId(nodeArg) },
-      ALL_MODULES,
-    );
+    const seeded = await provisionNode(db, { nodeId: brandNodeId(nodeArg) }, ALL_MODULES);
 
     for (const s of seeded) console.log(`${s.module}: ${s.report}`);
   } finally {

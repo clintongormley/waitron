@@ -3,7 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { isUniqueViolation, purchaseInvoiceVat, purchaseInvoices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import "./errors.js";
 import type {
   CreatePurchaseInvoiceInput,
@@ -130,7 +130,6 @@ function validateLines(lines: readonly PurchaseInvoiceLineInput[]): void {
  */
 async function insertLines(
   tx: Transaction,
-  tenantId: TenantId,
   invoiceId: string,
   lines: readonly PurchaseInvoiceLineInput[],
 ): Promise<LineRowWithId[]> {
@@ -138,7 +137,6 @@ async function insertLines(
     .insert(purchaseInvoiceVat)
     .values(
       lines.map((line) => ({
-        tenantId,
         purchaseInvoiceId: invoiceId,
         rate: line.rate,
         base: line.base,
@@ -177,13 +175,12 @@ async function selectLines(tx: Transaction, invoiceId: string): Promise<Purchase
 /**
  * Insert a received invoice and its VAT lines in the caller's transaction. Validates the header's
  * prorrata seam and the lines (≥1 line, non-negative base/VAT amount, rate 0–100 → `purchase.invalid`)
- * BEFORE any write; a collision on the `(tenant, supplier, supplier's number)` unique index becomes
+ * BEFORE any write; a collision on the `(supplier, supplier's number)` unique index becomes
  * `purchase.duplicate` (the VAT record-book no-duplicate rule). `regime`/`deductibleProportion`/`kind`
  * omitted fall to their column defaults.
  */
 export async function createPurchaseInvoice(
   tx: Transaction,
-  tenantId: TenantId,
   input: CreatePurchaseInvoiceInput,
 ): Promise<PurchaseInvoice> {
   validateProportion(input.header.deductibleProportion);
@@ -199,7 +196,6 @@ export async function createPurchaseInvoice(
     const [row] = await tx
       .insert(purchaseInvoices)
       .values({
-        tenantId,
         supplierTaxId: input.header.supplierTaxId,
         supplierName: input.header.supplierName,
         supplierInvoiceNumber: input.header.supplierInvoiceNumber,
@@ -225,7 +221,7 @@ export async function createPurchaseInvoice(
     throw error;
   }
 
-  const lines = sortLineRows(await insertLines(tx, tenantId, header.id, input.lines)).map(mapLine);
+  const lines = sortLineRows(await insertLines(tx, header.id, input.lines)).map(mapLine);
   return { ...header, lines };
 }
 
@@ -284,7 +280,6 @@ export async function listPurchaseInvoices(
  */
 export async function updatePurchaseInvoice(
   tx: Transaction,
-  tenantId: TenantId,
   id: string,
   patch: UpdatePurchaseInvoiceInput,
 ): Promise<void> {
@@ -302,7 +297,7 @@ export async function updatePurchaseInvoice(
 
   if (patch.lines !== undefined) {
     await tx.delete(purchaseInvoiceVat).where(eq(purchaseInvoiceVat.purchaseInvoiceId, id));
-    await insertLines(tx, tenantId, id, patch.lines);
+    await insertLines(tx, id, patch.lines);
   }
 }
 

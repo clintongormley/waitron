@@ -14,7 +14,7 @@
 // 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;
 // 2. seeds a tenant + location as the PGlite superuser — `app_user` holds no INSERT on `tenants`,
 //    deliberately (a running POS cannot create tenants);
-// 3. as the application role (`withTenant` opens the transaction, `asAppUser` selects the app
+// 3. as the application role (`withTransaction` opens the transaction, `asAppUser` selects the app
 //    role on PostgreSQL, exactly as the running POS does), walks the six-step story below,
 //    reading the PUBLISHED `products.allergens` column back after each mutation and asserting it
 //    matches.
@@ -31,16 +31,16 @@
 // Run it:
 //   pnpm --filter @waitron/server demo:recipes
 //   # or: pnpm --filter @waitron/server exec tsx scripts/recipes-demo.ts
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   asAppUser,
   createPgliteDb,
   products,
   runMigrations,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
@@ -49,28 +49,6 @@ import {
 } from "@waitron/catalogue";
 import type { ProductAllergens } from "@waitron/catalogue";
 import { createIngredient, setProductRecipe, updateIngredient } from "@waitron/recipes";
-import { tenantId as brandTenantId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
-
-interface Venue {
-  tenantId: TenantId;
-  locationId: string;
-}
-
-/**
- * Seeds tenant → location as the PGlite superuser, exactly as the package's own fixtures do. Only
- * these two rows are needed: this demo rings no sale, so no till / node / series.
- */
-async function seedVenue(db: Database): Promise<Venue> {
-  const t = await db.execute<{ id: string }>(
-    sql`insert into tenants (country, tax_id, legal_name) values ('ES', '50000000K', 'Deli Demo SL') returning id`,
-  );
-  const tenantId = brandTenantId(t.rows[0]!.id);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { tenantId, locationId: loc.rows[0]!.id };
-}
 
 /** Read the PUBLISHED declaration straight off the `products.allergens` column — the surface the till
  * sells from — after each recipe/manual change, as a Drizzle select. Returns null for a PENDING
@@ -118,11 +96,10 @@ async function main(): Promise<void> {
   try {
     await runMigrations(db, CORE_MIGRATIONS);
     await runMigrations(db, CATALOGUE_MIGRATIONS);
-    const venue = await seedVenue(db);
 
     // The whole story runs in one application-role transaction: every op takes `tx` and runs
-    // inside that `withTenant` transaction, and each read below sees the writes above it.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    // inside that `withTransaction` transaction, and each read below sees the writes above it.
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
 
       console.log("recipes-demo: allergen inheritance from ingredients to a product, end-to-end");
@@ -130,15 +107,15 @@ async function main(): Promise<void> {
 
       // Step 1 — three ingredients: two reviewed, one deliberately UNREVIEWED (allergens omitted →
       // null). The unreviewed one is what makes the product go PENDING in step 5.
-      const alioli = await createIngredient(tx, venue.tenantId, {
+      const alioli = await createIngredient(tx, {
         name: "alioli",
         allergens: { eggs: { presence: "contains" } },
       });
-      const pan = await createIngredient(tx, venue.tenantId, {
+      const pan = await createIngredient(tx, {
         name: "pan",
         allergens: { gluten: { presence: "contains", source: "wheat" } },
       });
-      const misterio = await createIngredient(tx, venue.tenantId, { name: "misterio" }); // allergens omitted → null
+      const misterio = await createIngredient(tx, { name: "misterio" }); // allergens omitted → null
 
       console.log("Step 1 — ingredients (raw materials):");
       console.log(`  alioli   → ${format(alioli.allergens)}`);
@@ -148,8 +125,8 @@ async function main(): Promise<void> {
 
       // Step 2 — a product with NO manual allergens of its own. Its declaration is whatever its
       // recipe derives (nothing, yet).
-      const cat = await createCatalogue(tx, venue.tenantId, { name: "Delicatessen" });
-      const bocadillo = await createProduct(tx, venue.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const bocadillo = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: null,
         name: "bocadillo",
@@ -165,7 +142,7 @@ async function main(): Promise<void> {
       // Step 3 — give it a recipe of the two REVIEWED ingredients. The published declaration is now
       // the derived floor: eggs (from alioli) ∪ gluten (from pan).
       console.log("Step 3 — setProductRecipe(bocadillo, [alioli, pan])  → inherited floor");
-      await setProductRecipe(tx, venue.tenantId, bocadillo.id, [alioli.id, pan.id]);
+      await setProductRecipe(tx, bocadillo.id, [alioli.id, pan.id]);
       expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten"]);
       console.log("");
 
@@ -175,7 +152,7 @@ async function main(): Promise<void> {
       console.log(
         'Step 4 — updateProduct(bocadillo, { allergens: "may_contain nuts (shared slicer)" })',
       );
-      await updateProduct(tx, venue.tenantId, bocadillo.id, {
+      await updateProduct(tx, bocadillo.id, {
         allergens: { nuts: { presence: "may_contain", source: "shared slicer" } },
       });
       expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten", "nuts"]);
@@ -187,7 +164,7 @@ async function main(): Promise<void> {
       console.log(
         "Step 5 — setProductRecipe(bocadillo, [alioli, pan, misterio])  → PENDING contagion",
       );
-      await setProductRecipe(tx, venue.tenantId, bocadillo.id, [alioli.id, pan.id, misterio.id]);
+      await setProductRecipe(tx, bocadillo.id, [alioli.id, pan.id, misterio.id]);
       expect(await readPublished(tx, bocadillo.id), ["<pending>"]);
       console.log("");
 

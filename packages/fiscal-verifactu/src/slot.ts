@@ -31,7 +31,7 @@ export const FISCAL_SLOT: FiscalContribution = {
       resolveClient: rejectResolveClient,
     }),
   // The runtime submission pass. The regime OWNS its transport: it builds a per-pass mTLS resolver
-  // (one TLS pool per tenant with due work, released in `finally`) and hands `runDrain` only the
+  // (one TLS pool per pass with due work, released in `finally`) and hands `runDrain` only the
   // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and
   // `aeatEndpointFor`'s host selector — the same `"production" | "preproduction"` union — so no cast.
   drain: async ({ db, ring, environment, skipRetryMs, log }, now) => {
@@ -55,7 +55,7 @@ export const FISCAL_SLOT: FiscalContribution = {
     validate: (raw) => {
       parseAeatCert(raw);
     },
-    seal: (deps, tenantId, raw) => sealAeatSecret(deps, tenantId, raw),
+    seal: (deps, raw) => sealAeatSecret(deps, raw),
   },
   // The operator-typed fields that reach AEAT verbatim. Refused here, at provision time, so the
   // operator fixes them in the wizard — the alternative is the chain-append guard refusing the

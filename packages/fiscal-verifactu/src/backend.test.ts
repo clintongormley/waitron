@@ -2,10 +2,11 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, captureError, sales, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import {
   MONEY_SCALE,
   decimal,
@@ -31,7 +32,6 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
  */
 
 let backend: VerifactuBackend;
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -39,7 +39,7 @@ let seriesId: SeriesId;
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -49,9 +49,9 @@ beforeEach(async () => {
 });
 
 async function sell() {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
 
@@ -63,13 +63,12 @@ describe("id", () => {
 
 describe("zero-rate sales", () => {
   it("files the existing zero-rate product treatment as S1 with a zero cuota", async () => {
-    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+    const { saleId } = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(
         tx,
         backend,
         saleInput({
-          tenantId,
           tillId,
           nodeId,
           seriesId,
@@ -123,9 +122,7 @@ describe("zero-rate sales", () => {
 
 describe("registerNode", () => {
   it("reports the node's live SIF registration", async () => {
-    const registration = await withTenant(pg.db, tenantId, (tx) =>
-      backend.registerNode(tx, nodeId, { tenantId }),
-    );
+    const registration = await withTransaction(pg.db, (tx) => backend.registerNode(tx, nodeId));
     expect(registration.backend).toBe("verifactu");
     expect(registration.nodeId).toBe(nodeId);
     expect(registration.registrationId).toContain("WT");
@@ -137,15 +134,34 @@ describe("registerNode", () => {
     // does not exist or once had a SIF that was later revoked.
     const neverProvisioned = brandNodeId("00000000-0000-4000-8000-000000000000");
     await expect(
-      withTenant(pg.db, tenantId, (tx) => backend.registerNode(tx, neverProvisioned, { tenantId })),
+      withTransaction(pg.db, (tx) => backend.registerNode(tx, neverProvisioned)),
     ).rejects.toMatchObject({ code: "sif.not_registered" });
+  });
+});
+
+describe("the taxpayer every record is filed as", () => {
+  it("refuses to file when the tenants table is empty, loudly and without a domain code", async () => {
+    // Every record carries `NombreRazonEmisor`, read from the one taxpayer row at filing time. With
+    // the tenant columns gone, no foreign key holds that row in place any more, so an empty table is
+    // reachable by a corrupt or half-provisioned database — and filing a record under a blank or
+    // guessed issuer name is unrepairable (CLAUDE.md §5). It must fail, and as a plain `Error`: no
+    // `AppError` code, because there is nothing an operator can do at a till about it.
+    await pg.db.execute(sql`delete from tenants`);
+    const error = await captureError(() =>
+      withTransaction(pg.db, async (tx) => {
+        await asAppUser(tx);
+        return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+      }),
+    );
+    expect(error).not.toBeInstanceOf(AppError);
+    expect((error as Error).message).toContain("tenants is empty");
   });
 });
 
 describe("recordVoid", () => {
   it("throws fiscal.sale_not_recorded for a sale with no prior alta", async () => {
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordVoid(tx, "00000000-0000-4000-8000-000000000000" as never, "staff error"),
       ),
     ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded" });
@@ -153,16 +169,11 @@ describe("recordVoid", () => {
 
   it("appends an anulación referencing the original alta's own identity", async () => {
     const { saleId } = await sell();
-    const ref = await withTenant(pg.db, tenantId, (tx) =>
-      backend.recordVoid(tx, saleId, "staff error"),
-    );
+    const ref = await withTransaction(pg.db, (tx) => backend.recordVoid(tx, saleId, "staff error"));
     expect(ref.backend).toBe("verifactu");
     expect(ref.state).toBe("pending");
 
-    const rows = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const rows = await pg.db.select().from(registrosFacturacion);
     const alta = rows.find((row) => row.tipoRegistro === "alta");
     const anulacion = rows.find((row) => row.tipoRegistro === "anulacion");
     expect(anulacion?.idEmisorFactura).toBe(alta?.idEmisorFactura);
@@ -220,7 +231,7 @@ describe("recordVoid — date reconstruction", () => {
       db: pg.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTenant(pg.db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(pg.db, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
 
     const rows = await pg.db
       .select()
@@ -239,7 +250,7 @@ describe("recordVoid — date reconstruction", () => {
       db: pg.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTenant(pg.db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTransaction(pg.db, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
 
     const rows = await pg.db
       .select()
@@ -262,7 +273,6 @@ describe("recordCorrection — refusals", () => {
    * the call type-correct. */
   function correctiveSale(): SaleForFiscalRecord {
     return {
-      tenantId,
       tillId,
       nodeId,
       saleId: brandSaleId("33333333-3333-4333-8333-333333333333"),
@@ -281,7 +291,7 @@ describe("recordCorrection — refusals", () => {
   it("throws fiscal.sale_not_recorded when the sale being corrected has no prior alta", async () => {
     const neverRecorded = brandSaleId("00000000-0000-4000-8000-000000000000");
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordCorrection(tx, correctiveSale(), { correctsSaleId: neverRecorded }),
       ),
     ).rejects.toMatchObject({
@@ -295,11 +305,10 @@ describe("recordCorrection — refusals", () => {
     // method assembles, and filing the wrong TipoFactura is unrepairable (§5). Build a real F1 alta
     // directly (bypassing core, which only ever issues F2), then try to correct it.
     const original = brandSaleId("44444444-4444-4444-8444-444444444444");
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: original,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -317,7 +326,6 @@ describe("recordCorrection — refusals", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: original,
@@ -334,7 +342,7 @@ describe("recordCorrection — refusals", () => {
     });
 
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordCorrection(tx, correctiveSale(), { correctsSaleId: original }),
       ),
     ).rejects.toMatchObject({
@@ -358,7 +366,6 @@ describe("recordSubstitution — refusals", () => {
    * well-formed value keeps the call type-correct. */
   function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
     return {
-      tenantId,
       tillId,
       nodeId,
       saleId: brandSaleId("55555555-5555-4555-8555-555555555555"),
@@ -380,7 +387,7 @@ describe("recordSubstitution — refusals", () => {
   it("throws fiscal.sale_not_recorded when a substituted sale has no prior alta", async () => {
     const neverRecorded = brandSaleId("00000000-0000-4000-8000-000000000000");
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordSubstitution(tx, substitutionSale(), { substitutedSaleIds: [neverRecorded] }),
       ),
     ).rejects.toMatchObject({
@@ -395,14 +402,13 @@ describe("recordSubstitution — refusals", () => {
     // than assumes. Build a real F1 alta directly (core only ever issues F2), then try to substitute
     // it — the same setup `recordCorrection`'s own F1 refusal uses.
     // A distinct id from the `recordCorrection` F1 refusal test above: this PGlite db is shared
-    // across the file and the tenant is fresh each `beforeEach`, but `sales_pkey` is global, so a
+    // across the file and the node is fresh each `beforeEach`, but `sales_pkey` is global, so a
     // reused literal id would collide with that sibling test's row.
     const original = brandSaleId("66666666-6666-4666-8666-666666666666");
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: original,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -418,7 +424,6 @@ describe("recordSubstitution — refusals", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: original,
@@ -435,7 +440,7 @@ describe("recordSubstitution — refusals", () => {
     });
 
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordSubstitution(tx, substitutionSale(), { substitutedSaleIds: [original] }),
       ),
     ).rejects.toMatchObject({
@@ -446,7 +451,7 @@ describe("recordSubstitution — refusals", () => {
 
   it("refuses an empty substitutedSaleIds list, which would substitute nothing", async () => {
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordSubstitution(tx, substitutionSale(), { substitutedSaleIds: [] }),
       ),
     ).rejects.toThrow(/empty/i);
@@ -454,7 +459,7 @@ describe("recordSubstitution — refusals", () => {
 
   it("refuses a substitution with no recipient, which a full invoice must always name", async () => {
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordSubstitution(tx, substitutionSale({ counterparty: null }), {
           substitutedSaleIds: [someTicket],
         }),
@@ -464,7 +469,7 @@ describe("recordSubstitution — refusals", () => {
 
   it("refuses a non-Spanish recipient until the foreign-recipient shape is confirmed", async () => {
     await expect(
-      withTenant(pg.db, tenantId, (tx) =>
+      withTransaction(pg.db, (tx) =>
         backend.recordSubstitution(
           tx,
           substitutionSale({
@@ -487,7 +492,7 @@ describe("recordSale — invoice type selection", () => {
     // calls `VerifactuBackend.recordSale` directly, bypassing core entirely, to prove the
     // branch itself rather than leave it an untested assumption about code nothing exercises.
     const freshSaleId = brandSaleId("22222222-2222-4222-8222-222222222222");
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       // total is "0.00" with no tender and no settlement — the simplest possible sale row now that
       // migration 0012 dropped `tip_amount`/`amount_charged` and retired the commit-time
@@ -498,7 +503,6 @@ describe("recordSale — invoice type selection", () => {
       // since only one is hashed), so this sale's own total is irrelevant to the assertion below.
       await tx.insert(sales).values({
         id: freshSaleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -514,7 +518,6 @@ describe("recordSale — invoice type selection", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: freshSaleId,
@@ -544,11 +547,10 @@ describe("recordSale — invoice type selection", () => {
     invoiceNumber: number,
     counterparty: { taxId: string; legalName: string; countryCode: string },
   ): Promise<void> {
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: saleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -563,7 +565,6 @@ describe("recordSale — invoice type selection", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: brandSaleId(saleId),
@@ -628,17 +629,13 @@ describe("recordSale — invoice type selection", () => {
 
 describe("checkIntegrity", () => {
   it("reports nothing checked on a node that has never sold", async () => {
-    const report = await withTenant(pg.db, tenantId, (tx) =>
-      backend.checkIntegrity(tx, tenantId, nodeId),
-    );
+    const report = await withTransaction(pg.db, (tx) => backend.checkIntegrity(tx, nodeId));
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
   it("verifies against the chain the same node actually has after a sale", async () => {
     await sell();
-    const report = await withTenant(pg.db, tenantId, (tx) =>
-      backend.checkIntegrity(tx, tenantId, nodeId),
-    );
+    const report = await withTransaction(pg.db, (tx) => backend.checkIntegrity(tx, nodeId));
     expect(report.ok).toBe(true);
   });
 });
@@ -646,19 +643,19 @@ describe("checkIntegrity", () => {
 describe("pendingCount", () => {
   it("counts the pending envios row a sale just created", async () => {
     await sell();
-    expect(await backend.pendingCount(tenantId, nodeId)).toBe(1);
+    expect(await backend.pendingCount(nodeId)).toBe(1);
   });
 
   it("does not count another node's pending records", async () => {
     await sell();
     const other = await seedTenantWithSif(pg.db);
-    expect(await backend.pendingCount(other.tenantId, other.nodeId)).toBe(0);
+    expect(await backend.pendingCount(other.nodeId)).toBe(0);
   });
 
   it("drops once the sidecar row is no longer pendiente", async () => {
     await sell();
-    await pg.db.execute(sql`update envios set estado = 'aceptado' where tenant_id = ${tenantId}`);
-    expect(await backend.pendingCount(tenantId, nodeId)).toBe(0);
+    await pg.db.execute(sql`update envios set estado = 'aceptado'`);
+    expect(await backend.pendingCount(nodeId)).toBe(0);
   });
 });
 
@@ -668,24 +665,24 @@ describe("pendingCount", () => {
  * working-order.pg.test.ts and till-api.pg.test.ts suites exercise replay through the backend.
  */
 describe("filedReceiptFor", () => {
-  it("returns the filed issuer after the tenant identity changes", async () => {
+  it("returns the filed issuer after the taxpayer's own identity changes", async () => {
     // PGlite covers this read-back: the assertion concerns persisted values, not privileges or concurrency.
     const { saleId } = await sell();
     const original = await pg.db.execute<{ legal_name: string; tax_id: string }>(
-      sql`select legal_name, tax_id from tenants where id = ${tenantId}`,
+      sql`select legal_name, tax_id from tenants limit 1`,
     );
     const issuer = { legalName: original.rows[0]!.legal_name, taxId: original.rows[0]!.tax_id };
     await pg.db.execute(
-      sql`update tenants set legal_name = 'New venue identity', tax_id = ${"changed-" + tenantId} where id = ${tenantId}`,
+      sql`update tenants set legal_name = 'New venue identity', tax_id = 'changed-tax-id'`,
     );
-    const filed = await withTenant(pg.db, tenantId, (tx) => backend.filedReceiptFor(tx, saleId));
+    const filed = await withTransaction(pg.db, (tx) => backend.filedReceiptFor(tx, saleId));
     expect(filed).toHaveProperty("issuer", issuer);
     const current = await pg.db.execute<{ legal_name: string; tax_id: string }>(
-      sql`select legal_name, tax_id from tenants where id = ${tenantId}`,
+      sql`select legal_name, tax_id from tenants limit 1`,
     );
     expect(current.rows[0]).toEqual({
       legal_name: "New venue identity",
-      tax_id: "changed-" + tenantId,
+      tax_id: "changed-tax-id",
     });
   });
 
@@ -703,11 +700,10 @@ describe("filedReceiptFor", () => {
     // `registros_facturacion.sale_id` FKs onto `sales.id`, so the sale row must exist before the
     // registro is chained — inserted directly (like the "F1" case above), bypassing core, so the
     // divergence-prone breakdown reaches the backend verbatim.
-    const ref = await withTenant(pg.db, tenantId, async (tx) => {
+    const ref = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: freshSaleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -723,7 +719,6 @@ describe("filedReceiptFor", () => {
         fiscalState: "recorded",
       });
       return backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: freshSaleId,
@@ -740,9 +735,7 @@ describe("filedReceiptFor", () => {
     });
     expect(ref.verificationUrl).toBeTruthy();
 
-    const filed = await withTenant(pg.db, tenantId, (tx) =>
-      backend.filedReceiptFor(tx, freshSaleId),
-    );
+    const filed = await withTransaction(pg.db, (tx) => backend.filedReceiptFor(tx, freshSaleId));
     expect(filed).toBeDefined();
     // The QR re-derived from the stored record equals the one `recordSale` returned at filing time.
     expect(filed!.verificationUrl).toBe(ref.verificationUrl);
@@ -765,9 +758,7 @@ describe("filedReceiptFor", () => {
 
   it("returns undefined for a sale with no filed alta", async () => {
     const neverFiled = brandSaleId("00000000-0000-4000-8000-000000000000");
-    const filed = await withTenant(pg.db, tenantId, (tx) =>
-      backend.filedReceiptFor(tx, neverFiled),
-    );
+    const filed = await withTransaction(pg.db, (tx) => backend.filedReceiptFor(tx, neverFiled));
     expect(filed).toBeUndefined();
   });
 });

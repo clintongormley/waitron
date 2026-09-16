@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -10,7 +10,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -24,48 +23,46 @@ import "./errors.js";
 // PGlite, not real Postgres: this suite proves the ROUTES — the request/response boundary, the body +
 // id screens, the permission gate wiring — end to end in-process, the
 // same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
-// the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTenant` +
+// the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` +
 // `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
-// turns the staff refusals green→red) and the option-group attach's tenant-consistent composite FK are
+// turns the staff refusals green→red) and the option-group attach's by-id FK are
 // the real-Postgres suite (`catalogue-api.pg.test.ts`); PGlite connects as a superuser holding every
 // grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let locationId: string;
 let managerCookie: string;
 let staffCookie: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedTenant(db);
+    await seedLegacySellingUnits(db);
     // One location for the tenant, seeded as the owner (fixture setup like seedTenant) so
     // the location↔menu membership routes have a `:locationId` to act on. Minimal required columns only.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Main', array['es-ES'], 'Venta') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Main', array['es-ES'], 'Venta') returning id`);
     locationId = loc.rows[0]!.id;
     // Seed a MANAGER (role `manager`, holds `person.manage`) and a STAFF person (role `staff`, holds
     // nothing) as the app role under the tenant, then mint a live management session for each so the
     // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
     // supplied even though these sessions are minted directly rather than via a PIN/password login.
-    const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -76,13 +73,12 @@ const suite = usePgliteDb({
 });
 
 /**
- * The venue the product editor's kitchen routing is checked against. Only `tenantId` and `locationId`
- * are read by `setProductStation`/`setProductCourse`; the fiscal ids are shape-fillers, as they are in
- * the other route suites.
+ * The venue the product editor's kitchen routing is checked against. Only `locationId` is read by
+ * `setProductStation`/`setProductCourse`; the fiscal ids are shape-fillers, as they are in the other
+ * route suites.
  */
-function venueCfgFor(mountedTenantId: string): TillConfig {
+function venueCfg(): TillConfig {
   return {
-    tenantId: brandTenantId(mountedTenantId),
     tillId: brandTillId(crypto.randomUUID()),
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
     seriesId: brandSeriesId(crypto.randomUUID()),
@@ -94,16 +90,13 @@ function venueCfgFor(mountedTenantId: string): TillConfig {
   };
 }
 
-function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
+function mountApp(venueLocale = "es-ES"): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
-    // cfg.nodeId is required but this in-process suite asserts route mechanics, not the captured
-    // origin (that is sync-origin.test.ts's job); any valid node id satisfies the type.
     {
       db: suite.db,
-      cfg: { tenantId: mountedTenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
-      venueCfg: venueCfgFor(mountedTenantId),
+      venueCfg: venueCfg(),
       venueLocale,
     },
     noopLog,
@@ -113,9 +106,9 @@ function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
 
 /** A live kitchen station and course of the seeded venue, as the app role. */
 async function seedRouting(): Promise<{ stationId: string; courseId: string }> {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const cfg = venueCfgFor(tenantId);
+    const cfg = venueCfg();
     const station = await createStation(tx, cfg, { name: `Pass ${crypto.randomUUID()}` });
     const course = await createCourse(tx, cfg, { name: `Course ${crypto.randomUUID()}` });
     return { stationId: station.id, courseId: course.id };
@@ -808,9 +801,7 @@ describe("mountCatalogueApi — products", () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Editor catalogue");
     const unitId = (
-      await suite.db.execute<{ id: string }>(
-        sql`select id from units where tenant_id = ${tenantId} and seed_key = 'each'`,
-      )
+      await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
     const category = await send(app, "POST", "/management-api/categories", {
       body: { name: { es: "Cafés" } },
@@ -920,9 +911,7 @@ describe("mountCatalogueApi — products", () => {
     extra: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
     const unitId = (
-      await suite.db.execute<{ id: string }>(
-        sql`select id from units where tenant_id = ${tenantId} and seed_key = 'each'`,
-      )
+      await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
     void app;
     return {
@@ -2271,45 +2260,24 @@ describe("menu name edits", () => {
       ).status,
     ).toBe(404);
   });
-
-  it("does not rename another tenant's menu", async () => {
-    const otherTenant = await seedTenant(suite.db);
-    const result = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${otherTenant}, 'Other') returning id`,
-    );
-    const id = result.rows[0]!.id;
-    expect(
-      (
-        await send(mountApp(), "PATCH", `/management-api/catalogues/${id}`, {
-          body: { name: "Wrong" },
-        })
-      ).status,
-    ).toBe(404);
-    const row = await suite.db.execute<{ name: string }>(
-      sql`select name from catalogues where id = ${id}`,
-    );
-    expect(row.rows).toEqual([{ name: "Other" }]);
-  });
 });
 
 describe("menu-section translations", () => {
-  it("updates translations with default-language validation and scopes section ids to the venue", async () => {
+  it("updates translations with default-language validation and rejects unknown section ids", async () => {
     const app = mountApp("en-GB");
-    const foreignTenantId = await seedTenant(suite.db);
-    const seedSection = async (ownerId: string) => {
+    const seedSection = async () => {
       const menu = await suite.db.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${ownerId}, 'Section edit') returning id`);
+        insert into catalogues (name) values ('Section edit') returning id`);
       return (
         await suite.db.execute<{ id: string }>(sql`
-        insert into menu_sections (tenant_id, menu_id, name)
-        values (${ownerId}, ${menu.rows[0]!.id}, '{"en":"Cocktails","de":"Getränke"}'::jsonb) returning id`)
+        insert into menu_sections (menu_id, name)
+        values (${menu.rows[0]!.id}, '{"en":"Cocktails","de":"Getränke"}'::jsonb) returning id`)
       ).rows[0]!.id;
     };
-    const sectionId = await seedSection(tenantId);
-    const foreignSectionId = await seedSection(foreignTenantId);
+    const sectionId = await seedSection();
     await suite.db.execute(sql`
-      insert into content_languages (tenant_id, default_language, languages) values (${tenantId}, 'en', array['en','fr'])
-      on conflict (tenant_id) do update set default_language = 'en', languages = array['en','fr']`);
+      insert into content_languages (default_language, languages) values ('en', array['en','fr'])
+      on conflict (id) do update set default_language = 'en', languages = array['en','fr']`);
     try {
       const path = `/management-api/menu-sections/${sectionId}`;
       const input = { name: { en: "Drinks", fr: "Boissons", de: "Getränke" } };
@@ -2331,13 +2299,6 @@ describe("menu-section translations", () => {
       ).toBe(400);
       expect(
         (
-          await send(app, "PATCH", `/management-api/menu-sections/${foreignSectionId}`, {
-            body: input,
-          })
-        ).status,
-      ).toBe(404);
-      expect(
-        (
           await send(app, "PATCH", `/management-api/menu-sections/${crypto.randomUUID()}`, {
             body: input,
           })
@@ -2345,26 +2306,22 @@ describe("menu-section translations", () => {
       ).toBe(404);
       expect((await send(app, "PATCH", path, { body: input })).status).toBe(204);
       const own = await suite.db.execute<{ name: Record<string, string> }>(
-        sql`select name from menu_sections where tenant_id = ${tenantId} and id = ${sectionId}`,
-      );
-      const foreign = await suite.db.execute<{ name: Record<string, string> }>(
-        sql`select name from menu_sections where tenant_id = ${foreignTenantId} and id = ${foreignSectionId}`,
+        sql`select name from menu_sections where id = ${sectionId}`,
       );
       expect(own.rows).toEqual([input]);
-      expect(foreign.rows).toEqual([{ name: { en: "Cocktails", de: "Getränke" } }]);
     } finally {
-      await suite.db.execute(sql`delete from content_languages where tenant_id = ${tenantId}`);
+      await suite.db.execute(sql`delete from content_languages`);
     }
   });
 });
 
 describe("menu-section list", () => {
-  it("lists empty sections in display order without exposing another tenant's menu", async () => {
+  it("lists empty sections in display order", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, "Empty sections");
-    await suite.db.execute(sql`insert into menu_sections (tenant_id, menu_id, name, display_order)
-      values (${tenantId}, ${menuId}, '{"es":"Postres"}'::jsonb, 2),
-             (${tenantId}, ${menuId}, '{"es":"Bebidas"}'::jsonb, 1)`);
+    await suite.db.execute(sql`insert into menu_sections (menu_id, name, display_order)
+      values (${menuId}, '{"es":"Postres"}'::jsonb, 2),
+             (${menuId}, '{"es":"Bebidas"}'::jsonb, 1)`);
     const path = `/management-api/catalogues/${menuId}/sections`;
     expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
@@ -2381,17 +2338,6 @@ describe("menu-section list", () => {
       { menuId, name: { es: "Bebidas" }, displayOrder: 1, active: true, hasId: true },
       { menuId, name: { es: "Postres" }, displayOrder: 2, active: true, hasId: true },
     ]);
-    const foreignTenantId = await seedTenant(suite.db);
-    const foreignMenu = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${foreignTenantId}, 'Private') returning id`,
-    );
-    const foreignMenuId = foreignMenu.rows[0]!.id;
-    await suite.db.execute(
-      sql`insert into menu_sections (tenant_id, menu_id, name) values (${foreignTenantId}, ${foreignMenuId}, '{"en":"Private"}'::jsonb)`,
-    );
-    expect(
-      (await send(app, "GET", `/management-api/catalogues/${foreignMenuId}/sections`)).status,
-    ).toBe(404);
     expect(
       (await send(app, "GET", `/management-api/catalogues/${crypto.randomUUID()}/sections`)).status,
     ).toBe(404);
@@ -2400,111 +2346,12 @@ describe("menu-section list", () => {
 });
 
 describe("catalogue API tenant authorization", () => {
-  it.each(["catalogues", "location catalogues"])(
-    "lists only its own %s for an authorized manager",
-    async (listing) => {
-      const other = await seedTenant(suite.db);
-      const foreign = await suite.db.execute<{ id: string }>(
-        sql`insert into catalogues (tenant_id, name) values (${other}, 'Private menu') returning id`,
-      );
-      const app = mountApp();
-      const ownId = await createCatalogueVia(app, "Own menu");
-      const path =
-        listing === "catalogues"
-          ? "/management-api/catalogues"
-          : `/management-api/locations/${locationId}/catalogues`;
-      const response = await send(app, "GET", path);
-      expect(response.status).toBe(200);
-      const rows = (await response.json()) as { id: string }[];
-      expect(rows.map((row) => row.id)).toContain(ownId);
-      expect(rows.map((row) => row.id)).not.toContain(foreign.rows[0]!.id);
-    },
-  );
-
-  it("does not return another tenant's products through its catalogue ID to an authorized manager", async () => {
-    const other = await seedTenant(suite.db);
-    const foreign = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${other}, 'Private products') returning id`,
-    );
-    await suite.db
-      .execute(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-      values (${other}, ${foreign.rows[0]!.id}, 'Privado', 'each', '2', 'general')`);
+  it("refuses editing an item through a group it does not belong to", async () => {
     const app = mountApp();
-    const ownMenuId = await createCatalogueVia(app, "Own products");
-    const ownProductId = await createProductVia(app, ownMenuId);
-    const own = await send(app, "GET", `/management-api/catalogues/${ownMenuId}/products`);
-    expect(own.status).toBe(200);
-    expect(await own.json()).toMatchObject([{ id: ownProductId }]);
-    const response = await send(
-      app,
-      "GET",
-      `/management-api/catalogues/${foreign.rows[0]!.id}/products`,
-    );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual([]);
-  });
-
-  it("refuses a manager session from another tenant before reading or writing language configuration", async () => {
-    const other = await seedTenant(suite.db);
-    const app = mountApp("en", other);
-    expect((await send(app, "GET", "/management-api/content-languages")).status).toBe(403);
-    expect(
-      (
-        await send(app, "PUT", "/management-api/content-languages", {
-          body: { defaultLanguage: "fr", languages: ["fr"] },
-        })
-      ).status,
-    ).toBe(403);
-    const config = await suite.db.execute(
-      sql`select * from content_languages where tenant_id = ${other}`,
-    );
-    expect(config.rows).toEqual([]);
-  });
-
-  it("refuses foreign product image and description edits and preserves the original fields", async () => {
-    const other = await seedTenant(suite.db);
-    const menu = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${other}, 'Other menu') returning id`,
-    );
-    const product = await suite.db.execute<{
-      id: string;
-    }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image)
-      values (${other}, ${menu.rows[0]!.id}, 'Pan', 'each', '2', 'general', 'original.png') returning id`);
-    const result = await send(
-      mountApp(),
-      "PATCH",
-      `/management-api/products/${product.rows[0]!.id}`,
-      { body: { image: null, name: "Cambio" } },
-    );
-    expect(result.status).toBe(403);
-    const after = await suite.db.execute(
-      sql`select image, name from products where tenant_id = ${other} and id = ${product.rows[0]!.id}`,
-    );
-    expect(after.rows).toEqual([{ image: "original.png", name: "Pan" }]);
-  });
-
-  it("refuses foreign modifier edits and a mismatched item group, including empty patches", async () => {
-    const other = await seedTenant(suite.db);
-    const group = await suite.db.execute<{ id: string }>(
-      sql`insert into option_groups (tenant_id, name) values (${other}, '{"es":"Tamaño"}'::jsonb) returning id`,
-    );
-    const item = await suite.db.execute<{ id: string }>(
-      sql`insert into option_group_items (tenant_id, group_id, name) values (${other}, ${group.rows[0]!.id}, '{"es":"Grande"}'::jsonb) returning id`,
-    );
-    const app = mountApp();
-    for (const path of [
-      `/management-api/option-groups/${group.rows[0]!.id}`,
-      `/management-api/option-groups/${group.rows[0]!.id}/items/${item.rows[0]!.id}`,
-    ]) {
-      expect((await send(app, "PATCH", path, { body: { name: { es: "Cambio" } } })).status).toBe(
-        403,
-      );
-      expect((await send(app, "PATCH", path, { body: {} })).status).toBe(403);
-    }
     const ownA = await createGroupVia(app, { name: { es: "A" } });
     const ownB = await createGroupVia(app, { name: { es: "B" } });
     const ownItem = await suite.db.execute<{ id: string }>(
-      sql`insert into option_group_items (tenant_id, group_id, name) values (${tenantId}, ${ownA.id}, '{"es":"Original"}'::jsonb) returning id`,
+      sql`insert into option_group_items (group_id, name) values (${ownA.id}, '{"es":"Original"}'::jsonb) returning id`,
     );
     expect(
       (
@@ -2517,13 +2364,9 @@ describe("catalogue API tenant authorization", () => {
       ).status,
     ).toBe(403);
     const names = await suite.db.execute(
-      sql`select name from option_group_items where id in (${item.rows[0]!.id}, ${ownItem.rows[0]!.id}) order by name::text`,
+      sql`select name from option_group_items where id = ${ownItem.rows[0]!.id}`,
     );
-    expect(names.rows).toEqual([{ name: { es: "Grande" } }, { name: { es: "Original" } }]);
-    expect(
-      (await suite.db.execute(sql`select name from option_groups where id=${group.rows[0]!.id}`))
-        .rows,
-    ).toEqual([{ name: { es: "Tamaño" } }]);
+    expect(names.rows).toEqual([{ name: { es: "Original" } }]);
   });
 });
 

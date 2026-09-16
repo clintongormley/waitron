@@ -6,12 +6,12 @@ import { AppError } from "./errors.js";
  * because the symbol has no runtime existence at all — it is erased entirely, so a branded id
  * costs nothing at runtime and is byte-identical to the string it wraps.
  *
- * A `unique symbol` rather than a string-keyed marker such as `{ __brand: "TenantId" }`, because
+ * A `unique symbol` rather than a string-keyed marker such as `{ __brand: "SaleId" }`, because
  * a string key is forgeable: any object literal with that property satisfies the type, and the
  * key shows up in `keyof`, in autocomplete and in `JSON.stringify` output. A unique symbol
  * declared here cannot be produced anywhere else in the repo.
  *
- * Rejected alternative: wrapper classes (`class TenantId { constructor(readonly value: string) }`).
+ * Rejected alternative: wrapper classes (`class SaleId { constructor(readonly value: string) }`).
  * They brand just as well but allocate on every construction and stop the value being passed
  * straight into a Drizzle bind parameter, so every query site grows a `.value` that is easy to
  * forget in exactly one place.
@@ -20,7 +20,6 @@ export declare const idBrand: unique symbol;
 
 export type Branded<T, B extends string> = T & { readonly [idBrand]: B };
 
-export type TenantId = Branded<string, "TenantId">;
 export type LocationId = Branded<string, "LocationId">;
 export type TillId = Branded<string, "TillId">;
 export type NodeId = Branded<string, "NodeId">;
@@ -53,7 +52,6 @@ function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
   return value as Branded<string, B>;
 }
 
-export const tenantId = (value: string): TenantId => brandId(value, "TenantId");
 export const locationId = (value: string): LocationId => brandId(value, "LocationId");
 export const tillId = (value: string): TillId => brandId(value, "TillId");
 export const nodeId = (value: string): NodeId => brandId(value, "NodeId");

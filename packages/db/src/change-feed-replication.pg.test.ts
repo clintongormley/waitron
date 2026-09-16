@@ -65,7 +65,6 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
       );
       await vi.waitFor(() =>
         expect(changed).toHaveBeenCalledWith({
-          tenantId: "tenant",
           resources: [
             { type: "print_jobs", id: "job" },
             { type: "printers", id: "printer" },
@@ -77,14 +76,12 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
       await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
       expect(changed.mock.calls.map(([event]) => event)).toEqual([
         {
-          tenantId: "tenant",
           resources: [
             { type: "print_jobs", id: "job" },
             { type: "printers", id: "printer" },
           ],
         },
         {
-          tenantId: "tenant",
           resources: [
             { type: "print_jobs", id: "job" },
             { type: "printers", id: "new-printer" },
@@ -95,7 +92,6 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
       await nodeA.run("delete from live_replica_probe where id = 'job'");
       await vi.waitFor(() =>
         expect(changed).toHaveBeenCalledExactlyOnceWith({
-          tenantId: "tenant",
           resources: [
             { type: "print_jobs", id: "job" },
             { type: "printers", id: "new-printer" },

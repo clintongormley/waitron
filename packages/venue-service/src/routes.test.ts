@@ -12,7 +12,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId, tenantId } from "@waitron/shared";
+import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -43,39 +43,32 @@ interface Fixture {
   stationId: string;
   menuId: string;
   categoryId: string;
-  tenantId: string;
 }
 
-async function fixture(existingTenantId?: string): Promise<Fixture> {
-  const rawTenantId = existingTenantId ?? (await seedTenant(db));
-  const scopedTenantId = tenantId(rawTenantId);
+async function fixture(): Promise<Fixture> {
+  await seedTenant(db);
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${scopedTenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
   const scopedLocationId = locationId(location.rows[0]!.id);
   const zone = await db.execute<{ id: string }>(sql`
-    insert into floor_zones (tenant_id, location_id, name)
-    values (${scopedTenantId}, ${scopedLocationId}, 'Terrace') returning id`);
+    insert into floor_zones (location_id, name) values (${scopedLocationId}, 'Terrace') returning id`);
   const station = await db.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name)
-    values (${scopedTenantId}, ${scopedLocationId}, 'Terrace bar') returning id`);
+    insert into kitchen_stations (location_id, name) values (${scopedLocationId}, 'Terrace bar') returning id`);
 
   const { menuId, categoryId, managerSessionId, staffSessionId } = await db.transaction(
     async (tx) => {
-      const menu = await createCatalogue(tx, scopedTenantId, { name: "Drinks" });
-      const category = await createCategory(tx, scopedTenantId, { name: { en: "Cocktails" } });
+      const menu = await createCatalogue(tx, { name: "Drinks" });
+      const category = await createCategory(tx, { name: { en: "Cocktails" } });
       const manager = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${scopedTenantId}, ${`Manager ${scopedLocationId}`}, ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values (${`Manager ${scopedLocationId}`}, ${hashPin("1234")}, 'manager') returning id`);
       const staff = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${scopedTenantId}, ${`Staff ${scopedLocationId}`}, ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values (${`Staff ${scopedLocationId}`}, ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId: scopedTenantId,
         personId: manager.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId: scopedTenantId,
         personId: staff.rows[0]!.id,
       });
       return {
@@ -92,14 +85,13 @@ async function fixture(existingTenantId?: string): Promise<Fixture> {
     app,
     {
       db,
-      cfg: { tenantId: scopedTenantId, locationId: scopedLocationId },
+      cfg: { locationId: scopedLocationId },
       core: {} as ModuleRouteContext["core"],
     },
     noopLog,
   );
   return {
     app,
-    tenantId: rawTenantId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSessionId}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSessionId}`,
     zoneId: zone.rows[0]!.id,
@@ -342,101 +334,92 @@ describe("venue service management routes", () => {
     });
   });
 
-  it("scopes edited rows and route references to their tenant and venue", async () => {
+  it("scopes edited rows and route references to their venue", async () => {
+    // A SECOND venue (a new location) in the SAME tenant — one tenant per database, so the scoping
+    // that still exists is by LOCATION, not tenant. `fx`'s manager (location L1) must not reach rows
+    // or references that live in `other`'s location (L2). (The cross-TENANT half of this probe was
+    // dropped: with one tenant per database it asserts a property the schema no longer has.)
     const fx = await fixture();
-    for (const other of [await fixture(), await fixture(fx.tenantId)]) {
-      const department = (await (
-        await send(
-          other.app,
-          "POST",
-          "/management-api/venue-service/departments",
-          other.managerCookie,
-          { name: "Other", defaultServiceMode: "prepay" },
-        )
-      ).json()) as { id: string };
-      const route = (await (
-        await send(other.app, "POST", "/management-api/venue-service/routes", other.managerCookie, {
-          categoryId: other.categoryId,
-          noPreparation: true,
-        })
-      ).json()) as { id: string };
-      expect(
-        (
-          await send(
-            fx.app,
-            "PATCH",
-            `/management-api/venue-service/departments/${department.id}`,
-            fx.managerCookie,
-            { name: "Wrong", tradingName: "Wrong", defaultServiceMode: "prepay" },
-          )
-        ).status,
-      ).toBe(404);
-      expect(
-        (
-          await send(
-            fx.app,
-            "PUT",
-            `/management-api/venue-service/routes/${route.id}`,
-            fx.managerCookie,
-            { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
-          )
-        ).status,
-      ).toBe(404);
-      const own = (await (
-        await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-          categoryId: fx.categoryId,
-          noPreparation: true,
-        })
-      ).json()) as { id: string };
-      expect(
-        (
-          await send(
-            fx.app,
-            "PUT",
-            `/management-api/venue-service/routes/${own.id}`,
-            fx.managerCookie,
-            { zoneId: null, categoryId: fx.categoryId, stationId: other.stationId },
-          )
-        ).status,
-      ).toBe(409);
-      expect(
-        (
-          await send(
-            fx.app,
-            "PUT",
-            `/management-api/venue-service/routes/${own.id}`,
-            fx.managerCookie,
-            { zoneId: other.zoneId, categoryId: fx.categoryId, noPreparation: true },
-          )
-        ).status,
-      ).toBe(404);
-      if (other.tenantId !== fx.tenantId)
-        expect(
-          (
-            await send(
-              fx.app,
-              "PUT",
-              `/management-api/venue-service/routes/${own.id}`,
-              fx.managerCookie,
-              { zoneId: null, categoryId: other.categoryId, noPreparation: true },
-            )
-          ).status,
-        ).toBe(404);
+    const other = await fixture();
+    const department = (await (
       await send(
-        fx.app,
-        "DELETE",
-        `/management-api/venue-service/routes/${own.id}`,
-        fx.managerCookie,
-      );
-      expect(
-        await (
-          await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
-        ).json(),
-      ).toMatchObject({
-        departments: [{ id: department.id, name: "Other" }],
-        routes: [{ id: route.id, categoryId: other.categoryId, noPreparation: true }],
-      });
-    }
+        other.app,
+        "POST",
+        "/management-api/venue-service/departments",
+        other.managerCookie,
+        { name: "Other", defaultServiceMode: "prepay" },
+      )
+    ).json()) as { id: string };
+    const route = (await (
+      await send(other.app, "POST", "/management-api/venue-service/routes", other.managerCookie, {
+        categoryId: other.categoryId,
+        noPreparation: true,
+      })
+    ).json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PATCH",
+          `/management-api/venue-service/departments/${department.id}`,
+          fx.managerCookie,
+          { name: "Wrong", tradingName: "Wrong", defaultServiceMode: "prepay" },
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/routes/${route.id}`,
+          fx.managerCookie,
+          { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
+        )
+      ).status,
+    ).toBe(404);
+    const own = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
+        categoryId: fx.categoryId,
+        noPreparation: true,
+      })
+    ).json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/routes/${own.id}`,
+          fx.managerCookie,
+          { zoneId: null, categoryId: fx.categoryId, stationId: other.stationId },
+        )
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/routes/${own.id}`,
+          fx.managerCookie,
+          { zoneId: other.zoneId, categoryId: fx.categoryId, noPreparation: true },
+        )
+      ).status,
+    ).toBe(404);
+    await send(
+      fx.app,
+      "DELETE",
+      `/management-api/venue-service/routes/${own.id}`,
+      fx.managerCookie,
+    );
+    expect(
+      await (
+        await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
+      ).json(),
+    ).toMatchObject({
+      departments: [{ id: department.id, name: "Other" }],
+      routes: [{ id: route.id, categoryId: other.categoryId, noPreparation: true }],
+    });
   });
 
   it("rejects a duplicate route edit and keeps the original route", async () => {
@@ -448,7 +431,7 @@ describe("venue service management routes", () => {
       })
     ).json()) as { id: string };
     const secondCategory = await db.transaction((tx) =>
-      createCategory(tx, tenantId(fx.tenantId), { name: { en: "Other" } }),
+      createCategory(tx, { name: { en: "Other" } }),
     );
     const route = (await (
       await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {

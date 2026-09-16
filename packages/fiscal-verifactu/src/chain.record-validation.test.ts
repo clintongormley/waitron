@@ -1,11 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, sales, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, saleId as brandSaleId } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -17,7 +17,6 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 // code before the insert. Nothing tested depends on grants being enforced or on two writers
 // racing, which are the two properties PGlite cannot show.
 let backend: VerifactuBackend;
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -25,7 +24,7 @@ let seriesId: SeriesId;
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -42,9 +41,9 @@ async function useSeriesCode(code: string): Promise<void> {
 }
 
 function sell() {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
 
@@ -61,21 +60,18 @@ describe("a record AEAT could not accept never enters the chain", () => {
     await useSeriesCode("Serie A");
     await expect(sell()).rejects.toMatchObject({ code: "fiscal.record_invalid" });
 
-    const registros = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const registros = await pg.db.select().from(registrosFacturacion);
     expect(registros).toEqual([]);
 
     // The sale itself must be gone too — `recordSale` writes the sale and the fiscal record in ONE
     // transaction, so a refusal that left a sale behind would be a sale with no fiscal record.
-    const soldRows = await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId));
+    const soldRows = await pg.db.select().from(sales);
     expect(soldRows).toEqual([]);
 
     // And the chain head must not have advanced: a refused record leaves the node exactly where it
     // was, so the next legitimate sale is still the chain's first record.
     const heads = await pg.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where tenant_id = ${tenantId} and node_id = ${nodeId}`,
+      sql`select secuencia from cadenas where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
   });
@@ -85,10 +81,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     const { saleId } = await sell();
     expect(saleId).toBeDefined();
 
-    const [registro] = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const [registro] = await pg.db.select().from(registrosFacturacion);
     expect(registro?.numSerieFactura).toBe("FS/1");
   });
 
@@ -107,7 +100,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     };
 
     await expect(
-      withTenant(pg.db, tenantId, (tx) => appendToChain(tx, tenantId, nodeId, registro)),
+      withTransaction(pg.db, (tx) => appendToChain(tx, nodeId, registro)),
     ).rejects.toMatchObject({
       code: "fiscal.record_invalid",
       params: { fields: ["NumSerieFacturaAnulada"] },
@@ -133,7 +126,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
    * case needs is the DERIVED one, which cannot disagree with itself. */
   function mismatchedSale() {
     return {
-      ...saleInput({ tenantId, tillId, nodeId, seriesId }),
+      ...saleInput({ tillId, nodeId, seriesId }),
       total: decimal("9999.00"),
       settlement: { kind: "deferred" } as const,
     };
@@ -141,28 +134,25 @@ describe("a record whose totals disagree with themselves is written, filed and f
 
   it("records the sale rather than refusing it", async () => {
     await useSeriesCode("FS");
-    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+    const { saleId } = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, mismatchedSale());
     });
     expect(saleId).toBeDefined();
 
-    const registros = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const registros = await pg.db.select().from(registrosFacturacion);
     expect(registros).toHaveLength(1);
   });
 
   it("raises a warning incident against that sale", async () => {
     await useSeriesCode("FS");
-    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+    const { saleId } = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, mismatchedSale());
     });
 
     const rows = await pg.db.execute<{ code: string; severity: string; sale_id: string }>(
-      sql`select code, severity, sale_id from incidents where tenant_id = ${tenantId}`,
+      sql`select code, severity, sale_id from incidents`,
     );
     expect(rows.rows).toEqual([
       expect.objectContaining({
@@ -177,7 +167,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
     await useSeriesCode("FS");
     await sell();
 
-    const rows = await pg.db.execute(sql`select 1 from incidents where tenant_id = ${tenantId}`);
+    const rows = await pg.db.execute(sql`select 1 from incidents`);
     expect(rows.rows).toEqual([]);
   });
 });
@@ -191,9 +181,9 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
    *
    * `packages/core`'s `recordSale` hardcodes `counterparty: null`, so the F1 branch is reached by
    * calling the backend directly — the same bypass `backend.test.ts`'s own F1 cases use. The sale
-   * row is inserted on the SAME `withTenant` transaction, which is what makes the "nothing was
+   * row is inserted on the SAME `withTransaction` transaction, which is what makes the "nothing was
    * written" assertions below meaningful: a refusal rolls back both or neither. */
-  // `sales_pkey` is global while the tenant is fresh each `beforeEach`, so each case mints its own
+  // `sales_pkey` is global while the node is fresh each `beforeEach`, so each case mints its own
   // id and invoice number — a shared literal would make a case that EXPECTS the write to succeed
   // depend on its siblings having rolled theirs back.
   let sequence = 0;
@@ -202,11 +192,10 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     sequence += 1;
     const saleId = `77777777-7777-4777-8777-7777777770${String(sequence).padStart(2, "0")}`;
     const invoiceNumber = 900 + sequence;
-    return withTenant(pg.db, tenantId, async (tx) => {
+    return withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: saleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -221,7 +210,6 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: brandSaleId(saleId),
@@ -255,17 +243,14 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
       code: "fiscal.record_invalid",
     });
 
-    const registros = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const registros = await pg.db.select().from(registrosFacturacion);
     expect(registros).toEqual([]);
 
-    const soldRows = await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId));
+    const soldRows = await pg.db.select().from(sales);
     expect(soldRows).toEqual([]);
 
     const heads = await pg.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where tenant_id = ${tenantId} and node_id = ${nodeId}`,
+      sql`select secuencia from cadenas where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
   });
@@ -274,10 +259,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     await useSeriesCode("FS");
     await sellToNamedRecipient("Cliente SL");
 
-    const [registro] = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const [registro] = await pg.db.select().from(registrosFacturacion);
     expect(registro?.destinatarios).toEqual({
       IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
     });

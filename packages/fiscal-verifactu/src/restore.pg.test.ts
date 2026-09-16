@@ -1,7 +1,7 @@
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
@@ -20,30 +20,21 @@ describe("restoreFiscal", () => {
       sql`select location_id from nodes where id = ${till.nodeId}`,
     );
     const node: ProvisionedNode = {
-      tenantId: till.tenantId,
       locationId: brandLocationId(rows[0]!.location_id),
       nodeId: till.nodeId,
     };
     const sale = await seedSale(suite.db, till, 1);
     await suite.db.transaction((tx) =>
-      appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale, 1, 1)),
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, sale, 1, 1)),
     );
-    const before = await withTenant(suite.db, till.tenantId, (tx) =>
-      currentSif(tx, till.tenantId, till.nodeId),
-    );
+    const before = await withTransaction(suite.db, (tx) => currentSif(tx, till.nodeId));
 
-    const outcome = await withTenant(suite.db, till.tenantId, (tx) => restoreFiscal(tx, node, NOW));
+    const outcome = await withTransaction(suite.db, (tx) => restoreFiscal(tx, node, NOW));
 
-    const after = await withTenant(suite.db, till.tenantId, (tx) =>
-      currentSif(tx, till.tenantId, till.nodeId),
-    );
+    const after = await withTransaction(suite.db, (tx) => currentSif(tx, till.nodeId));
     expect(after.id).not.toBe(before.id);
     expect(after.numeroInstalacion).toBeGreaterThanOrEqual(installationFloor(NOW));
-    expect(
-      await withTenant(suite.db, till.tenantId, (tx) =>
-        esPrimerRegistro(tx, till.tenantId, till.nodeId),
-      ),
-    ).toBe(true);
+    expect(await withTransaction(suite.db, (tx) => esPrimerRegistro(tx, till.nodeId))).toBe(true);
     const { rows: ledger } = await suite.db.execute<{ n: number }>(
       sql`select count(*)::int as n from registros_facturacion where node_id = ${till.nodeId}`,
     );

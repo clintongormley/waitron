@@ -63,7 +63,6 @@ describe("reserved-sif primitives", () => {
     );
     await withTx((tx) =>
       writeReservedSif(tx, {
-        tenantId: fixture.tenantId,
         nodeId: cloud,
         nif: fixture.nif,
         idSistemaInformatico: SISTEMA,
@@ -72,11 +71,11 @@ describe("reserved-sif primitives", () => {
     );
     // The reserved SIF is the node's live identity (revocado_en IS NULL) and carries the supplied
     // number — never re-minted here.
-    const sif = await withTx((tx) => currentSif(tx, fixture.tenantId, cloud));
+    const sif = await withTx((tx) => currentSif(tx, cloud));
     expect(sif.numeroInstalacion).toBe(numero);
     expect(sif.revocadoEn).toBeNull();
     // ...on a brand-new empty chain (first record).
-    expect(await withTx((tx) => esPrimerRegistro(tx, fixture.tenantId, cloud))).toBe(true);
+    expect(await withTx((tx) => esPrimerRegistro(tx, cloud))).toBe(true);
   });
 
   it("the unique index rejects re-persisting the same (nif, idSistema, numero)", async () => {
@@ -86,7 +85,6 @@ describe("reserved-sif primitives", () => {
     );
     await withTx((tx) =>
       writeReservedSif(tx, {
-        tenantId: fixture.tenantId,
         nodeId: nodeA,
         nif: fixture.nif,
         idSistemaInformatico: SISTEMA,
@@ -96,7 +94,6 @@ describe("reserved-sif primitives", () => {
     await expect(
       withTx((tx) =>
         writeReservedSif(tx, {
-          tenantId: fixture.tenantId,
           nodeId: nodeB,
           nif: fixture.nif,
           idSistemaInformatico: SISTEMA,

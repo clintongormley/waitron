@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -28,7 +28,8 @@ beforeAll(() => {
 });
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -38,18 +39,17 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
  *  verbs' own `location_id` predicate is the only guard against. Returns a full TillConfig scoped to
  *  each. */
 async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const make = async (name: string): Promise<TillConfig> => {
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, ${name}, array[${LOCALE}], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values (${name}, array[${LOCALE}], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, ${`${name} Caja`}) returning id`);
-    const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+      insert into tills (location_id, name)
+      values (${locationId}, ${`${name} Caja`}) returning id`);
+    const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
-      tenantId,
       tillId: brandTillId(till.rows[0]!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
@@ -81,7 +81,7 @@ describe("placement verbs are LOCATION-scoped (a same-tenant cross-location writ
     const { a, b } = await setupTwoVenues();
     const { id: tableA } = await asApp(a, (tx) => createTable(tx, a, { label: "A-1" }));
     const { id: zoneB } = await asApp(b, (tx) => createZone(tx, b, { name: "Zona B" }));
-    // Table A is in scope, but zone B is another venue's. The `dining_tables_zone_fk` is (tenant, zone)
+    // Table A is in scope, but zone B is another venue's. The `dining_tables_zone_fk` is (zone)
     // only, so without the explicit location predicate the cross-location zone would be accepted.
     await expect(
       asApp(a, (tx) => setTablePlacement(tx, a, tableA, { zoneId: zoneB, ...P })),

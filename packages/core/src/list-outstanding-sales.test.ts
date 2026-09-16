@@ -6,28 +6,27 @@ import {
   saleSubstitutions,
   saleVoids,
   tenders,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedBareSale, seedTenant } from "../test/fixtures.js";
 import { listOutstandingSales } from "./list-outstanding-sales.js";
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 function list() {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    return listOutstandingSales(tx, tenantId);
+    return listOutstandingSales(tx);
   });
 }
 
@@ -35,10 +34,9 @@ function list() {
 // sale_settlements row. Tenders first — tenders_reject_post_settlement (WT002) rejects a tender once
 // the settlement row exists.
 async function settleDirectly(saleId: SaleId): Promise<void> {
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await tx.insert(tenders).values({
-      tenantId,
       saleId,
       method: "cash",
       amount: "70.00",
@@ -46,7 +44,6 @@ async function settleDirectly(saleId: SaleId): Promise<void> {
       settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
     });
     await tx.insert(saleSettlements).values({
-      tenantId,
       saleId,
       settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
     });
@@ -57,7 +54,7 @@ describe("listOutstandingSales", () => {
   it("lists an unsettled ordinary sale with amountDue = total", async () => {
     const saleId = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     const out = await list();
@@ -77,12 +74,12 @@ describe("listOutstandingSales", () => {
   it("nets a correction into amountDue and hides the corrective itself", async () => {
     const originalId = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { total: "-5.00", invoiceNumber: 2, correctsSaleId: originalId },
     );
     const out = await list();
@@ -98,7 +95,7 @@ describe("listOutstandingSales", () => {
   it("hides a settled sale", async () => {
     const saleId = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await settleDirectly(saleId);
@@ -108,11 +105,10 @@ describe("listOutstandingSales", () => {
   it("hides a voided sale", async () => {
     const saleId = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await suite.db.insert(saleVoids).values({
-      tenantId,
       saleId,
       reason: "test void",
       voidedAt: new Date("2026-08-01T12:00:00Z").toISOString(),
@@ -124,42 +120,21 @@ describe("listOutstandingSales", () => {
     // A settled simplified ticket, then an F3 that substitutes it.
     const ticketId = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
     await settleDirectly(ticketId);
     const f3Id = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 2 },
     );
     await suite.db
       .insert(saleSubstitutions)
-      .values({ tenantId, substitutionSaleId: f3Id, substitutedSaleId: ticketId });
+      .values({ substitutionSaleId: f3Id, substitutedSaleId: ticketId });
 
     const out = await list();
     expect(out.map((o) => o.saleId)).not.toContain(f3Id);
     expect(out).toHaveLength(0);
-  });
-
-  it("excludes another tenant's outstanding sales", async () => {
-    // Primary tenant (the beforeEach one) has an outstanding sale, so there is something to return.
-    const mineId = await seedBareSale(
-      suite.db,
-      { tenantId, tillId, nodeId, seriesId },
-      { total: "70.00", invoiceNumber: 1 },
-    );
-    // A SECOND, independent tenant with its own outstanding sale. seedTenant with no override mints a
-    // fresh tenant/till/node/series (a genuinely different tenantId), so this is another tenant's row
-    // — not a second till under the same tenant.
-    const other = await seedTenant(suite.db);
-    const theirsId = await seedBareSale(suite.db, other, { total: "40.00", invoiceNumber: 1 });
-
-    // list() runs under the PRIMARY tenant (withTenant + asAppUser), so it must see only its own.
-    const out = await list();
-    const ids = out.map((o) => o.saleId);
-    expect(ids).toContain(mineId);
-    expect(ids).not.toContain(theirsId);
-    expect(out).toHaveLength(1);
   });
 });

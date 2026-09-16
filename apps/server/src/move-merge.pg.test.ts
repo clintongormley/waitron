@@ -14,13 +14,12 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -77,7 +76,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -141,11 +139,11 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -153,7 +151,7 @@ async function setupVenue(): Promise<SeededVenue> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await createProduct(tx, cfg.tenantId, {
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -171,7 +169,7 @@ async function setupVenue(): Promise<SeededVenue> {
 
 /** Seed one active dining table in the venue as the app role; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return createTable(tx, cfg, { label }).then((r) => r.id);
   });
@@ -183,7 +181,7 @@ async function openTabOn(
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId);
   });
@@ -270,7 +268,7 @@ describe("moveTab concurrency (the target FOR UPDATE lock IS the guard)", () => 
       expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (false pass).
 
       const attempt = (d: Database, tabId: string) =>
-        withTenant(d, cfg.tenantId, async (tx) => {
+        withTransaction(d, async (tx) => {
           await asAppUser(tx);
           return moveTab(tx, cfg, tabId, target);
         });
@@ -304,7 +302,7 @@ describe("joinTable → one bill", () => {
     const t1 = await seedTable(cfg, "JP1");
     const t2 = await seedTable(cfg, "JP2");
     const tabId = await openTabOn(cfg, t1, [{ productId: cafe.id, quantity: "1" }]);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await joinTable(tx, cfg, tabId, t2);
     });
@@ -330,7 +328,7 @@ describe("mergeTabs → one registro (H2)", () => {
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
     });
@@ -365,7 +363,7 @@ describe("mergeTabs join → one bill covering both tables", () => {
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false });
     });
@@ -415,7 +413,7 @@ describe("concurrent merge deadlock-safety (working_orders-first lock order matc
       );
       expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (false pass).
 
-      const doMerge = withTenant(connMerge, cfg.tenantId, async (tx) => {
+      const doMerge = withTransaction(connMerge, async (tx) => {
         await asAppUser(tx);
         await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
       });
@@ -466,7 +464,7 @@ describe("concurrent merge deadlock-safety (working_orders-first lock order matc
     const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
     try {
       const merge = (d: Database, into: string, from: string) =>
-        withTenant(d, cfg.tenantId, async (tx) => {
+        withTransaction(d, async (tx) => {
           await asAppUser(tx);
           await mergeTabs(tx, cfg, into, from, { freeSourceTable: true });
         });
@@ -531,55 +529,5 @@ describe("concurrent merge deadlock-safety (working_orders-first lock order matc
       ]);
       await Promise.all([connA.close(), connB.close()]);
     }
-  });
-});
-
-// Cross-tenant isolation for the table-service move/join verbs (CLAUDE.md §3, conventions-data.md
-// "A by-id read still needs its own eq(table.tenantId, cfg.tenantId)"). Production holds one tenant
-// per database, but the `dining_tables` by-id read a move/join does is not isolated by `withTenant`
-// (RLS was dropped, #255), so it must scope to the caller's tenant itself. The exposed argument is the
-// TARGET table id (`toTableId`/`tableId`), not the tab id — `assertTabOpen` already scopes the tab.
-// Real Postgres as `app_user` (rolsuper=f): on PGlite every connection is a superuser and the leak
-// would pass silently.
-describe("cross-tenant isolation — a move/join never reaches another tenant's table", () => {
-  it("moveTab onto a FOREIGN tenant's table id throws table.not_found — never repoints the other tenant's table", async () => {
-    const { cfg: tenantA, cafe: cafeA } = await setupVenue();
-    const { cfg: tenantB } = await setupVenue();
-    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
-
-    const srcA = await seedTable(tenantA, "MX-srcA");
-    const tabA = await openTabOn(tenantA, srcA, [{ productId: cafeA.id, quantity: "1" }]);
-    const tableB = await seedTable(tenantB, "MX-tgtB"); // tenant B's free table
-
-    await expect(
-      withTenant(suite.admin, tenantA.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return moveTab(tx, tenantA, tabA, tableB);
-      }),
-    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: tableB } });
-
-    // B's table is untouched — never repointed at A's tab.
-    expect(await tabIdOf(tableB)).toBeNull();
-    // A's own source table still covers A's tab — the aborted move freed nothing.
-    expect(await tabIdOf(srcA)).toBe(tabA);
-  });
-
-  it("joinTable onto a FOREIGN tenant's table id throws table.not_found — never links the other tenant's table", async () => {
-    const { cfg: tenantA, cafe: cafeA } = await setupVenue();
-    const { cfg: tenantB } = await setupVenue();
-
-    const t1A = await seedTable(tenantA, "JX-t1A");
-    const tabA = await openTabOn(tenantA, t1A, [{ productId: cafeA.id, quantity: "1" }]);
-    const tableB = await seedTable(tenantB, "JX-tgtB"); // tenant B's free table
-
-    await expect(
-      withTenant(suite.admin, tenantA.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return joinTable(tx, tenantA, tabA, tableB);
-      }),
-    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: tableB } });
-
-    // B's table is untouched — never linked to A's tab.
-    expect(await tabIdOf(tableB)).toBeNull();
   });
 });

@@ -1,8 +1,7 @@
-import { tenantId as brandTenantId } from "@waitron/shared";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -13,7 +12,7 @@ import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: this suite proves the recipe-authoring write group's `recipe.manage` gate
-// BY DELETION against the real cluster, with every DB touch going through `withTenant` + `asAppUser`
+// BY DELETION against the real cluster, with every DB touch going through `withTransaction` + `asAppUser`
 // so the routes run as the non-superuser app role and its table grants are enforced — PGlite connects
 // as a superuser holding every privilege (CLAUDE.md §4). The route mechanics (body/id screens, STATUS
 // map) are already proven in-process on PGlite (`recipe-api.test.ts`).
@@ -37,7 +36,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `recipe.manage`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
@@ -48,7 +46,7 @@ interface Venue {
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupVenue(): Promise<Venue> {
-  const venue = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -82,53 +80,46 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid, productId } = await withTenant(
-    suite.admin,
-    venue.tenantId,
-    async (tx) => {
-      await asAppUser(tx);
-      const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
-      const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-      const managerSession = await startManagementSession(tx, {
-        tenantId: venue.tenantId,
-        personId: mgr.rows[0]!.id,
-      });
-      const staffSession = await startManagementSession(tx, {
-        tenantId: venue.tenantId,
-        personId: stf.rows[0]!.id,
-      });
-      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
-        name: "Recipe catalogue",
-      });
-      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
-        catalogueId: catalogue.id,
-        categoryId: null,
-        name: "Tostada",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-      });
-      return { managerSid: managerSession.id, staffSid: staffSession.id, productId: product.id };
-    },
-  );
+  const { managerSid, staffSid, productId } = await withTransaction(suite.admin, async (tx) => {
+    await asAppUser(tx);
+    const mgr = await tx.execute<{ id: string }>(sql`
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
+    const stf = await tx.execute<{ id: string }>(sql`
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+    const managerSession = await startManagementSession(tx, {
+      personId: mgr.rows[0]!.id,
+    });
+    const staffSession = await startManagementSession(tx, {
+      personId: stf.rows[0]!.id,
+    });
+    const catalogue = await createCatalogue(tx, {
+      name: "Recipe catalogue",
+    });
+    const product = await createProduct(tx, {
+      catalogueId: catalogue.id,
+      categoryId: null,
+      name: "Tostada",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+    return { managerSid: managerSession.id, staffSid: staffSession.id, productId: product.id };
+  });
 
   return {
-    tenantId: venue.tenantId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
     productId,
   };
 }
 
-/** One Hono app per tenant — `mountRecipeApi` binds ONE tenant via `cfg.tenantId`, so each venue's
+/** One Hono app per venue — `mountRecipeApi` binds ONE node via `cfg.nodeId`, so each venue's
  * routes need their own app (mirrors `purchasing-api.pg.test.ts`). */
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
-  mountRecipeApi(app, { db: suite.admin, cfg: { tenantId, nodeId: NODE_ID } }, noopLog);
+  mountRecipeApi(app, { db: suite.admin, cfg: { nodeId: NODE_ID } }, noopLog);
   return app;
 }
 
@@ -174,8 +165,8 @@ describe("Recipe API over real Postgres (the recipe.manage gate)", () => {
     // funnel through the SAME `gated` chokepoint, so they lose the gate identically; the run aborts at
     // the first failed assertion, so 200 on the list is the only status this deletion was OBSERVED to
     // produce.) Restored the line and the test passed again; `git diff recipe-api.ts` is clean afterwards.
-    const { tenantId, managerCookie, staffCookie, productId } = await setupVenue();
-    const app = mountApp(tenantId);
+    const { managerCookie, staffCookie, productId } = await setupVenue();
+    const app = mountApp();
 
     // A real ingredient the manager owns, so the staff PATCH targets an id that DOES exist — the refusal
     // is the gate, not a not_found masking it. Also proves the manager (who holds `recipe.manage`) is

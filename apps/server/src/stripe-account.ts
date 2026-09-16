@@ -1,7 +1,6 @@
 import Stripe from "stripe";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
-import type { TenantId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import { stripeClient, stripeReportClient } from "@waitron/payments-stripe";
 import type { StripeReconcileAccount } from "@waitron/payments-stripe";
@@ -61,7 +60,7 @@ export function defaultMakeStripe(secretKey: string): Stripe {
  */
 export function stripeSecretKeyFrom(
   payload: Record<string, string | undefined>,
-  ref: { tenantId: string; purpose: string },
+  ref: { purpose: string },
   environment: DeploymentEnvironment,
 ): string {
   const secretKey = payload.secretKey;
@@ -71,7 +70,6 @@ export function stripeSecretKeyFrom(
   const keyEnvironment = keyEnvironmentOf(secretKey);
   if (keyEnvironment !== null && keyEnvironment !== environment) {
     throw new AppError("payment.credential_environment_mismatch", {
-      tenantId: ref.tenantId,
       keyEnvironment,
       hostEnvironment: environment,
     });
@@ -87,12 +85,9 @@ export function stripeSecretKeyFrom(
  * three callers, never the wrap around the returned key (each caller's own `makeStripe` + client
  * wrapper differs, so that stays with the caller).
  */
-async function resolveStripeSecretKey(
-  deps: StripeAccountDeps,
-  tenantId: TenantId,
-): Promise<string> {
-  const payload = await readCredential(deps.db, deps.ring, tenantId, "payments.stripe");
-  return stripeSecretKeyFrom(payload, { tenantId, purpose: "payments.stripe" }, deps.environment);
+async function resolveStripeSecretKey(deps: StripeAccountDeps): Promise<string> {
+  const payload = await readCredential(deps.db, deps.ring, "payments.stripe");
+  return stripeSecretKeyFrom(payload, { purpose: "payments.stripe" }, deps.environment);
 }
 
 /**
@@ -105,9 +100,9 @@ async function resolveStripeSecretKey(
  */
 export function stripeAccountResolver(
   deps: StripeAccountDeps,
-): (tenantId: TenantId) => Promise<StripeReconcileAccount> {
-  return async (tenantId) => {
-    const secretKey = await resolveStripeSecretKey(deps, tenantId);
+): () => Promise<StripeReconcileAccount> {
+  return async () => {
+    const secretKey = await resolveStripeSecretKey(deps);
     const stripe = deps.makeStripe(secretKey);
     return { report: stripeReportClient(stripe), refund: stripeClient(stripe) };
   };

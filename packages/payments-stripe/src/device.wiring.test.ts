@@ -5,7 +5,6 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
@@ -42,7 +41,6 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -74,18 +72,16 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
   it("chains the sale on an offline-accepted device tender, then a forward-decline raises an incident without un-chaining it", async () => {
     const backend = new FakeFiscalBackend(pg.db);
     const s = await seedForSale(pg.db, backend, freshNif());
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
 
     const client = new FakeStripeDevice();
     client.nextCollect("offline"); // policy accepts + consent + under cap → the device stores offline
     const provider = new StripeOnDeviceProvider({
       client,
       db: pg.db,
-      tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
     });
     const paid = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
@@ -97,7 +93,6 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid.settledAt as Date));
       await associatePaymentWithSale(tx, {
-        tenantId: s.tenantId,
         provider: "stripe",
         paymentRef: paid.paymentRef,
         saleId: recorded.saleId,
@@ -110,7 +105,7 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     expect(result).toMatchObject({ forwarded: 0, declined: 1, incidentsRaised: 1 });
 
     const rows = await pg.db.execute<{ state: string; sale_id: string | null }>(
-      sql`select state, sale_id from payments where tenant_id = ${s.tenantId}`,
+      sql`select state, sale_id from payments where working_order_id = ${s.workingOrderId}`,
     );
     expect(rows.rows[0].state).toBe("declined");
     expect(rows.rows[0].sale_id).toBe(saleId);

@@ -1,6 +1,12 @@
 import type { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
-import { asAppUser, locations, withTenant, type Database, type Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import {
+  asAppUser,
+  locations,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
@@ -21,22 +27,17 @@ const run = createErrorBoundary(
 
 export function mountLocationSettingsApi(
   app: Hono,
-  deps: { db: Database; cfg: { tenantId: string; locationId: string }; fiscal: FiscalContribution },
+  deps: { db: Database; cfg: { locationId: string }; fiscal: FiscalContribution },
   log: Logger,
 ): void {
-  const scope = and(
-    eq(locations.id, deps.cfg.locationId),
-    eq(locations.tenantId, deps.cfg.tenantId),
-  );
+  const scope = eq(locations.id, deps.cfg.locationId);
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
-      const authorization = await authorizeManager(tx, {
+      await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: "venue.configure",
       });
-      if (authorization.tenantId !== deps.cfg.tenantId)
-        throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
       return fn(tx);
     });
   app.get("/management-api/location-settings", (c) =>

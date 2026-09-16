@@ -2,11 +2,7 @@ import Stripe from "stripe";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import {
-  decimal,
-  tenantId as brandTenantId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
@@ -42,7 +38,6 @@ d("Stripe test-mode sandbox: hosted Checkout Session", () => {
     const paymentRef = randomUUID();
 
     const res = await provider.initiate({
-      tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,
@@ -52,7 +47,7 @@ d("Stripe test-mode sandbox: hosted Checkout Session", () => {
     expect(res.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
 
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );
     expect(row?.state).toBe("initiated");
     expect(row?.externalRef).toBe(res.externalRef);

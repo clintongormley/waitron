@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { products } from "./catalogue.js";
 import { nodes } from "./nodes.js";
-import { tenants, tills } from "./tenants.js";
+import { tills } from "./tenants.js";
 
 /**
  * A pgEnum rather than a text CHECK, deliberately: unlike invoice_series.purpose
@@ -75,16 +75,6 @@ export const workingOrders = pgTable(
   "working_orders",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      // See ./series.ts's identical comment: the two-argument `.references()`
-      // form is what makes v8 track this thunk as its own never-invoked
-      // function (drizzle-kit resolves it in a separate CLI process, never
-      // during `vitest run`) — verified against this package's own coverage
-      // thresholds. `v8 ignore` here keeps the explicit `onDelete` rather than
-      // dropping it for coverage's sake.
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
     tillId: uuid("till_id")
       .notNull()
       /* v8 ignore next */
@@ -93,10 +83,9 @@ export const workingOrders = pgTable(
     // `createOpenOrder` (apps/server/src/working-order.ts) always sets it to the till's node on every
     // parked AND walk-up order, so in practice a working order carries one. It stays nullable for
     // MATCH SIMPLE, not because nothing writes it (design §5): MATCH SIMPLE (the default) means a NULL
-    // node_id skips the composite FK check below, leaving room for a future non-till writer to omit
-    // it. Bare column: the FK is the tenant-consistent COMPOSITE (tenant_id, node_id) →
-    // nodes(tenant_id, id) declared in extraConfig below (mirroring `working_order_lines_order_fk`),
-    // so a set node_id must belong to THIS order's tenant, not merely exist somewhere in `nodes`. No
+    // node_id skips the FK check below, leaving room for a future non-till writer to omit
+    // it. Bare column: the FK is the (node_id) →
+    // nodes(id) declared in extraConfig below (mirroring `working_order_lines_order_fk`),
     // `.references()` here, so nothing for v8 to track.
     nodeId: uuid("node_id"),
     // The human-facing order number the counter parks against (park & retrieve, sub-project 7b):
@@ -113,18 +102,17 @@ export const workingOrders = pgTable(
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
     // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
     // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
-    // tab-membership column — only this delivery link. BARE column: its tenant-consistent composite FK
-    // (tenant_id, delivery_table_id) → dining_tables(tenant_id, id) is hand-written in the mutual-FK
+    // tab-membership column — only this delivery link. BARE column: its FK
+    // (delivery_table_id) → dining_tables(id) is hand-written in the mutual-FK
     // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
     deliveryTableId: uuid("delivery_table_id"),
     collectedAt: timestamp("collected_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
-    unique("working_orders_tenant_id_key").on(t.tenantId, t.id),
-    index("working_orders_tenant_status_idx").on(t.tenantId, t.status),
+    index("working_orders_tenant_status_idx").on(t.status),
     foreignKey({
-      columns: [t.tenantId, t.nodeId],
-      foreignColumns: [nodes.tenantId, nodes.id],
+      columns: [t.nodeId],
+      foreignColumns: [nodes.id],
       name: "working_orders_node_fk",
     }),
     // Biconditional, not two one-way checks: a settled order always carries a
@@ -149,7 +137,7 @@ export const workingOrders = pgTable(
  * or WEIGHED line being (re)priced at add time — NOT a handle for re-pricing an existing line,
  * whose price is already fixed on it. A parked draft keeps the link back to the product it was
  * built from so a fresh line can resolve one; the snapshot columns are what the till writes, reads
- * and files. The composite (tenant_id, product_id) → products FK below keeps it tenant-consistent.
+ * and files. The (product_id) → products FK below keeps the link referential.
  *
  * `descriptions` is a locale→string map holding EXACTLY the venue's configured
  * locales (spec §9), checked by trigger against locations.invoice_locales.
@@ -158,7 +146,6 @@ export const workingOrderLines = pgTable(
   "working_order_lines",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     workingOrderId: uuid("working_order_id").notNull(),
     lineNo: integer("line_no").notNull(),
     // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.
@@ -166,9 +153,9 @@ export const workingOrderLines = pgTable(
     // The priced product this draft line was built from — the pricing input described above.
     // NULLABLE (ordering modifiers, Task 2): a top-level dish line always carries a product, but a
     // CHILD MODIFIER line (parent_line_id set) has none — its price/name are snapshotted onto the
-    // line by value, not resolved from a product. The FK is the tenant-consistent COMPOSITE in
-    // extraConfig below (null-permissive under MATCH SIMPLE, so a NULL product_id skips it and parent
-    // rows are unaffected), so this column carries no plain single-column `.references()` of its own.
+    // line by value, not resolved from a product. The FK is declared in extraConfig below
+    // (null-permissive under MATCH SIMPLE, so a NULL product_id skips it and parent rows are
+    // unaffected), so this column carries no `.references()` of its own.
     productId: uuid("product_id"),
     variantId: uuid("variant_id"),
     // Frozen variant staff name — plain text; null when the line names no variant.
@@ -222,17 +209,16 @@ export const workingOrderLines = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.workingOrderId],
-      foreignColumns: [workingOrders.tenantId, workingOrders.id],
+      columns: [t.workingOrderId],
+      foreignColumns: [workingOrders.id],
       name: "working_order_lines_order_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.productId],
-      foreignColumns: [products.tenantId, products.id],
+      columns: [t.productId],
+      foreignColumns: [products.id],
       name: "working_order_lines_product_fk",
     }).onDelete("restrict"),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
-    unique("working_order_lines_tenant_id_key").on(t.tenantId, t.id),
     check(
       "working_order_lines_unit_precision_ck",
       sql`${t.unitPrecision} is null or ${t.unitPrecision} between 0 and 3`,

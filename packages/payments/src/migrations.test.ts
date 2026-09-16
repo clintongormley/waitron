@@ -1,6 +1,13 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  createPgliteDb,
+  pgErrorCode,
+  pgErrorMessage,
+  runMigrations,
+} from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 
@@ -90,9 +97,7 @@ describe("payments migrations", () => {
     // A plain, NON-UNIQUE index: a unique one here would break any legitimate
     // "N rows sharing a key" writer (the PR #25 lesson).
     expect(rows.rows[0].indexdef).not.toContain("UNIQUE");
-    expect(rows.rows[0].indexdef).toContain("tenant_id");
-    expect(rows.rows[0].indexdef).toContain("provider");
-    expect(rows.rows[0].indexdef).toContain("settled_at");
+    expect(rows.rows[0].indexdef).toContain("(provider, settled_at)");
   });
 
   it("creates the payment_policy table with a numeric(12,2) offline_amount_cap", async () => {
@@ -113,5 +118,42 @@ describe("payments migrations", () => {
     expect(col.rows[0].data_type).toBe("numeric");
     expect(col.rows[0].numeric_precision).toBe(12);
     expect(col.rows[0].numeric_scale).toBe(2);
+  });
+
+  it("carries no tenant_id column on any table in the set", async () => {
+    const rows = await suite.db.execute<{ table_name: string }>(sql`
+        select table_name from information_schema.columns
+        where table_schema = 'public' and column_name = 'tenant_id'
+          and table_name in ('payments', 'payment_refunds', 'payment_policy', 'card_readers',
+                             'device_card_readers')
+      `);
+    expect(rows.rows).toEqual([]);
+  });
+
+  it("keeps payment_policy to one row: id defaults to 1 and no other id is accepted", async () => {
+    await suite.db.execute(sql`
+        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', '0.00')`);
+    const stored = await suite.db.execute<{ id: number }>(sql`select id from payment_policy`);
+    expect(stored.rows).toEqual([{ id: 1 }]);
+
+    const second = await captureError(() =>
+      suite.db.execute(sql`
+          insert into payment_policy (id, offline_mode, offline_amount_cap)
+          values (2, 'cash_only', '0.00')`),
+    );
+    expect(pgErrorCode(second)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(second)).toMatch(/payment_policy_singleton_ck/);
+
+    const duplicate = await captureError(() =>
+      suite.db.execute(sql`
+          insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', '0.00')`),
+    );
+    expect(pgErrorCode(duplicate)).toBe("23505"); // unique_violation on the primary key
+  });
+
+  it("drops resolve_payment_tenant, the webhook's tenant lookup", async () => {
+    const rows = await suite.db.execute<{ n: number }>(sql`
+        select count(*)::int as n from pg_proc where proname = 'resolve_payment_tenant'`);
+    expect(rows.rows[0].n).toBe(0);
   });
 });

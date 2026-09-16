@@ -6,7 +6,7 @@ import {
   workingOrderId as brandWorkingOrderId,
   decimal,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
 // **Deviation from the brief.** The brief imports `FakeFiscalBackend` from `@waitron/fiscal/testing`
 // — a subpath that does not exist (no `packages/fiscal/testing` folder, no `exports` map, and
 // `@waitron/fiscal`'s own `src/index.ts` re-export barrel explicitly does NOT carry the fake — see
@@ -31,7 +31,7 @@ import {
   saleSettlements,
   sales,
   tenders,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
@@ -39,7 +39,6 @@ import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -69,7 +68,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -111,7 +110,6 @@ const DEFAULT_TENDERS: RecordSaleTender[] = [
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -159,39 +157,29 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  * assertion with that error instead of the one under test.
  */
 async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     // Never as the owner. An owner can disable any trigger, so an owner-run
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it.
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });
 }
 
-/**
- * **Deviation from the brief.** The brief's `countRows` counted every row in the whole table,
- * unscoped. That silently assumes either a fresh database per test or a truncation between
- * them — neither holds here: this file's `beforeAll` boots ONE PGlite instance for the whole
- * suite (booting a fresh WASM PostgreSQL per test would be the far slower alternative), and
- * `beforeEach` seeds a FRESH tenant per test rather than truncating. Left unscoped, a later
- * test's count includes every row every earlier test in the file committed — observed live in
- * this task's own red phase as counts like 11, 12, 15 where 1 or 2 were expected. Scoped to the
- * CURRENT test's own tenant instead, which is what "this test wrote exactly N rows" actually
- * means once the database is shared across the file.
- */
+/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
+ * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
 
 /**
  * A thin `execute` wrapper returning the raw rows, for the `sale_lines.category` assertion. Scoped
- * by the CALLER's own `where` (in practice `sale_id = ${saleId}`) rather than an unscoped `limit 1`
- * — this suite shares ONE PGlite instance across the whole file and seeds a fresh tenant per test
- * (see `countRows`'s own note), so an unscoped read would pick up rows an earlier test committed.
+ * by the CALLER's own `where` (in practice `sale_id = ${saleId}`) rather than an unscoped `limit 1`,
+ * so it reads the row this case wrote even when a test writes several sales.
  */
 async function rows<T extends Record<string, unknown>>(
   query: ReturnType<typeof sql>,
@@ -219,14 +207,14 @@ async function rows<T extends Record<string, unknown>>(
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
     id: fake.id,
-    registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
+    registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
-    checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
-    pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
+    checkIntegrity: (tx, node) => fake.checkIntegrity(tx, node),
+    pendingCount: (node) => fake.pendingCount(node),
     ...overrides,
   };
 }
@@ -453,7 +441,7 @@ describe("recordSale — the order of operations", () => {
     const observed: number[] = [];
     const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, tenant, node) {
+      async checkIntegrity(tx, node) {
         // Read the counter from inside the verification call. If allocation had already run,
         // next_number would read 2 here. Observing only "both happened" would not discriminate
         // which came first — this is the one observation that does.
@@ -462,7 +450,7 @@ describe("recordSale — the order of operations", () => {
           .from(invoiceSeries)
           .where(eq(invoiceSeries.id, seriesId));
         observed.push(row?.n ?? -1);
-        return fake.checkIntegrity(tx, tenant, node);
+        return fake.checkIntegrity(tx, node);
       },
     });
     await run(backend);
@@ -663,7 +651,7 @@ describe("recordSale — settlement modes", () => {
     // D6, made observable: `immediate` runs the SAME `settleSale` code in the same transaction, so
     // a sale settled inline must leave byte-for-byte identical `tenders` and `sale_settlements`
     // rows to the identical sale recorded `deferred` and settled later by a separate `settleSale`
-    // (modulo the ids and the sale/tenant they hang off). If the two paths ever drift, this fails —
+    // (modulo the ids and the sale they hang off). If the two paths ever drift, this fails —
     // which is the whole reason `recordSale` calls `settleSale` rather than re-implementing it.
     const later = new Date(BASE.getTime() + 5 * 60_000);
     const tendersInput: RecordSaleTender[] = [
@@ -672,10 +660,10 @@ describe("recordSale — settlement modes", () => {
     ];
     const backend = new FakeFiscalBackend(suite.db);
 
-    // Path A — immediate, on the beforeEach tenant.
-    const a = await withTenant(suite.db, tenantId, async (tx) => {
+    // Path A — immediate, on the beforeEach venue.
+    const a = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await backend.registerNode(tx, nodeId, { tenantId });
+      await backend.registerNode(tx, nodeId);
       return recordSale(
         tx,
         backend,
@@ -683,16 +671,15 @@ describe("recordSale — settlement modes", () => {
       );
     });
 
-    // Path B — a second, independent tenant: deferred record, then a SEPARATE settleSale.
+    // Path B — a second, independent venue: deferred record, then a SEPARATE settleSale.
     const other = await seedTenant(suite.db);
-    const b = await withTenant(suite.db, other.tenantId, async (tx) => {
+    const b = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await backend.registerNode(tx, other.nodeId, { tenantId: other.tenantId });
+      await backend.registerNode(tx, other.nodeId);
       return recordSale(
         tx,
         backend,
         input({
-          tenantId: other.tenantId,
           tillId: other.tillId,
           nodeId: other.nodeId,
           seriesId: other.seriesId,
@@ -700,12 +687,12 @@ describe("recordSale — settlement modes", () => {
         }),
       );
     });
-    await withTenant(suite.db, other.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await settleSale(tx, { tenantId: other.tenantId, saleId: b.saleId, tenders: tendersInput });
+      await settleSale(tx, { saleId: b.saleId, tenders: tendersInput });
     });
 
-    // Tenders, modulo id/tenant_id/sale_id, sorted for a position-independent compare.
+    // Tenders, modulo id/sale_id, sorted for a position-independent compare.
     const normalize = (rows: (typeof tenders.$inferSelect)[]) =>
       rows
         .map((r) => ({
@@ -732,7 +719,7 @@ describe("recordSale — settlement modes", () => {
     });
     expect(aTenders).toEqual(bTenders);
 
-    // Settlements, modulo id/tenant_id/sale_id. Both stamp the LATEST tender's instant (decision 5),
+    // Settlements, modulo id/sale_id. Both stamp the LATEST tender's instant (decision 5),
     // which is `later`, NOT either sale's issuance instant (BASE) — proving the max-tender path.
     const [aSettle] = await suite.db
       .select()
@@ -809,10 +796,9 @@ describe("recordSale — numbering", () => {
     // task's own governing context.
     await run(new FakeFiscalBackend(suite.db));
     const error = await captureError(() =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(sales).values({
-          tenantId,
           tillId,
           nodeId,
           seriesId,
@@ -863,10 +849,10 @@ describe("recordSale — series validation", () => {
   it("rejects a series belonging to another node", async () => {
     // A node may own N series, but a series belongs to exactly one node. Allocating from another
     // node's series would have two chains issuing from one counter, which no constraint
-    // downstream can detect. `seedTenant({ tenantId })` mints a SECOND node under the same tenant,
-    // so `other.seriesId` is real and same-tenant but owned by a different node than the one under
+    // downstream can detect. a second `seedTenant` call mints a SECOND node,
+    // so `other.seriesId` is real but owned by a different node than the one under
     // test — the series↔node guard must reject it.
-    const other = await seedTenant(suite.db, { tenantId });
+    const other = await seedTenant(suite.db);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: other.seriesId }),
     ).rejects.toMatchObject({ code: "sale.series_wrong_node" });
@@ -876,7 +862,7 @@ describe("recordSale — series validation", () => {
     // The other direction of the §5 purpose guard. A corrective series (`purpose='rectificative'`)
     // is reserved for corrective invoices (RD 1619/2012 art. 6.1.a); an ordinary sale drawing from it
     // would consume a corrective number and break the mandated separation.
-    const rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
+    const rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),
     ).rejects.toMatchObject({
@@ -908,15 +894,14 @@ describe("recordSale — working order linkage", () => {
   // The parked working order this sale is FILED from is the sale-idempotency key
   // (`sales_working_order_id_key`, migration for sub-project 7b): recordSale writes
   // `input.workingOrderId` onto `sales.working_order_id` when the till supplies one, and leaves it
-  // NULL for a walk-up sale rung with no draft. The composite FK
-  // `(tenant_id, working_order_id) → working_orders(tenant_id, id)` is enforced even on PGlite (its
+  // NULL for a walk-up sale rung with no draft. The FK
+  // `(working_order_id) → working_orders(id)` is enforced even on PGlite (its
   // default connection is a superuser, but constraints still hold), so the "supplied" case needs a
   // REAL working_orders row as the FK target — a fabricated id would FK-violate, which is why the
   // seed fixtures no longer mint one.
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`insert into working_orders (tenant_id, till_id, order_number)
-          values (${tenantId}, ${tillId}, 1) returning id`,
+      sql`insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`,
     );
     return brandWorkingOrderId(rows[0]!.id);
   }
@@ -1188,7 +1173,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
   it("inserts NULL for a parentLineNo that names no line in the basket (the `?? null` guard)", async () => {
     // Defensive branch of `byLineNo.get(line.parentLineNo) ?? null`: a `parentLineNo` pointing at a
     // lineNo not present in this basket resolves to NO generated id, so the row inserts NULL rather
-    // than a dangling pointer — and the tenant-consistent self-FK would reject a fabricated id
+    // than a dangling pointer — and the self-FK would reject a fabricated id
     // anyway. Line 2 names lineNo 9, which does not exist here.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "6.05",

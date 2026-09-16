@@ -15,7 +15,6 @@ import {
 // coincidence — every id is the same 8-4-4-4-12 shape but a different value, matching
 // till-config.test.ts's own convention.
 const TILL_ENV = {
-  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -31,7 +30,6 @@ const ROOT = "/opt/waitron/drizzle";
 const STATE_ROOT = "/opt/waitron/state";
 
 const EXPECTED_TILL = {
-  tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
   tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
   nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
   seriesId: TILL_ENV.WAITRON_TILL_SERIES_ID,
@@ -140,13 +138,13 @@ describe("loadConfig", () => {
     expect(config.till).toEqual(EXPECTED_TILL);
   });
 
-  // Setup mode (slice 1b): an unprovisioned box has no venue, so the five WAITRON_TILL_*_ID are
+  // Setup mode (slice 1b): an unprovisioned box has no venue, so the four WAITRON_TILL_*_ID are
   // absent — `loadConfig` then leaves `config.till` UNDEFINED and does NOT throw (boot branches on
-  // that in a later slice-1b task). A provisioned box sets all five and `config.till` carries the
+  // that in a later slice-1b task). A provisioned box sets all four and `config.till` carries the
   // identity. DATABASE_URL stays required either way — its guard fires before the till is read, so a
   // setup box with no DATABASE_URL still reports the DATABASE_URL fault (the `requires DATABASE_URL`
   // case below covers that ordering).
-  it("leaves config.till undefined when the five WAITRON_TILL_*_ID are absent, else populates it", () => {
+  it("leaves config.till undefined when the four WAITRON_TILL_*_ID are absent, else populates it", () => {
     const setup = loadConfig({ DATABASE_URL: "postgres://u@h/d" }, ROOT, STATE_ROOT);
     expect(setup.till).toBeUndefined();
 

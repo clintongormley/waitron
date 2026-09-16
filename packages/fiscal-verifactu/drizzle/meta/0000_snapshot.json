@@ -1,5 +1,5 @@
 {
-  "id": "52b5a824-9108-40b5-a14b-753c499ef4c5",
+  "id": "f2535a34-0091-4392-8be5-367fb3863d56",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -12,12 +12,6 @@
           "name": "registro_id",
           "type": "uuid",
           "primaryKey": true,
-          "notNull": true
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
           "notNull": true
         },
         "submitted_at": {
@@ -59,19 +53,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "acks_tenant_id_tenants_id_fk": {
-          "name": "acks_tenant_id_tenants_id_fk",
-          "tableFrom": "acks",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -89,12 +70,6 @@
       "name": "cadenas",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "node_id": {
           "name": "node_id",
           "type": "uuid",
@@ -130,19 +105,6 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "cadenas_tenant_id_tenants_id_fk": {
-          "name": "cadenas_tenant_id_tenants_id_fk",
-          "tableFrom": "cadenas",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "cadenas_node_id_nodes_id_fk": {
           "name": "cadenas_node_id_nodes_id_fk",
           "tableFrom": "cadenas",
@@ -171,10 +133,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "cadenas_tenant_id_node_id_pk": {
-          "name": "cadenas_tenant_id_node_id_pk",
+        "cadenas_node_id_pk": {
+          "name": "cadenas_node_id_pk",
           "columns": [
-            "tenant_id",
             "node_id"
           ]
         }
@@ -233,11 +194,12 @@
       "name": "envio_flujo",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
+        "id": {
+          "name": "id",
+          "type": "integer",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": 1
         },
         "proximo_envio_en": {
           "name": "proximo_envio_en",
@@ -253,25 +215,16 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "envio_flujo_tenant_id_tenants_id_fk": {
-          "name": "envio_flujo_tenant_id_tenants_id_fk",
-          "tableFrom": "envio_flujo",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "envio_flujo_singleton_ck": {
+          "name": "envio_flujo_singleton_ck",
+          "value": "\"envio_flujo\".\"id\" = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.envios": {
@@ -282,12 +235,6 @@
           "name": "registro_id",
           "type": "uuid",
           "primaryKey": true,
-          "notNull": true
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
           "notNull": true
         },
         "estado": {
@@ -360,12 +307,6 @@
           "name": "envios_drenaje_idx",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "estado",
               "isExpression": false,
               "asc": true,
@@ -397,19 +338,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "envios_tenant_id_tenants_id_fk": {
-          "name": "envios_tenant_id_tenants_id_fk",
-          "tableFrom": "envios",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -433,12 +361,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "node_id": {
           "name": "node_id",
@@ -510,12 +432,6 @@
           "name": "registro_sif_activo_uq",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "node_id",
               "isExpression": false,
               "asc": true,
@@ -530,19 +446,6 @@
         }
       },
       "foreignKeys": {
-        "registro_sif_tenant_id_tenants_id_fk": {
-          "name": "registro_sif_tenant_id_tenants_id_fk",
-          "tableFrom": "registro_sif",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "registro_sif_node_id_nodes_id_fk": {
           "name": "registro_sif_node_id_nodes_id_fk",
           "tableFrom": "registro_sif",
@@ -578,12 +481,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "till_id": {
           "name": "till_id",
@@ -784,12 +681,6 @@
           "name": "registros_tenant_node_secuencia_uq",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "node_id",
               "isExpression": false,
               "asc": true,
@@ -810,12 +701,6 @@
         "registros_identidad_uq": {
           "name": "registros_identidad_uq",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "id_emisor_factura",
               "isExpression": false,
@@ -850,12 +735,6 @@
           "name": "registros_sale_idx",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "sale_id",
               "isExpression": false,
               "asc": true,
@@ -870,12 +749,6 @@
         "registros_node_secuencia_idx": {
           "name": "registros_node_secuencia_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "node_id",
               "isExpression": false,
@@ -896,19 +769,6 @@
         }
       },
       "foreignKeys": {
-        "registros_facturacion_tenant_id_tenants_id_fk": {
-          "name": "registros_facturacion_tenant_id_tenants_id_fk",
-          "tableFrom": "registros_facturacion",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "registros_facturacion_till_id_tills_id_fk": {
           "name": "registros_facturacion_till_id_tills_id_fk",
           "tableFrom": "registros_facturacion",

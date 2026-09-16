@@ -34,21 +34,25 @@ describe("the public surface", () => {
  * through the package root, which is the surface a host actually gets.
  */
 describe("scheduled_runs constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares scheduled_runs' unique index, foreign key and check constraints", () => {
+  it("declares scheduled_runs' unique index and check constraints, and no foreign key", () => {
     const config = getTableConfig(api.scheduledRuns);
 
     // `scheduled_runs_key` is a `uniqueIndex(...)`, not a `unique(...)` table constraint — it
     // shows up in `config.indexes` (with `unique: true`), not in `config.uniqueConstraints`.
     const key = config.indexes.find((i) => i.config.name === "scheduled_runs_key");
     expect(key?.config.unique).toBe(true);
+    expect(key?.config.columns.map((c) => ("name" in c ? c.name : null))).toEqual([
+      "duty",
+      "period_from",
+      "generation",
+    ]);
 
     // And it is the ONLY index on this table: derivation reads by the unique key's own leading
     // columns and filters `next_attempt_at` in JavaScript, every claim keys on `id`, so a second
     // index would be read by nothing while costing every INSERT and claim UPDATE its maintenance.
     expect(config.indexes.map((i) => i.config.name)).toEqual(["scheduled_runs_key"]);
 
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("scheduled_runs_tenant_fk");
+    expect(config.foreignKeys).toEqual([]);
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("scheduled_runs_state_ck");

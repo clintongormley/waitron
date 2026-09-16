@@ -10,14 +10,13 @@ import type { Database } from "../client.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { seedKitchenStation, seedTenant } from "../testing/seed.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
-import type { LocationId, TenantId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("devices binding-rule trigger (form factor → station XOR register)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
   let admin: Database;
-  let tenantId: TenantId;
   let locationId: LocationId;
   let stationId: string;
   let tillId: string;
@@ -26,20 +25,19 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
 
   beforeAll(async () => {
     admin = suite.admin;
-    tenantId = await seedTenant(admin);
+    await seedTenant(admin);
     const location = await admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Loc', array['es'], 'Hostelería') returning id`);
     locationId = location.rows[0]!.id as LocationId;
-    stationId = await seedKitchenStation(admin, { tenantId, locationId });
+    stationId = await seedKitchenStation(admin, { locationId });
     const till = await admin.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till') returning id`);
+      insert into tills (location_id, name) values (${locationId}, 'Till') returning id`);
     tillId = till.rows[0]!.id;
     const kds = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor) values (${tenantId}, 'KDS profile', 'kds') returning id`);
+      insert into device_profiles (name, form_factor) values ('KDS profile', 'kds') returning id`);
     kdsProfileId = kds.rows[0]!.id;
     const tillProfile = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor) values (${tenantId}, 'Till profile', 'till') returning id`);
+      insert into device_profiles (name, form_factor) values ('Till profile', 'till') returning id`);
     tillProfileId = tillProfile.rows[0]!.id;
   });
 
@@ -50,8 +48,7 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     label: string;
   }): Promise<void> {
     await admin.execute(sql`
-      insert into devices (tenant_id, location_id, device_profile_id, station_id, till_id, label, token_hash)
-      values (${tenantId}, ${locationId}, ${fields.profileId}, ${fields.stationId}, ${fields.tillId},
+      insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash) values (${locationId}, ${fields.profileId}, ${fields.stationId}, ${fields.tillId},
               ${fields.label}, ${TOKEN_HASH})`);
   }
 
@@ -123,8 +120,7 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     // trigger never re-runs on an active-only change and the invalid binding lands.
     const profile = (
       await admin.execute<{ id: string }>(sql`
-        insert into device_profiles (tenant_id, name, form_factor)
-        values (${tenantId}, 'Reactivate till', 'till') returning id`)
+        insert into device_profiles (name, form_factor) values ('Reactivate till', 'till') returning id`)
     ).rows[0]!.id;
     // A valid till device (register, no station) on that profile, then deactivated.
     await insertDevice({ profileId: profile, stationId: null, tillId, label: "Reactivate me" });
@@ -165,8 +161,7 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
         await tx.execute(sql`drop trigger device_binding_rule_insert on devices`);
         // The exact insert the "rejects a kds-profile device with a NULL station" case refuses.
         await tx.execute(sql`
-          insert into devices (tenant_id, location_id, device_profile_id, station_id, till_id, label, token_hash)
-          values (${tenantId}, ${locationId}, ${kdsProfileId}, ${null}, ${null}, 'KDS no-trigger', ${TOKEN_HASH})`);
+          insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash) values (${locationId}, ${kdsProfileId}, ${null}, ${null}, 'KDS no-trigger', ${TOKEN_HASH})`);
         const { rows } = await tx.execute<{ n: number }>(
           sql`select count(*)::int as n from devices where label = 'KDS no-trigger'`,
         );

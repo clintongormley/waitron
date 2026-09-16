@@ -36,14 +36,15 @@ export type { DeviceKind };
 const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
- * A device composite binding FK and the input FIELD it guards. A 23503 on one of these means a device
- * write (enrol, `assign-device-profile`, or the hardware PATCH) named a binding that no row of this
- * tenant matches — the composite makes each check tenant-isolated and atomic with the write (no
- * read-then-write race), so the routes translate it here rather than pre-checking:
- *  - `devices_device_profile_fk (tenant_id, device_profile_id)` — a reassign to an unknown/foreign
+ * A device binding FK and the input FIELD it guards. A 23503 on one of these means a device
+ * write (enrol, `assign-device-profile`, or the hardware PATCH) named a binding no row matches —
+ * the FK makes that check atomic with the write (no read-then-write race), so the routes translate it
+ * here rather than pre-checking. Existence is all it can check: every profile and printer in the
+ * database belongs to the one taxpayer.
+ *  - `devices_device_profile_fk (device_profile_id)` — a reassign to an unknown
  *    profile (`deviceProfileId`);
- *  - `devices_receipt_printer_fk (tenant_id, receipt_printer_id)` — a hardware PATCH naming an
- *    unknown/foreign printer (`receiptPrinterId`).
+ *  - `devices_receipt_printer_fk (receipt_printer_id)` — a hardware PATCH naming an
+ *    unknown printer (`receiptPrinterId`).
  * Only `devices` carries a binding FK: a join request names none, so nothing at knock time can trip one.
  */
 const BINDING_FK_FIELD: Record<string, "deviceProfileId" | "receiptPrinterId"> = {
@@ -52,7 +53,7 @@ const BINDING_FK_FIELD: Record<string, "deviceProfileId" | "receiptPrinterId"> =
 };
 
 /**
- * If `error` (or anything it wraps) is a 23503 on one of the device binding composite FKs, the input
+ * If `error` (or anything it wraps) is a 23503 on one of the device binding FKs, the input
  * FIELD it guards (`deviceProfileId`/`receiptPrinterId`); otherwise `undefined`. Reuses `@waitron/db`'s
  * `pgErrorConstraint` to walk the cause chain and read the offending constraint name — Drizzle wraps
  * every failed query in a `DrizzleQueryError` whose own `.code` is undefined, so the real SQLSTATE and
@@ -82,17 +83,9 @@ const TILL_NAME_UNIQUE = "tills_tenant_location_name_key";
  * unique index is the whole guard (`tills` is a `state` table), keyed by CONSTRAINT NAME so an unrelated
  * unique violation is rethrown raw — the `translateWriteError` idiom (device-profile-store.ts).
  */
-async function createRegister(
-  tx: Transaction,
-  cfg: TillConfig,
-  locationId: string,
-  name: string,
-): Promise<string> {
+async function createRegister(tx: Transaction, locationId: string, name: string): Promise<string> {
   try {
-    const [till] = await tx
-      .insert(tills)
-      .values({ tenantId: cfg.tenantId, locationId, name })
-      .returning({ id: tills.id });
+    const [till] = await tx.insert(tills).values({ locationId, name }).returning({ id: tills.id });
     return till!.id;
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -108,10 +101,8 @@ async function createRegister(
 }
 
 /**
- * Assert `registerId` names a `tills` row of THIS tenant at THIS venue and return it. A by-id read that
- * carries its OWN `tenant_id` predicate — one-tenant-per-db is NOT the query's isolation boundary
- * (CLAUDE.md §3) — plus the `location_id` scope, so a register that is absent, another tenant's, or
- * another venue's is rejected here rather than trusted or left to the `devices` composite FK (which
+ * Assert `registerId` names a `tills` row at THIS venue and return it. A by-id read with the
+ * `location_id` scope, so a register that is absent or another venue's is rejected here rather than trusted or left to the `devices` FK (which
  * sees neither location). No such row → `device.binding_invalid` naming the `tillId` FIELD (never the
  * id), the code the domain already uses for "named a binding id that matches no row of this tenant".
  */
@@ -121,16 +112,11 @@ async function requireLiveRegister(
   locationId: string,
   registerId: string,
 ): Promise<string> {
+  void cfg;
   const [till] = await tx
     .select({ id: tills.id })
     .from(tills)
-    .where(
-      and(
-        eq(tills.tenantId, cfg.tenantId),
-        eq(tills.locationId, locationId),
-        eq(tills.id, registerId),
-      ),
-    );
+    .where(and(eq(tills.locationId, locationId), eq(tills.id, registerId)));
   if (till === undefined) throw new AppError("device.binding_invalid", { field: "tillId" });
   return till.id;
 }
@@ -148,7 +134,7 @@ export async function resolveDeviceBinding(
   locationId: string,
   input: { profileId: string; name: string; stationId?: string | null; registerId?: string | null },
 ): Promise<{ stationId: string | null; tillId: string | null; formFactor: FormFactor }> {
-  const profile = await getDeviceProfile(tx, cfg.tenantId, input.profileId);
+  const profile = await getDeviceProfile(tx, input.profileId);
   // `profileId` is the admin's choice in the accept dialog, so a well-formed id that names no profile
   // of this tenant —
   // unknown, or one deleted meanwhile — is a CLIENT-recoverable 404, NOT a server fault: reuse
@@ -168,7 +154,7 @@ export async function resolveDeviceBinding(
       stationId = input.stationId;
       break;
     case "till":
-      tillId = await createRegister(tx, cfg, locationId, input.name);
+      tillId = await createRegister(tx, locationId, input.name);
       break;
     case "handheld":
       if (input.registerId == null) throw new AppError("device.register_required", {});

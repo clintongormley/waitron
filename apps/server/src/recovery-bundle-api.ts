@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { collectStateSecrets } from "./state-secrets.js";
@@ -13,7 +13,6 @@ import "./errors.js";
 
 export type RecoveryBundleDeps = {
   db: Database;
-  cfg: { tenantId: string };
   /** The box's persisted state dir — the secret files the bundle packs live here (`config.stateDir`). */
   stateDir: string;
   now: () => Date;
@@ -41,7 +40,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 /**
  * `POST /api/box/recovery-bundle` — download the box's passphrase-encrypted recovery bundle. Gated
- * exactly like `GET /api/box/status`: `requireManagementSession` → 401, then `withTenant` + `asAppUser`
+ * exactly like `GET /api/box/status`: `requireManagementSession` → 401, then `withTransaction` + `asAppUser`
  * + `authorizeManager("system.manage")`. The passphrase rides the JSON body (never the URL/query — it
  * is a secret). The bundle carries the box's UNRECOVERABLE state (vault master key + fiscal identity +
  * CA/leaf), so it is returned as an attachment and logged (session id only, never the passphrase or
@@ -52,7 +51,7 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
   app.post("/api/box/recovery-bundle", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c); // throws 401 if absent
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,

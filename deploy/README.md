@@ -173,8 +173,8 @@ middle of a cold restore, so it is worth reading twice:
   ```bash
   # break-glass resets the first admin's dashboard password (the lockout IS the password). Its
   # secrets come from the ENVIRONMENT, never argv (an argv element leaks into `ps`): the new password
-  # is WAITRON_BREAKGLASS_PASSWORD, and it needs the box's own DATABASE_URL + WAITRON_TILL_TENANT_ID,
-  # both in the state volume's trading.env. `--person <id>` only disambiguates a tenant with >1 admin;
+  # is WAITRON_BREAKGLASS_PASSWORD, and it needs the box's own DATABASE_URL, which is in the state
+  # volume's trading.env. `--person <id>` only disambiguates a venue with more than one admin;
   # WAITRON_BREAKGLASS_PIN also resets the PIN.
   docker compose exec app sh -c '
     set -a; . /var/lib/waitron/state/trading.env; set +a

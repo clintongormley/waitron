@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
-import { AppError, type TenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { readProductCategories, replaceProductCategories } from "./categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
@@ -41,30 +41,25 @@ const columns = {
 
 export async function readProductEditor(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
 ): Promise<ProductEditorValue> {
-  const [row] = await tx
-    .select(columns)
-    .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+  const [row] = await tx.select(columns).from(products).where(eq(products.id, productId));
   if (!row) throw new AppError("product.not_found", { productId });
-  const categories = await readProductCategories(tx, tenantId, productId);
+  const categories = await readProductCategories(tx, productId);
   return {
     ...row,
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
-    unitId: await readProductUnitId(tx, tenantId, productId),
+    unitId: await readProductUnitId(tx, productId),
     ...categories,
-    modifierIds: await listProductOptionGroupIds(tx, tenantId, productId),
-    variants: await listProductVariants(tx, tenantId, productId),
+    modifierIds: await listProductOptionGroupIds(tx, productId),
+    variants: await listProductVariants(tx, productId),
   };
 }
 
 /** No section commits independently: a rejected association rolls back the complete product. */
 export async function saveProductEditor(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string | null,
   catalogueId: string,
   input: unknown,
@@ -76,23 +71,23 @@ export async function saveProductEditor(
   // supplied customer name is validated — validateContentTranslations({}) would wrongly demand a
   // default-language entry.
   if (value.customerName !== null)
-    await validateContentTranslations(tx, tenantId, value.customerName, fallbackLanguage);
+    await validateContentTranslations(tx, value.customerName, fallbackLanguage);
   if (productId !== null) {
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)))
+      .where(eq(products.id, productId))
       .for("update");
     if (!product) throw new AppError("product.not_found", { productId });
   } else {
     const [catalogue] = await tx
       .select({ id: catalogues.id })
       .from(catalogues)
-      .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, catalogueId)));
+      .where(eq(catalogues.id, catalogueId));
     if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
   }
   if (productId === null) {
-    const created = await createProduct(tx, tenantId, {
+    const created = await createProduct(tx, {
       catalogueId,
       categoryId: null,
       name: value.name,
@@ -109,7 +104,7 @@ export async function saveProductEditor(
     });
     productId = created.id;
   } else {
-    await updateProduct(tx, tenantId, productId, {
+    await updateProduct(tx, productId, {
       name: value.name,
       customerName: value.customerName,
       description: value.description,
@@ -123,11 +118,11 @@ export async function saveProductEditor(
       dietaryDeclarations: value.dietaryDeclarations,
     });
   }
-  await replaceProductCategories(tx, tenantId, productId, {
+  await replaceProductCategories(tx, productId, {
     categoryIds: value.categoryIds,
     primaryCategoryId: value.primaryCategoryId,
   });
-  await setProductVariants(tx, tenantId, productId, value.variants, fallbackLanguage);
-  await setProductOptionGroups(tx, tenantId, productId, value.modifierIds);
-  return readProductEditor(tx, tenantId, productId);
+  await setProductVariants(tx, productId, value.variants, fallbackLanguage);
+  await setProductOptionGroups(tx, productId, value.modifierIds);
+  return readProductEditor(tx, productId);
 }

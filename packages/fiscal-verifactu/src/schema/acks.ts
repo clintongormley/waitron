@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { check, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -16,9 +15,6 @@ export const acks = pgTable(
     registroId: uuid("registro_id")
       .primaryKey()
       .references(() => registrosFacturacion.id),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
     csv: text("csv"),
     state: text("state").notNull(),

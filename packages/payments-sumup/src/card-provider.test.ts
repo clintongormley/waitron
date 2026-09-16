@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-provider.js";
 
@@ -57,12 +56,11 @@ async function seedSumUp(value: {
   merchantCode: string;
   affiliateAppId: string;
   affiliateKey: string;
-}): Promise<TenantId> {
-  const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, (tx) =>
-    putCredential(tx, ring, { tenantId, purpose: "payments.sumup", value }),
+}): Promise<void> {
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, (tx) =>
+    putCredential(tx, ring, { purpose: "payments.sumup", value }),
   );
-  return tenantId;
 }
 
 describe("SUMUP_CARD_PROVIDER seat metadata", () => {
@@ -201,7 +199,7 @@ describe("SUMUP_CARD_PROVIDER.connect", () => {
 
 describe("SUMUP_CARD_PROVIDER.build", () => {
   it("builds a SumUpCloudProvider from the sealed credential", async () => {
-    const tenantId = await seedSumUp({
+    await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
       affiliateAppId: "-",
@@ -211,7 +209,6 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
     const provider = SUMUP_CARD_PROVIDER.build({
       db: suite.db,
       ring,
-      tenantId,
       nodeId: "node-1",
       environment: "preproduction",
       incidents,
@@ -222,13 +219,13 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
 
 describe("SUMUP_CARD_PROVIDER.readers", () => {
   async function readerDeps(fetchImpl: typeof globalThis.fetch) {
-    const tenantId = await seedSumUp({
+    await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
       affiliateAppId: "-",
       affiliateKey: "-",
     });
-    return { db: suite.db, ring, tenantId, fetch: fetchImpl };
+    return { db: suite.db, ring, fetch: fetchImpl };
   }
 
   it("lists only paired readers with their provider identity", async () => {
@@ -468,7 +465,7 @@ describe("optionsFromSealed", () => {
 
 describe("deferredClient", () => {
   it("reads the sealed credential on first use, then reuses the resolved client", async () => {
-    const tenantId = await seedSumUp({
+    await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
       affiliateAppId: "-",
@@ -480,7 +477,7 @@ describe("deferredClient", () => {
       ]),
       "GET /v0.1/merchants/MABC123/readers": () => json(200, { items: [] }),
     });
-    const client = deferredClient({ db: suite.db, ring, tenantId, fetch });
+    const client = deferredClient({ db: suite.db, ring, fetch });
     expect(await client.memberships()).toEqual([
       { merchantCode: "MABC123", name: "Test restaurant" },
     ]);
@@ -489,15 +486,13 @@ describe("deferredClient", () => {
   });
 
   it("does not cache a failed read, so a later call retries once the credential exists", async () => {
-    const tenantId = await seedTenant(suite.db); // no payments.sumup credential yet
     const fetch = routedFetch({
       "GET /v0.1/memberships": memberships([{ resource_id: "M", resource: { name: "x" } }]),
     });
-    const client = deferredClient({ db: suite.db, ring, tenantId, fetch });
+    const client = deferredClient({ db: suite.db, ring, fetch });
     await expect(client.memberships()).rejects.toMatchObject({ code: "credentials.missing" });
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "payments.sumup",
         value: { apiKey: "k", merchantCode: "M", affiliateAppId: "-", affiliateKey: "-" },
       }),

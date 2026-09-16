@@ -4,7 +4,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 // mechanical check that keeps errors.ts reachable from this package's own public barrel
 // (index.ts). Mirrors ./record-sale.ts / ./record-void.ts's identical convention.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   invoiceSeries,
@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
@@ -25,7 +25,6 @@ import { buildVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordCorrectionInput {
-  tenantId: TenantId;
   /**
    * The till this corrective invoice rings at — an informational snapshot only (written to `sales.till_id`
    * and the fiscal record's `till_id`, and used for incidents). NOT checked against the series; see
@@ -140,8 +139,7 @@ export async function recordCorrection(
 
   // Step 2. The corrective series, and the purpose guard that IS the §5 separation. A correction
   // must draw from a `purpose='rectificative'` series; an ordinary sale must not (the mirror guard
-  // lives in `./record-sale.ts`). The explicit tenant predicate mirrors `recordSale` and is
-  // applied to the series lookup.
+  // lives in `./record-sale.ts`). The series lookup is by id alone, as in `recordSale`.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -150,12 +148,11 @@ export async function recordCorrection(
       retiredAt: invoiceSeries.retiredAt,
     })
     .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.id, input.seriesId), eq(invoiceSeries.tenantId, input.tenantId)));
+    .where(eq(invoiceSeries.id, input.seriesId));
 
   if (series === undefined) {
     throw new AppError("sale.series_not_found", {
       seriesId: input.seriesId,
-      tenantId: input.tenantId,
     });
   }
   if (series.nodeId !== input.nodeId) {
@@ -179,8 +176,8 @@ export async function recordCorrection(
     });
   }
 
-  // The gate (spec §7). Placed AFTER the sale-existence and series guards above (so a missing or
-  // cross-tenant original, or a wrong/absent corrective series, still returns its own code and never
+  // The gate (spec §7). Placed AFTER the sale-existence and series guards above (so a missing
+  // original, or a wrong/absent corrective series, still returns its own code and never
   // leaks an authz error) and BEFORE the chain work below — `checkIntegrity`'s chain-head lock and
   // `allocateInvoiceNumber`'s series-row lock — so a rejected correction consumes NO number and does
   // NO chain work, leaving no permanent series gap. `authorization.authorizedBy` is the person to
@@ -195,9 +192,9 @@ export async function recordCorrection(
   // Step 3. Art. 7.i verification, exactly as for a sale record. Nothing branches on `verification.ok` —
   // a failed check records ONE aggregated incident (below, once `saleId` exists) and the correction
   // is chained anyway. The table-wide `incidents_open_dedup` index holds at most one open incident
-  // per (tenant, till, code, sale), so emitting one row per issue would collapse to a single row and
+  // per (till, code, sale), so emitting one row per issue would collapse to a single row and
   // drop every issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
+  const verification = await backend.checkIntegrity(tx, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
     pending.push({
@@ -242,7 +239,6 @@ export async function recordCorrection(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
@@ -278,7 +274,6 @@ export async function recordCorrection(
   // sale (the one this call created), matching `recordSale`'s own deferral until `saleId` exists.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       saleId,
       detectedAt: now.instant,
@@ -286,19 +281,19 @@ export async function recordCorrection(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(input.tenantId, saleId, input.lines));
+  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
 
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })
     .from(tills)
     .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(and(eq(tills.id, input.tillId), eq(tills.tenantId, input.tenantId)));
+    .where(eq(tills.id, input.tillId));
 
   /* v8 ignore start */
   if (location === undefined) {
     // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
     // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // or the tenant predicate excluded it — a caller programming error, not a fiscal condition.
+    // — a caller programming error, not a fiscal condition.
     throw new Error(`recordCorrection: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */
@@ -311,7 +306,6 @@ export async function recordCorrection(
   const fiscal = await backend.recordCorrection(
     tx,
     {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       saleId,

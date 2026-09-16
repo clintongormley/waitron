@@ -9,7 +9,7 @@ import {
   printJobs,
   sales,
   tills,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import {
   assignCatalogueToLocation,
@@ -33,7 +33,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -91,7 +90,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -104,7 +102,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 function printCfg(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 /** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %), a
@@ -154,60 +152,56 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { each, operatorId, supervisorId } = await withTenant(
-    suite.admin,
-    cfg.tenantId,
-    async (tx) => {
-      await asAppUser(tx);
-      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-      const product = await createProduct(tx, cfg.tenantId, {
-        catalogueId: cat.id,
-        categoryId: bebidas.id,
-        name: "Agua mineral",
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-      });
-      await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-      const section = await createMenuSection(tx, cfg.tenantId, {
-        menuId: cat.id,
-        name: { [LOCALE]: "Bebidas" },
-      });
-      const menuItem = await createMenuItem(tx, cfg.tenantId, {
-        menuId: cat.id,
-        productId: product.id,
-        sectionId: section.id,
-        grossPrice: "1.50",
-      });
-      await tx.execute(sql`
-        insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
-        select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+  const { each, operatorId, supervisorId } = await withTransaction(suite.admin, async (tx) => {
+    await asAppUser(tx);
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const product = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      name: "Agua mineral",
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+    });
+    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    const section = await createMenuSection(tx, {
+      menuId: cat.id,
+      name: { [LOCALE]: "Bebidas" },
+    });
+    const menuItem = await createMenuItem(tx, {
+      menuId: cat.id,
+      productId: product.id,
+      sectionId: section.id,
+      grossPrice: "1.50",
+    });
+    await tx.execute(sql`
+        insert into zone_menus (zone_id, menu_id, display_order)
+        select zone_id, ${cat.id}, 0
         from zone_service_policies
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        where location_id = ${cfg.locationId}
           and is_counter_default`);
-      await tx.execute(sql`
+    await tx.execute(sql`
         update zone_service_policies set default_menu_id = ${cat.id}
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        where location_id = ${cfg.locationId}
           and is_counter_default`);
-      await tx.execute(sql`
+    await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, category_id, station_id, no_preparation)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id}, null, true)`);
-      const staff = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
-      const supervisor = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${cfg.tenantId}, 'Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
-      const { products: available } = await listAvailableProducts(tx, cfg.locationId);
-      return {
-        each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
-        operatorId: staff.rows[0]!.id,
-        supervisorId: supervisor.rows[0]!.id,
-      };
-    },
-  );
+          (location_id, category_id, station_id, no_preparation)
+        values (${cfg.locationId}, ${bebidas.id}, null, true)`);
+    const staff = await tx.execute<{ id: string }>(sql`
+        insert into persons (display_name, pin_hash, role)
+        values ('Cajera', ${hashPin("5555")}, 'staff') returning id`);
+    const supervisor = await tx.execute<{ id: string }>(sql`
+        insert into persons (display_name, pin_hash, role)
+        values ('Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
+    const { products: available } = await listAvailableProducts(tx, cfg.locationId);
+    return {
+      each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
+      operatorId: staff.rows[0]!.id,
+      supervisorId: supervisor.rows[0]!.id,
+    };
+  });
   return { cfg, each, operatorId, supervisorId };
 }
 
@@ -225,7 +219,7 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
 /** Create a `cloud_poll` receipt printer (no agent needed — the enqueue is a pure INSERT, so no
  *  transport is ever touched on these routes) and return its id. */
 async function makePrinter(cfg: TillConfig): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(tx, printCfg(cfg), {
       name: "Recibos",
@@ -242,7 +236,7 @@ async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
@@ -262,7 +256,8 @@ async function configureReceipt(
 async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Buffer }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -270,8 +265,7 @@ async function printJobsFor(
         status: printJobs.status,
         payload: printJobs.payload,
       })
-      .from(printJobs)
-      .where(eq(printJobs.tenantId, cfg.tenantId));
+      .from(printJobs);
   });
 }
 
@@ -285,7 +279,8 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
     viaOverride: boolean;
   }[]
 > {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -296,15 +291,14 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         authorizedBy: drawerOpens.authorizedBy,
         viaOverride: drawerOpens.viaOverride,
       })
-      .from(drawerOpens)
-      .where(eq(drawerOpens.tenantId, cfg.tenantId));
+      .from(drawerOpens);
   });
 }
 
 /** Set the location's `drawer_open_policy` ('gated' | 'open') directly (the app role holds UPDATE on
  *  locations). The column defaults to 'gated', so a test wanting the gate need not call this. */
 async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx
       .update(locations)
@@ -314,22 +308,18 @@ async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promi
 }
 
 async function registroCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return (
-      await tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
-    ).length;
+    return (await tx.select().from(registrosFacturacion)).length;
   });
 }
 
 async function saleCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return (await tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, cfg.tenantId)))
-      .length;
+    return (await tx.select({ id: sales.id }).from(sales)).length;
   });
 }
 
@@ -352,16 +342,16 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
  *  enrolled device, and the device's till IS the venue till, so the filed record is unchanged. */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(cfg: TillConfig): Promise<string> {
-  // A device-gated login (§5/§6) plus a sale both enrol a till device in the SAME tenant, so the
+  // A device-gated login (§5/§6) plus a sale both enrol a till device in the SAME database, so the
   // profile name AND the device name (which the auto-created register is named after) must be unique
-  // per call — both carry a tenant-scoped unique index.
+  // per call — both carry a unique index.
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
   // A `till` device is defined by a `till`-form-factor profile (Task 7); `resolveDeviceBinding`
   // auto-creates the register it rings against, so the resolved sale till is this device's own.
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor)
-      values (${cfg.tenantId}, ${`Counter till profile ${n}`}, 'till') returning id`);
+      insert into device_profiles (name, form_factor)
+      values (${`Counter till profile ${n}`}, 'till') returning id`);
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: `Counter till ${n}`,
     profileId: rows[0]!.id,
@@ -928,7 +918,7 @@ describe("payment slip persisted capture facts", () => {
       const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
       // Seed the same persisted columns an integrated provider supplies, without contacting hardware.
       await suite.admin.execute(
-        sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`,
+        sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
       );
       const res = await app.request(`/api/sales/${id}/payment-slip`, {
         method: "POST",
@@ -950,7 +940,7 @@ describe("payment slip persisted capture facts", () => {
       expect(await saleCount(cfg)).toBe(1);
     },
   );
-  it("does not print a manual card slip or another tenant's sale", async () => {
+  it("does not print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
     const app = new Hono();
@@ -962,21 +952,11 @@ describe("payment slip persisted capture facts", () => {
         .status,
     ).toBe(200);
     expect(await printJobsFor(cfg)).toEqual([]);
-    const other = await setupVenue();
-    const foreignApp = new Hono();
-    mountTillApi(foreignApp, apiDeps(other.cfg), noopLog);
-    const foreignCookie = await login(foreignApp, other.cfg, other.operatorId);
-    const res = await foreignApp.request(`/api/sales/${id}/payment-slip`, {
-      method: "POST",
-      headers: { cookie: foreignCookie },
-    });
-    expect(res.status).toBe(404);
-    expect(await printJobsFor(other.cfg)).toEqual([]);
   });
   it("lays the payment slip out for the till printer's paper width and character set", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
@@ -989,7 +969,7 @@ describe("payment slip persisted capture facts", () => {
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
     await suite.admin.execute(
-      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`,
+      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
     );
     const res = await app.request(`/api/sales/${id}/payment-slip`, {
       method: "POST",
@@ -1053,15 +1033,13 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   const cookie = await login(app, cfg, operatorId);
   const id = await ringSale(app, cfg, cookie, each.menuItemId);
   const originalTaxId = (
-    await suite.admin.execute<{ tax_id: string }>(
-      sql`select tax_id from tenants where id = ${cfg.tenantId}`,
-    )
+    await suite.admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`)
   ).rows[0]!.tax_id;
   await suite.admin.execute(
-    sql`update tenants set legal_name = 'Changed venue identity' where id = ${cfg.tenantId}`,
+    sql`update tenants set legal_name = 'Changed venue identity' where id = 1`,
   );
   await suite.admin.execute(
-    sql`insert into tenant_receipts (tenant_id, receipt) values (${cfg.tenantId}, ${JSON.stringify({ headerSubtitle: "Current welcome", footerMessage: "Current farewell" })}::jsonb) on conflict (tenant_id) do update set receipt = excluded.receipt`,
+    sql`insert into tenant_receipts (id, receipt) values (1, ${JSON.stringify({ headerSubtitle: "Current welcome", footerMessage: "Current farewell" })}::jsonb) on conflict (id) do update set receipt = excluded.receipt`,
   );
   const res = await app.request(`/api/sales/${id}/reprint`, {
     method: "POST",

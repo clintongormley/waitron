@@ -1,9 +1,8 @@
 import { sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
 import { locations, tenants } from "./schema/tenants.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 import { pgErrorMessage } from "./testing/errors.js";
 import { usePgliteDb } from "./testing/lifecycle.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -31,19 +30,17 @@ async function rejectsWithCauseMatching(promise: Promise<unknown>, pattern: RegE
 }
 
 describe("invoice_locales", () => {
-  const tenantId = randomUUID();
   let db: Database;
 
   beforeEach(async () => {
     db = suite.db;
     await db
       .insert(tenants)
-      .values({ id: tenantId, country: "ES", taxId: "B44444447", legalName: "Bar Gamma SL" });
+      .values({ id: 1, country: "ES", taxId: "B44444447", legalName: "Bar Gamma SL" });
   });
 
   const insertLocales = async (invoiceLocales: string[]): Promise<unknown> => {
     return db.insert(locations).values({
-      tenantId,
       name: `locales-${invoiceLocales.join("-") || "empty"}`,
       invoiceLocales,
       operationDescription: "Servicios de restauración",
@@ -82,8 +79,7 @@ describe("invoice_locales", () => {
   });
 });
 
-describe("withTenant transaction context", () => {
-  const tenantId = randomUUID();
+describe("withTransaction transaction context", () => {
   let db: Database;
 
   beforeEach(async () => {
@@ -91,7 +87,7 @@ describe("withTenant transaction context", () => {
   });
 
   it("sets no app.tenant_id GUC — the database holds one tenant (spec §1)", async () => {
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       const { rows } = await tx.execute<{ v: string }>(
         sql`select current_setting('app.tenant_id', true) as v`,
       );

@@ -281,12 +281,12 @@ describe("native-replication arc — Case 1: the every-table copy matrix (spec �
     const ids = await seedFiscalParents(nodeA.ownerDb);
     const woId = randomUUID();
     await nodeA.ownerDb.execute(sql`
-      insert into working_orders (id, tenant_id, till_id, node_id, order_number)
-      values (${woId}, ${ids.tenantId}, ${ids.tillId}, ${ids.nodeId}, 1)`);
+      insert into working_orders (id, till_id, node_id, order_number)
+      values (${woId}, ${ids.tillId}, ${ids.nodeId}, 1)`);
     const personId = randomUUID();
     await nodeA.ownerDb.execute(sql`
-      insert into persons (id, tenant_id, display_name, pin_hash, role, status)
-      values (${personId}, ${ids.tenantId}, 'Case1 person', 'unusable', 'admin', 'active')`);
+      insert into persons (id, display_name, pin_hash, role, status)
+      values (${personId}, 'Case1 person', 'unusable', 'admin', 'active')`);
 
     // Each row lands on B by id — ledger (`sales`) and state (`working_orders`, `persons`), plus their
     // state parents (`tenants`/`tills`/`nodes`/`invoice_series`). Poll the last-written class, then read
@@ -296,7 +296,7 @@ describe("native-replication arc — Case 1: the every-table copy matrix (spec �
       .toBe(1);
     expect(await count(nodeB.superuserDb, "sales", ids.saleId)).toBe(1);
     expect(await count(nodeB.superuserDb, "working_orders", woId)).toBe(1);
-    expect(await count(nodeB.superuserDb, "tenants", ids.tenantId)).toBe(1);
+    expect(await count(nodeB.superuserDb, "tenants", "1")).toBe(1);
     expect(await count(nodeB.superuserDb, "invoice_series", ids.seriesId)).toBe(1);
 
     // A `local` table does NOT copy: stamp A's `deployment` (its own record of what it is) — B, never
@@ -359,11 +359,7 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
 
     designated = await provisionPrimaryVenue(nodeA.ownerDb);
     await stampDeployment(nodeA.ownerDb, ENV); // (primary, primary) by column default
-    await establishNodeIdentity(
-      { ownerDb: nodeA.ownerDb, ring: RING },
-      designated.tenantId,
-      designated.nodeId,
-    );
+    await establishNodeIdentity({ ownerDb: nodeA.ownerDb, ring: RING }, designated.nodeId);
     await createPublications(nodeA.ownerDb, {
       environment: ENV,
       ledgerTables: LEDGER,
@@ -423,7 +419,6 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
       primaryUrl: "https://a.local",
       credential: { personId: "admin", password: "x" },
     });
-    expect(result.tenantId).toBe(designated.tenantId);
     expect(result.breakGlassSecret.length).toBeGreaterThan(0);
 
     // The pending-adoption latch was written; it carries B's own minted standby identity.
@@ -549,7 +544,6 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
       holders: createDeploymentHolders("mirror", "secondary"),
       log: noopLog,
       ring: RING,
-      tenantId: designated.tenantId,
       nodeId: standbyNodeId,
       persistTradingEnv: async (seriesId) => {
         persistedSeries = seriesId;
@@ -585,7 +579,6 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
     const tailSaleId = randomUUID();
     await insertFiscalSale(nodeA.ownerDb, {
       saleId: tailSaleId,
-      tenantId: designated.tenantId,
       tillId: designated.tillId,
       nodeId: designated.nodeId,
       seriesId: designated.seriesId,
@@ -779,7 +772,7 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
   });
 });
 
-/** Provision a fresh venue on the OWNER connection (`applyVenue`), returning the five designated ids in
+/** Provision a fresh venue on the OWNER connection (`applyVenue`), returning the four designated ids in
  * `AdoptResult` shape — the same setup `mirror-bundle.test.ts` uses, so `assembleMirrorBundle` has a
  * real tenant + node to read. */
 async function provisionPrimaryVenue(ownerDb: Database): Promise<AdoptResult> {
@@ -817,7 +810,6 @@ async function provisionPrimaryVenue(ownerDb: Database): Promise<AdoptResult> {
     { db: ownerDb, modules: ALL_MODULES },
   );
   return {
-    tenantId: venue.tenantId,
     locationId: venue.locationId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,

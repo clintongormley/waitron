@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToLocation,
@@ -23,7 +23,6 @@ import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -40,7 +39,7 @@ import "./errors.js";
 // working-order id (unique, so `sales_working_order_id_key` never collides across cases).
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -75,7 +74,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -138,13 +136,13 @@ beforeAll(async () => {
   );
 
   cfg = tillConfigFromVenue(venue);
-  productId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  productId = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     // A product priced at exactly 1.00 gross so the filed total is "1.00" — the figure every case
     // below asserts against.
-    const product = await createProduct(tx, cfg.tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -177,7 +175,6 @@ async function seedSale(
     null,
   );
   const { saleId } = await recordSale(tx, backend, {
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
@@ -204,7 +201,6 @@ async function seedSale(
   if (payment !== undefined) {
     const paymentRef = randomUUID();
     await insertCapturedPayment(tx, {
-      tenantId: cfg.tenantId,
       workingOrderId,
       provider: payment.provider,
       paymentRef,
@@ -217,7 +213,6 @@ async function seedSale(
       provider: payment.provider,
       paymentRef,
       saleId,
-      tenantId: cfg.tenantId,
     });
   }
   return { saleId, workingOrderId };
@@ -225,7 +220,7 @@ async function seedSale(
 
 describe("readTenderBlock", () => {
   it("returns a cash block with the passed change", async () => {
-    const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const block = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "cash",
@@ -239,7 +234,7 @@ describe("readTenderBlock", () => {
   });
 
   it("returns the card amounts without exposing payment identity", async () => {
-    const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const block = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -260,7 +255,7 @@ describe("readTenderBlock", () => {
   });
 
   it("shows tip and charged when a tip rode on the card", async () => {
-    const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const block = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       // total 1.00 + tip 0.50 → tenders.amount 1.50, tip_amount 0.50.
       const { saleId, workingOrderId } = await seedSale(
@@ -277,7 +272,7 @@ describe("readTenderBlock", () => {
   });
 
   it("a manual card tender carries the operator reference", async () => {
-    const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const block = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -295,7 +290,7 @@ describe("readTenderBlock", () => {
   });
 
   it("keeps card amounts when the payment row has no card facts and is not manual", async () => {
-    const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const block = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -312,7 +307,7 @@ describe("readTenderBlock", () => {
     // payment insert when no payment arg is passed) — the `payment === null` branch of readTenderBlock,
     // which every other case misses. A filed, immutable sale must PRESENT, never throw (CLAUDE.md §5),
     // so this degrades to a bare card block rather than failing.
-    const block = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const block = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "card",

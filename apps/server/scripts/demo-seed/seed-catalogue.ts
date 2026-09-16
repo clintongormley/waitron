@@ -1,8 +1,7 @@
 // Seed both demo menus in the caller's transaction and return the image-to-product map.
-// The explicit tenant id supplies writes; this module resolves the kitchen stations.
+// The caller supplies the location; this module resolves the kitchen stations.
 
 import { sql } from "drizzle-orm";
-import type { TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
@@ -48,11 +47,7 @@ type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
 };
 
 /** Resolve the location's provisioned Cocina station and create its non-default Barra station. */
-async function resolveStationIds(
-  tx: Transaction,
-  tenantId: TenantId,
-  locationId: string,
-): Promise<StationIds> {
+async function resolveStationIds(tx: Transaction, locationId: string): Promise<StationIds> {
   const { rows: cocina } = await tx.execute<{ id: string }>(sql`
     select id from kitchen_stations
     where location_id = ${locationId} and name = 'Cocina'
@@ -63,11 +58,11 @@ async function resolveStationIds(
   }
   await tx.execute(sql`
     update kitchen_stations set name = 'Kitchen'
-    where tenant_id = ${tenantId} and id = ${kitchen}`);
+    where id = ${kitchen}`);
   // Seed scripts have no management session, so insert the non-default station directly.
   const { rows: barra } = await tx.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
-    values (${tenantId}, ${locationId}, 'Downstairs bar', 1, false, true)
+    insert into kitchen_stations (location_id, name, display_order, is_default, active)
+    values (${locationId}, 'Downstairs bar', 1, false, true)
     returning id`);
   const bar = barra[0]?.id;
   if (bar === undefined) {
@@ -76,8 +71,8 @@ async function resolveStationIds(
     );
   }
   const { rows: upstairsRows } = await tx.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
-    values (${tenantId}, ${locationId}, 'Upstairs bar', 2, false, true)
+    insert into kitchen_stations (location_id, name, display_order, is_default, active)
+    values (${locationId}, 'Upstairs bar', 2, false, true)
     returning id`);
   const upstairsBar = upstairsRows[0]?.id;
   if (upstairsBar === undefined) {
@@ -86,8 +81,8 @@ async function resolveStationIds(
     );
   }
   const { rows: deliRows } = await tx.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
-    values (${tenantId}, ${locationId}, 'Deli counter', 3, false, true)
+    insert into kitchen_stations (location_id, name, display_order, is_default, active)
+    values (${locationId}, 'Deli counter', 3, false, true)
     returning id`);
   const deli = deliRows[0]?.id;
   if (deli === undefined) {
@@ -99,17 +94,16 @@ async function resolveStationIds(
 }
 
 /**
- * Seed both demo menus onto `locationId` under the caller's tenant context, routing each category to
+ * Seed both demo menus onto `locationId` in the caller's transaction, routing each category to
  * its KDS station, setting Casa Delgado as the location DEFAULT and Menú del Día as an accessible
  * second menu. Returns the image→productId map for the downstream media/sales steps.
  */
 export async function seedCatalogues(
   tx: Transaction,
-  tenantId: TenantId,
   { locationId, locale }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
-  const stationIds = await resolveStationIds(tx, tenantId, locationId);
-  await writeContentLanguages(tx, tenantId, {
+  const stationIds = await resolveStationIds(tx, locationId);
+  await writeContentLanguages(tx, {
     defaultLanguage: locale,
     languages: locale === "en" ? ["en", "es"] : ["es", "en"],
   });
@@ -119,22 +113,22 @@ export async function seedCatalogues(
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
     select default_menu_id as id from zone_service_policies
-    where tenant_id = ${tenantId} and location_id = ${locationId} and is_counter_default
+    where location_id = ${locationId} and is_counter_default
       and default_menu_id is not null
     limit 1`);
 
   const seedOne = async (data: SeedCatalogue, existingMenuId?: string): Promise<string> => {
     const catalogue =
       existingMenuId === undefined
-        ? await createCatalogue(tx, tenantId, { name: data.name[locale] })
+        ? await createCatalogue(tx, { name: data.name[locale] })
         : { id: existingMenuId };
     if (existingMenuId !== undefined) {
       await tx.execute(sql`
         update catalogues set name = ${data.name[locale]}
-        where tenant_id = ${tenantId} and id = ${existingMenuId}`);
+        where id = ${existingMenuId}`);
     }
     for (const [categoryIndex, cat] of data.categories.entries()) {
-      const category = await createCategory(tx, tenantId, { name: cat.name });
+      const category = await createCategory(tx, { name: cat.name });
       categoriesByEnglishName.set(cat.name.en, category.id);
       if (cat.station !== null) {
         // The create op takes no station; set the route with a parameterised update. Both the id and
@@ -145,12 +139,12 @@ export async function seedCatalogues(
       }
       await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, category_id, station_id, no_preparation)
+          (location_id, category_id, station_id, no_preparation)
         values (
-          ${tenantId}, ${locationId}, ${category.id},
+          ${locationId}, ${category.id},
           ${cat.station === null ? null : stationIds[cat.station]}, ${cat.station === null}
         )`);
-      const section = await createMenuSection(tx, tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: catalogue.id,
         name: cat.name,
         displayOrder: categoryIndex,
@@ -160,7 +154,6 @@ export async function seedCatalogues(
           ? (
               await createUnit(
                 tx,
-                tenantId,
                 {
                   name: product.unit.name,
                   precision: product.unit.precision,
@@ -170,7 +163,7 @@ export async function seedCatalogues(
               )
             ).id
           : undefined;
-        const created = await createProduct(tx, tenantId, {
+        const created = await createProduct(tx, {
           catalogueId: catalogue.id,
           categoryId: category.id,
           // The staff-facing name is the authored short label where the menu gives one, so the demo
@@ -187,7 +180,7 @@ export async function seedCatalogues(
           unitPrice: product.unitPrice,
           vatClass: product.vatClass,
         });
-        const menuItem = await createMenuItem(tx, tenantId, {
+        const menuItem = await createMenuItem(tx, {
           menuId: catalogue.id,
           productId: created.id,
           sectionId: section.id,
@@ -198,7 +191,6 @@ export async function seedCatalogues(
         if (product.variants?.length) {
           const variants = await setProductVariants(
             tx,
-            tenantId,
             created.id,
             product.variants.map((variant) => ({
               name: variant.staffName ?? variant.customerName[locale],
@@ -212,7 +204,6 @@ export async function seedCatalogues(
           );
           await setMenuVariants(
             tx,
-            tenantId,
             menuItem.id,
             variants.map((variant, index) => ({
               variantId: variant.id,
@@ -240,22 +231,22 @@ export async function seedCatalogues(
   const drinksId = categoriesByEnglishName.get("Drinks");
   if (coffeeId === undefined || drinksId === undefined)
     throw new Error("demo-seed: Coffee or Drinks was not created");
-  const hotDrinks = await createCategory(tx, tenantId, {
+  const hotDrinks = await createCategory(tx, {
     name: { en: "Hot drinks", es: "Bebidas calientes" },
   });
-  await replaceProductCategories(tx, tenantId, coffeeId, {
+  await replaceProductCategories(tx, coffeeId, {
     categoryIds: [drinksId, hotDrinks.id],
     primaryCategoryId: drinksId,
   });
 
   const negroniId = productsByImage.get("negroni.png");
   if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");
-  const cocktailSection = await createMenuSection(tx, tenantId, {
+  const cocktailSection = await createMenuSection(tx, {
     menuId: diaId,
     name: { en: "Cocktails", es: "Cócteles" },
     displayOrder: MENU_DEL_DIA.categories.length,
   });
-  await createMenuItem(tx, tenantId, {
+  await createMenuItem(tx, {
     menuId: diaId,
     productId: negroniId,
     sectionId: cocktailSection.id,
@@ -264,8 +255,8 @@ export async function seedCatalogues(
   });
 
   await assignCatalogueToLocation(tx, locationId, casaId);
-  await addCatalogueToLocation(tx, tenantId, locationId, diaId);
-  await addCatalogueToLocation(tx, tenantId, locationId, deliId);
+  await addCatalogueToLocation(tx, locationId, diaId);
+  await addCatalogueToLocation(tx, locationId, deliId);
 
   return {
     productsByImage,

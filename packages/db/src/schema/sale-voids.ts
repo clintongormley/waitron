@@ -1,6 +1,5 @@
 import { foreignKey, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { sales } from "./sales.js";
-import { tenants } from "./tenants.js";
 
 /**
  * A sale is voided by APPENDING a row here, never by editing the sale.
@@ -18,14 +17,9 @@ export const saleVoids = pgTable(
   "sale_voids",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    // No single-column `.references()` here — see the composite
+    // No inline `.references()` here — see the hand-written
     // `sale_voids_sale_fk` below, mirroring `./sales.ts`'s own
     // `sale_lines_sale_fk`/`tenders_sale_fk`: a child row must not point at a
-    // sale belonging to a DIFFERENT tenant than the one recorded on this row,
     // a property a bare `sale_id -> sales.id` reference cannot express.
     saleId: uuid("sale_id").notNull(),
     reason: text("reason").notNull(),
@@ -47,8 +41,8 @@ export const saleVoids = pgTable(
     // transactions, and the second one would chain a duplicate annulment.
     unique("sale_voids_sale_id_key").on(t.saleId),
     foreignKey({
-      columns: [t.tenantId, t.saleId],
-      foreignColumns: [sales.tenantId, sales.id],
+      columns: [t.saleId],
+      foreignColumns: [sales.id],
       name: "sale_voids_sale_fk",
     }).onDelete("restrict"),
   ],

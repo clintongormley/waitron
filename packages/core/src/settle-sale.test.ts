@@ -8,12 +8,12 @@ import {
   saleSettlements,
   saleVoids,
   tenders,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { AppError, saleId as brandSaleId, tenantId as brandTenantId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import { AppError, saleId as brandSaleId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
@@ -31,13 +31,12 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
  */
 async function seedSale(
   db: Database,
-  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
   overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
     .values({
-      tenantId: seed.tenantId,
       tillId: seed.tillId,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
@@ -61,8 +60,8 @@ async function seedSale(
 /**
  * Runs `settleSale` inside one transaction as the non-superuser app role.
  */
-function settle(db: Database, tenantId: TenantId, input: SettleSaleInput): Promise<void> {
-  return withTenant(db, tenantId, async (tx) => {
+function settle(db: Database, input: SettleSaleInput): Promise<void> {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await settleSale(tx, input);
   });
@@ -74,8 +73,7 @@ describe("settleSale — the happy path", () => {
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
 
     // total 65.00 → 70.00 = 65.00 + 5.00 covers.
-    await settle(postgres.admin, seed.tenantId, {
-      tenantId: seed.tenantId,
+    await settle(postgres.admin, {
       saleId,
       tenders: [
         {
@@ -123,8 +121,7 @@ describe("settleSale — the happy path", () => {
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed);
     const error = await captureError(() =>
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
+      settle(postgres.admin, {
         saleId,
         tenders: [{ ...cash, amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -152,8 +149,7 @@ describe("settleSale — the happy path", () => {
     // Window the settle call so the stamped instant is pinned to the actual settlement moment, not
     // the seed's issued_at (11:00Z). `before`/`after` bracket the real `new Date()` inside settleSale.
     const before = new Date();
-    await settle(postgres.admin, seed.tenantId, {
-      tenantId: seed.tenantId,
+    await settle(postgres.admin, {
       saleId,
       tenders: [],
     });
@@ -187,8 +183,7 @@ describe("settleSale — the happy path", () => {
     const earlier = new Date("2026-08-01T12:00:00Z");
     const later = new Date("2026-08-01T18:30:00Z");
 
-    await settle(postgres.admin, seed.tenantId, {
-      tenantId: seed.tenantId,
+    await settle(postgres.admin, {
       saleId,
       // 40.00 + 25.00 = 65.00 = total + 0 tips. `later` is supplied on the FIRST tender to prove
       // the max is by value, not by array position.
@@ -207,28 +202,12 @@ describe("settleSale — the happy path", () => {
 });
 
 describe("settleSale — guards", () => {
-  it("throws sale.not_found for a cross-tenant sale", async () => {
-    // The sale exists, but the explicit sales.tenantId predicate excludes it from this lookup.
-    const other = await seedTenant(postgres.admin);
-    const foreignSaleId = await seedSale(postgres.admin, other, { total: "65.00" });
-    const seed = await seedTenant(postgres.admin);
-
-    await expect(
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
-        saleId: foreignSaleId,
-        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
-      }),
-    ).rejects.toMatchObject({ code: "sale.not_found", params: { saleId: foreignSaleId } });
-  });
-
   it("throws sale.tender_unsettled for a null settledAt", async () => {
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
 
     await expect(
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
+      settle(postgres.admin, {
         saleId,
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: null }],
       }),
@@ -251,8 +230,7 @@ describe("settleSale — guards", () => {
 
     // 60.00 charged against a 65.00 due — under-coverage.
     await expect(
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
+      settle(postgres.admin, {
         saleId,
         tenders: [{ method: "cash", amount: "60.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -269,10 +247,8 @@ describe("settleSale — guards", () => {
   });
 
   it("throws sale.not_found for an unknown sale id", async () => {
-    const seed = await seedTenant(postgres.admin);
     await expect(
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
+      settle(postgres.admin, {
         saleId: brandSaleId("00000000-0000-4000-8000-000000000000"),
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -283,15 +259,13 @@ describe("settleSale — guards", () => {
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
     await postgres.admin.insert(saleVoids).values({
-      tenantId: seed.tenantId,
       saleId,
       reason: "Wrong table",
       voidedAt: new Date("2026-08-01T11:30:00Z").toISOString(),
     });
 
     await expect(
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
+      settle(postgres.admin, {
         saleId,
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -302,15 +276,14 @@ describe("settleSale — guards", () => {
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
     const input: SettleSaleInput = {
-      tenantId: seed.tenantId,
       saleId,
       tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
     };
 
-    await settle(postgres.admin, seed.tenantId, input);
+    await settle(postgres.admin, input);
     // The second attempt is caught by the pre-check SELECT, not the UNIQUE violation (that is the
     // concurrent path below).
-    await expect(settle(postgres.admin, seed.tenantId, input)).rejects.toMatchObject({
+    await expect(settle(postgres.admin, input)).rejects.toMatchObject({
       code: "sale.already_settled",
       params: { saleId },
     });
@@ -340,7 +313,6 @@ describe("settleSale — the concurrent settlement race (real Postgres only)", (
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
     const input: SettleSaleInput = {
-      tenantId: seed.tenantId,
       saleId,
       tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
     };
@@ -363,7 +335,7 @@ describe("settleSale — the concurrent settlement race (real Postgres only)", (
 
       // Holder: settles fully (tenders + sale_settlements), signals it holds the uncommitted UNIQUE
       // key, and pauses before commit — keeping its transaction, and the key, open.
-      holderRun = withTenant(holder, seed.tenantId, async (tx) => {
+      holderRun = withTransaction(holder, async (tx) => {
         await asAppUser(tx);
         await settleSale(tx, input);
         acquire();
@@ -375,7 +347,7 @@ describe("settleSale — the concurrent settlement race (real Postgres only)", (
       // invisible), it inserts its own tenders (WT002 sees no committed settlement), then BLOCKS on
       // the sale_settlements UNIQUE key.
       let waiterDone = false;
-      waiterRun = settle(waiter, seed.tenantId, input)
+      waiterRun = settle(waiter, input)
         .then(() => undefined)
         .catch((error: unknown) => error)
         .finally(() => {
@@ -450,7 +422,6 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
-        tenantId: brandTenantId("00000000-0000-4000-8000-000000000000"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [],
       }),
@@ -495,7 +466,6 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
-        tenantId: brandTenantId("00000000-0000-4000-8000-000000000000"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -533,7 +503,6 @@ describe("settleSale — error propagation", () => {
 
     const error = await captureError(() =>
       settleSale(fakeTx, {
-        tenantId: brandTenantId("00000000-0000-4000-8000-000000000000"),
         saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
         tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -546,25 +515,17 @@ describe("settleSale — error propagation", () => {
 // Insert tenders then a settlement row directly, as the app role — bypassing settleSale so the
 // coverage TRIGGER is what is under test. Tenders first: tenders_reject_post_settlement (WT002)
 // rejects a tender once a settlement row exists.
-async function settleDirect(
-  db: Database,
-  tenantId: TenantId,
-  saleId: SaleId,
-  amount: string,
-): Promise<void> {
-  await withTenant(db, tenantId, async (tx) => {
+async function settleDirect(db: Database, saleId: SaleId, amount: string): Promise<void> {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await tx.insert(tenders).values({
-      tenantId,
       saleId,
       method: "cash",
       amount,
       tipAmount: "0.00",
       settledAt: SETTLED_AT.toISOString(),
     });
-    await tx
-      .insert(saleSettlements)
-      .values({ tenantId, saleId, settledAt: SETTLED_AT.toISOString() });
+    await tx.insert(saleSettlements).values({ saleId, settledAt: SETTLED_AT.toISOString() });
   });
 }
 
@@ -578,7 +539,7 @@ describe("coverage trigger nets corrections", () => {
       correctsSaleId: originalId,
     });
 
-    await settleDirect(postgres.admin, seed.tenantId, originalId, "65.00");
+    await settleDirect(postgres.admin, originalId, "65.00");
 
     const settled = await postgres.admin
       .select()
@@ -596,9 +557,7 @@ describe("coverage trigger nets corrections", () => {
       correctsSaleId: originalId,
     });
 
-    const error = await captureError(() =>
-      settleDirect(postgres.admin, seed.tenantId, originalId, "70.00"),
-    );
+    const error = await captureError(() => settleDirect(postgres.admin, originalId, "70.00"));
     expect(error).toBeDefined();
 
     const settled = await postgres.admin
@@ -612,9 +571,7 @@ describe("coverage trigger nets corrections", () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
 
-    const error = await captureError(() =>
-      settleDirect(postgres.admin, seed.tenantId, originalId, "65.00"),
-    );
+    const error = await captureError(() => settleDirect(postgres.admin, originalId, "65.00"));
     expect(error).toBeDefined();
 
     const settled = await postgres.admin
@@ -635,8 +592,7 @@ describe("settleSale nets corrections into the due", () => {
       correctsSaleId: originalId,
     });
 
-    await settle(postgres.admin, seed.tenantId, {
-      tenantId: seed.tenantId,
+    await settle(postgres.admin, {
       saleId: originalId,
       tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
     });
@@ -658,8 +614,7 @@ describe("settleSale nets corrections into the due", () => {
     });
 
     await expect(
-      settle(postgres.admin, seed.tenantId, {
-        tenantId: seed.tenantId,
+      settle(postgres.admin, {
         saleId: originalId,
         tenders: [{ method: "cash", amount: "70.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
@@ -678,8 +633,7 @@ describe("settleSale nets corrections into the due", () => {
       correctsSaleId: originalId,
     });
 
-    await settle(postgres.admin, seed.tenantId, {
-      tenantId: seed.tenantId,
+    await settle(postgres.admin, {
       saleId: originalId,
       tenders: [{ method: "cash", amount: "75.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
     });

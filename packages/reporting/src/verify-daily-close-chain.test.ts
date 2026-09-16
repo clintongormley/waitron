@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -27,10 +27,9 @@ beforeEach(async () => {
 });
 
 function record(businessDay: string, cashCounts: CashCountInput[]): Promise<DailyCloseRecord> {
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, {
-      tenantId: venue.tenantId,
       nodeId: venue.nodeId,
       businessDay,
       timeZone: "Europe/Madrid",
@@ -41,12 +40,12 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   });
 }
 
-// Verify under the app role with an explicit tenant id — the shape a caller (Task 5's demo) uses, which also
+// Verify under the app role for one node — the shape a caller (Task 5's demo) uses, which also
 // proves app_user's SELECT grant is enough to re-walk the chain.
 function verify() {
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    return verifyDailyCloseChain(tx, venue.tenantId, venue.nodeId);
+    return verifyDailyCloseChain(tx, venue.nodeId);
   });
 }
 
@@ -69,11 +68,7 @@ function craftClose(opts: {
   entryHash: string;
 }): Promise<unknown> {
   return suite.db.execute(sql`
-    insert into daily_closes (
-      tenant_id, node_id, business_day, sequence_no,
-      prev_entry_hash, entry_hash, closed_by, snapshot
-    ) values (
-      ${venue.tenantId}, ${venue.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
+    insert into daily_closes (node_id, business_day, sequence_no, prev_entry_hash, entry_hash, closed_by, snapshot) values (${venue.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
       ${opts.prevEntryHash}, ${opts.entryHash}, ${CLOSED_BY}, ${SNAPSHOT}::jsonb
     )`);
 }
@@ -85,7 +80,7 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
     expect(await verify()).toEqual({ ok: true });
   });
 
-  it("passes a (tenant, node) that has never closed (vacuously ok)", async () => {
+  it("passes a node that has never closed (vacuously ok)", async () => {
     expect(await verify()).toEqual({ ok: true });
   });
 
@@ -150,7 +145,7 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
     await record("2026-08-05", []);
     await suite.db.execute(sql`
       update daily_close_chain set sequence_no = 3, last_entry_hash = ${"F".repeat(64)}
-       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+       where node_id = ${venue.nodeId}`);
     expect(await verify()).toEqual({ ok: false, brokenAt: 3, reason: "tail_truncation" });
   });
 
@@ -162,7 +157,7 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
     await record("2026-08-05", []);
     await suite.db.execute(sql`
       update daily_close_chain set last_entry_hash = ${"E".repeat(64)}
-       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+       where node_id = ${venue.nodeId}`);
     expect(await verify()).toEqual({ ok: false, brokenAt: 2, reason: "tail_truncation" });
   });
 });

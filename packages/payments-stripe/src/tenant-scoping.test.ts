@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 /**
- * Makes the tenant-scoping invariant STRUCTURAL rather than a rule three doc comments happen to
- * describe.
+ * Makes the transaction-boundary invariant STRUCTURAL rather than a rule three doc comments happen
+ * to describe. (The file is still named for the tenant scoping this guard was first written for; the
+ * tenant column it scoped to is gone, the guard is not.)
  *
- * Adapters use `withTenant` for their transaction boundaries and node origin attribution.
- * The source scan rejects bare `.transaction(` calls in production sources.
+ * Adapters use `withTransaction` for their transaction boundaries. The source scan rejects bare
+ * `.transaction(` calls in production sources.
  *
  * The local `ImportMeta.glob` declaration mirrors that file's, and for its reason: this package
  * carries no `vite` dependency, and adding one for a type reference would be a dependency bought
@@ -77,9 +78,9 @@ describe("no adapter opens an unscoped transaction", () => {
     // NO exemptions, deliberately. An earlier version of this test exempted `reverse.ts` on the
     // grounds that `reverseViaStripe` "chooses its opener once, from its own `tenantId` option" —
     // which described the code the fix had just deleted. Its opener is now an unconditional
-    // `withTenant`, so the exemption protected nothing and holed the guard in precisely the file
+    // `withTransaction`, so the exemption protected nothing and holed the guard in precisely the file
     // that caused the reversal defect: re-adding
-    // `tenantId === undefined ? db.transaction(fn) : withTenant(...)` there would have kept CI
+    // `tenantId === undefined ? db.transaction(fn) : withTransaction(...)` there would have kept CI
     // green while returning every reversal to `payment.not_found` under a real role.
     const offenders = Object.entries(sources)
       .filter(([, source]) => stripComments(source).includes(".transaction("))

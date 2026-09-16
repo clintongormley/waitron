@@ -4,6 +4,8 @@ export type { Database, Driver, Schema, Transaction } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
 export * from "./schema/tenants.js";
+export { readTenant } from "./read-tenant.js";
+export type { Tenant } from "./read-tenant.js";
 export { nodes } from "./schema/nodes.js";
 export { invoiceSeries } from "./schema/series.js";
 export {
@@ -123,7 +125,7 @@ export {
 } from "./reserved-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
-export { withTenant } from "./tenancy.js";
+export { withTransaction } from "./tenancy.js";
 export {
   isPgError,
   isUniqueViolation,

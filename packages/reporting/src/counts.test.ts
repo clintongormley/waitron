@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedSale, seedSubstitution, seedVenue, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -14,13 +14,12 @@ beforeEach(async () => {
 });
 function run(): Promise<CloseCounts> {
   const input: DailyCloseInput = {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
   };
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeCloseCounts(tx, input);
   });
@@ -48,7 +47,7 @@ describe("computeCloseCounts", () => {
       correctsSaleId: s1,
       lines: [{ vatRate: "21.00", lineTotal: "-1.00" }],
     });
-    await seedVoid(suite.db, { tenantId: venue.tenantId, saleId: s1 }, noon);
+    await seedVoid(suite.db, { saleId: s1 }, noon);
     // s1 is voided → not in sales count; s2 remains; the corrective counts; one void.
     expect(await run()).toEqual({ sales: 1, corrections: 1, voids: 1 });
   });
@@ -67,7 +66,6 @@ describe("computeCloseCounts", () => {
       lines: [line],
     });
     await seedSubstitution(suite.db, {
-      tenantId: venue.tenantId,
       substitutionSaleId: f3,
       substitutedSaleId: ticket,
     });

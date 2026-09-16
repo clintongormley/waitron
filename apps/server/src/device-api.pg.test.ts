@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -93,7 +93,7 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
   );
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     select ti.id from ticket_items ti
-    join working_order_lines wol on wol.id = ti.working_order_line_id and wol.tenant_id = ti.tenant_id
+    join working_order_lines wol on wol.id = ti.working_order_line_id
     where ti.working_order_id = ${orderId}
     order by wol.line_no`);
   return { orderId, items: rows.map((r) => r.id) };
@@ -108,11 +108,11 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
 }
 
 /** Seed a `cloud_poll` printer for the venue (owner SQL) — needs only a poll id, so no print agent has
- *  to be seeded to satisfy the transport CHECK. A real `(tenant_id, id)` a device binding can name. */
+ *  to be seeded to satisfy the transport CHECK. A real `(id)` a device binding can name. */
 async function seedPrinter(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into printers (tenant_id, location_id, name, transport, poll_id)
-    values (${cfg.tenantId}, ${cfg.locationId}, 'Recibos', 'cloud_poll', 'poll-abc')
+    insert into printers (location_id, name, transport, poll_id)
+    values (${cfg.locationId}, 'Recibos', 'cloud_poll', 'poll-abc')
     returning id`);
   return rows[0]!.id;
 }
@@ -194,14 +194,13 @@ function deviceCookieFrom(res: Response): string {
  *  7). A per-suite counter keeps the tenant-unique name from colliding across the shared clone. */
 let profileCounter = 0;
 async function seedProfile(
-  cfg: TillConfig,
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, ${`Profile ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values (${`Profile ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
     returning id`);
   return rows[0]!.id;
 }
@@ -221,7 +220,7 @@ async function knockAndAccept(
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
   expect(res.status).toBe(200);
   const knock = (await res.json()) as { joinId: string; verificationNumber: string };
-  const accepted = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+  const accepted = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
       choice: knock.verificationNumber,
@@ -244,7 +243,7 @@ async function enrolKds(
   venue: Venue,
   stationId: string,
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
-  const profileId = await seedProfile(venue.cfg, "kds");
+  const profileId = await seedProfile("kds");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name: "Pantalla Cocina",
     profileId,
@@ -260,7 +259,7 @@ async function enrolTill(
   venue: Venue,
   name = "Caja nueva",
 ): Promise<{ deviceId: string; jar: string; profileId: string; formFactor: string }> {
-  const profileId = await seedProfile(venue.cfg, "till");
+  const profileId = await seedProfile("till");
   const { deviceId, jar, formFactor } = await knockAndAccept(app, venue, { name, profileId });
   return { deviceId, jar, profileId, formFactor };
 }
@@ -271,7 +270,7 @@ async function enrolHandheld(
   venue: Venue,
   registerId: string,
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
-  const profileId = await seedProfile(venue.cfg, "phone-portrait");
+  const profileId = await seedProfile("phone-portrait");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name: "Waiter phone",
     profileId,
@@ -293,7 +292,7 @@ describe("POST /api/device/join", () => {
     // The refusal happens before any DB work: no row, so a flood cannot fill the pending cap or the
     // connection pool (CLAUDE.md §5 — nothing external may block a sale).
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -321,7 +320,7 @@ describe("POST /api/device/join", () => {
     // The row is this tenant's, pending, and carries the number that came back.
     const { rows } = await suite.admin.execute<{ label: string; verification_number: string }>(
       sql`select label, verification_number from join_requests
-           where tenant_id = ${venue.cfg.tenantId} and id = ${body.joinId as string}`,
+           where id = ${body.joinId as string}`,
     );
     expect(rows[0]).toMatchObject({
       label: "Bar till",
@@ -380,7 +379,7 @@ describe("POST /api/device/join", () => {
     );
     expect(mode.refusedRecently()).toBe(0);
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -447,7 +446,7 @@ describe("devMode auto-accept", () => {
 
     // The request row is CONSUMED by the accept — it is now a device, not a pending join.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -456,9 +455,7 @@ describe("devMode auto-accept", () => {
     const venue = await setupVenue(suite.admin);
     // Remove the provisioned default `till` profile (no device references it yet, so the RESTRICT FK is
     // not tripped). Auto-accept then has no default to resolve.
-    await suite.admin.execute(
-      sql`delete from device_profiles where tenant_id = ${venue.cfg.tenantId} and form_factor = 'till'`,
-    );
+    await suite.admin.execute(sql`delete from device_profiles where form_factor = 'till'`);
     const app = mountDevApp(venue.cfg, true);
     const res = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
     expect(res.status).toBe(404);
@@ -468,7 +465,7 @@ describe("devMode auto-accept", () => {
     // The throw is inside the same transaction as the mint, so the just-created request is rolled back —
     // no orphan pending row nobody can approve.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -503,8 +500,8 @@ describe("GET /api/device/join/status", () => {
     expect(pending.status).toBe(200);
     expect(await pending.json()).toEqual({ status: "pending" });
 
-    const profileId = await seedProfile(venue.cfg, "till");
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const profileId = await seedProfile("till");
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return acceptDeviceJoinRequest(tx, venue.cfg, joinId, {
         choice: verificationNumber,
@@ -534,7 +531,7 @@ describe("GET /api/device/join/status", () => {
     const jar = deviceCookieFrom(knock);
     const { joinId } = (await knock.json()) as { joinId: string };
 
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return denyJoinRequest(tx, venue.cfg, joinId);
     });
@@ -599,7 +596,7 @@ describe("Device API over real Postgres — the device-guarded routes", () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
 
-    const fria = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const fria = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createStation(tx, venue.cfg, { name: "Fría", isDefault: false });
     });
@@ -784,59 +781,12 @@ describe("Device management routes (device.manage)", () => {
     expect(malformed.status).toBe(404);
   });
 
-  it("contains cross-tenant management: A cannot list, revoke, or reassign B's device", async () => {
-    // RUN, not read (CLAUDE.md §3/§4): enrol a device in venue B, then drive venue A's management mount
-    // against B's globally-unique device id. Since RLS was dropped (#255) the by-id list/revoke/assign
-    // must each carry their OWN tenant scope, or A reaches across the id into B's row. Proven against
-    // real Postgres as `app_user`.
-    const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const appA = mountApp(venueA.cfg);
-    const appB = mountApp(venueB.cfg);
-    const { deviceId, profileId } = await enrolTill(appB, venueB, "Caja B");
-
-    // (1) A's LIST omits B's device entirely — an unscoped SELECT would return every tenant's rows.
-    const list = await send(appA, "GET", "/management-api/devices", {
-      cookie: venueA.managerCookie,
-    });
-    expect(list.status).toBe(200);
-    const rows = (await list.json()) as { id: string }[];
-    expect(rows.find((r) => r.id === deviceId)).toBeUndefined();
-
-    // (2) A's REVOKE 404s — an unscoped UPDATE would flip B's device inactive.
-    const revoke = await send(appA, "POST", `/management-api/devices/${deviceId}/revoke`, {
-      cookie: venueA.managerCookie,
-    });
-    expect(revoke.status).toBe(404);
-    expect((await revoke.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "device.not_found" },
-    });
-
-    // (3) A's REASSIGN 404s. The target is a SECOND profile of B's tenant, so the composite FK
-    // `(tenant_id, device_profile_id)` would NOT block an unscoped UPDATE — it would reassign B's device.
-    // Only the tenant predicate stops it. (A's own profile would 400 on the FK instead, a weaker proof.)
-    const targetOnB = await seedProfile(venueB.cfg, "till");
-    const assign = await send(
-      appA,
-      "POST",
-      `/management-api/devices/${deviceId}/assign-device-profile`,
-      { cookie: venueA.managerCookie, body: { deviceProfileId: targetOnB } },
-    );
-    expect(assign.status).toBe(404);
-
-    // B's device is intact: still active, still on its own enrol profile.
-    const after = await suite.admin.execute<{ active: boolean; device_profile_id: string }>(
-      sql`select active, device_profile_id from devices where id = ${deviceId}`,
-    );
-    expect(after.rows[0]).toMatchObject({ active: true, device_profile_id: profileId });
-  });
-
   describe("assign-device-profile (reassign only — the profile is NOT NULL since Task 7)", () => {
     it("reassigns a device to another of this tenant's profiles", async () => {
       const venue = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
       const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
-      const target = await seedProfile(venue.cfg, "kds");
+      const target = await seedProfile("kds");
 
       const assign = await send(
         app,
@@ -848,14 +798,12 @@ describe("Device management routes (device.manage)", () => {
       expect((await deviceBindings(deviceId)).device_profile_id).toBe(target);
     });
 
-    it("rejects a nonexistent / cross-tenant / absent profile — device untouched", async () => {
+    it("rejects a nonexistent or absent profile — device untouched", async () => {
       const venue = await setupVenue(suite.admin);
-      const foreign = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
-      const foreignProfile = await seedProfile(foreign.cfg, "kds");
       const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);
 
-      for (const badProfile of [randomUUID(), foreignProfile]) {
+      for (const badProfile of [randomUUID()]) {
         const res = await send(
           app,
           "POST",
@@ -889,7 +837,7 @@ describe("Device management routes (device.manage)", () => {
     it("with an unknown or malformed device id → 404 device.not_found", async () => {
       const venue = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
-      const profileId = await seedProfile(venue.cfg, "kds");
+      const profileId = await seedProfile("kds");
       const unknown = randomUUID();
       const res = await send(
         app,
@@ -980,38 +928,14 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     expect(malformed.status).toBe(404);
   });
 
-  it("404s a FOREIGN tenant's device — the update is tenant-scoped, not just by id", async () => {
-    // Enrol a device in venue A, then PATCH it through venue B's mount (cfg B). A by-id write STILL
-    // scopes to the tenant (CLAUDE.md §3), so B's UPDATE matches 0 rows and 404s rather than reaching
-    // across the (globally-unique) id. RUN, not read: proven against real Postgres as `app_user`.
-    const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const appA = mountApp(venueA.cfg);
-    const appB = mountApp(venueB.cfg);
-    const { deviceId } = await enrolTill(appA, venueA, "Caja A");
-
-    const res = await send(appB, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      cookie: venueB.managerCookie,
-      body: { hasCashDrawer: true },
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "device.not_found" },
-    });
-    // Venue A's device is untouched — B's scoped UPDATE never reached it.
-    expect((await deviceBindings(deviceId)).has_cash_drawer).toBe(false);
-  });
-
   it("rejects a receiptPrinterId naming no printer of this tenant with device.binding_invalid", async () => {
     const venue = await setupVenue(suite.admin);
-    const foreign = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const foreignPrinter = await seedPrinter(foreign.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja fk");
 
     const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
       cookie: venue.managerCookie,
-      body: { receiptPrinterId: foreignPrinter },
+      body: { receiptPrinterId: randomUUID() },
     });
     expect(res.status).toBe(400);
     expect(
@@ -1106,7 +1030,7 @@ describe("join rate limiter (spec §8)", () => {
     });
     // Refused before any DB work: only the two admitted knocks left rows.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(2);
 

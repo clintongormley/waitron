@@ -1,5 +1,13 @@
 # The tenant credential vault — `packages/credentials`
 
+> **2026-09-14 — `waitron-credentials` no longer takes `--tenant`, and REFUSES it.** The tenant
+> column was dropped from every table: one database holds one taxpayer, as the single row of
+> `tenants`, and a credential is keyed by its purpose alone. Every command below of the shape
+> `… set --tenant <uuid> --purpose <name>` is run today as `… set --purpose <name>` — the flag is
+> not ignored, it fails with the CLI's usage line (`packages/credentials/src/cli.test.ts`, "rejects
+> a --tenant flag with usage"). The rest of this document is left as it was written. Spec:
+> [drop-tenant-id](2026-09-14-drop-tenant-id-design.md).
+
 **Date:** 2026-07-26
 **Status:** design, approved in brainstorm; implementation plan to follow.
 **Main at design time:** `c9faa2c`.

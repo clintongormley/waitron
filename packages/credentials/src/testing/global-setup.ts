@@ -11,8 +11,8 @@ import { CREDENTIALS_MIGRATIONS } from "../migrations.js";
  * `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
  *
  * One template, because the one real-PG suite here migrates exactly the pair — CORE then
- * CREDENTIALS. That ordering (core first, since `tenant_credentials` carries a foreign key onto core's
- * `tenants`) is the runtime's responsibility and nothing enforces it across packages, so it is
+ * CREDENTIALS. That ordering (core first, since the credentials baseline references core's `tenants`)
+ * is the runtime's responsibility and nothing enforces it across packages, so it is
  * explicit here; the now-removed per-file `startRealPostgres` ran the same pair. The suite clones it
  * with `useTemplateDb({ template: "core_credentials" })`.
  *

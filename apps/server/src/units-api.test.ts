@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -14,7 +14,6 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 const log: Logger = () => {};
-let tenantId: string;
 let cookie: string;
 
 beforeEach(async () => {
@@ -25,20 +24,20 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from management_sessions`);
   await suite.db.execute(sql`delete from persons`);
-  tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const session = await startManagementSession(tx, { tenantId, personId: person.rows[0]!.id });
+      insert into persons (display_name, pin_hash, role)
+      values ('Manager', ${hashPin("1234")}, 'manager') returning id`);
+    const session = await startManagementSession(tx, { personId: person.rows[0]!.id });
     cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
   });
 });
 
 function app() {
   const app = new Hono();
-  mountUnitsApi(app, { db: suite.db, cfg: { tenantId }, venueLocale: "en-GB" }, log);
+  mountUnitsApi(app, { db: suite.db, venueLocale: "en-GB" }, log);
   return app;
 }
 
@@ -171,18 +170,18 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const [a, b] = await withTenant(suite.db, tenantId, async (tx) => {
+    const [a, b] = await withTransaction(suite.db, async (tx) => {
       const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+        insert into catalogues (name) values ('Menu') returning id`);
       const ids: string[] = [];
       for (const name of ["A", "B"]) {
         const product = await tx.execute<{ id: string }>(sql`
-          insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${tenantId}, ${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
+          insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
           returning id`);
         await tx.execute(sql`
-          insert into product_units (tenant_id, product_id, unit_id)
-          values (${tenantId}, ${product.rows[0]!.id}, ${from.id})`);
+          insert into product_units (product_id, unit_id)
+          values (${product.rows[0]!.id}, ${from.id})`);
         ids.push(product.rows[0]!.id);
       }
       return ids;
@@ -205,16 +204,16 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const p1 = await withTenant(suite.db, tenantId, async (tx) => {
+    const p1 = await withTransaction(suite.db, async (tx) => {
       const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+        insert into catalogues (name) values ('Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
-        insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
+        insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
         returning id`);
       await tx.execute(sql`
-        insert into product_units (tenant_id, product_id, unit_id)
-        values (${tenantId}, ${product.rows[0]!.id}, ${unit.id})`);
+        insert into product_units (product_id, unit_id)
+        values (${product.rows[0]!.id}, ${unit.id})`);
       return product.rows[0]!.id;
     });
 
@@ -249,16 +248,16 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const p1 = await withTenant(suite.db, tenantId, async (tx) => {
+    const p1 = await withTransaction(suite.db, async (tx) => {
       const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+        insert into catalogues (name) values ('Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
-        insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
+        insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
         returning id`);
       await tx.execute(sql`
-        insert into product_units (tenant_id, product_id, unit_id)
-        values (${tenantId}, ${product.rows[0]!.id}, ${unit.id})`);
+        insert into product_units (product_id, unit_id)
+        values (${product.rows[0]!.id}, ${unit.id})`);
       return product.rows[0]!.id;
     });
 
@@ -283,36 +282,5 @@ describe("unit management routes", () => {
       unitId: unit.id,
     });
     expect(response.status).toBe(400);
-  });
-
-  it("does not expose or mutate another tenant's unit through either manager session", async () => {
-    const otherTenantId = await seedTenant(suite.db);
-    const other = await withTenant(suite.db, otherTenantId, async (tx) => {
-      await asAppUser(tx);
-      const unit = await tx.execute<{ id: string }>(sql`
-        insert into units (tenant_id, name, abbreviation, precision)
-        values (${otherTenantId}, '{"en":"foreign"}'::jsonb, '{"en":"f"}'::jsonb, 0) returning id`);
-      const person = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${otherTenantId}, 'Other manager', ${hashPin("5678")}, 'manager') returning id`);
-      const session = await startManagementSession(tx, {
-        tenantId: otherTenantId,
-        personId: person.rows[0]!.id,
-      });
-      return { unitId: unit.rows[0]!.id, cookie: `${MANAGEMENT_COOKIE}=${session.id}` };
-    });
-
-    const foreignSession = await app().request("/management-api/units", {
-      headers: { cookie: other.cookie },
-    });
-    expect(foreignSession.status).toBe(403);
-    expect(await foreignSession.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
-    expect((await send("GET", `/management-api/units/${other.unitId}`)).status).toBe(404);
-    expect(
-      (await send("PATCH", `/management-api/units/${other.unitId}`, { precision: 1 })).status,
-    ).toBe(404);
-    expect((await send("DELETE", `/management-api/units/${other.unitId}`)).status).toBe(404);
   });
 });

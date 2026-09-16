@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -13,30 +13,30 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 const noopLog: Logger = () => {};
-let tenantId: string;
 let locationId: string;
 let personId: string;
 let managerCookie: string;
 let staffCookie: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    const seeded = await withTenant(db, tenantId, async (tx) => {
+    await seedTenant(db);
+    const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const loc = await tx.execute<{ id: string }>(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (${tenantId}, 'Main', array['es-ES'], 'Sale on premises') returning id`);
+        insert into locations (name, invoice_locales, operation_description)
+        values ('Main', array['es-ES'], 'Sale on premises') returning id`);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-      const mSes = await startManagementSession(tx, { tenantId, personId: mgr.rows[0]!.id });
-      const sSes = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      const mSes = await startManagementSession(tx, { personId: mgr.rows[0]!.id });
+      const sSes = await startManagementSession(tx, { personId: stf.rows[0]!.id });
       return {
         locationId: loc.rows[0]!.id,
         personId: mgr.rows[0]!.id,
@@ -57,7 +57,7 @@ function mountApp(): Hono {
   // plumbed into cfg but never reaches the chain.
   mountWorkforceApi(
     app,
-    { db: suite.db, cfg: { tenantId, nodeId: "00000000-0000-4000-8000-000000000000" } },
+    { db: suite.db, cfg: { nodeId: "00000000-0000-4000-8000-000000000000" } },
     noopLog,
   );
   return app;
@@ -294,12 +294,12 @@ describe("mountWorkforceApi — shift routes", () => {
 
 describe("mountWorkforceApi — publish", () => {
   async function seedConvenio(): Promise<void> {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
-        insert into convenio_config (tenant_id, location_id)
-        values (${tenantId}, ${locationId})
-        on conflict (tenant_id, location_id) do nothing`);
+        insert into convenio_config (location_id)
+        values (${locationId})
+        on conflict (location_id) do nothing`);
     });
   }
 
@@ -363,11 +363,11 @@ describe("mountWorkforceApi — publish", () => {
   it("409s publish when the location has no convenio_config (convenio.not_found)", async () => {
     const app = mountApp();
     // A DIFFERENT location with no convenio row.
-    const otherLoc = await withTenant(suite.db, tenantId, async (tx) => {
+    const otherLoc = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (${tenantId}, 'Annex', array['es-ES'], 'Sale on premises') returning id`);
+        insert into locations (name, invoice_locales, operation_description)
+        values ('Annex', array['es-ES'], 'Sale on premises') returning id`);
       return r.rows[0]!.id;
     });
     const create = await send(app, "POST", "/management-api/roster", {
@@ -393,24 +393,24 @@ describe("mountWorkforceApi — publish", () => {
 
 describe("mountWorkforceApi — swap + absence approvals", () => {
   async function seedAcceptedSwap(): Promise<string> {
-    return withTenant(suite.db, tenantId, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const shift = await tx.execute<{ id: string }>(sql`
-        insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-        values (${tenantId}, ${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0)
+        insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
+        values (${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0)
         returning id`);
       const swap = await tx.execute<{ id: string }>(sql`
-        insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
-        values (${tenantId}, ${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
+        insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
+        values (${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
       return swap.rows[0]!.id;
     });
   }
   async function seedRequestedAbsence(): Promise<string> {
-    return withTenant(suite.db, tenantId, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
-        insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
-        values (${tenantId}, ${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
+        insert into absences (person_id, absence_kind, starts_on, ends_on)
+        values (${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
       return r.rows[0]!.id;
     });
   }

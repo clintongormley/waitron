@@ -409,6 +409,8 @@ Replacing the duplicate-set condition in `replaceProductCategories` with `false`
 -t 'validates replacement primaries and rolls back invalid saves'` fails: expected
 `category.membership_invalid`, received a wrapped PostgreSQL `23505`, "duplicate key value violates
 unique constraint product_categories_tenant_id_product_id_category_id_pk". Re-verified 2026-09-13.
+That constraint is now `product_categories_product_id_category_id_pk` — the tenant column went on
+2026-09-14 — so a re-run prints the new name; nothing else about the measurement changes.
 Note the test name — an earlier version of this paragraph named a test that no longer exists, and
 because a `-t` filter matching nothing skips every test and still exits 0, following it produced a
 green run that looked like a passing control.

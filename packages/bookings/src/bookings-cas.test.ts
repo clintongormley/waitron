@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, diningTables, withTenant } from "@waitron/db";
+import { asAppUser, diningTables, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { fakeCore } from "./testing/fake-core.js";
 import {
@@ -17,6 +17,10 @@ import {
   type BookingConfig,
 } from "./bookings.js";
 import "./errors.js";
+
+/** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
+ * tills, working_orders) still carry. */
+type VenueCfg = BookingConfig;
 
 // Real PostgreSQL (a shared-container clone of the whole-manifest template), NOT PGlite. `seatBooking`'s terminal
 // write is a compare-and-swap — `update … where id = ? and status = 'booked'`, throwing
@@ -35,12 +39,8 @@ beforeAll(() => {
   db = suite.admin;
 });
 
-function asApp<T>(
-  d: Database,
-  cfg: BookingConfig,
-  fn: (tx: Transaction) => Promise<T>,
-): Promise<T> {
-  return withTenant(d, cfg.tenantId, async (tx) => {
+function asApp<T>(d: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(d, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -50,32 +50,29 @@ function asApp<T>(
  * seat cfg is a plain `BookingConfig` and the till + node the tab row needs are captured by `fakeCore`
  * (its `SELECT … FOR UPDATE` on the table is what makes the two-backend race below stage). */
 async function setupVenue(): Promise<{
-  cfg: BookingConfig;
+  cfg: VenueCfg;
   core: CoreServices;
   createdBy: string;
 }> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
-    core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }),
+    cfg: { locationId: brandLocationId(locationId) },
+    core: fakeCore({ tillId: till.rows[0]!.id, nodeId }),
     createdBy: randomUUID(),
   };
 }
 
 /** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
  * verb lives in apps/server, which a module cannot import). */
-async function seedTable(cfg: BookingConfig, label: string): Promise<string> {
+async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -102,10 +99,10 @@ async function waitUntilLockBlocked(pid: number): Promise<void> {
   throw new Error(`backend ${pid} never became lock-blocked (the race never staged)`);
 }
 
-/** Count of `working_orders` for this tenant, read as the owner. */
-async function workingOrderCount(cfg: BookingConfig): Promise<number> {
+/** Count of `working_orders`, read as the owner. */
+async function workingOrderCount(): Promise<number> {
   const { rows } = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,
+    sql`select count(*)::int as n from working_orders`,
   );
   return rows[0]!.n;
 }
@@ -126,7 +123,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
     // (and a tab survives). Verified 2026-08-31.
     const { cfg, core, createdBy } = await setupVenue();
     const tableId = await seedTable(cfg, "CAS-1");
-    const { id: bookingId } = await asApp(db, cfg, (tx) =>
+    const { id: bookingId } = await asApp(db, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -150,7 +147,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       });
       let cancelCommitted = false;
 
-      const connBWork = asApp(connB, cfg, async (tx) => {
+      const connBWork = asApp(connB, async (tx) => {
         await tx
           .select({ id: diningTables.id })
           .from(diningTables)
@@ -164,7 +161,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       });
 
       await lockHeld;
-      const seatA = asApp(connA, cfg, (tx) => seatBooking(tx, cfg, bookingId, {}, core));
+      const seatA = asApp(connA, (tx) => seatBooking(tx, cfg, bookingId, {}, core));
 
       const [seatRes] = await Promise.allSettled([seatA, connBWork]);
       await connBWork; // surface any connB failure
@@ -178,9 +175,9 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
 
       // The booking stayed `cancelled`, never linked a tab, and seatBooking's rolled-back tx left NO
       // working order behind — the CAS's throw rolls the whole caller tx back, so no orphan tab survives.
-      const after = await asApp(db, cfg, (tx) => getBooking(tx, cfg, bookingId));
+      const after = await asApp(db, (tx) => getBooking(tx, cfg, bookingId));
       expect(after).toMatchObject({ status: "cancelled", tabId: null });
-      expect(await workingOrderCount(cfg)).toBe(0);
+      expect(await workingOrderCount()).toBe(0);
     } finally {
       await Promise.all([connA.close(), connB.close()]);
     }
@@ -199,7 +196,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
     // of the two.
     const { cfg, createdBy } = await setupVenue();
     const tableId = await seedTable(cfg, "CAS-2");
-    const { id: bookingId } = await asApp(db, cfg, (tx) =>
+    const { id: bookingId } = await asApp(db, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -209,9 +206,9 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
         createdBy,
       }),
     );
-    await asApp(db, cfg, (tx) => cancelBooking(tx, cfg, bookingId));
+    await asApp(db, (tx) => cancelBooking(tx, cfg, bookingId));
 
-    await asApp(db, cfg, async (tx) => {
+    await asApp(db, async (tx) => {
       // seatBooking's terminal WHERE verbatim: id AND status = 'booked'. The booking is `cancelled`, so
       // the guarded update matches nothing — the throw path.
       const guarded = await tx

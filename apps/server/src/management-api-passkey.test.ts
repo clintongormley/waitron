@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -9,7 +9,7 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
 
-// The passkey routes below run their DB work through `withTenant` + `asAppUser`, so the credential
+// The passkey routes below run their DB work through `withTransaction` + `asAppUser`, so the credential
 // write and the session lookup are subject to app_user's grants: a grant the role lacks fails
 // assertion 2. The register route is also GATED on a management-session cookie, which needs a
 // migrated database (persons + management_sessions). The ceremony LOGIC (options issued/stored/consumed,
@@ -80,7 +80,7 @@ function authVerified(
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's seeded password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
+// (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -97,8 +97,8 @@ function nextNif(): string {
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
-  const venue = await applyVenue(
+async function setupTenant(): Promise<{ managerId: string }> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -132,21 +132,21 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return { managerId: manager.rows[0]!.id };
   });
-  return { tenantId: venue.tenantId, managerId };
+  return { managerId };
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request`. `deps.db` is the
-  // owner connection; the routes drop to `app_user` themselves via `withTenant` + `asAppUser`.
+  // owner connection; the routes drop to `app_user` themselves via `withTransaction` + `asAppUser`.
   // `rpId`/`origin` are the loopback passkey Relying Party values Task 4 widened `ManagementApiDeps`
   // to require — the same values the mocked `verify*` calls receive.
   mountManagementApi(
@@ -155,7 +155,7 @@ function mountApp(tenantId: string): Hono {
       db: suite.admin,
       // The all-zero node id (the capture default): this suite exercises the passkey ceremonies, not
       // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -167,13 +167,13 @@ function mountApp(tenantId: string): Hono {
 
 /** The same app with the me API mounted beside the management API, as `boot.ts` mounts them: the
  * passkey offer is answered by sign-in on one surface and recorded as resolved on the other. */
-function mountAppWithMe(tenantId: string): Hono {
-  const app = mountApp(tenantId);
+function mountAppWithMe(): Hono {
+  const app = mountApp();
   mountMeApi(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       venueLocale: LOCALE,
       modules: [],
     },
@@ -181,28 +181,6 @@ function mountAppWithMe(tenantId: string): Hono {
   );
   return app;
 }
-
-it("refuses another tenant's session on both passkey registration endpoints", async () => {
-  const first = await setupTenant();
-  const second = await setupTenant();
-  const cookie = await login(mountApp(first.tenantId), MANAGER_EMAIL);
-  const app = mountApp(second.tenantId);
-  for (const stage of ["options", "verify"]) {
-    const response = await app.request(`/management-api/passkey/register/${stage}`, {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        currentPassword: PASSWORD,
-        challengeHandle: "11111111-1111-4111-8111-111111111111",
-        response: {},
-      }),
-    });
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({
-      error: { code: "management_session.required", params: {} },
-    });
-  }
-});
 
 /** Sign in over HTTP as the seeded manager and hand back the whole response, so a caller can read the
  * body as well as the cookie — `login` below returns only the cookie. */
@@ -227,12 +205,12 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Read every `webauthn_credentials` row for the tenant as the app role — the proof a genuine
- * tenant-scoped credential landed, not merely that a route returned 200. */
-async function readCredentials(
-  tenantId: string,
-): Promise<{ credential_id: string; person_id: string; counter: string; name: string | null }[]> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+/** Read every `webauthn_credentials` row as the app role — the proof a real credential row
+ * landed, not merely that a route returned 200. */
+async function readCredentials(): Promise<
+  { credential_id: string; person_id: string; counter: string; name: string | null }[]
+> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{
       credential_id: string;
@@ -272,8 +250,8 @@ beforeEach(() => {
 
 describe("Management API passkey routes over real Postgres (mocked ceremony)", () => {
   it("register/options is gated: 401 without a cookie, 200 with the manager's", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     // No cookie → refused before any DB work.
     const anon = await app.request("/management-api/passkey/register/options", { method: "POST" });
@@ -295,9 +273,9 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     expect(body.options.challenge).toBeTruthy();
   });
 
-  it("register/verify (gated) persists a tenant-scoped credential", async () => {
-    const { tenantId, managerId } = await setupTenant();
-    const app = mountApp(tenantId);
+  it("register/verify (gated) persists a credential row", async () => {
+    const { managerId } = await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     // Begin, then finish with the ceremony mocked to verify.
@@ -318,9 +296,9 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     expect(verify.status).toBe(200);
     expect((await verify.json()) as { credentialId: string }).toEqual({ credentialId: "cred-abc" });
 
-    // Re-read as the app role: exactly one credential landed, owned by the manager, under
-    // this tenant — a genuine tenant-scoped write, not merely a 200.
-    const creds = await readCredentials(tenantId);
+    // Re-read as the app role: exactly one credential landed, owned by the manager — a real
+    // write, not merely a 200.
+    const creds = await readCredentials();
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({
       credential_id: "cred-abc",
@@ -330,14 +308,14 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
   });
 
   it("register/verify surfaces a duplicate credential as 409, not an opaque 500", async () => {
-    const { tenantId, managerId } = await setupTenant();
-    const app = mountApp(tenantId);
+    const { managerId } = await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     // First registration of `cred-dup` succeeds.
     await registerPasskey(app, cookie, "cred-dup");
 
-    // A SECOND ceremony returning the SAME credential id collides on the (tenant_id, credential_id)
+    // A SECOND ceremony returning the SAME credential id collides on the (credential_id)
     // unique constraint. `finishPasskeyRegistration` translates the 23505 into
     // `passkey.already_registered`, which STATUS maps to 409 — a raw driver error would instead reach
     // `run` as an opaque `server.internal` 500, the "every surfaced code is a 4xx" invariant this fix
@@ -362,14 +340,14 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     });
 
     // Still exactly one credential — the collision landed no second row.
-    const creds = await readCredentials(tenantId);
+    const creds = await readCredentials();
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({ credential_id: "cred-dup", person_id: managerId });
   });
 
   it("auth/options is ungated: 200 with a challenge handle and no cookie", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     const res = await app.request("/management-api/passkey/auth/options", { method: "POST" });
     expect(res.status).toBe(200);
@@ -381,8 +359,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
   });
 
   it("auth/verify (ungated) logs the credential's owner in and sets the session cookie", async () => {
-    const { tenantId, managerId } = await setupTenant();
-    const app = mountApp(tenantId);
+    const { managerId } = await setupTenant();
+    const app = mountApp();
 
     // Register "cred-abc" for the manager first (the credential auth/verify resolves the person from).
     const cookie = await login(app, MANAGER_EMAIL);
@@ -413,8 +391,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
   });
 
   it("auth/verify screens a malformed challengeHandle as 400 before it reaches Postgres", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     // A well-formed-but-non-UUID handle would `22P02` on the `uuid` PK column → opaque 500 (and this
     // route is UNAUTHENTICATED, so that would be an unauthenticated 500); the `isUuid` screen turns it
@@ -447,8 +425,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
   });
 
   it("register/verify screens a malformed challengeHandle as 400 (gated route, same guard)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const badUuid = await app.request("/management-api/passkey/register/verify", {
@@ -473,12 +451,12 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
 
     // Neither malformed request reached the verifier or wrote a credential.
     expect(mockVerifyReg).not.toHaveBeenCalled();
-    expect(await readCredentials(tenantId)).toHaveLength(0);
+    expect(await readCredentials()).toHaveLength(0);
   });
 
   it("auth/verify screens a missing / non-object response as 400 before it reaches Postgres", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     // A well-formed challengeHandle but NO `response`. This route is UNAUTHENTICATED and
     // `finishPasskeyAuthentication` reads `response.id` to resolve the credential, so a missing/non-object
@@ -512,8 +490,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
   });
 
   it("register/verify screens a missing response as 400 (gated route, same guard)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     // A well-formed challengeHandle but NO `response`: the same non-null-object screen the auth route
@@ -531,7 +509,7 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     });
 
     expect(mockVerifyReg).not.toHaveBeenCalled();
-    expect(await readCredentials(tenantId)).toHaveLength(0);
+    expect(await readCredentials()).toHaveLength(0);
   });
 });
 
@@ -545,8 +523,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
  */
 describe("the sign-in passkey offer", () => {
   it("tells a first-time signer-in to offer a passkey", async () => {
-    const { tenantId } = await setupTenant();
-    const response = await signIn(mountApp(tenantId));
+    await setupTenant();
+    const response = await signIn(mountApp());
     expect(response.status).toBe(200);
     expect((await response.json()) as { offerPasskey: boolean }).toMatchObject({
       offerPasskey: true,
@@ -554,10 +532,10 @@ describe("the sign-in passkey offer", () => {
   });
 
   it("does not offer a passkey to someone who already holds one", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     await registerPasskey(app, await login(app, MANAGER_EMAIL), "cred-already-held");
-    expect(await readCredentials(tenantId)).toHaveLength(1);
+    expect(await readCredentials()).toHaveLength(1);
 
     const response = await signIn(app);
     expect(response.status).toBe(200);
@@ -567,8 +545,8 @@ describe("the sign-in passkey offer", () => {
   });
 
   it("does not offer again once the offer was resolved", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountAppWithMe(tenantId);
+    await setupTenant();
+    const app = mountAppWithMe();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const resolved = await app.request("/management-api/session/me/passkey-offer", {

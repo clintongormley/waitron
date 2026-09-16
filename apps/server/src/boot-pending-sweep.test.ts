@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ForwardResult, PaymentProvider } from "@waitron/payments";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -232,10 +232,9 @@ function recordingPool(): {
 
 describe("connectedCardProviderSweep", () => {
   it("sweeps a pooled provider only when the tenant has its sealed credential (negative control: none → not swept)", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_x",
@@ -249,7 +248,6 @@ describe("connectedCardProviderSweep", () => {
 
     const providers = await connectedCardProviderSweep({
       db: suite.db,
-      tenantId,
       pool,
       contributions: CONTRIBUTIONS,
       simulator: undefined,
@@ -261,7 +259,7 @@ describe("connectedCardProviderSweep", () => {
   });
 
   it("includes the demo/prepare simulator, and yields ONLY it when no credential is sealed", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     const { pool, gets } = recordingPool();
     const simulator = fakeProvider("simulator", async () => ({
       nextDueAt: null,
@@ -272,7 +270,6 @@ describe("connectedCardProviderSweep", () => {
 
     const providers = await connectedCardProviderSweep({
       db: suite.db,
-      tenantId,
       pool,
       contributions: CONTRIBUTIONS,
       simulator,

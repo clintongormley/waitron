@@ -1,5 +1,5 @@
 // Real PostgreSQL: checks node-postgres monetary decoding alongside the PGlite driver.
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -10,22 +10,15 @@ import { saleLines, sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 // Since the node-id rekey (2026-08-03) both invoice_series and sales carry a NOT NULL node_id;
-// sales keeps till_id too, and adds the composite (tenant_id, node_id) → nodes FK. seed() creates
-// one node per tenant so a sale's node shares its tenant (the composite FK), and saleValues()
-// defaults to tenant A's node.
+// sales keeps till_id too, and adds the (node_id) → nodes FK. seed() creates one node, and
+// saleValues() defaults to it.
 let seriesA = "";
-let seriesB = "";
 let nodeA = "";
-let nodeB = "";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
@@ -33,47 +26,28 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-    {
-      id: LOCATION_B,
-      tenantId: TENANT_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
   ]);
-  await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
-  ]);
-  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeB = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
+  nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
-    .returning({ id: invoiceSeries.id });
-  const [b] = await db
-    .insert(invoiceSeries)
-    .values({ tenantId: TENANT_B, nodeId: nodeB, code: "FB", purpose: "standard" })
+    .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
-  seriesB = b.id;
 }
 
 function saleValues(overrides: Record<string, unknown> = {}) {
   return {
-    tenantId: TENANT_A,
     tillId: TILL_A1,
     nodeId: nodeA,
     seriesId: seriesA,
@@ -116,7 +90,6 @@ async function recordCompleteSale(
   return db.transaction(async (tx) => {
     const [sale] = await tx.insert(sales).values(saleValues(overrides)).returning({ id: sales.id });
     await tx.insert(saleLines).values({
-      tenantId: (overrides.tenantId as string) ?? TENANT_A,
       saleId: sale.id,
       lineNo: 1,
       name: "Café solo",
@@ -128,7 +101,6 @@ async function recordCompleteSale(
     });
     await tx.insert(tenders).values(
       tenderRows.map((t) => ({
-        tenantId: (overrides.tenantId as string) ?? TENANT_A,
         saleId: sale.id,
         method: t.method,
         amount: t.amount,
@@ -147,7 +119,7 @@ async function recordCompleteSale(
 // no-op: TRUNCATE ... CASCADE fires the BEFORE TRUNCATE statement trigger on
 // every table it cascades into, not only the table named in the statement —
 // verified live against PGlite — and sales/sale_lines/tenders are reachable by
-// cascade from tenants (via till_id/tenant_id). Keeping the truncate would
+// cascade from tenants (via till_id). Keeping the truncate would
 // make sales_block_truncate/sale_lines_block_truncate/tenders_block_truncate
 // reject the fixture setup itself on every single test in this file.
 describeEachTarget("sales — the commercial record", (target) => {
@@ -189,7 +161,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   it("permits the same invoice number in two different series", async () => {
     const [other] = await db
       .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, nodeId: nodeA, code: "RA", purpose: "rectificative" })
+      .values({ nodeId: nodeA, code: "RA", purpose: "rectificative" })
       .returning({ id: invoiceSeries.id });
     await recordCompleteSale(db);
     const second = await recordCompleteSale(db, { seriesId: other.id });
@@ -251,7 +223,6 @@ describeEachTarget("sales — the commercial record", (target) => {
         .returning({ id: sales.id });
       await tx.insert(saleLines).values(
         ["0.10", "0.20", "0.70"].map((amount, i) => ({
-          tenantId: TENANT_A,
           saleId: sale.id,
           lineNo: i + 1,
           name: "Café solo",
@@ -267,7 +238,6 @@ describeEachTarget("sales — the commercial record", (target) => {
         })),
       );
       await tx.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: sale.id,
         method: "cash",
         amount: "1.00",
@@ -309,8 +279,8 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("requires a node_id referencing nodes", async () => {
-    // Node-id rekey (2026-08-03, plan Task 4 §5): sales.node_id is now NOT NULL with a composite
-    // tenant-consistent (tenant_id, node_id) → nodes FK — the node that chained the sale (#33).
+    // Node-id rekey (2026-08-03, plan Task 4 §5): sales.node_id is NOT NULL with a
+    // (node_id) → nodes FK — the node that chained the sale (#33).
     // till_id stays (where the sale rang); this is the node beside it. (This test was the Task-3
     // scaffolding assertion that node_id was NULLABLE; the completed rekey inverts it — see this
     // task's report.)
@@ -328,11 +298,7 @@ describeEachTarget("sales — the commercial record", (target) => {
     // insert type requires node_id, so the omission can only be expressed at the SQL layer.
     const error = await captureError(() =>
       db.execute(
-        sql`insert into sales (
-               tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-               total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
-             ) values (
-               ${TENANT_A}, ${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
+        sql`insert into sales (till_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
                '1.00', '[]'::jsonb, 'es', array['es', 'ca']::text[], 'verifactu', 'recorded'
              )`,
       ),
@@ -341,7 +307,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
-    // The composite FK guarantees referential existence: a node id with no `nodes` row is refused.
+    // The FK guarantees referential existence: a node id with no `nodes` row is refused.
     const error = await captureError(() =>
       db.insert(sales).values(
         saleValues({
@@ -444,9 +410,7 @@ describeEachTarget("sales — tender coverage", (target) => {
     // tenders_amount_ck is the only constraint that can fire here — deleting it
     // is what lets a zero tender through (proved by deletion locally).
     const error = await captureError(() =>
-      db
-        .insert(tenders)
-        .values({ tenantId: TENANT_A, saleId: id, method: "cash", amount: "0.00", settledAt: AT }),
+      db.insert(tenders).values({ saleId: id, method: "cash", amount: "0.00", settledAt: AT }),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/tenders_amount_ck/);
@@ -462,7 +426,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     // above is the one that isolates tenders_amount_ck under deletion.
     const error = await captureError(() =>
       db.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "cash",
         amount: "-10.00",
@@ -476,7 +439,7 @@ describeEachTarget("sales — tender coverage", (target) => {
     const id = await recordCompleteSale(db);
     const [inserted] = await db
       .insert(tenders)
-      .values({ tenantId: TENANT_A, saleId: id, method: "cash", amount: "10.00", settledAt: AT })
+      .values({ saleId: id, method: "cash", amount: "10.00", settledAt: AT })
       .returning();
     expect(inserted.amount).toBe("10.00");
   });
@@ -490,7 +453,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     // only constraint that can fire — the name is safe to pin here.
     const error = await captureError(() =>
       db.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "card",
         amount: "10.00",
@@ -507,7 +469,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     const [inserted] = await db
       .insert(tenders)
       .values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "card",
         amount: "10.00",
@@ -522,7 +483,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     const id = await recordCompleteSale(db);
     const error = await captureError(() =>
       db.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "card",
         amount: "10.00",
@@ -676,7 +636,7 @@ describeEachTarget("sales — fiscal_state", (target) => {
 
 /**
  * The corrective-invoice link. `corrects_sale_id` is the generic-layer
- * projection of "this sale corrects that one" — nullable, tenant-consistent FK back onto
+ * projection of "this sale corrects that one" — a nullable FK back onto
  * `sales`, NOT unique (a sale may be corrected more than once), and it is what relaxes
  * `sales_total_ck` to permit the negative total a `rectificativa por diferencias` carries
  * (`docs/superpowers/plans/2026-08-02-rectificativas.md` §2.1).
@@ -707,16 +667,13 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     total: string;
     correctsSaleId: string | null;
     invoiceNumber: number;
-    tenantId?: string;
     tillId?: string;
     nodeId?: string;
     seriesId?: string;
     invoiceLocales?: string[];
   }): Promise<{ id: string }[]> {
-    const tenantId = opts.tenantId ?? TENANT_A;
     const tillId = opts.tillId ?? TILL_A1;
-    // node_id is NOT NULL since the rekey; these correctives are all tenant A, so nodeA is the
-    // tenant-consistent node for the composite FK.
+    // node_id is NOT NULL since the rekey.
     const nodeId = opts.nodeId ?? nodeA;
     const seriesId = opts.seriesId ?? seriesA;
     const locales = opts.invoiceLocales ?? ["es", "ca"];
@@ -726,12 +683,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     )}]::text[]`;
     return rows<{ id: string }>(
       db,
-      sql`insert into sales (
-             tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-             issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend,
-             fiscal_state, corrects_sale_id
-           ) values (
-             ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
+      sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, corrects_sale_id) values (${tillId}, ${nodeId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
              ${opts.total}, '[]'::jsonb, 'es', ${localesArray}, 'verifactu', 'recorded',
              ${opts.correctsSaleId}
            ) returning id`,
@@ -809,25 +761,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
         invoiceNumber: 2,
       }),
     );
-    // Foreign key violation — the composite (tenant_id, corrects_sale_id) FK onto sales.
-    expect(pgErrorCode(error)).toBe("23503");
-  });
-
-  it("rejects a corrective link to another tenant's sale", async () => {
-    // The FK is composite and tenant-consistent, mirroring sale_lines_sale_fk: a corrective may
-    // only point at a sale of its OWN tenant. Tenant A cannot link to tenant B's sale even
-    // though that id exists.
-    const otherTenantSale = await recordCompleteSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      nodeId: nodeB,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-      locale: "es",
-    });
-    const error = await captureError(() =>
-      insertSale({ total: "-1.00", correctsSaleId: otherTenantSale, invoiceNumber: 2 }),
-    );
+    // Foreign key violation — the (corrects_sale_id) FK onto sales.
     expect(pgErrorCode(error)).toBe("23503");
   });
 });
@@ -838,8 +772,8 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
  * never from `sale_lines`, so this column never reaches the fiscal fingerprint (design §4). A modifier files as
  * its own child line pointing at the dish line it belongs to; a top-level line leaves it NULL.
  *
- * The composite (tenant_id, parent_line_id) → sale_lines(tenant_id, id) FK keeps the link
- * tenant-consistent (mirrors sale_lines_sale_fk); MATCH SIMPLE means a NULL parent satisfies it, so
+ * The (parent_line_id) → sale_lines(id) FK keeps the link referential (mirrors
+ * sale_lines_sale_fk); MATCH SIMPLE means a NULL parent satisfies it, so
  * ordinary lines are untouched. sale_lines carries NO reference to any option/catalogue table — the
  * "carries only the chosen variant snapshot identifier" test above guards that, and
  * `option_group_item_id` lives on the MUTABLE working_order_lines draft only, never here.
@@ -865,24 +799,18 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
     saleId: string;
     lineNo: number;
     parentLineId: string | null;
-    tenantId?: string;
     descriptions?: string;
   }): Promise<{ id: string }[]> {
-    const tenantId = opts.tenantId ?? TENANT_A;
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into sale_lines (
-             tenant_id, sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate,
-             line_total, parent_line_id
-           ) values (
-             ${tenantId}, ${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', '1.00',
+      sql`insert into sale_lines (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total, parent_line_id) values (${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', '1.00',
              '10.00', '1.00', ${opts.parentLineId}
            ) returning id`,
     );
   }
 
-  it("links a child line to its parent line within the tenant", async () => {
+  it("links a child line to its parent line", async () => {
     const [parent] = await db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
     const [child] = await insertLine({ saleId, lineNo: 2, parentLineId: parent.id });
     const [row] = await rows<{ parent_line_id: string }>(
@@ -898,27 +826,5 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
       sql`select parent_line_id from sale_lines where sale_id = ${saleId}::uuid and line_no = 1`,
     );
     expect(row.parent_line_id).toBeNull();
-  });
-
-  it("rejects a child pointing at a foreign-tenant line via the composite FK", async () => {
-    // Tenant B's sale + its line, then a tenant-A child pointing at it: the composite
-    // (tenant_id, parent_line_id) FK has no (TENANT_A, tenantB-line) parent row, so 23503 fires —
-    // the tenant-consistency a plain single-column self-FK could not enforce.
-    const foreignSaleId = await recordCompleteSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      nodeId: nodeB,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-      locale: "es",
-    });
-    const [foreignParent] = await db
-      .select()
-      .from(saleLines)
-      .where(eq(saleLines.saleId, foreignSaleId));
-    const error = await captureError(() =>
-      insertLine({ saleId, lineNo: 2, parentLineId: foreignParent.id }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
   });
 });

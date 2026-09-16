@@ -23,8 +23,8 @@ export const DEMO_PIN = "5555";
 export const DEMO_DASHBOARD_PASSWORD = "dashPass123";
 
 /** The provisioned admin's ("Administradora") dashboard login email. `dev-setup` supplies it to
- * `applyVenue` alongside the initial password. It is distinct from every `DEMO_STAFF` email (the
- * per-tenant `persons_tenant_email_uq` index). */
+ * `applyVenue` alongside the initial password. It is distinct from every `DEMO_STAFF` email, which
+ * it has to be: `persons_tenant_email_uq` is unique on `lower(email)` across the whole database. */
 export const DEMO_ADMIN_EMAIL = "owner@demo.waitron.local";
 
 /** A demo person: a display name, role, required account email, and optional pre-seeded password. */

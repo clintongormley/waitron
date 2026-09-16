@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { addDecimal, decimal, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
-import type { Decimal, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, SaleId, TillId } from "@waitron/shared";
 
 /**
  * A sale issued (invoice printed, chained, filed) but not yet paid — the answer to "what is owed?"
@@ -22,14 +22,11 @@ export interface OutstandingSale {
 }
 
 /**
- * Lists a tenant's outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
+ * Lists the outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
  * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
- * voided. The outer query and every subquery filter by tenant. This is a plain read.
+ * voided. This is a plain read over the database's one taxpayer.
  */
-export async function listOutstandingSales(
-  tx: Transaction,
-  tenantId: TenantId,
-): Promise<OutstandingSale[]> {
+export async function listOutstandingSales(tx: Transaction): Promise<OutstandingSale[]> {
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;
@@ -44,14 +41,13 @@ export async function listOutstandingSales(
       s.issued_at::text as issued_at,
       s.till_id        as till_id,
       s.total::text    as total,
-      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id and c.tenant_id = ${tenantId}), 0)::numeric(12, 2)::text
+      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::numeric(12, 2)::text
         as correction_total
     from sales s
-    where s.tenant_id = ${tenantId}
-      and s.corrects_sale_id is null
-      and not exists (select 1 from sale_settlements ss where ss.sale_id = s.id and ss.tenant_id = ${tenantId})
-      and not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${tenantId})
-      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${tenantId})
+    where s.corrects_sale_id is null
+      and not exists (select 1 from sale_settlements ss where ss.sale_id = s.id)
+      and not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
+      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)
     order by s.issued_at, s.invoice_number
   `);
 

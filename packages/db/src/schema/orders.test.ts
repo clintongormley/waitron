@@ -1,8 +1,8 @@
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
@@ -33,20 +33,15 @@ afterEach(async () => {
   });
 });
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// working_order_lines.product_id carries a tenant-consistent composite FK to products (park &
+// working_order_lines.product_id carries a foreign key to products (park &
 // retrieve, Task 1). It is NULLABLE since ordering modifiers (Task 2) — a child modifier line has no
-// product — but every PARENT dish line still needs a real product in its own tenant. seed() creates
-// one priced product per tenant and stores its id here; the LINE fixture defaults to tenant A's.
+// product — but every PARENT dish line still needs a real product. seed() creates one priced product
+// and stores its id here; the LINE fixture uses it.
 let productA = "";
-let productB = "";
 // order_number is NOT NULL on working_orders. No UNIQUE constraint yet (the per-node allocator is a
 // later task), so a simple ascending counter keeps every fixture order distinct without one.
 let orderNumberSeq = 0;
@@ -57,46 +52,28 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       // Bilingual on purpose: a single-locale venue cannot detect a trigger
       // that checks "at least one locale" instead of "exactly these".
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-    {
-      id: LOCATION_B,
-      tenantId: TENANT_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
   ]);
-  await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
-  ]);
-  // One priced product per tenant — the FK target every draft line now needs. Each is its own
-  // tenant's, so a line pointing at the other tenant's product would trip the composite FK.
+  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
+  // One priced product — the FK target every draft line now needs.
   const [catA] = await db
     .insert(catalogues)
-    .values({ tenantId: TENANT_A, name: "Deli A" })
-    .returning({ id: catalogues.id });
-  const [catB] = await db
-    .insert(catalogues)
-    .values({ tenantId: TENANT_B, name: "Deli B" })
+    .values({ name: "Deli A" })
     .returning({ id: catalogues.id });
   const [prodA] = await db
     .insert(products)
     .values({
-      tenantId: TENANT_A,
       catalogueId: catA.id,
       name: "Café solo",
       pricingUnit: "each",
@@ -104,30 +81,18 @@ async function seed(db: Database): Promise<void> {
       vatClass: "general",
     })
     .returning({ id: products.id });
-  const [prodB] = await db
-    .insert(products)
-    .values({
-      tenantId: TENANT_B,
-      catalogueId: catB.id,
-      name: "Café solo",
-      pricingUnit: "each",
-      unitPrice: "1.30",
-      vatClass: "general",
-    })
-    .returning({ id: products.id });
   productA = prodA.id;
-  productB = prodB.id;
 }
 
-async function openOrder(db: Database, tenantId = TENANT_A, tillId = TILL_A1): Promise<string> {
+async function openOrder(db: Database, tillId = TILL_A1): Promise<string> {
   const [row] = await db
     .insert(workingOrders)
-    .values({ tenantId, tillId, orderNumber: ++orderNumberSeq, status: "open", openedAt: AT })
+    .values({ tillId, orderNumber: ++orderNumberSeq, status: "open", openedAt: AT })
     .returning({ id: workingOrders.id });
   return row.id;
 }
 
-// Defaults to tenant A's product; the two tenant-B line inserts override productId to productB.
+// The shared line fixture; callers pass the tenant's product via productId.
 const LINE = {
   lineNo: 1,
   name: "Café solo",
@@ -158,8 +123,7 @@ describe("working_orders", () => {
   it("rejects a status outside the enum", async () => {
     const error = await captureError(() =>
       db.execute(
-        sql`insert into working_orders (tenant_id, till_id, status, opened_at)
-            values (${TENANT_A}::uuid, ${TILL_A1}::uuid, 'paid', ${AT}::timestamptz)`,
+        sql`insert into working_orders (till_id, status, opened_at) values (${TILL_A1}::uuid, 'paid', ${AT}::timestamptz)`,
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/invalid input value for enum working_order_status/);
@@ -169,12 +133,10 @@ describe("working_orders", () => {
     // open → open is the ordinary case and must stay cheap: a table adds a
     // round of drinks four times before it asks for the bill.
     const id = await openOrder(db);
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     await db
       .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, lineNo: 2, tenantId: TENANT_A, workingOrderId: id });
+      .values({ ...LINE, productId: productA, lineNo: 2, workingOrderId: id });
     await db
       .update(workingOrderLines)
       .set({ quantity: "2.000", lineTotal: "2.60" })
@@ -303,7 +265,7 @@ describe("working_orders", () => {
   it("carries a nullable node_id column referencing nodes", async () => {
     // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`, and
     // working_orders stays nullable permanently in this slice — no writer yet (design §5).
-    const node = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    const node = await seedNode(db, brandLocationId(LOCATION_A));
     const meta = await rows<{ is_nullable: string }>(
       db,
       sql`select is_nullable from information_schema.columns
@@ -318,7 +280,6 @@ describe("working_orders", () => {
     const [withNode] = await db
       .insert(workingOrders)
       .values({
-        tenantId: TENANT_A,
         tillId: TILL_A1,
         orderNumber: ++orderNumberSeq,
         status: "open",
@@ -332,7 +293,6 @@ describe("working_orders", () => {
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     const error = await captureError(() =>
       db.insert(workingOrders).values({
-        tenantId: TENANT_A,
         tillId: TILL_A1,
         orderNumber: ++orderNumberSeq,
         status: "open",
@@ -341,27 +301,6 @@ describe("working_orders", () => {
       }),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
-  });
-
-  it("rejects a node_id belonging to another tenant with a foreign-key violation", async () => {
-    // The composite (tenant_id, node_id) → nodes(tenant_id, id) FK bites: `foreignNode` EXISTS
-    // but under TENANT_B, so the (TENANT_A, foreignNode) pair has no matching parent row and the
-    // insert is rejected 23503. This is the tenant-consistency a plain single-column node_id FK
-    // could NOT enforce — it would have accepted the cross-tenant node because the id exists in
-    // `nodes`. Mirrors `sales_node_fk`'s cross-tenant rejection
-    // (fiscal-verifactu/src/chain.node-rekey.concurrency.test.ts).
-    const foreignNode = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
-    const error = await captureError(() =>
-      db.insert(workingOrders).values({
-        tenantId: TENANT_A,
-        tillId: TILL_A1,
-        orderNumber: ++orderNumberSeq,
-        status: "open",
-        openedAt: AT,
-        nodeId: foreignNode,
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
   });
 });
 
@@ -375,9 +314,7 @@ describe("working_order_lines", () => {
 
   it("adds a line to an open order", async () => {
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     const found = await db.select().from(workingOrderLines);
     expect(found).toHaveLength(1);
     expect(found[0].descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
@@ -385,13 +322,9 @@ describe("working_order_lines", () => {
 
   it("rejects a duplicate line_no within an order", async () => {
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     const error = await captureError(() =>
-      db
-        .insert(workingOrderLines)
-        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
+      db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
   });
@@ -403,9 +336,7 @@ describe("working_order_lines", () => {
       .set({ status: "settled", settledAt: AT })
       .where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db
-        .insert(workingOrderLines)
-        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
+      db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
@@ -414,9 +345,7 @@ describe("working_order_lines", () => {
     const id = await openOrder(db);
     await db.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db
-        .insert(workingOrderLines)
-        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
+      db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
@@ -425,9 +354,7 @@ describe("working_order_lines", () => {
     // Deletion is the transition that would otherwise slip through: the
     // trigger has to cover DELETE, and OLD rather than NEW carries the id.
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     await db
       .update(workingOrders)
       .set({ status: "settled", settledAt: AT })
@@ -444,7 +371,6 @@ describe("working_order_lines", () => {
       db.insert(workingOrderLines).values({
         ...LINE,
         productId: productA,
-        tenantId: TENANT_A,
         workingOrderId: id,
         descriptions: { es: "Café solo" },
       }),
@@ -458,7 +384,6 @@ describe("working_order_lines", () => {
       db.insert(workingOrderLines).values({
         ...LINE,
         productId: productA,
-        tenantId: TENANT_A,
         workingOrderId: id,
         descriptions: { es: "Café solo", ca: "Cafè sol", en: "Black coffee" },
       }),
@@ -471,9 +396,7 @@ describe("working_order_lines", () => {
     // configuration would mean a receipt reprinted next year reads differently
     // from the one the customer took.
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     await db
       .update(locations)
       .set({ invoiceLocales: ["es", "en"] })
@@ -543,31 +466,18 @@ describe("working_order_lines", () => {
       expect(col.numeric_scale).toBe(2);
     }
   });
-
-  it("rejects a line whose tenant differs from its order's", async () => {
-    const id = await openOrder(db);
-    const error = await captureError(() =>
-      db.insert(workingOrderLines).values({
-        ...LINE,
-        productId: productB,
-        tenantId: TENANT_B,
-        workingOrderId: id,
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
-  });
 });
 
 /**
  * The modifier links on the MUTABLE draft line (ordering modifiers, Task 2):
  *
  * - `parent_line_id` — a self-link so a modifier is its own child line pointing at the dish line it
- *   belongs to. Composite (tenant_id, parent_line_id) → working_order_lines(tenant_id, id), MATCH
+ *   belongs to. (parent_line_id) → working_order_lines(id), MATCH
  *   SIMPLE so a top-level line (NULL) passes. A child modifier line has no product, which is why
  *   `product_id` is now NULLABLE (was NOT NULL): the FK to products is null-permissive, so parent
  *   rows are unaffected.
- * - `option_group_item_id` — authoring TRACEABILITY only. Composite (tenant_id, option_group_item_id)
- *   → option_group_items(tenant_id, id) with onDelete SET NULL: the option's price/name/VAT are
+ * - `option_group_item_id` — authoring TRACEABILITY only. (option_group_item_id)
+ *   → option_group_items(id) with onDelete SET NULL: the option's price/name/VAT are
  *   snapshotted onto the line by value, so a catalogue DELETE of an option item must NOT be blocked
  *   and must NOT strip the draft's snapshot columns — it only clears this back-reference. It lives on
  *   working_order_lines only, never on the filed sale_lines (which stay decoupled from the mutable
@@ -589,39 +499,33 @@ describe("working_order_lines — modifier links", () => {
     productId: string | null;
     parentLineId?: string | null;
     optionGroupItemId?: string | null;
-    tenantId?: string;
     descriptions?: string;
   }): Promise<{ id: string }[]> {
-    const tenantId = opts.tenantId ?? TENANT_A;
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into working_order_lines (
-             tenant_id, working_order_id, line_no, product_id, name, descriptions, quantity,
-             unit_price, unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id
-           ) values (
-             ${tenantId}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
+      sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id) values (${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
              ${descriptions}::jsonb, '1.000', '1.30', '1.43', '10.00', '1.30',
              ${opts.parentLineId ?? null}, ${opts.optionGroupItemId ?? null}
            ) returning id`,
     );
   }
 
-  // A group + one item in `tenantId`. Names are the known-safe café strings — option names are jsonb
+  // A group + one item. Names are the known-safe café strings — option names are jsonb
   // VALUES, but this package's english-only guard scans string literals in test files too.
-  async function seedOptionItem(tenantId: string): Promise<string> {
+  async function seedOptionItem(): Promise<string> {
     const [group] = await db
       .insert(optionGroups)
-      .values({ tenantId, name: { es: "Café solo" } })
+      .values({ name: { es: "Café solo" } })
       .returning({ id: optionGroups.id });
     const [item] = await db
       .insert(optionGroupItems)
-      .values({ tenantId, groupId: group.id, name: { es: "Café solo" }, priceDelta: "0.50" })
+      .values({ groupId: group.id, name: { es: "Café solo" }, priceDelta: "0.50" })
       .returning({ id: optionGroupItems.id });
     return item.id;
   }
 
-  it("links a child modifier line to its parent dish line within the tenant", async () => {
+  it("links a child modifier line to its parent dish line", async () => {
     const orderId = await openOrder(db);
     const [parent] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
     // A child modifier line: no product of its own, linked to the parent dish line.
@@ -639,30 +543,9 @@ describe("working_order_lines — modifier links", () => {
     expect(row.product_id).toBeNull();
   });
 
-  it("rejects a child pointing at a foreign-tenant line via the composite FK", async () => {
-    const orderA = await openOrder(db);
-    const orderB = await openOrder(db, TENANT_B, TILL_B1);
-    const [foreignParent] = await insertLine({
-      workingOrderId: orderB,
-      lineNo: 1,
-      productId: productB,
-      tenantId: TENANT_B,
-      descriptions: '{"es":"Café solo"}',
-    });
-    const error = await captureError(() =>
-      insertLine({
-        workingOrderId: orderA,
-        lineNo: 2,
-        productId: null,
-        parentLineId: foreignParent.id,
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
-  });
-
   it("links a line to an option_group_item for authoring traceability", async () => {
     const orderId = await openOrder(db);
-    const itemId = await seedOptionItem(TENANT_A);
+    const itemId = await seedOptionItem();
     const [line] = await insertLine({
       workingOrderId: orderId,
       lineNo: 1,
@@ -676,27 +559,13 @@ describe("working_order_lines — modifier links", () => {
     expect(row.option_group_item_id).toBe(itemId);
   });
 
-  it("rejects an option_group_item belonging to another tenant via the composite FK", async () => {
-    const orderId = await openOrder(db);
-    const foreignItem = await seedOptionItem(TENANT_B);
-    const error = await captureError(() =>
-      insertLine({
-        workingOrderId: orderId,
-        lineNo: 1,
-        productId: productA,
-        optionGroupItemId: foreignItem,
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
-  });
-
   it("nulls option_group_item_id when the catalogue item is deleted, rather than blocking", async () => {
     // Traceability only — the option's price/name/VAT are snapshotted onto the line by value, so a
     // catalogue DELETE must NOT be blocked (not RESTRICT) and must leave the line's own columns
     // intact; onDelete SET NULL clears just this back-reference. The order stays open so the
     // require_open_parent trigger admits the cascade UPDATE.
     const orderId = await openOrder(db);
-    const itemId = await seedOptionItem(TENANT_A);
+    const itemId = await seedOptionItem();
     const [line] = await insertLine({
       workingOrderId: orderId,
       lineNo: 1,

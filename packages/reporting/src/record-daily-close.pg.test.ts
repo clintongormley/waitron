@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
@@ -31,7 +31,7 @@ beforeEach(async () => {
   venue = await seedVenue(suite.admin);
 });
 
-/** Runs `recordDailyClose` on `db` under the real app role, inside `withTenant` — the exact shape
+/** Runs `recordDailyClose` on `db` under the real app role, inside `withTransaction` — the exact shape
  * the running POS uses. Each caller passes its own `db` (a distinct backend) so two of them
  * genuinely contend. */
 function record(
@@ -39,10 +39,9 @@ function record(
   businessDay: string,
   cashCounts: CashCountInput[],
 ): Promise<DailyCloseRecord> {
-  return withTenant(db, venue.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, {
-      tenantId: venue.tenantId,
       nodeId: venue.nodeId,
       businessDay,
       timeZone: "Europe/Madrid",
@@ -56,7 +55,7 @@ function record(
 async function closeCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(sql`
     select count(*)::int as n from daily_closes
-     where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+     where node_id = ${venue.nodeId}`);
   return rows[0]!.n;
 }
 
@@ -69,7 +68,7 @@ async function readChain(): Promise<
     entry_hash: string;
   }>(sql`
     select sequence_no, prev_entry_hash, entry_hash from daily_closes
-     where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}
+     where node_id = ${venue.nodeId}
      order by sequence_no`);
   return rows.map((r) => ({
     sequenceNo: r.sequence_no,
@@ -141,7 +140,7 @@ describe("recordDailyClose under real contention", () => {
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from daily_close_chain where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId} for update`,
+          sql`select 1 from daily_close_chain where node_id = ${venue.nodeId} for update`,
         );
         acquire();
         await held;
@@ -149,11 +148,10 @@ describe("recordDailyClose under real contention", () => {
       await acquired;
 
       const error = await captureError(() =>
-        withTenant(waiter, venue.tenantId, async (tx) => {
+        withTransaction(waiter, async (tx) => {
           await asAppUser(tx);
           await tx.execute(sql`set local lock_timeout = '250ms'`);
           return recordDailyClose(tx, {
-            tenantId: venue.tenantId,
             nodeId: venue.nodeId,
             businessDay: "2026-08-02",
             timeZone: "Europe/Madrid",

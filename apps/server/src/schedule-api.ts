@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -24,13 +24,13 @@ import {
 import type { Logger } from "./logger.js";
 
 /**
- * The deps the staff schedule API needs — the SAME minimal shape `mountWorkforceApi` takes, plus what
- * `requireSession` reads (only `cfg.tenantId`). No fiscal backend, clock or card provider: these routes
- * touch only the planning tables (`shifts`/`shift_swaps`/`absences`).
+ * The deps the staff schedule API needs: a database handle and nothing else. No fiscal backend,
+ * clock or card provider — these routes touch only the identity session and the planning tables
+ * (`shifts`/`shift_swaps`/`absences`). `mountWorkforceApi` takes a WIDER shape (it also carries the
+ * node id); this one is genuinely just the handle.
  */
 export interface ScheduleApiDeps {
   db: Database;
-  cfg: { tenantId: string };
 }
 
 /**
@@ -64,14 +64,14 @@ const run = createErrorBoundary(STATUS, "schedule.failed");
  * the manager approval half. Every route resolves the requester via `requireSession(deps, c)`
  * FIRST and passes THAT `personId` into the verb; the request body is NEVER trusted for identity
  * (the crux of this surface — a staff member acts only as themselves). The verb then runs on the
- * app role under the till's tenant (`withTenant` + `asAppUser`), in the database holding this
+ * app role under the till's tenant (`withTransaction` + `asAppUser`), in the database holding this
  * tenant. The explicit `person_id` predicate scopes the operation to the requester.
  */
 export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger): void {
-  /** Run `fn` on the app role under the till's tenant — the one place the withTenant/asAppUser pair
+  /** Run `fn` on the app role under the till's tenant — the one place the withTransaction/asAppUser pair
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -82,9 +82,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       const { personId } = await requireSession(deps, c);
       const from = requirePeriod(c.req.query("from"), "from");
       const to = requirePeriod(c.req.query("to"), "to");
-      const rows = await asStaff((tx) =>
-        listShiftsForPerson(tx, { tenantId: deps.cfg.tenantId, personId, from, to }),
-      );
+      const rows = await asStaff((tx) => listShiftsForPerson(tx, { personId, from, to }));
       return c.json(rows);
     }),
   );
@@ -93,9 +91,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
   app.get("/api/schedule/swaps", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const rows = await asStaff((tx) =>
-        listSwapsForPerson(tx, { tenantId: deps.cfg.tenantId, personId }),
-      );
+      const rows = await asStaff((tx) => listSwapsForPerson(tx, { personId }));
       return c.json(rows);
     }),
   );
@@ -111,7 +107,6 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       const toShiftId = requireNullableBodyUuid(body.toShiftId, "toShiftId");
       const swapId = await asStaff((tx) =>
         requestSwap(tx, {
-          tenantId: deps.cfg.tenantId,
           requestedByPersonId: personId,
           fromShiftId,
           toPersonId,
@@ -128,9 +123,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
-      await asStaff((tx) =>
-        acceptSwap(tx, { tenantId: deps.cfg.tenantId, swapId, acceptingPersonId: personId }),
-      );
+      await asStaff((tx) => acceptSwap(tx, { swapId, acceptingPersonId: personId }));
       return c.body(null, 204);
     }),
   );
@@ -139,9 +132,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
   app.get("/api/schedule/absences", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const rows = await asStaff((tx) =>
-        listAbsencesForPerson(tx, { tenantId: deps.cfg.tenantId, personId }),
-      );
+      const rows = await asStaff((tx) => listAbsencesForPerson(tx, { personId }));
       return c.json(rows);
     }),
   );
@@ -156,7 +147,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       const endsOn = requirePeriod(body.endsOn, "endsOn");
       const note = requireNullableString(body.note, "note");
       const absenceId = await asStaff((tx) =>
-        createAbsence(tx, { tenantId: deps.cfg.tenantId, personId, kind, startsOn, endsOn, note }),
+        createAbsence(tx, { personId, kind, startsOn, endsOn, note }),
       );
       return c.json({ absenceId }, 201);
     }),

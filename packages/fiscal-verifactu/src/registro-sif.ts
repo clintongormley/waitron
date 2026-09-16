@@ -6,7 +6,7 @@
 import "./errors.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
 import { contadoresInstalacion, registroSif } from "./schema/sif.js";
@@ -37,7 +37,6 @@ function assertUsableIdSistema(value: string): void {
 }
 
 export interface RegisterSifParams {
-  tenantId: TenantId;
   nodeId: NodeId;
   /** The obligado tributario's NIF. Half of the SIF identity, with IdSIF and NºInstalación. */
   nif: string;
@@ -46,7 +45,6 @@ export interface RegisterSifParams {
 
 export interface SifRegistration {
   id: string;
-  tenantId: TenantId;
   nodeId: NodeId;
   nif: string;
   idSistemaInformatico: string;
@@ -128,21 +126,21 @@ export function reserveInstallationNumber(
 
 /**
  * Reset a node's `cadenas` head to a fresh, empty chain — a distinct chain, never a resume of
- * anyone's (findings §1; CLAUDE.md §5). Upserts the (tenant, node) row to a both-null pointer
+ * anyone's (findings §1; CLAUDE.md §5). Upserts the node's row to a both-null pointer
  * (`ultimoRegistroId`/`ultimaHuella`), so the next append is treated as the chain's first record.
  * `secuencia` is deliberately left OUT of the SET clause: it is OUR outbox ordering aid, never
- * AEAT's, and resetting it would collide with UNIQUE (tenant_id, node_id, secuencia) on the very
- * next append.
+ * AEAT's, and resetting it would collide with UNIQUE (node_id, secuencia) on the very next
+ * append.
  *
  * Shared verbatim by `registerSif` (a new installation number is a new SIF identity, hence a new
  * chain) and `writeReservedSif` (a reserved node is brand-new, with no prior identity to retire).
  */
-function resetChainHead(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Promise<unknown> {
+function resetChainHead(tx: Transaction, nodeId: NodeId): Promise<unknown> {
   return tx
     .insert(cadenas)
-    .values({ tenantId, nodeId })
+    .values({ nodeId })
     .onConflictDoUpdate({
-      target: [cadenas.tenantId, cadenas.nodeId],
+      target: [cadenas.nodeId],
       set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: sql`now()` },
     });
 }
@@ -151,7 +149,7 @@ function resetChainHead(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Pr
  * Persist a DORMANT reserved SIF on a standby's own database (design §6 R2), keyed to the standby's
  * OWN nodeId with the number the PRIMARY allocated (`numeroInstalacion`) — NOT re-allocated here. It
  * is inert because no sale resolves this node (`config.till.nodeId` stays the primary's until a
- * promotion), and `currentSif` gates on `(tenant, node)`. A fresh empty `cadenas` head (both-null
+ * promotion), and `currentSif` gates on the node. A fresh empty `cadenas` head (both-null
  * pointer) makes it a brand-new chain, never a resume of anyone's (CLAUDE.md §5). No prior identity to
  * retire — a reserved node is new. The `registro_sif_instalacion_uq` unique on
  * (nif, id_sistema_informatico, numero_instalacion) is the never-reuse backstop; a duplicate number
@@ -164,7 +162,6 @@ function resetChainHead(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Pr
 export async function writeReservedSif(
   tx: Transaction,
   params: {
-    tenantId: TenantId;
     nodeId: NodeId;
     nif: string;
     idSistemaInformatico: string;
@@ -176,7 +173,6 @@ export async function writeReservedSif(
   const [inserted] = await tx
     .insert(registroSif)
     .values({
-      tenantId: params.tenantId,
       nodeId: params.nodeId,
       nif: params.nif,
       idSistemaInformatico: params.idSistemaInformatico,
@@ -190,7 +186,7 @@ export async function writeReservedSif(
   }
   /* v8 ignore stop */
 
-  await resetChainHead(tx, params.tenantId, params.nodeId);
+  await resetChainHead(tx, params.nodeId);
 
   return { id: inserted.id };
 }
@@ -226,13 +222,7 @@ export async function registerSif(
   await tx
     .update(registroSif)
     .set({ revocadoEn: sql`now()` })
-    .where(
-      and(
-        eq(registroSif.tenantId, params.tenantId),
-        eq(registroSif.nodeId, params.nodeId),
-        isNull(registroSif.revocadoEn),
-      ),
-    );
+    .where(and(eq(registroSif.nodeId, params.nodeId), isNull(registroSif.revocadoEn)));
 
   const numeroInstalacion = await mintNumeroInstalacion(
     tx,
@@ -243,7 +233,6 @@ export async function registerSif(
   const [inserted] = await tx
     .insert(registroSif)
     .values({
-      tenantId: params.tenantId,
       nodeId: params.nodeId,
       nif: params.nif,
       idSistemaInformatico: params.idSistemaInformatico,
@@ -259,11 +248,10 @@ export async function registerSif(
   /* v8 ignore stop */
 
   // A new installation number is a new SIF identity, therefore a NEW CHAIN (findings §1).
-  await resetChainHead(tx, params.tenantId, params.nodeId);
+  await resetChainHead(tx, params.nodeId);
 
   return {
     id: inserted.id,
-    tenantId: params.tenantId,
     nodeId: params.nodeId,
     nif: params.nif,
     idSistemaInformatico: params.idSistemaInformatico,
@@ -279,11 +267,7 @@ export async function registerSif(
  * unprovisioned node gets a structured refusal that reaches a screen translatable, never a
  * locally invented number. (Node-id rekey, 2026-08-03: keyed per node.)
  */
-export async function currentSif(
-  tx: Transaction,
-  tenantId: TenantId,
-  nodeId: NodeId,
-): Promise<SifRegistration> {
+export async function currentSif(tx: Transaction, nodeId: NodeId): Promise<SifRegistration> {
   const [row] = await tx
     .select({
       id: registroSif.id,
@@ -294,20 +278,14 @@ export async function currentSif(
       revocadoEn: registroSif.revocadoEn,
     })
     .from(registroSif)
-    .where(
-      and(
-        eq(registroSif.tenantId, tenantId),
-        eq(registroSif.nodeId, nodeId),
-        isNull(registroSif.revocadoEn),
-      ),
-    )
+    .where(and(eq(registroSif.nodeId, nodeId), isNull(registroSif.revocadoEn)))
     .limit(1);
 
   if (row === undefined) {
-    throw new AppError("sif.not_registered", { tenantId, nodeId });
+    throw new AppError("sif.not_registered", { nodeId });
   }
 
-  return { ...row, tenantId, nodeId };
+  return { ...row, nodeId };
 }
 
 /**
@@ -320,15 +298,11 @@ export async function currentSif(
  * record — a node registered but never sold — and a chain row whose pointer was just reset by
  * `registerSif` reports the same thing, which is the point: re-registration begins a new chain.
  */
-export async function esPrimerRegistro(
-  tx: Transaction,
-  tenantId: TenantId,
-  nodeId: NodeId,
-): Promise<boolean> {
+export async function esPrimerRegistro(tx: Transaction, nodeId: NodeId): Promise<boolean> {
   const [row] = await tx
     .select({ ultimaHuella: cadenas.ultimaHuella })
     .from(cadenas)
-    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)))
+    .where(eq(cadenas.nodeId, nodeId))
     .limit(1);
 
   return (row?.ultimaHuella ?? null) === null;

@@ -171,11 +171,11 @@ declare module "@waitron/shared" {
      * `database` is operator-typed configuration and never a secret. */
     "provisioning.database_unstamped": { database: string };
     /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
-     * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the natural keys it
-     * knows — the tenant `(country, tax_id)` and each series `(tenant_id, node_id, code)` — with
-     * `ON CONFLICT DO NOTHING`, so this is the residual case those clauses do not absorb: most
-     * plausibly a second `venue` run racing between this run's plan and its apply. Named here rather
-     * than left to reach the operator as `unexpected failure` (`bin.ts`'s catch-all).
+     * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the keys it knows —
+     * the taxpayer row's `id` and each series `(node_id, code)` — with `ON CONFLICT DO NOTHING`, so
+     * this is the residual case those clauses do not absorb: most plausibly a second `venue` run
+     * racing between this run's plan and its apply. Named here rather than left to reach the
+     * operator as `unexpected failure` (`bin.ts`'s catch-all).
      *
      * `database` only, and never the driver's own error: a `DrizzleQueryError` can quote the failing
      * statement back in its message, and this file's header forbids a param that could carry one.
@@ -186,10 +186,9 @@ declare module "@waitron/shared" {
      * several such databases. A byte-for-byte re-run of the existing venue remains idempotent. */
     "provisioning.second_venue": Record<string, never>;
     /** A SECOND, DIFFERENT tenant was asked to stand up in a database that already holds
-     * one. Refused: one tenant per database is the post-RLS isolation boundary. This branch dropped
-     * row-level security on the premise that each database carries a single tenant, so `withTenant`
-     * no longer filters rows by tenant (`packages/db/src/tenancy.ts`); a second `(country, tax_id)`
-     * in the same database would therefore expose one business's rows to the other — a cross-tenant
+     * one. Refused: one tenant per database is the isolation boundary. No query filters rows by
+     * tenant and `withTransaction` (`packages/db/src/tenancy.ts`) isolates nothing, so a second
+     * `(country, tax_id)` in the same database would expose one business's rows to the other — a cross-tenant
      * leak a hash-chained fiscal record (§5) cannot take back. The invariant is enforced at EVERY
      * tenant-creation entry point — the setup-api provision handler (`provisionVenue`,
      * `apps/server/src/provision.ts`), the `venue` CLI (`packages/provisioning/src/cli.ts`), and the
@@ -203,12 +202,38 @@ declare module "@waitron/shared" {
      * `database` only, and never the driver's own error: the same discipline `venue_conflict` keeps
      * — `database` is operator-typed configuration and never a secret. */
     "provisioning.foreign_tenant": { database: string };
-    /** A mirror-bundle adopt found one of the five DESIGNATED ids for `trading.env` absent from the
+    /** `applyVenue` was asked to stand a venue up in a database whose ONE taxpayer row already
+     * names a DIFFERENT country and tax id. The taxpayer is a single row keyed `id = 1`
+     * (`packages/db/src/schema/tenants.ts`), so the alternative to refusing is not "two taxpayers":
+     * it is a primary-key violation reported as a driver error nobody can act on. Refused by name
+     * instead, at the write boundary.
+     *
+     * NOT the refusal an operator meets after mistyping a NIF. That is
+     * `provisioning.foreign_tenant`, raised by `assertNoForeignTenant`
+     * (`packages/provisioning/src/tenant-guard.ts`) BEFORE `applyVenue` is entered, at every caller
+     * that reads the existing identities first — the `venue` CLI, `provisionVenue` and
+     * `adoptFromPrimary` (`cli.test.ts` pins that the CLI prints it and the apply is never
+     * reached). This code catches what that pre-read cannot see: another run committing a different
+     * taxpayer between the pre-read and this write, and the caller that does no pre-read at all.
+     *
+     * The write itself is `insert … on conflict do nothing` followed by a `for update` read of the
+     * row, so the loser of that race waits for the winner's transaction and then reads the winner's
+     * identity — landing here or on the idempotent path, never on a raw `23505`
+     * (`venue-apply.race.pg.test.ts`). Comparison is on the canonical values — both sides trimmed
+     * and upper-cased, the same normalisation `planVenue` applies — so a casing or
+     * surrounding-space difference is the SAME identity and proceeds as an idempotent re-run.
+     *
+     * No params, the shape `provisioning.second_venue` above keeps: this is a refusal INSIDE
+     * applyVenue's transaction, and the identity the operator supplied is the one they just typed.
+     */
+    "provisioning.tenant_identity_mismatch": Record<string, never>;
+    /** A mirror-bundle adopt found one of the DESIGNATED ids for `trading.env` absent from the
      * inserted rows — a malformed or incomplete bundle. DEPRECATED: its former thrower `adoptVenue`
      * was deleted when the initial copy went native (a native tablesync COPY cannot coexist with
      * pre-inserted rows — swap S5). The code is kept registered per CLAUDE.md §3 (codes are never
      * deleted once shipped). `missing` is the ROLE LABEL of the absent parent
-     * (`tenant`|`location`|`node`|`till`|`series`), never the uuid. */
+     * (`location`|`node`|`till`|`series`; `tenant` was a fifth until the tenant column went on
+     * 2026-09-14), never the uuid. */
     "provisioning.adopt_incomplete": {
       missing: "tenant" | "location" | "node" | "till" | "series";
     };
@@ -228,7 +253,7 @@ declare module "@waitron/shared" {
      * that withheld it could not be acted on. */
     "provisioning.invalid_locales": { count: number };
     /** A venue request gave its standard and rectificative series the SAME code. The two series
-     * share the natural key `(tenant_id, node_id, code)`, so a venue built from such a request would
+     * share the natural key `(node_id, code)`, so a venue built from such a request would
      * insert one series and silently drop the other on `ON CONFLICT DO NOTHING` — leaving a venue
      * that can ring sales but cannot issue a rectificative invoice (a correction). Refused in the
      * pure planner (`planVenue`), like the locale and territory refusals, so the operator is not

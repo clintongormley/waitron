@@ -34,7 +34,7 @@ import { invoiceSeries } from "./schema/series.js";
  * numbering and PERMITS gaps without requiring them, and a number that was
  * allocated inside a transaction that aborted was never used — nothing was
  * recorded under it. The property that must hold, "no two committed sales
- * share a number", is enforced by UNIQUE (tenant_id, series_id,
+ * share a number", is enforced by UNIQUE (series_id,
  * invoice_number) on `sales`, which does not depend on this function being
  * correct.
  *

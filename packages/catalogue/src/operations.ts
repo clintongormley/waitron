@@ -3,7 +3,7 @@ import type { Modifier } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
 import { isModifierPrice } from "./modifier-limits.js";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { AppError, resolveContentText, FALLBACK_LOCALE, type TenantId } from "@waitron/shared";
+import { AppError, resolveContentText, FALLBACK_LOCALE } from "@waitron/shared";
 import {
   catalogues,
   categories,
@@ -57,7 +57,7 @@ import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declar
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
  * assignment, and the read the till sells from (`listAvailableProducts`).
  *
- * Inserts take the tenant id explicitly and share the caller's transaction.
+ * Every operation shares the caller's transaction.
  *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
  * snapshots, and the app role holds no DELETE grant (`products: "SIU"` in
@@ -431,51 +431,38 @@ function legacyPricingUnit(unit: SellableUnit): PricingUnit {
 
 export async function createCatalogue(
   tx: Transaction,
-  tenantId: TenantId,
   input: { name: string },
 ): Promise<Catalogue> {
   const [row] = await tx
     .insert(catalogues)
-    .values({ tenantId, name: input.name })
+    .values({ name: input.name })
     .returning(CATALOGUE_COLUMNS);
   return row!;
 }
 
-export async function listCatalogues(tx: Transaction, tenantId: TenantId): Promise<Catalogue[]> {
-  return tx
-    .select(CATALOGUE_COLUMNS)
-    .from(catalogues)
-    .where(eq(catalogues.tenantId, tenantId))
-    .orderBy(catalogues.createdAt, catalogues.id);
+export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
+  return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
 }
 
 export async function createMenuSection(
   tx: Transaction,
-  tenantId: TenantId,
   input: { menuId: string; name: Record<string, string>; displayOrder?: number },
 ): Promise<MenuSection> {
-  const [row] = await tx
-    .insert(menuSections)
-    .values({ tenantId, ...input })
-    .returning({
-      id: menuSections.id,
-      menuId: menuSections.menuId,
-      name: menuSections.name,
-      displayOrder: menuSections.displayOrder,
-      active: menuSections.active,
-    });
+  const [row] = await tx.insert(menuSections).values(input).returning({
+    id: menuSections.id,
+    menuId: menuSections.menuId,
+    name: menuSections.name,
+    displayOrder: menuSections.displayOrder,
+    active: menuSections.active,
+  });
   return row!;
 }
 
-export async function listMenuSections(
-  tx: Transaction,
-  tenantId: TenantId,
-  menuId: string,
-): Promise<MenuSection[]> {
+export async function listMenuSections(tx: Transaction, menuId: string): Promise<MenuSection[]> {
   const [menu] = await tx
     .select({ id: catalogues.id })
     .from(catalogues)
-    .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, menuId)));
+    .where(eq(catalogues.id, menuId));
   if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   return tx
     .select({
@@ -486,27 +473,25 @@ export async function listMenuSections(
       active: menuSections.active,
     })
     .from(menuSections)
-    .where(and(eq(menuSections.tenantId, tenantId), eq(menuSections.menuId, menuId)))
+    .where(eq(menuSections.menuId, menuId))
     .orderBy(menuSections.displayOrder, menuSections.id);
 }
 
 export async function updateMenuSection(
   tx: Transaction,
-  tenantId: TenantId,
   sectionId: string,
   patch: { name: Record<string, string> },
 ): Promise<void> {
   const [row] = await tx
     .update(menuSections)
     .set(patch)
-    .where(and(eq(menuSections.tenantId, tenantId), eq(menuSections.id, sectionId)))
+    .where(eq(menuSections.id, sectionId))
     .returning({ id: menuSections.id });
   if (row === undefined) throw new AppError("menu_section.not_found", { sectionId });
 }
 
 export async function createMenuItem(
   tx: Transaction,
-  tenantId: TenantId,
   input: {
     menuId: string;
     productId: string;
@@ -515,23 +500,17 @@ export async function createMenuItem(
     displayOrder?: number;
   },
 ): Promise<MenuItem> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, input.productId)));
+    .where(eq(products.id, input.productId));
   if (product === undefined)
     throw new AppError("product.not_found", { productId: input.productId });
   const [section] = await tx
     .select({ id: menuSections.id })
     .from(menuSections)
-    .where(
-      and(
-        eq(menuSections.tenantId, tenantId),
-        eq(menuSections.menuId, input.menuId),
-        eq(menuSections.id, input.sectionId),
-      ),
-    );
+    .where(and(eq(menuSections.menuId, input.menuId), eq(menuSections.id, input.sectionId)));
   if (section === undefined) {
     throw new AppError("menu_section.not_found", {
       menuId: input.menuId,
@@ -541,18 +520,12 @@ export async function createMenuItem(
   const [existing] = await tx
     .select({ id: menuItems.id })
     .from(menuItems)
-    .where(
-      and(
-        eq(menuItems.tenantId, tenantId),
-        eq(menuItems.menuId, input.menuId),
-        eq(menuItems.productId, input.productId),
-      ),
-    );
+    .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
   const [row] = await tx
     .insert(menuItems)
-    .values({ tenantId, ...input })
+    .values(input)
     .onConflictDoUpdate({
-      target: [menuItems.tenantId, menuItems.menuId, menuItems.productId],
+      target: [menuItems.menuId, menuItems.productId],
       set: {
         sectionId: input.sectionId,
         grossPrice: input.grossPrice,
@@ -579,26 +552,16 @@ export async function createMenuItem(
       .from(productOptionGroups)
       .innerJoin(
         optionGroups,
-        and(
-          eq(optionGroups.tenantId, productOptionGroups.tenantId),
-          eq(optionGroups.id, productOptionGroups.groupId),
-          eq(optionGroups.active, true),
-        ),
+        and(eq(optionGroups.id, productOptionGroups.groupId), eq(optionGroups.active, true)),
       )
       .leftJoin(
         optionGroupItems,
         and(
-          eq(optionGroupItems.tenantId, productOptionGroups.tenantId),
           eq(optionGroupItems.groupId, productOptionGroups.groupId),
           eq(optionGroupItems.active, true),
         ),
       )
-      .where(
-        and(
-          eq(productOptionGroups.tenantId, tenantId),
-          eq(productOptionGroups.productId, input.productId),
-        ),
-      )
+      .where(eq(productOptionGroups.productId, input.productId))
       .orderBy(productOptionGroups.sort, optionGroupItems.sort, optionGroupItems.id);
     const byGroup = new Map<
       string,
@@ -611,7 +574,7 @@ export async function createMenuItem(
       byGroup.set(option.groupId, group);
     }
     if (byGroup.size > 0) {
-      await setMenuItemOptionGroups(tx, tenantId, row!.id, [...byGroup.values()]);
+      await setMenuItemOptionGroups(tx, row!.id, [...byGroup.values()]);
     }
   }
   return row!;
@@ -619,7 +582,6 @@ export async function createMenuItem(
 
 export async function updateMenuItem(
   tx: Transaction,
-  tenantId: TenantId,
   menuId: string,
   menuItemId: string,
   patch: { sectionId?: string; grossPrice?: string; displayOrder?: number },
@@ -628,12 +590,7 @@ export async function updateMenuItem(
     .update(menuItems)
     .set(patch)
     .where(
-      and(
-        eq(menuItems.tenantId, tenantId),
-        eq(menuItems.menuId, menuId),
-        eq(menuItems.id, menuItemId),
-        eq(menuItems.active, true),
-      ),
+      and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
     )
     .returning({ id: menuItems.id });
   if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
@@ -641,7 +598,6 @@ export async function updateMenuItem(
 
 export async function deactivateMenuItem(
   tx: Transaction,
-  tenantId: TenantId,
   menuId: string,
   menuItemId: string,
 ): Promise<void> {
@@ -649,12 +605,7 @@ export async function deactivateMenuItem(
     .update(menuItems)
     .set({ active: false })
     .where(
-      and(
-        eq(menuItems.tenantId, tenantId),
-        eq(menuItems.menuId, menuId),
-        eq(menuItems.id, menuItemId),
-        eq(menuItems.active, true),
-      ),
+      and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
     )
     .returning({ id: menuItems.id });
   if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
@@ -663,18 +614,17 @@ export async function deactivateMenuItem(
 /** Replace the groups and choices offered for one menu item, including their menu-specific prices. */
 export async function setMenuItemOptionGroups(
   tx: Transaction,
-  tenantId: TenantId,
   menuItemId: string,
   groups: {
     groupId: string;
     options: { optionId: string; priceDelta: string }[];
   }[],
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   const [menuItem] = await tx
     .select({ productId: menuItems.productId })
     .from(menuItems)
-    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, menuItemId)));
+    .where(eq(menuItems.id, menuItemId));
   if (menuItem === undefined) throw new AppError("menu_item.not_found", { menuItemId });
 
   const groupIds = groups.map((group) => group.groupId);
@@ -684,16 +634,9 @@ export async function setMenuItemOptionGroups(
   const requiredGroups = await tx
     .select({ id: productOptionGroups.groupId })
     .from(productOptionGroups)
-    .innerJoin(
-      optionGroups,
-      and(
-        eq(optionGroups.tenantId, productOptionGroups.tenantId),
-        eq(optionGroups.id, productOptionGroups.groupId),
-      ),
-    )
+    .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
     .where(
       and(
-        eq(productOptionGroups.tenantId, tenantId),
         eq(productOptionGroups.productId, menuItem.productId),
         eq(optionGroups.required, true),
         eq(optionGroups.active, true),
@@ -708,7 +651,6 @@ export async function setMenuItemOptionGroups(
       .from(productOptionGroups)
       .where(
         and(
-          eq(productOptionGroups.tenantId, tenantId),
           eq(productOptionGroups.productId, menuItem.productId),
           inArray(productOptionGroups.groupId, groupIds),
         ),
@@ -720,7 +662,7 @@ export async function setMenuItemOptionGroups(
     const definitions = await tx
       .select({ id: optionGroups.id, minSelect: optionGroups.minSelect, type: optionGroups.type })
       .from(optionGroups)
-      .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
+      .where(inArray(optionGroups.id, groupIds));
     const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
     for (const group of groups) {
       const definition = definitionById.get(group.groupId);
@@ -752,7 +694,6 @@ export async function setMenuItemOptionGroups(
           .from(optionGroupItems)
           .where(
             and(
-              eq(optionGroupItems.tenantId, tenantId),
               eq(optionGroupItems.groupId, group.groupId),
               eq(optionGroupItems.active, true),
               inArray(optionGroupItems.id, optionIds),
@@ -765,18 +706,10 @@ export async function setMenuItemOptionGroups(
     }
   }
 
-  await tx
-    .delete(menuItemOptionGroups)
-    .where(
-      and(
-        eq(menuItemOptionGroups.tenantId, tenantId),
-        eq(menuItemOptionGroups.menuItemId, menuItemId),
-      ),
-    );
+  await tx.delete(menuItemOptionGroups).where(eq(menuItemOptionGroups.menuItemId, menuItemId));
   if (groups.length === 0) return;
   await tx.insert(menuItemOptionGroups).values(
     groups.map((group, displayOrder) => ({
-      tenantId,
       menuItemId,
       groupId: group.groupId,
       displayOrder,
@@ -784,7 +717,6 @@ export async function setMenuItemOptionGroups(
   );
   const options = groups.flatMap((group) =>
     group.options.map((option) => ({
-      tenantId,
       menuItemId,
       groupId: group.groupId,
       optionId: option.optionId,
@@ -794,11 +726,7 @@ export async function setMenuItemOptionGroups(
   if (options.length > 0) await tx.insert(menuItemOptions).values(options);
 }
 
-export async function listMenuOffers(
-  tx: Transaction,
-  tenantId: TenantId,
-  menuIds: string[],
-): Promise<MenuOffer[]> {
+export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const rows = await tx
     .select({
@@ -830,33 +758,14 @@ export async function listMenuOffers(
       courseId: products.courseId,
     })
     .from(menuItems)
-    .innerJoin(
-      catalogues,
-      and(eq(catalogues.tenantId, menuItems.tenantId), eq(catalogues.id, menuItems.menuId)),
-    )
-    .innerJoin(
-      menuSections,
-      and(eq(menuSections.tenantId, menuItems.tenantId), eq(menuSections.id, menuItems.sectionId)),
-    )
-    .innerJoin(
-      products,
-      and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
-    )
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
-    .leftJoin(
-      categories,
-      and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
-    )
+    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
+    .innerJoin(menuSections, eq(menuSections.id, menuItems.sectionId))
+    .innerJoin(products, eq(products.id, menuItems.productId))
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(categories, eq(categories.id, products.categoryId))
     .where(
       and(
-        eq(menuItems.tenantId, tenantId),
         inArray(menuItems.menuId, menuIds),
         eq(menuItems.active, true),
         eq(menuSections.active, true),
@@ -883,17 +792,10 @@ export async function listMenuOffers(
       suitableFor: optionGroupItems.dietarySuitability,
     })
     .from(menuItemOptionGroups)
-    .innerJoin(
-      optionGroups,
-      and(
-        eq(optionGroups.tenantId, menuItemOptionGroups.tenantId),
-        eq(optionGroups.id, menuItemOptionGroups.groupId),
-      ),
-    )
+    .innerJoin(optionGroups, eq(optionGroups.id, menuItemOptionGroups.groupId))
     .innerJoin(
       menuItemOptions,
       and(
-        eq(menuItemOptions.tenantId, menuItemOptionGroups.tenantId),
         eq(menuItemOptions.menuItemId, menuItemOptionGroups.menuItemId),
         eq(menuItemOptions.groupId, menuItemOptionGroups.groupId),
       ),
@@ -901,14 +803,12 @@ export async function listMenuOffers(
     .innerJoin(
       optionGroupItems,
       and(
-        eq(optionGroupItems.tenantId, menuItemOptions.tenantId),
         eq(optionGroupItems.id, menuItemOptions.optionId),
         eq(optionGroupItems.groupId, menuItemOptions.groupId),
       ),
     )
     .where(
       and(
-        eq(menuItemOptionGroups.tenantId, tenantId),
         inArray(
           menuItemOptionGroups.menuItemId,
           rows.map((row) => row.id),
@@ -952,10 +852,9 @@ export async function listMenuOffers(
       suitableFor: option.suitableFor as string[] | null,
     });
   }
-  const content = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
+  const content = await readContentLanguages(tx, FALLBACK_LOCALE);
   const modifiersByItem = await readMenuModifiers(
     tx,
-    tenantId,
     rows.map((row) => row.id),
   );
   const variantRows = await tx
@@ -974,18 +873,14 @@ export async function listMenuOffers(
     .innerJoin(
       productVariants,
       and(
-        eq(productVariants.tenantId, menuItemVariants.tenantId),
         eq(productVariants.productId, menuItemVariants.productId),
         eq(productVariants.id, menuItemVariants.variantId),
       ),
     )
     .where(
-      and(
-        eq(menuItemVariants.tenantId, tenantId),
-        inArray(
-          menuItemVariants.menuItemId,
-          rows.map((row) => row.id),
-        ),
+      inArray(
+        menuItemVariants.menuItemId,
+        rows.map((row) => row.id),
       ),
     )
     .orderBy(menuItemVariants.displayOrder, menuItemVariants.variantId);
@@ -1039,9 +934,9 @@ export async function listMenuOffers(
 
 /**
  * Check an untrusted catalogue id before a location-menu write, so an absent catalogue produces
- * `catalogue.not_found` (404) instead of an opaque FK failure (23503). Composite FKs on
+ * `catalogue.not_found` (404) instead of an opaque FK failure (23503). The foreign keys on
  * `locations.catalogue_id` and `location_catalogues.catalogue_id` remain the data-layer backstop
- * for missing or tenant-inconsistent references; this read checks existence only.
+ * for a missing reference; this read checks existence only.
  */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
@@ -1053,14 +948,13 @@ export async function catalogueExists(tx: Transaction, catalogueId: string): Pro
 
 export async function renameCatalogue(
   tx: Transaction,
-  tenantId: TenantId,
   catalogueId: string,
   name: string,
 ): Promise<void> {
   const [row] = await tx
     .update(catalogues)
     .set({ name, updatedAt: sql`now()` })
-    .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, catalogueId)))
+    .where(eq(catalogues.id, catalogueId))
     .returning({ id: catalogues.id });
   if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId });
 }
@@ -1184,11 +1078,7 @@ export async function applyDietDerivation(
   await republishProductDiet(tx, productId);
 }
 
-export async function createProduct(
-  tx: Transaction,
-  tenantId: TenantId,
-  input: CreateProductInput,
-): Promise<Product> {
+export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("management.request_invalid", { field: "unitId" });
   }
@@ -1197,11 +1087,11 @@ export async function createProduct(
   if (input.unitId === null) {
     selectedUnit = null;
   } else if (input.unitId !== undefined) {
-    selectedUnit = await getSellableUnit(tx, tenantId, input.unitId); // 404s an unknown unit
+    selectedUnit = await getSellableUnit(tx, input.unitId); // 404s an unknown unit
   } else if (input.pricingUnit === "each") {
     selectedUnit = null;
   } else if (input.pricingUnit === "weight") {
-    selectedUnit = await getSeededUnit(tx, tenantId, "kg"); // legacy weight → the retained kg seed
+    selectedUnit = await getSeededUnit(tx, "kg"); // legacy weight → the retained kg seed
     if (selectedUnit === null)
       throw new AppError("management.request_invalid", { field: "unitId" });
   } else {
@@ -1227,7 +1117,6 @@ export async function createProduct(
   const [row] = await tx
     .insert(products)
     .values({
-      tenantId,
       catalogueId: input.catalogueId,
       categoryId: null,
       name: input.name,
@@ -1246,34 +1135,24 @@ export async function createProduct(
       image: input.image ?? null,
     })
     .returning({ id: products.id });
-  if (selectedUnit !== null) await assignProductUnit(tx, tenantId, row!.id, selectedUnit.id);
-  const membership = await replaceProductCategories(tx, tenantId, row!.id, {
+  if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
+  const membership = await replaceProductCategories(tx, row!.id, {
     categoryIds: input.categoryId === null ? [] : [input.categoryId],
     primaryCategoryId: input.categoryId,
   });
   const [created] = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, row!.id)));
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .where(eq(products.id, row!.id));
   return toProduct(
     { ...created!, categoryId: membership.primaryCategoryId },
     membership.categoryIds,
   );
 }
 
-export async function listProducts(
-  tx: Transaction,
-  tenantId: TenantId,
-  catalogueId?: string,
-): Promise<Product[]> {
+export async function listProducts(tx: Transaction, catalogueId?: string): Promise<Product[]> {
   const rows = await tx
     .select({
       ...PRODUCT_COLUMNS,
@@ -1282,27 +1161,10 @@ export async function listProducts(
       >`coalesce(array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null), array[]::text[])`,
     })
     .from(products)
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
-    .leftJoin(
-      productCategories,
-      and(
-        eq(productCategories.tenantId, products.tenantId),
-        eq(productCategories.productId, products.id),
-      ),
-    )
-    .where(
-      and(
-        eq(products.tenantId, tenantId),
-        catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId),
-      ),
-    )
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(productCategories, eq(productCategories.productId, products.id))
+    .where(catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId))
     .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
@@ -1310,12 +1172,9 @@ export async function listProducts(
     .select({ productId: productOptionGroups.productId, groupId: productOptionGroups.groupId })
     .from(productOptionGroups)
     .where(
-      and(
-        eq(productOptionGroups.tenantId, tenantId),
-        inArray(
-          productOptionGroups.productId,
-          rows.map((row) => row.id),
-        ),
+      inArray(
+        productOptionGroups.productId,
+        rows.map((row) => row.id),
       ),
     )
     .orderBy(productOptionGroups.sort, productOptionGroups.groupId);
@@ -1332,12 +1191,9 @@ export async function listProducts(
     })
     .from(productVariants)
     .where(
-      and(
-        eq(productVariants.tenantId, tenantId),
-        inArray(
-          productVariants.productId,
-          rows.map((row) => row.id),
-        ),
+      inArray(
+        productVariants.productId,
+        rows.map((row) => row.id),
       ),
     )
     .orderBy(productVariants.displayOrder, productVariants.id);
@@ -1355,7 +1211,6 @@ export async function listProducts(
 
 export async function updateProduct(
   tx: Transaction,
-  tenantId: TenantId,
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
@@ -1380,11 +1235,11 @@ export async function updateProduct(
     // the only thing that ever did, and nothing mounts it), so changing it would alter a legacy
     // route's contract with nothing to gain. `docs/developers/product-categories.md` says which
     // path is which; `docs/backlog.md` carries removing this one when a client needs it relaxed.
-    await lockCategories(tx, tenantId);
-    const current = await readProductCategories(tx, tenantId, id);
+    await lockCategories(tx);
+    const current = await readProductCategories(tx, id);
     if (categoryId === null && current.categoryIds.length > 1)
       throw new AppError("category.primary_required", {});
-    await replaceProductCategories(tx, tenantId, id, {
+    await replaceProductCategories(tx, id, {
       categoryIds: categoryId === null ? [] : [...new Set([...current.categoryIds, categoryId])],
       primaryCategoryId: categoryId,
     });
@@ -1406,13 +1261,13 @@ export async function updateProduct(
   if (unitId === null) {
     unitAction = { kind: "clear" };
   } else if (unitId !== undefined) {
-    unitAction = { kind: "set", unit: await getSellableUnit(tx, tenantId, unitId) };
+    unitAction = { kind: "set", unit: await getSellableUnit(tx, unitId) };
   } else if (pricingUnit === undefined) {
     unitAction = { kind: "keep" };
   } else if (pricingUnit === "each") {
     unitAction = { kind: "clear" };
   } else if (pricingUnit === "weight") {
-    const kg = await getSeededUnit(tx, tenantId, "kg");
+    const kg = await getSeededUnit(tx, "kg");
     if (kg === null) throw new AppError("management.request_invalid", { field: "unitId" });
     unitAction = { kind: "set", unit: kg };
   } else {
@@ -1433,9 +1288,9 @@ export async function updateProduct(
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
       updatedAt: sql`now()`,
     })
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, id)));
-  if (unitAction.kind === "set") await assignProductUnit(tx, tenantId, id, unitAction.unit.id);
-  else if (unitAction.kind === "clear") await clearProductUnit(tx, tenantId, id);
+    .where(eq(products.id, id));
+  if (unitAction.kind === "set") await assignProductUnit(tx, id, unitAction.unit.id);
+  else if (unitAction.kind === "clear") await clearProductUnit(tx, id);
   // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
   // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
   // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so
@@ -1475,7 +1330,6 @@ export async function assignCatalogueToLocation(
  */
 export async function setLocationDefaultCatalogue(
   tx: Transaction,
-  tenantId: TenantId,
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
@@ -1488,27 +1342,23 @@ export async function setLocationDefaultCatalogue(
     .where(eq(locations.id, locationId));
   const defaultId = row?.id ?? null;
   if (defaultId !== null && defaultId !== catalogueId) {
-    await addCatalogueToLocation(tx, tenantId, locationId, defaultId);
+    await addCatalogueToLocation(tx, locationId, defaultId);
   }
   await assignCatalogueToLocation(tx, locationId, catalogueId);
 }
 
 /**
  * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row): the
- * location may then sell from it alongside its default `catalogue_id`. Idempotent — the composite PK
- * (tenant_id, location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
+ * location may then sell from it alongside its default `catalogue_id`. Idempotent — the primary key
+ * (location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
  * default assignment stays with {@link assignCatalogueToLocation}; this only adds OTHER menus.
  */
 export async function addCatalogueToLocation(
   tx: Transaction,
-  tenantId: TenantId,
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
-  await tx
-    .insert(locationCatalogues)
-    .values({ tenantId, locationId, catalogueId })
-    .onConflictDoNothing();
+  await tx.insert(locationCatalogues).values({ locationId, catalogueId }).onConflictDoNothing();
 }
 
 /**
@@ -1578,7 +1428,7 @@ export interface LocationCatalogue extends Catalogue {
 }
 
 /**
- * EVERY catalogue the tenant owns, each flagged with whether `locationId` may sell from it
+ * EVERY catalogue, each flagged with whether `locationId` may sell from it
  * (`sellable`) and whether it is that location's default (`isDefault`) — the dashboard's
  * location↔menu membership screen. Unlike {@link listAccessibleCatalogues} (which returns ONLY the
  * accessible set, for the till), this returns the full list so the screen can offer the not-yet-sold
@@ -1587,10 +1437,9 @@ export interface LocationCatalogue extends Catalogue {
  */
 export async function listCataloguesForLocation(
   tx: Transaction,
-  tenantId: TenantId,
   locationId: string,
 ): Promise<LocationCatalogue[]> {
-  const all = await listCatalogues(tx, tenantId);
+  const all = await listCatalogues(tx);
   const { ids, defaultId } = await resolveAccessibleCatalogueIds(tx, locationId);
   const sellable = new Set(ids);
   return all.map((c) => ({ ...c, sellable: sellable.has(c.id), isDefault: c.id === defaultId }));
@@ -1644,7 +1493,6 @@ export async function listAvailableProducts(
   const rows = await tx
     .select({
       id: products.id,
-      tenantId: products.tenantId,
       name: products.name,
       customerName: products.customerName,
       unitId: units.id,
@@ -1668,16 +1516,10 @@ export async function listAvailableProducts(
     })
     .from(products)
     .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(categories, eq(categories.id, products.categoryId))
-    .leftJoin(contentLanguages, eq(contentLanguages.tenantId, products.tenantId))
+    .leftJoin(contentLanguages, sql`true`)
     .where(
       and(
         inArray(catalogues.id, accessible),
@@ -1769,9 +1611,7 @@ export async function listAvailableProducts(
   }
 
   const modifiersByProduct =
-    rows.length === 0
-      ? new Map<string, Modifier[]>()
-      : await readProductModifiers(tx, rows[0]!.tenantId, productIds);
+    rows.length === 0 ? new Map<string, Modifier[]>() : await readProductModifiers(tx, productIds);
 
   // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
@@ -1953,10 +1793,9 @@ function normalizeOverlay(input: {
 
 export async function createOptionGroup(
   tx: Transaction,
-  tenantId: TenantId,
   input: CreateOptionGroupInput,
 ): Promise<OptionGroup> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // Resolve the column defaults HERE so the invariant is validated against the values that will land
   // (the DB defaults are min 0, max 1, required false).
   const minSelect = input.minSelect ?? 0;
@@ -1966,7 +1805,6 @@ export async function createOptionGroup(
   const [row] = await tx
     .insert(optionGroups)
     .values({
-      tenantId,
       name: input.name,
       minSelect,
       maxSelect,
@@ -1979,7 +1817,7 @@ export async function createOptionGroup(
   return row!;
 }
 
-/** Every option group of the tenant (active AND inactive), for the authoring editor. Ordered by `sort`
+/** Every option group (active AND inactive), for the authoring editor. Ordered by `sort`
  * then `id` so the editor list is stable. */
 export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> {
   return tx
@@ -1990,11 +1828,10 @@ export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> 
 
 export async function updateOptionGroup(
   tx: Transaction,
-  tenantId: TenantId,
   id: string,
   patch: UpdateOptionGroupInput,
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // Read the stored bounds and MERGE the patch onto them before validating: a partial patch that only
   // touches one of the three invariant fields (e.g. `required: true` with the stored `min_select`, or a
   // lowered `max_select` against the stored `min_select`) must be checked against the row it lands on,
@@ -2007,7 +1844,7 @@ export async function updateOptionGroup(
       required: optionGroups.required,
     })
     .from(optionGroups)
-    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
+    .where(eq(optionGroups.id, id));
   if (current === undefined) return;
   validateOptionGroupBounds(
     patch.minSelect ?? current.minSelect,
@@ -2020,16 +1857,15 @@ export async function updateOptionGroup(
       ...patch,
       ...(patch.maxSelect === undefined ? {} : { maxTotalQuantity: patch.maxSelect }),
     })
-    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
+    .where(eq(optionGroups.id, id));
 }
 
 export async function createOptionGroupItem(
   tx: Transaction,
-  tenantId: TenantId,
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // Resolve the default HERE so the invariant is validated against the value that will land (the DB
   // default is 1), the same posture createOptionGroup takes for its bounds.
   const maxQuantity = input.maxQuantity ?? 1;
@@ -2037,7 +1873,6 @@ export async function createOptionGroupItem(
   const [row] = await tx
     .insert(optionGroupItems)
     .values({
-      tenantId,
       groupId,
       name: input.name,
       maxQuantity,
@@ -2075,11 +1910,10 @@ export async function listOptionGroupItems(
 
 export async function updateOptionGroupItem(
   tx: Transaction,
-  tenantId: TenantId,
   itemId: string,
   patch: UpdateOptionGroupItemInput,
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // maxQuantity's invariant is single-field: a patch that omits it leaves the stored value untouched
   // (Drizzle `.set()` only writes provided keys); a patch that sets it is re-validated here before the
   // write, the same clean-error-before-the-CHECK posture create takes.
@@ -2088,44 +1922,35 @@ export async function updateOptionGroupItem(
   // collapses an empty map to NULL; Drizzle `.set()` writes only the keys present, so an omitted
   // `addAllergens` leaves the stored value untouched. Validated regardless of caller (CLAUDE.md §3).
   const write: Record<string, unknown> = { ...patch, ...(normalizeOverlay(patch) ?? {}) };
-  await tx
-    .update(optionGroupItems)
-    .set(write)
-    .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, itemId)));
+  await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
 
 /**
  * Fully replace the product's option groups with `groupIds`. Delete the existing attachments,
  * then insert each id with `sort` equal to its list index; an empty list detaches everything.
- * The caller's transaction keeps replacement atomic, and composite FKs reject tenant-inconsistent
- * product or group references.
+ * The caller's transaction keeps replacement atomic, and the foreign keys reject a product or
+ * group reference that names no row.
  */
 export async function setProductOptionGroups(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
   groupIds: string[],
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+    .where(eq(products.id, productId));
   if (!product) throw new AppError("product.not_found", { productId });
   if (groupIds.length) {
     const retained = await tx
       .select({ id: productOptionGroups.groupId })
       .from(productOptionGroups)
-      .where(
-        and(
-          eq(productOptionGroups.tenantId, tenantId),
-          eq(productOptionGroups.productId, productId),
-        ),
-      );
+      .where(eq(productOptionGroups.productId, productId));
     const available = await tx
       .select({ id: optionGroups.id, active: optionGroups.active })
       .from(optionGroups)
-      .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
+      .where(inArray(optionGroups.id, groupIds));
     if (
       available.some(
         (group) => !group.active && !retained.some((entry) => entry.id === group.id),
@@ -2135,15 +1960,10 @@ export async function setProductOptionGroups(
     )
       throw new AppError("modifier.invalid", { field: "modifierIds" });
   }
-  await tx
-    .delete(productOptionGroups)
-    .where(
-      and(eq(productOptionGroups.tenantId, tenantId), eq(productOptionGroups.productId, productId)),
-    );
+  await tx.delete(productOptionGroups).where(eq(productOptionGroups.productId, productId));
   if (groupIds.length === 0) return;
   await tx.insert(productOptionGroups).values(
     groupIds.map((groupId, index) => ({
-      tenantId,
       productId,
       groupId,
       sort: index,
@@ -2155,15 +1975,12 @@ export async function setProductOptionGroups(
  * product form (Task 12) uses to show which groups are attached and in what order. */
 export async function listProductOptionGroupIds(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
 ): Promise<string[]> {
   const rows = await tx
     .select({ groupId: productOptionGroups.groupId })
     .from(productOptionGroups)
-    .where(
-      and(eq(productOptionGroups.tenantId, tenantId), eq(productOptionGroups.productId, productId)),
-    )
+    .where(eq(productOptionGroups.productId, productId))
     .orderBy(asc(productOptionGroups.sort), asc(productOptionGroups.groupId));
   return rows.map((r) => r.groupId);
 }

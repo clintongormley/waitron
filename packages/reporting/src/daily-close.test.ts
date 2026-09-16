@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedSale, seedTender, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -13,7 +13,6 @@ beforeEach(async () => {
 });
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
@@ -22,7 +21,7 @@ function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   };
 }
 function run(i: DailyCloseInput) {
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeDailyClose(tx, i);
   });
@@ -47,7 +46,7 @@ describe("computeDailyClose", () => {
     });
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "card", amount: "121.00", settledAt: settled },
     );
 
@@ -88,7 +87,7 @@ describe("computeDailyClose", () => {
     });
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "card", amount: "121.00", settledAt: settled },
     );
 
@@ -116,12 +115,11 @@ describe("computeDailyClose", () => {
     });
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "cash", amount: "121.00", tipAmount: "0.00", settledAt: issued },
     );
     const close = await run(input());
     expect(close).toMatchObject({
-      tenantId: venue.tenantId,
       nodeId: venue.nodeId,
       businessDay: "2026-08-04",
       timeZone: "Europe/Madrid",
@@ -129,21 +127,6 @@ describe("computeDailyClose", () => {
     });
     expect(close.vat.grossTotal).toBe("121.00");
     expect(close.cash.byTill[0]!.cashTakings).toBe("121.00");
-  });
-
-  it("does not leak another tenant's data (explicit tenant predicate)", async () => {
-    // Our tenant: nothing. A DIFFERENT tenant with a sale on the same day/node-of-its-own.
-    const other = await seedVenue(suite.db);
-    const issued = new Date("2026-08-04T10:00:00Z").toISOString();
-    await seedSale(suite.db, other, {
-      invoiceNumber: 1,
-      issuedAt: issued,
-      total: "121.00",
-      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
-    });
-    const close = await run(input());
-    expect(close.vat.byRate).toEqual([]);
-    expect(close.counts).toEqual({ sales: 0, corrections: 0, voids: 0 });
   });
 
   it("handles the spring-forward DST day without shifting the bucket", async () => {

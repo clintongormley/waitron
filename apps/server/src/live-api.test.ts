@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -17,23 +17,19 @@ import { LiveEvents, mountLiveApi } from "./live-api.js";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
 async function fixture() {
-  const tenantId = await seedTenant(suite.db);
-  const session = await withTenant(suite.db, tenantId, async (tx) => {
-    const person = await tx.execute<{ id: string }>(
-      sql`insert into persons (tenant_id, display_name, pin_hash, role) values (${tenantId}, 'Manager', ${hashPin("1234")}, 'manager') returning id`,
+  await seedTenant(suite.db);
+  const session = await withTransaction(suite.db, async (tx) => {
+    const p = await tx.execute<{ id: string }>(
+      sql`insert into persons (display_name, pin_hash, role) values ('Manager', ${hashPin("1234")}, 'manager') returning id`,
     );
-    return startManagementSession(tx, { tenantId, personId: person.rows[0]!.id });
+    return startManagementSession(tx, { personId: p.rows[0]!.id });
   });
   const bus = new LiveEvents();
   const app = new Hono();
-  mountLiveApi(
-    app,
-    { db: suite.db, tenantId, bus, resourceTypes: ["printers", "print_jobs"] },
-    () => {},
-  );
+  mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["printers", "print_jobs"] }, () => {});
   const path = `/management-api/events?resources=${encodeURIComponent(JSON.stringify([{ type: "printers", id: "p1" }]))}`;
   const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
-  return { app, bus, path, cookie, tenantId, session };
+  return { app, bus, path, cookie, session };
 }
 
 describe("management live events", () => {
@@ -44,8 +40,8 @@ describe("management live events", () => {
     expect(await response.json()).toMatchObject({ error: { code: "management_session.required" } });
   });
 
-  it("sends only subscribed identities from the current tenant and releases the subscription", async () => {
-    const { app, path, cookie, bus, tenantId } = await fixture();
+  it("sends only subscribed identities and releases the subscription", async () => {
+    const { app, path, cookie, bus } = await fixture();
     const response = await app.request(path, { headers: { cookie } });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/event-stream");
@@ -53,9 +49,8 @@ describe("management live events", () => {
     try {
       expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: ready");
       expect(bus.subscriberCount).toBe(1);
-      bus.publish({ tenantId: "another-tenant", resources: [{ type: "printers", id: "p1" }] });
-      bus.publish({ tenantId, resources: [{ type: "printers", id: "p2" }] });
-      bus.publish({ tenantId, resources: [{ type: "printers", id: "p1" }] });
+      bus.publish({ resources: [{ type: "printers", id: "p2" }] });
+      bus.publish({ resources: [{ type: "printers", id: "p1" }] });
       const message = new TextDecoder().decode((await reader.read()).value);
       expect(message).toBe('event: change\ndata: [{"type":"printers","id":"p1"}]\n\n');
     } finally {
@@ -65,25 +60,25 @@ describe("management live events", () => {
   });
 
   it("does not extend the session and closes it when the next change finds it expired", async () => {
-    const { app, path, cookie, bus, tenantId, session } = await fixture();
+    const { app, path, cookie, bus, session } = await fixture();
     await suite.db.execute(
       sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id}`,
     );
-    const before = await withTenant(suite.db, tenantId, (tx) =>
+    const before = await withTransaction(suite.db, (tx) =>
       resolveManagementSession(tx, session.id, { touch: false }),
     );
     const response = await app.request(path, { headers: { cookie } });
     const reader = response.body!.getReader();
     try {
       await reader.read();
-      const after = await withTenant(suite.db, tenantId, (tx) =>
+      const after = await withTransaction(suite.db, (tx) =>
         resolveManagementSession(tx, session.id, { touch: false }),
       );
       expect(after.expiresAt).toBe(before.expiresAt);
       await suite.db.execute(
         sql`update management_sessions set last_seen_at = now() - interval '1 hour' where id = ${session.id}`,
       );
-      bus.publish({ tenantId, resources: [{ type: "printers", id: "p1" }] });
+      bus.publish({ resources: [{ type: "printers", id: "p1" }] });
       expect(new TextDecoder().decode((await reader.read()).value)).toContain(
         'event: session-invalid\ndata: {"code":"management_session.expired"}',
       );
@@ -136,14 +131,13 @@ it("refreshes snapshots after listener reset and closes streams during server sh
 });
 
 it("bounds a burst of identities with a reset", async () => {
-  const { app, cookie, bus, tenantId } = await fixture();
+  const { app, cookie, bus } = await fixture();
   const path = `/management-api/events?resources=${encodeURIComponent('[{"type":"printers"}]')}`;
   const response = await app.request(path, { headers: { cookie } });
   const reader = response.body!.getReader();
   try {
     await reader.read();
-    for (let i = 0; i < 300; i++)
-      bus.publish({ tenantId, resources: [{ type: "printers", id: String(i) }] });
+    for (let i = 0; i < 300; i++) bus.publish({ resources: [{ type: "printers", id: String(i) }] });
     const message = new TextDecoder().decode((await reader.read()).value);
     expect(message).toContain("event: reset");
     expect(message.length).toBeLessThan(12_000);
@@ -172,25 +166,5 @@ it("revalidates idle streams on the heartbeat without extending their session", 
   } finally {
     await reader.cancel();
     vi.useRealTimers();
-  }
-});
-
-it("collection subscriptions exclude foreign identities before batching", async () => {
-  const { app, cookie, bus, tenantId } = await fixture();
-  const path = `/management-api/events?resources=${encodeURIComponent('[{"type":"printers"}]')}`;
-  const response = await app.request(path, { headers: { cookie } });
-  const reader = response.body!.getReader();
-  try {
-    await reader.read();
-    bus.publish({
-      tenantId: "foreign-tenant",
-      resources: [{ type: "printers", id: "foreign-p9" }],
-    });
-    bus.publish({ tenantId, resources: [{ type: "printers", id: "local-p1" }] });
-    expect(new TextDecoder().decode((await reader.read()).value)).toBe(
-      'event: change\ndata: [{"type":"printers","id":"local-p1"}]\n\n',
-    );
-  } finally {
-    await reader.cancel();
   }
 });

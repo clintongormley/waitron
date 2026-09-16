@@ -2,7 +2,7 @@
 // so a race there is a false pass (CLAUDE.md §4).
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
@@ -34,10 +34,9 @@ async function waitForLockWaiter(): Promise<void> {
 describe("markIncidentHandled — two managers at once", () => {
   it("keeps the first committed handler and time, and both calls succeed", async () => {
     const seed = await seedTenant(postgres.admin);
-    await withTenant(postgres.admin, seed.tenantId, async (tx) => {
+    await withTransaction(postgres.admin, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
-        tenantId: seed.tenantId,
         tillId: seed.tillId,
         error: new AppError("chain.verification_failed", {
           tillId: seed.tillId,
@@ -47,9 +46,9 @@ describe("markIncidentHandled — two managers at once", () => {
         detectedAt: BASE,
       });
     });
-    const [open] = await withTenant(postgres.admin, seed.tenantId, async (tx) => {
+    const [open] = await withTransaction(postgres.admin, async (tx) => {
       await asAppUser(tx);
-      return listOpenIncidents(tx, seed.tenantId);
+      return listOpenIncidents(tx);
     });
     const first = { personId: "00000000-0000-4000-8000-000000000001", handledAt: BASE };
     const second = {
@@ -57,9 +56,9 @@ describe("markIncidentHandled — two managers at once", () => {
       handledAt: new Date(BASE.getTime() + 5_000),
     };
     const mark = (db: Database, by: typeof first) =>
-      withTenant(db, seed.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        await markIncidentHandled(tx, { tenantId: seed.tenantId, id: open!.id, ...by });
+        await markIncidentHandled(tx, { id: open!.id, ...by });
       });
 
     let holder: Database | undefined;
@@ -76,9 +75,9 @@ describe("markIncidentHandled — two managers at once", () => {
 
       // The holder's update locks the row and pauses before commit, so the waiter's update must
       // wait for it and then re-check the row the holder committed.
-      holderRun = withTenant(holder, seed.tenantId, async (tx) => {
+      holderRun = withTransaction(holder, async (tx) => {
         await asAppUser(tx);
-        await markIncidentHandled(tx, { tenantId: seed.tenantId, id: open!.id, ...first });
+        await markIncidentHandled(tx, { id: open!.id, ...first });
         acquire();
         await held;
       });
@@ -97,9 +96,9 @@ describe("markIncidentHandled — two managers at once", () => {
       if (waiter !== undefined) await waiter.close();
     }
 
-    const stored = await withTenant(postgres.admin, seed.tenantId, async (tx) => {
+    const stored = await withTransaction(postgres.admin, async (tx) => {
       await asAppUser(tx);
-      return findIncident(tx, seed.tenantId, open!.id);
+      return findIncident(tx, open!.id);
     });
     expect({
       personId: stored?.acknowledgedBy,

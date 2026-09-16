@@ -13,7 +13,7 @@ describe("the public surface", () => {
         "isPurpose",
         "validatePayload",
         "loadKeyRing",
-        "credentialTenants",
+        "credentialProvisioned",
         "deleteCredential",
         "getCredential",
         "listCredentials",
@@ -35,7 +35,7 @@ describe("the public surface", () => {
 
 /**
  * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never
- * runs it, which is why tenant-credentials.ts's PK/FK/check block shows as uncovered even though
+ * runs it, which is why tenant-credentials.ts's PK/check block shows as uncovered even though
  * every other test in this package imports the table. Calling `getTableConfig` forces the callback
  * to run, and the assertions below are the meaningful check that tenant_credentials' constraints
  * actually exist under the names the migration and cipher/store depend
@@ -43,13 +43,12 @@ describe("the public surface", () => {
  * packages/payments/src/index.test.ts.
  */
 describe("tenant_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares tenant_credentials' primary key, foreign key and check constraints", () => {
+  it("declares tenant_credentials' primary key on purpose, no foreign key, and its checks", () => {
     const config = getTableConfig(api.tenantCredentials);
 
     expect(config.primaryKeys[0]?.getName()).toBe("tenant_credentials_pk");
-
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("tenant_credentials_tenant_fk");
+    expect(config.primaryKeys[0]?.columns.map((c) => c.name)).toEqual(["purpose"]);
+    expect(config.foreignKeys).toEqual([]);
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("tenant_credentials_key_version_ck");

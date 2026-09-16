@@ -1,6 +1,5 @@
 import { and, asc, eq, gte, inArray, lt, notInArray, or, sql, type AnyColumn } from "drizzle-orm";
 import { isUniqueViolation, type Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import { TERMINAL, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
 import { scheduledRuns, type RunState } from "./schema/scheduled-runs.js";
@@ -46,23 +45,20 @@ const CLAIMED = {
 } as const;
 
 /**
- * Everything derivation needs about one (tenant, duty).
+ * Everything derivation needs about one duty.
  *
  * The row read spans two ranges deliberately (see `LedgerSnapshot`): at-or-above the horizon start,
  * OR non-terminal at any age, so a re-sweep chain older than the horizon stays claimable. The
  * below-horizon MISSING-day count would be an unbounded read, so it is aggregated in SQL instead.
  *
- * The explicit tenant predicate scopes the read to the requested tenant.
+ * The read scopes to the duty alone; the database holds one taxpayer, so every row is its own.
  */
 export async function readSnapshot(
   tx: Transaction,
-  params: { tenantId: TenantId; duty: string; horizonStart: Date },
+  params: { duty: string; horizonStart: Date },
 ): Promise<LedgerSnapshot> {
   const horizon = params.horizonStart.toISOString();
-  const scope = and(
-    eq(scheduledRuns.tenantId, params.tenantId),
-    eq(scheduledRuns.duty, params.duty),
-  );
+  const scope = eq(scheduledRuns.duty, params.duty);
 
   const rows = await tx
     .select({
@@ -117,12 +113,11 @@ export async function readSnapshot(
  */
 export async function claimGap(
   tx: Transaction,
-  params: { tenantId: TenantId; duty: string; period: RunPeriod; now: Date },
+  params: { duty: string; period: RunPeriod; now: Date },
 ): Promise<ClaimedRun | null> {
   const [row] = await tx
     .insert(scheduledRuns)
     .values({
-      tenantId: params.tenantId,
       duty: params.duty,
       periodFrom: params.period.from.toISOString(),
       periodTo: params.period.to.toISOString(),
@@ -257,7 +252,7 @@ export async function completeRun(
 /**
  * Enqueue the next generation of one period, due at `dueAt`.
  *
- * Guarded and idempotent. A successor is inserted only when that (tenant, duty, period_from) has
+ * Guarded and idempotent. A successor is inserted only when that (duty, period_from) has
  * NO row at any generation in a non-terminal state — anything outside derivation's own `TERMINAL`
  * list, so a `failed` row awaiting its own retry blocks it too. The caller runs this in the SAME
  * transaction as `completeRun`, so the guard sees the run that is finishing as already terminal.
@@ -270,14 +265,10 @@ export async function completeRun(
  */
 export async function enqueueSuccessor(
   tx: Transaction,
-  params: { tenantId: TenantId; duty: string; period: RunPeriod; dueAt: Date },
+  params: { duty: string; period: RunPeriod; dueAt: Date },
 ): Promise<boolean> {
   const periodFrom = params.period.from.toISOString();
-  const scope = and(
-    eq(scheduledRuns.tenantId, params.tenantId),
-    eq(scheduledRuns.duty, params.duty),
-    eq(scheduledRuns.periodFrom, periodFrom),
-  );
+  const scope = and(eq(scheduledRuns.duty, params.duty), eq(scheduledRuns.periodFrom, periodFrom));
 
   const [state] = await tx
     .select({
@@ -296,7 +287,6 @@ export async function enqueueSuccessor(
 
   try {
     await tx.insert(scheduledRuns).values({
-      tenantId: params.tenantId,
       duty: params.duty,
       periodFrom,
       periodTo: params.period.to.toISOString(),

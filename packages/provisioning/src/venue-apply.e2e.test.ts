@@ -4,7 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById } from "@waitron/identity";
@@ -12,7 +12,6 @@ import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
@@ -32,8 +31,9 @@ import { applyVenue } from "./venue-apply.js";
  * PGlite is sufficient for sale chaining and login behavior; venue-apply.pg.test.ts
  * exercises provisioning as a non-superuser owner on real Postgres.
  *
- * The full manifest is migrated in dependency order. The real
- * `applyVenue` now seeds an admin `persons` row, which carries a foreign key onto `tenants`.
+ * The full manifest is migrated in dependency order. The real `applyVenue` now seeds an admin
+ * `persons` row, so identity's set has to be migrated here too. (`persons` no longer has a foreign
+ * key onto `tenants` — the column it used to carry is gone.)
  */
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -84,14 +84,8 @@ function request(taxId = "B12345678", adminEmail = "owner@example.test"): VenueR
 }
 
 /** A well-formed sale — the reconciled figures from `write-path-fixtures.ts`'s `saleInput`. */
-function saleInput(ids: {
-  tenantId: string;
-  tillId: string;
-  nodeId: string;
-  seriesId: string;
-}): RecordSaleInput {
+function saleInput(ids: { tillId: string; nodeId: string; seriesId: string }): RecordSaleInput {
   return {
-    tenantId: brandTenantId(ids.tenantId),
     tillId: brandTillId(ids.tillId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),
@@ -153,13 +147,12 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
     // applyVenue pushes in that order.
     const standardSeriesId = venue.seriesIds[0]!;
 
-    const { saleId, fiscal } = await withTenant(suite.db, venue.tenantId, async (tx) => {
+    const { saleId, fiscal } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(
         tx,
         backend,
         saleInput({
-          tenantId: venue.tenantId,
           tillId: venue.tillId,
           nodeId: venue.nodeId,
           seriesId: standardSeriesId,
@@ -192,24 +185,23 @@ describe("the provisioned admin authenticates by id with its password", () => {
     // the email the venue also requires.
     // A distinct tenant (B33333333) so this test's admin is its own (the PGlite suite shares one
     // database).
-    const venue = await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
+    await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
     // The admin's id is generated at seed time, so fetch it by tenant + role rather than assume one.
     const admin = await suite.db.execute<{ id: string }>(sql`
-      select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`);
+      select id from persons where role = 'admin'`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
     // The provisioned password logs in and mints a management session — run as the app role under the
     // tenant (asAppUser), the same role constraints production's login runs under, so this also proves
     // app_user can SELECT the seeded password_hash and INSERT the management session.
-    const session = await withTenant(suite.db, venue.tenantId, async (tx) => {
+    const session = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginManagerById(tx, {
-        tenantId: venue.tenantId,
         personId: personId!,
         password: "dashPass123",
       });
@@ -218,10 +210,9 @@ describe("the provisioned admin authenticates by id with its password", () => {
 
     // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
     await expect(
-      withTenant(suite.db, venue.tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return loginManagerById(tx, {
-          tenantId: venue.tenantId,
           personId: personId!,
           password: "wrongpass1",
         });
@@ -239,7 +230,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // setup-api boundary produces. A distinct tenant (B44444444) so this admin is its own in the
     // shared PGlite database.
     const adminEmail = "owner@venue.example";
-    const venue = await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {
+    await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -247,16 +238,15 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // The admin's id is generated at seed time; fetch it so we can prove the email login resolves the
     // SAME provisioned admin, not just some person.
     const admin = await suite.db.execute<{ id: string }>(sql`
-      select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`);
+      select id from persons where role = 'admin'`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
     // The email path mints a management session for the provisioned admin — run as the app role under
     // the tenant (asAppUser), the same role constraints production's login runs under.
-    const session = await withTenant(suite.db, venue.tenantId, async (tx) => {
+    const session = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginManager(tx, {
-        tenantId: venue.tenantId,
         email: adminEmail,
         password: "dashPass123",
       });
@@ -265,10 +255,9 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
 
     // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
     await expect(
-      withTenant(suite.db, venue.tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return loginManager(tx, {
-          tenantId: venue.tenantId,
           email: adminEmail,
           password: "wrongpass1",
         });

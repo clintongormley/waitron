@@ -1,4 +1,4 @@
-import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
@@ -13,6 +13,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
+  resetPerTest: false,
 });
 
 // One shared PGlite database backs the whole file, so every insert must claim a fresh secuencia
@@ -51,14 +52,13 @@ async function insertRegistro(
   const secuencia = nextSecuencia();
   await exec.execute(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, facturas_sustituidas, destinatarios,
       descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-    ) values (
-      ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+    ) values (${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"F/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       ${fields.tipoFactura === undefined ? "F3" : fields.tipoFactura},
@@ -131,7 +131,7 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
 
 describe("the destinatarios column inherits the table's immutability", () => {
   async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(pg.db, TENANT_A.id, async (tx) => {
+    return withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -144,7 +144,7 @@ describe("the destinatarios column inherits the table's immutability", () => {
     // column with NO new DDL. Revocation fires first for the app role, so — exactly as
     // rectificativa-columns.test.ts does — grant UPDATE inside a rolled-back transaction and watch
     // the SECOND layer (the trigger) catch it. WT001 is the trigger's SQLSTATE.
-    await withTenant(pg.db, TENANT_A.id, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await tx.execute(sql`grant update on registros_facturacion to app_user`);
       await tx.execute(sql`set local role app_user`);
       await insertRegistro(tx, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });

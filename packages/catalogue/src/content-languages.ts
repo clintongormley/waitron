@@ -12,31 +12,27 @@ import "./errors.js";
 
 export async function validateContentTranslations(
   tx: Transaction,
-  tenantId: string,
   translations: Readonly<Record<string, string>>,
   fallbackLanguage: string,
 ): Promise<void> {
-  await lockContentLanguages(tx, tenantId);
+  await lockContentLanguages(tx);
   for (const [language, value] of Object.entries(translations)) {
     contentLanguageCode(language);
     if (typeof value !== "string") throw new AppError("content.translation_invalid", {});
   }
-  const config = await readContentLanguages(tx, tenantId, fallbackLanguage);
+  const config = await readContentLanguages(tx, fallbackLanguage);
   if (resolveContentText(translations, config.defaultLanguage, config.defaultLanguage) === "") {
     throw new AppError("content.translation_required", { language: config.defaultLanguage });
   }
 }
 
 /** Configuration edits and content validation serialize so a new default cannot invalidate a save. */
-async function lockContentLanguages(tx: Transaction, tenantId: string): Promise<void> {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`content-languages:${tenantId}`}, 0))`,
-  );
+async function lockContentLanguages(tx: Transaction): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"content-languages"}, 0))`);
 }
 
 export async function listContentTranslationGaps(
   tx: Transaction,
-  tenantId: string,
   language: string,
 ): Promise<{ kind: string; id: string }[]> {
   const code = contentLanguageCode(language);
@@ -50,14 +46,14 @@ export async function listContentTranslationGaps(
     translations: Record<string, string>;
   }>(sql`
     select 'product' as kind, id, customer_name as translations from products
-      where tenant_id = ${tenantId} and customer_name is not null and customer_name <> '{}'::jsonb
-    union all select 'category' as kind, id, name as translations from categories where tenant_id = ${tenantId}
-    union all select 'unit' as kind, id, name as translations from units where tenant_id = ${tenantId}
+      where customer_name is not null and customer_name <> '{}'::jsonb
+    union all select 'category' as kind, id, name as translations from categories
+    union all select 'unit' as kind, id, name as translations from units
     union all select 'variant' as kind, id, customer_name as translations from product_variants
-      where tenant_id = ${tenantId} and customer_name is not null and customer_name <> '{}'::jsonb
-    union all select 'section' as kind, id, name as translations from menu_sections where tenant_id = ${tenantId}
-    union all select 'option_group' as kind, id, name as translations from option_groups where tenant_id = ${tenantId}
-    union all select 'option' as kind, id, name as translations from option_group_items where tenant_id = ${tenantId}
+      where customer_name is not null and customer_name <> '{}'::jsonb
+    union all select 'section' as kind, id, name as translations from menu_sections
+    union all select 'option_group' as kind, id, name as translations from option_groups
+    union all select 'option' as kind, id, name as translations from option_group_items
   `);
   return result.rows
     .filter((row) => resolveContentText(row.translations, code, code) === "")
@@ -66,7 +62,6 @@ export async function listContentTranslationGaps(
 
 export async function readContentLanguages(
   tx: Transaction,
-  tenantId: string,
   fallbackLanguage: string,
 ): Promise<ContentLanguages> {
   const [row] = await tx
@@ -75,7 +70,7 @@ export async function readContentLanguages(
       languages: contentLanguages.languages,
     })
     .from(contentLanguages)
-    .where(eq(contentLanguages.tenantId, tenantId));
+    .where(eq(contentLanguages.id, 1));
   if (row) return row;
   let defaultLanguage: string;
   try {
@@ -89,14 +84,9 @@ export async function readContentLanguages(
 
 export async function writeContentLanguages(
   tx: Transaction,
-  tenantId: string,
   config: ContentLanguages,
   fallbackLanguage = config.defaultLanguage,
-  additionalGaps?: (
-    tx: Transaction,
-    tenantId: string,
-    language: string,
-  ) => Promise<{ kind: string; id: string }[]>,
+  additionalGaps?: (tx: Transaction, language: string) => Promise<{ kind: string; id: string }[]>,
 ): Promise<void> {
   const defaultLanguage = contentLanguageCode(config.defaultLanguage);
   const languages = config.languages.map(contentLanguageCode);
@@ -107,12 +97,12 @@ export async function writeContentLanguages(
   ) {
     throw new AppError("content.languages_invalid", {});
   }
-  await lockContentLanguages(tx, tenantId);
-  const previous = await readContentLanguages(tx, tenantId, fallbackLanguage);
+  await lockContentLanguages(tx);
+  const previous = await readContentLanguages(tx, fallbackLanguage);
   if (previous.defaultLanguage !== defaultLanguage) {
     const gaps = [
-      ...(await listContentTranslationGaps(tx, tenantId, defaultLanguage)),
-      ...((await additionalGaps?.(tx, tenantId, defaultLanguage)) ?? []),
+      ...(await listContentTranslationGaps(tx, defaultLanguage)),
+      ...((await additionalGaps?.(tx, defaultLanguage)) ?? []),
     ];
     if (gaps.length > 0)
       throw new AppError("content.default_missing", {
@@ -126,6 +116,6 @@ export async function writeContentLanguages(
   };
   await tx
     .insert(contentLanguages)
-    .values({ tenantId, ...values })
-    .onConflictDoUpdate({ target: contentLanguages.tenantId, set: values });
+    .values(values)
+    .onConflictDoUpdate({ target: contentLanguages.id, set: values });
 }

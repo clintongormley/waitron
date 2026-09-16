@@ -1,7 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { ingredients } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import {
   validateAllergens,
   validateOrigin,
@@ -43,7 +42,6 @@ export interface UpdateIngredientInput {
 
 export async function createIngredient(
   tx: Transaction,
-  tenantId: TenantId,
   input: CreateIngredientInput,
 ): Promise<Ingredient> {
   // Validate before the write: an unreviewed ingredient stores null, a supplied map is checked
@@ -55,7 +53,7 @@ export async function createIngredient(
   const dietaryOrigin = input.dietaryOrigin == null ? null : validateOrigin(input.dietaryOrigin);
   const [row] = await tx
     .insert(ingredients)
-    .values({ tenantId, name: input.name, allergens, dietaryOrigin })
+    .values({ name: input.name, allergens, dietaryOrigin })
     .returning(INGREDIENT_COLUMNS);
   return row!;
 }

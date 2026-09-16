@@ -11,7 +11,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -32,7 +31,6 @@ export const employments = pgTable(
   "employments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     /** Ordinary weekly working time, in minutes — the overtime baseline (art. 35.5). Minutes, not hours,
      * so the projection never carries a fractional-hour rounding error. */
@@ -51,19 +49,13 @@ export const employments = pgTable(
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
     // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI
     // process, never during vitest run). restrict, not cascade: an employment must not be silently
-    // orphaned or discarded by a tenant/person delete.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "employments_tenant_fk",
-    }).onDelete("restrict"),
+    // orphaned or discarded by a person delete.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
       name: "employments_person_fk",
     }).onDelete("restrict"),
-    index("employments_tenant_id_idx").on(t.tenantId),
-    index("employments_tenant_person_idx").on(t.tenantId, t.personId),
+    index("employments_person_idx").on(t.personId),
     check("employments_contracted_minutes_ck", sql`${t.contractedMinutesPerWeek} >= 0`),
     check("employments_dates_ck", sql`${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
   ],

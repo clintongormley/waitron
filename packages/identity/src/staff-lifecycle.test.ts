@@ -1,8 +1,7 @@
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
@@ -18,24 +17,22 @@ import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
 import { codeOf, openManagementSession, seedPerson, seedTill } from "../test/fixtures.js";
 
-let tenantId: string;
+// Reset per test (the default), deliberately. The last-admin guard counts every admin in the
+// database, so admins created by earlier tests would be counted too and the "only active admin"
+// test could never see a single admin.
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 describe("invited person lifecycle", () => {
   it("stores legal and contact details as Pending with no usable PIN", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const { id } = await run((tx) =>
       invitePerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "  Ada  ",
         firstNames: " Ada ",
@@ -70,9 +67,8 @@ describe("invited person lifecycle", () => {
   });
 
   it("allows duplicate legal names but rejects duplicate active-or-pending display names", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const base = {
-      tenantId,
       managementSessionId: sessionId,
       firstNames: "Alex",
       lastNames: "Smith",
@@ -99,12 +95,12 @@ describe("invited person lifecycle", () => {
   });
 
   it("rejects reactivating an inactive account whose display name is now in use", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
-    const inactiveId = await seedPerson(suite.db, tenantId, "staff", "suspended");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const inactiveId = await seedPerson(suite.db, "staff", "suspended");
     await suite.db.execute(
       sql`update persons set display_name = 'Shared name', email = 'old-shared@example.com' where id = ${inactiveId}`,
     );
-    const currentId = await seedPerson(suite.db, tenantId, "staff");
+    const currentId = await seedPerson(suite.db, "staff");
     await suite.db.execute(
       sql`update persons set display_name = 'Shared name', email = 'new-shared@example.com' where id = ${currentId}`,
     );
@@ -122,10 +118,9 @@ describe("invited person lifecycle", () => {
   });
 
   it("returns the administrative fields without credential material", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Grace",
         firstNames: "Grace Brewster",
@@ -148,10 +143,9 @@ describe("invited person lifecycle", () => {
   });
 
   it("does not allow a Pending account through normal password or PIN login", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Pending login",
         firstNames: "Pending",
@@ -161,17 +155,16 @@ describe("invited person lifecycle", () => {
         email: "pending-login@example.com",
       }),
     );
-    const tillId = await seedTill(suite.db, tenantId);
+    const tillId = await seedTill(suite.db);
     expect(
       await codeOf(() =>
-        run((tx) => loginWithPin(tx, { tenantId, tillId, personId: created.id, pin: "1234" })),
+        run((tx) => loginWithPin(tx, { tillId, personId: created.id, pin: "1234" })),
       ),
     ).toBe("pin.invalid");
     expect(
       await codeOf(() =>
         run((tx) =>
           loginManager(tx, {
-            tenantId,
             email: "pending-login@example.com",
             password: "correct horse",
           }),
@@ -181,10 +174,9 @@ describe("invited person lifecycle", () => {
   });
 
   it("updates all administrative details in one operation while preserving Pending", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Edit me",
         firstNames: "Edith",
@@ -220,11 +212,10 @@ describe("invited person lifecycle", () => {
   });
 
   it("rejects a malformed telephone on both invite and update, but accepts an absent one", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     await expect(
       run((tx) =>
         invitePerson(tx, {
-          tenantId,
           managementSessionId: sessionId,
           displayName: "Bad Phone",
           firstNames: "Bad",
@@ -237,7 +228,6 @@ describe("invited person lifecycle", () => {
     ).rejects.toMatchObject({ code: "person.telephone_invalid" });
     const created = await run((tx) =>
       invitePerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Good Phone",
         firstNames: "Good",
@@ -265,10 +255,9 @@ describe("invited person lifecycle", () => {
   });
 
   it("does not let the only active admin demote or deactivate themselves", async () => {
-    const isolatedTenant = await seedTenant(suite.db);
-    const { personId, sessionId } = await openManagementSession(suite.db, isolatedTenant, "admin");
+    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
     const attempt = (role: "staff" | "admin", status: "active" | "suspended") =>
-      withTenant(suite.db, isolatedTenant, (tx) =>
+      withTransaction(suite.db, (tx) =>
         updatePersonDetails(tx, {
           managementSessionId: sessionId,
           personId: personId.toUpperCase(),
@@ -286,11 +275,11 @@ describe("invited person lifecycle", () => {
   });
 
   it("ends dashboard and till sessions when an administrator marks a person inactive", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
-    const target = await openManagementSession(suite.db, tenantId, "staff");
-    const tillId = await seedTill(suite.db, tenantId);
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const target = await openManagementSession(suite.db, "staff");
+    const tillId = await seedTill(suite.db);
     const tillSession = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId: target.personId, pin: "1234" }),
+      loginWithPin(tx, { tillId, personId: target.personId, pin: "1234" }),
     );
 
     await run((tx) =>
@@ -304,10 +293,9 @@ describe("invited person lifecycle", () => {
   });
 
   it("clears a PIN instead of letting an administrator choose its replacement", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Reset pin",
         firstNames: "Reset",
@@ -326,11 +314,9 @@ describe("invited person lifecycle", () => {
   });
 
   it("reset login returns an account to Pending and removes its login credentials", async () => {
-    const isolatedTenant = await seedTenant(suite.db);
-    const actor = await openManagementSession(suite.db, isolatedTenant, "admin");
-    const target = await withTenant(suite.db, isolatedTenant, (tx) =>
+    const actor = await openManagementSession(suite.db, "admin");
+    const target = await withTransaction(suite.db, (tx) =>
       invitePerson(tx, {
-        tenantId: isolatedTenant,
         managementSessionId: actor.sessionId,
         displayName: "Reset login",
         firstNames: "Reset",
@@ -343,7 +329,7 @@ describe("invited person lifecycle", () => {
     await suite.db.execute(sql`update persons
       set status = 'active', pin_hash = 'pin', password_hash = 'password', totp_secret = 'totp'
       where id = ${target.id}`);
-    await withTenant(suite.db, isolatedTenant, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       resetPersonLogin(tx, { managementSessionId: actor.sessionId, personId: target.id }),
     );
     const row = await suite.db.execute<{
@@ -363,8 +349,8 @@ describe("invited person lifecycle", () => {
   });
 
   it("keeps inactive accounts inactive unless the explicit reactivation action is used", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
-    const target = await seedPerson(suite.db, tenantId, "staff", "suspended");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const target = await seedPerson(suite.db, "staff", "suspended");
     expect(
       await codeOf(() =>
         run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: target })),
@@ -380,7 +366,7 @@ describe("invited person lifecycle", () => {
   });
 
   it("does not let a manager promote themselves to admin", async () => {
-    const actor = await openManagementSession(suite.db, tenantId, "manager");
+    const actor = await openManagementSession(suite.db, "manager");
     expect(
       await codeOf(() =>
         run((tx) =>

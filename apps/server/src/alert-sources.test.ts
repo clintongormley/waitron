@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, type Database, withTenant } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, type Database, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
@@ -10,7 +10,6 @@ import {
   PAYMENTS_MIGRATIONS,
   type ReaderStatus,
 } from "@waitron/payments";
-import type { TenantId } from "@waitron/shared";
 import {
   awaitingCertAlertSource,
   backupAlertSource,
@@ -25,7 +24,7 @@ import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
-const ctx = { tx: {} as never, tenantId: "t1" as never, now: NOW };
+const ctx = { tx: {} as never, now: NOW };
 
 function src(status: BackupStatus, outcomes: BackupOutcomeHolder) {
   return backupAlertSource({ listStatus: async () => status, outcomes, now: () => NOW });
@@ -112,42 +111,39 @@ function minsAgo(mins: number): string {
   return new Date(NOW.getTime() - mins * 60_000).toISOString();
 }
 
-async function seedLocation(tenantId: TenantId): Promise<string> {
+async function seedLocation(): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Counter', array['es-ES'], 'Retail') returning id`);
   return rows[0]!.id;
 }
 
 async function seedPrinter(t: {
-  tenantId: TenantId;
   locationId: string;
   name: string;
   active?: boolean;
 }): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into printers (tenant_id, location_id, name, transport, host, active)
-    values (${t.tenantId}, ${t.locationId}, ${t.name}, 'network_tcp', '10.0.0.1', ${t.active ?? true})
+    insert into printers (location_id, name, transport, host, active)
+    values (${t.locationId}, ${t.name}, 'network_tcp', '10.0.0.1', ${t.active ?? true})
     returning id`);
   return rows[0]!.id;
 }
 
 async function seedAgent(t: {
-  tenantId: TenantId;
   locationId: string;
   name: string;
   lastSeenAt: string | null;
   active?: boolean;
 }): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into print_agents (tenant_id, location_id, name, token_hash, active, last_seen_at)
-    values (${t.tenantId}, ${t.locationId}, ${t.name}, 'hash', ${t.active ?? true}, ${t.lastSeenAt})
+    insert into print_agents (location_id, name, token_hash, active, last_seen_at)
+    values (${t.locationId}, ${t.name}, 'hash', ${t.active ?? true}, ${t.lastSeenAt})
     returning id`);
   return rows[0]!.id;
 }
 
 async function seedJob(t: {
-  tenantId: TenantId;
   locationId: string;
   printerId: string;
   createdAt: string;
@@ -156,38 +152,37 @@ async function seedJob(t: {
   attempts?: number;
 }): Promise<void> {
   await suite.db.execute(sql`
-    insert into print_jobs (tenant_id, location_id, printer_id, payload, kind, status, attempts, created_at)
-    values (${t.tenantId}, ${t.locationId}, ${t.printerId}, decode('01', 'hex'),
+    insert into print_jobs (location_id, printer_id, payload, kind, status, attempts, created_at)
+    values (${t.locationId}, ${t.printerId}, decode('01', 'hex'),
             ${t.kind ?? "document"}, ${t.status ?? "queued"}, ${t.attempts ?? 0}, ${t.createdAt})`);
 }
 
-/** Run the source as the app role in the tenant's own transaction, exactly as the registry does. */
-async function readAlerts(tenantId: TenantId, now = NOW) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+/** Run the source as the app role in one transaction, exactly as the registry does. */
+async function readAlerts(now = NOW) {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    return printingAlertSource().read({ tx, tenantId, now });
+    return printingAlertSource().read({ tx, now });
   });
 }
 
 describe("printingAlertSource — agent.silent", () => {
   it("stays quiet for an agent seen 4 minutes ago", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
-    await seedAgent({ tenantId, locationId, name: "Cocina", lastSeenAt: minsAgo(4) });
-    expect(await readAlerts(tenantId)).toEqual([]);
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    await seedAgent({ locationId, name: "Cocina", lastSeenAt: minsAgo(4) });
+    expect(await readAlerts()).toEqual([]);
   });
 
   it("raises agent.silent for an agent seen 6 minutes ago, then clears on a fresh pull", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
     const agentId = await seedAgent({
-      tenantId,
       locationId,
       name: "Cocina",
       lastSeenAt: minsAgo(6),
     });
 
-    expect(await readAlerts(tenantId)).toMatchObject([
+    expect(await readAlerts()).toMatchObject([
       {
         key: `agent.silent:${agentId}`,
         code: "agent.silent",
@@ -199,26 +194,23 @@ describe("printingAlertSource — agent.silent", () => {
     ]);
 
     // A fresh check-in moves last_seen_at to now, so the next read finds nothing.
-    await suite.db.execute(
-      sql`update print_agents set last_seen_at = ${NOW.toISOString()} where tenant_id = ${tenantId}`,
-    );
-    expect(await readAlerts(tenantId)).toEqual([]);
+    await suite.db.execute(sql`update print_agents set last_seen_at = ${NOW.toISOString()} `);
+    expect(await readAlerts()).toEqual([]);
   });
 
   it("gives two silent agents that share a name two distinct alerts", async () => {
     // Names are not unique; keying the alert on the name would collide these two into one and hide a
     // down agent. The key must be per-agent-id, so both silent agents surface.
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
-    const first = await seedAgent({ tenantId, locationId, name: "Cocina", lastSeenAt: minsAgo(6) });
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const first = await seedAgent({ locationId, name: "Cocina", lastSeenAt: minsAgo(6) });
     const second = await seedAgent({
-      tenantId,
       locationId,
       name: "Cocina",
       lastSeenAt: minsAgo(7),
     });
 
-    const alerts = await readAlerts(tenantId);
+    const alerts = await readAlerts();
     expect(alerts.every((a) => a.code === "agent.silent")).toBe(true);
     expect(new Set(alerts.map((a) => a.key))).toEqual(
       new Set([`agent.silent:${first}`, `agent.silent:${second}`]),
@@ -226,29 +218,28 @@ describe("printingAlertSource — agent.silent", () => {
   });
 
   it("ignores a deactivated silent agent and a never-seen agent", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
     await seedAgent({
-      tenantId,
       locationId,
       name: "Retired",
       lastSeenAt: minsAgo(30),
       active: false,
     });
-    await seedAgent({ tenantId, locationId, name: "Never", lastSeenAt: null });
-    expect(await readAlerts(tenantId)).toEqual([]);
+    await seedAgent({ locationId, name: "Never", lastSeenAt: null });
+    expect(await readAlerts()).toEqual([]);
   });
 });
 
 describe("printingAlertSource — printer.jobs_waiting", () => {
   it("raises for a document job queued 3 minutes ago, with the printer name and count", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
-    const printerId = await seedPrinter({ tenantId, locationId, name: "Barra" });
-    await seedJob({ tenantId, locationId, printerId, createdAt: minsAgo(3) });
-    await seedJob({ tenantId, locationId, printerId, createdAt: minsAgo(5) });
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(3) });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(5) });
 
-    expect(await readAlerts(tenantId)).toMatchObject([
+    expect(await readAlerts()).toMatchObject([
       {
         key: `printer.jobs_waiting:${printerId}`,
         code: "printer.jobs_waiting",
@@ -261,83 +252,44 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stays quiet for a job only 1 minute old", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
-    const printerId = await seedPrinter({ tenantId, locationId, name: "Barra" });
-    await seedJob({ tenantId, locationId, printerId, createdAt: minsAgo(1) });
-    expect(await readAlerts(tenantId)).toEqual([]);
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(1) });
+    expect(await readAlerts()).toEqual([]);
   });
 
   it("never counts a drawer job, however old", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
-    const printerId = await seedPrinter({ tenantId, locationId, name: "Barra" });
-    await seedJob({ tenantId, locationId, printerId, createdAt: minsAgo(30), kind: "drawer" });
-    expect(await readAlerts(tenantId)).toEqual([]);
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(30), kind: "drawer" });
+    expect(await readAlerts()).toEqual([]);
   });
 
   it("raises for a fresh failed job that has hit the delivery-attempt ceiling", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
-    const printerId = await seedPrinter({ tenantId, locationId, name: "Barra" });
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
     // 1 minute old — below the stuck-time threshold — but exhausted, so it will never print again.
     await seedJob({
-      tenantId,
       locationId,
       printerId,
       createdAt: minsAgo(1),
       status: "failed",
       attempts: 5,
     });
-    expect(await readAlerts(tenantId)).toMatchObject([
+    expect(await readAlerts()).toMatchObject([
       { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
     ]);
   });
 
   it("ignores jobs on a deactivated printer", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const locationId = await seedLocation(tenantId);
-    const printerId = await seedPrinter({ tenantId, locationId, name: "Off", active: false });
-    await seedJob({ tenantId, locationId, printerId, createdAt: minsAgo(10) });
-    expect(await readAlerts(tenantId)).toEqual([]);
-  });
-});
-
-// The composite FK (tenant_id, printer_id) → printers(tenant_id, id) makes a cross-tenant print_jobs
-// row uninsertable, so this proves partition — the two per-table predicates and that FK together — but
-// cannot exercise each tenant predicate independently, which is what the FK is there to make redundant.
-describe("printingAlertSource — tenant scoping", () => {
-  it("reads only its own tenant's silent agents and waiting jobs", async () => {
-    const other = await seedTenant(suite.db);
-    const otherLocation = await seedLocation(other);
-    await seedAgent({
-      tenantId: other,
-      locationId: otherLocation,
-      name: "Foreign",
-      lastSeenAt: minsAgo(30),
-    });
-    const otherPrinter = await seedPrinter({
-      tenantId: other,
-      locationId: otherLocation,
-      name: "Foreign",
-    });
-    await seedJob({
-      tenantId: other,
-      locationId: otherLocation,
-      printerId: otherPrinter,
-      createdAt: minsAgo(30),
-    });
-
-    // The other tenant's rows exist and would fire for their own tenant (control)…
-    expect((await readAlerts(other)).map((a) => a.code).sort()).toEqual([
-      "agent.silent",
-      "printer.jobs_waiting",
-    ]);
-
-    // …but a different tenant, with nothing of its own, sees none of them.
-    const mine = await seedTenant(suite.db);
-    await seedLocation(mine);
-    expect(await readAlerts(mine)).toEqual([]);
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Off", active: false });
+    await seedJob({ locationId, printerId, createdAt: minsAgo(10) });
+    expect(await readAlerts()).toEqual([]);
   });
 });
 
@@ -347,15 +299,14 @@ describe("printingAlertSource — tenant scoping", () => {
 const batterySuite = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 async function seedReader(t: {
-  tenantId: TenantId;
   provider?: string;
   providerRef: string;
   name: string;
   active?: boolean;
 }): Promise<string> {
   const { rows } = await batterySuite.db.execute<{ id: string }>(sql`
-    insert into card_readers (tenant_id, provider, provider_ref, name, active)
-    values (${t.tenantId}, ${t.provider ?? "stub"}, ${t.providerRef}, ${t.name}, ${t.active ?? true})
+    insert into card_readers (provider, provider_ref, name, active)
+    values (${t.provider ?? "stub"}, ${t.providerRef}, ${t.name}, ${t.active ?? true})
     returning id`);
   return rows[0]!.id;
 }
@@ -392,24 +343,25 @@ function stubProvider(opts: {
   };
 }
 
-const stubRuntimeDeps =
-  (db: Database) =>
-  (tenantId: TenantId): CardProviderRuntimeDeps => ({ db, ring: {} as never, tenantId });
+const stubRuntimeDeps = (db: Database) => (): CardProviderRuntimeDeps => ({
+  db,
+  ring: {} as never,
+});
 
-async function readBattery(source: AlertSource, tenantId: TenantId, now = NOW) {
-  return withTenant(batterySuite.db, tenantId, async (tx) => {
+async function readBattery(source: AlertSource, now = NOW) {
+  return withTransaction(batterySuite.db, async (tx) => {
     await asAppUser(tx);
-    return source.read({ tx, tenantId, now });
+    return source.read({ tx, now });
   });
 }
 
 describe("batteryAlertSource", () => {
   it("warns at the warning floor, errors at the error floor, and is silent above or absent", async () => {
-    const tenantId = await seedTenant(batterySuite.db);
-    const at25 = await seedReader({ tenantId, providerRef: "p25", name: "R25" });
-    const at20 = await seedReader({ tenantId, providerRef: "p20", name: "R20" });
-    const at10 = await seedReader({ tenantId, providerRef: "p10", name: "R10" });
-    await seedReader({ tenantId, providerRef: "pNone", name: "RNone" });
+    await seedTenant(batterySuite.db);
+    const at25 = await seedReader({ providerRef: "p25", name: "R25" });
+    const at20 = await seedReader({ providerRef: "p20", name: "R20" });
+    const at10 = await seedReader({ providerRef: "p10", name: "R10" });
+    await seedReader({ providerRef: "pNone", name: "RNone" });
 
     const percentByRef: Record<string, number | undefined> = {
       p25: 25,
@@ -424,7 +376,7 @@ describe("batteryAlertSource", () => {
       cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
 
-    const alerts = await readBattery(source, tenantId);
+    const alerts = await readBattery(source);
     // 25 is above the warning floor and pNone reports no battery, so neither raises anything.
     const byKey = new Map(alerts.map((a) => [a.key, a]));
     expect(new Set(byKey.keys())).toEqual(
@@ -447,8 +399,8 @@ describe("batteryAlertSource", () => {
   });
 
   it("reuses one provider status read for five minutes, then reads again", async () => {
-    const tenantId = await seedTenant(batterySuite.db);
-    await seedReader({ tenantId, providerRef: "p1", name: "R1" });
+    await seedTenant(batterySuite.db);
+    await seedReader({ providerRef: "p1", name: "R1" });
 
     let clock = NOW;
     const calls = { n: 0 };
@@ -458,46 +410,28 @@ describe("batteryAlertSource", () => {
       cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => clock }),
     });
 
-    await readBattery(source, tenantId, clock);
+    await readBattery(source, clock);
     // A second read four minutes later stays inside the 5-minute window: still one provider call.
     clock = new Date(NOW.getTime() + 4 * 60_000);
-    await readBattery(source, tenantId, clock);
+    await readBattery(source, clock);
     expect(calls.n).toBe(1);
 
     // Six minutes on, the cached reading has expired, so the source asks the provider again.
     clock = new Date(NOW.getTime() + 6 * 60_000);
-    await readBattery(source, tenantId, clock);
+    await readBattery(source, clock);
     expect(calls.n).toBe(2);
   });
 
-  it("raises nothing for another tenant's low reader", async () => {
-    const other = await seedTenant(batterySuite.db);
-    await seedReader({ tenantId: other, providerRef: "pOther", name: "Foreign" });
-    const calls = { n: 0 };
-    const source = batteryAlertSource({
-      providers: [stubProvider({ battery: () => 5, calls })],
-      runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
-    });
-
-    // The other tenant's low reader fires for its own tenant (control)…
-    expect((await readBattery(source, other)).map((a) => a.code)).toEqual(["reader.battery_low"]);
-
-    // …but a fresh tenant with no readers of its own sees none of it.
-    const mine = await seedTenant(batterySuite.db);
-    expect(await readBattery(source, mine)).toEqual([]);
-  });
-
   it("ignores a deactivated low reader", async () => {
-    const tenantId = await seedTenant(batterySuite.db);
-    await seedReader({ tenantId, providerRef: "pOff", name: "Retired", active: false });
+    await seedTenant(batterySuite.db);
+    await seedReader({ providerRef: "pOff", name: "Retired", active: false });
     const calls = { n: 0 };
     const source = batteryAlertSource({
       providers: [stubProvider({ battery: () => 5, calls })],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
       cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
-    expect(await readBattery(source, tenantId)).toEqual([]);
+    expect(await readBattery(source)).toEqual([]);
     // The disabled reader was never enumerated, so the provider was never asked.
     expect(calls.n).toBe(0);
   });

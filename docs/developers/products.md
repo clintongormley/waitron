@@ -140,9 +140,9 @@ declarations. It has its own name (all three of them), price, availability and i
 The image library refuses to delete a photo a variant still uses, and lists the variant among the
 uses it shows you — `listImageUsages` and `deleteImage` in `packages/media/src/images.ts` both cover
 `product_variants.image`. **That protection is application-level only.** Unlike `products.image`,
-which carries a real foreign key to `media_images` (`packages/media/drizzle/0001_images_references_grants.sql`),
-`product_variants.image` has none: it is a plain `text` column added by
-`packages/catalogue/drizzle/0014_variant_names_image.sql`. So a delete that does not go through
+which carries a real foreign key to `media_images` (declared in the media set's baseline,
+`packages/media/drizzle/0001_media_baseline_sql.sql`), `product_variants.image` has none: it is a
+plain `text` column, declared in `packages/catalogue/drizzle/0000_catalogue_baseline.sql`. So a delete that does not go through
 `deleteImage` is not stopped by the database.
 
 ## The editor form

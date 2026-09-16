@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, isPgError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, isPgError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -12,8 +12,7 @@ import "./errors.js";
 // PGlite, not real Postgres: `createPrinter` is a single INSERT gated by an app-layer required-field
 // pre-check plus the DB's transport CHECK + partial UNIQUE — none of which is a CONCURRENCY or
 // deployment-role-privilege property. The CHECK/UNIQUE integrity is already proven on real Postgres in
-// packages/db's printing.test.ts, so the heavier target buys this suite nothing (CLAUDE.md §4). The
-// explicit `tenant_id` the verb writes/reads is what scopes these rows.
+// packages/db's printing.test.ts, so the heavier target buys this suite nothing (CLAUDE.md §4).
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
 /**
@@ -21,15 +20,15 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
  * tenant (via seedTenant's fresh NIF) so rows are order-independent.
  */
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
+  return { locationId: rows[0]!.id };
 }
 
 function asTx<T>(cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, cfg.tenantId, fn);
+  void cfg;
+  return withTransaction(suite.db, fn);
 }
 
 async function printerRow(printerId: string): Promise<{ transport: string; port: number | null }> {

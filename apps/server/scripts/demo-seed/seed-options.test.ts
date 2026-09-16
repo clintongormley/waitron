@@ -1,4 +1,3 @@
-import { tenantId as brandTenantId } from "@waitron/shared";
 // Real-Postgres proof of `seedOptions` (Phase 4, Task 13): it creates the demo modifier groups
 // (menu.ts's `PRODUCT_OPTION_GROUPS`) and attaches them to their named products, so the till
 // shows a picker on those two dishes and a plain ring on everything else. Real Postgres, not
@@ -6,7 +5,7 @@ import { tenantId as brandTenantId } from "@waitron/shared";
 // PGlite's superuser connection cannot check the grants used by these writes (CLAUDE.md §4).
 
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -31,7 +30,7 @@ function nextNif(): string {
 }
 
 /** Provision a fresh chained venue (as the owner) and return the ids the seed needs. */
-async function provisionVenue(): Promise<{ tenantId: string; locationId: string }> {
+async function provisionVenue(): Promise<{ locationId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -65,31 +64,27 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  return { tenantId: venue.tenantId, locationId: venue.locationId };
+  return { locationId: venue.locationId };
 }
 
 describe("seedOptions", () => {
   it("seeds legacy groups and the three canonical modifier types with product and menu behavior", async () => {
-    const { tenantId, locationId } = await provisionVenue();
+    const { locationId } = await provisionVenue();
 
-    const { products, modifiers } = await withTenant(suite.admin, tenantId, async (tx) => {
+    const { products, modifiers } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage, menuItemsByProduct } = await seedCatalogues(
-        tx,
-        brandTenantId(tenantId),
-        {
-          locationId,
-          locale: LOCALE,
-        },
-      );
-      await seedOptions(tx, brandTenantId(tenantId), {
+      const { productsByImage, menuItemsByProduct } = await seedCatalogues(tx, {
+        locationId,
+        locale: LOCALE,
+      });
+      await seedOptions(tx, {
         productsByImage,
         menuItemsByProduct,
         locale: LOCALE,
       });
       return {
         products: (await listAvailableProducts(tx, locationId)).products,
-        modifiers: await listModifiers(tx, tenantId),
+        modifiers: await listModifiers(tx),
       };
     });
 

@@ -58,7 +58,7 @@ function parseDbTarget(url: string): { host: string; port: string; database: str
  *  - `WAITRON_MAINTENANCE_DATABASE_URL` — a `createdb createrole` admin connected to a DIFFERENT
  *    (maintenance) database. The wipe DROPs as the migrator-owner via `withRole` (probe F) and CREATEs as
  *    this plain admin holding CREATEDB, which the migrator lacks (probe A).
- *  - `WAITRON_TILL_*_ID` — via `tryLoadTillConfig` → the node's `nodeId`/`tenantId`. Absent = an
+ *  - `WAITRON_TILL_*_ID` — via `tryLoadTillConfig` → the node's `nodeId`. Absent = an
  *    unprovisioned box, which `rejoin` is a misuse of.
  *  - `WAITRON_STATE_DIR` / `WAITRON_ENV` — the state dir whose `trading.env` is cleared, and the target
  *    environment (names the publication/subscription and gates `deploymentEnvironment`).

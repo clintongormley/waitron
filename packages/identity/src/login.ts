@@ -6,7 +6,6 @@ import type { PersonRoleValue } from "./permissions.js";
 
 export interface Session {
   id: string;
-  tenantId: string;
   personId: string;
   tillId: string;
   /** The operator's own role, carried through so callers (the till's `POST /api/session` response) can
@@ -23,25 +22,19 @@ export interface Session {
 /** Opens a shift session for a person at a till after verifying their PIN. Throws `person.not_found`, `person.suspended`, `pin.invalid`. */
 export async function loginWithPin(
   tx: Transaction,
-  input: { tenantId: string; tillId: string; personId: string; pin: string },
+  input: { tillId: string; personId: string; pin: string },
 ): Promise<Session> {
   // The shared credential gate (not_found → suspended → pin.invalid). Login does not GATE on the role,
   // but it surfaces it in the returned session (see {@link Session.role}). `authorize`'s override
   // branch runs the identical credential sequence.
-  const { role, locale } = await verifyPersonCredential(
-    tx,
-    input.tenantId,
-    input.personId,
-    input.pin,
-  );
+  const { role, locale } = await verifyPersonCredential(tx, input.personId, input.pin);
 
   const [row] = await tx
     .insert(sessions)
-    .values({ tenantId: input.tenantId, personId: input.personId, tillId: input.tillId })
+    .values({ personId: input.personId, tillId: input.tillId })
     .returning({ id: sessions.id });
   return {
     id: row!.id,
-    tenantId: input.tenantId,
     personId: input.personId,
     tillId: input.tillId,
     role,

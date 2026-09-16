@@ -14,7 +14,7 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * set to layer on top. Suites clone it with `useTemplateDb({ template: "core" })`.
  *
  * NO cluster `roles` are provided: the runtime suites drive the real deployment role by switching to
- * it inside a superuser transaction (`withTenant` + `asAppUser`, i.e. `set local role app_user`),
+ * it inside a superuser transaction (`withTransaction` + `asAppUser`, i.e. `set local role app_user`),
  * exactly as packages/db's own printing.test.ts does — they need no separate LOGIN probe role.
  * `app_user` itself exists by the time any clone is used: CORE's `0001_db_baseline_sql.sql` creates it.
  *

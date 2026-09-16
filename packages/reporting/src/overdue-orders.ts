@@ -29,13 +29,13 @@ import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
  * `tableLabel` mirrors `ExpoOrder.tableLabel`'s fan-out-proof scalar subquery (a LEFT JOIN could
  * multiply an order's rows if two tables pointed at it): a seated TAB (`dining_tables.tab_id` back-
  * points at the order) or a counter DELIVERY (`working_orders.delivery_table_id` points at the
- * table), tenant-scoped — `null` for a bare walk-up. Unlike `listExpoQueue` this carries no
- * `locationId` param (this query has none to scope by): a table can only match via one of those two
- * order-specific links, so tenant scoping alone is exact here — never two tables satisfy the OR for
- * the SAME order under the one-tab-per-table / one-delivery-target invariants those columns carry.
+ * table) — `null` for a bare walk-up. Unlike `listExpoQueue` this carries no `locationId` param (this
+ * query has none to scope by): a table can only match via one of those two order-specific links, so
+ * the links alone are exact here — never two tables satisfy the OR for the SAME order under the
+ * one-tab-per-table / one-delivery-target invariants those columns carry.
  *
- * Runs on the caller's transaction as `app_user`. The query scopes its rows with explicit
- * `tenantId` and `nodeId` WHERE predicates; transaction context does not supply tenant filtering.
+ * Runs on the caller's transaction as `app_user`. The query scopes its rows with an explicit `nodeId`
+ * WHERE predicate; one tenant per database, so it carries no tenant predicate.
  */
 export async function computeOverdueOrders(
   tx: Transaction,
@@ -63,41 +63,20 @@ export async function computeOverdueOrders(
       // never this query's `.from()` base), so this is immune to CLAUDE.md §3's bare-column trap.
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
-        where dt.tenant_id = ${workingOrders.tenantId}
-          and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
+        where (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
         order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
         limit 1)`,
     })
     .from(ticketItems)
-    // The owning order — composite (tenant_id too), the tenant-consistent shape ticket_items' FKs
-    // carry, mirroring listStationQueue/listExpoQueue.
-    .innerJoin(
-      workingOrders,
-      and(
-        eq(ticketItems.workingOrderId, workingOrders.id),
-        eq(ticketItems.tenantId, workingOrders.tenantId),
-      ),
-    )
+    // The owning order, joined on its id, mirroring listStationQueue/listExpoQueue.
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     // The line this item was fired from — needed for `served_at` (the age-model's "until served").
-    .innerJoin(
-      workingOrderLines,
-      and(
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-      ),
-    )
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     // The item's OWN station, for its name + order-timing thresholds — a plain INNER JOIN keyed on
-    // the tenant-consistent (tenant_id, station_id) FK, never a correlated subquery (CLAUDE.md §3).
-    .innerJoin(
-      kitchenStations,
-      and(
-        eq(ticketItems.stationId, kitchenStations.id),
-        eq(ticketItems.tenantId, kitchenStations.tenantId),
-      ),
-    )
+    // the `station_id` FK, never a correlated subquery (CLAUDE.md §3).
+    .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     .where(
       and(
-        eq(ticketItems.tenantId, input.tenantId),
         eq(ticketItems.nodeId, input.nodeId),
         // "Open" for the age model (design §3/Task 4): not abandoned, not yet collected — the SAME
         // definition listExpoQueue/listStationQueue use, wider than status = 'open'.

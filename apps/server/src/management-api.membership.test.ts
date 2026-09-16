@@ -5,7 +5,7 @@ import {
   asAppUser,
   readNodeMembership,
   stampDeployment,
-  withTenant,
+  withTransaction,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
@@ -79,17 +79,14 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
     { db: suite.admin, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    tenantId: venue.tenantId,
     locationId: venue.locationId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
-  const adminPersonId = await withTenant(appDb, designated.tenantId, async (tx) => {
+  const adminPersonId = await withTransaction(appDb, async (tx) => {
     await asAppUser(tx);
-    const r = await tx.execute<{ id: string }>(
-      sql`select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`,
-    );
+    const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
     return r.rows[0]!.id;
   });
   return { designated, adminPersonId };
@@ -97,26 +94,26 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
 
 /** Insert a NON-admin (staff) person carrying a dashboard password — staff lacks `mirror.create`, so it
  * authenticates but fails authorization → 403. */
-async function seedStaff(tenantId: string): Promise<string> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+async function seedStaff(): Promise<string> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (${tenantId}, 'Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
+      insert into persons (display_name, pin_hash, password_hash, role)
+      values ('Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
       returning id`);
     return r.rows[0]!.id;
   });
 }
 
 /** Mount the management API on a fresh Hono app for one tenant. The membership route reads only
- * `deps.db` + `deps.cfg.tenantId`; the other deps are inert here (no route under test touches them). */
+ * `deps.db`; the other deps are inert here (no route under test touches them). */
 function mountApp(designated: AdoptResult): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
     {
       db: appDb,
-      cfg: { tenantId: designated.tenantId, nodeId: designated.nodeId },
+      cfg: { nodeId: designated.nodeId },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost:5191",
@@ -172,7 +169,7 @@ describe("GET /management-api/membership (real Postgres)", () => {
 
   it("refuses a non-admin (staff) credential with 403", async () => {
     const { designated } = await setupVenue();
-    const staffPersonId = await seedStaff(designated.tenantId);
+    const staffPersonId = await seedStaff();
     const app = mountApp(designated);
 
     const res = await getMembership(app, { personId: staffPersonId, password: STAFF_PASSWORD });

@@ -28,7 +28,6 @@ import "./errors.js";
 /** One clock event's inputs. `at`/`offsetMinutes` are the trusted event timestamp and its wall
  * offset, supplied by the caller (as `recordSale` is handed `issuedAt`), never read here. */
 export interface ClockEventInput {
-  tenantId: string;
   /** The node recording the event — its chain the entry is appended to (spec §2.1). Supplied per
    * call the way `recordSale` takes `input.nodeId`. */
   nodeId: string;
@@ -43,7 +42,6 @@ export interface ClockEventInput {
 }
 
 export interface WorkSummaryQuery {
-  tenantId: string;
   personId: string;
   /** The pay period, as a half-open local-date window `[start, end)`. */
   period: Period;
@@ -76,7 +74,6 @@ export interface WorkSummaryRuleset {
 
 /** A request to correct an entry's timestamp — an append, never an edit of the target. */
 export interface CorrectionRequestInput {
-  tenantId: string;
   /** The node recording the correction — its chain the correction is appended to (spec §3.3). A
    * correction rides its RECORDING node's chain, which need not be the target's node. */
   nodeId: string;
@@ -95,7 +92,6 @@ export interface CorrectionRequestInput {
 
 /** A supervisor's approval of a requested correction — the second append that gives it effect. */
 export interface CorrectionApprovalInput {
-  tenantId: string;
   /** The node recording the approval — its chain the approval is appended to (spec §3.3). */
   nodeId: string;
   /** The `requested` correction to approve. */
@@ -108,7 +104,6 @@ export interface CorrectionApprovalInput {
  * planned shifts. Publishing is a plain mutation over PLANNING data, not an append to the immutable
  * record (design §2.1): `roster_versions`/`shifts` take UPDATE, unlike `time_entries`. */
 export interface PublishRosterInput {
-  tenantId: string;
   /** The `roster_versions` row to publish. Must be a `draft`, or `roster.already_published`. */
   versionId: string;
   /** Who published it — recorded on the version; null when the caller does not attribute it. */
@@ -124,7 +119,6 @@ export interface PublishRosterInput {
 
 /** A request to open a DRAFT roster version for one location's week (design §3a). */
 export interface CreateRosterVersionInput {
-  tenantId: string;
   locationId: string;
   /** ANY day (YYYY-MM-DD) of the week to author. The engine NORMALIZES it to that week's Monday, which
    * becomes period_start (period_end is then derived as +6 days), so a non-Monday caller (a date
@@ -167,7 +161,6 @@ export interface RosterSnapshot {
 
 /** A request to add one planned shift to a DRAFT roster version (design §3a). */
 export interface AddShiftInput {
-  tenantId: string;
   versionId: string;
   personId: string;
   /** The workplace — should match the version's location (the screen uses the roster's). */
@@ -181,7 +174,6 @@ export interface AddShiftInput {
 
 /** A partial edit of a shift on a DRAFT roster version (design §3a) — only the supplied fields change. */
 export interface UpdateShiftInput {
-  tenantId: string;
   shiftId: string;
   personId?: string;
   startsAt?: string;
@@ -222,24 +214,24 @@ const STATE_AFTER: Record<LiveEntryKind, ShiftState> = {
 export class WorkforceBackend {
   /** out → working. */
   async clockIn(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.tenantId, input.personId);
-    const state = await this.currentState(tx, input.tenantId, input.personId);
+    await this.lockPerson(tx, input.personId);
+    const state = await this.currentState(tx, input.personId);
     if (state !== "out") throw this.alreadyOpen(input);
     await this.append(tx, input, "in");
   }
 
   /** working → out. */
   async clockOut(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.tenantId, input.personId);
-    const state = await this.currentState(tx, input.tenantId, input.personId);
+    await this.lockPerson(tx, input.personId);
+    const state = await this.currentState(tx, input.personId);
     if (state !== "working") throw this.noOpenEntry(input);
     await this.append(tx, input, "out");
   }
 
   /** working → on_break. */
   async breakStart(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.tenantId, input.personId);
-    const state = await this.currentState(tx, input.tenantId, input.personId);
+    await this.lockPerson(tx, input.personId);
+    const state = await this.currentState(tx, input.personId);
     if (state === "on_break") throw this.alreadyOpen(input);
     if (state !== "working") throw this.noOpenEntry(input);
     await this.append(tx, input, "break_start");
@@ -247,8 +239,8 @@ export class WorkforceBackend {
 
   /** on_break → working. */
   async breakEnd(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.tenantId, input.personId);
-    const state = await this.currentState(tx, input.tenantId, input.personId);
+    await this.lockPerson(tx, input.personId);
+    const state = await this.currentState(tx, input.personId);
     if (state !== "on_break") throw this.noOpenEntry(input);
     await this.append(tx, input, "break_end");
   }
@@ -270,11 +262,7 @@ export class WorkforceBackend {
     ruleset: WorkSummaryRuleset,
   ): Promise<PeriodSummary> {
     const { workingDaysPerWeek, overtimeModel, dailyTargetMinutes } = ruleset;
-    const contractedPerWeek = await this.contractedMinutesPerWeek(
-      tx,
-      query.tenantId,
-      query.personId,
-    );
+    const contractedPerWeek = await this.contractedMinutesPerWeek(tx, query.personId);
     const entries = await this.entriesInPeriod(tx, query);
     const sessions = projectWorkSessions(entries);
     const periodDays = (Date.parse(query.period.end) - Date.parse(query.period.start)) / MS_PER_DAY;
@@ -303,20 +291,10 @@ export class WorkforceBackend {
    */
   async getPlannedVsActual(
     tx: Transaction,
-    query: { tenantId: string; locationId: string; period: Period },
+    query: { locationId: string; period: Period },
   ): Promise<PlannedVsActual[]> {
-    const plannedShifts = await this.plannedShiftsInPeriod(
-      tx,
-      query.tenantId,
-      query.locationId,
-      query.period,
-    );
-    const entries = await this.entriesForLocationInPeriod(
-      tx,
-      query.tenantId,
-      query.locationId,
-      query.period,
-    );
+    const plannedShifts = await this.plannedShiftsInPeriod(tx, query.locationId, query.period);
+    const entries = await this.entriesForLocationInPeriod(tx, query.locationId, query.period);
     // The ±1-day widened fetch can return a session one local day outside the window; keep only the
     // sessions whose LOCAL day is in [start, end) (the planned side is already exact — its SQL filters
     // by local date directly).
@@ -334,7 +312,7 @@ export class WorkforceBackend {
    * JOIN, `schema/shifts.ts:49-50`) and a SUPERSEDED version (`status <> 'published'` → dropped by the
    * filter, `schema/roster-versions.ts:32-36`) must not manufacture phantom no-shows. The
    * `roster_versions_published_period_uq` partial unique index (`schema/roster-versions.ts:108-110`)
-   * keeps at most one published version per (tenant, location, period), so the join yields a single
+   * keeps at most one published version per (location, period), so the join yields a single
    * coherent plan.
    *
    * The published-only predicate lives in the JOIN's ON clause, not in WHERE, so BOTH exclusions are
@@ -354,7 +332,6 @@ export class WorkforceBackend {
    * `Date.parse` sees a string under either driver. */
   private async plannedShiftsInPeriod(
     tx: Transaction,
-    tenantId: string,
     locationId: string,
     period: Period,
   ): Promise<PlannedShift[]> {
@@ -373,8 +350,8 @@ export class WorkforceBackend {
         s.ends_offset_minutes
       from shifts s
       join roster_versions rv
-        on rv.id = s.roster_version_id and rv.tenant_id = s.tenant_id and rv.status = 'published'
-      where s.tenant_id = ${tenantId} and s.location_id = ${locationId}
+        on rv.id = s.roster_version_id and rv.status = 'published'
+      where s.location_id = ${locationId}
         and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date >= ${period.start}::date
         and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date < ${period.end}::date`);
     return rows.map((r) => ({
@@ -394,7 +371,6 @@ export class WorkforceBackend {
    * `projectWorkSessions` can fold them in. */
   private async entriesForLocationInPeriod(
     tx: Transaction,
-    tenantId: string,
     locationId: string,
     period: Period,
   ): Promise<TimeEntryRecord[]> {
@@ -417,7 +393,6 @@ export class WorkforceBackend {
       .from(timeEntries)
       .where(
         and(
-          eq(timeEntries.tenantId, tenantId),
           eq(timeEntries.locationId, locationId),
           gte(timeEntries.eventAt, windowStart),
           lt(timeEntries.eventAt, windowEnd),
@@ -433,12 +408,11 @@ export class WorkforceBackend {
    * effect on the projection until a supervisor approves it (`approveCorrection`). The row copies its
    * person and location from the entry it corrects, so a correction is always attributed to the same
    * worker and workplace as its target. Returns the new correction's id, which `approveCorrection`
-   * names. Throws `correction.target_not_found` if the target does not exist under this tenant.
+   * names. Throws `correction.target_not_found` if the target does not exist.
    */
   async requestCorrection(tx: Transaction, input: CorrectionRequestInput): Promise<string> {
-    const target = await this.entryById(tx, input.tenantId, input.correctsEntryId);
+    const target = await this.entryById(tx, input.correctsEntryId);
     return this.appendCorrection(tx, {
-      tenantId: input.tenantId,
       nodeId: input.nodeId,
       personId: target.personId,
       locationId: target.locationId,
@@ -461,32 +435,29 @@ export class WorkforceBackend {
    * the projection, so the approval — targeting the original entry — is what the reprojection sees.
    *
    * Throws `correction.not_permitted` if the approver's role is not supervisor/manager/admin,
-   * `correction.target_not_found` if no such correction row exists under this tenant, and
+   * `correction.target_not_found` if no such correction row exists, and
    * `correction.not_pending` if that correction's target already carries an approved correction —
    * a second approval of the same request, or an approval naming an already-`approved` row, both of
    * which would append a duplicate `approved` row (the request→approve-once invariant).
    */
   async approveCorrection(tx: Transaction, input: CorrectionApprovalInput): Promise<string> {
-    const role = await this.roleOf(tx, input.tenantId, input.approverPersonId);
+    const role = await this.roleOf(tx, input.approverPersonId);
     if (role === undefined || !SUPERVISOR_ROLES.has(role)) {
       throw new AppError("correction.not_permitted", {
-        tenantId: input.tenantId,
         personId: input.approverPersonId,
       });
     }
-    const request = await this.correctionById(tx, input.tenantId, input.correctionId);
+    const request = await this.correctionById(tx, input.correctionId);
     // Refuse a second approval BEFORE appending (the immutability floor forbids mutating the request
     // row, so its status stays `requested` and cannot itself signal "already approved"; the signal is
     // an existing approved correction against the SAME target). This is a guard on the append, not a
     // mutation — the request and any prior approval stay in history untouched (design §5).
-    if (await this.hasApprovedCorrection(tx, input.tenantId, request.correctsEntryId)) {
+    if (await this.hasApprovedCorrection(tx, request.correctsEntryId)) {
       throw new AppError("correction.not_pending", {
-        tenantId: input.tenantId,
         correctionId: input.correctionId,
       });
     }
     return this.appendCorrection(tx, {
-      tenantId: input.tenantId,
       nodeId: input.nodeId,
       personId: request.personId,
       locationId: request.locationId,
@@ -541,9 +512,9 @@ export class WorkforceBackend {
    * clock-vs-clock case). `pg_advisory_xact_lock` would also dodge the ABBA (it is disjoint from the
    * FK locks), but at the cost of a hashed key space and a lock nobody reading the row can see.
    */
-  private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
+  private async lockPerson(tx: Transaction, personId: string): Promise<void> {
     await tx.execute(sql`
-      select id from persons where tenant_id = ${tenantId} and id = ${personId} for no key update`);
+      select id from persons where id = ${personId} for no key update`);
   }
 
   /**
@@ -553,7 +524,7 @@ export class WorkforceBackend {
    * cannot open a mid-week roster and two different days of one calendar week map to the same
    * period_start — closing the mid-week + duplicate-draft hole structurally. `period_end` is derived
    * in SQL as the inclusive Sunday (`+ 6` days), so no date value round-trips through TypeScript.
-   * Throws `roster.draft_exists` when a draft for this (tenant, location, week) already exists — the
+   * Throws `roster.draft_exists` when a draft for this (location, week) already exists — the
    * published-uniqueness index does not cover drafts, so this check-then-insert is the guard.
    * Slice-1 single-author screen: a concurrent double-create could still fork two drafts (no draft
    * unique index — that would be a migration); acceptable and documented here.
@@ -562,18 +533,17 @@ export class WorkforceBackend {
     const period = weekStartOf(input.period);
     const existing = await tx.execute<{ id: string }>(sql`
       select id from roster_versions
-      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+      where location_id = ${input.locationId}
         and period_start = ${period} and status = 'draft'
       limit 1`);
     if (existing.rows.length > 0) {
       throw new AppError("roster.draft_exists", {
-        tenantId: input.tenantId,
         locationId: input.locationId,
       });
     }
     const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into roster_versions (tenant_id, location_id, period_start, period_end)
-      values (${input.tenantId}, ${input.locationId}, ${period}, ${period}::date + 6)
+      insert into roster_versions (location_id, period_start, period_end)
+      values (${input.locationId}, ${period}, ${period}::date + 6)
       returning id`);
     return rows[0]!.id;
   }
@@ -587,7 +557,7 @@ export class WorkforceBackend {
    */
   async getRoster(
     tx: Transaction,
-    input: { tenantId: string; locationId: string; period: string },
+    input: { locationId: string; period: string },
   ): Promise<RosterSnapshot> {
     const period = weekStartOf(input.period);
     // Prefer the DRAFT (what is being edited); fall back to the current PUBLISHED version for the week.
@@ -599,35 +569,31 @@ export class WorkforceBackend {
         to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
         published_by_person_id
       from roster_versions
-      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+      where location_id = ${input.locationId}
         and period_start = ${period} and status in ('draft', 'published')
       order by case when status = 'draft' then 0 else 1 end
       limit 1`);
     const row = rows[0];
     if (row === undefined) return { version: null, shifts: [] };
     const version = mapRosterVersion(row);
-    return { version, shifts: await this.shiftsForVersion(tx, input.tenantId, version.id) };
+    return { version, shifts: await this.shiftsForVersion(tx, version.id) };
   }
 
   /**
    * Reads one `roster_versions` row by id, or throws `roster.not_found`. The publish route reads a
    * version's `locationId` off this before resolving its collective-agreement ruleset.
    */
-  async getRosterVersion(
-    tx: Transaction,
-    input: { tenantId: string; versionId: string },
-  ): Promise<RosterVersionRow> {
+  async getRosterVersion(tx: Transaction, input: { versionId: string }): Promise<RosterVersionRow> {
     const { rows } = await tx.execute<RosterVersionDbRow>(sql`
       select id, location_id, period_start::text as period_start, period_end::text as period_end, status,
         to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
         published_by_person_id
       from roster_versions
-      where tenant_id = ${input.tenantId} and id = ${input.versionId}
+      where id = ${input.versionId}
       limit 1`);
     const row = rows[0];
     if (row === undefined) {
       throw new AppError("roster.not_found", {
-        tenantId: input.tenantId,
         rosterVersionId: input.versionId,
       });
     }
@@ -635,11 +601,7 @@ export class WorkforceBackend {
   }
 
   /** The shifts attached to a version, mapped to `ShiftRow`s ordered by start instant. */
-  private async shiftsForVersion(
-    tx: Transaction,
-    tenantId: string,
-    versionId: string,
-  ): Promise<ShiftRow[]> {
+  private async shiftsForVersion(tx: Transaction, versionId: string): Promise<ShiftRow[]> {
     const { rows } = await tx.execute<ShiftDbRow>(sql`
       select id, person_id, location_id,
         to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
@@ -647,7 +609,7 @@ export class WorkforceBackend {
         to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
         ends_offset_minutes, role, roster_version_id
       from shifts
-      where tenant_id = ${tenantId} and roster_version_id = ${versionId}
+      where roster_version_id = ${versionId}
       order by starts_at`);
     return rows.map(mapShift);
   }
@@ -660,18 +622,17 @@ export class WorkforceBackend {
    * INSERT, no chain.
    */
   async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
-    assertShiftInterval(input.tenantId, input.startsAt, input.endsAt);
-    const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId); // throws roster.not_found
+    assertShiftInterval(input.startsAt, input.endsAt);
+    const status = await this.rosterVersionStatus(tx, input.versionId); // throws roster.not_found
     if (status !== "draft") {
       throw new AppError("roster.not_draft", {
-        tenantId: input.tenantId,
         rosterVersionId: input.versionId,
       });
     }
     const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes,
+      insert into shifts (person_id, location_id, starts_at, starts_offset_minutes,
         ends_at, ends_offset_minutes, role, roster_version_id)
-      values (${input.tenantId}, ${input.personId}, ${input.locationId},
+      values (${input.personId}, ${input.locationId},
         ${input.startsAt}, ${input.startsOffsetMinutes}, ${input.endsAt}, ${input.endsOffsetMinutes},
         ${input.role}, ${input.versionId})
       returning id`);
@@ -685,10 +646,10 @@ export class WorkforceBackend {
    * interval can only come from the patch, i.e. `assertShiftInterval` screens exactly the field(s) the
    * patch supplies. */
   async updateShift(tx: Transaction, input: UpdateShiftInput): Promise<void> {
-    const shift = await this.shiftForWrite(tx, input.tenantId, input.shiftId);
+    const shift = await this.shiftForWrite(tx, input.shiftId);
     const startsAt = input.startsAt ?? shift.startsAt;
     const endsAt = input.endsAt ?? shift.endsAt;
-    assertShiftInterval(input.tenantId, startsAt, endsAt);
+    assertShiftInterval(startsAt, endsAt);
     await tx.execute(sql`
       update shifts set
         person_id = ${input.personId ?? shift.personId},
@@ -697,25 +658,19 @@ export class WorkforceBackend {
         ends_at = ${endsAt},
         ends_offset_minutes = ${input.endsOffsetMinutes ?? shift.endsOffsetMinutes},
         role = ${input.role === undefined ? shift.role : input.role}
-      where tenant_id = ${input.tenantId} and id = ${input.shiftId}`);
+      where id = ${input.shiftId}`);
   }
 
   /** Deletes a shift on a DRAFT version. Same guards as `updateShift`. */
-  async removeShift(tx: Transaction, input: { tenantId: string; shiftId: string }): Promise<void> {
-    await this.shiftForWrite(tx, input.tenantId, input.shiftId);
-    await tx.execute(
-      sql`delete from shifts where tenant_id = ${input.tenantId} and id = ${input.shiftId}`,
-    );
+  async removeShift(tx: Transaction, input: { shiftId: string }): Promise<void> {
+    await this.shiftForWrite(tx, input.shiftId);
+    await tx.execute(sql`delete from shifts where id = ${input.shiftId}`);
   }
 
   /** Reads a shift + its version's status, throwing `shift.not_found` (no such shift) or
    * `roster.not_draft` (the shift's non-null version is not a draft). A null `roster_version_id`
    * (an unattached draft shift) is editable — there is no published version to protect. */
-  private async shiftForWrite(
-    tx: Transaction,
-    tenantId: string,
-    shiftId: string,
-  ): Promise<ShiftRow> {
+  private async shiftForWrite(tx: Transaction, shiftId: string): Promise<ShiftRow> {
     const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
       select s.id, s.person_id, s.location_id,
         to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
@@ -723,13 +678,13 @@ export class WorkforceBackend {
         to_char(s.ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
         s.ends_offset_minutes, s.role, s.roster_version_id, rv.status as version_status
       from shifts s
-      left join roster_versions rv on rv.id = s.roster_version_id and rv.tenant_id = ${tenantId}
-      where s.tenant_id = ${tenantId} and s.id = ${shiftId}
+      left join roster_versions rv on rv.id = s.roster_version_id
+      where s.id = ${shiftId}
       limit 1`);
     const row = rows[0];
-    if (row === undefined) throw new AppError("shift.not_found", { tenantId, shiftId });
+    if (row === undefined) throw new AppError("shift.not_found", { shiftId });
     if (row.version_status !== null && row.version_status !== "draft") {
-      throw new AppError("roster.not_draft", { tenantId, rosterVersionId: row.roster_version_id! });
+      throw new AppError("roster.not_draft", { rosterVersionId: row.roster_version_id! });
     }
     return mapShift(row);
   }
@@ -750,7 +705,7 @@ export class WorkforceBackend {
    *    offset semantics `time_entries` uses — so a shift whose UTC instant sits just outside the
    *    period still attaches when its local date is inside.
    *
-   * Throws `roster.not_found` if no such version exists under the tenant, `roster.already_published`
+   * Throws `roster.not_found` if no such version exists, `roster.already_published`
    * if THIS version is no longer a `draft` (a version is published exactly once — republishing it is
    * refused, never a silent re-stamp), and `roster.period_already_published` if a DIFFERENT version
    * won a concurrent race to publish the same period (the unique-index backstop firing — see
@@ -761,20 +716,19 @@ export class WorkforceBackend {
    * still publishes and the breaches are surfaced here, never thrown — see `validateRoster`.
    */
   async publishRoster(tx: Transaction, input: PublishRosterInput): Promise<RosterBreach[]> {
-    const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId);
+    const status = await this.rosterVersionStatus(tx, input.versionId);
     if (status !== "draft") {
       throw new AppError("roster.already_published", {
-        tenantId: input.tenantId,
         rosterVersionId: input.versionId,
       });
     }
-    await this.supersedePriorPublished(tx, input.tenantId, input.versionId);
+    await this.supersedePriorPublished(tx, input.versionId);
     try {
       await tx.execute(sql`
         update roster_versions
         set status = 'published', published_at = now(),
             published_by_person_id = ${input.publishedByPersonId ?? null}
-        where tenant_id = ${input.tenantId} and id = ${input.versionId}`);
+        where id = ${input.versionId}`);
     } catch (error) {
       // The partial-index backstop firing: a concurrent publish of a DIFFERENT draft for this same
       // (location, period) committed after `supersedePriorPublished` took its lock snapshot, so its
@@ -783,7 +737,6 @@ export class WorkforceBackend {
       // structured code instead of a raw driver string.
       if (isUniqueViolation(error)) {
         throw new AppError("roster.period_already_published", {
-          tenantId: input.tenantId,
           rosterVersionId: input.versionId,
         });
       }
@@ -796,8 +749,7 @@ export class WorkforceBackend {
       update shifts s
       set roster_version_id = rv.id
       from roster_versions rv
-      where rv.id = ${input.versionId} and rv.tenant_id = ${input.tenantId}
-        and s.tenant_id = ${input.tenantId}
+      where rv.id = ${input.versionId}
         and s.location_id = rv.location_id
         and s.roster_version_id is null
         and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date
@@ -806,20 +758,13 @@ export class WorkforceBackend {
     // output). Validate exactly the shifts now attached to this version, then return the breaches —
     // publishing has already committed above, so a breach never blocks it.
     if (input.ruleset === undefined) return [];
-    return validateRoster(
-      await this.attachedShifts(tx, input.tenantId, input.versionId),
-      input.ruleset,
-    );
+    return validateRoster(await this.attachedShifts(tx, input.versionId), input.ruleset);
   }
 
   /** The shifts attached to a published version, as neutral `PlannedShift`s for `validateRoster`.
    * `event_at` is normalised to a UTC ISO instant so the pure engine's `Date.parse` sees a string
    * under either driver (node-postgres returns a Date, PGlite a string). */
-  private async attachedShifts(
-    tx: Transaction,
-    tenantId: string,
-    versionId: string,
-  ): Promise<PlannedShift[]> {
+  private async attachedShifts(tx: Transaction, versionId: string): Promise<PlannedShift[]> {
     const { rows } = await tx.execute<{
       id: string;
       person_id: string;
@@ -834,7 +779,7 @@ export class WorkforceBackend {
         to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
         ends_offset_minutes
       from shifts
-      where tenant_id = ${tenantId} and roster_version_id = ${versionId}`);
+      where roster_version_id = ${versionId}`);
     return rows.map((r) => ({
       shiftId: r.id,
       personId: r.person_id,
@@ -845,26 +790,21 @@ export class WorkforceBackend {
     }));
   }
 
-  /** A roster version's `status`, or `roster.not_found` if there is no such version under the
-   * tenant. `publishRoster` reads the publish guard off this. The row is locked `for update`, so the
+  /** A roster version's `status`, or `roster.not_found` if there is no such version. `publishRoster` reads the publish guard off this. The row is locked `for update`, so the
    * check-then-publish is race-free: a second concurrent publish blocks on this SELECT until the
    * first commits, then reads `published` and is refused. Without the lock both could observe `draft`
    * and the later would silently re-stamp `published_at`/`published_by_person_id` (the guard is a
    * separate statement from the UPDATE, so a bare read cannot serialise them). The lock rides the
    * caller's transaction, which `publishRoster` always supplies. */
-  private async rosterVersionStatus(
-    tx: Transaction,
-    tenantId: string,
-    versionId: string,
-  ): Promise<string> {
+  private async rosterVersionStatus(tx: Transaction, versionId: string): Promise<string> {
     const { rows } = await tx.execute<{ status: string }>(sql`
       select status from roster_versions
-      where tenant_id = ${tenantId} and id = ${versionId}
+      where id = ${versionId}
       limit 1
       for update`);
     const version = rows[0];
     if (version === undefined) {
-      throw new AppError("roster.not_found", { tenantId, rosterVersionId: versionId });
+      throw new AppError("roster.not_found", { rosterVersionId: versionId });
     }
     return version.status;
   }
@@ -891,17 +831,12 @@ export class WorkforceBackend {
    * <> versionId` is belt-and-suspenders: the version being published is still `draft` here, so it
    * cannot match `status = 'published'` anyway.
    */
-  private async supersedePriorPublished(
-    tx: Transaction,
-    tenantId: string,
-    versionId: string,
-  ): Promise<void> {
+  private async supersedePriorPublished(tx: Transaction, versionId: string): Promise<void> {
     const { rows } = await tx.execute<{ id: string }>(sql`
       select prior.id
       from roster_versions prior
-      join roster_versions target on target.id = ${versionId} and target.tenant_id = ${tenantId}
-      where prior.tenant_id = ${tenantId}
-        and prior.location_id = target.location_id
+      join roster_versions target on target.id = ${versionId}
+      where prior.location_id = target.location_id
         and prior.period_start = target.period_start
         and prior.period_end = target.period_end
         and prior.status = 'published'
@@ -912,8 +847,7 @@ export class WorkforceBackend {
       update roster_versions prior
       set status = 'superseded'
       from roster_versions target
-      where target.id = ${versionId} and target.tenant_id = ${tenantId}
-        and prior.tenant_id = ${tenantId}
+      where target.id = ${versionId}
         and prior.location_id = target.location_id
         and prior.period_start = target.period_start
         and prior.period_end = target.period_end
@@ -924,14 +858,10 @@ export class WorkforceBackend {
   /** The state the worker's most recent event left them in — `out` when they have no events yet.
    * Corrections are excluded: a correction of a past shift is not a live clock event and must not
    * drive today's open/closed state (and `correction` has no `STATE_AFTER` entry). */
-  private async currentState(
-    tx: Transaction,
-    tenantId: string,
-    personId: string,
-  ): Promise<ShiftState> {
+  private async currentState(tx: Transaction, personId: string): Promise<ShiftState> {
     const { rows } = await tx.execute<{ entry_kind: LiveEntryKind }>(sql`
       select entry_kind from time_entries
-      where tenant_id = ${tenantId} and person_id = ${personId} and entry_kind <> 'correction'
+      where person_id = ${personId} and entry_kind <> 'correction'
       order by event_at desc, recorded_at desc, node_id desc, sequence_no desc
       limit 1`);
     const last = rows[0];
@@ -948,7 +878,7 @@ export class WorkforceBackend {
     // recorded_at are computed there, never supplied here.
     await appendToChain(
       tx,
-      { tenantId: input.tenantId, nodeId: input.nodeId, locationId: input.locationId },
+      { nodeId: input.nodeId, locationId: input.locationId },
       {
         personId: input.personId,
         entryKind,
@@ -963,16 +893,15 @@ export class WorkforceBackend {
   /** The person and location of an entry, or `correction.target_not_found` if it does not exist. */
   private async entryById(
     tx: Transaction,
-    tenantId: string,
     entryId: string,
   ): Promise<{ personId: string; locationId: string }> {
     const { rows } = await tx.execute<{ person_id: string; location_id: string }>(sql`
       select person_id, location_id from time_entries
-      where tenant_id = ${tenantId} and id = ${entryId}
+      where id = ${entryId}
       limit 1`);
     const entry = rows[0];
     if (entry === undefined) {
-      throw new AppError("correction.target_not_found", { tenantId, entryId });
+      throw new AppError("correction.target_not_found", { entryId });
     }
     return { personId: entry.person_id, locationId: entry.location_id };
   }
@@ -982,7 +911,6 @@ export class WorkforceBackend {
    * so it must be handed an already-`approved` row rather than told it does not exist. */
   private async correctionById(
     tx: Transaction,
-    tenantId: string,
     correctionId: string,
   ): Promise<{
     personId: string;
@@ -1004,11 +932,11 @@ export class WorkforceBackend {
         to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as event_at,
         event_offset_minutes, correction_reason
       from time_entries
-      where tenant_id = ${tenantId} and id = ${correctionId} and entry_kind = 'correction'
+      where id = ${correctionId} and entry_kind = 'correction'
       limit 1`);
     const row = rows[0];
     if (row === undefined) {
-      throw new AppError("correction.target_not_found", { tenantId, entryId: correctionId });
+      throw new AppError("correction.target_not_found", { entryId: correctionId });
     }
     return {
       personId: row.person_id,
@@ -1020,31 +948,23 @@ export class WorkforceBackend {
     };
   }
 
-  /** Whether an `approved` correction already targets `targetEntryId` under this tenant — the signal
+  /** Whether an `approved` correction already targets `targetEntryId` — the signal
    * that a request has already been approved (approval targets the ORIGINAL entry, not the request
    * row). One approved correction per target is the invariant `approveCorrection` enforces; a further
    * correction of an already-corrected value chains off the approval instead (a distinct target). */
-  private async hasApprovedCorrection(
-    tx: Transaction,
-    tenantId: string,
-    targetEntryId: string,
-  ): Promise<boolean> {
+  private async hasApprovedCorrection(tx: Transaction, targetEntryId: string): Promise<boolean> {
     const { rows } = await tx.execute<{ one: number }>(sql`
       select 1 as one from time_entries
-      where tenant_id = ${tenantId} and corrects_entry_id = ${targetEntryId}
+      where corrects_entry_id = ${targetEntryId}
         and entry_kind = 'correction' and correction_status = 'approved'
       limit 1`);
     return rows.length > 0;
   }
 
-  /** A person's `role`, or `undefined` when no such person exists under the tenant. */
-  private async roleOf(
-    tx: Transaction,
-    tenantId: string,
-    personId: string,
-  ): Promise<string | undefined> {
+  /** A person's `role`, or `undefined` when no such person exists. */
+  private async roleOf(tx: Transaction, personId: string): Promise<string | undefined> {
     const { rows } = await tx.execute<{ role: string }>(sql`
-      select role from persons where tenant_id = ${tenantId} and id = ${personId} limit 1`);
+      select role from persons where id = ${personId} limit 1`);
     return rows[0]?.role;
   }
 
@@ -1053,7 +973,6 @@ export class WorkforceBackend {
   private async appendCorrection(
     tx: Transaction,
     params: {
-      tenantId: string;
       nodeId: string;
       personId: string;
       locationId: string;
@@ -1076,7 +995,7 @@ export class WorkforceBackend {
     // no longer rides only on the coincidence that the two are the same person here.
     const { id } = await appendToChain(
       tx,
-      { tenantId: params.tenantId, nodeId: params.nodeId, locationId: params.locationId },
+      { nodeId: params.nodeId, locationId: params.locationId },
       {
         personId: params.personId,
         entryKind: "correction",
@@ -1093,19 +1012,15 @@ export class WorkforceBackend {
     return id;
   }
 
-  private async contractedMinutesPerWeek(
-    tx: Transaction,
-    tenantId: string,
-    personId: string,
-  ): Promise<number> {
+  private async contractedMinutesPerWeek(tx: Transaction, personId: string): Promise<number> {
     const { rows } = await tx.execute<{ contracted: number }>(sql`
       select contracted_minutes_per_week as contracted from employments
-      where tenant_id = ${tenantId} and person_id = ${personId}
+      where person_id = ${personId}
       order by start_date desc
       limit 1`);
     const employment = rows[0];
     if (employment === undefined) {
-      throw new AppError("employment.not_found", { tenantId, personId });
+      throw new AppError("employment.not_found", { personId });
     }
     return employment.contracted;
   }
@@ -1142,7 +1057,6 @@ export class WorkforceBackend {
       .from(timeEntries)
       .where(
         and(
-          eq(timeEntries.tenantId, query.tenantId),
           eq(timeEntries.personId, query.personId),
           gte(timeEntries.eventAt, windowStart),
           lt(timeEntries.eventAt, windowEnd),
@@ -1153,14 +1067,12 @@ export class WorkforceBackend {
 
   private alreadyOpen(input: ClockEventInput): AppError {
     return new AppError("attendance.already_open", {
-      tenantId: input.tenantId,
       personId: input.personId,
     });
   }
 
   private noOpenEntry(input: ClockEventInput): AppError {
     return new AppError("attendance.no_open_entry", {
-      tenantId: input.tenantId,
       personId: input.personId,
     });
   }
@@ -1180,14 +1092,14 @@ function shiftDay(date: string, deltaDays: number): string {
  * The engine verb is a public `@waitron/workforce` API and must honour this contract itself, even
  * though the HTTP route also screens the inputs (`requireTimestamp`).
  */
-function assertShiftInterval(tenantId: string, startsAt: string, endsAt: string): void {
+function assertShiftInterval(startsAt: string, endsAt: string): void {
   const startMs = Date.parse(startsAt);
   const endMs = Date.parse(endsAt);
   if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
-    throw new AppError("shift.invalid", { tenantId, reason: "unparseable_timestamp" });
+    throw new AppError("shift.invalid", { reason: "unparseable_timestamp" });
   }
   if (startMs >= endMs) {
-    throw new AppError("shift.invalid", { tenantId, reason: "ends_not_after_starts" });
+    throw new AppError("shift.invalid", { reason: "ends_not_after_starts" });
   }
 }
 

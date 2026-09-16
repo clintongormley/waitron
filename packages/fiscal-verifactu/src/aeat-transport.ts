@@ -1,7 +1,6 @@
 import { Agent, fetch as undiciFetch } from "undici";
 import { AppError, isAppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
@@ -15,7 +14,7 @@ import "./errors.js";
  * third kind added to one is a type error or a dead branch in the other, never a silent gap. */
 const CERT_KINDS = ["sello", "representante"] as const;
 
-/** Which FNMT certificate a tenant submits with. It selects the AEAT HOST, not merely a header. */
+/** Which FNMT certificate the venue submits with. It selects the AEAT HOST, not merely a header. */
 export type CertKind = (typeof CERT_KINDS)[number];
 
 /** The single runtime membership check for `CertKind`, derived from the same `CERT_KINDS` array the
@@ -42,14 +41,13 @@ export interface CertMaterial {
  *
  * This is the read-side half of `rotate`'s coupling to `PURPOSES` (server design §5.1). Reads do not
  * validate, so a row sealed before `certKind` joined the registry decrypts to a payload missing it;
- * defaulting would send a sello certificate to the non-sello host and fail every submission for that
- * tenant with nothing anywhere explaining why. Validating HERE rather than in the store is
- * deliberate: the store would take the whole vault offline, while this costs one tenant one pass and
- * says so.
+ * defaulting would send a sello certificate to the non-sello host and fail every submission with
+ * nothing anywhere explaining why. Validating HERE rather than in the store is deliberate: the store
+ * would take the whole vault offline, while this costs one pass and says so.
  */
 export function certMaterialFrom(
   payload: Record<string, string | undefined>,
-  ref: { tenantId: string; purpose: string },
+  ref: { purpose: string },
 ): CertMaterial {
   const certKind = payload.certKind;
   if (certKind === undefined || !isCertKind(certKind)) {
@@ -62,7 +60,7 @@ export function certMaterialFrom(
   // Decoded BEFORE it is checked, not after: `Buffer.from("!!!!", "base64")` is zero bytes despite
   // a non-empty, non-base64 input, so checking only the encoded string's emptiness would let that
   // case through. It would then surface much later as `configSecureContext`'s raw "not enough
-  // data" — not an `AppError`, and not this tenant's `certMaterialFrom` failure at all — which is
+  // data" — not an `AppError`, and not a `certMaterialFrom` failure at all — which is
   // exactly the "nothing anywhere explaining why" outcome this function exists to prevent.
   const pfx = Buffer.from(pfxBase64, "base64");
   if (pfx.length === 0) {
@@ -75,15 +73,11 @@ export function certMaterialFrom(
   return { pfx, passphrase, certKind };
 }
 
-export async function readCertMaterial(
-  db: Database,
-  ring: KeyRing,
-  tenantId: TenantId,
-): Promise<CertMaterial> {
-  const payload = await withTenant(db, tenantId, (tx) =>
-    getCredential(tx, ring, { tenantId, purpose: "fiscal.aeat" }),
+export async function readCertMaterial(db: Database, ring: KeyRing): Promise<CertMaterial> {
+  const payload = await withTransaction(db, (tx) =>
+    getCredential(tx, ring, { purpose: "fiscal.aeat" }),
   );
-  return certMaterialFrom(payload, { tenantId, purpose: "fiscal.aeat" });
+  return certMaterialFrom(payload, { purpose: "fiscal.aeat" });
 }
 
 /**
@@ -98,7 +92,7 @@ export function aeatEndpointFor(
     certKind === "sello" ? SOAP_ENDPOINTS_SELLO[environment] : SOAP_ENDPOINTS[environment];
 }
 
-/** A tenant's mTLS `fetch` and the handle that releases the connection pool behind it. */
+/** The venue's mTLS `fetch` and the handle that releases the connection pool behind it. */
 export interface TenantTransport {
   fetch: typeof globalThis.fetch;
   /** Graceful: `Agent.close()`, not `.destroy()`. Nothing is in flight by the time this runs — the
@@ -108,9 +102,9 @@ export interface TenantTransport {
 }
 
 /**
- * A `fetch` carrying this tenant's client certificate, and the `Agent` it is bound to. One `Agent`
- * per call — its TLS material is per-tenant client-certificate config, an `Agent`-level setting, not
- * a per-request one — so the caller owns its lifetime via the returned `close`. `packages/verifactu`
+ * A `fetch` carrying the venue's client certificate, and the `Agent` it is bound to. One `Agent`
+ * per call — its TLS material is client-certificate config, an `Agent`-level setting, not a
+ * per-request one — so the caller owns its lifetime via the returned `close`. `packages/verifactu`
  * injects `fetch` for exactly this reason — mTLS configuration is a deployment concern and the
  * library keeps none of it.
  *
@@ -149,7 +143,7 @@ export interface TransportDeps {
 export interface ClientResolver {
   /** `DrainDeps.resolveClient`, unchanged in shape — `@waitron/fiscal` still knows nothing about
    * mTLS, and this change must not be the one that teaches it. */
-  resolve: (tenantId: TenantId) => Promise<VerifactuClient>;
+  resolve: () => Promise<VerifactuClient>;
   /** Releases every transport this resolver built, and NEVER throws — neither for a transport whose
    * own `close()` rejects, nor for a `Logger` that throws while reporting one. Both are caught
    * per transport (below), so one bad `Agent` can never stop the rest from being released. */
@@ -158,23 +152,20 @@ export interface ClientResolver {
 
 /**
  * `DrainDeps.resolveClient`, wired to the vault, plus the handle that releases what it built.
- * One client — and one connection pool — per tenant per pass, built only for tenants the sweep
- * actually has work for, and closed when that pass ends.
+ * One client — and one connection pool — per pass, built only when the sweep actually has work,
+ * and closed when that pass ends.
  *
  * Constructed PER PASS by `boot.ts` rather than once at boot: the set of transports to close is
  * then scoped by construction, with no residue between passes to reset and no way for one pass's
  * `closeAll` to reach another's.
  */
 export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): ClientResolver {
-  // The tenant travels WITH its transport, not just the bare `TenantTransport` `resolve` used to
-  // push: `closeAll`'s own failure log otherwise has no way to say WHICH tenant's Agent failed to
-  // close — see its own comment below.
-  const open: { tenantId: TenantId; transport: TenantTransport }[] = [];
+  const open: TenantTransport[] = [];
   return {
-    resolve: async (tenantId) => {
-      const material = await readCertMaterial(deps.db, deps.ring, tenantId);
+    resolve: async () => {
+      const material = await readCertMaterial(deps.db, deps.ring);
       const transport = deps.fetchFor(material);
-      open.push({ tenantId, transport });
+      open.push(transport);
       return createClient({
         endpoint: deps.endpointFor(material.certKind),
         fetch: transport.fetch,
@@ -187,7 +178,7 @@ export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): Cl
       // reason nothing here depends on. `open.splice(0)` still runs exactly once, up front, so the
       // list is emptied before any `close()` settles either way.
       await Promise.allSettled(
-        open.splice(0).map(({ tenantId, transport }) =>
+        open.splice(0).map((transport) =>
           // `Promise.resolve().then(() => transport.close())`, not `transport.close().catch(...)`
           // directly (F2 of the 2026-07-27 pre-merge review): `TenantTransport.close` is typed
           // `() => Promise<void>`, but that is a promise about the return type, not about how the
@@ -213,14 +204,12 @@ export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): Cl
               // rather than one with a caveat — and, now, one that holds per-transport regardless of
               // how many others in this same `Promise.allSettled` are failing at the same time.
               try {
-                // `tenantId` and a `message` that survives a non-`AppError` are both required to make
-                // this line actionable — the `isAppError(error) ? error.code : "unknown"` code alone
-                // flattens a plain socket-layer `Error` (which is all `Agent.close()` can ever throw)
-                // to the bare string `"unknown"`, and nothing else here says WHICH tenant's mTLS pool
-                // failed to release. An `Agent` close failure is a socket-layer error with no secret
-                // to leak, so the raw `message` is safe to log here.
+                // A `message` that survives a non-`AppError` is what makes this line actionable —
+                // the `isAppError(error) ? error.code : "unknown"` code alone flattens a plain
+                // socket-layer `Error` (which is all `Agent.close()` can ever throw) to the bare
+                // string `"unknown"`. An `Agent` close failure is a socket-layer error with no
+                // secret to leak, so the raw `message` is safe to log here.
                 log?.("warn", "transport.close_failed", {
-                  tenantId,
                   errorCode: isAppError(error) ? error.code : "unknown",
                   message: error instanceof Error ? error.message : String(error),
                 });

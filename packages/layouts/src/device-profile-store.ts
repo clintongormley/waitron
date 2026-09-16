@@ -8,17 +8,17 @@ import {
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { CapabilityFlag, FormFactor } from "./canvas.js";
 import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
 
 /**
- * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows
- * per tenant, keyed by `id`, names unique per tenant. The twin of `canvas-store.ts`, sharing its
+ * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows,
+ * keyed by `id`, with distinct names. The twin of `canvas-store.ts`, sharing its
  * shape exactly — read that file's header for the (tx, …)-is-caller-scoped convention.
  *
  * Every function takes the caller's transaction, opened with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `withTransaction(deps.db, …)` + `asAppUser(tx)`. Exercised in
  * `device-profile-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite
  * holds every grant, CLAUDE.md §4).
  *
@@ -26,8 +26,8 @@ import { validateCapabilities, validateInactivityTimeout } from "./device-profil
  * any DB write, proven by-deletion in the suite; (2) `validateCapabilities` — fail-closed on an
  * unknown capability flag (throws `device_profile.invalid` {reason: "bad_capabilities"} before the
  * write, since capabilities drive the /api/pay + /api/drawer firewall); (3) the drizzle write, whose
- * 23505 on the per-tenant name unique becomes `device_profile.name_taken` and whose 23503 on the
- * tenant-consistent composite FK `device_profiles_canvas_fk` becomes `device_profile.invalid`
+ * 23505 on the name unique becomes `device_profile.name_taken` and whose 23503 on
+ * `device_profiles_canvas_fk` becomes `device_profile.invalid`
  * {reason: "bad_canvas_ref"} (see `translateWriteError`). `deleteDeviceProfile` authorises but has no
  * capabilities to validate. Reads return `capabilities` as PARSED jsonb (an array) — no `::text[]`
  * cast: it is a jsonb column, not PG `name[]` (CLAUDE.md §4's cast note is about `name[]`). The `as`
@@ -81,7 +81,7 @@ function toRow(row: {
 const FOREIGN_KEY_VIOLATION = "23503";
 const RESTRICT_VIOLATION = "23001";
 
-/** The composite FK a device holds on a profile, ON DELETE RESTRICT (Task 5's
+/** The FK a device holds on a profile, ON DELETE RESTRICT (Task 5's
  * `devices_device_profile_fk`). A delete that trips it is a "still in use" conflict; matched on the
  * constraint NAME so an unrelated RESTRICT can never be mislabelled `device_profile.in_use`. `devices`
  * is the ONLY table that references a profile. */
@@ -92,13 +92,11 @@ const DEVICE_PROFILE_FK = "devices_device_profile_fk";
  * re-throw anything else untouched:
  *   - a `device_profiles_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
  *     `device_profile.name_taken` — the `translateWriteError` twin from `canvas-store.ts`, matched on
- *     the CONSTRAINT NAME so the composite `device_profiles_tenant_id_key` (the FK target devices point
- *     at, a cryptographically-unreachable `defaultRandom()` clash on writes) is re-thrown untouched,
- *     with the same "no constraint name reported ⇒ translate" fallback for PGlite;
- *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that is absent or belongs to another
- *     tenant, SQLSTATE 23503) → `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the
- *     constraint name so the `tenant_id → tenants` FK (server-controlled, never client input) can
- *     never be mislabelled. The name is the only 23503 a client value can trip here;
+ *     the CONSTRAINT NAME so a 23505 on any other constraint is re-thrown untouched, with the same
+ *     "no constraint name reported ⇒ translate" fallback for PGlite;
+ *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that names no canvas, SQLSTATE 23503) →
+ *     `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the constraint name, and it is
+ *     the only 23503 a client value can trip here;
  *   - a `devices_device_profile_fk` violation (a delete of a profile a live device still references, ON
  *     DELETE RESTRICT, SQLSTATE 23001) → `device_profile.in_use` — a clean 409 rather than a raw 500.
  *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
@@ -124,40 +122,36 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All of the current tenant's device profiles, ordered by name. The tenant predicate scopes the read. */
-export async function listDeviceProfiles(
-  tx: Transaction,
-  tenantId: string,
-): Promise<DeviceProfileRow[]> {
+/** All device profiles, ordered by name. */
+export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfileRow[]> {
   const rows = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
-    .where(eq(deviceProfiles.tenantId, tenantId))
     .orderBy(asc(deviceProfiles.name));
   return rows.map(toRow);
 }
 
-/** One device profile by id, or `undefined` when the tenant has no such profile. */
+/** One device profile by id, or `undefined` when no profile carries that id. */
 export async function getDeviceProfile(
   tx: Transaction,
-  tenantId: string,
   id: string,
 ): Promise<DeviceProfileRow | undefined> {
   const [row] = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
-    .where(and(eq(deviceProfiles.tenantId, tenantId), eq(deviceProfiles.id, id)));
+    .where(eq(deviceProfiles.id, id));
   if (row === undefined) return undefined;
   return toRow(row);
 }
 
-/** Create a device profile for the tenant, returning the stored row. Manager/admin only
+/** Create a device profile, returning the stored row. Manager/admin only
  * (`layout.configure`). */
 export async function createDeviceProfile(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
+    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
+     * when those callers do. */
     name: string;
     formFactor: FormFactor;
     canvasId: string | null | undefined;
@@ -180,7 +174,6 @@ export async function createDeviceProfile(
     const [row] = await tx
       .insert(deviceProfiles)
       .values({
-        tenantId: input.tenantId,
         name: input.name,
         formFactor: input.formFactor,
         canvasId: input.canvasId ?? null,
@@ -196,7 +189,7 @@ export async function createDeviceProfile(
 
 /**
  * Replace a profile's name, canvas reference and capabilities in place, returning the stored row.
- * Manager/admin only (`layout.configure`). An absent id (or another tenant's row, excluded by the tenant predicate) throws
+ * Manager/admin only (`layout.configure`). An absent id throws
  * `device_profile.not_found` — the by-id config-CRUD idiom `updateCanvas` uses, read back via
  * `.returning({ id })` so a PUT that matched zero rows is a 404, never a masked "saved" 204. A name
  * collision throws `device_profile.name_taken`, a bad canvas reference `device_profile.invalid`
@@ -206,7 +199,8 @@ export async function updateDeviceProfile(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
+    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
+     * when those callers do. */
     id: string;
     name: string;
     formFactor: FormFactor;
@@ -238,7 +232,7 @@ export async function updateDeviceProfile(
         inactivityTimeoutSeconds,
         updatedAt: sql`now()`,
       })
-      .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
+      .where(eq(deviceProfiles.id, input.id))
       .returning(PROFILE_COLUMNS);
     updated = rows.map(toRow);
   } catch (error) {
@@ -251,17 +245,17 @@ export async function updateDeviceProfile(
 }
 
 /**
- * Delete a device profile. Manager/admin only (`layout.configure`). An absent id (or another tenant's
- * row, excluded by the tenant predicate) throws `device_profile.not_found`, read back via `.returning({ id })` — the same
+ * Delete a device profile. Manager/admin only (`layout.configure`). An absent id throws
+ * `device_profile.not_found`, read back via `.returning({ id })` — the same
  * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
- * a silent success. A device still referencing the profile (the composite FK, ON DELETE RESTRICT)
+ * a silent success. A device still referencing the profile (the FK, ON DELETE RESTRICT)
  * trips a 23001 restrict_violation, which `translateWriteError`
  * turns into `device_profile.in_use` (a clean 409) rather than letting the raw DB error propagate to a
  * 500 — the twin of `deleteCanvas`.
  */
 export async function deleteDeviceProfile(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; id: string },
+  input: { managementSessionId: string; id: string },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
@@ -271,7 +265,7 @@ export async function deleteDeviceProfile(
   try {
     deleted = await tx
       .delete(deviceProfiles)
-      .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
+      .where(eq(deviceProfiles.id, input.id))
       .returning({ id: deviceProfiles.id });
   } catch (error) {
     translateWriteError(error);

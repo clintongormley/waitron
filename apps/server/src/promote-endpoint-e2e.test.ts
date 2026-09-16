@@ -15,7 +15,7 @@ import {
   readStandardSeriesId,
   setDeploymentMode,
   stampDeployment,
-  withTenant,
+  withTransaction,
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
@@ -30,7 +30,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
@@ -114,7 +114,6 @@ const RING = loadKeyRing({
 
 // The mirror's OWN venue ids — one venue, seeded identically on each clone (each `useTemplateDb` clones
 // the manifest afresh, so the fixed ids never collide across clones).
-const MIRROR_TENANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // inert, must be overwritten
@@ -157,15 +156,13 @@ let migrationsRoot: string;
 async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSeriesId: string }> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${MIRROR_TENANT_ID}, 'ES', '90222222H', 'Promote E2E Cloud SL')
+    values (1, 'ES', '90222222H', 'Promote E2E Cloud SL')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${MIRROR_LOCATION_ID}, ${MIRROR_TENANT_ID}, 'Barra', array['en']::text[], 'Hospitality')
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${MIRROR_LOCATION_ID}, 'Barra', array['en']::text[], 'Hospitality')
     on conflict do nothing`);
-  const t = await admin.execute<{ tax_id: string }>(
-    sql`select tax_id from tenants where id = ${MIRROR_TENANT_ID}`,
-  );
+  const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();
@@ -178,7 +175,6 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
   await establishReservedStandbyIdentity(
     { ownerDb: admin, ring: RING },
     {
-      tenantId: MIRROR_TENANT_ID,
       locationId: MIRROR_LOCATION_ID,
       standby,
       nodeName: "cloud",
@@ -222,14 +218,14 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
 
   // The admin/manager the endpoint + box-status authenticate.
   await admin.execute(sql`
-    insert into persons (id, tenant_id, display_name, email, pin_hash, password_hash, role)
-    values (${ADMIN_ID}, ${MIRROR_TENANT_ID}, 'Promote Admin', ${ADMIN_EMAIL}, ${hashPin("1234")},
+    insert into persons (id, display_name, email, pin_hash, password_hash, role)
+    values (${ADMIN_ID}, 'Promote Admin', ${ADMIN_EMAIL}, ${hashPin("1234")},
             ${hashPassword(ADMIN_PW)}, 'admin')
     on conflict do nothing`);
 
   await stampDeployment(admin, "production");
   await setDeploymentMode(admin, "mirror");
-  const standardSeriesId = await readStandardSeriesId(admin, MIRROR_TENANT_ID, standby.nodeId);
+  const standardSeriesId = await readStandardSeriesId(admin, standby.nodeId);
   return { nodeId: standby.nodeId, standardSeriesId };
 }
 
@@ -239,36 +235,35 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
  * (`token_hash` = scrypt of `DEVICE_TOKEN`, the same shape `acceptDeviceJoinRequest` stores, so the
  * device cookie verifies). */
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
-  await seedLegacySellingUnits(admin, MIRROR_TENANT_ID);
+  await seedLegacySellingUnits(admin);
   await admin.execute(sql`
-    insert into tills (id, tenant_id, location_id, name)
-    values (${MIRROR_TILL_ID}, ${MIRROR_TENANT_ID}, ${MIRROR_LOCATION_ID}, 'Barra')
+    insert into tills (id, location_id, name)
+    values (${MIRROR_TILL_ID}, ${MIRROR_LOCATION_ID}, 'Barra')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into persons (id, tenant_id, display_name, pin_hash, role)
-    values (${STAFF_ID}, ${MIRROR_TENANT_ID}, 'Cajera', ${hashPin(STAFF_PIN)}, 'staff')
+    insert into persons (id, display_name, pin_hash, role)
+    values (${STAFF_ID}, 'Cajera', ${hashPin(STAFF_PIN)}, 'staff')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into device_profiles (id, tenant_id, name, form_factor, capabilities)
-    values (${DEVICE_PROFILE_ID}, ${MIRROR_TENANT_ID}, 'Counter', 'till', '[]'::jsonb)
+    insert into device_profiles (id, name, form_factor, capabilities)
+    values (${DEVICE_PROFILE_ID}, 'Counter', 'till', '[]'::jsonb)
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into devices (id, tenant_id, location_id, device_profile_id, till_id, label, token_hash)
-    values (${DEVICE_ID}, ${MIRROR_TENANT_ID}, ${MIRROR_LOCATION_ID}, ${DEVICE_PROFILE_ID},
+    insert into devices (id, location_id, device_profile_id, till_id, label, token_hash)
+    values (${DEVICE_ID}, ${MIRROR_LOCATION_ID}, ${DEVICE_PROFILE_ID},
             ${MIRROR_TILL_ID}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
     on conflict do nothing`);
   await admin.execute(sql`
     insert into kitchen_stations
-      (tenant_id, location_id, name, display_order, is_default, active)
-    values (${MIRROR_TENANT_ID}, ${MIRROR_LOCATION_ID}, 'Kitchen', 0, true, true)
+      (location_id, name, display_order, is_default, active)
+    values (${MIRROR_LOCATION_ID}, 'Kitchen', 0, true, true)
     on conflict do nothing`);
 
-  const tenant = brandTenantId(MIRROR_TENANT_ID);
-  await withTenant(admin, MIRROR_TENANT_ID, async (tx) => {
+  await withTransaction(admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenant, { name: "Delicatessen" });
-    const drinks = await createCategory(tx, tenant, { name: { en: "Bebidas" } });
-    await createProduct(tx, tenant, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const drinks = await createCategory(tx, { name: { en: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
       name: "Mineral water",
@@ -341,7 +336,6 @@ function mirrorEnv(
   return {
     ...KEY_ENV,
     ...TICK_ENV,
-    WAITRON_TILL_TENANT_ID: MIRROR_TENANT_ID,
     WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
@@ -358,10 +352,9 @@ function mirrorEnv(
 /** Read the observable columns of every envío for a tenant — the "was it submitted?" evidence. */
 async function readEnvios(
   admin: Database,
-  tenantId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }[]> {
   const rows = await admin.execute<{ estado: string; intentos: number; incidencia: boolean }>(
-    sql`select estado, intentos, incidencia from envios where tenant_id = ${tenantId} order by registro_id`,
+    sql`select estado, intentos, incidencia from envios  order by registro_id`,
   );
   return rows.rows;
 }
@@ -454,7 +447,6 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
       primary = await startServer({
         ...KEY_ENV,
         ...TICK_ENV,
-        WAITRON_TILL_TENANT_ID: persisted.WAITRON_TILL_TENANT_ID!,
         WAITRON_TILL_TILL_ID: persisted.WAITRON_TILL_TILL_ID!,
         WAITRON_TILL_NODE_ID: persisted.WAITRON_TILL_NODE_ID!,
         WAITRON_TILL_SERIES_ID: persisted.WAITRON_TILL_SERIES_ID!, // the reserved series the promote wrote
@@ -540,9 +532,9 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
       });
       expect(awaiting.awaitingFiscalCertificate).toBe(true);
 
-      // The envío was never submitted — still pendiente, never attempted (a missing cert is a per-tenant
-      // skip BEFORE the claim, so intentos stays 0).
-      expect(await readEnvios(mainSuite.admin, MIRROR_TENANT_ID)).toEqual([
+      // The envío was never submitted — still pendiente, never attempted (a missing cert skips the
+      // whole pass BEFORE the claim, so intentos stays 0).
+      expect(await readEnvios(mainSuite.admin)).toEqual([
         { estado: "pendiente", intentos: 0, incidencia: false },
       ]);
     } finally {
@@ -679,7 +671,7 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
       "*",
       readOnlyGate(() => true, exempt),
     ); // a read-only mirror (isReadOnly always true)
-    mountPromoteApi(app, { appDb: mainSuite.admin, tenantId: MIRROR_TENANT_ID, run: alwaysRun });
+    mountPromoteApi(app, { appDb: mainSuite.admin, run: alwaysRun });
     return app;
   }
 

@@ -1,6 +1,6 @@
 {
-  "id": "ae7e78a5-9f5d-48e3-9ba5-0ded1b5ba21a",
-  "prevId": "630bb9e3-2ec9-41b7-b99f-9cf9b880d77a",
+  "id": "2fed64df-f0f0-44d5-a769-0a0abc17f74b",
+  "prevId": "b91289db-746a-4ade-91ab-f93492f02621",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "location_id": {
           "name": "location_id",
@@ -150,37 +144,8 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "convenio_config_tenant_id_idx": {
-          "name": "convenio_config_tenant_id_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "convenio_config_tenant_fk": {
-          "name": "convenio_config_tenant_fk",
-          "tableFrom": "convenio_config",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "tableTo": "tenants",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
-        },
         "convenio_config_location_fk": {
           "name": "convenio_config_location_fk",
           "tableFrom": "convenio_config",
@@ -197,10 +162,9 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "convenio_config_tenant_location_uq": {
-          "name": "convenio_config_tenant_location_uq",
+        "convenio_config_location_uq": {
+          "name": "convenio_config_location_uq",
           "columns": [
-            "tenant_id",
             "location_id"
           ],
           "nullsNotDistinct": false

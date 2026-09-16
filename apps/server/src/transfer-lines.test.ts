@@ -6,7 +6,7 @@ import {
   optionGroupItems,
   optionGroups,
   productOptionGroups,
-  withTenant,
+  withTransaction,
   workingOrderLines,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -64,17 +64,16 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  const tenantId = await seedTenant(db);
-  await seedLegacySellingUnits(db, tenantId);
+  await seedTenant(db);
+  await seedLegacySellingUnits(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -84,11 +83,11 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const seeded = await withTenant(db, tenantId, async (tx) => {
+  const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-    const cafe = await createProduct(tx, tenantId, {
+    const cat = await createCatalogue(tx, { name: "Carta" });
+    const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+    const cafe = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -96,7 +95,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -104,7 +103,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "2.00",
       vatClass: "general",
     });
-    const jamon = await createProduct(tx, tenantId, {
+    const jamon = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Jamón",
@@ -122,7 +121,8 @@ async function setupVenue(): Promise<Seeded> {
 
 /** Run `fn` on a fresh app-scoped transaction (`app_user` role), like production. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -525,16 +525,10 @@ describe("transferLines — duplicate line_no in the batch", () => {
 
 describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", () => {
   /** Attach a single-item option group to `productId`, returning the item id. */
-  async function addOption(
-    tx: Transaction,
-    tenantId: TillConfig["tenantId"],
-    productId: string,
-    name: string,
-  ): Promise<string> {
+  async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: 0,
         maxSelect: 1,
@@ -545,7 +539,6 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -554,7 +547,6 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -602,7 +594,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
 
   it("carries a parent dish's modifier children along on a whole-line transfer", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cfg.tenantId, cafeId, "Bacon"));
+    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
     // Tab A: café (parent, line 1) + bacon child (line 2). Tab B: agua (line 1).
     const tabA = await openModifierTab(cfg, tableAId, [
       { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
@@ -624,7 +616,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
 
   it("refuses transferring a modifier CHILD line on its own (tab.transfer_modifier_line)", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cfg.tenantId, cafeId, "Bacon"));
+    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
     const tabA = await openModifierTab(cfg, tableAId, [
       { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
     ]);
@@ -643,7 +635,7 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
 
   it("refuses a partial split of a dish that carries modifiers (tab.transfer_modifier_line)", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cfg.tenantId, cafeId, "Bacon"));
+    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
     // café ×2 (parent, line 1) + bacon child (line 2).
     const tabA = await openModifierTab(cfg, tableAId, [
       { productId: cafeId, quantity: "2", options: [{ optionGroupItemId: bacon }] },

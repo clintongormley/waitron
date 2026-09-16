@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { isUniqueViolation, type Database, withTenant } from "@waitron/db";
+import { isUniqueViolation, type Database, withTransaction } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   assertPasswordLength,
@@ -20,7 +20,7 @@ type Env = Record<string, string | undefined>;
  * The deployment holds one tenant per database. The ungated reset lives HERE, not in
  * `@waitron/identity`, on purpose: exposing a reusable ungated reset from the identity package
  * would be a permission bypass anyone could import. This command writes the account and removes its
- * login factors under `withTenant`; the write is by id.
+ * login factors under `withTransaction`; the write is by id.
  *
  * Secrets come from the environment, NEVER argv — an argv element leaks into the process table
  * (`ps`), the same reason `waitron-recovery`/`register-till` read theirs from env. The new password
@@ -49,12 +49,6 @@ export async function runBreakGlassReset(deps: {
     "DATABASE_URL must be set to the box's database connection string",
   );
   if (databaseUrl === undefined) return 2;
-  const tenantId = requireEnv(
-    deps,
-    "WAITRON_TILL_TENANT_ID",
-    "WAITRON_TILL_TENANT_ID must be set to the box's tenant id",
-  );
-  if (tenantId === undefined) return 2;
   const newPassword = requireEnv(
     deps,
     "WAITRON_BREAKGLASS_PASSWORD",
@@ -103,23 +97,22 @@ export async function runBreakGlassReset(deps: {
   const db = await deps.connect(databaseUrl);
   try {
     try {
-      return await withTenant(db, tenantId, async (tx) => {
-        // The deployment holds one tenant per database. The read is unfiltered: these are the box's
-        // admins.
+      return await withTransaction(db, async (tx) => {
+        // The read is unfiltered: these are the box's admins.
         const admins = await tx
           .select({ id: persons.id })
           .from(persons)
           .where(eq(persons.role, "admin"));
 
         if (admins.length === 0) {
-          deps.out(`break-glass: no admin found for tenant ${tenantId}`);
+          deps.out("break-glass: no admin found on this box");
           return 1;
         }
 
         let targetId: string;
         if (personArg !== undefined) {
           if (!admins.some((a) => a.id === personArg)) {
-            deps.out(`break-glass: --person ${personArg} is not an admin of tenant ${tenantId}`);
+            deps.out(`break-glass: --person ${personArg} is not an admin of this box`);
             return 1;
           }
           targetId = personArg;
@@ -150,23 +143,17 @@ export async function runBreakGlassReset(deps: {
           return 1;
         }
 
+        await tx.execute(sql`delete from webauthn_credentials where person_id=${targetId}`);
+        await tx.execute(sql`delete from recovery_codes where person_id=${targetId}`);
+        await tx.execute(sql`delete from totp_enrollments where person_id=${targetId}`);
         await tx.execute(
-          sql`delete from webauthn_credentials where tenant_id=${tenantId} and person_id=${targetId}`,
+          sql`update management_account_actions set used_at=now() where person_id=${targetId} and used_at is null`,
         );
         await tx.execute(
-          sql`delete from recovery_codes where tenant_id=${tenantId} and person_id=${targetId}`,
+          sql`update management_sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
         );
         await tx.execute(
-          sql`delete from totp_enrollments where tenant_id=${tenantId} and person_id=${targetId}`,
-        );
-        await tx.execute(
-          sql`update management_account_actions set used_at=now() where tenant_id=${tenantId} and person_id=${targetId} and used_at is null`,
-        );
-        await tx.execute(
-          sql`update management_sessions set ended_at=now() where tenant_id=${tenantId} and person_id=${targetId} and ended_at is null`,
-        );
-        await tx.execute(
-          sql`update sessions set ended_at=now() where tenant_id=${tenantId} and person_id=${targetId} and ended_at is null`,
+          sql`update sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
         );
 
         const resets = resetPin ? "password, pin" : "password";

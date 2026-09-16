@@ -29,13 +29,11 @@ export interface PaymentRow {
 }
 
 interface Key {
-  tenantId: string;
   provider: string;
   paymentRef: string;
 }
 
 interface NewPayment {
-  tenantId: string;
   workingOrderId: string;
   provider: string;
   paymentRef: string;
@@ -69,7 +67,6 @@ async function insertPayment(
   settledAt: string | null,
 ): Promise<void> {
   await tx.insert(payments).values({
-    tenantId: params.tenantId,
     workingOrderId: params.workingOrderId,
     provider: params.provider,
     paymentRef: params.paymentRef,
@@ -203,13 +200,7 @@ export async function recordRefund(
   const prior = await tx
     .select({ amount: paymentRefunds.amount })
     .from(paymentRefunds)
-    .where(
-      and(
-        eq(paymentRefunds.tenantId, params.tenantId),
-        eq(paymentRefunds.paymentId, row.id),
-        eq(paymentRefunds.state, "succeeded"),
-      ),
-    );
+    .where(and(eq(paymentRefunds.paymentId, row.id), eq(paymentRefunds.state, "succeeded")));
   const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
   const afterThis = addDecimal(alreadyRefunded, params.amount);
   const captured = decimal(row.amount);
@@ -222,7 +213,6 @@ export async function recordRefund(
     });
   }
   await tx.insert(paymentRefunds).values({
-    tenantId: params.tenantId,
     paymentId: row.id,
     provider: params.provider,
     paymentRef: params.paymentRef,
@@ -255,7 +245,6 @@ export async function recordFailedRefund(
     });
   }
   await tx.insert(paymentRefunds).values({
-    tenantId: params.tenantId,
     paymentId: row.id,
     provider: params.provider,
     paymentRef: params.paymentRef,
@@ -344,7 +333,7 @@ const CAPTURED_FOR_ORDER_COLUMNS = {
  * a lost-T2 `attempting` orphan is never mistaken for a completed capture (§4).
  *
  * At most one captured/accepted_offline payment exists per working order BY CONSTRUCTION, not by a DB
- * constraint (`payments` carries no unique index over `(tenant_id, provider, working_order_id)`
+ * constraint (`payments` carries no unique index over `(provider, working_order_id)`
  * restricted to those states): Task 1 derives the Stripe PaymentIntent-creation idempotency key from
  * the working-order id (`wo_<id>`, `packages/payments-stripe`), so every retry drives the SAME
  * PaymentIntent to at most one capture — and this pre-check is itself the thing that stops a caller
@@ -359,27 +348,26 @@ const CAPTURED_FOR_ORDER_COLUMNS = {
  * invariant is ever violated. */
 export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
-  key: { tenantId: string; provider: string; workingOrderId: string },
+  key: { provider: string; workingOrderId: string },
 ): Promise<CapturedPaymentForOrder | undefined> {
   return selectCapturedForWorkingOrder(tx, key);
 }
 
 /** The shared body of both captured-payment reads: the most-recent captured/accepted-offline payment
- * for a working order, tenant-scoped, optionally narrowed to ONE provider. `provider` omitted selects
+ * for a working order, optionally narrowed to ONE provider. `provider` omitted selects
  * across every provider — Drizzle's `and()` drops an `undefined` clause, so the same query serves the
  * provider-filtered §4 pre-check and the ticket path's any-provider read. The `desc nulls last`
  * ordering and the at-most-one-per-order invariant are documented on
  * `findCapturedPaymentForWorkingOrder`. */
 async function selectCapturedForWorkingOrder(
   tx: Transaction,
-  key: { tenantId: string; workingOrderId: string; provider?: string },
+  key: { workingOrderId: string; provider?: string },
 ): Promise<CapturedPaymentForOrder | undefined> {
   const [row] = await tx
     .select(CAPTURED_FOR_ORDER_COLUMNS)
     .from(payments)
     .where(
       and(
-        eq(payments.tenantId, key.tenantId),
         key.provider === undefined ? undefined : eq(payments.provider, key.provider),
         eq(payments.workingOrderId, key.workingOrderId),
         inArray(payments.state, ["captured", "accepted_offline"]),
@@ -395,29 +383,23 @@ async function selectCapturedForWorkingOrder(
  * Returns null when none (a cash sale, or a card sale whose payment row is absent). Shares
  * `selectCapturedForWorkingOrder` with the provider-filtered read above, passing no `provider` so the
  * query spans every provider; the only difference is the null (not undefined) empty return this
- * caller wants. Tenant-scoped explicitly, like every read here (CLAUDE.md §3): one-tenant-per-database
- * is not the query's isolation boundary. */
+ * caller wants. */
 export async function findCapturedPaymentForWorkingOrderAnyProvider(
   tx: Transaction,
-  key: { tenantId: string; workingOrderId: string },
+  key: { workingOrderId: string },
 ): Promise<CapturedPaymentForOrder | null> {
   return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
 }
 
-/** A payment row plus its tenant, looked up by (provider, paymentRef) WITHOUT a tenant filter — the
- * lookup a provider uses when it holds only its own reference (e.g. the fake's `void`/`refund`, or a
- * real adapter's webhook). */
-export interface PaymentRecord extends PaymentRow {
-  tenantId: string;
-}
-
+/** A payment row looked up by (provider, paymentRef) — the lookup a provider uses when it holds only
+ * its own reference (e.g. the fake's `void`/`refund`). */
 export async function findPaymentByRef(
   tx: Transaction,
   provider: string,
   paymentRef: string,
-): Promise<PaymentRecord | undefined> {
+): Promise<PaymentRow | undefined> {
   const [row] = await tx
-    .select({ ...PAYMENT_COLUMNS, tenantId: payments.tenantId })
+    .select(PAYMENT_COLUMNS)
     .from(payments)
     .where(and(eq(payments.provider, provider), eq(payments.paymentRef, paymentRef)))
     .limit(1);
@@ -428,7 +410,6 @@ export async function findPaymentByRef(
  * (accepted but never associated); the fake/adapter uses `workingOrderId` to find the till for the
  * decline incident. */
 export interface ForwardablePayment {
-  tenantId: string;
   paymentRef: string;
   workingOrderId: string;
   saleId: string | null;
@@ -436,25 +417,16 @@ export interface ForwardablePayment {
 }
 
 const FORWARDABLE_COLUMNS = {
-  tenantId: payments.tenantId,
   paymentRef: payments.paymentRef,
   workingOrderId: payments.workingOrderId,
   saleId: payments.saleId,
   amount: payments.amount,
 };
 
-/**
- * The predicate both forward-queue reads share — kept as one function so the twins below cannot
- * drift, which they briefly did when only one of them gained the tenant filter.
- *
- * Filters by tenant, provider and accepted_offline state.
- */
-function forwardableWhere(tenantId: string, provider: string) {
-  return and(
-    eq(payments.tenantId, tenantId),
-    eq(payments.provider, provider),
-    eq(payments.state, "accepted_offline"),
-  );
+/** The predicate both forward-queue reads share — kept as one function so the twins below cannot
+ * drift. */
+function forwardableWhere(provider: string) {
+  return and(eq(payments.provider, provider), eq(payments.state, "accepted_offline"));
 }
 
 /**
@@ -462,20 +434,18 @@ function forwardableWhere(tenantId: string, provider: string) {
  * SKIP LOCKED so concurrent `forward` passes partition the queue and never double-advance a row.
  * State IS the queue (no outbox table). Ordered by `created_at` for a stable pass.
  *
- * Takes the same `tenantId` as its unlocked twin, and for the same reason — see
- * `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
+ * Shares its predicate with its unlocked twin through `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
  * drain has no network call to split around; a REAL adapter uses `listAcceptedOffline` instead so
  * it never holds a row lock across the processor round-trip.
  */
 export async function claimAcceptedOffline(
   tx: Transaction,
-  tenantId: string,
   provider: string,
 ): Promise<ForwardablePayment[]> {
   return tx
     .select(FORWARDABLE_COLUMNS)
     .from(payments)
-    .where(forwardableWhere(tenantId, provider))
+    .where(forwardableWhere(provider))
     .orderBy(payments.createdAt)
     .for("update", { skipLocked: true });
 }
@@ -488,13 +458,12 @@ export async function claimAcceptedOffline(
  * fake's single-transaction `forward` keeps using the locking `claimAcceptedOffline`. */
 export async function listAcceptedOffline(
   tx: Transaction,
-  tenantId: string,
   provider: string,
 ): Promise<ForwardablePayment[]> {
   return tx
     .select(FORWARDABLE_COLUMNS)
     .from(payments)
-    .where(forwardableWhere(tenantId, provider))
+    .where(forwardableWhere(provider))
     .orderBy(payments.createdAt);
 }
 
@@ -502,7 +471,6 @@ export async function listAcceptedOffline(
  * (stamped by `stampAttemptingRef` after the create call), null when the adapter crashed before
  * stamping it; `createdAt` bounds how long a not-found row is still considered pending. */
 export interface AttemptingPayment {
-  tenantId: string;
   paymentRef: string;
   workingOrderId: string;
   amount: string;
@@ -510,19 +478,17 @@ export interface AttemptingPayment {
   createdAt: string;
 }
 
-/** This tenant's and provider's `attempting` rows, oldest first, unlocked — the T1 read of a
+/** This provider's `attempting` rows, oldest first, unlocked — the T1 read of a
  * `resolvePending` pass. Unlocked for the same reason `listAcceptedOffline` is: the processor
  * lookup that follows is a network call, and the T2 advances (`captureAttempting` /
  * `failAttempting`) each match only a row still `attempting`, so two concurrent passes are
- * harmless. Tenant-scoped explicitly (CLAUDE.md §3). */
+ * harmless. */
 export async function listAttempting(
   tx: Transaction,
-  tenantId: string,
   provider: string,
 ): Promise<AttemptingPayment[]> {
   return tx
     .select({
-      tenantId: payments.tenantId,
       paymentRef: payments.paymentRef,
       workingOrderId: payments.workingOrderId,
       amount: payments.amount,
@@ -530,13 +496,7 @@ export async function listAttempting(
       createdAt: payments.createdAt,
     })
     .from(payments)
-    .where(
-      and(
-        eq(payments.tenantId, tenantId),
-        eq(payments.provider, provider),
-        eq(payments.state, "attempting"),
-      ),
-    )
+    .where(and(eq(payments.provider, provider), eq(payments.state, "attempting")))
     .orderBy(payments.createdAt);
 }
 
@@ -648,30 +608,25 @@ export async function expireInitiated(
     );
 }
 
-/** Resolve the tenant that owns a hosted payment from `(provider, external_ref)` alone — the ONLY
- * identifiers an inbound webhook carries, with NO tenant context. Calls the `resolve_payment_tenant`
- * function, which returns only tenant_id using the caller's privileges. Runs on a
- * plain `db` handle, OUTSIDE any tenant scope — the app-level orchestrator calls this first, then
- * opens `withTenant(tenantId)` for the settle + `recordSale` + associate. Returns null for an unknown
- * reference (the missingLocal case reconcile audits per-tenant). Mirrors fiscal drain's
- * `tenantsWithWork` call over `envios_tenants_with_work`. */
-export async function resolvePaymentTenant(
+/** Whether any payment of this provider, in any state, carries `externalRef` — the one question an
+ * inbound webhook can ask with the identifiers it carries. `false` is the missingLocal case
+ * reconcile audits; `true` for a row already past `initiated` is a redelivery. Runs on a plain
+ * handle, before the settle transaction opens. */
+export async function hasPaymentWithExternalRef(
   db: Database,
   provider: string,
   externalRef: string,
-): Promise<string | null> {
-  const result = await db.execute<{ tenant_id: string | null }>(
-    sql`select resolve_payment_tenant(${provider}, ${externalRef}) as tenant_id`,
-  );
-  return result.rows[0]?.tenant_id ?? null;
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(and(eq(payments.provider, provider), eq(payments.externalRef, externalRef)))
+    .limit(1);
+  return row !== undefined;
 }
 
 function keyWhere(params: Key) {
-  return and(
-    eq(payments.tenantId, params.tenantId),
-    eq(payments.provider, params.provider),
-    eq(payments.paymentRef, params.paymentRef),
-  );
+  return and(eq(payments.provider, params.provider), eq(payments.paymentRef, params.paymentRef));
 }
 
 /** Read-only reversibility pre-check for integrated adapters: validates a payment can be reversed the
@@ -710,13 +665,7 @@ export async function assertReversible(
   const prior = await tx
     .select({ amount: paymentRefunds.amount })
     .from(paymentRefunds)
-    .where(
-      and(
-        eq(paymentRefunds.tenantId, params.tenantId),
-        eq(paymentRefunds.paymentId, row.id),
-        eq(paymentRefunds.state, "succeeded"),
-      ),
-    );
+    .where(and(eq(paymentRefunds.paymentId, row.id), eq(paymentRefunds.state, "succeeded")));
   const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
   const requested = params.amount ?? decimal(row.amount);
   if (compareDecimal(addDecimal(alreadyRefunded, requested), decimal(row.amount)) > 0) {
@@ -770,24 +719,20 @@ export interface ReconcilableRow {
  * Filters compare the timestamp columns directly (no `to_char` wrapper), and the two state groups
  * are issued as TWO queries rather than one `OR`, deliberately. A single `OR` over two different
  * timestamp columns needs a usable index on BOTH arms before the planner will build a BitmapOr;
- * there is an index leading `(tenant_id, provider, settled_at)` but none on `created_at`, so the OR
- * form degrades to a scan of the tenant's whole payments history on every sweep — for a tenant with
- * a year of payments, every row, every night. Split, the `captured`/`settled` arm uses
- * `payments_reconcile_idx` fully, and the `initiated` arm uses its leading `(tenant_id, provider)`
- * columns and then filters a set that is small and short-lived by nature (a minted-but-unpaid hosted
+ * there is an index on `(provider, settled_at)` but none on `created_at`, so the OR form degrades to
+ * a scan of the whole payments history on every sweep — for a venue with a year of payments, every
+ * row, every night. Split, the `captured`/`settled` arm lines up with
+ * `payments_reconcile_idx`'s `(provider, settled_at)` columns, and the `initiated` arm with its
+ * `provider` column and then filters a set that is small and short-lived by nature (a minted-but-unpaid hosted
  * payment resolves or expires within minutes). A second index on `created_at` would buy the same
  * thing at the cost of another write-path index, which is why it is not the answer here.
  *
  * The two arms are merged on `created_at` then `payment_ref`, so the combined result keeps the
  * single query's created_at ordering AND is fully deterministic (the old single `ORDER BY
  * created_at` left same-instant rows in whatever order the plan produced them).
- *
- * Both arms filter by `payments.tenantId`. The join's tenant equality keeps the two tables
- * consistent with each other; the explicit predicate scopes the result to the requested tenant.
  */
 export async function listReconcilable(
   tx: Transaction,
-  tenantId: string,
   provider: string,
   period: { from: Date; to: Date },
 ): Promise<ReconcilableRow[]> {
@@ -810,17 +755,10 @@ export async function listReconcilable(
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
       })
       .from(payments)
-      .innerJoin(
-        workingOrders,
-        and(
-          eq(workingOrders.id, payments.workingOrderId),
-          eq(workingOrders.tenantId, payments.tenantId),
-        ),
-      );
+      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId));
 
   const held = await auditable().where(
     and(
-      eq(payments.tenantId, tenantId),
       eq(payments.provider, provider),
       inArray(payments.state, ["captured", "settled"]),
       gte(payments.settledAt, from),
@@ -829,7 +767,6 @@ export async function listReconcilable(
   );
   const pending = await auditable().where(
     and(
-      eq(payments.tenantId, tenantId),
       eq(payments.provider, provider),
       eq(payments.state, "initiated"),
       gte(payments.createdAt, from),
@@ -838,7 +775,7 @@ export async function listReconcilable(
   );
 
   // Code-unit comparison of `${created_at}|${payment_ref}` — no locale collation, no branch on the
-  // three-way result. `payment_ref` is unique per (tenant, provider), so the key is total.
+  // three-way result. `payment_ref` is unique per provider, so the key is total.
   const orderKey = (row: ReconcilableRow): string => `${row.createdAt}|${row.paymentRef}`;
   return [...held, ...pending].sort((a, b) => {
     const left = orderKey(a);
@@ -868,15 +805,9 @@ const CHUNK_SIZE = 1000;
  * It is deliberately unbounded by period and by state: the report is fetched over a WIDER window
  * than the local rows (settlement lags capture by days), so a window-difference would manufacture
  * false positives for payments whose local row simply sits outside the audited period.
- *
- * Carries an explicit `eq(payments.tenantId, tenantId)` predicate to scope the check. The consequence of skipping it here
- * is sharper than `listReconcilable`'s: a match against another tenant's `external_ref` would
- * suppress a real `missingLocal` finding, silently hiding exactly the money-loss case this audit
- * exists to catch.
  */
 export async function existingReferences(
   tx: Transaction,
-  tenantId: string,
   provider: string,
   references: string[],
 ): Promise<Set<string>> {
@@ -887,13 +818,7 @@ export async function existingReferences(
     const rows = await tx
       .select({ externalRef: payments.externalRef })
       .from(payments)
-      .where(
-        and(
-          eq(payments.tenantId, tenantId),
-          eq(payments.provider, provider),
-          inArray(payments.externalRef, chunk),
-        ),
-      );
+      .where(and(eq(payments.provider, provider), inArray(payments.externalRef, chunk)));
     // `externalRef` is never null here: the WHERE clause matches only rows whose external_ref
     // equals one of `chunk`'s (non-null) entries. The cast avoids a null check the query already
     // forecloses, which would otherwise sit as a branch no test can legitimately take.
@@ -928,15 +853,12 @@ export async function markReconcileRemediated(
  * would lengthen lock contention with the concurrent sweeps this feature explicitly supports (see
  * `reconcile.concurrency.test.ts`), worst-case largest for a large report with few or no local rows.
  *
- * Returns a map keyed by `workingOrderId`; an id that does not exist (or that the tenant predicate excludes) is simply
- * absent from it, which the caller reads as "skip this hint" — the same contract the unbatched
- * single-lookup form expressed with `undefined`.
- *
- * The explicit `workingOrders.tenantId` predicate scopes the lookup to the requested tenant.
+ * Returns a map keyed by `workingOrderId`; an id that does not exist is simply absent from it,
+ * which the caller reads as "skip this hint" — the same contract the unbatched single-lookup form
+ * expressed with `undefined`.
  */
 export async function tillsForWorkingOrders(
   tx: Transaction,
-  tenantId: string,
   workingOrderIds: string[],
 ): Promise<Map<string, string>> {
   if (workingOrderIds.length === 0) return new Map();
@@ -946,7 +868,7 @@ export async function tillsForWorkingOrders(
     const rows = await tx
       .select({ id: workingOrders.id, tillId: workingOrders.tillId })
       .from(workingOrders)
-      .where(and(eq(workingOrders.tenantId, tenantId), inArray(workingOrders.id, chunk)));
+      .where(inArray(workingOrders.id, chunk));
     for (const row of rows) tills.set(row.id, row.tillId);
   }
   return tills;

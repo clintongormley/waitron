@@ -1,6 +1,5 @@
 CREATE TABLE "scheduled_runs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"duty" text NOT NULL,
 	"period_from" timestamp with time zone NOT NULL,
 	"period_to" timestamp with time zone NOT NULL,
@@ -20,5 +19,4 @@ CREATE TABLE "scheduled_runs" (
 	CONSTRAINT "scheduled_runs_attempts_ck" CHECK ("scheduled_runs"."attempts" >= 0)
 );
 --> statement-breakpoint
-ALTER TABLE "scheduled_runs" ADD CONSTRAINT "scheduled_runs_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "scheduled_runs_key" ON "scheduled_runs" USING btree ("tenant_id","duty","period_from","generation");
+CREATE UNIQUE INDEX "scheduled_runs_key" ON "scheduled_runs" USING btree ("duty","period_from","generation");

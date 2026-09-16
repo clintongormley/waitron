@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -34,11 +33,10 @@ beforeEach(async () => {
 describe("the orphan backstop, end to end", () => {
   it("collects, loses the sale, and lets the sweep reverse it and record an open incident", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
-    const provider = new FakePaymentProvider(pg.db, seeded.tenantId);
+    const provider = new FakePaymentProvider(pg.db);
 
     // 1. Real capture through the provider — the money moves.
     const captured = await provider.collect({
-      tenantId: brandTenantId(seeded.tenantId),
       tillId: brandTillId(seeded.tillId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("12.50"),
@@ -62,7 +60,7 @@ describe("the orphan backstop, end to end", () => {
     const reconciler = new FakeReconciler(pg.db, report);
     const period = { from: new Date(now.getTime() - 3_600_000), to: new Date(now.getTime() + 1) };
 
-    const result = await reconciler.reconcile(brandTenantId(seeded.tenantId), period, now);
+    const result = await reconciler.reconcile(period, now);
 
     // 4. The audit found it, reversed it, and said so.
     expect(result.orphan).toHaveLength(1);

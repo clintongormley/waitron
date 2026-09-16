@@ -1,4 +1,4 @@
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { createJoinRequest, acceptDeviceJoinRequest } from "../join-requests.js";
 import type { TillConfig } from "../till-config.js";
 
@@ -13,7 +13,7 @@ export async function enrolDeviceForTest(
   cfg: TillConfig,
   input: { name: string; profileId: string; stationId?: string; registerId?: string },
 ): Promise<{ deviceId: string; token: string }> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const made = await createJoinRequest(tx, cfg, { kind: "device", label: input.name });
     const accepted = await acceptDeviceJoinRequest(tx, cfg, made.joinId, {

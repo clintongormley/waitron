@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -64,49 +64,43 @@ async function setupVenue(): Promise<VenueResult> {
   );
 }
 
-/** Seed a staff person under `tenantId` with a known PIN (on the app role, which holds INSERT on
+/** Seed a staff person with a known PIN (on the app role, which holds INSERT on
  * persons). Returns its id. */
-async function seedPerson(tenantId: string, name: string, pin: string): Promise<string> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+async function seedPerson(name: string, pin: string): Promise<string> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, ${name}, ${hashPin(pin)}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values (${name}, ${hashPin(pin)}, 'staff') returning id`);
     return r.rows[0]!.id;
   });
 }
 
 /** Open a real shift session (through `loginWithPin` on the app role) and return the cookie header. */
-async function cookieFor(
-  tenantId: string,
-  tillId: string,
-  personId: string,
-  pin: string,
-): Promise<string> {
-  const session = await withTenant(suite.admin, tenantId, async (tx) => {
+async function cookieFor(tillId: string, personId: string, pin: string): Promise<string> {
+  const session = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return loginWithPin(tx, { tenantId, tillId, personId, pin });
+    return loginWithPin(tx, { tillId, personId, pin });
   });
   return `${SESSION_COOKIE}=${session.id}`;
 }
 
-/** A shift for `personId`, seeded as admin (superuser) with tenant_id explicit. Returns its id. */
+/** A shift for `personId`, seeded as admin (superuser). Returns its id. */
 async function seedShift(
-  tenantId: string,
   personId: string,
   locationId: string,
   startsAt: string,
   endsAt: string,
 ): Promise<string> {
   const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-    values (${tenantId}, ${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0) returning id`);
+    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
+    values (${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0) returning id`);
   return r.rows[0]!.id;
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
-  mountScheduleApi(app, { db: suite.admin, cfg: { tenantId } }, noopLog);
+  mountScheduleApi(app, { db: suite.admin }, noopLog);
   return app;
 }
 
@@ -137,17 +131,16 @@ describe("Schedule API over real Postgres (the identity property: the session's 
     // the offered shift is P's, so `requestSwap`'s ownership guard 403s where the session-based route
     // 201s (`expected 403 to be 201`). Restored, green. Run as the non-superuser app_user.
     const venue = await setupVenue();
-    const p = await seedPerson(venue.tenantId, "P", "1111");
-    const q = await seedPerson(venue.tenantId, "Q", "2222");
+    const p = await seedPerson("P", "1111");
+    const q = await seedPerson("Q", "2222");
     const pShift = await seedShift(
-      venue.tenantId,
       p,
       venue.locationId,
       "2026-05-04T09:00:00Z",
       "2026-05-04T17:00:00Z",
     );
-    const app = mountApp(venue.tenantId);
-    const cookieP = await cookieFor(venue.tenantId, venue.tillId, p, "1111");
+    const app = mountApp();
+    const cookieP = await cookieFor(venue.tillId, p, "1111");
 
     const res = await send(app, "POST", "/api/schedule/swaps", cookieP, {
       fromShiftId: pShift,
@@ -167,28 +160,21 @@ describe("Schedule API over real Postgres (the identity property: the session's 
 
   it("scopes reads to the session's person — P sees only P's shifts, never Q's", async () => {
     const venue = await setupVenue();
-    const p = await seedPerson(venue.tenantId, "P", "1111");
-    const q = await seedPerson(venue.tenantId, "Q", "2222");
+    const p = await seedPerson("P", "1111");
+    const q = await seedPerson("Q", "2222");
     const pShift = await seedShift(
-      venue.tenantId,
       p,
       venue.locationId,
       "2026-06-01T09:00:00Z",
       "2026-06-01T17:00:00Z",
     );
-    await seedShift(
-      venue.tenantId,
-      q,
-      venue.locationId,
-      "2026-06-01T10:00:00Z",
-      "2026-06-01T18:00:00Z",
-    );
-    const app = mountApp(venue.tenantId);
+    await seedShift(q, venue.locationId, "2026-06-01T10:00:00Z", "2026-06-01T18:00:00Z");
+    const app = mountApp();
     const res = await send(
       app,
       "GET",
       "/api/schedule/shifts?from=2026-06-01&to=2026-06-08",
-      await cookieFor(venue.tenantId, venue.tillId, p, "1111"),
+      await cookieFor(venue.tillId, p, "1111"),
     );
     expect(res.status).toBe(200);
     const ids = ((await res.json()) as { id: string }[]).map((r) => r.id);

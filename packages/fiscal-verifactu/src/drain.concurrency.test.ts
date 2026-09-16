@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
@@ -8,9 +8,9 @@ import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants (including EXECUTE on
-// envios_tenants_with_work). Being non-superuser is what subjects EVERY query a drain issues on
-// this connection to the app role's real privilege set — crucially including tenantsWithWork's
-// top-level enumeration, which runs OUTSIDE any withTenant transaction and therefore cannot be
+// envios_work_due). Being non-superuser is what subjects EVERY query a drain issues on
+// this connection to the app role's real privilege set — crucially including the due-work check's
+// top-level enumeration, which runs OUTSIDE any withTransaction transaction and therefore cannot be
 // covered by a per-transaction `asAppUser` SET LOCAL ROLE.
 const DRAIN_PROBE_ROLE = "drain_probe";
 const DRAIN_PROBE_PASSWORD = "probe";
@@ -38,8 +38,8 @@ const suite = useTemplateDb({ template: "manifest" });
 const PENDING_COUNT = 12;
 
 describe("drain — claim concurrency (real Postgres)", () => {
-  it("two concurrent drains over the same tenant never submit a record twice (SKIP LOCKED)", async () => {
-    const seeded = await seedPendingEnvios(suite.admin, { count: PENDING_COUNT });
+  it("two concurrent drains over the same backlog never submit a record twice (SKIP LOCKED)", async () => {
+    await seedPendingEnvios(suite.admin, { count: PENDING_COUNT });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
 
     // Separate connections, not one shared `db` — `testing/postgres.ts`'s own doc comment on
@@ -88,9 +88,9 @@ describe("drain — claim concurrency (real Postgres)", () => {
       // Independent, DB-side proof: every row was attempted exactly once. If a row had been
       // claimed by BOTH transactions, its `intentos` (incremented by claimBatch's own UPDATE)
       // would read 2, not 1 — this is untouched by anything AEAT's fake does or does not dedupe.
-      const rows = await withTenant(suite.admin, seeded.tenantId, (tx) =>
+      const rows = await withTransaction(suite.admin, (tx) =>
         tx.execute<{ estado: string; intentos: number; csv: string | null }>(sql`
-          select estado, intentos, csv from envios where tenant_id = ${seeded.tenantId}
+          select estado, intentos, csv from envios
         `),
       );
       expect(rows.rows).toHaveLength(PENDING_COUNT);
@@ -109,13 +109,13 @@ describe("drain — claim concurrency (real Postgres)", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
 
     const pendingAsApp = () =>
-      withTenant(suite.admin, seeded.tenantId, async (tx) => {
+      withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         const rows = await tx.execute<{ count: string }>(sql`
           select count(*)::text as count
           from envios e
           join registros_facturacion r on r.id = e.registro_id
-          where r.node_id = ${seeded.nodeId} and e.tenant_id = ${seeded.tenantId} and e.estado = 'pendiente'
+          where r.node_id = ${seeded.nodeId} and e.estado = 'pendiente'
         `);
         return Number(rows.rows[0]!.count);
       });
@@ -139,11 +139,13 @@ describe("drain — claim concurrency (real Postgres)", () => {
 
 /** Exercise enumeration and the subsequent drain on a LOGIN role inheriting app_user. */
 describe("drain — enumeration as app_user (real Postgres)", () => {
-  const pendingAsApp = (tenantId: string) =>
-    withTenant(suite.admin, tenantId, async (tx) => {
+  const pendingAsApp = (nodeId: string) =>
+    withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const rows = await tx.execute<{ count: string }>(sql`
-        select count(*)::text as count from envios where tenant_id = ${tenantId} and estado = 'pendiente'
+        select count(*)::text as count from envios e
+        join registros_facturacion r on r.id = e.registro_id
+        where r.node_id = ${nodeId} and e.estado = 'pendiente'
       `);
       return Number(rows.rows[0]!.count);
     });
@@ -156,8 +158,8 @@ describe("drain — enumeration as app_user (real Postgres)", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const now = new Date("2026-07-21T00:01:00Z");
 
-    expect(await pendingAsApp(t1.tenantId)).toBe(2);
-    expect(await pendingAsApp(t2.tenantId)).toBe(3);
+    expect(await pendingAsApp(t1.nodeId)).toBe(2);
+    expect(await pendingAsApp(t2.nodeId)).toBe(3);
 
     // The LOGIN fixture inherits app_user grants for every query, including enumeration.
     const appUserDb = await suite.pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
@@ -180,27 +182,31 @@ describe("drain — enumeration as app_user (real Postgres)", () => {
     }
 
     // Both backlogs must be empty when read through the application role.
-    expect(await pendingAsApp(t1.tenantId)).toBe(0);
-    expect(await pendingAsApp(t2.tenantId)).toBe(0);
+    expect(await pendingAsApp(t1.nodeId)).toBe(0);
+    expect(await pendingAsApp(t2.nodeId)).toBe(0);
   }, 30_000);
 
-  it("returns the due-tenant UUID list to app_user", async () => {
-    const t1 = await seedPendingEnvios(suite.admin, { count: 1 });
+  it("answers the due-work question for app_user, and only yes or no", async () => {
+    await seedPendingEnvios(suite.admin, { count: 1 });
     const now = new Date("2026-07-21T00:01:00Z");
     const appUserDb = await suite.pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
     try {
-      // What the seam DOES expose is exactly the due-tenant id set — bare uuids (setof uuid),
-      // carrying no other envío column at all.
-      const enumerated = await appUserDb.execute<{ tenant_id: string }>(sql`
-        select tenant_id from envios_tenants_with_work(${now.toISOString()}::timestamptz) as t(tenant_id)
+      // What the seam exposes is exactly one boolean — no envío column reaches the caller through
+      // it at all — and app_user may run it.
+      const due = await appUserDb.execute<{ due: boolean }>(sql`
+        select envios_work_due(${now.toISOString()}::timestamptz) as due
       `);
-      const ids = enumerated.rows.map((r) => r.tenant_id);
-      expect(ids).toContain(t1.tenantId);
-      expect(
-        ids.every((id) =>
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id),
-        ),
-      ).toBe(true);
+      expect(due.rows.map((r) => r.due)).toEqual([true]);
+
+      // And it is the DUE-ness that decides, not merely the presence of rows: pushed past `now`,
+      // the same backlog answers no.
+      await suite.admin.execute(
+        sql`update envios set proximo_intento_en = ${new Date(now.getTime() + 60_000).toISOString()}`,
+      );
+      const notDue = await appUserDb.execute<{ due: boolean }>(sql`
+        select envios_work_due(${now.toISOString()}::timestamptz) as due
+      `);
+      expect(notDue.rows.map((r) => r.due)).toEqual([false]);
     } finally {
       await appUserDb.close();
     }

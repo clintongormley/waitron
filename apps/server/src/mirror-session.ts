@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { sql } from "drizzle-orm";
-import { withTenant, type Database, type DeploymentMode } from "@waitron/db";
+import { withTransaction, type Database, type DeploymentMode } from "@waitron/db";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -24,18 +24,18 @@ const UNUSABLE_PIN_HASH = "mirror-viewer-never-logs-in";
  * Ensures the mirror's ambient read-only viewer exists: one `admin` person (every permission, so every
  * gated dashboard read passes `authorizeManager` — the §5 gate is what enforces read-only, not this
  * role) and one live management session for it. Idempotent — safe to call on every boot. Runs under the
- * mirror's tenant as `app_user` (which already holds INSERT/UPDATE on both tables; no new grant).
+ * as `app_user` (which already holds INSERT/UPDATE on both tables; no new grant).
  */
-export async function ensureMirrorViewer(db: Database, tenantId: string): Promise<void> {
-  await withTenant(db, tenantId, async (tx) => {
+export async function ensureMirrorViewer(db: Database): Promise<void> {
+  await withTransaction(db, async (tx) => {
     await tx.execute(sql`
-      insert into persons (id, tenant_id, display_name, pin_hash, role, status)
-      values (${MIRROR_VIEWER_PERSON_ID}, ${tenantId}, 'mirror viewer', ${UNUSABLE_PIN_HASH}, 'admin', 'active')
+      insert into persons (id, display_name, pin_hash, role, status)
+      values (${MIRROR_VIEWER_PERSON_ID}, 'mirror viewer', ${UNUSABLE_PIN_HASH}, 'admin', 'active')
       on conflict (id) do nothing
     `);
     await tx.execute(sql`
-      insert into management_sessions (id, tenant_id, person_id)
-      values (${MIRROR_VIEWER_SESSION_ID}, ${tenantId}, ${MIRROR_VIEWER_PERSON_ID})
+      insert into management_sessions (id, person_id)
+      values (${MIRROR_VIEWER_SESSION_ID}, ${MIRROR_VIEWER_PERSON_ID})
       on conflict (id) do update set last_seen_at = now(), ended_at = null
     `);
   });
@@ -71,7 +71,6 @@ export async function ensureMirrorViewer(db: Database, tenantId: string): Promis
  */
 export function mirrorSession(
   db: Database,
-  tenantId: string,
   secure: boolean,
   getMode: () => DeploymentMode,
 ): MiddlewareHandler {
@@ -80,7 +79,7 @@ export function mirrorSession(
       // Promoted: drop the ambient admin. Only act when the request still presents the ambient id —
       // otherwise there is nothing to end, and requireManagementSession handles the no-cookie case.
       if (readManagementSessionId(c) === MIRROR_VIEWER_SESSION_ID) {
-        await withTenant(db, tenantId, (tx) =>
+        await withTransaction(db, (tx) =>
           tx.execute(sql`update management_sessions set ended_at = now()
                          where id = ${MIRROR_VIEWER_SESSION_ID} and ended_at is null`),
         );
@@ -92,7 +91,7 @@ export function mirrorSession(
     // ended (`ended_at is not null`). Clearing `ended_at` must NOT be gated behind the last_seen_at
     // throttle alone — a stamped `ended_at` with a still-fresh `last_seen_at` would otherwise keep the
     // session dead and 401 the next dashboard request.
-    await withTenant(db, tenantId, (tx) =>
+    await withTransaction(db, (tx) =>
       tx.execute(sql`update management_sessions set last_seen_at = now(), ended_at = null
                      where id = ${MIRROR_VIEWER_SESSION_ID}
                        and (last_seen_at is null or last_seen_at < now() - interval '1 minute'

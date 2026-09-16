@@ -12,7 +12,6 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants.js";
 
 /**
  * A received supplier invoice — a `factura recibida` — and its per-rate VAT breakdown, the input
@@ -54,9 +53,6 @@ export const purchaseInvoices = pgTable(
   "purchase_invoices",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     // The supplier's own tax identity (NIF/CIF) and legal name — theirs, not ours; not validated as
     // one of our own identifiers.
     supplierTaxId: text("supplier_tax_id").notNull(),
@@ -68,7 +64,7 @@ export const purchaseInvoices = pgTable(
     // Our receipt/registration date — this DRIVES the deduction period (spec §D3): input VAT is
     // deductible in the period the invoice is received.
     receivedOn: date("received_on").notNull(),
-    // Gross total, tenant currency (single currency per tenant — no currency column, spec §D7).
+    // Gross total, in the venue's currency (one currency — no currency column, spec §D7).
     total: numeric("total", { precision: 12, scale: 2 }).notNull(),
     regime: purchaseRegime("regime").notNull().default("general"),
     // The prorrata / partial-deductibility seam (spec §9): the percentage of the input VAT that is
@@ -82,21 +78,15 @@ export const purchaseInvoices = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    // Composite target for the tenant-consistent FK from `purchase_invoice_vat` (mirrors
-    // `sales_tenant_id_key`): a VAT line cannot point at an invoice belonging to another tenant.
-    unique("purchase_invoices_tenant_id_key").on(t.tenantId, t.id),
+    // Composite target for the FK from `purchase_invoice_vat` (mirrors
     // Refuse entering the same supplier invoice twice — the `libro-registro` no-duplicate default. Keyed
-    // on (tenant, supplier, supplier's number). Whether a supplier may legitimately reuse a number
+    // on (supplier, supplier's number). Whether a supplier may legitimately reuse a number
     // across YEARS (making this per-year rather than forever) is an asesor-fiscal question flagged in
     // spec §9; the conservative forever-unique default is chosen here.
-    unique("purchase_invoices_supplier_number_key").on(
-      t.tenantId,
-      t.supplierTaxId,
-      t.supplierInvoiceNumber,
-    ),
+    unique("purchase_invoices_supplier_number_key").on(t.supplierTaxId, t.supplierInvoiceNumber),
     // Supports the monthly deducible aggregate's `received_on` bucketing (mirrors
     // `sales_tenant_issued_idx`).
-    index("purchase_invoices_tenant_received_idx").on(t.tenantId, t.receivedOn),
+    index("purchase_invoices_tenant_received_idx").on(t.receivedOn),
     check(
       "purchase_invoices_deductible_proportion_ck",
       sql`${t.deductibleProportion} >= 0 and ${t.deductibleProportion} <= 100`,
@@ -117,7 +107,6 @@ export const purchaseInvoiceVat = pgTable(
   "purchase_invoice_vat",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     purchaseInvoiceId: uuid("purchase_invoice_id").notNull(),
     // The VAT percentage as stored, e.g. "21.00".
     rate: numeric("rate", { precision: 5, scale: 2 }).notNull(),
@@ -129,11 +118,11 @@ export const purchaseInvoiceVat = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.purchaseInvoiceId],
-      foreignColumns: [purchaseInvoices.tenantId, purchaseInvoices.id],
+      columns: [t.purchaseInvoiceId],
+      foreignColumns: [purchaseInvoices.id],
       name: "purchase_invoice_vat_invoice_fk",
     }).onDelete("cascade"),
-    index("purchase_invoice_vat_invoice_idx").on(t.tenantId, t.purchaseInvoiceId),
+    index("purchase_invoice_vat_invoice_idx").on(t.purchaseInvoiceId),
     check("purchase_invoice_vat_rate_ck", sql`${t.rate} >= 0 and ${t.rate} <= 100`),
   ],
 );

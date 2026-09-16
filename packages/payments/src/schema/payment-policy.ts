@@ -1,19 +1,18 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
+import { check, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
- * Per-tenant offline-acceptance policy — exactly one row per tenant. `offline_mode` governs whether
- * the offline opt-in is ever available (`accept_offline` | `cash_only`); `offline_amount_cap` bounds
- * even an opted-in acceptance. Modelled as explicit configuration, never inferred from connectivity
- * (mirrors Veri*Factu-mode being explicit per-tenant config). The ABSENCE of a row is fail-safe: no
- * row means no offline acceptance at all (see `resolveOfflineDecision`). Mutable config, so tenant
- * isolation only (no append-only trigger); cascades with its tenant, being pure per-tenant config.
+ * The venue's offline-acceptance policy — at most one row, `id` pinned to 1 (the `deployment` /
+ * `mirror_config` / `node_membership` singleton shape in `@waitron/db`). `offline_mode` governs
+ * whether the offline opt-in is ever available (`accept_offline` | `cash_only`);
+ * `offline_amount_cap` bounds even an opted-in acceptance. Modelled as explicit configuration, never
+ * inferred from connectivity. The ABSENCE of the row is fail-safe: no row means no offline acceptance
+ * at all (see `resolveOfflineDecision`). Mutable config, so no append-only trigger.
  */
 export const paymentPolicy = pgTable(
   "payment_policy",
   {
-    tenantId: uuid("tenant_id").primaryKey(),
+    id: integer("id").primaryKey().notNull().default(1),
     offlineMode: text("offline_mode").notNull(),
     offlineAmountCap: numeric("offline_amount_cap", { precision: 12, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
@@ -24,11 +23,7 @@ export const paymentPolicy = pgTable(
       .defaultNow(),
   },
   (t) => [
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "payment_policy_tenant_fk",
-    }).onDelete("cascade"),
+    check("payment_policy_singleton_ck", sql`${t.id} = 1`),
     check(
       "payment_policy_offline_mode_ck",
       sql`${t.offlineMode} in ('accept_offline', 'cash_only')`,

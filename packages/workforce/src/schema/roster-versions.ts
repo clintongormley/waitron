@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "@waitron/db";
+import { locations } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -55,7 +55,6 @@ export const rosterVersions = pgTable(
   "roster_versions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     /** The workplace this schedule covers. */
     locationId: uuid("location_id").notNull(),
     /** First day of the scheduled period, inclusive. */
@@ -78,12 +77,7 @@ export const rosterVersions = pgTable(
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
     // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI
     // process, never during vitest run). restrict, not cascade: a schedule must not be silently
-    // discarded by a tenant/location delete.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "roster_versions_tenant_fk",
-    }).onDelete("restrict"),
+    // discarded by a location delete.
     foreignKey({
       columns: [t.locationId],
       foreignColumns: [locations.id],
@@ -94,19 +88,17 @@ export const rosterVersions = pgTable(
       foreignColumns: [persons.id],
       name: "roster_versions_published_by_person_fk",
     }).onDelete("restrict"),
-    index("roster_versions_tenant_id_idx").on(t.tenantId),
-    index("roster_versions_tenant_location_idx").on(t.tenantId, t.locationId),
-    // At most one PUBLISHED version per (tenant, location, exact period). Partial (WHERE status =
+    index("roster_versions_location_idx").on(t.locationId),
+    // At most one PUBLISHED version per (location, exact period). Partial (WHERE status =
     // 'published'), so drafts and superseded rows accumulate freely — only the live published row is
     // unique. This is the invariant backstop for `publishRoster`'s supersede-on-republish: the
     // FOR UPDATE lock it takes on the incumbent published row serialises the common case, but a
     // concurrent first-publish of two DIFFERENT drafts has no row to lock, so THIS index is what
     // guarantees the second cannot also leave a published row — it raises 23505, which publishRoster
     // translates to roster.period_already_published. Like `registro_sif_activo_uq` (fiscal-verifactu),
-    // it binds across the whole table, and
-    // tenant_id is the leading column so it never collides across tenants.
+    // it binds across the whole table.
     uniqueIndex("roster_versions_published_period_uq")
-      .on(t.tenantId, t.locationId, t.periodStart, t.periodEnd)
+      .on(t.locationId, t.periodStart, t.periodEnd)
       .where(sql`${t.status} = 'published'`),
     check("roster_versions_period_ck", sql`${t.periodEnd} >= ${t.periodStart}`),
     // draft ⟺ not yet published: `published_at` is set exactly when the version leaves draft, so

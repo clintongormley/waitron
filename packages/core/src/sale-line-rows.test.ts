@@ -23,11 +23,10 @@ describe("saleLineRows", () => {
       modifierSnapshots: [],
     };
 
-    const [row] = saleLineRows("tenant-1", "sale-1", [line]);
+    const [row] = saleLineRows("sale-1", [line]);
 
     expect(row).toEqual({
       id: row!.id,
-      tenantId: "tenant-1",
       saleId: "sale-1",
       lineNo: 1,
       parentLineId: null,
@@ -60,11 +59,10 @@ describe("saleLineRows", () => {
       lineTotal: "1.00",
     };
 
-    const [row] = saleLineRows("tenant-1", "sale-1", [line]);
+    const [row] = saleLineRows("sale-1", [line]);
 
     expect(row).toEqual({
       id: row!.id,
-      tenantId: "tenant-1",
       saleId: "sale-1",
       lineNo: 1,
       parentLineId: null,

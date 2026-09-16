@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
@@ -23,10 +23,14 @@ import {
 } from "./bookings.js";
 import "./errors.js";
 
+/** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
+ * tills, working_orders) still carry. */
+type VenueCfg = BookingConfig;
+
 // PGlite, not real Postgres: these verbs are plain CRUD + a conditional-UPDATE state machine over one
 // table — no privilege or concurrency behaviour that needs a genuine non-superuser backend (the CAS
 // race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `routes.test.ts`). Every read/write still runs
-// through `withTenant` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
+// through `withTransaction` + `asAppUser`, so the app_user grants and the `party_size > 0` CHECK are exercised
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
 // container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs
 // into core, so it lands on top of the shared ordered set.
@@ -42,52 +46,49 @@ beforeAll(() => {
 });
 
 interface Venue {
-  cfg: BookingConfig;
+  cfg: VenueCfg;
   /** A fixture person id for `created_by` (no FK — the drawer_opens.person_id seam). */
   createdBy: string;
 }
 
 /** Stand up a fresh tenant + location and a `BookingConfig` scoped to them. Each test gets its own. */
 async function setupVenue(): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   return {
-    cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
+    cfg: { locationId: brandLocationId(locationId) },
     createdBy: randomUUID(),
   };
 }
 
 /** Insert an ACTIVE dining table for the venue and return its id (for the optional table-link path). */
-async function makeTable(cfg: BookingConfig, active = true): Promise<string> {
+async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${cfg.locationId}, '12', ${active}) returning id`);
+    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, '12', ${active}) returning id`);
   return row.rows[0]!.id;
 }
 
 /**
- * The deployment holds one tenant per database. Insert an ACTIVE dining table in a SECOND
- * location of the SAME tenant, and return its id. This cross-LOCATION table exists in the same
+ * Insert an ACTIVE dining table in a SECOND location, and return its id. This
+ * cross-LOCATION table exists in the same
  * database — the exact shape the location-scope guard must refuse (a booking in location A must
  * not be assigned a table in location B).
  */
-async function makeTableInOtherLocation(cfg: BookingConfig): Promise<string> {
+async function makeTableInOtherLocation(): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${cfg.tenantId}, 'Terraza', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Terraza', array['es-ES'], 'Venta en establecimiento') returning id`);
   const otherLocationId = loc.rows[0]!.id;
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${otherLocationId}, 'B-1', true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${otherLocationId}, 'B-1', true) returning id`);
   return row.rows[0]!.id;
 }
 
-/** Run `fn` inside the venue's tenant scope as `app_user`, exactly as production routes do. */
-function scoped<T>(cfg: BookingConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+/** Run `fn` as `app_user`, exactly as production routes do. */
+function scoped<T>(cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -95,7 +96,7 @@ function scoped<T>(cfg: BookingConfig, fn: (tx: Transaction) => Promise<T>): Pro
 
 /** Insert a booking directly at an arbitrary status (to reach `seated`, which only Task 4's seat sets). */
 async function seedBooking(
-  cfg: BookingConfig,
+  cfg: VenueCfg,
   createdBy: string,
   status: "booked" | "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<string> {
@@ -103,7 +104,6 @@ async function seedBooking(
     const [row] = await tx
       .insert(bookings)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -265,7 +265,7 @@ describe("createBooking — optional table link", () => {
 
   it("rejects an ACTIVE table in ANOTHER location of the same tenant with table.not_found", async () => {
     const { cfg, createdBy } = await setupVenue();
-    const tableId = await makeTableInOtherLocation(cfg);
+    const tableId = await makeTableInOtherLocation();
     await expect(
       scoped(cfg, (tx) =>
         createBooking(tx, cfg, {
@@ -365,7 +365,7 @@ describe("updateBooking", () => {
 
   it("rejects an edit that assigns a table in ANOTHER location with table.not_found", async () => {
     const { cfg, createdBy } = await setupVenue();
-    const tableId = await makeTableInOtherLocation(cfg);
+    const tableId = await makeTableInOtherLocation();
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
@@ -447,10 +447,9 @@ describe("getBooking", () => {
 
 /** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
  * verb lives in apps/server, which a module cannot import). */
-async function seedTable(cfg: BookingConfig, label: string): Promise<string> {
+async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -461,22 +460,20 @@ async function seedTable(cfg: BookingConfig, label: string): Promise<string> {
 // The seat cfg is a plain `BookingConfig`; the till + node the tab row needs are captured by `fakeCore`.
 describe("seatBooking", () => {
   async function setupTillVenue(): Promise<{
-    cfg: BookingConfig;
+    cfg: VenueCfg;
     core: CoreServices;
     createdBy: string;
   }> {
-    const tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-    const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+      insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+    const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
-      cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
-      core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }),
+      cfg: { locationId: brandLocationId(locationId) },
+      core: fakeCore({ tillId: till.rows[0]!.id, nodeId }),
       createdBy: randomUUID(),
     };
   }
@@ -519,7 +516,7 @@ describe("seatBooking", () => {
 
   it("rejects a req.tableId in ANOTHER location of the same tenant with table.not_found", async () => {
     const { cfg, core, createdBy } = await setupTillVenue();
-    const otherTableId = await makeTableInOtherLocation(cfg);
+    const otherTableId = await makeTableInOtherLocation();
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
@@ -596,7 +593,7 @@ describe("seatBooking", () => {
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "cancelled", tabId: null });
     const tabs = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,
+      sql`select count(*)::int as n from working_orders`,
     );
     expect(tabs.rows[0]!.n).toBe(0);
   });

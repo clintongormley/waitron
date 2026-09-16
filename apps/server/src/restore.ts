@@ -1,12 +1,11 @@
 import { mkdir, rename, rm } from "node:fs/promises";
 import { join, posix } from "node:path";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   AppError,
   isAppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  tenantId as brandTenantId,
 } from "@waitron/shared";
 import {
   createPostgresDb,
@@ -14,7 +13,7 @@ import {
   nodes,
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
-  withTenant,
+  withTransaction,
   type Database,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
@@ -43,7 +42,6 @@ const TRADING_ENV_FILE = "trading.env";
 /** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
 const REPLACED_SUFFIX = ".replaced";
 const IDENTITY_KEYS = [
-  "WAITRON_TILL_TENANT_ID",
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_SERIES_ID",
@@ -341,7 +339,6 @@ export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
   }
   return {
     node: {
-      tenantId: brandTenantId(env.WAITRON_TILL_TENANT_ID!),
       locationId: brandLocationId(env.WAITRON_TILL_LOCATION_ID!),
       nodeId: brandNodeId(env.WAITRON_TILL_NODE_ID!),
     },
@@ -390,15 +387,14 @@ export async function runRestoreHooks(args: {
   log: Logger;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
-  return withTenant(args.db, node.tenantId, async (tx) => {
+  return withTransaction(args.db, async (tx) => {
     const [known] = await tx
       .select({ id: nodes.id })
       .from(nodes)
-      .where(and(eq(nodes.tenantId, node.tenantId), eq(nodes.id, node.nodeId)))
+      .where(eq(nodes.id, node.nodeId))
       .limit(1);
     if (known === undefined) {
       throw new AppError("restore.identity_unknown", {
-        tenantId: node.tenantId,
         nodeId: node.nodeId,
       });
     }
@@ -430,10 +426,10 @@ export async function runRestoreHooks(args: {
     const owner = replacement?.module ?? "core";
     try {
       if (replacement !== undefined) {
-        await retireNodeSeriesTx(tx, node.tenantId, node.nodeId);
-        await insertNodeSeriesTx(tx, node.tenantId, node.nodeId, replacement.series);
+        await retireNodeSeriesTx(tx, node.nodeId);
+        await insertNodeSeriesTx(tx, node.nodeId, replacement.series);
       }
-      const seriesId = await readStandardSeriesIdTx(tx, node.tenantId, node.nodeId);
+      const seriesId = await readStandardSeriesIdTx(tx, node.nodeId);
       return { seriesId, reports };
     } catch (err) {
       throw wrapHookError(owner, err);

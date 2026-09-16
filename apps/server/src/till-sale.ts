@@ -22,12 +22,12 @@ import {
   isUniqueViolation,
   sales,
   tenders,
-  withTenant,
+  withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { Decimal, SaleId, TenantId } from "@waitron/shared";
+import type { Decimal, SaleId } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
 import {
   payments,
@@ -200,6 +200,7 @@ export async function readTenderBlock(
   saleId: SaleId,
   workingOrderId: string,
 ): Promise<TenderBlock> {
+  void cfg;
   const [tender] = await tx
     .select({
       method: tenders.method,
@@ -208,7 +209,7 @@ export async function readTenderBlock(
       cashTendered: tenders.cashTendered,
     })
     .from(tenders)
-    .where(and(eq(tenders.tenantId, cfg.tenantId), eq(tenders.saleId, saleId)));
+    .where(eq(tenders.saleId, saleId));
   // Invoice-first issuance legitimately precedes the tender.
   if (tender === undefined) return { method: "unpaid" };
   if (tender.method === "cash") {
@@ -225,7 +226,6 @@ export async function readTenderBlock(
     .from(payments)
     .where(
       and(
-        eq(payments.tenantId, cfg.tenantId),
         eq(payments.saleId, saleId),
         eq(payments.workingOrderId, workingOrderId),
         eq(payments.provider, "manual"),
@@ -350,7 +350,7 @@ export type IntegratedPayDeps = TillSaleDeps & {
 /**
  * Pay and settle a working order idempotently — the CRUX of park & retrieve (spec §3). It stops a
  * lost-response pay retry from filing a SECOND chained fiscal record (an unrepairable defect: invoice
- * numbers are never reused, `CLAUDE.md` §5). All in ONE `withTenant`/`asAppUser` transaction, so the
+ * numbers are never reused, `CLAUDE.md` §5). All in ONE `withTransaction`/`asAppUser` transaction, so the
  * working order's settle, the sale, its tender/settlement and its chained fiscal record commit as one
  * unit — or roll back together.
  *
@@ -382,20 +382,16 @@ export async function payWorkingOrder(
   operatorId?: string,
 ): Promise<TillSaleResult> {
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
-      // The deployment holds one tenant per database. Step
-      // 1. Lock/resolve the order by its id in this database. FOR UPDATE serialises a
+      // 1. Lock/resolve the order by its id (one tenant per database). FOR UPDATE serialises a
       //    concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks
       //    nothing and the 23505 catch below is that shape's backstop.
       const [locked] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        // Tenant-scoped: a by-id read is not isolated since RLS was dropped (#255), so a foreign
-        // tenant's order id must resolve as "no row" (walk-up) here, never as their open order
-        // (CLAUDE.md §3). Same-tenant pay is unchanged — the order is this tenant's.
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+        .where(eq(workingOrders.id, req.id))
         .for("update");
 
       // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
@@ -463,7 +459,7 @@ export async function payWorkingOrder(
         // never a re-price of a client basket (`req.lines` is IGNORED). It runs the SAME
         // difference-method arithmetic over the locked gross that `priceBasket` runs over a live
         // catalogue, so a catalogue price change between park and pay never moves the filed total.
-        priced = await priceStoredOrder(tx, cfg, req.id);
+        priced = await priceStoredOrder(tx, req.id);
       }
 
       const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
@@ -494,16 +490,15 @@ export async function payWorkingOrder(
       throw error;
     }
     // A 23505 means a concurrent pay for this same id won the race and this transaction aborted. Roll
-    // back (already done by the failed `withTenant`) and REPLAY in a fresh transaction: the winner
+    // back (already done by the failed `withTransaction`) and REPLAY in a fresh transaction: the winner
     // has committed (a unique violation fires only against a COMMITTED conflicting row), so its
     // settled sale is now readable.
-    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const [row] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        // Tenant-scoped like the lock read above (CLAUDE.md §3).
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
       /* v8 ignore start */
       if (row?.status !== "settled") {
         // A unique violation with no settled winner is not our idempotency case (e.g. a pay racing a
@@ -536,7 +531,7 @@ async function readSettledTicket(
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+    .where(eq(sales.workingOrderId, workingOrderId));
 
   /* v8 ignore start */
   if (issued === undefined) {
@@ -551,7 +546,7 @@ async function readSettledTicket(
   // walk-up (`createOpenOrder` stored the priced lock) and a retrieved/placed order. Read straight
   // back rather than recomputed from `sale_lines` (which stores the NET base, so recovering the gross
   // would drift by a cent), so the replayed receipt's line list matches the invoice exactly.
-  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, cfg, workingOrderId));
+  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
 
   // Read the QR + the exact filed desglose back from the immutable fiscal record, in this same
   // transaction. This reads nothing but the already-filed alta — never re-files, never re-hashes.
@@ -595,7 +590,7 @@ export async function printSaleReceipt(
   workingOrderId: string,
   duplicate: boolean,
 ): Promise<void> {
-  await withTenant(deps.db, cfg.tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     // Is there a filed sale for this working-order id? An unknown/open/foreign id names none → nothing
     // to reprint. This existence check keeps `readSettledTicket`'s bare-Error "no sale" path unreachable
@@ -603,7 +598,7 @@ export async function printSaleReceipt(
     const [existing] = await tx
       .select({ id: sales.id })
       .from(sales)
-      .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+      .where(eq(sales.workingOrderId, workingOrderId));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket);
@@ -658,7 +653,6 @@ async function fileImmediateSale(
   const settledAt = deps.clock.now().instant;
 
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
@@ -693,13 +687,12 @@ async function fileImmediateSale(
   // here). Cash gets no payments row. `settledAt` is the SAME reading the tender carries.
   if (isCard) {
     const { provider, paymentRef } = await recordManualCardPayment(tx, {
-      tenantId: cfg.tenantId,
       workingOrderId,
       amount: decimal(priced.total),
       settledAt,
       externalRef: tender.externalRef,
     });
-    await associatePaymentWithSale(tx, { provider, paymentRef, saleId, tenantId: cfg.tenantId });
+    await associatePaymentWithSale(tx, { provider, paymentRef, saleId });
   }
 
   // → settled. `working_orders_enforce_transition` permits both open → settled (walk-up/pay) and
@@ -715,9 +708,9 @@ async function fileImmediateSale(
       settledAt: settledAt.toISOString(),
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
     })
-    // Tenant-scoped for uniformity with the sibling finalize updates; the caller has already taken a
-    // tenant-scoped `.for("update")` lock on this row, so this can only ever match its own order.
-    .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.tenantId, cfg.tenantId)));
+    // The caller has already taken a `.for("update")` lock on this row, so this can only ever match
+    // its own order.
+    .where(eq(workingOrders.id, workingOrderId));
 
   // Read the tender block back AFTER the tender row (recordSale) and, for a manual card, the payment
   // row (recordManualCardPayment) are both written above — so a manual acquirer reference is visible.
@@ -751,7 +744,7 @@ async function fileImmediateSale(
  * filed AT PLACING (`placeOrder`), so a `placed` invoice-first order already carries a chained,
  * unsettled `sales` row; every other flow files its sale at pay, so a non-settled order has none and
  * this returns `undefined`. The presence of that row — not `cfg.orderFlow` — is the discriminator (the
- * DB is the truth). `sales_working_order_id_key` (UNIQUE on `(tenant_id, working_order_id)`) makes the
+ * DB is the truth). `sales_working_order_id_key` (UNIQUE on `(working_order_id)`) makes the
  * lookup return at most one row.
  *
  * `amountDue` is `total + correctionTotal` — the printed total netted against every rectificativa
@@ -764,17 +757,16 @@ async function fileImmediateSale(
  */
 async function readOutstandingSaleForOrder(
   tx: Transaction,
-  tenantId: TenantId,
   workingOrderId: string,
 ): Promise<{ saleId: SaleId; amountDue: Decimal } | undefined> {
   const [row] = await tx
     .select({
       id: sales.id,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id and c.tenant_id = ${tenantId}), 0)::numeric(12, 2)::text`,
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::numeric(12, 2)::text`,
     })
     .from(sales)
-    .where(and(eq(sales.tenantId, tenantId), eq(sales.workingOrderId, workingOrderId)));
+    .where(eq(sales.workingOrderId, workingOrderId));
   if (row === undefined) {
     return undefined;
   }
@@ -793,7 +785,7 @@ async function readOutstandingSaleForOrder(
  *
  *  - P1 (tx A). Lock/resolve the order, decide the price, and — for a WALK-UP — create it `open` and
  *    COMMIT, so the `working_orders` row exists before P2: the provider's `insertAttempting` carries a
- *    composite FK to `working_orders` (`payments_working_order_fk`, `packages/payments`), which an
+ *    FK to `working_orders` (`payments_working_order_fk`, `packages/payments`), which an
  *    uncommitted row would violate. An already-`settled` order REPLAYS its ticket here (files nothing);
  *    an `abandoned` (or any other non-`open`/`placed`) order is refused `working_order.not_open`; an
  *    empty WALK-UP basket is refused `sale.empty_basket`. A retrieved/placed order files its STORED
@@ -833,13 +825,13 @@ export async function payWorkingOrderIntegrated(
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A): resolve / replay / price; commit a walk-up order OPEN before the network call. ----
-  const prepared = await withTenant(deps.db, cfg.tenantId, async (tx) => {
+  const prepared = await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // Already settled → idempotent replay (a retry whose first response was lost). Files nothing.
@@ -873,7 +865,7 @@ export async function payWorkingOrderIntegrated(
       // invoice-first order already carries an unsettled `sales` row (ordering 2 files at pay, so its
       // non-settled order has none → `undefined`). Used both to route a live collect to a SETTLE and to
       // decide whether a lost-T2 recovery settles the existing invoice or files a fresh sale.
-      const outstanding = await readOutstandingSaleForOrder(tx, cfg.tenantId, req.id);
+      const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
       // §4 capture-idempotency pre-check. A captured (or offline-accepted) payment whose sale is not yet
       // filed (`sale_id` NULL) is the LOST-T2 RECOVERY WINDOW: `collect`'s T2 committed its capture but
@@ -882,7 +874,6 @@ export async function payWorkingOrderIntegrated(
       // filed and the order is therefore `settled`, so the replay above (step 2) has already returned —
       // this only fires on an `open`/`placed` order.
       const captured = await findCapturedPaymentForWorkingOrder(tx, {
-        tenantId: cfg.tenantId,
         provider: deps.provider.provider,
         workingOrderId: req.id,
       });
@@ -913,7 +904,7 @@ export async function payWorkingOrderIntegrated(
         zoneId: req.zoneId,
       }));
     } else {
-      priced = await priceStoredOrder(tx, cfg, req.id);
+      priced = await priceStoredOrder(tx, req.id);
     }
     // A `placed` order at this read is a genuine COUNTER COLLECT (the card is being tendered at the
     // collect stage of a prepared order) rather than a walk-up `open` → settle; `finalizeCapture`
@@ -947,7 +938,6 @@ export async function payWorkingOrderIntegrated(
   const baseAmount =
     prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.priced.total;
   const result = await deps.provider.collect({
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     workingOrderId: brandWorkingOrderId(req.id),
     amount: addDecimal(baseAmount, tip),
@@ -995,7 +985,7 @@ export async function payWorkingOrderIntegrated(
  * `recordSale` collides on that unique key and this replays the winner's settled ticket rather than
  * filing a second unrepairable record. The SEQUENTIAL retry never reaches here — P1's `for update` read
  * already saw the order `settled` and replayed there. Two concurrent captures are ALSO serialised one
- * level down, inside `recordSale` itself: `checkIntegrity` takes the (tenant, node) chain-head row lock
+ * level down, inside `recordSale` itself: `checkIntegrity` takes the NODE's chain-head row lock
  * as its first statement and holds it until commit (`packages/core/src/record-sale.ts:181-185`), so the
  * second caller cannot even start its own `checkIntegrity` until the first has fully committed — by
  * which point the first's `sales` row already exists, and the second's own insert (step 4, after the
@@ -1031,11 +1021,10 @@ async function finalizeCapture(
   }
   /* v8 ignore stop */
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tenantId: cfg.tenantId,
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
@@ -1065,7 +1054,6 @@ async function finalizeCapture(
         provider: result.provider,
         paymentRef: result.paymentRef,
         saleId,
-        tenantId: cfg.tenantId,
         ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
@@ -1091,7 +1079,7 @@ async function finalizeCapture(
           settledAt: settledAt.toISOString(),
           ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
         })
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
 
       // The card tender row (recordSale) and the captured payment row (associated just above) are
       // both committed on this tx, so the tender block reads them back; a card hands nothing back.
@@ -1128,7 +1116,7 @@ async function finalizeCapture(
     // its sale first, aborting this one. Replay the winner's settled ticket in a fresh transaction
     // (the unique violation fires only against a COMMITTED conflicting row, so it is readable now),
     // filing nothing.
-    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
@@ -1142,7 +1130,7 @@ async function finalizeCapture(
  * files the sale from the order's STORED locked lines — the SAME lines P1 would have priced, so
  * `priced.total` equals what `collect` charged when no tip was added (line-add snapshot, 7c) — and
  * associates THIS existing captured row, never a second `collect` (design Decision 2). All in ONE
- * `withTenant`/`asAppUser` transaction so the sale, its tender/settlement, its chained fiscal record,
+ * `withTransaction`/`asAppUser` transaction so the sale, its tender/settlement, its chained fiscal record,
  * the association and the `open`/`placed` → `settled` transition commit as one unit (or roll back
  * together).
  *
@@ -1170,7 +1158,7 @@ async function finalizeRecovery(
   captured: CapturedPaymentForOrder,
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
@@ -1178,7 +1166,7 @@ async function finalizeRecovery(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // A concurrent winner (another retry) filed the sale and settled the order while this one waited on
@@ -1192,7 +1180,7 @@ async function finalizeRecovery(
 
     // File from the STORED locked lines — the SAME `priceStoredOrder` reader P1 priced with, so
     // `priced.total` equals what `collect` charged (ex any tip). NOT a re-price of `req.lines`.
-    const priced = await priceStoredOrder(tx, cfg, req.id);
+    const priced = await priceStoredOrder(tx, req.id);
     const capturedAmount = decimal(captured.amount);
 
     // Corruption guard (Decision 2 / §5): the charge cannot cover the locked total → file nothing,
@@ -1218,7 +1206,6 @@ async function finalizeRecovery(
     const settledAt = new Date(captured.settledAt);
 
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       nodeId: cfg.nodeId,
       seriesId: cfg.seriesId,
@@ -1246,7 +1233,6 @@ async function finalizeRecovery(
       provider: deps.provider.provider,
       paymentRef: captured.paymentRef,
       saleId,
-      tenantId: cfg.tenantId,
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
@@ -1272,7 +1258,7 @@ async function finalizeRecovery(
         settledAt: settledAt.toISOString(),
         ...(locked?.status === "placed" ? { collectedAt: settledAt.toISOString() } : {}),
       })
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+      .where(eq(workingOrders.id, req.id));
 
     // The card tender row (recordSale) and the recovered captured payment (associated just above) are
     // both committed on this tx; read the tender block back. A card hands nothing back.
@@ -1319,12 +1305,7 @@ async function firePrepayOrder(
       doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, cfg.tenantId),
-        eq(workingOrderLines.workingOrderId, workingOrderId),
-      ),
-    )
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
 
   await fireLines(tx, cfg, workingOrderId, lines);
@@ -1369,14 +1350,13 @@ async function finalizeSettle(
   }
   /* v8 ignore stop */
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
       // Settle the EXISTING issued invoice — files no fiscal record. The tender records the whole card
       // charge (`amountDue + tip`) with the tip attributed on it (coverage identity above); `settleSale`
       // re-derives `due = total + corrections` itself and rejects a mismatch as `sale.tender_shortfall`.
       await settleSale(tx, {
-        tenantId: cfg.tenantId,
         saleId: outstanding.saleId,
         tenders: [
           {
@@ -1396,7 +1376,6 @@ async function finalizeSettle(
         provider: result.provider,
         paymentRef: result.paymentRef,
         saleId: outstanding.saleId,
-        tenantId: cfg.tenantId,
         ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
@@ -1412,7 +1391,7 @@ async function finalizeSettle(
           settledAt: settledAt.toISOString(),
           collectedAt: settledAt.toISOString(),
         })
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
 
       // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
       // `change` stays the "0.00" default.
@@ -1427,7 +1406,7 @@ async function finalizeSettle(
     if (!(error instanceof AppError) || error.code !== "sale.already_settled") {
       throw error;
     }
-    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
@@ -1466,7 +1445,7 @@ async function finalizeSettleRecovery(
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
 ): Promise<IntegratedPayOutcome> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
@@ -1474,7 +1453,7 @@ async function finalizeSettleRecovery(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // A concurrent winner settled the invoice and moved the order while this one waited on the lock →
@@ -1514,7 +1493,6 @@ async function finalizeSettleRecovery(
     // charge with the reconstructed tip attributed on it (coverage identity `charged = total +
     // corrections + Σtip`; `settleSale` re-derives `due` and rejects a mismatch).
     await settleSale(tx, {
-      tenantId: cfg.tenantId,
       saleId: outstanding.saleId,
       tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
     });
@@ -1525,7 +1503,6 @@ async function finalizeSettleRecovery(
       provider: deps.provider.provider,
       paymentRef: captured.paymentRef,
       saleId: outstanding.saleId,
-      tenantId: cfg.tenantId,
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
@@ -1540,7 +1517,7 @@ async function finalizeSettleRecovery(
         settledAt: settledAt.toISOString(),
         collectedAt: settledAt.toISOString(),
       })
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+      .where(eq(workingOrders.id, req.id));
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };
@@ -1577,7 +1554,7 @@ export function toPayOutcome(
 /**
  * Collect and finalise a PLACED order (prepare & collect, sub-project 7c) — the COLLECT half of the
  * mode dispatch, dispatching on the location's `order_flow` (design §3's state-machine table). All in
- * one `withTenant`/`asAppUser` transaction:
+ * one `withTransaction`/`asAppUser` transaction:
  *  - `invoice_first` (Mode I): the invoice was ALREADY issued (deferred) at placing, so collect
  *    SETTLES the existing sale (`settleSale`) and moves `placed → settled`. It files NO second fiscal
  *    record — a double-file would be an unrepairable defect (§5). A `card` tender ALSO writes the
@@ -1606,7 +1583,7 @@ export async function collectOrder(
   req: PayWorkingOrderRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Lock the order for the life of the tx and read its status off the locked copy. A concurrent
@@ -1614,7 +1591,7 @@ export async function collectOrder(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // Already settled → idempotent replay: a retry whose first response was lost, or the loser of a
@@ -1646,7 +1623,7 @@ export async function collectOrder(
       const [sale] = await tx
         .select({ id: sales.id, total: sales.total })
         .from(sales)
-        .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, req.id)));
+        .where(eq(sales.workingOrderId, req.id));
       /* v8 ignore start */
       if (sale === undefined) {
         // Structurally unreachable: an invoice-first order reaches `placed` only via `placeOrder`,
@@ -1660,7 +1637,6 @@ export async function collectOrder(
       const settledAt = deps.clock.now().instant;
 
       await settleSale(tx, {
-        tenantId: cfg.tenantId,
         saleId: brandSaleId(sale.id),
         tenders: [
           {
@@ -1684,7 +1660,6 @@ export async function collectOrder(
       // inline with the settlement.
       if (req.tender.method === "card") {
         const { provider, paymentRef } = await recordManualCardPayment(tx, {
-          tenantId: cfg.tenantId,
           workingOrderId: req.id,
           amount: decimal(sale.total),
           settledAt,
@@ -1694,7 +1669,6 @@ export async function collectOrder(
           provider,
           paymentRef,
           saleId: brandSaleId(sale.id),
-          tenantId: cfg.tenantId,
         });
       }
 
@@ -1712,7 +1686,7 @@ export async function collectOrder(
           settledAt: settledAt.toISOString(),
           collectedAt: settledAt.toISOString(),
         })
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
 
       // The just-settled invoice now carries its persisted payment facts.
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
@@ -1724,7 +1698,7 @@ export async function collectOrder(
     // order's stored locked lines and move placed → settled (the shared filing path). `markCollected`
     // = true stamps `collected_at` in that same settle UPDATE (this IS a collect), dropping the order
     // from its station queue; the fiscal filing itself is byte-identical to a walk-up's.
-    const priced = await priceStoredOrder(tx, cfg, req.id);
+    const priced = await priceStoredOrder(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId, true);
   });
 }

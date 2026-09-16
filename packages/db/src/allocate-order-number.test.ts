@@ -1,7 +1,7 @@
 // Real PostgreSQL checks competing order-number allocators on distinct backends.
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { allocateOrderNumber } from "./allocate-order-number.js";
 import type { Database } from "./client.js";
 import { locations, tenants } from "./schema/tenants.js";
@@ -9,33 +9,30 @@ import { describeEachTarget } from "./testing/harness.js";
 import { useTemplateDb } from "./testing/lifecycle.js";
 import { asAppUser } from "./testing/roles.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
-// One counter per (tenant, node). Two nodes of the SAME tenant give the
-// independence test a real second key without a second tenant — the property
-// the park path depends on is that one register's held-order numbering never
-// disturbs another's.
+// One counter per node. Two nodes give the independence test a real second
+// key — the property the park path depends on is that one register's
+// held-order numbering never disturbs another's.
 let nodeA1 = "";
 let nodeA2 = "";
 
 async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
-    .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     },
   ]);
-  nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeA2 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
+  nodeA2 = await seedNode(db, brandLocationId(LOCATION_A));
 }
 
 describeEachTarget("allocateOrderNumber", (target) => {
@@ -57,22 +54,22 @@ describeEachTarget("allocateOrderNumber", (target) => {
     if (db !== undefined) await db.close();
   });
 
-  it("allocates 1, then 2, for a (tenant, node)", async () => {
+  it("allocates 1, then 2, for a node", async () => {
     // Run under the non-owner app role so the INSERT and the ON CONFLICT UPDATE
     // both pass the counter's WITH CHECK and its SELECT/INSERT/UPDATE grants —
     // the allocator is the first writer of this table (Task 1's deferred Minor).
-    await withTenant(db, TENANT_A, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      expect(await allocateOrderNumber(tx, TENANT_A, nodeA1)).toBe(1);
-      expect(await allocateOrderNumber(tx, TENANT_A, nodeA1)).toBe(2);
+      expect(await allocateOrderNumber(tx, nodeA1)).toBe(1);
+      expect(await allocateOrderNumber(tx, nodeA1)).toBe(2);
     });
   });
 
-  it("numbers each (tenant, node) independently", async () => {
-    const a1 = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
-    const a2 = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
+  it("numbers each node independently", async () => {
+    const a1 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
+    const a2 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
     // nodeA2's counter is untouched by nodeA1's two allocations: it starts at 1.
-    const b1 = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA2));
+    const b1 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA2));
     expect([a1, a2, b1]).toEqual([1, 2, 1]);
   });
 
@@ -81,7 +78,7 @@ describeEachTarget("allocateOrderNumber", (target) => {
     // to bigint, or a RETURNING expression producing numeric, would render as a
     // string that compares == 1 but not toBe(1) and would reach order_number as
     // text — the same trap allocate-number.test.ts guards for invoice numbers.
-    const n = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
+    const n = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
     expect(typeof n).toBe("number");
   });
 });
@@ -99,26 +96,26 @@ describe("allocateOrderNumber under concurrency", () => {
 
   // The suite shares ONE cloned database (useTemplateDb does not reset between tests) and
   // working_order_counters cannot be truncated back — its FK chain to `tenants` cascades into
-  // append-only fiscal tables whose BEFORE TRUNCATE trigger blocks the wipe. So mint a FRESH tenant +
-  // node (seedTenant uses a fresh NIF and a fresh uuid), leaving the rows independent of any other
-  // test's — the same approach chain.concurrency.test.ts takes for the same reason.
-  async function freshTenantNode(admin: Database): Promise<{ tenantId: string; nodeId: string }> {
-    const tenantId = await seedTenant(admin);
+  // append-only fiscal tables whose BEFORE TRUNCATE trigger blocks the wipe. So mint a FRESH
+  // location + node, leaving the rows independent of any other test's — the same approach
+  // chain.concurrency.test.ts takes for the same reason. The taxpayer row is a singleton, so
+  // `seedTenant` only makes sure it is there.
+  async function freshTenantNode(admin: Database): Promise<{ nodeId: string }> {
+    await seedTenant(admin);
     const [location] = await admin
       .insert(locations)
       .values({
-        tenantId,
         name: "Fixture Location",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       })
       .returning({ id: locations.id });
-    const nodeId = await seedNode(admin, tenantId, brandLocationId(location!.id));
-    return { tenantId, nodeId };
+    const nodeId = await seedNode(admin, brandLocationId(location!.id));
+    return { nodeId };
   }
 
   it("hands out distinct numbers to concurrent allocators on distinct backends", async () => {
-    const { tenantId, nodeId } = await freshTenantNode(suite.admin);
+    const { nodeId } = await freshTenantNode(suite.admin);
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       // Load-bearing: distinct backend PROCESSES. On PGlite these collapse onto one and every
@@ -132,13 +129,13 @@ describe("allocateOrderNumber under concurrency", () => {
       );
       expect(new Set(pids).size).toBe(WRITERS);
 
-      // All WRITERS allocate the same (tenant, node) at once, each on its own backend, each as the
+      // All WRITERS allocate the same node's counter at once, each on its own backend, each as the
       // app role. A read-then-write allocator would hand the same number out twice here.
       const results = await Promise.all(
         dbs.map((db) =>
-          withTenant(db, tenantId, async (tx) => {
+          withTransaction(db, async (tx) => {
             await asAppUser(tx);
-            return allocateOrderNumber(tx, tenantId, nodeId);
+            return allocateOrderNumber(tx, nodeId);
           }),
         ),
       );

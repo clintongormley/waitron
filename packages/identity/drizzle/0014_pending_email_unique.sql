@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "persons_tenant_pending_email_uq" ON "persons" USING btree ("tenant_id",lower("pending_email")) WHERE "persons"."pending_email" is not null;

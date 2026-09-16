@@ -6,7 +6,6 @@ import {
   decimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -42,7 +41,6 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -74,13 +72,12 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
   it("chains the sale on an offline-accepted tender, then a forward-decline raises an incident without un-chaining it", async () => {
     const backend = new FakeFiscalBackend(pg.db);
     const s = await seedForSale(pg.db, backend, freshNif());
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
 
     // 1. Offline accept BEFORE the sale transaction (there is an acceptance step, unlike manual mode).
-    const provider = new FakePaymentProvider(pg.db, s.tenantId);
+    const provider = new FakePaymentProvider(pg.db);
     provider.offlineNextCollect();
     const paid = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
@@ -94,7 +91,6 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid.settledAt as Date));
       await associatePaymentWithSale(tx, {
-        tenantId: s.tenantId,
         provider: "fake",
         paymentRef: paid.paymentRef,
         saleId: recorded.saleId,
@@ -109,7 +105,7 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
 
     // The payment is declined; the SALE is untouched (immutable — same row, still present).
     const rows = await pg.db.execute<{ state: string; sale_id: string | null }>(sql`
-      select state, sale_id from payments where tenant_id = ${s.tenantId}`);
+      select state, sale_id from payments where working_order_id = ${s.workingOrderId}`);
     expect(rows.rows[0].state).toBe("declined");
     expect(rows.rows[0].sale_id).toBe(saleId);
     const sale = await pg.db.execute<{ id: string }>(

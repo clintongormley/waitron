@@ -40,8 +40,8 @@ absent and lets `@waitron/migrations` resolve each set from `packages/migrations
 | `status`   | the same admin connection; reads only                                 | any time            |
 | `venue`    | the migrator connection (role option) to a stamped, migrated database | once per venue      |
 
-`venue` creates a tenant, a location, a till, a node and its standard and rectificative invoice
-series, then runs each composed module's provisioning seed (the fiscal module's registers the node as
+`venue` creates the taxpayer row, a location, a till, a node and its standard and rectificative
+invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the node as
 a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql` (removed
 2026-08-04, spec [`2026-08-04-locations-provisioning-design.md`](../../docs/superpowers/specs/2026-08-04-locations-provisioning-design.md)).
 `register-till` (`apps/server`) remains the standalone path for an EXISTING node: it runs the same
@@ -201,8 +201,8 @@ It is also the tool to reach for after a failed `instance`: it names which roles
 
 ### `venue`
 
-Stands a sellable venue up in one transaction: a tenant, an **admin person**, a location, a till, a
-node, a standard plus a rectificative invoice series, and then every composed module's provisioning
+Stands a sellable venue up in one transaction: the taxpayer row (`tenants` holds exactly one), an
+**admin person**, a location, a till, a node, a standard plus a rectificative invoice series, and then every composed module's provisioning
 seed — the fiscal module's registers the node as a Veri\*Factu SIF and starts its chain. It replaced
 the retired `apps/server/sql/bootstrap-tenant.sql`.
 
@@ -235,7 +235,7 @@ authenticates that admin **by id** via `loginManagerById`, because it is a serve
 carrying the id rather than the dashboard form.
 
 It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
-confirmation (`--yes` skips it), applies, then prints the new `tenant` and `node` ids and one
+confirmation (`--yes` skips it), applies, then prints the new `node` id and one
 `seeded:` line per module seed that ran (the fiscal module's names its SIF id and installation
 number). The SIF's `id_sistema_informatico` is **not** an option — it is the `WAITRON_ID_SISTEMA`
 product constant (`W1`, owned by `packages/fiscal-verifactu`), which identifies Waitron's software,
@@ -249,7 +249,15 @@ opened. Before `planVenue` runs, the command reaches the fiscal regime's own ven
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and either series code outside AEAT's character set or longer than
 the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
-races a conflicting row is caught as `provisioning.venue_conflict`.
+races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
+taxpayer row names a different country or tax id is refused with `provisioning.foreign_tenant`, and
+refused BEFORE the plan is applied: `venue` reads the stored identity and calls the shared
+`assertNoForeignTenant` first (`cli.test.ts` pins that the apply is never reached). `planVenue`
+trims and upper-cases both values before that comparison, so a difference of letter case or
+surrounding space is the SAME taxpayer and the re-run is the no-op a re-provision should be.
+`provisioning.tenant_identity_mismatch` is a second, narrower refusal INSIDE `applyVenue`'s own
+transaction, for the case that pre-read cannot see: another run committing a different taxpayer
+between this run's read and its write.
 
 A worked invocation with the full option set is in
 [`apps/server/README.md`](../../apps/server/README.md#provisioning-a-venue).

@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { isUniqueViolation, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
@@ -27,8 +27,8 @@ import { recordIncident } from "./incidents.js";
  * permission, or a supervisor `override` (a second person's PIN) supplies it. `authorize` returns
  * the authorizing person, which is written to `sale_voids.voided_by` at insert. That column is on an
  * append-only table with no UPDATE grant, so the authorizer MUST be supplied here, at the append, and
- * can never be back-filled. `authorize` runs AFTER the sale-exists lookup (so a cross-tenant or
- * missing sale still returns `sale.not_found`, never an authz leak) and BEFORE any chain work, so a
+ * can never be back-filled. `authorize` runs AFTER the sale-exists lookup (so a missing sale
+ * still returns `sale.not_found`, never an authz leak) and BEFORE any chain work, so a
  * rejected void consumes none.
  */
 export async function recordVoid(
@@ -39,7 +39,7 @@ export async function recordVoid(
   authz: AuthzInput,
 ): Promise<{ fiscal: FiscalRecordRef }> {
   const [sale] = await tx
-    .select({ tenantId: sales.tenantId, tillId: sales.tillId, nodeId: sales.nodeId })
+    .select({ tillId: sales.tillId, nodeId: sales.nodeId })
     .from(sales)
     .where(eq(sales.id, saleId));
 
@@ -50,8 +50,8 @@ export async function recordVoid(
     throw new AppError("sale.not_found", { saleId });
   }
 
-  // The gate. Placed after the sale is confirmed to exist (so a cross-tenant or missing sale still
-  // returns sale.not_found above, not an authz leak) and before any chain work below, so a rejected
+  // The gate. Placed after the sale is confirmed to exist (so a missing sale still returns
+  // sale.not_found above, not an authz leak) and before any chain work below, so a rejected
   // void consumes none. `authorization.authorizedBy` is the person to record on the append.
   const authorization = await authorize(tx, {
     sessionId: authz.sessionId,
@@ -68,13 +68,9 @@ export async function recordVoid(
   // No clock-degradation incident here: unlike `recordSale`, `recordVoid` takes no `TrustedClock`
   // at all (its own `new Date()` a few lines down is not a `TrustedReading`), so there is no
   // `.warning` to forward.
-  const verification = await backend.checkIntegrity(
-    tx,
-    sale.tenantId as TenantId,
-    sale.nodeId as NodeId,
-  );
+  const verification = await backend.checkIntegrity(tx, sale.nodeId as NodeId);
   // ONE incident aggregating all of this call's issues, never one per issue — the table-wide
-  // `incidents_open_dedup` index holds at most one open incident per (tenant, till, code, sale), so
+  // `incidents_open_dedup` index holds at most one open incident per (till, code, sale), so
   // one row per issue (all sharing this sale + `chain.verification_failed`) would collapse to a
   // single row and drop every issue after the first. `params.issues` carries them all. Mirrors
   // `./record-sale.ts`'s identical aggregation.
@@ -106,7 +102,6 @@ export async function recordVoid(
 
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId: sale.tenantId as TenantId,
       tillId: sale.tillId as TillId,
       saleId,
       detectedAt: now,
@@ -121,7 +116,6 @@ export async function recordVoid(
   // at all — lock order stays chain-then-everything-else, matching `./record-sale.ts`.
   try {
     await tx.insert(saleVoids).values({
-      tenantId: sale.tenantId,
       saleId,
       reason,
       voidedAt: now.toISOString(),

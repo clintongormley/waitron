@@ -1,11 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { pgErrorCode, withTenant } from "@waitron/db";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { pgErrorCode, withTransaction } from "@waitron/db";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -39,7 +35,6 @@ const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 const backend = new WorkforceBackend();
 
-let tenantId: string;
 let personId: string;
 let otherPersonId: string;
 let locationId: string;
@@ -48,15 +43,15 @@ let nodeId: string;
 // A FRESH tenant per test: time_entries' block-truncate trigger makes the table un-wipeable even by
 // its owner (chain.concurrency.test.ts's reasoning), so each test mints new rows in a new tenant.
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.admin);
-  personId = await seedPerson(suite.admin, tenantId, "Ana");
-  otherPersonId = await seedPerson(suite.admin, tenantId, "Ben");
-  locationId = await seedLocation(suite.admin, tenantId);
-  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+  await seedTenant(suite.admin);
+  personId = await seedPerson(suite.admin, "Ana");
+  otherPersonId = await seedPerson(suite.admin, "Ben");
+  locationId = await seedLocation(suite.admin);
+  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
 });
 
 function event(at: string): ClockEventInput {
-  return { tenantId, nodeId, personId, locationId, at, offsetMinutes: 0 };
+  return { nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
 /** Classifies a racer's outcome for an `.toEqual` assertion: a domain rejection reports its AppError
@@ -75,7 +70,7 @@ function classify(error: unknown): string {
  * serialises. */
 async function attemptClockIn(db: Awaited<ReturnType<typeof suite.pg.connectAs>>, at: string) {
   try {
-    await withTenant(db, tenantId, (tx) => backend.clockIn(tx, event(at)));
+    await withTransaction(db, (tx) => backend.clockIn(tx, event(at)));
     return "ok";
   } catch (error) {
     return classify(error);
@@ -91,9 +86,8 @@ async function attemptCorrection(
   correctsEntryId: string,
 ) {
   try {
-    await withTenant(db, tenantId, (tx) =>
+    await withTransaction(db, (tx) =>
       backend.requestCorrection(tx, {
-        tenantId,
         nodeId,
         correctsEntryId,
         at: "2026-01-05T07:59:00Z",
@@ -113,7 +107,6 @@ async function attemptCorrection(
  * Runs as the superuser owner; this also creates the location chain head the holder locks below. */
 async function seedCompletedShift(): Promise<string> {
   await insertTimeEntry(suite.admin, {
-    tenantId,
     nodeId,
     personId,
     locationId,
@@ -121,7 +114,6 @@ async function seedCompletedShift(): Promise<string> {
     eventAt: "2026-01-05T08:00:00Z",
   });
   await insertTimeEntry(suite.admin, {
-    tenantId,
     nodeId,
     personId,
     locationId,
@@ -185,7 +177,6 @@ describe("clockIn serialises per person under real contention", () => {
     // Pre-create the location chain head via a DIFFERENT person, so there is a row for the holder to
     // lock while `personId`'s own live state stays "out" (currentState filters by person_id).
     await insertTimeEntry(suite.admin, {
-      tenantId,
       nodeId,
       personId: otherPersonId,
       locationId,
@@ -205,7 +196,7 @@ describe("clockIn serialises per person under real contention", () => {
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from workforce_chains where tenant_id = ${tenantId} and location_id = ${locationId} for update`,
+          sql`select 1 from workforce_chains where location_id = ${locationId} for update`,
         );
         acquire();
         await held;
@@ -263,7 +254,7 @@ describe("clockIn does not deadlock against a concurrent same-person correction"
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from workforce_chains where tenant_id = ${tenantId} and location_id = ${locationId} for update`,
+          sql`select 1 from workforce_chains where location_id = ${locationId} for update`,
         );
         acquire();
         await held;

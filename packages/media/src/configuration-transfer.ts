@@ -18,21 +18,14 @@ export function validateMediaConfiguration(
   if (images.length !== data.length) invalid();
   const remaining = new Map<string, Record<string, unknown>>();
   for (const row of data) {
-    if (typeof row.image_id !== "string" || typeof row.tenant_id !== "string") invalid();
-    const key = `${row.tenant_id}:${row.image_id}`;
-    if (remaining.has(key)) invalid();
-    remaining.set(key, row);
+    if (typeof row.image_id !== "string") invalid();
+    if (remaining.has(row.image_id)) invalid();
+    remaining.set(row.image_id, row);
   }
   const labels = new Map<string, string>();
   for (const image of images) {
-    if (
-      typeof image.id !== "string" ||
-      typeof image.tenant_id !== "string" ||
-      typeof image.filename !== "string"
-    )
-      invalid();
-    const key = `${image.tenant_id}:${image.id}`;
-    const row = remaining.get(key);
+    if (typeof image.id !== "string" || typeof image.filename !== "string") invalid();
+    const row = remaining.get(image.id);
     if (
       !row ||
       typeof row.bytes !== "string" ||
@@ -56,11 +49,12 @@ export function validateMediaConfiguration(
     )
       invalid();
     for (const label of metadata.labels) {
-      const key = `${image.tenant_id}:${label.toLowerCase()}`;
+      const key = label.toLowerCase();
       if (labels.has(key) && labels.get(key) !== label) invalid();
       labels.set(key, label);
     }
-    const config = tables.content_languages?.find((config) => config.tenant_id === image.tenant_id);
+    // One tenant per database, so a bundle holds at most one content-language row.
+    const config = tables.content_languages?.[0];
     if (typeof config?.default_language !== "string") invalid();
     const language = contentLanguageCode(config.default_language);
     if (
@@ -68,6 +62,6 @@ export function validateMediaConfiguration(
       resolveContentText(metadata.altText, language, language) === ""
     )
       invalid();
-    remaining.delete(key);
+    remaining.delete(image.id);
   }
 }

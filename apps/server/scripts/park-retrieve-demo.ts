@@ -21,7 +21,7 @@
 // PostgreSQL, because the whole point is to file genuine huella-chained, append-only
 // `registros_facturacion` rows AS THE APP ROLE — which PGlite's superuser-only connection cannot
 // prove. `applyVenue` and the extra till run as the connection OWNER (which those inserts need);
-// the park/list/retrieve/pay functions drop to `app_user` via `withTenant` + `asAppUser`
+// the park/list/retrieve/pay functions drop to `app_user` via `withTransaction` + `asAppUser`
 // internally, the same as the deployed host. `resolveClient` is supplied but never reached:
 // `recordSale` never contacts AEAT (that is `drain`'s job), so the stub below throws if it is
 // ever called.
@@ -45,7 +45,7 @@ import {
   asAppUser,
   createPostgresDb,
   runMigrations,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -62,7 +62,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../src/config.js";
@@ -156,7 +155,6 @@ async function main(): Promise<void> {
     // Caja 1 — the register the order is parked on. `seriesIds[0]` is the standard series (planVenue
     // emits it before the rectificative one).
     const caja1: TillConfig = {
-      tenantId: brandTenantId(venue.tenantId),
       tillId: brandTillId(venue.tillId),
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -173,10 +171,10 @@ async function main(): Promise<void> {
     // the owner (a till insert is a provisioning write). This is the register that retrieves and pays
     // the order Caja 1 parked, so the held list has to be shared across the two.
     const caja2TillId = randomUUID();
-    await withTenant(db, caja1.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await tx.execute(sql`
-        insert into tills (id, tenant_id, location_id, name)
-        values (${caja2TillId}, ${caja1.tenantId}, ${caja1.locationId}, 'Caja 2')`);
+        insert into tills (id, location_id, name)
+        values (${caja2TillId}, ${caja1.locationId}, 'Caja 2')`);
     });
     const caja2: TillConfig = { ...caja1, tillId: brandTillId(caja2TillId) };
 
@@ -184,12 +182,12 @@ async function main(): Promise<void> {
     // each-priced product, in two categories, assigned to the venue's location. Spanish names are fine
     // — apps/* is out of the english-only guard's scope. Read the sellable products back so the park /
     // sale requests carry real product ids (the till never invents one).
-    const available = await withTenant(db, caja1.tenantId, async (tx) => {
+    const available = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, caja1.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, caja1.tenantId, { name: { es: "Comida" } });
-      const bebidas = await createCategory(tx, caja1.tenantId, { name: { es: "Bebidas" } });
-      await createProduct(tx, caja1.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const comida = await createCategory(tx, { name: { es: "Comida" } });
+      const bebidas = await createCategory(tx, { name: { es: "Bebidas" } });
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Jamón cortado",
@@ -197,7 +195,7 @@ async function main(): Promise<void> {
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
       });
-      await createProduct(tx, caja1.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua mineral",
@@ -251,7 +249,7 @@ async function main(): Promise<void> {
     });
 
     // LIST on Caja 2: the OTHER register sees the order Caja 1 parked — the held list is venue-wide
-    // (tenant-scoped, till-reroute §3.6), not register-owned.
+    // (till-reroute §3.6), not register-owned.
     const heldOnCaja2 = await listHeldOrders({ db }, caja2);
 
     // RETRIEVE on Caja 2: rebuild the basket from the parked order's pricing inputs.
@@ -273,9 +271,7 @@ async function main(): Promise<void> {
     });
 
     // CONFIRM THE CHAIN: both sales on this node verify as one intact huella chain.
-    const integrity = await withTenant(db, caja1.tenantId, (tx) =>
-      backend.checkIntegrity(tx, caja1.tenantId, caja1.nodeId),
-    );
+    const integrity = await withTransaction(db, (tx) => backend.checkIntegrity(tx, caja1.nodeId));
 
     const describe = (productId: string | null): string =>
       productId === null

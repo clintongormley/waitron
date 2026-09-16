@@ -20,7 +20,7 @@ import {
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import {
   cloneTemplate,
@@ -72,11 +72,11 @@ import { DEV_DEVICE_HEADER } from "./device-session.js";
  * route to a real endpoint is AEAT's actual preproduction host — reachable from this sandbox, but
  * not something an automated suite should be dialling on every run. Module-mocking `undici`'s
  * `fetch` keeps the resulting SOAP POST from ever leaving this process; `Agent` is spread through
- * untouched, so `mtlsFetch` (aeat-transport.ts, unmodified) still constructs a genuine per-tenant
- * TLS connection pool for that test's `Agent.prototype.close` spy to observe. Confirmed this does
+ * untouched, so `mtlsFetch` (aeat-transport.ts, unmodified) still constructs a genuine TLS
+ * connection pool for that test's `Agent.prototype.close` spy to observe. Confirmed this does
  * not affect any OTHER test in this file: none of them seed a usable `fiscal.aeat` credential
- * (boot.ts's own comment on its `drain` closure), so `resolveClient` never reaches `mtlsFetch` for
- * any tenant but this one, and the plain global `fetch(...)` calls this file uses against its own
+ * (boot.ts's own comment on its `drain` closure), so `resolveClient` never reaches `mtlsFetch` in
+ * any of them, and the plain global `fetch(...)` calls this file uses against its own
  * local `/health` server resolve through Node's OWN built-in fetch, a separate module identity
  * from the `"undici"` npm package specifier this mock intercepts.
  */
@@ -129,7 +129,7 @@ beforeEach(() => {
  * `/health` come back `200`. The first test below additionally captures the real, hardcoded stdout
  * `boot.ts` logs to (deliberately not injectable — see its own doc comment) and asserts the logged
  * `loop.sleeping` line's `sleepMs`, which `sleepMsFor` derives from `maxTickMs` alone whenever
- * nothing is due — exactly this suite's own case, with zero tenants enrolled for either duty.
+ * nothing is due — exactly this suite's own case, with no due work seeded for either duty.
  *
  * `DATABASE_URL` is the deployment role, not the container's superuser default (`pg.connect()`'s
  * role): spec §10 states plainly that `DATABASE_URL` "must be the non-superuser deployment role".
@@ -159,7 +159,7 @@ const PROBE_PASSWORD = "probe";
 const RUNTIME_ROLE = "server_boot_runtime_probe";
 const RUNTIME_PASSWORD = "probe";
 // The till's fiscal identity. `loadConfig` resolves `config.till` OPTIONALLY via `tryLoadTillConfig`
-// (undefined when none of the five ids are set — setup mode, slice 1b); it is boot's TRADING branch
+// (undefined when none of the four ids are set — setup mode, slice 1b); it is boot's TRADING branch
 // that REQUIRES a venue, so every provisioned-boot test in this suite must carry these. Distinct per
 // field, matching till-config.test.ts's convention. Folded into `KEY_ENV` below so every trading boot
 // in this suite carries one; the two config-guard tests at the bottom, which omit `KEY_ENV` on purpose
@@ -170,7 +170,6 @@ const RUNTIME_PASSWORD = "probe";
 // (`readOrderFlow`/`readFilingModule`), so both rows must exist for a successful boot. No staff are
 // seeded, so `GET /api/staff` still returns `[]`.
 const TILL_ENV = {
-  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -212,7 +211,7 @@ const KEY_ENV = {
 // per-file `probeRole` + `beforeAll` role creation this suite used before the shared container; the
 // per-DATABASE grants `PROBE_ROLE` needs to re-run migrations are applied to this clone in the
 // `beforeAll` below (they cannot be cluster-wide — they name this database).
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let migrationsRoot: string;
 let databaseUrl: string;
@@ -267,22 +266,22 @@ beforeAll(async () => {
   // database.
   await suite.admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90000000K', 'Boot Till SL')`);
+    values (1, 'ES', '90000000K', 'Boot Till SL')`);
   await suite.admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Barra',
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Barra',
             array['es-ES'], 'Venta en establecimiento')`);
   // The till's own NODE, stamped with the regime provisioning would have recorded: `startServer`
   // reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it against the enabled
   // fiscal module, so the row must exist and must agree with `verifactu` or every successful-boot
   // test would fail there. The unstamped (null) node is covered in `till-config.filing.test.ts`.
   await suite.admin.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name, filing_module)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+    insert into nodes (id, location_id, name, filing_module)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till', 'verifactu')`);
   await suite.admin.execute(sql`
-    insert into tills (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+    insert into tills (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till')`);
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
@@ -555,14 +554,13 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 async function assertPassiveManagementReads(port: number): Promise<void> {
-  const tenantId = TILL_ENV.WAITRON_TILL_TENANT_ID;
   const person = await suite.admin.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role) values (${tenantId}, 'Passive read probe', ${hashPin("1234")}, 'manager') returning id`,
+    sql`insert into persons (display_name, pin_hash, role) values ('Passive read probe', ${hashPin("1234")}, 'manager') returning id`,
   );
   const personId = person.rows[0]!.id;
   try {
-    const session = await withTenant(suite.admin, tenantId, (tx) =>
-      startManagementSession(tx, { tenantId, personId }),
+    const session = await withTransaction(suite.admin, (tx) =>
+      startManagementSession(tx, { personId }),
     );
     const age = async (): Promise<string> =>
       (
@@ -627,7 +625,7 @@ describe("startServer, against a real container as the deployment role", () => {
         WAITRON_MIN_TICK_MS: "1000",
         WAITRON_MAX_TICK_MS: "94327",
         // Within [minTickMs, maxTickMs] only to satisfy `loadConfig`'s guard (F1 of the 2026-07-27
-        // pre-merge review) — zero tenants are enrolled for either duty below, so neither drain nor
+        // pre-merge review) — no due work is seeded for either duty below, so neither drain nor
         // reconcile ever reports a skip, and this value plays no part in `sleeping.sleepMs` below.
         WAITRON_SKIP_RETRY_MS: "9000",
         WAITRON_SETTLEMENT_LAG_MS: "1000",
@@ -758,7 +756,7 @@ describe("startServer, against a real container as the deployment role", () => {
   }, 60_000);
 
   it("boots in setup mode over HTTPS from a minted self-signed cert, serves /setup-api/status, refuses plain HTTP, and does not mount the trading routes", async () => {
-    // SETUP MODE (slice 1b): `config.till === undefined`, reached by omitting all five
+    // SETUP MODE (slice 1b): `config.till === undefined`, reached by omitting all four
     // WAITRON_TILL_*_ID AND the credentials key. The DB is still migrated (the shared prefix runs
     // applyMigrations in both modes, ready for slice 2's wizard), but boot mounts ONLY /health + the
     // unauthenticated setup surface — no key ring, no reconciler/duty, no readOrderFlow, no trading
@@ -976,7 +974,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // PRISTINE database (`template0`, no app objects), so each `__drizzle_migrations_<name>` table
     // exists and is populated ONLY because boot's `applyMigrations` created it.
     //
-    // Setup mode (all five WAITRON_TILL_*_ID omitted) reaches the SAME single seam trading mode does
+    // Setup mode (all four WAITRON_TILL_*_ID omitted) reaches the SAME single seam trading mode does
     // — `boot.ts`'s one `applyMigrations` runs in the shared prefix, before the mode branch — and it
     // needs no seeded venue (no `readOrderFlow`), so it is the mode that can boot a fresh database.
     // The deployment probe that runs BEFORE migrations reads `null` on an unstamped/unmigrated DB
@@ -1243,7 +1241,7 @@ describe("startServer, against a real container as the deployment role", () => {
 
   it("setup mode serves the built setup wizard at / end-to-end when WAITRON_SETUP_APP_DIR is configured", async () => {
     // The end-to-end proof that `config.setupAppDir` threads config → boot's SETUP branch → `mountSetup`
-    // → `mountSpa`: a real `startServer` boot in setup mode (all five WAITRON_TILL_*_ID omitted) with
+    // → `mountSpa`: a real `startServer` boot in setup mode (all four WAITRON_TILL_*_ID omitted) with
     // WAITRON_SETUP_APP_DIR pointed at a marked throwaway dir. `GET /` must return that marker (the built
     // wizard), NOT the inline placeholder shell — the setup-mode analogue of the till/dashboard
     // end-to-end SPA test below. This is the missing wire-up proof: the other setup tests are a
@@ -1532,14 +1530,13 @@ describe("startServer, against a real container as the deployment role", () => {
             body: JSON.stringify(body),
           });
           expect(response.status).toBe(200);
-          const json = (await response.json()) as { provisioned: boolean; tenantId: string };
+          const json = (await response.json()) as { provisioned: boolean };
           expect(json.provisioned).toBe(true);
 
-          // `trading.env` was written with the five till ids + `WAITRON_ENV` + `DATABASE_URL`, so the
+          // `trading.env` was written with the four till ids + `WAITRON_ENV` + `DATABASE_URL`, so the
           // next boot enters trading mode. Parsed (not substring-matched) so a missing key really fails.
           const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
           for (const key of [
-            "WAITRON_TILL_TENANT_ID",
             "WAITRON_TILL_TILL_ID",
             "WAITRON_TILL_NODE_ID",
             "WAITRON_TILL_SERIES_ID",
@@ -1549,8 +1546,6 @@ describe("startServer, against a real container as the deployment role", () => {
           }
           expect(trading.WAITRON_ENV).toBe("preproduction");
           expect(trading.DATABASE_URL).toBe(pg.uri);
-          // The tenant id the endpoint returned is the one persisted for the trading boot.
-          expect(trading.WAITRON_TILL_TENANT_ID).toBe(json.tenantId);
 
           // The DB is now stamped preproduction and holds exactly one venue (one tenant, one
           // node/SIF). `check` is the clone's superuser connection, used for the count
@@ -1568,9 +1563,9 @@ describe("startServer, against a real container as the deployment role", () => {
           // Slice 4: the provision path established the primary node's membership identity — a keypair
           // was generated, the private half sealed, and the public half stamped on `nodes.public_key`
           // — so the freshly-minted node is the venue's SOLE trust anchor. `readMembershipTrustSet`
-          // scopes by `tenant_id`, so it returns exactly this venue's one keyed node. RED before boot
+          // returns every keyed node, which here is exactly that one. RED before boot
           // wires `establishIdentity`: `public_key` is null and the trust set is empty.
-          const trust = await readMembershipTrustSet(check, json.tenantId);
+          const trust = await readMembershipTrustSet(check);
           expect(Object.keys(trust)).toHaveLength(1);
           expect(Object.values(trust)[0]).toMatch(/.+/);
 
@@ -1748,21 +1743,24 @@ describe("startServer, against a real container as the deployment role", () => {
             body: JSON.stringify(body),
           });
           expect(response.status).toBe(200);
-          const json = (await response.json()) as { provisioned: boolean; tenantId: string };
+          const json = (await response.json()) as { provisioned: boolean };
           expect(json.provisioned).toBe(true);
 
           // The live fork stamped PRODUCTION (mode-derived, not the box's preproduction boot
           // env). `check` is the clone's superuser connection, used for both observations.
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
-          // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned — the real
-          // provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`) ran end-to-end.
-          const sealed = await check.execute<{ n: number; tenant: string }>(
-            sql`select count(*)::int as n, max(tenant_id::text) as tenant
-                from tenant_credentials where purpose = 'fiscal.aeat'`,
+          // Exactly one `fiscal.aeat` credential was sealed, in the database holding the tenant just
+          // provisioned — the real provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`)
+          // ran end-to-end.
+          const sealed = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(1);
-          expect(sealed.rows[0]!.tenant).toBe(json.tenantId);
+          const provisioned = await check.execute<{ id: string }>(
+            sql`select id::text as id from tenants`,
+          );
+          expect(provisioned.rows).toEqual([{ id: "1" }]);
 
           // The restart fires once after the seal + persist, as for the plain demo above.
           await poll(() => (kills.length > 0 ? kills.length : undefined));
@@ -1781,7 +1779,7 @@ describe("startServer, against a real container as the deployment role", () => {
   }, 60_000);
 
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {
-    // The regression guard for the branch: a provisioned box (all five WAITRON_TILL_*_ID + a
+    // The regression guard for the branch: a provisioned box (all four WAITRON_TILL_*_ID + a
     // credentials key, via KEY_ENV) runs today's exact trading flow — the till API is mounted — and the
     // setup routes are NOT mounted (so /setup-api/status is a bare 404, never the setup fact sheet).
     // This is the prove-by-deletion target: forcing `config.till` always-undefined takes the setup
@@ -2121,24 +2119,19 @@ describe("startServer, against a real container as the deployment role", () => {
 
     try {
       const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      const imageName = await withTenant(
-        suite.admin,
-        TILL_ENV.WAITRON_TILL_TENANT_ID,
-        async (tx) => {
-          const result = await uploadImage(
-            tx,
-            TILL_ENV.WAITRON_TILL_TENANT_ID,
-            {
-              bytes: imageBytes,
-              names: { en: "Bread", es: "Pan" },
-              altText: { en: "A loaf", es: "Una hogaza" },
-              labels: [],
-            },
-            { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: "es" },
-          );
-          return result.image.filename;
-        },
-      );
+      const imageName = await withTransaction(suite.admin, async (tx) => {
+        const result = await uploadImage(
+          tx,
+          {
+            bytes: imageBytes,
+            names: { en: "Bread", es: "Pan" },
+            altText: { en: "A loaf", es: "Una hogaza" },
+            labels: [],
+          },
+          { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: "es" },
+        );
+        return result.image.filename;
+      });
       const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
       expect(image.status).toBe(200);
       expect(image.headers.get("content-type")).toBe("image/png");
@@ -2192,7 +2185,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       await waitForPass(server.health);
       // The pool itself is on `RUNTIME_ROLE`: a pass that reached `ok` proves the duty work (reading
-      // `credential_tenants`/`envios_tenants_with_work` through their SECURITY DEFINER seams, and
+      // `credential_tenants`/`envios_work_due` through their SECURITY DEFINER seams, and
       // `runDue`'s own `scheduled_runs` reads) also succeeds under `app_user` membership alone, with
       // none of `PROBE_ROLE`'s extra migration-only grants.
       expect(
@@ -2307,7 +2300,8 @@ describe("startServer, against a real container as the deployment role", () => {
   // and nothing proves this branch's headline behaviour end to end. `boot.ts` passes
   // `skipRetryMs: config.skipRetryMs` to both `drain` and `runDue` — `tsc` only pins that the
   // field is PRESENT, `config.test.ts` pins parsing, and the fold unit tests
-  // (`drain.fold.test.ts`, `run.test.ts`) pin behaviour GIVEN a value. None of them would notice
+  // (`drain.test.ts`'s "nextDueAt is folded as a minimum, never assigned" block, `run.test.ts`) pin
+  // behaviour GIVEN a value. None of them would notice
   // `skipRetryMs: config.minTickMs` at either call site: 13/13 typecheck, every unit test and 100%
   // coverage would all stay green while silently reintroducing the exact 5-second spin this branch
   // exists to remove. This test seeds a real, due `envios` row for a tenant with no `fiscal.aeat`
@@ -2336,7 +2330,6 @@ describe("startServer, against a real container as the deployment role", () => {
     const seeded = await seedPendingEnvios(suite.admin, {
       count: 1,
       identity: {
-        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
         tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         nif: "90000000K",
@@ -2372,7 +2365,6 @@ describe("startServer, against a real container as the deployment role", () => {
         // Proof #1: the seeded tenant really was skipped for a missing credential, not silently
         // dropped some other way — a passing `sleepMs` assertion below would prove nothing about
         // THIS branch's behaviour if the tenant were never enumerated at all.
-        expect(skipped.tenantId).toBe(seeded.tenantId);
         expect(skipped.errorCode).toBe("credentials.missing");
 
         // THE assertion. `config.skipRetryMs` reached `drain` via `boot.ts`'s `drain` closure and
@@ -2394,13 +2386,11 @@ describe("startServer, against a real container as the deployment role", () => {
         await server.close();
       }
     } finally {
-      // The ONLY row that makes this tenant perpetually due: `envios_tenants_with_work`
-      // (drain.ts) reads `envios`, not `tenants`/`tills`/`registros_facturacion`/`sales`/
-      // `registro_sif`, so deleting just this is what stops the tenant from being enumerated
-      // again — and it sidesteps the FK-ordered teardown a full tenant delete would need
-      // (`registros_facturacion`/`sales`/`invoice_series` all reference `tenants` with
-      // `onDelete: "restrict"`). Runs regardless of how the block above finishes, so a failed
-      // assertion still leaves the container clean for whatever test runs next.
+      // The ONLY row that keeps this database perpetually due: `envios_work_due` (drain.ts) reads
+      // `envios`, not `tenants`/`tills`/`registros_facturacion`/`sales`/`registro_sif`, so deleting
+      // just this is what stops the drain from finding work again. Runs regardless of how the block
+      // above finishes, so a failed assertion still leaves the container clean for whatever test
+      // runs next.
       await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
@@ -2408,9 +2398,9 @@ describe("startServer, against a real container as the deployment role", () => {
   // F4 (2026-07-27 fix wave): `boot.ts`'s `drain` closure builds a fresh `aeatClientResolver`
   // every pass and releases it via `finally { await resolver.closeAll() }` — the fix this whole
   // branch exists to land, and the one line of it with no test at all before this one. Every OTHER
-  // test in this describe block either enrols no tenant for `fiscal.drain`, or (the test just
-  // above) enrols one with due work but NO usable `fiscal.aeat` credential — in both cases
-  // `resolveClient` never reaches `mtlsFetch`, so no real per-tenant `Agent` is ever built for
+  // test in this describe block either seeds no due `fiscal.drain` work at all, or (the test just
+  // above) seeds due work with NO usable `fiscal.aeat` credential — in both cases
+  // `resolveClient` never reaches `mtlsFetch`, so no real `Agent` is ever built for
   // `closeAll` to release. This seeds BOTH: due `envios` work (`seedPendingEnvios`, as above) AND
   // a usable credential, reusing `aeat-transport.test.ts`'s own TLS/PKCS#12 fixture
   // (`mintMtlsMaterial`) rather than inventing a new one — so `resolveClient` succeeds and a
@@ -2422,7 +2412,6 @@ describe("startServer, against a real container as the deployment role", () => {
     const seeded = await seedPendingEnvios(suite.admin, {
       count: 1,
       identity: {
-        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
         tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         nif: "90000000K",
@@ -2432,9 +2421,8 @@ describe("startServer, against a real container as the deployment role", () => {
     // Same shape as `aeat-transport.test.ts`'s own `provision(certKind)` helper, against the
     // TENANT `seedPendingEnvios` just seeded rather than a fresh one of its own — this test needs
     // ONE tenant carrying both due work and a usable credential, not two separate tenants.
-    await withTenant(suite.admin, seeded.tenantId, (tx) =>
+    await withTransaction(suite.admin, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
-        tenantId: seeded.tenantId,
         purpose: "fiscal.aeat",
         value: {
           pfxBase64: material.clientPfx.toString("base64"),
@@ -2461,11 +2449,11 @@ describe("startServer, against a real container as the deployment role", () => {
         // `"preproduction"`, the seeded row's `entorno` disagrees, and `claimBatch`'s
         // deployment-environment guard refuses it before `resolveClient` (and hence `mtlsFetch`)
         // is ever reached FOR THAT ROW. This test's assertion happened to still pass either way —
-        // `resolveClient` is called once per tenant with ANY due work, ahead of and regardless of
-        // that per-row check (`drain`'s own top-level loop) — but a passing assertion for the
+        // `resolveClient` is called once per PASS that has any due work at all, ahead of and
+        // regardless of that per-row check (`packages/fiscal-verifactu/src/drain.ts:181-187`) — but a passing assertion for the
         // wrong reason is not what this test claims to cover. Set explicitly so the scenario
         // actually exercised is "a real submission attempt", not "a refused row that happens to
-        // share a tenant with a resolved transport".
+        // share a pass with a resolved transport".
         WAITRON_ENV: "production",
       });
       try {
@@ -2476,10 +2464,10 @@ describe("startServer, against a real container as the deployment role", () => {
       }
     } finally {
       closeSpy.mockRestore();
-      // Same reasoning as the skip-retry test above: only the `envios` row makes this tenant
+      // Same reasoning as the skip-retry test above: only the `envios` row keeps the database
       // perpetually due, so deleting it is enough to keep this test order-independent. The
-      // `tenant_credentials` row this test also inserted is not read by `envios_tenants_with_work`
-      // and is left in place, matching every other tenant/credential this file's suite seeds.
+      // `tenant_credentials` row this test also inserted is not read by `envios_work_due` and is
+      // left in place, matching every other credential this file's suite seeds.
       //
       // `incidents` also needs cleanup here, unlike the skip-retry test above: with `WAITRON_ENV`
       // now agreeing with the seeded `entorno`, the mocked `undici` fetch (this file's own header
@@ -2488,7 +2476,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // rather than assumed absent, so a future change to that failure path does not silently
       // leave a row behind for a LATER test in this shared-container suite to trip over.
       await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
-      await suite.admin.execute(sql`delete from incidents where tenant_id = ${seeded.tenantId}`);
+      await suite.admin.execute(sql`delete from incidents `);
     }
   }, 60_000);
 
@@ -2595,7 +2583,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   // (which reconstructs a NARROW `{ db, cfg }` for `requireDevice`) must forward `devMode` so the
   // `x-waitron-dev-device` override header is honoured. The security invariant is the fail-closed
   // half: a NON-dev boot (`WAITRON_ENV=preproduction`) must IGNORE the header entirely — proven at
-  // the HTTP layer, not reasoned about. Both boots are TRADING mode (all five WAITRON_TILL_*_ID via
+  // the HTTP layer, not reasoned about. Both boots are TRADING mode (all four WAITRON_TILL_*_ID via
   // KEY_ENV), so `mountDeviceApi` is mounted; only `WAITRON_ENV` differs between them.
   //
   // Two devices are enrolled (bound to two DIFFERENT tills) so the assertion proves the header
@@ -2610,13 +2598,13 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   beforeAll(async () => {
     const cfg: TillConfig = { ...loadTillConfig(TILL_ENV), orderFlow: "prepay" };
-    // Two `tills` rows in this till's own tenant/location, inserted as the container superuser
-    // (exactly as the tenant/location seed above). The (tenant_id, till_id) composite FK on
-    // `devices` (MATCH SIMPLE, both columns non-null here) requires a real row per bound device.
+    // Two `tills` rows in this till's own location, inserted as the container superuser
+    // (exactly as the location seed above). The (till_id) FK on
+    // `devices` requires a real row per bound device.
     const insertTill = async (name: string): Promise<string> => {
       const res = await suite.admin.execute<{ id: string }>(sql`
-        insert into tills (tenant_id, location_id, name)
-        values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${name})
+        insert into tills (location_id, name)
+        values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${name})
         returning id`);
       return res.rows[0]!.id;
     };
@@ -2630,8 +2618,8 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       // is the sale-capable handheld leg (`registerId`). The dev-override read below only cares that the
       // device resolves to its own bound till, which a handheld carries.
       const { rows } = await suite.admin.execute<{ id: string }>(sql`
-          insert into device_profiles (tenant_id, name, form_factor)
-          values (${cfg.tenantId}, ${`Override device ${boundTillId}`}, 'phone-portrait') returning id`);
+          insert into device_profiles (name, form_factor)
+          values (${`Override device ${boundTillId}`}, 'phone-portrait') returning id`);
       const dev = await enrolDeviceForTest(suite.admin, cfg, {
         name: "SP-C dev override device",
         profileId: rows[0]!.id,

@@ -1,10 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { listHandledIncidents, listOpenIncidents, type TenantIncident } from "@waitron/core";
 import { persons } from "@waitron/identity";
 import type { Alert, AlertEventClaim, AlertSource } from "@waitron/module";
 import { codeOf, type Logger } from "@waitron/server-kit";
-import type { TenantId } from "@waitron/shared";
 import "./errors.js";
 
 /** Where an incident whose code no area claims is shown, so a new code is never recorded and then
@@ -57,7 +56,6 @@ export function incidentKey(id: string): string {
 
 export interface AlertReadDeps {
   registry: AlertRegistry;
-  tenantId: TenantId;
   now: Date;
   log: Logger;
 }
@@ -95,7 +93,7 @@ export async function readOpenAlerts(
   held: ReadonlySet<string>,
 ): Promise<Alert[]> {
   const alerts: Alert[] = [];
-  for (const incident of await listOpenIncidents(tx, deps.tenantId)) {
+  for (const incident of await listOpenIncidents(tx)) {
     const claim = claimFor(deps.registry, incident.code);
     if (held.has(claim.permission)) alerts.push(eventAlert(incident, claim));
   }
@@ -106,9 +104,7 @@ export async function readOpenAlerts(
     try {
       // A savepoint per source: a failed query aborts only this source's work, not the transaction
       // every later source reads on.
-      const found = await tx.transaction((sp) =>
-        source.read({ tx: sp, tenantId: deps.tenantId, now: deps.now }),
-      );
+      const found = await tx.transaction((sp) => source.read({ tx: sp, now: deps.now }));
       for (const alert of found) alerts.push({ ...alert, kind: "ongoing", area: source.area });
     } catch (error) {
       deps.log("error", "alert.source_unavailable", {
@@ -137,7 +133,7 @@ export async function readHandledAlerts(
   held: ReadonlySet<string>,
 ): Promise<Alert[]> {
   const since = new Date(deps.now.getTime() - HANDLED_WINDOW_MS);
-  const visible = (await listHandledIncidents(tx, deps.tenantId, since)).flatMap((incident) => {
+  const visible = (await listHandledIncidents(tx, since)).flatMap((incident) => {
     const claim = claimFor(deps.registry, incident.code);
     return held.has(claim.permission) ? [{ incident, claim }] : [];
   });
@@ -147,7 +143,7 @@ export async function readHandledAlerts(
     const rows = await tx
       .select({ id: persons.id, displayName: persons.displayName })
       .from(persons)
-      .where(and(eq(persons.tenantId, deps.tenantId), inArray(persons.id, ids)));
+      .where(inArray(persons.id, ids));
     for (const row of rows) names.set(row.id, row.displayName);
   }
   return visible.map(({ incident, claim }) => ({

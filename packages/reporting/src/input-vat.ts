@@ -1,13 +1,12 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import { periodDateFilter, validatePeriod, type LiquidationPeriod } from "./period.js";
 import type { InputVatRateLine, InputVatReturn, PurchaseVatKind } from "./types.js";
 
+/** The obligado is the database's one taxpayer, so this aggregates ALL nodes of the legal entity with
+ * no node predicate, like the output side — it takes only the period to report on. */
 export interface InputVatInput {
-  /** The obligado — aggregates ALL nodes of the legal entity (no node predicate), like the output side. */
-  tenantId: TenantId;
   /** Civil calendar year of the liquidation period. */
   year: number;
   /** The liquidation period (month/quarter/year); the deduction window over `received_on`. */
@@ -30,8 +29,8 @@ const KIND_ORDER: Record<PurchaseVatKind, number> = { ordinary: 0, capital: 1 };
  * deductible_proportion/100)` — rounded PER invoice line, then summed, never re-rounded on the monthly
  * base. That is the same "sum the filed per-invoice cuotas, never `round(Σ base × rate)`" exactness
  * rule the output side follows (#76/#66); with the default proportion 100 it collapses to `Σ` of the
- * filed cuotas verbatim. The explicit `p.tenant_id` predicate scopes the query to the requested
- * tenant across all its nodes (mirrors `aggregateVatByRate`).
+ * filed cuotas verbatim. It spans every node in the database: one tenant per database, so no tenant
+ * predicate is needed (mirrors `aggregateVatByRate`).
  *
  * The result carries every (rate, kind) line UNFILTERED — the casilla 28/29 (corrientes) vs 30/31
  * (bienes de inversión) split is applied DOWNSTREAM in `mapModelo303`, which sums `deductible.byRate`
@@ -64,8 +63,7 @@ export async function computeInputVat(
       sum(round(v.tax * p.deductible_proportion / 100, 2))::numeric(12, 2)::text as tax
     from purchase_invoice_vat v
     join purchase_invoices p on p.id = v.purchase_invoice_id
-    where p.tenant_id = ${input.tenantId}
-      and p.regime = 'general'
+    where p.regime = 'general'
       and ${dateFilter}
     group by (v.rate)::numeric(5, 2)::text, v.kind
   `);
@@ -90,7 +88,6 @@ export async function computeInputVat(
   }
 
   return {
-    tenantId: input.tenantId,
     year: input.year,
     period: input.period,
     byRate: lines,

@@ -42,7 +42,6 @@ export interface PreparedVenue {
 export async function buildConfigurationBundle(
   db: Database | Transaction,
   source: {
-    tenantId: string;
     locationId: string;
     tillId: string;
     nodeId: string;
@@ -75,11 +74,10 @@ export async function buildConfigurationBundle(
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
     from tenants t
-    join locations l on l.tenant_id = t.id and l.id = ${source.locationId}
-    join tills till on till.tenant_id = t.id and till.id = ${source.tillId}
-    join nodes n on n.tenant_id = t.id and n.id = ${source.nodeId}
-    join invoice_series s on s.tenant_id = t.id and s.node_id = n.id and s.retired_at is null
-    where t.id = ${source.tenantId}
+    join locations l on l.id = ${source.locationId}
+    join tills till on till.id = ${source.tillId}
+    join nodes n on n.id = ${source.nodeId}
+    join invoice_series s on s.node_id = n.id and s.retired_at is null
     group by t.id, l.id, till.id
   `);
   const row = venue.rows[0];
@@ -88,11 +86,10 @@ export async function buildConfigurationBundle(
   }
   const { country, taxId, legalName, tillName, seriesCode, rectificativeSeriesCode, ...location } =
     row;
-  const transferred = await exportConfigurationTables(db, source.tenantId, modules);
+  const transferred = await exportConfigurationTables(db, modules);
   return {
     version: 1,
     createdAt: now.toISOString(),
-    sourceTenantId: source.tenantId,
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
       country,
@@ -110,7 +107,7 @@ export async function buildConfigurationBundle(
 
 export async function applyPreparedLocation(
   tx: Transaction,
-  target: { tenantId: string; locationId: string },
+  target: { locationId: string },
   location: PreparedVenue["location"],
 ): Promise<void> {
   const invoiceLocales = sql`array[${sql.join(
@@ -127,14 +124,13 @@ export async function applyPreparedLocation(
       receipt_print_mode = ${location.receiptPrintMode},
       drawer_open_policy = ${location.drawerOpenPolicy},
       catalogue_id = ${location.catalogueId}
-    where tenant_id = ${target.tenantId} and id = ${target.locationId}
+    where id = ${target.locationId}
   `);
 }
 
 export interface ConfigurationBundle {
   version: 1;
   createdAt: string;
-  sourceTenantId: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
   modules: Record<string, number>;
@@ -181,10 +177,9 @@ function declarations(modules: readonly WaitronModule[]): ConfigurationTransferT
   return ordered;
 }
 
-/** Read only explicitly declared, tenant-scoped configuration rows from one consistent transaction. */
+/** Read every row of the explicitly declared configuration tables (one tenant per database). */
 export async function exportConfigurationTables(
   db: Database | Transaction,
-  tenantId: string,
   modules: readonly WaitronModule[],
 ): Promise<{ tables: ConfigurationBundle["tables"]; reconnect: string[] }> {
   const tables: ConfigurationBundle["tables"] = {};
@@ -193,7 +188,6 @@ export async function exportConfigurationTables(
     const result = await db.execute<{ row: Record<string, unknown> }>(sql`
       select to_jsonb(t) as row
       from ${sql.identifier(declaration.name)} t
-      where t.tenant_id = ${tenantId}
     `);
     if (result.rows.length > MAX_ROWS_PER_TABLE) {
       throw new AppError("setup.request_invalid", { field: `table:${declaration.name}` });
@@ -231,7 +225,6 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (
     typeof value.createdAt !== "string" ||
     Number.isNaN(Date.parse(value.createdAt)) ||
-    typeof value.sourceTenantId !== "string" ||
     typeof value.sourceOperatorId !== "string" ||
     !isRecord(venue) ||
     !isRecord(location) ||
@@ -351,7 +344,7 @@ export function validateConfigurationBundle(
 export async function importConfigurationTables(
   tx: Transaction,
   bundle: ConfigurationBundle,
-  target: { tenantId: string; locationId: string },
+  target: { locationId: string },
   modules: readonly WaitronModule[],
   targetVersions: Readonly<Record<string, number>>,
 ): Promise<void> {
@@ -384,18 +377,18 @@ export async function importConfigurationTables(
   // remapped source default is restored by applyPreparedLocation after the rows are inserted.
   await tx.execute(sql`
     update locations set catalogue_id = null
-    where tenant_id = ${target.tenantId} and id = ${target.locationId}
+    where id = ${target.locationId}
   `);
 
   for (const [declaration] of [...checked].reverse()) {
     if (declaration.name === "persons") {
       await tx.execute(sql`
         delete from ${sql.identifier(declaration.name)}
-        where tenant_id = ${target.tenantId} and role <> 'admin'
+        where role <> 'admin'
       `);
     } else {
       await tx.execute(sql`
-        delete from ${sql.identifier(declaration.name)} where tenant_id = ${target.tenantId}
+        delete from ${sql.identifier(declaration.name)}
       `);
     }
   }
@@ -403,10 +396,7 @@ export async function importConfigurationTables(
   const sourceOperatorIds = new Set(
     bundle.sourceOperatorId === "" ? [] : [bundle.sourceOperatorId],
   );
-  const idMap = new Map<string, string>([
-    [bundle.sourceTenantId, target.tenantId],
-    [bundle.venue.location.id, target.locationId],
-  ]);
+  const idMap = new Map<string, string>([[bundle.venue.location.id, target.locationId]]);
   for (const [, rows] of checked) {
     for (const row of rows) {
       if (typeof row.id === "string") idMap.set(row.id, randomUUID());
@@ -416,7 +406,7 @@ export async function importConfigurationTables(
     for (const source of rows) {
       if (declaration.name === "persons" && source.id === bundle.sourceOperatorId) continue;
       if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
-      const row: Record<string, unknown> = { ...source, tenant_id: target.tenantId };
+      const row: Record<string, unknown> = { ...source };
       for (const [field, value] of Object.entries(row)) {
         if (typeof value === "string" && idMap.has(value)) row[field] = idMap.get(value)!;
       }

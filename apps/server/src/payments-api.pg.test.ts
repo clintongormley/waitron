@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
@@ -12,7 +12,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -25,7 +24,7 @@ import "./errors.js";
 // Real Postgres (a manifest template clone), NOT PGlite — mandatory for THIS surface (CLAUDE.md §4).
 // These routes read and write as `app_user` (the credential vault put/delete, the card_readers +
 // device_card_readers writes, the payments.manage gate proven by DELETION), and the properties this
-// suite is FOR — the table grants, the by-id tenant isolation, the gate — are exactly what PGlite's
+// suite is FOR — the table grants and the gate — are exactly what PGlite's
 // all-superuser connection false-passes.
 const noopLog: Logger = () => {};
 
@@ -55,7 +54,6 @@ function nextName(prefix: string): string {
 }
 
 interface Venue {
-  tenantId: string;
   locationId: string;
   managerCookie: string;
   staffCookie: string;
@@ -64,31 +62,28 @@ interface Venue {
 /** A fresh tenant + location + a manager and a staff person, each with a management session. Each
  * test seeds its OWN venue so reader/credential counts are order-independent across the shared clone. */
 async function seedVenue(): Promise<Venue> {
-  const tenantId = randomUUID();
   await suite.admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${tenantId}, 'ES', ${nextNif()}, 'Deli Test SL')`);
+    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
   const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
-  const { managerSid, staffSid } = await withTenant(suite.admin, tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId,
       personId: mgr.rows[0]!.id,
     });
-    const staffSession = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf.rows[0]!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
   return {
-    tenantId,
     locationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
@@ -100,14 +95,14 @@ async function seedVenue(): Promise<Venue> {
  * device_binding_rule trigger. */
 async function seedDevice(venue: Venue): Promise<string> {
   const profile = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor)
-    values (${venue.tenantId}, ${nextName("Perfil caja")}, 'till') returning id`);
+    insert into device_profiles (name, form_factor)
+    values (${nextName("Perfil caja")}, 'till') returning id`);
   const till = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${venue.tenantId}, ${venue.locationId}, ${nextName("Caja")}) returning id`);
+    insert into tills (location_id, name)
+    values (${venue.locationId}, ${nextName("Caja")}) returning id`);
   const dev = await suite.admin.execute<{ id: string }>(sql`
-    insert into devices (tenant_id, location_id, till_id, device_profile_id, label, token_hash)
-    values (${venue.tenantId}, ${venue.locationId}, ${till.rows[0]!.id}, ${profile.rows[0]!.id}, 'Registro', 'x')
+    insert into devices (location_id, till_id, device_profile_id, label, token_hash)
+    values (${venue.locationId}, ${till.rows[0]!.id}, ${profile.rows[0]!.id}, 'Registro', 'x')
     returning id`);
   return dev.rows[0]!.id;
 }
@@ -162,7 +157,6 @@ const pool: CardProviderPool = {
 
 function cfgOf(venue: Venue): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
@@ -233,11 +227,10 @@ async function addReader(
   });
 }
 
-async function sealedStripe(venue: Venue): Promise<Record<string, string> | null> {
-  return withTenant(suite.admin, venue.tenantId, async (tx) => {
+async function sealedStripe(): Promise<Record<string, string> | null> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tryGetCredential(tx, RING, {
-      tenantId: brandTenantId(venue.tenantId),
       purpose: "payments.stripe",
     });
   });
@@ -255,10 +248,9 @@ describe("connect", () => {
     expect(body).toEqual({ merchantName: "Deli Stripe SL" });
     expect(evicted.slice(before)).toEqual(["stripe"]);
     // The sealed payload exists and is exactly the four declared fields.
-    const stored = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const stored = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return getCredential(tx, RING, {
-        tenantId: brandTenantId(venue.tenantId),
         purpose: "payments.stripe",
       });
     });
@@ -276,14 +268,14 @@ describe("connect", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "payment.provider_credential_rejected" },
     });
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 
   it("refuses a wrong-environment key with payment.credential_environment_mismatch (environment is passed)", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
     // A live key on a preproduction host: the seat's prefix guard fires only because the route passed
-    // `environment` AND `tenantId` through.
+    // `environment` through.
     const res = await send(app, "POST", "/management-api/payments/providers/stripe/connect", {
       cookie: venue.managerCookie,
       body: { ...GOOD_KEY, secretKey: "sk_live_ok" },
@@ -292,7 +284,7 @@ describe("connect", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "payment.credential_environment_mismatch" },
     });
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 
   it("refuses a staff session with authorization.not_permitted", async () => {
@@ -306,7 +298,7 @@ describe("connect", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 });
 
@@ -335,74 +327,6 @@ describe("providers list", () => {
     });
     const afterBody = (await after.json()) as { providerId: string; state: string }[];
     expect(afterBody.find((p) => p.providerId === "stripe")!.state).toBe("connected");
-  });
-});
-
-describe("readers — tenant isolation", () => {
-  it("hides tenant A's reader from tenant B's list", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const appB = mountApp(b);
-    await connectStripe(appA, a);
-    const ref = nextRef();
-    const added = await addReader(appA, a, ref, "Barra A");
-    expect(added.status).toBe(201);
-    const addedBody = (await added.json()) as { id: string; status: string };
-    const readerId = addedBody.id;
-    expect(addedBody.status).toBe("paired");
-
-    const listA = (await (
-      await send(appA, "GET", "/management-api/payments/readers", { cookie: a.managerCookie })
-    ).json()) as { id: string }[];
-    expect(listA.some((r) => r.id === readerId)).toBe(true);
-
-    const listB = (await (
-      await send(appB, "GET", "/management-api/payments/readers", { cookie: b.managerCookie })
-    ).json()) as { id: string }[];
-    expect(listB.some((r) => r.id === readerId)).toBe(false);
-  });
-
-  it("404s reader.not_found on a status read of another tenant's reader id", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const appB = mountApp(b);
-    await connectStripe(appB, b);
-    const bReaderId = (
-      (await (await addReader(appB, b, nextRef(), "Barra B")).json()) as {
-        id: string;
-      }
-    ).id;
-    const res = await send(appA, "GET", `/management-api/payments/readers/${bReaderId}/status`, {
-      cookie: a.managerCookie,
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "reader.not_found" },
-    });
-  });
-
-  it("404s reader.not_found when a device default names another tenant's reader", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const appB = mountApp(b);
-    await connectStripe(appB, b);
-    const bReaderId = (
-      (await (await addReader(appB, b, nextRef(), "Barra B")).json()) as {
-        id: string;
-      }
-    ).id;
-    const deviceA = await seedDevice(a);
-    const res = await send(appA, "PUT", `/management-api/payments/devices/${deviceA}/reader`, {
-      cookie: a.managerCookie,
-      body: { readerId: bReaderId },
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "reader.not_found" },
-    });
   });
 });
 
@@ -508,21 +432,6 @@ describe("device default reader — screens", () => {
       error: { code: "management.request_invalid", params: { field: "readerId" } },
     });
   });
-
-  it("404s device.not_found for a device id that is not this tenant's", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const deviceB = await seedDevice(b);
-    const res = await send(appA, "PUT", `/management-api/payments/devices/${deviceB}/reader`, {
-      cookie: a.managerCookie,
-      body: { readerId: null },
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "device.not_found" },
-    });
-  });
 });
 
 describe("an injected fetch is threaded to the seat", () => {
@@ -605,7 +514,7 @@ describe("disconnect", () => {
       cookie: venue.managerCookie,
     });
     expect(gone.status).toBe(204);
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 });
 
@@ -750,7 +659,7 @@ describe("reader adoption and local management", () => {
   const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
 
   it("runs as non-superuser app_user", async () => {
-    await withTenant(suite.admin, randomUUID(), async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const result = await tx.execute(
         sql`select current_user as role, rolsuper from pg_roles where rolname = current_user`,
@@ -800,7 +709,7 @@ describe("reader adoption and local management", () => {
     });
     expect(await again.json()).toEqual({ id, status: "paired" });
     const stored = await suite.admin.execute(
-      sql`select id, name, active, disabled_at from card_readers where tenant_id = ${venue.tenantId}`,
+      sql`select id, name, active, disabled_at from card_readers`,
     );
     expect(stored.rows).toEqual([{ id, name: "Terrace", active: true, disabled_at: null }]);
     expect(await (await send(app, "GET", `${base}/devices/${device}/reader`, opts)).json()).toEqual(
@@ -829,79 +738,9 @@ describe("reader adoption and local management", () => {
     expect(await result.json()).toEqual({
       error: { code: "reader.not_listed", params: { providerId: "stripe" } },
     });
-    expect(
-      (
-        await suite.admin.execute(
-          sql`select id from card_readers where tenant_id = ${venue.tenantId}`,
-        )
-      ).rows,
-    ).toEqual([]);
+    expect((await suite.admin.execute(sql`select id from card_readers`)).rows).toEqual([]);
     expect(removed).toEqual([]);
   });
-
-  it("keeps another tenant's same provider reference out of comparison and adoption", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const seat = discoverySeat(async () => [vendor]);
-    const appA = mountApp(a, [seat]);
-    const appB = mountApp(b, [seat]);
-    await connectStripe(appA, a);
-    await connectStripe(appB, b);
-    const bReader = (await (await addReader(appB, b, vendor.providerRef, "Tenant B")).json()) as {
-      id: string;
-    };
-    expect(
-      await (
-        await send(appA, "GET", `${base}/providers/stripe/available-readers`, {
-          cookie: a.managerCookie,
-        })
-      ).json(),
-    ).toEqual([{ ...vendor, status: "available" }]);
-    const adopted = (await (
-      await send(appA, "POST", `${base}/readers/adopt`, { cookie: a.managerCookie, body: adoption })
-    ).json()) as { id: string };
-    expect(adopted).toEqual({ id: expect.any(String), status: "paired" });
-    expect(adopted.id).not.toBe(bReader.id);
-    expect(
-      (
-        await suite.admin.execute(
-          sql`select name, active from card_readers where id = ${bReader.id}`,
-        )
-      ).rows,
-    ).toEqual([{ name: "Tenant B", active: true }]);
-  });
-
-  it.each(["rename", "disable", "enable", "unpair"] as const)(
-    "isolates %s by tenant before any vendor call",
-    async (action) => {
-      const a = await seedVenue();
-      const b = await seedVenue();
-      let removes = 0;
-      const seat = discoverySeat(
-        async () => [vendor],
-        async () => {
-          removes++;
-        },
-      );
-      const appA = mountApp(a, [seat]);
-      const appB = mountApp(b, [seat]);
-      await connectStripe(appB, b);
-      const { id } = (await (await addReader(appB, b, nextRef())).json()) as { id: string };
-      const result = await send(
-        appA,
-        action === "rename" ? "PATCH" : "POST",
-        `${base}/readers/${id}${action === "rename" ? "" : `/${action}`}`,
-        { cookie: a.managerCookie, body: { name: "Changed" } },
-      );
-      expect(result.status).toBe(404);
-      expect(await result.json()).toEqual({ error: { code: "reader.not_found", params: { id } } });
-      expect(removes).toBe(0);
-      expect(
-        (await suite.admin.execute(sql`select name, active from card_readers where id = ${id}`))
-          .rows,
-      ).toEqual([{ name: "Barra 1", active: true }]);
-    },
-  );
 
   it("renames, disables and enables locally, while unpair alone calls the vendor", async () => {
     const venue = await seedVenue();
@@ -997,10 +836,10 @@ describe("reader adoption and local management", () => {
     const ready = new Promise<void>((resolve) => {
       updated = resolve;
     });
-    const unpairWrite = withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const unpairWrite = withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
-        sql`update card_readers set active = false, disabled_at = now(), unpaired_at = now() where tenant_id = ${venue.tenantId} and id = ${id}`,
+        sql`update card_readers set active = false, disabled_at = now(), unpaired_at = now() where id = ${id}`,
       );
       updated();
       await hold;
@@ -1095,13 +934,7 @@ describe("reader adoption and local management", () => {
     expect(await response.json()).toEqual({
       error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
     });
-    expect(
-      (
-        await suite.admin.execute(
-          sql`select id from card_readers where tenant_id = ${venue.tenantId}`,
-        )
-      ).rows,
-    ).toEqual([]);
+    expect((await suite.admin.execute(sql`select id from card_readers`)).rows).toEqual([]);
     expect(removes).toBe(0);
   });
 

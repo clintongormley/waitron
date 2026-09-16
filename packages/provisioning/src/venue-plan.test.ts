@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { isAppError } from "@waitron/shared";
-import { deriveTenantId } from "./tenant-id.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 
 // planVenue is generic over the module list now, so these tests build their own: a seedless module
@@ -206,15 +205,11 @@ describe("planVenue", () => {
     });
   });
 
-  it("derives the deterministic tenant id and stamps the resolved modules on the node", () => {
+  it("carries the canonical fiscal identity and stamps the resolved modules on the node", () => {
     const actions = planVenue(request(), MODULES);
     const tenant = actions.find((a) => a.kind === "ensure-tenant");
     const node = actions.find((a) => a.kind === "create-node");
-    expect(tenant).toMatchObject({
-      tenantId: deriveTenantId("ES", "B12345678"),
-      country: "ES",
-      taxId: "B12345678",
-    });
+    expect(tenant).toMatchObject({ country: "ES", taxId: "B12345678" });
     expect(node).toMatchObject({ filingModule: "verifactu", taxModule: "vat" });
   });
 
@@ -268,7 +263,7 @@ describe("planVenue", () => {
   });
 
   it("REFUSES equal standard and rectificative series codes before emitting anything", () => {
-    // Equal codes collide on the series natural key (tenant, node, code), so ON CONFLICT would
+    // Equal codes collide on the series natural key (node_id, code), so ON CONFLICT would
     // silently drop the second and leave the venue with ONE series and no way to issue corrections.
     // Rejected in the pure planner, like the other D4 input refusals.
     try {
@@ -315,33 +310,34 @@ describe("planVenue", () => {
     }
   });
 
-  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES cannot mint two tenants (§5)", () => {
+  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES reads as the SAME taxpayer (§5)", () => {
     // The setup API currently emits the pack's canonical country and normalized tax ID, while the CLI
     // accepts operator-entered casing and surrounding space. Both paths go through planVenue, so canonicalizing
-    // HERE — once, at the top, via `.trim().toUpperCase()` — makes the derived id AND the stored
-    // (country, tax_id) unique-index row canonical for both. Without it, a re-run of the SAME business
-    // differing only in case or surrounding whitespace mints a second, permanent, unmergeable tenant
-    // (§5). (Internal whitespace is deliberately NOT normalized; see the tenant-id primitive's test.)
-    // Proven by deletion: strip planVenue's normalization and the id-equality / stored-value
-    // assertions below go red.
+    // HERE — once, at the top, via `.trim().toUpperCase()` — makes the stored
+    // `tenants (country, tax_id)` row canonical for both. Without it, a re-run of the SAME business
+    // differing only in case or surrounding whitespace reads as a DIFFERENT taxpayer and is refused
+    // as a foreign one (`provisioning.foreign_tenant`, thrown by `assertNoForeignTenant` before the
+    // apply is reached) instead of being the no-op it should be (§5).
+    // Internal whitespace is deliberately NOT normalized.
+    // Proven by deletion: strip planVenue's normalization and the stored-value assertions below go
+    // red.
     const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );
     const messyTenant = planVenue(request({ country: "es", taxId: " b12345678 " }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );
-    // The stored unique-index row is canonical (so applyVenue's ON CONFLICT (country, tax_id) fires)...
+    // The stored row is canonical, so a messy re-run compares equal to it and is the no-op it
+    // should be, not a refusal as a foreign taxpayer (`provisioning.foreign_tenant`).
     expect(messyTenant).toMatchObject({ kind: "ensure-tenant", country: "ES", taxId: "B12345678" });
-    // ...and the derived id matches the already-canonical run's id.
-    expect(messyTenant?.tenantId).toBe(canonicalTenant?.tenantId);
-    expect(messyTenant?.tenantId).toBe(deriveTenantId("ES", "B12345678"));
+    expect(messyTenant).toEqual(canonicalTenant);
   });
 
   it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
     // The check is case-insensitive on the country-prefixed convention, so a lowercase country still
-    // matches its territory prefix. This never mints two tenants (planVenue canonicalizes country
-    // before deriving the id and storing the row — see the casing test above), but planVenue must not
-    // refuse the coherent combination on case alone.
+    // matches its territory prefix. The stored row is canonical either way (planVenue canonicalizes
+    // country before storing it — see the casing test above), so a lowercase re-run is still read as
+    // the same taxpayer; planVenue must not refuse the coherent combination on case alone.
     const actions = planVenue(
       request({ country: "es", location: { ...request().location, fiscalTerritory: "ES-common" } }),
       MODULES,

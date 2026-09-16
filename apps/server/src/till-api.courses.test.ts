@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -21,7 +21,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
@@ -63,44 +62,45 @@ const FILETE = "Filete"; // Principales (later) → held
 const PAN = "Pan"; // no course → fires immediately
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    const tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedTenant(db);
+    await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
     // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     const locationId = brandLocationId(loc.rows[0]!.id);
     // A default kitchen station so the place-time fire (placeOrder → fireLines) has a fallback route.
-    await seedKitchenStation(db, { tenantId, locationId });
+    await seedKitchenStation(db, { locationId });
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
-    const nodeId = await seedNode(db, tenantId, locationId);
+      insert into tills (location_id, name)
+      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    const nodeId = await seedNode(db, locationId);
     const person = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
 
     // Seed the courses + three products (two coursed, one loose) on the APP role under the tenant, the
-    // same `withTenant` + `asAppUser` path the routes read/write through — so the course FK + the
+    // same `withTransaction` + `asAppUser` path the routes read/write through — so the course FK + the
     // active/assignment filters are real, not bypassed by a superuser insert.
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       entCourseId = ent.id;
       priCourseId = pri.id;
-      const catalogue = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const category = await createCategory(tx, tenantId, { name: { en: "Comida" } });
+      const catalogue = await createCatalogue(tx, { name: "Carta" });
+      const category = await createCategory(tx, { name: { en: "Comida" } });
       const mk = async (description: string): Promise<string> => {
-        const p = await createProduct(tx, tenantId, {
+        const p = await createProduct(tx, {
           catalogueId: catalogue.id,
           categoryId: category.id,
           name: description,
@@ -130,14 +130,8 @@ function collect(
 /** The till's config for the seeded tenant. `seriesId` is unused (no fiscal write on the coursing/fire
  *  path) so it carries a fresh uuid; `nodeId`/`locationId` are the seeded rows the park/place/queue
  *  routes write and scope by. */
-function makeCfg(
-  tenantId: TenantId,
-  tillId: string,
-  locationId: string,
-  nodeId: string,
-): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
-    tenantId,
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -183,13 +177,12 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
  *  `loginWithPin` path the login route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       personId: ana.id,
       pin: "5555",
@@ -221,8 +214,8 @@ let tillDeviceCookie: string;
  *  `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor)
-      values (${cfg.tenantId}, 'Counter till profile', 'till') returning id`);
+      insert into device_profiles (name, form_factor)
+      values ('Counter till profile', 'till') returning id`);
   const dev = await enrolDeviceForTest(db, cfg, { name: "Counter till", profileId: rows[0]!.id });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }

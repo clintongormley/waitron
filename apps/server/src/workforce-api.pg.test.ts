@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -12,7 +12,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: this suite proves the workforce write group's `schedule.manage` gate BY
 // DELETION, and that a decide lands `decided_by_person_id` through app_user's TABLE-level UPDATE grant
-// (which a column-level grant would not cover). Every DB touch goes through `withTenant` + `asAppUser`
+// (which a column-level grant would not cover). Every DB touch goes through `withTransaction` + `asAppUser`
 // from `suite.admin`, so the routes run as the non-superuser app role; a PGlite superuser holds every
 // privilege, so a missing or narrowed grant would pass there (CLAUDE.md §4). The route mechanics are
 // already proven in-process on PGlite (`workforce-api.test.ts`).
@@ -27,7 +27,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   locationId: string;
   personId: string;
   managerCookie: string;
@@ -35,7 +34,7 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
-  const venue = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -68,29 +67,24 @@ async function setupVenue(): Promise<Venue> {
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  const seeded = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const loc = await tx.execute<{ id: string }>(
-      sql`select id from locations where tenant_id = ${venue.tenantId} limit 1`,
-    );
+    const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const mSes = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const sSes = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: stf.rows[0]!.id,
     });
     return { locationId: loc.rows[0]!.id, personId: mgr.rows[0]!.id, mSid: mSes.id, sSid: sSes.id };
   });
   return {
-    tenantId: venue.tenantId,
     locationId: seeded.locationId,
     personId: seeded.personId,
     managerCookie: `${MANAGEMENT_COOKIE}=${seeded.mSid}`,
@@ -98,13 +92,13 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   // A placeholder nodeId: no route here appends a clock event (only roster/swap/absence), so it is
   // plumbed into cfg but never reaches the chain.
   mountWorkforceApi(
     app,
-    { db: suite.admin, cfg: { tenantId, nodeId: "00000000-0000-4000-8000-000000000000" } },
+    { db: suite.admin, cfg: { nodeId: "00000000-0000-4000-8000-000000000000" } },
     noopLog,
   );
   return app;
@@ -126,23 +120,19 @@ async function send(
   });
 }
 
-async function seedAcceptedSwap(
-  tenantId: string,
-  personId: string,
-  locationId: string,
-): Promise<string> {
+async function seedAcceptedSwap(personId: string, locationId: string): Promise<string> {
   const shift = await suite.admin.execute<{ id: string }>(sql`
-    insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-    values (${tenantId}, ${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0) returning id`);
+    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
+    values (${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0) returning id`);
   const swap = await suite.admin.execute<{ id: string }>(sql`
-    insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
-    values (${tenantId}, ${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
+    insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
+    values (${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
   return swap.rows[0]!.id;
 }
-async function seedRequestedAbsence(tenantId: string, personId: string): Promise<string> {
+async function seedRequestedAbsence(personId: string): Promise<string> {
   const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
-    values (${tenantId}, ${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
+    insert into absences (person_id, absence_kind, starts_on, ends_on)
+    values (${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
   return r.rows[0]!.id;
 }
 
@@ -155,8 +145,8 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     // `expect403`, `expected 200 to be 403`, and halted there, so routes 2-5 weren't individually
     // exercised in that run; the gate is what turns this suite red when removed. Restored the call and
     // the test passed again.
-    const { tenantId, locationId, staffCookie } = await setupVenue();
-    const app = mountApp(tenantId);
+    const { locationId, staffCookie } = await setupVenue();
+    const app = mountApp();
     const missing = "00000000-0000-0000-0000-000000000000";
     const expect403 = async (res: Response) => {
       expect(res.status).toBe(403);
@@ -199,11 +189,11 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
 
   it("publishes end-to-end as the app role and returns the breaches array", async () => {
     const v = await setupVenue();
-    // Seed the location's convenio_config (as admin — owner; tenant_id set explicitly).
+    // Seed the location's convenio_config (as admin — owner).
     await suite.admin.execute(
-      sql`insert into convenio_config (tenant_id, location_id) values (${v.tenantId}, ${v.locationId})`,
+      sql`insert into convenio_config (location_id) values (${v.locationId})`,
     );
-    const app = mountApp(v.tenantId);
+    const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", v.managerCookie, {
       locationId: v.locationId,
       period: "2026-06-01",
@@ -221,9 +211,9 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
 
   it("a manager decides a swap and an absence — the decider columns land through app_user's table-level UPDATE grant", async () => {
     const a = await setupVenue();
-    const swapA = await seedAcceptedSwap(a.tenantId, a.personId, a.locationId);
-    const absA = await seedRequestedAbsence(a.tenantId, a.personId);
-    const appA = mountApp(a.tenantId);
+    const swapA = await seedAcceptedSwap(a.personId, a.locationId);
+    const absA = await seedRequestedAbsence(a.personId);
+    const appA = mountApp();
 
     // A positive control that the queues surface the seeded rows at all, so the decides below act on
     // a swap the route really listed rather than on an id nothing ever returned.
@@ -297,8 +287,8 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     //      `expected 404 to be 403`, with (1) and (2) intact so #1-#3 passed and it reached #4.
     // A 404 rather than 200 for the decide routes is still a genuine gate signal: the 403 is what the
     // gate produces; without it the request falls through to the verb.
-    const { tenantId, locationId, staffCookie } = await setupVenue();
-    const app = mountApp(tenantId);
+    const { locationId, staffCookie } = await setupVenue();
+    const app = mountApp();
     const missing = "00000000-0000-0000-0000-000000000000";
     const expect403 = async (res: Response) => {
       expect(res.status).toBe(403);
@@ -329,19 +319,19 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
   });
 
   it("assembles planned-vs-actual for the tenant's own location as the app role", async () => {
-    // The route assembles + returns rows under withTenant + asAppUser (the windowing/scoping logic is
+    // The route assembles + returns rows under withTransaction + asAppUser (the windowing/scoping logic is
     // already covered on PGlite in Task 5). Seed one shift on a PUBLISHED roster version as admin
-    // (tenant_id explicit; the planned side is published-only, so a null-version draft would be excluded)
+    // (the planned side is published-only, so a null-version draft would be excluded)
     // and assert it comes back as a no-show — proving the read runs as app_user without leaking or 500-ing.
     const v = await setupVenue();
     const version = await suite.admin.execute<{ id: string }>(sql`
-      insert into roster_versions (tenant_id, location_id, period_start, period_end, status, published_at)
-      values (${v.tenantId}, ${v.locationId}, '2026-03-02', '2026-03-08', 'published', now()) returning id`);
+      insert into roster_versions (location_id, period_start, period_end, status, published_at)
+      values (${v.locationId}, '2026-03-02', '2026-03-08', 'published', now()) returning id`);
     await suite.admin.execute(sql`
-      insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, roster_version_id)
-      values (${v.tenantId}, ${v.personId}, ${v.locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0, ${version.rows[0]!.id})`);
+      insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, roster_version_id)
+      values (${v.personId}, ${v.locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0, ${version.rows[0]!.id})`);
     const res = await send(
-      mountApp(v.tenantId),
+      mountApp(),
       "GET",
       `/management-api/planned-vs-actual?locationId=${v.locationId}&from=2026-03-02&to=2026-03-09`,
       v.managerCookie,

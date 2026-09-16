@@ -1,5 +1,12 @@
 # Onboarding Slice 4c — Break-glass admin recovery Implementation Plan
 
+> **2026-09-14 — the tenant column is gone.** Every `tenant_id` column, every tenant argument and
+> the `WAITRON_TILL_TENANT_ID` environment variable were removed: one database holds one taxpayer,
+> as the single row of `tenants`, and nothing filters by a tenant. The text below is left as the
+> record of what was built at the time; anywhere it names a tenant id, a tenant predicate or that
+> variable, read it as history. Spec:
+> [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Give an operator with physical possession of a locked-out box a way to reset the admin credential — an on-box `waitron-break-glass` CLI that resets the admin's dashboard password (and PIN) and reactivates a suspended admin, for the box's single tenant — plus a **design-only** note on the chain-destructive factory reset (which stays unbuilt).

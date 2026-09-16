@@ -1,9 +1,8 @@
 // Exercise the staff seed on PostgreSQL through app_user, including the permitted persons writes.
 
-import { tenantId as brandTenantId } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -24,9 +23,9 @@ function nextNif(): string {
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Provision a fresh chained venue (as the owner) and return the tenant id the seed needs. */
-async function provisionVenue(): Promise<{ tenantId: string }> {
-  const venue = await applyVenue(
+/** Provision a fresh chained venue (as the owner) for the seed to run against. */
+async function provisionVenue(): Promise<void> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -59,16 +58,15 @@ async function provisionVenue(): Promise<{ tenantId: string }> {
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  return { tenantId: venue.tenantId };
 }
 
 describe("seedStaff", () => {
   it("seeds staff across all roles, all on the demo PIN", async () => {
-    const { tenantId } = await provisionVenue();
+    await provisionVenue();
 
-    const persons = await withTenant(suite.admin, tenantId, async (tx) => {
+    const persons = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await seedStaff(tx, brandTenantId(tenantId));
+      await seedStaff(tx);
 
       const { rows } = await tx.execute<{
         display_name: string;
@@ -101,11 +99,11 @@ describe("seedStaff", () => {
   });
 
   it("gives every person an email while preserving which demo accounts have preset passwords", async () => {
-    const { tenantId } = await provisionVenue();
+    await provisionVenue();
 
-    const rows = await withTenant(suite.admin, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await seedStaff(tx, brandTenantId(tenantId));
+      await seedStaff(tx);
 
       const { rows } = await tx.execute<{
         display_name: string;

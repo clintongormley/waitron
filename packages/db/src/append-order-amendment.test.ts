@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { appendOrderAmendment, type AppendAmendmentInput } from "./append-order-amendment.js";
 import type { Database, Transaction } from "./client.js";
 import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendment-hash.js";
 import { captureError, pgErrorCode } from "./testing/errors.js";
 import { useTemplateDb } from "./testing/lifecycle.js";
 import { seedNode } from "./testing/seed.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
 
 // Real Postgres, not PGlite, and not describeEachTarget: the ONE thing here PGlite cannot show is
@@ -20,12 +20,11 @@ import { locations, tenants, tills } from "./schema/tenants.js";
 // `order_amendments` is append-only for EVERY role, the owner included (reject_mutation blocks
 // UPDATE/DELETE/TRUNCATE), so nothing can clean it up between tests — the table only grows. Each
 // test therefore seeds its OWN working order and scopes its per-chain reads to that order's id
-// rather than reading a tenant-wide total that would drift as earlier tests accumulate rows.
+// rather than reading a table-wide total that would drift as earlier tests accumulate rows.
 //
-// A second tenant is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps in.
+// A second LOCATION is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps
+// in. There is one taxpayer row: a second `tenants` row cannot be inserted.
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
@@ -34,7 +33,7 @@ const OPERATOR_A = "aaaaaaaa-2222-4000-8000-000000000001";
 const OTHER_ACTOR = "cccccccc-2222-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// Captured at seed time — the tenant-scoped node ids the amendments attribute to.
+// Captured at seed time — the node ids the amendments attribute to.
 let nodeA = "";
 let nodeB = "";
 // A fresh order number per seeded working order, so no two collide on the counter's uniqueness.
@@ -46,10 +45,9 @@ class RollbackSignal extends Error {}
 
 async function rollBackAfter(
   admin: Database,
-  tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
+  await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
   }).catch((error: unknown) => {
@@ -61,54 +59,51 @@ describe("order_amendments append helper", () => {
   // A clone of the shared container's `core` template. Docker is required (the package globalSetup
   // fails loudly without it): the concurrency proof below opens distinct backends via
   // `suite.pg.connect()`, which one serialised PGlite backend cannot give.
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
-  // As the connection owner — pure setup: two tenants, each with a location, a till and a node
-  // (tenant B exists only to mint `nodeB`, the foreign node id the hash-tamper case swaps in).
+  // As the connection owner — pure setup: the one taxpayer row, then two locations, each with a
+  // till and a node (location B exists only to mint `nodeB`, the foreign node id the hash-tamper
+  // case swaps in).
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.admin;
-    await admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await admin
+      .insert(tenants)
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Fixture Location A",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
       {
         id: LOCATION_B,
-        tenantId: TENANT_B,
         name: "Fixture Location B",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
     ]);
     await admin.insert(tills).values([
-      { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-      { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
+      { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
+      { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
     ]);
-    nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-    nodeB = await seedNode(admin, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
+    nodeB = await seedNode(admin, brandLocationId(LOCATION_B));
   });
 
   /** Seeds one fresh open working order as the owner and returns its id. A fresh chain per test so
    * sequence numbers are predictable and one test's rows never interleave with another's. */
-  async function openOrder(tenant: string, till: string, node: string): Promise<string> {
+  async function openOrder(till: string, node: string): Promise<string> {
     orderNumberSeq += 1;
     const result = await suite.admin.execute<{ id: string }>(
-      sql`insert into working_orders (tenant_id, till_id, node_id, order_number, status, opened_at)
-          values (${tenant}, ${till}, ${node}, ${orderNumberSeq}, 'open', ${AT}) returning id`,
+      sql`insert into working_orders (till_id, node_id, order_number, status, opened_at) values (${till}, ${node}, ${orderNumberSeq}, 'open', ${AT}) returning id`,
     );
     return result.rows[0]!.id;
   }
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, TENANT_A, async (tx) => {
+    return withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`set local role app_user`);
       return fn(tx);
     });
@@ -117,7 +112,6 @@ describe("order_amendments append helper", () => {
   /** Tenant A's genesis `order_placed` input for an order. Reason null (a placement has no contest). */
   function genesisA(order: string): AppendAmendmentInput {
     return {
-      tenantId: TENANT_A,
       workingOrderId: order,
       kind: "order_placed",
       actorId: OPERATOR_A,
@@ -174,12 +168,11 @@ describe("order_amendments append helper", () => {
   }
 
   it("appends a hashed per-order sequence, genesis first then linked", async () => {
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     const first = await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
     expect(first.sequenceNo).toBe(1);
     const second = await asApp((tx) =>
       appendOrderAmendment(tx, {
-        tenantId: TENANT_A,
         workingOrderId: order,
         kind: "order_cancelled",
         actorId: OPERATOR_A,
@@ -215,13 +208,13 @@ describe("order_amendments append helper", () => {
     // has seen fire is a comment, not a backstop. Grant the privilege inside a transaction that rolls
     // back and watch reject_mutation catch it anyway. The trigger fires for every actor, the owner
     // included, so the granted app_user is stopped by the second layer alone.
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
     // UPDATE and DELETE each in their OWN rolled-back transaction: the first WT001 aborts its
     // transaction (a later statement in it would return 25P02, in_failed_sql_transaction, not the
     // trigger's code), so testing both in one transaction would measure the poisoned-transaction
     // state for the second, not the trigger.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await tx.execute(sql`grant update on order_amendments to app_user`);
       await tx.execute(sql`set local role app_user`);
       const eU = await captureError(() =>
@@ -231,7 +224,7 @@ describe("order_amendments append helper", () => {
       );
       expect(pgErrorCode(eU)).toBe("WT001");
     });
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await tx.execute(sql`grant delete on order_amendments to app_user`);
       await tx.execute(sql`set local role app_user`);
       const eD = await captureError(() =>
@@ -242,11 +235,10 @@ describe("order_amendments append helper", () => {
   });
 
   it("the stored hash commits the reason, actor and capturing node — a tamper of any breaks verification", async () => {
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
     await asApp((tx) =>
       appendOrderAmendment(tx, {
-        tenantId: TENANT_A,
         workingOrderId: order,
         kind: "order_cancelled",
         actorId: OPERATOR_A,
@@ -295,7 +287,7 @@ describe("order_amendments append helper", () => {
     // (The FK from order_amendments to working_orders takes only a SHARED key-share lock on the
     // parent, which does NOT serialise the writers — the exclusive FOR UPDATE is what does.)
     const WRITERS = 10;
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     const conns = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       // A distinct instant per writer, so a lost race would also show as a wrong hash, not only a
@@ -304,7 +296,6 @@ describe("order_amendments append helper", () => {
         conns.map((db, i) =>
           db.transaction((tx) =>
             appendOrderAmendment(tx, {
-              tenantId: TENANT_A,
               workingOrderId: order,
               kind: i === 0 ? "order_placed" : "order_cancelled",
               actorId: OPERATOR_A,

@@ -9,8 +9,11 @@ import type Stripe from "stripe";
  * - **byte-exactness** — a body re-serialised (parsed then `JSON.stringify`d) no longer matches, so
  *   a test that signs a whitespace-irregular body pins that the route reads the RAW bytes
  *   (`c.req.text()`), never a JSON round-trip;
- * - **secret-dependence** — a body signed with tenant A's secret does not verify under tenant B's,
- *   so a test proves the per-tenant secret SELECTION rather than a single shared secret.
+ * - **secret-dependence** — a body signed with the wrong secret does not verify, so a test that
+ *   signs with a secret other than the configured one pins that the route really checks it. There
+ *   is ONE secret to check against: the route lost its per-taxpayer path segment (see `webhook.ts`)
+ *   and the endpoint reads the single configured `payments.stripe` credential, so nothing here
+ *   proves a SELECTION between secrets and no test tries to.
  */
 export function signStripeBody(rawBody: string, secret: string): string {
   return createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");

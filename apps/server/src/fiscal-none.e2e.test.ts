@@ -1,8 +1,8 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { Transaction } from "@waitron/db";
-import { asAppUser, invoiceSeries, withTenant } from "@waitron/db";
+import { asAppUser, invoiceSeries, withTransaction } from "@waitron/db";
 import { applyVenue, planVenue, resolveFiscalModules } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -13,10 +13,9 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import "./errors.js";
@@ -83,7 +82,6 @@ beforeAll(() => {
 });
 
 interface GbVenue {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   standardSeriesId: SeriesId;
@@ -94,7 +92,8 @@ interface GbVenue {
 /** Provision a fresh GB venue (country `GB`, territory `GB-vat`, `fiscal-none` enabled /
  *  `fiscal-verifactu` disabled — the set `venueModuleConfig` produces) as the owner, then open a
  *  shift session for its seeded admin (who holds every permission, so it authorizes voids and
- *  corrections). Each test gets its OWN tenant so the tenant-scoped counts are order-independent. */
+ *  corrections). `useTemplateDb` resets the clone between tests, so each test provisions into an
+ *  empty database and the counts below are order-independent. */
 async function setupGbVenue(): Promise<GbVenue> {
   const venue: VenueResult = await applyVenue(
     planVenue(
@@ -130,14 +129,13 @@ async function setupGbVenue(): Promise<GbVenue> {
     { db: suite.admin, modules: gbModules },
   );
 
-  const tenantId = brandTenantId(venue.tenantId);
   const nodeId = brandNodeId(venue.nodeId);
 
   // The two series the venue plan seeds — read by purpose rather than by array position.
   const seriesRows = await suite.admin
     .select({ id: invoiceSeries.id, purpose: invoiceSeries.purpose })
     .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.tenantId, tenantId), eq(invoiceSeries.nodeId, nodeId)));
+    .where(eq(invoiceSeries.nodeId, nodeId));
   const standard = seriesRows.find((r) => r.purpose === "standard");
   const rectificative = seriesRows.find((r) => r.purpose === "rectificative");
   if (standard === undefined || rectificative === undefined) {
@@ -148,16 +146,15 @@ async function setupGbVenue(): Promise<GbVenue> {
   // opened through `loginWithPin` exactly as a till would — the authorizer for the void and the
   // correction below. Read as owner; opened as the app role under the tenant scope.
   const { rows: adminRows } = await suite.admin.execute<{ id: string }>(
-    sql`select id from persons where tenant_id = ${tenantId} and role = 'admin'`,
+    sql`select id from persons where role = 'admin'`,
   );
   const adminPersonId = adminRows[0]!.id;
   const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
   let adminSessionId: string;
   try {
-    const session = await withTenant(app, tenantId, async (tx) => {
+    const session = await withTransaction(app, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
-        tenantId,
         tillId: venue.tillId,
         personId: adminPersonId,
         pin: "1234",
@@ -169,7 +166,6 @@ async function setupGbVenue(): Promise<GbVenue> {
   }
 
   return {
-    tenantId,
     tillId: brandTillId(venue.tillId),
     nodeId,
     standardSeriesId: brandSeriesId(standard.id),
@@ -178,12 +174,12 @@ async function setupGbVenue(): Promise<GbVenue> {
   };
 }
 
-/** Run `fn` as the non-superuser app role, tenant-scoped — the exact subject the trading write path
+/** Run `fn` as the non-superuser app role — the exact subject the trading write path
  *  runs under (bound by `app_user`'s grants, no superuser bypass). Opens and closes its own connection. */
-async function asApp<T>(tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
   try {
-    return await withTenant(app, tenantId, async (tx) => {
+    return await withTransaction(app, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -194,9 +190,8 @@ async function asApp<T>(tenantId: TenantId, fn: (tx: Transaction) => Promise<T>)
 
 /** Ring an ordinary café sale through `recordSale`, immediate cash settlement. Returns its id. */
 async function ringSale(venue: GbVenue): Promise<{ saleId: SaleId; backendId: string }> {
-  return asApp(venue.tenantId, async (tx) => {
+  return asApp(async (tx) => {
     const { saleId, fiscal } = await recordSale(tx, backend, {
-      tenantId: venue.tenantId,
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.standardSeriesId,
@@ -224,18 +219,18 @@ async function ringSale(venue: GbVenue): Promise<{ saleId: SaleId; backendId: st
   });
 }
 
-/** Owner read: how many rows a tenant holds in `table` (each fiscal table carries `tenant_id`). */
-async function countForTenant(table: string, tenantId: TenantId): Promise<number> {
+/** Owner read: how many rows `table` holds. */
+async function countRows(table: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(
-    sql`select count(*)::text as count from ${sql.identifier(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::text as count from ${sql.identifier(table)} `,
   );
   return Number(rows[0]!.count);
 }
 
 /** The `fiscal_backend` values stamped on this tenant's sales (owner read). */
-async function saleBackends(tenantId: TenantId): Promise<string[]> {
+async function saleBackends(): Promise<string[]> {
   const { rows } = await suite.admin.execute<{ fiscal_backend: string }>(
-    sql`select fiscal_backend from sales where tenant_id = ${tenantId} order by issued_at`,
+    sql`select fiscal_backend from sales  order by issued_at`,
   );
   return rows.map((r) => r.fiscal_backend);
 }
@@ -263,16 +258,15 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     const toSubstitute = await ringSale(venue);
 
     // 3. Void the first sale — authorized by the admin session, no fiscal chain work.
-    await asApp(venue.tenantId, (tx) =>
+    await asApp((tx) =>
       recordVoid(tx, backend, sale.saleId, "rung in error", {
         sessionId: venue.adminSessionId,
       }),
     );
 
     // 4. A rectificativa correcting the second sale, drawn from the rectificative series.
-    await asApp(venue.tenantId, (tx) =>
+    await asApp((tx) =>
       recordCorrection(tx, backend, {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         seriesId: venue.rectificativeSeriesId,
@@ -295,9 +289,8 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     );
 
     // 5. A factura de canje (F3) substituting the third sale, drawn from the standard series.
-    await asApp(venue.tenantId, (tx) =>
+    await asApp((tx) =>
       recordSubstitution(tx, backend, {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         seriesId: venue.standardSeriesId,
@@ -328,12 +321,12 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
     // The proof: no fiscal record exists anywhere for this venue — not a registro, not a SIF row,
     // not a chain head, not an outbox envío — across a sale, a void, a correction and a substitution.
     for (const table of ["registros_facturacion", "registro_sif", "cadenas", "envios"]) {
-      expect(await countForTenant(table, venue.tenantId)).toBe(0);
+      expect(await countRows(table)).toBe(0);
     }
 
     // Every sale the venue rang carries the no-regime backend id (a correction inserts a `sales` row
     // too, so this is four: sale, correction, F3 — and the corrected/substituted originals).
-    const backends = await saleBackends(venue.tenantId);
+    const backends = await saleBackends();
     expect(backends.length).toBeGreaterThanOrEqual(4);
     expect(new Set(backends)).toEqual(new Set(["none"]));
   });

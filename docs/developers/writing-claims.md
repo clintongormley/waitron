@@ -56,9 +56,10 @@ controller who was supposed to be watching for it. The instances:
    for this defect, because everyone downstream repeats it in good faith.
 
 5. **"The same transaction, and therefore the same snapshot."** The second half does not follow from
-   the first. `withTenant` (`packages/db/src/tenancy.ts`) opens an ordinary transaction and sets no
-   isolation level, so it runs at PostgreSQL's default of read committed, where every statement takes
-   a fresh snapshot. Only a repeatable-read transaction gives you the one snapshot the sentence
+   the first. The helper (`packages/db/src/tenancy.ts` — `withTenant` when this was written,
+   `withTransaction` since the tenant column went on 2026-09-14) opens an ordinary transaction and
+   sets no isolation level, so it runs at PostgreSQL's default of read committed, where every
+   statement takes a fresh snapshot. Only a repeatable-read transaction gives you the one snapshot the sentence
    assumed.
 
 The cheapest habit, and it would have caught nearly all of these: before writing a sentence that

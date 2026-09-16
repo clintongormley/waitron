@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError, isUuid } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { sessions } from "@waitron/identity";
 // Side-effect only: keeps this host's `session.required` code (errors.ts) reachable from the file
@@ -83,12 +83,12 @@ export function readSessionId(c: Context): string | null {
  * login/logout routes in `till-api.ts` deliberately do NOT (logging in has no prior session, and
  * logout tolerates a missing or already-closed one).
  *
- * `deps.cfg` is typed to the ONE field this reads — `tenantId` — rather than the full `TillConfig`, so
- * both the till API (`TillApiDeps`) and the staff schedule API (`ScheduleApiDeps`, which carries only
- * `{ tenantId }`) can gate their routes on it without contriving a full till config.
+ * `deps` is typed to the ONE thing this reads — the database — rather than the full `TillConfig`, so
+ * both the till API (`TillApiDeps`) and the staff schedule API (`ScheduleApiDeps`) can gate their
+ * routes on it without contriving a till config.
  */
 export async function requireSession(
-  deps: { db: Database; cfg: { tenantId: string } },
+  deps: { db: Database },
   c: Context,
 ): Promise<{ personId: string; sessionId: string }> {
   const id = readSessionId(c);
@@ -96,7 +96,7 @@ export async function requireSession(
   // without a round-trip. Passing a non-UUID into the `uuid` column would raise 22P02 → an opaque 500
   // (see `isUuid`), so the shape check is what keeps a forged cookie a 401 rather than a 500.
   if (id === null || !isUuid(id)) throw new AppError("session.required", {});
-  const personId = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+  const personId = await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
       .select({ personId: sessions.personId })

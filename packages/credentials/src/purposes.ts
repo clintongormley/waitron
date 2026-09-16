@@ -14,7 +14,7 @@ import "./errors.js";
  */
 export const PURPOSES = {
   /** Outbound account email. `url` is an SMTP connection URL (and may contain credentials); `from`
-   * is the RFC 5322 sender shown to recipients. Both remain sealed in the tenant vault. */
+   * is the RFC 5322 sender shown to recipients. Both remain sealed in the vault. */
   "email.smtp": ["url", "from"],
   "payments.stripe": ["secretKey", "webhookSecret", "successUrl", "cancelUrl"],
   /** SumUp Cloud API. `affiliateAppId`/`affiliateKey` come from the developer portal's Affiliate

@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, diningTables, withTenant, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  asAppUser,
+  diningTables,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -59,17 +65,16 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  const tenantId = await seedTenant(db);
-  await seedLegacySellingUnits(db, tenantId);
+  await seedTenant(db);
+  await seedLegacySellingUnits(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -79,11 +84,11 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const seeded = await withTenant(db, tenantId, async (tx) => {
+  const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-    const agua = await createProduct(tx, tenantId, {
+    const cat = await createCatalogue(tx, { name: "Carta" });
+    const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -91,7 +96,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const jamon = await createProduct(tx, tenantId, {
+    const jamon = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Jamón",
@@ -103,7 +108,7 @@ async function setupVenue(): Promise<Seeded> {
     const t1 = await createTable(tx, cfg, { label: "T1" });
     const t2 = await createTable(tx, cfg, { label: "T2" });
     const status = await tx.execute<{ id: string }>(
-      sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantId}, 'Bill requested', '#ef4444') returning id`,
+      sql`insert into table_service_statuses (label, color) values ('Bill requested', '#ef4444') returning id`,
     );
     return {
       aguaId: agua.id,
@@ -120,7 +125,8 @@ async function setupVenue(): Promise<Seeded> {
  * Run fn in one transaction as app_user.
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -161,18 +167,13 @@ describe("receipt order grouping", () => {
     });
   });
 
-  it("refuses a missing order and another tenant's order", async () => {
-    const { cfg, tableId } = await setupVenue();
-    const other = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-    for (const id of [randomUUID(), tabId]) {
-      await expect(
-        asApp(other.cfg, (tx) => readReceiptOrder(tx, other.cfg, id)),
-      ).rejects.toMatchObject({
-        code: "working_order.not_found",
-        params: { workingOrderId: id },
-      });
-    }
+  it("refuses a missing order", async () => {
+    const { cfg } = await setupVenue();
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => readReceiptOrder(tx, cfg, missing))).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: missing },
+    });
   });
 });
 
@@ -301,10 +302,7 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx
-        .select({ id: workingOrders.id })
-        .from(workingOrders)
-        .where(eq(workingOrders.tenantId, cfg.tenantId));
+      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to 2.000).
@@ -350,10 +348,7 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx
-        .select({ id: workingOrders.id })
-        .from(workingOrders)
-        .where(eq(workingOrders.tenantId, cfg.tenantId));
+      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3.
@@ -424,7 +419,7 @@ describe("unjoinTable", () => {
       const [{ count }] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(workingOrders)
-        .where(and(eq(workingOrders.status, "open"), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.status, "open"));
       return { anchor, count };
     });
     expect(state.anchor?.tabId).toBe(tabId); // unchanged — the guard threw before the repoint
@@ -518,8 +513,8 @@ it("retains the structured modifier snapshots and the frozen names when a dish q
       .set({ modifierSnapshots, ...names })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     const { checkId } = await splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
-    const source = await priceStoredOrder(tx, cfg, tabId);
-    const check = await priceStoredOrder(tx, cfg, checkId);
+    const source = await priceStoredOrder(tx, tabId);
+    const check = await priceStoredOrder(tx, checkId);
     expect(source.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
     expect(check.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
     expect(check.lines[0]).toMatchObject({ name: "Agua", ...names });

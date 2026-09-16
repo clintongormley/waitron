@@ -143,12 +143,14 @@ Generated core migration `0021_product_modifiers.sql` extends the existing group
 and adds JSONB snapshots to working and sale lines. No new tables or core-to-catalogue foreign keys
 are added. The catalogue generation script reports no schema change. Existing table grants,
 classification and configuration-transfer ordering apply; the definition/attachment and publication
-operations share a tenant-scoped transaction lock.
+operations share one transaction-scoped advisory lock, keyed on the constant
+`"modifier-definitions"` (`packages/catalogue/src/modifier-lock.ts`).
 
 Selections take that lock in shared mode so definition readers can coexist. Canonical and retained
 group/item writers take it exclusively before reading or changing definitions. The retained
-`updateOptionGroup` and `updateOptionGroupItem` operations now require the tenant ID as their
-second argument; their by-ID reads and writes also use that tenant predicate.
+`updateOptionGroup` and `updateOptionGroupItem` operations take `(tx, id, patch)` — the tenant
+argument and the tenant predicate on their by-ID reads and writes went with the column
+(2026-09-14).
 
 Regenerate generated migration collisions against the integration base rather than editing the
 journal or snapshots. No backfill or shared development database reset is included. Products still

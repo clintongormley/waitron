@@ -20,9 +20,9 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**
-     * No `convenio_config` row for this (tenant, location) — not configured. The overtime rule
+     * No `convenio_config` row for this location — not configured. The overtime rule
      * and guardrails a work-time summary needs cannot be resolved without one.
      */
-    "convenio.not_found": { tenantId: string; locationId: string };
+    "convenio.not_found": { locationId: string };
   }
 }

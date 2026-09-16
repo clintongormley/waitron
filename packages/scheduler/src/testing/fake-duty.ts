@@ -1,8 +1,6 @@
-import type { TenantId } from "@waitron/shared";
 import type { DutyOutcome, PeriodDuty, RunPeriod } from "../duty.js";
 
 export interface FakeDutyCall {
-  tenantId: TenantId;
   period: RunPeriod;
   now: Date;
 }
@@ -21,8 +19,8 @@ export class FakeDuty implements PeriodDuty {
       Promise.resolve({ summary: { ok: true } }),
   ) {}
 
-  async run(tenantId: TenantId, period: RunPeriod, now: Date): Promise<DutyOutcome> {
-    const call = { tenantId, period, now };
+  async run(period: RunPeriod, now: Date): Promise<DutyOutcome> {
+    const call = { period, now };
     this.calls.push(call);
     return this.behaviour(call, this.calls.length - 1);
   }

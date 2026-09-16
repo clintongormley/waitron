@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
 // subpath. `packages/fiscal/src/index.ts`'s own closing comment states the real path.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -13,7 +13,7 @@ import {
   incidents,
   pgErrorMessage,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -31,7 +31,6 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -46,7 +45,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -95,7 +94,6 @@ const degradedClock: TrustedClock = fixedClock(() => ({
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -161,9 +159,9 @@ function failingChain(): FakeFiscalBackend {
  * with no prior `registerNode`, exactly like a real backend).
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });
 }
@@ -171,23 +169,22 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
 /**
  * Scoped to the CURRENT test's own till, never the bare table. This suite shares ONE PGlite
  * instance across the whole file (booting a fresh WASM Postgres per test would be far slower) and
- * reseeds a fresh tenant/till per test rather than truncating, so an earlier test's incident rows
- * would otherwise be counted here too — the identical "Deviation from the brief" record-sale.
- * test.ts's own `countRows` helper documents for `sales`/`sale_lines`/`tenders`.
+ * reseeds a fresh till per test, so an earlier test's incident rows would otherwise be counted
+ * here too.
  */
 async function incidentsForTill(till: TillId) {
   return suite.db.select().from(incidents).where(eq(incidents.tillId, till));
 }
 
 /**
- * The open-dedup suite below needs its own tenant/till per test (rather than the module-level
- * `tenantId`/`tillId` `beforeEach` already seeds) purely so each test's assertions read against
- * an isolated till — reuses `seedTenant`'s exact seeding path, just narrowed to the two ids these
+ * The open-dedup suite below needs its own till per test (rather than the module-level
+ * `tillId` `beforeEach` already seeds) purely so each test's assertions read against
+ * an isolated till — reuses `seedTenant`'s exact seeding path, narrowed to the one id these
  * tests care about.
  */
-async function seedTillForIncidents(): Promise<{ tenantId: TenantId; tillId: TillId }> {
+async function seedTillForIncidents(): Promise<{ tillId: TillId }> {
   const seeded = await seedTenant(suite.db);
-  return { tenantId: seeded.tenantId, tillId: seeded.tillId };
+  return { tillId: seeded.tillId };
 }
 
 describe("incidents — chain verification failure", () => {
@@ -236,7 +233,7 @@ describe("incidents — chain verification failure", () => {
     // `predecessor-hash-mismatch` AND a `predecessor-link-mismatch`, because the hash-mismatch push
     // does not early-return (packages/fiscal-verifactu/src/verify.ts). Modelled here by a fake whose
     // `checkIntegrity` reports two issues for this till (`breakIntegrity` appends). The table-wide
-    // `incidents_open_dedup` index holds at most ONE open incident per (tenant, till, code, sale),
+    // `incidents_open_dedup` index holds at most ONE open incident per (till, code, sale),
     // so emitting one incident row per issue — all sharing this sale + `chain.verification_failed`
     // — would silently drop the second under `ON CONFLICT DO NOTHING`. record-sale AGGREGATES all
     // issues into ONE incident whose `params.issues` carries BOTH: this is the proof the
@@ -283,9 +280,9 @@ describe("incidents — chain verification failure", () => {
     // neither survives.
     const backend = failingChain();
     await expect(
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
-        await backend.registerNode(tx, nodeId, { tenantId });
+        await backend.registerNode(tx, nodeId);
         await recordSale(tx, backend, input());
         throw new Error("simulated crash before commit");
       }),
@@ -328,10 +325,9 @@ describe("recordIncident — no sale attached", () => {
     // ./incidents.ts's own doc comment on `saleId`. Nothing in Task 18's own write path omits it
     // (`recordSale`/`recordVoid` always have one), so this is the one place that path is
     // exercised at all before plan 3 exists to call it for real.
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
-        tenantId,
         tillId,
         error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
         severity: "warning",
@@ -356,7 +352,7 @@ describe("openIncidents", () => {
     }));
     await sell(failingChain());
     await sell(failingChain(), { clock: later });
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
@@ -366,13 +362,13 @@ describe("openIncidents", () => {
 
   it("excludes acknowledged incidents", async () => {
     await sell(failingChain());
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       // The one permitted mutation, and it must be permitted for app_user — a column-level GRANT
       // that omitted acknowledged_at would fail here. This update acknowledges the fixture rows.
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
@@ -380,9 +376,9 @@ describe("openIncidents", () => {
   });
 
   it("scopes incidents to one till", async () => {
-    const other = await seedTenant(suite.db, { tenantId });
+    const other = await seedTenant(suite.db);
     await sell(failingChain());
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, other.tillId);
     });
@@ -399,7 +395,7 @@ describe("openIncidents", () => {
     // `captureError`/`pgErrorMessage` (this task's own governing conventions) read that instead.
     await sell(failingChain());
     const error = await captureError(() =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.update(incidents).set({ code: "nothing.happened" });
       }),
@@ -443,10 +439,9 @@ describe("recordIncidentOnce", () => {
   }
 
   it("inserts the first time and returns true", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const inserted = await recordIncidentOnce(tx, {
-        tenantId,
         tillId,
         saleId: undefined,
         error: chainFailed(),
@@ -459,10 +454,9 @@ describe("recordIncidentOnce", () => {
   });
 
   it("de-dups a second raise for the same open (till, code, sale) and returns false", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
-        tenantId,
         tillId,
         saleId: undefined,
         error: chainFailed(),
@@ -481,10 +475,9 @@ describe("recordIncidentOnce", () => {
   });
 
   it("raises a fresh one after the prior incident is acknowledged", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
-        tenantId,
         tillId,
         saleId: undefined,
         error: chainFailed(),
@@ -504,10 +497,9 @@ describe("recordIncidentOnce", () => {
   });
 
   it("does not de-dup a different code for the same till", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const base = {
-        tenantId,
         tillId,
         saleId: undefined,
         severity: "error" as const,
@@ -532,11 +524,10 @@ describe("recordIncidentOnce", () => {
     const { saleId: saleA } = await sell(backend);
     const { saleId: saleB } = await sell(backend);
 
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
       const forSaleA = await recordIncidentOnce(tx, {
-        tenantId,
         tillId,
         saleId: saleA,
         error,
@@ -545,7 +536,6 @@ describe("recordIncidentOnce", () => {
       });
       expect(forSaleA).toBe(true);
       const forSaleB = await recordIncidentOnce(tx, {
-        tenantId,
         tillId,
         saleId: saleB,
         error,
@@ -576,9 +566,8 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   // in its place — the dedup key only cares that it is a real, distinct code.
 
   it("recordIncident (unconditional) de-dups a second OPEN same-key raise to one row", async () => {
-    const { tenantId, tillId } = await seedTillForIncidents(); // reuse the suite's existing seeding
+    const { tillId } = await seedTillForIncidents(); // reuse the suite's existing seeding
     const input: RecordIncidentInput = {
-      tenantId,
       tillId,
       error: new AppError("chain.verification_failed", {
         tillId,
@@ -593,11 +582,11 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       severity: "error",
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, input);
     });
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, input);
     });
@@ -606,12 +595,11 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   });
 
   it("de-dups two orphan (sale_id NULL) raises via NULLS NOT DISTINCT", async () => {
-    const { tenantId, tillId } = await seedTillForIncidents();
+    const { tillId } = await seedTillForIncidents();
     const raise = () =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return recordIncidentOnce(tx, {
-          tenantId,
           tillId,
           // no saleId — orphan
           error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
@@ -628,16 +616,15 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   });
 
   it("frees the key after acknowledgement (a recurring condition resurfaces)", async () => {
-    const { tenantId, tillId } = await seedTillForIncidents();
+    const { tillId } = await seedTillForIncidents();
     const input: RecordIncidentInput = {
-      tenantId,
       tillId,
       error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
       severity: "error",
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };
     const raise = () =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return recordIncidentOnce(tx, input);
       });
@@ -657,11 +644,10 @@ describe("tenant incident reads", () => {
     });
   }
 
-  async function raise(forTenant: TenantId, forTill: TillId, detectedAt: Date): Promise<void> {
-    await withTenant(suite.db, forTenant, async (tx) => {
+  async function raise(forTill: TillId, detectedAt: Date): Promise<void> {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
-        tenantId: forTenant,
         tillId: forTill,
         error: chainFailed(forTill),
         severity: "error",
@@ -671,97 +657,63 @@ describe("tenant incident reads", () => {
   }
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.db, tenantId, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
   it("lists this tenant's open incidents across tills, newest first", async () => {
-    const secondTill = await seedTenant(suite.db, { tenantId });
-    await raise(tenantId, tillId, BASE);
-    await raise(tenantId, secondTill.tillId, new Date(BASE.getTime() + 60_000));
-    const rows = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const secondTill = await seedTenant(suite.db);
+    await raise(tillId, BASE);
+    await raise(secondTill.tillId, new Date(BASE.getTime() + 60_000));
+    const rows = await asApp((tx) => listOpenIncidents(tx));
     expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
     expect(rows[0]).toMatchObject({ acknowledgedAt: null, acknowledgedBy: null });
   });
 
-  it("never lists another tenant's incidents", async () => {
-    const other = await seedTenant(suite.db);
-    await raise(other.tenantId, other.tillId, BASE);
-    expect(await asApp((tx) => listOpenIncidents(tx, tenantId))).toEqual([]);
-  });
-
-  it("finds an incident by id only within its tenant", async () => {
-    const other = await seedTenant(suite.db);
-    await raise(tenantId, tillId, BASE);
-    await raise(other.tenantId, other.tillId, BASE);
-    const [mine] = await asApp((tx) => listOpenIncidents(tx, tenantId));
-    const theirs = await withTenant(suite.db, other.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return (await listOpenIncidents(tx, other.tenantId))[0]!;
-    });
-    expect((await asApp((tx) => findIncident(tx, tenantId, mine!.id)))?.id).toBe(mine!.id);
-    expect(await asApp((tx) => findIncident(tx, tenantId, theirs.id))).toBeNull();
+  it("finds an incident by id, and reads an unknown id as null", async () => {
+    await raise(tillId, BASE);
+    const [mine] = await asApp((tx) => listOpenIncidents(tx));
+    expect((await asApp((tx) => findIncident(tx, mine!.id)))?.id).toBe(mine!.id);
+    expect(
+      await asApp((tx) => findIncident(tx, "00000000-0000-4000-8000-000000000000")),
+    ).toBeNull();
   });
 
   it("marks an incident handled once; a second mark keeps the first time and person", async () => {
-    await raise(tenantId, tillId, BASE);
-    const [open] = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    await raise(tillId, BASE);
+    const [open] = await asApp((tx) => listOpenIncidents(tx));
     const first = new Date(BASE.getTime() + 1_000);
     const firstPerson = "00000000-0000-4000-8000-000000000001";
     await asApp((tx) =>
-      markIncidentHandled(tx, { tenantId, id: open!.id, personId: firstPerson, handledAt: first }),
+      markIncidentHandled(tx, { id: open!.id, personId: firstPerson, handledAt: first }),
     );
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        tenantId,
         id: open!.id,
         personId: "00000000-0000-4000-8000-000000000002",
         handledAt: new Date(BASE.getTime() + 9_000),
       }),
     );
-    expect(await asApp((tx) => listOpenIncidents(tx, tenantId))).toEqual([]);
-    const handled = await asApp((tx) => findIncident(tx, tenantId, open!.id));
+    expect(await asApp((tx) => listOpenIncidents(tx))).toEqual([]);
+    const handled = await asApp((tx) => findIncident(tx, open!.id));
     expect(handled?.acknowledgedAt?.toISOString()).toBe(first.toISOString());
     expect(handled?.acknowledgedBy).toBe(firstPerson);
   });
 
-  it("does not mark another tenant's incident handled", async () => {
-    const other = await seedTenant(suite.db);
-    await raise(other.tenantId, other.tillId, BASE);
-    const theirs = await withTenant(suite.db, other.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return (await listOpenIncidents(tx, other.tenantId))[0]!;
-    });
-    await asApp((tx) =>
-      markIncidentHandled(tx, {
-        tenantId,
-        id: theirs.id,
-        personId: "00000000-0000-4000-8000-000000000001",
-        handledAt: BASE,
-      }),
-    );
-    const still = await withTenant(suite.db, other.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return listOpenIncidents(tx, other.tenantId);
-    });
-    expect(still.map((r) => r.id)).toEqual([theirs.id]);
-  });
-
   it("lists handled incidents inside the window, newest handled first", async () => {
-    const secondTill = await seedTenant(suite.db, { tenantId });
-    const thirdTill = await seedTenant(suite.db, { tenantId });
-    await raise(tenantId, tillId, BASE);
-    await raise(tenantId, secondTill.tillId, BASE);
-    await raise(tenantId, thirdTill.tillId, BASE);
-    const open = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const secondTill = await seedTenant(suite.db);
+    const thirdTill = await seedTenant(suite.db);
+    await raise(tillId, BASE);
+    await raise(secondTill.tillId, BASE);
+    await raise(thirdTill.tillId, BASE);
+    const open = await asApp((tx) => listOpenIncidents(tx));
     const byTill = new Map(open.map((r) => [r.tillId, r.id]));
     const person = "00000000-0000-4000-8000-000000000001";
     const mark = (till: TillId, at: Date) =>
       asApp((tx) =>
         markIncidentHandled(tx, {
-          tenantId,
           id: byTill.get(till)!,
           personId: person,
           handledAt: at,
@@ -770,34 +722,18 @@ describe("tenant incident reads", () => {
     await mark(tillId, new Date("2026-03-10T10:00:00Z"));
     await mark(secondTill.tillId, new Date("2026-03-12T10:00:00Z"));
     await mark(thirdTill.tillId, new Date("2026-02-01T10:00:00Z"));
-    const other = await seedTenant(suite.db);
-    await raise(other.tenantId, other.tillId, BASE);
-    await withTenant(suite.db, other.tenantId, async (tx) => {
-      await asAppUser(tx);
-      const [theirs] = await listOpenIncidents(tx, other.tenantId);
-      await markIncidentHandled(tx, {
-        tenantId: other.tenantId,
-        id: theirs!.id,
-        personId: person,
-        handledAt: new Date("2026-03-11T10:00:00Z"),
-      });
-    });
-    const rows = await asApp((tx) =>
-      listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
-    );
+    const rows = await asApp((tx) => listHandledIncidents(tx, new Date("2026-03-01T00:00:00Z")));
     expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
   });
 
-  // The suite's database outlives each test, so every call mints fresh ids. They are inserted in
-  // ascending order: a read with no second sort key tends to hand tied rows back in that order,
-  // which fails the descending expectation.
+  // Each call mints fresh ids, inserted in ascending order: a read with no second sort key tends to
+  // hand tied rows back in that order, which fails the descending expectation.
   async function insertTied(acknowledgedAt: string | null): Promise<string[]> {
     const prefix = crypto.randomUUID().slice(0, -2);
     const ids = ["0a", "0b", "0c"].map((suffix) => `${prefix}${suffix}`);
     for (const [index, id] of ids.entries()) {
       await suite.db.insert(incidents).values({
         id,
-        tenantId,
         tillId,
         code: `test.tied_${index}`,
         params: {},
@@ -812,29 +748,26 @@ describe("tenant incident reads", () => {
 
   it("orders open incidents detected at the same instant by id, highest first", async () => {
     const ids = await insertTied(null);
-    const rows = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const rows = await asApp((tx) => listOpenIncidents(tx));
     expect(rows.map((r) => r.id)).toEqual(ids.reverse());
   });
 
   it("orders incidents handled at the same instant by id, highest first", async () => {
     const ids = await insertTied("2026-03-10T10:00:00.000Z");
-    const rows = await asApp((tx) =>
-      listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
-    );
+    const rows = await asApp((tx) => listHandledIncidents(tx, new Date("2026-03-01T00:00:00Z")));
     expect(rows.map((r) => r.id)).toEqual(ids.reverse());
   });
 
   it("includes an incident handled exactly at the cut-off and excludes one a millisecond before", async () => {
     const cutOff = new Date("2026-03-10T10:00:00.000Z");
-    await raise(tenantId, tillId, BASE);
-    const secondTill = await seedTenant(suite.db, { tenantId });
-    await raise(tenantId, secondTill.tillId, BASE);
-    const open = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    await raise(tillId, BASE);
+    const secondTill = await seedTenant(suite.db);
+    await raise(secondTill.tillId, BASE);
+    const open = await asApp((tx) => listOpenIncidents(tx));
     const byTill = new Map(open.map((r) => [r.tillId, r.id]));
     const person = "00000000-0000-4000-8000-000000000001";
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        tenantId,
         id: byTill.get(tillId)!,
         personId: person,
         handledAt: cutOff,
@@ -842,13 +775,12 @@ describe("tenant incident reads", () => {
     );
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        tenantId,
         id: byTill.get(secondTill.tillId)!,
         personId: person,
         handledAt: new Date(cutOff.getTime() - 1),
       }),
     );
-    const rows = await asApp((tx) => listHandledIncidents(tx, tenantId, cutOff));
+    const rows = await asApp((tx) => listHandledIncidents(tx, cutOff));
     expect(rows.map((r) => r.tillId)).toEqual([tillId]);
   });
 });

@@ -1,6 +1,6 @@
 // Real-Postgres proof of `seedDemoRestaurant` (Phase 2, Task 11): the orchestrator that wires the
 // Task 6-10 sub-seeds together — catalogues → floor → staff → media (inside ONE
-// `withTenant`/`asAppUser` tx), then the historical sales (its own per-sale tx, OUTSIDE that tx). This
+// `withTransaction`/`asAppUser` tx), then the historical sales (its own per-sale tx, OUTSIDE that tx). This
 // asserts every sub-seed actually ran: both menus present, the full floor, the staff, ≥1 back-dated
 // sale, and a product's `image` rewritten to the content-addressed served name.
 //
@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -38,7 +38,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -81,7 +80,6 @@ async function provisionVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
   return {
-    tenantId: venue.tenantId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
@@ -97,7 +95,7 @@ describe("seedDemoRestaurant", () => {
     // certain to draw the coffee/steak at least once each — see the modifier assertions below.
     await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 7 });
 
-    const read = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const read = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
@@ -133,16 +131,16 @@ describe("seedDemoRestaurant", () => {
                p.is_counter_default,
                array_agg(c.name order by zm.display_order) as menus
         from zone_service_policies p
-        join floor_zones z on z.tenant_id = p.tenant_id and z.id = p.zone_id
-        join departments d on d.tenant_id = p.tenant_id and d.id = p.department_id
-        join zone_menus zm on zm.tenant_id = p.tenant_id and zm.zone_id = p.zone_id
-        join catalogues c on c.tenant_id = zm.tenant_id and c.id = zm.menu_id
+        join floor_zones z on z.id = p.zone_id
+        join departments d on d.id = p.department_id
+        join zone_menus zm on zm.zone_id = p.zone_id
+        join catalogues c on c.id = zm.menu_id
         group by z.name, d.name, p.service_mode, d.default_service_mode, p.is_counter_default
         order by z.name`);
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, count(distinct h.weekday)::int as days
         from department_hours h
-        join departments d on d.tenant_id = h.tenant_id and d.id = h.department_id
+        join departments d on d.id = h.department_id
         group by d.name
         order by d.name`);
       const { rows: stationRows } = await tx.execute<{ name: string }>(sql`
@@ -154,8 +152,8 @@ describe("seedDemoRestaurant", () => {
       }>(sql`
         select mi.product_id, c.name as menu_name, mi.gross_price
         from menu_items mi
-        join products p on p.tenant_id = mi.tenant_id and p.id = mi.product_id
-        join catalogues c on c.tenant_id = mi.tenant_id and c.id = mi.menu_id
+        join products p on p.id = mi.product_id
+        join catalogues c on c.id = mi.menu_id
         where p.name = 'Negroni'
         order by mi.gross_price`);
       const { rows: cocktailRouteRows } = await tx.execute<{
@@ -164,9 +162,9 @@ describe("seedDemoRestaurant", () => {
       }>(sql`
         select z.name as zone_name, s.name as station_name
         from preparation_routes r
-        join categories c on c.tenant_id = r.tenant_id and c.id = r.category_id
-        join floor_zones z on z.tenant_id = r.tenant_id and z.id = r.zone_id
-        join kitchen_stations s on s.tenant_id = r.tenant_id and s.id = r.station_id
+        join categories c on c.id = r.category_id
+        join floor_zones z on z.id = r.zone_id
+        join kitchen_stations s on s.id = r.station_id
         where c.name->>'en' = 'Drinks'
         order by z.name`);
       return {
@@ -285,7 +283,7 @@ describe("seedDemoRestaurant", () => {
 
     // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.png` name.
     // listAvailableProducts does not project `image`, so read one product's image directly.
-    const { rows: imageRows } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const { rows: imageRows } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,

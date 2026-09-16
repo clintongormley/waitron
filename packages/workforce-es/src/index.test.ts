@@ -34,12 +34,10 @@ describe("convenio_config constraint declarations (forces the lazy extraConfig c
     const config = getTableConfig(api.convenioConfig);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(
-      expect.arrayContaining(["convenio_config_tenant_fk", "convenio_config_location_fk"]),
-    );
+    expect(fkNames).toEqual(expect.arrayContaining(["convenio_config_location_fk"]));
 
     expect(config.uniqueConstraints.map((u) => u.getName())).toContain(
-      "convenio_config_tenant_location_uq",
+      "convenio_config_location_uq",
     );
 
     expect(config.checks.map((c) => c.name)).toContain("convenio_config_working_days_ck");

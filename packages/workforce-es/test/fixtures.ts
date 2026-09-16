@@ -15,22 +15,21 @@ import type { Database, Transaction } from "@waitron/db";
 export { seedEmployment, seedLocation, seedPerson } from "@waitron/workforce/test/fixtures.js";
 
 /**
- * A `convenio_config` row for the (tenant, location). With no overrides it is a DEFAULT row — only
- * tenant_id and location_id are set, so every rule takes its DB-default (the ET statutory floor /
+ * A `convenio_config` row for the location. With no overrides it is a DEFAULT row — only
+ * location_id is set, so every rule takes its DB-default (the ET statutory floor /
  * today's default), which is what lets D2.0 reproduce current behaviour. Pass `workingDaysPerWeek`
  * or `overtimeModel` to override a single rule.
  */
 export async function seedConvenioConfig(
   db: Database | Transaction,
   params: {
-    tenantId: string;
     locationId: string;
     workingDaysPerWeek?: number;
     overtimeModel?: "daily_accrual" | "period_net";
   },
 ): Promise<void> {
-  const cols = [sql`tenant_id`, sql`location_id`];
-  const vals = [sql`${params.tenantId}`, sql`${params.locationId}`];
+  const cols = [sql`location_id`];
+  const vals = [sql`${params.locationId}`];
   if (params.workingDaysPerWeek !== undefined) {
     cols.push(sql`working_days_per_week`);
     vals.push(sql`${params.workingDaysPerWeek}`);

@@ -4,15 +4,11 @@ import { putCredential, tryGetCredential, type KeyRing } from "@waitron/credenti
 import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
-  withTenant,
+  withTransaction,
   type Database,
 } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { NODE_KEY_PURPOSE } from "./node-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import "./errors.js";
@@ -26,7 +22,7 @@ export interface StandbyIdentity {
 /** Mint a standby's own identity in memory (design §6 R2): a fresh nodeId + Ed25519 keypair. Generated
  * BEFORE the adopt fetch so the public half + nodeId can be sent to the primary for endorsement +
  * number allocation; the private half is sealed by `establishReservedStandbyIdentity` after the tenant
- * exists (the vault FK is restrict). */
+ * exists. */
 export function generateStandbyIdentity(): StandbyIdentity {
   const { publicKey, privateKey } = generateNodeKeyPair();
   return { nodeId: randomUUID(), publicKey, privateKey };
@@ -53,7 +49,6 @@ export function generateStandbyIdentity(): StandbyIdentity {
 export async function establishReservedStandbyIdentity(
   deps: { ownerDb: Database; ring: KeyRing },
   args: {
-    tenantId: string;
     locationId: string;
     standby: StandbyIdentity;
     nodeName: string;
@@ -64,22 +59,16 @@ export async function establishReservedStandbyIdentity(
     reserved: ReservedIdentity;
   },
 ): Promise<void> {
-  const tenant = brandTenantId(args.tenantId);
-  await withTenant(deps.ownerDb, tenant, async (tx) => {
-    const existing = await tryGetCredential(tx, deps.ring, {
-      tenantId: tenant,
-      purpose: NODE_KEY_PURPOSE,
-    });
+  await withTransaction(deps.ownerDb, async (tx) => {
+    const existing = await tryGetCredential(tx, deps.ring, { purpose: NODE_KEY_PURPOSE });
     if (existing !== null) return; // already established — idempotent no-op
 
     await putCredential(tx, deps.ring, {
-      tenantId: tenant,
       purpose: NODE_KEY_PURPOSE,
       value: { privateKey: args.standby.privateKey },
     });
     await insertReservedNodeTx(tx, {
       id: args.standby.nodeId,
-      tenantId: args.tenantId,
       locationId: args.locationId,
       name: args.nodeName,
       filingModule: args.filingModule,
@@ -88,7 +77,6 @@ export async function establishReservedStandbyIdentity(
       endorsement: args.reserved.endorsement,
     });
     const standbyNode = {
-      tenantId: tenant,
       locationId: brandLocationId(args.locationId),
       nodeId: brandNodeId(args.standby.nodeId),
     };
@@ -99,7 +87,6 @@ export async function establishReservedStandbyIdentity(
     await insertReservedSeriesTx(
       tx,
       (args.reserved.series ?? []).map((s) => ({
-        tenantId: args.tenantId,
         nodeId: args.standby.nodeId,
         code: s.code,
         purpose: s.purpose,

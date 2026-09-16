@@ -27,7 +27,6 @@ declare module "@waitron/shared" {
 /** The `TillConfig` fields the real `openTab` reads to stamp a `working_orders` row; boot binds the
  * full config into `core`, so this double captures exactly these three. */
 export interface FakeCoreConfig {
-  tenantId: string;
   tillId: string;
   nodeId: string;
 }
@@ -56,7 +55,6 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
       nextOrderNumber += 1;
       await tx.insert(workingOrders).values({
         id: tabId,
-        tenantId: cfg.tenantId,
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
         orderNumber: nextOrderNumber,

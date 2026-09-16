@@ -14,12 +14,12 @@ import { uploadImage, readImageBytes } from "@waitron/media";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
-import { nodeId, seriesId, tenantId, tillId } from "@waitron/shared";
+import { nodeId, seriesId, tillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
@@ -31,7 +31,11 @@ import {
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 
+// TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
+// production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
+// target the bundle is imported into.
 const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const targetSuite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 function venue(taxId: string): VenueRequest {
   return {
@@ -66,7 +70,6 @@ function venue(taxId: string): VenueRequest {
 const bundle: ConfigurationBundle = {
   version: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
-  sourceTenantId: "tenant",
   sourceOperatorId: "source-admin",
   venue: {
     country: "ES",
@@ -97,7 +100,7 @@ const bundle: ConfigurationBundle = {
     rectificativeSeriesCode: "R",
   },
   modules: { core: 1 },
-  tables: { products: [{ id: "p1", tenant_id: "tenant", name: "Café" }] },
+  tables: { products: [{ id: "p1", name: "Café" }] },
   reconnect: ["printers"],
 };
 
@@ -144,7 +147,7 @@ describe("configuration transfer archive", () => {
   it("rejects an undeclared module contribution", async () => {
     const { exportConfigurationTables } = await import("./configuration-transfer.js");
     const module = { name: "probe" } as WaitronModule;
-    await expect(exportConfigurationTables({} as never, "tenant", [module])).rejects.toMatchObject({
+    await expect(exportConfigurationTables({} as never, [module])).rejects.toMatchObject({
       code: "setup.request_invalid",
       params: { field: "module:probe" },
     });
@@ -176,7 +179,7 @@ describe("configuration transfer database path", () => {
                 products: [{ ...bundle.tables.products![0], injected_column: "refuse me" }],
               },
             },
-            { tenantId: result.tenantId, locationId: result.locationId },
+            { locationId: result.locationId },
             coreOnly,
             { core: 1 },
           );
@@ -194,10 +197,9 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await withTenant(suite.db, source.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const uploaded = await uploadImage(
         tx,
-        source.tenantId,
         {
           bytes: new Uint8Array([0xff, 0xd8, 0xff, 1]),
           names: { es: "Pan" },
@@ -208,120 +210,119 @@ describe("configuration transfer database path", () => {
       );
       await tx.execute(sql`
         insert into persons
-          (id, tenant_id, display_name, pin_hash, password_hash, email, role)
+          (id, display_name, pin_hash, password_hash, email, role)
         values
-          ('12121212-aaaa-aaaa-aaaa-121212121212', ${source.tenantId}, 'Second admin',
+          ('12121212-aaaa-aaaa-aaaa-121212121212', 'Second admin',
            'second-admin-pin', 'second-admin-password', 'second-admin@example.test', 'admin')`);
       await tx.execute(sql`
-        insert into catalogues (id, tenant_id, name) values
-          ('11111111-aaaa-aaaa-aaaa-111111111111', ${source.tenantId}, 'Prepared menu')`);
+        insert into catalogues (id, name) values
+          ('11111111-aaaa-aaaa-aaaa-111111111111', 'Prepared menu')`);
       await tx.execute(sql`
         insert into products
-          (id, tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+          (id, catalogue_id, name, pricing_unit, unit_price, vat_class)
         values
-          ('22222222-aaaa-aaaa-aaaa-222222222222', ${source.tenantId},
+          ('22222222-aaaa-aaaa-aaaa-222222222222',
            '11111111-aaaa-aaaa-aaaa-111111111111', 'Café', 'each', 1.50, 'general')`);
       await tx.execute(
-        sql`update products set image = ${uploaded.image.filename} where tenant_id = ${source.tenantId} and id = '22222222-aaaa-aaaa-aaaa-222222222222'`,
+        sql`update products set image = ${uploaded.image.filename} where id = '22222222-aaaa-aaaa-aaaa-222222222222'`,
       );
       await tx.execute(sql`
-        insert into categories (id, tenant_id, name) values
-          ('23232323-aaaa-aaaa-aaaa-232323232323', ${source.tenantId}, '{"es":"Panadería"}'::jsonb)`);
+        insert into categories (id, name) values
+          ('23232323-aaaa-aaaa-aaaa-232323232323', '{"es":"Panadería"}'::jsonb)`);
       await tx.execute(sql`
-        insert into category_details (tenant_id, category_id, image) values
-          (${source.tenantId}, '23232323-aaaa-aaaa-aaaa-232323232323', ${uploaded.image.filename})`);
+        insert into category_details (category_id, image) values
+          ('23232323-aaaa-aaaa-aaaa-232323232323', ${uploaded.image.filename})`);
       await tx.execute(sql`
-        insert into product_categories (tenant_id, product_id, category_id) values
-          (${source.tenantId}, '22222222-aaaa-aaaa-aaaa-222222222222',
+        insert into product_categories (product_id, category_id) values
+          ('22222222-aaaa-aaaa-aaaa-222222222222',
            '23232323-aaaa-aaaa-aaaa-232323232323')`);
       await tx.execute(sql`
         update products set category_id = '23232323-aaaa-aaaa-aaaa-232323232323'
-        where tenant_id = ${source.tenantId} and id = '22222222-aaaa-aaaa-aaaa-222222222222'`);
+        where id = '22222222-aaaa-aaaa-aaaa-222222222222'`);
       await tx.execute(sql`
         insert into persons
-          (id, tenant_id, display_name, pin_hash, password_hash, email, role)
+          (id, display_name, pin_hash, password_hash, email, role)
         values
-          ('33333333-aaaa-aaaa-aaaa-333333333333', ${source.tenantId}, 'Ada',
+          ('33333333-aaaa-aaaa-aaaa-333333333333', 'Ada',
            'source-pin-secret', 'source-password-secret', 'ada@example.test', 'manager')`);
       await tx.execute(sql`
         insert into employments
-          (id, tenant_id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate)
+          (id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate)
         values
-          ('66666666-aaaa-aaaa-aaaa-666666666666', ${source.tenantId},
+          ('66666666-aaaa-aaaa-aaaa-666666666666',
            '33333333-aaaa-aaaa-aaaa-333333333333', 2400, 'permanent', '2026-01-01', 12.50)`);
       await tx.execute(sql`
         insert into availability
-          (id, tenant_id, person_id, weekday, available_from_minute, available_to_minute,
+          (id, person_id, weekday, available_from_minute, available_to_minute,
            effective_from)
         values
-          ('77777777-aaaa-aaaa-aaaa-777777777777', ${source.tenantId},
+          ('77777777-aaaa-aaaa-aaaa-777777777777',
            '33333333-aaaa-aaaa-aaaa-333333333333', 1, 540, 1020, '2026-01-01')`);
       await tx.execute(sql`
         insert into shift_templates
-          (id, tenant_id, location_id, label, weekday, starts_minute, ends_minute, role)
+          (id, location_id, label, weekday, starts_minute, ends_minute, role)
         values
-          ('88888888-aaaa-aaaa-aaaa-888888888888', ${source.tenantId}, ${source.locationId},
+          ('88888888-aaaa-aaaa-aaaa-888888888888', ${source.locationId},
            'Evening', 1, 1020, 120, 'bar')`);
       await tx.execute(sql`
-        insert into convenio_config (id, tenant_id, location_id)
-        values ('99999999-aaaa-aaaa-aaaa-999999999999', ${source.tenantId}, ${source.locationId})`);
+        insert into convenio_config (id, location_id)
+        values ('99999999-aaaa-aaaa-aaaa-999999999999', ${source.locationId})`);
       await tx.execute(sql`
-        insert into payment_policy (tenant_id, offline_mode, offline_amount_cap)
-        values (${source.tenantId}, 'cash_only', 50)`);
+        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 50)`);
       await tx.execute(sql`
         insert into working_orders
-          (id, tenant_id, till_id, node_id, order_number, label)
+          (id, till_id, node_id, order_number, label)
         values
-          ('aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa', ${source.tenantId}, ${source.tillId},
+          ('aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa', ${source.tillId},
            ${source.nodeId}, 1, 'Practice tab')`);
       await tx.execute(sql`
         insert into dining_tables
-          (id, tenant_id, location_id, label, tab_id)
+          (id, location_id, label, tab_id)
         values
-          ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', ${source.tenantId}, ${source.locationId},
+          ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', ${source.locationId},
            'T1', 'aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa')`);
       await tx.execute(sql`
         insert into payments
-          (id, tenant_id, working_order_id, node_id, provider, payment_ref, amount, state)
+          (id, working_order_id, node_id, provider, payment_ref, amount, state)
         values
-          ('cccccccc-bbbb-bbbb-bbbb-cccccccccccc', ${source.tenantId},
+          ('cccccccc-bbbb-bbbb-bbbb-cccccccccccc',
            'aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa', ${source.nodeId}, 'simulated',
            'practice-payment', 1.50, 'captured')`);
       await tx.execute(sql`
         insert into bookings
-          (id, tenant_id, location_id, booking_date, booking_time, party_size, contact_name,
+          (id, location_id, booking_date, booking_time, party_size, contact_name,
            table_id, created_by)
         values
-          ('dddddddd-bbbb-bbbb-bbbb-dddddddddddd', ${source.tenantId}, ${source.locationId},
+          ('dddddddd-bbbb-bbbb-bbbb-dddddddddddd', ${source.locationId},
            '2026-09-10', '20:00', 2, 'Practice guest',
            'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
            '33333333-aaaa-aaaa-aaaa-333333333333')`);
       await tx.execute(sql`
         insert into print_agents
-          (id, tenant_id, location_id, name, token_hash, active, host)
+          (id, location_id, name, token_hash, active, host)
         values
-          ('44444444-aaaa-aaaa-aaaa-444444444444', ${source.tenantId}, ${source.locationId},
+          ('44444444-aaaa-aaaa-aaaa-444444444444', ${source.locationId},
            'Kitchen agent', 'source-agent-token', true, 'source-box.local')`);
       await tx.execute(sql`
         insert into printers
-          (id, tenant_id, location_id, name, transport, local_key, active,
+          (id, location_id, name, transport, local_key, active,
            paper_width, resolution, character_set)
         values
-          ('55555555-aaaa-aaaa-aaaa-555555555555', ${source.tenantId}, ${source.locationId},
+          ('55555555-aaaa-aaaa-aaaa-555555555555', ${source.locationId},
            'Kitchen printer', 'usb', 'B120300001', true, '58mm', '203dpi', 'pc858')`);
       await tx.execute(sql`
         insert into sales
-          (tenant_id, till_id, series_id, node_id, invoice_number, issued_at,
+          (till_id, series_id, node_id, invoice_number, issued_at,
            issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
            fiscal_backend, fiscal_state)
         values
-          (${source.tenantId}, ${source.tillId}, ${source.seriesIds[0]}, ${source.nodeId}, 99,
+          (${source.tillId}, ${source.seriesIds[0]}, ${source.nodeId}, 99,
            '2026-09-09T10:00:00Z', 0, 1.50, '[]', 'es-ES', array['es-ES'],
            'verifactu', 'recorded')`);
     });
     const sourceOperator = await suite.db.execute<{ id: string }>(sql`
       select id from persons
-      where tenant_id = ${source.tenantId} and role = 'admin'
+      where role = 'admin'
         and id <> '12121212-aaaa-aaaa-aaaa-121212121212'
     `);
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -344,25 +345,23 @@ describe("configuration transfer database path", () => {
     expect(transferred.tables.print_agents![0]).not.toHaveProperty("host");
 
     const target = await applyVenue(planVenue(venue("B87654321"), ALL_MODULES), {
-      db: suite.db,
+      db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: async (tx, result) => {
         await importConfigurationTables(
           tx,
           transferred,
-          { tenantId: result.tenantId, locationId: result.locationId },
+          { locationId: result.locationId },
           ALL_MODULES,
           versions,
         );
       },
     });
-    await withTenant(suite.db, target.tenantId, async (tx) => {
+    await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
-      const bytes = await readImageBytes(tx, target.tenantId, metadata!.filename as string);
+      const bytes = await readImageBytes(tx, metadata!.filename as string);
       expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
-      const attached = await tx.execute<{ image: string }>(
-        sql`select image from products where tenant_id = ${target.tenantId}`,
-      );
+      const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
       const category = await tx.execute<{
         name: Record<string, string>;
@@ -374,12 +373,12 @@ describe("configuration transfer database path", () => {
           p.category_id = c.id as primary,
           exists (
             select 1 from product_categories pc
-            where pc.tenant_id = p.tenant_id and pc.product_id = p.id and pc.category_id = c.id
+            where pc.product_id = p.id and pc.category_id = c.id
           ) as member
         from categories c
-        join category_details d on d.tenant_id = c.tenant_id and d.category_id = c.id
-        join products p on p.tenant_id = c.tenant_id
-        where c.tenant_id = ${target.tenantId} and p.name = 'Café'
+        join category_details d on d.category_id = c.id
+        cross join products p
+        where p.name = 'Café'
       `);
       expect(category.rows).toEqual([
         {
@@ -390,14 +389,17 @@ describe("configuration transfer database path", () => {
         },
       ]);
     });
-    const imported = await suite.db.execute<{
+    const sourceSales = await suite.db.execute<{ count: number }>(
+      sql`select count(*)::int as count from sales `,
+    );
+    expect(sourceSales.rows[0]!.count).toBe(1);
+    const imported = await targetSuite.db.execute<{
       products: number;
       staff: number;
       suspended_admins: number;
       secret_hits: number;
       status: string;
       target_sales: number;
-      source_sales: number;
       inactive_agents: number;
       inactive_printers: number;
       source_agent_secrets: number;
@@ -412,31 +414,28 @@ describe("configuration transfer database path", () => {
       target_bookings: number;
     }>(sql`
       select
-        (select count(*)::int from products where tenant_id = ${target.tenantId}) as products,
-        (select count(*)::int from persons where tenant_id = ${target.tenantId} and role = 'manager') as staff,
-        (select count(*)::int from persons where tenant_id = ${target.tenantId}
-          and role = 'admin' and status = 'suspended') as suspended_admins,
-        (select count(*)::int from persons where tenant_id = ${target.tenantId}
-          and (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
-        (select status from persons where tenant_id = ${target.tenantId} and role = 'manager') as status,
-        (select count(*)::int from sales where tenant_id = ${target.tenantId}) as target_sales,
-        (select count(*)::int from sales where tenant_id = ${source.tenantId}) as source_sales,
+        (select count(*)::int from products ) as products,
+        (select count(*)::int from persons where role = 'manager') as staff,
+        (select count(*)::int from persons where role = 'admin' and status = 'suspended') as suspended_admins,
+        (select count(*)::int from persons where (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
+        (select status from persons where role = 'manager') as status,
+        (select count(*)::int from sales ) as target_sales,
         (select count(*)::int from print_agents
-          where tenant_id = ${target.tenantId} and not active) as inactive_agents,
+          where not active) as inactive_agents,
         (select count(*)::int from printers
-          where tenant_id = ${target.tenantId} and not active and local_key = 'B120300001') as inactive_printers,
+          where not active and local_key = 'B120300001') as inactive_printers,
         (select count(*)::int from print_agents
-          where tenant_id = ${target.tenantId} and token_hash = 'source-agent-token') as source_agent_secrets,
-        (select count(*)::int from employments where tenant_id = ${target.tenantId}) as employments,
-        (select count(*)::int from availability where tenant_id = ${target.tenantId}) as availability,
-        (select count(*)::int from shift_templates where tenant_id = ${target.tenantId}) as shift_templates,
-        (select count(*)::int from convenio_config where tenant_id = ${target.tenantId}) as convenio_config,
-        (select count(*)::int from payment_policy where tenant_id = ${target.tenantId}) as payment_policy,
+          where token_hash = 'source-agent-token') as source_agent_secrets,
+        (select count(*)::int from employments) as employments,
+        (select count(*)::int from availability) as availability,
+        (select count(*)::int from shift_templates) as shift_templates,
+        (select count(*)::int from convenio_config) as convenio_config,
+        (select count(*)::int from payment_policy) as payment_policy,
         (select count(*)::int from dining_tables
-          where tenant_id = ${target.tenantId} and tab_id is not null) as linked_tables,
-        (select count(*)::int from working_orders where tenant_id = ${target.tenantId}) as target_orders,
-        (select count(*)::int from payments where tenant_id = ${target.tenantId}) as target_payments,
-        (select count(*)::int from bookings where tenant_id = ${target.tenantId}) as target_bookings
+          where tab_id is not null) as linked_tables,
+        (select count(*)::int from working_orders ) as target_orders,
+        (select count(*)::int from payments) as target_payments,
+        (select count(*)::int from bookings) as target_bookings
     `);
     expect(imported.rows[0]).toEqual({
       products: 1,
@@ -445,7 +444,6 @@ describe("configuration transfer database path", () => {
       secret_hits: 0,
       status: "suspended",
       target_sales: 0,
-      source_sales: 1,
       inactive_agents: 1,
       inactive_printers: 1,
       source_agent_secrets: 0,
@@ -460,24 +458,23 @@ describe("configuration transfer database path", () => {
       target_bookings: 0,
     });
 
-    const printerSettings = await suite.db.execute<{
+    const printerSettings = await targetSuite.db.execute<{
       paper_width: string;
       resolution: string;
       character_set: string;
     }>(sql`
       select paper_width, resolution, character_set from printers
-      where tenant_id = ${target.tenantId} and local_key = 'B120300001'`);
+      where local_key = 'B120300001'`);
     expect(printerSettings.rows).toEqual([
       { paper_width: "58mm", resolution: "203dpi", character_set: "pc858" },
     ]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
-    await withTenant(suite.db, target.tenantId, (tx) =>
+    await withTransaction(targetSuite.db, (tx) =>
       recordSale(
         tx,
-        fiscal.makeBackend({ db: suite.db, clock: systemClock(), environment: "production" }),
+        fiscal.makeBackend({ db: targetSuite.db, clock: systemClock(), environment: "production" }),
         {
-          tenantId: tenantId(target.tenantId),
           tillId: tillId(target.tillId),
           nodeId: nodeId(target.nodeId),
           seriesId: seriesId(target.seriesIds[0]!),
@@ -510,7 +507,7 @@ describe("configuration transfer database path", () => {
         },
       ),
     );
-    const firstLive = await suite.db.execute<{
+    const firstLive = await targetSuite.db.execute<{
       invoice_number: number;
       first_record: boolean;
       previous_hash: string | null;
@@ -519,8 +516,7 @@ describe("configuration transfer database path", () => {
         select s.invoice_number, r.primer_registro as first_record,
           r.anterior_huella as previous_hash
         from sales s
-        join registros_facturacion r on r.tenant_id = s.tenant_id and r.sale_id = s.id
-        where s.tenant_id = ${target.tenantId}
+        join registros_facturacion r on r.sale_id = s.id
       `,
     );
     expect(firstLive.rows).toEqual([
@@ -534,14 +530,14 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const original = await withTenant(suite.db, source.tenantId, async (tx) => {
+  const original = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const menu = await createCatalogue(tx, tenantId(source.tenantId), { name: "Modifier menu" });
-    const section = await createMenuSection(tx, tenantId(source.tenantId), {
+    const menu = await createCatalogue(tx, { name: "Modifier menu" });
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { es: "Bebidas" },
     });
-    const product = await createProduct(tx, tenantId(source.tenantId), {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Café",
@@ -552,10 +548,9 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     const choiceId = randomUUID();
     const extraId = randomUUID();
     const definitions = [
-      await createModifier(tx, source.tenantId, { type: "text", name: { es: "Mensaje" } }, "es"),
+      await createModifier(tx, { type: "text", name: { es: "Mensaje" } }, "es"),
       await createModifier(
         tx,
-        source.tenantId,
         {
           type: "options",
           name: { es: "Leche" },
@@ -566,7 +561,6 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
       ),
       await createModifier(
         tx,
-        source.tenantId,
         {
           type: "extras",
           name: { es: "Extras" },
@@ -587,11 +581,10 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     ];
     await setProductOptionGroups(
       tx,
-      tenantId(source.tenantId),
       product.id,
       definitions.map((definition) => definition.id),
     );
-    await createMenuItem(tx, tenantId(source.tenantId), {
+    await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
@@ -609,15 +602,15 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
   );
   expect(transferred.tables.option_groups).toHaveLength(3);
   expect(transferred.tables.option_group_items).toHaveLength(2);
-  const target = await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
-    db: suite.db,
+  await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
+    db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx, result) =>
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
-  await withTenant(suite.db, target.tenantId, async (tx) => {
+  await withTransaction(targetSuite.db, async (tx) => {
     await asAppUser(tx);
-    const definitions = await listModifiers(tx, target.tenantId);
+    const definitions = await listModifiers(tx);
     expect(definitions).toHaveLength(3);
     expect(
       definitions.every((definition) =>
@@ -634,9 +627,9 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
       choices: [{ priceDelta: "1.50", maxQuantity: 3, preselected: true, vatClass: "general" }],
     });
     const menus = await tx.execute<{ id: string }>(
-      sql`select id from catalogues where tenant_id = ${target.tenantId} and name = 'Modifier menu'`,
+      sql`select id from catalogues where name = 'Modifier menu'`,
     );
-    const offers = await listMenuOffers(tx, tenantId(target.tenantId), [menus.rows[0]!.id]);
+    const offers = await listMenuOffers(tx, [menus.rows[0]!.id]);
     expect(offers[0]!.grossPrice).toBe("2.75");
     expect(offers[0]!.modifiers.map((modifier) => modifier.type)).toEqual([
       "text",

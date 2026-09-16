@@ -1,5 +1,5 @@
 import { addDecimal, decimal, percentOf } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import type { LiquidationPeriod } from "./period.js";
 import type { VatReturn } from "./types.js";
 
@@ -28,7 +28,6 @@ import type { VatReturn } from "./types.js";
  * monthly deli return with none of them; a comment marks each such zero.
  */
 export interface Modelo303 {
-  tenantId: TenantId;
   year: number;
   /** The liquidation period the boxes are FOR (month/quarter/year). */
   period: LiquidationPeriod;
@@ -144,5 +143,5 @@ export function mapModelo303(vatReturn: VatReturn): Modelo303 {
   // The boxes above are period-agnostic (the box arithmetic never looks at month/quarter/year); the
   // liquidation period the aggregate is FOR is threaded through verbatim, so a quarterly or annual
   // VatReturn maps to the same boxes a monthly one with identical figures would, tagged with its period.
-  return { tenantId: vatReturn.tenantId, year: vatReturn.year, period: vatReturn.period, boxes };
+  return { year: vatReturn.year, period: vatReturn.period, boxes };
 }

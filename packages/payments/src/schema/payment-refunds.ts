@@ -24,7 +24,6 @@ export const paymentRefunds = pgTable(
   "payment_refunds",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     paymentId: uuid("payment_id").notNull(),
     provider: text("provider").notNull(),
     paymentRef: text("payment_ref").notNull(),
@@ -39,8 +38,8 @@ export const paymentRefunds = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.paymentId],
-      foreignColumns: [payments.tenantId, payments.id],
+      columns: [t.paymentId],
+      foreignColumns: [payments.id],
       name: "payment_refunds_payment_fk",
     }).onDelete("restrict"),
     index("payment_refunds_payment_idx").on(t.paymentId),

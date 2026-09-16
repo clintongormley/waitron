@@ -1,11 +1,9 @@
 import { parseArgs } from "node:util";
-import { withTenant, type Database } from "@waitron/db";
-import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
+import { withTransaction, type Database } from "@waitron/db";
+import { AppError, isAppError } from "@waitron/shared";
 import type { KeyRing } from "./keyring.js";
 import { PURPOSES, isPurpose } from "./purposes.js";
 import {
-  credentialTenants,
   deleteCredential,
   listCredentials,
   putCredential,
@@ -31,10 +29,10 @@ export interface CliDeps {
 const USAGE = [
   "usage: waitron-credentials <command> [options]",
   "",
-  "  set    --tenant <uuid> --purpose <name> [--file <path>]   payload on stdin by default",
-  "  list   [--tenant <uuid>]",
+  "  set    --purpose <name> [--file <path>]   payload on stdin by default",
+  "  list",
   "  rotate",
-  "  delete --tenant <uuid> --purpose <name>",
+  "  delete --purpose <name>",
   "",
   `purposes: ${Object.keys(PURPOSES).join(", ")}`,
   "",
@@ -77,7 +75,6 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
   let values;
   try {
     ({ values } = parse(argv, {
-      tenant: { type: "string" },
       purpose: { type: "string" },
       file: { type: "string" },
     }));
@@ -86,16 +83,11 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
     return 2;
   }
 
-  const tenant = values.tenant;
   const purpose = values.purpose;
-  if (typeof tenant !== "string" || typeof purpose !== "string") {
+  if (typeof purpose !== "string") {
     deps.io.stderr(USAGE);
     return 2;
   }
-
-  // Resolved BEFORE any I/O (stdin/file read, purpose check) so a mistyped UUID fails fast.
-  const tenantId = resolveTenant(tenant, deps);
-  if (typeof tenantId !== "string") return tenantId;
 
   if (!isPurpose(purpose)) {
     // The structured code, not an ad-hoc sentence: `credentials.unknown_purpose` exists precisely
@@ -143,52 +135,29 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
   }
 
   try {
-    await withTenant(deps.db, tenantId, (tx) =>
-      putCredential(tx, deps.ring, { tenantId, purpose, value: payload }),
+    await withTransaction(deps.db, (tx) =>
+      putCredential(tx, deps.ring, { purpose, value: payload }),
     );
   } catch (error) {
     return reportFailure(error, deps);
   }
-  deps.io.stdout(`set ${purpose} for ${tenantId}`);
+  deps.io.stdout(`set ${purpose}`);
   return 0;
 }
 
 async function list(argv: string[], deps: CliDeps): Promise<number> {
-  let values;
   try {
-    ({ values } = parse(argv, { tenant: { type: "string" } }));
+    parse(argv, {});
   } catch {
     deps.io.stderr(USAGE);
     return 2;
   }
 
-  let tenants: TenantId[];
-  if (typeof values.tenant === "string") {
-    const tenantId = resolveTenant(values.tenant, deps);
-    if (typeof tenantId !== "string") return tenantId;
-    tenants = [tenantId];
-  } else {
-    // No --tenant: enumerate through credential_tenants, once per purpose, and
-    // de-duplicate — a tenant holding two purposes would otherwise be visited twice below, and
-    // print every one of its rows twice. There is no untenanted read of the table itself.
-    tenants = [
-      ...new Set(
-        (
-          await Promise.all(
-            Object.keys(PURPOSES).map((purpose) => credentialTenants(deps.db, purpose)),
-          )
-        ).flat(),
-      ),
-    ];
-  }
-
-  for (const tenantId of tenants) {
-    const rows = await withTenant(deps.db, tenantId, (tx) => listCredentials(tx));
-    for (const row of rows) {
-      // Metadata only — purpose, key version, when it was last written. Never a field name, never a
-      // value.
-      deps.io.stdout(`${row.tenantId}\t${row.purpose}\tv${row.keyVersion}\t${row.updatedAt}`);
-    }
+  const rows = await withTransaction(deps.db, (tx) => listCredentials(tx));
+  for (const row of rows) {
+    // Metadata only — purpose, key version, when it was last written. Never a field name, never a
+    // value.
+    deps.io.stdout(`${row.purpose}\tv${row.keyVersion}\t${row.updatedAt}`);
   }
   return 0;
 }
@@ -196,29 +165,24 @@ async function list(argv: string[], deps: CliDeps): Promise<number> {
 async function remove(argv: string[], deps: CliDeps): Promise<number> {
   let values;
   try {
-    ({ values } = parse(argv, { tenant: { type: "string" }, purpose: { type: "string" } }));
+    ({ values } = parse(argv, { purpose: { type: "string" } }));
   } catch {
     deps.io.stderr(USAGE);
     return 2;
   }
-  const tenant = values.tenant;
   const purpose = values.purpose;
-  if (typeof tenant !== "string" || typeof purpose !== "string" || !isPurpose(purpose)) {
+  if (typeof purpose !== "string" || !isPurpose(purpose)) {
     deps.io.stderr(USAGE);
     return 2;
   }
-  const tenantId = resolveTenant(tenant, deps);
-  if (typeof tenantId !== "string") return tenantId;
-  const deleted = await withTenant(deps.db, tenantId, (tx) =>
-    deleteCredential(tx, { tenantId, purpose }),
-  );
+  const deleted = await withTransaction(deps.db, (tx) => deleteCredential(tx, { purpose }));
   if (!deleted) {
     // Non-zero: "there was nothing there" is a different outcome from "removed it", and a script
-    // that de-provisions a tenant should be able to tell them apart.
-    deps.io.stderr(`no ${purpose} credential for ${tenantId}`);
+    // that de-provisions a purpose should be able to tell them apart.
+    deps.io.stderr(`no ${purpose} credential`);
     return 1;
   }
-  deps.io.stdout(`deleted ${purpose} for ${tenantId}`);
+  deps.io.stdout(`deleted ${purpose}`);
   return 0;
 }
 
@@ -238,32 +202,6 @@ async function rotate(deps: CliDeps): Promise<number> {
   }
   deps.io.stdout(`rotated ${result.rotated}, already current ${result.alreadyCurrent}`);
   return 0;
-}
-
-/**
- * Brands a raw `--tenant` argument, or reports the failure and yields the exit code to return.
- *
- * `brandTenantId` throws a plain `AppError` on any non-UUID string, and `runCli`'s contract is
- * "returns the exit code, never rejects for an ordinary operator mistake" (see its doc comment).
- * Left unguarded, a truncated or mis-pasted tenant id — the likeliest operator typo there is —
- * crashes `bin.ts` with an unhandled rejection instead of the clean structured line a bad
- * `--purpose` gets.
- *
- * One home rather than three: `set`, `list` and `remove` each carried this block verbatim, and two
- * of the three comments said only "same reasoning as `set`'s" — the duplication was noticed at the
- * time, not missed. That mattered more than line count, because the resolve-don't-reject property
- * is the safety-critical one in this file and was being upheld by three independently-maintained
- * copies.
- *
- * Returns `TenantId` (a branded string) on success and a number on failure, so callers discriminate
- * with `typeof !== "string"` and return the code directly.
- */
-function resolveTenant(raw: string, deps: CliDeps): TenantId | number {
-  try {
-    return brandTenantId(raw);
-  } catch (error) {
-    return reportFailure(error, deps);
-  }
 }
 
 /** Prints an AppError's CODE and structured params — never a raw message, and never a value. Params

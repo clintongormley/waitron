@@ -1,5 +1,5 @@
 {
-  "id": "e1c91cd3-5bb3-4b20-8c87-849edc83dadd",
+  "id": "80e18488-19e5-4792-8883-a6f2a25955d0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "location_id": {
           "name": "location_id",
@@ -98,15 +92,9 @@
         }
       },
       "indexes": {
-        "bookings_tenant_location_date_idx": {
-          "name": "bookings_tenant_location_date_idx",
+        "bookings_location_date_idx": {
+          "name": "bookings_location_date_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "location_id",
               "isExpression": false,
@@ -125,15 +113,9 @@
           "method": "btree",
           "with": {}
         },
-        "bookings_tenant_table_status_date_time_idx": {
-          "name": "bookings_tenant_table_status_date_time_idx",
+        "bookings_table_status_date_time_idx": {
+          "name": "bookings_table_status_date_time_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "table_id",
               "isExpression": false,
@@ -166,19 +148,6 @@
         }
       },
       "foreignKeys": {
-        "bookings_tenant_fk": {
-          "name": "bookings_tenant_fk",
-          "tableFrom": "bookings",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "bookings_location_fk": {
           "name": "bookings_location_fk",
           "tableFrom": "bookings",
@@ -194,16 +163,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "bookings_tenant_id_key": {
-          "name": "bookings_tenant_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "bookings_party_size_ck": {

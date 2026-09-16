@@ -5,8 +5,8 @@ import {
   isAppError,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { Decimal, SaleId, TenantId, TillId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import type { Decimal, SaleId, TillId } from "@waitron/shared";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentState } from "./provider.js";
 import type { OrphanRemediation } from "./errors.js";
@@ -49,16 +49,14 @@ export interface SettlementRecord {
  * The processor's settlement report for a window — the vendor half of the audit. The neutral seam
  * never names any vendor concept.
  *
- * An implementer MUST return only the settlements belonging to `tenantId`'s settlement identity.
- * The tenant is an ARGUMENT rather than something the source binds at construction because a
- * `ReconcileDeps` is built once and swept across many tenants, while a processor account may well be
- * shared between them (provisioning is not decided yet). A source that could not see the tenant
- * would return the whole account's settlements, and every OTHER tenant's settlement would then fail
- * this tenant's targeted existence check and land in `missingLocal` — filling the sweep's
- * authoritative result with money that is not this tenant's, on every run.
+ * An implementer MUST return only the settlements belonging to this taxpayer's settlement identity.
+ * A source over a processor account shared with anyone else has to narrow the fetch itself, using
+ * whatever the vendor offers: every settlement it returns that has no local row fails the sweep's
+ * targeted existence check and lands in `missingLocal`, so a report that is too wide fills the
+ * sweep's authoritative result with money that is not ours, on every run.
  */
 export interface SettlementReportSource {
-  fetch(tenantId: TenantId, window: ReconcilePeriod): Promise<SettlementRecord[]>;
+  fetch(window: ReconcilePeriod): Promise<SettlementRecord[]>;
 }
 
 /** Reverse one payment in full at the processor — the orphan self-heal. The adapter chooses how.
@@ -66,14 +64,13 @@ export interface SettlementReportSource {
 export type ReversalFn = (paymentRef: string) => Promise<void>;
 
 /**
- * Raise an incident, deduplicated per open `(tenant, till, code, sale)`, reporting whether it
+ * Raise an incident, deduplicated per open `(till, code, sale)`, reporting whether it
  * actually inserted. Typed structurally rather than imported so this package keeps `@waitron/core`
  * a DEV dependency; `recordIncidentOnce` is assignable to it verbatim.
  */
 export type IncidentSink = (
   tx: Transaction,
   input: {
-    tenantId: TenantId;
     tillId: TillId;
     saleId?: SaleId;
     error: AppError;
@@ -114,7 +111,7 @@ export interface PaymentReconcileResult {
    * period covers them again, and their incidents stay open regardless of cadence — but a claimed
    * orphan carries a permanent `reconcile_remediated_at` marker unconditionally, whichever sweep
    * stamped it, so a failure dropped here is dropped for good. The `payment.reconcile_remediation_failed`
-   * incident alone cannot carry it — the open-incident dedup keys on `(tenant, till, code, sale_id)`,
+   * incident alone cannot carry it — the open-incident dedup keys on `(till, code, sale_id)`,
    * so a still-open incident from an earlier sweep silently swallows this sweep's new failures.
    */
   remediationFailures: { paymentRef: string; reason: string }[];
@@ -129,11 +126,7 @@ export interface PaymentReconcileResult {
  */
 export interface PaymentReconciler {
   readonly provider: string;
-  reconcile(
-    tenantId: TenantId,
-    period: ReconcilePeriod,
-    now: Date,
-  ): Promise<PaymentReconcileResult>;
+  reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult>;
 }
 
 /** The four classes a LOCAL row can fall into. `missingLocal` is not here: it has no local row. */
@@ -275,18 +268,15 @@ const SEVERITY = {
  */
 export async function reconcilePayments(
   deps: ReconcileDeps,
-  tenantId: TenantId,
   period: ReconcilePeriod,
   now: Date,
 ): Promise<PaymentReconcileResult> {
   // T1 — our rows for the period. No network call inside it.
-  const rows = await withTenant(deps.db, tenantId, (tx) =>
-    listReconcilable(tx, tenantId, deps.provider, period),
-  );
+  const rows = await withTransaction(deps.db, (tx) => listReconcilable(tx, deps.provider, period));
 
   // Network — outside every transaction, over a window widened by the settlement lag, because a
   // payment captured at the end of the period settles days after it.
-  const records = await deps.report.fetch(tenantId, {
+  const records = await deps.report.fetch({
     from: period.from,
     to: new Date(period.to.getTime() + deps.settlementLagMs),
   });
@@ -318,7 +308,7 @@ export async function reconcilePayments(
   // T2 — resolve the missingLocal candidates, raise every incident, and claim the orphans this
   // sweep will reverse. One short write transaction.
   const remediable: ReconcilableRow[] = [];
-  await withTenant(deps.db, tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     // One batched existence check for the WHOLE sweep's unmatched settlements, not one per
     // settlement: T2 is a write transaction, so N round trips here would lengthen lock contention
     // with the concurrent sweeps this feature explicitly supports, and a tenant with zero local
@@ -329,7 +319,7 @@ export async function reconcilePayments(
     for (const record of classified.unmatched) {
       for (const reference of record.references) allReferences.add(reference);
     }
-    const existing = await existingReferences(tx, tenantId, deps.provider, [...allReferences]);
+    const existing = await existingReferences(tx, deps.provider, [...allReferences]);
 
     const missing: SettlementRecord[] = [];
     for (const record of classified.unmatched) {
@@ -395,7 +385,6 @@ export async function reconcilePayments(
         continue;
       }
       const claimed = await markReconcileRemediated(tx, {
-        tenantId,
         provider: deps.provider,
         paymentRef: ref,
         at: now,
@@ -406,15 +395,8 @@ export async function reconcilePayments(
       if (claimed) remediable.push(entry.row);
     }
 
-    result.incidentsRaised += await raiseRowIncidents(
-      tx,
-      deps,
-      tenantId,
-      classified,
-      remediation,
-      now,
-    );
-    result.incidentsRaised += await raiseMissingLocal(tx, deps, tenantId, missing, now);
+    result.incidentsRaised += await raiseRowIncidents(tx, deps, classified, remediation, now);
+    result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
   });
 
   // Reversals — outside every transaction. See the marker-ordering note above. One failure does
@@ -432,7 +414,7 @@ export async function reconcilePayments(
     }
   }
   if (failures.length > 0) {
-    result.incidentsRaised += await raiseRemediationFailures(deps, tenantId, failures, now);
+    result.incidentsRaised += await raiseRemediationFailures(deps, failures, now);
   }
   return result;
 }
@@ -440,12 +422,11 @@ export async function reconcilePayments(
 /** Raises one AGGREGATE incident per (till, class) over the classified rows, returning how many
  * were really inserted (`recordIncidentOnce` reports its own de-duplication, so a re-detected
  * still-open condition is not counted twice). Aggregate rather than one incident per payment: the
- * open-incident dedup index keys on `(tenant, till, code, sale_id)` and these rows frequently share
+ * open-incident dedup index keys on `(till, code, sale_id)` and these rows frequently share
  * a null sale_id, so N same-key incidents would silently collapse into whichever won the race. */
 async function raiseRowIncidents(
   tx: Transaction,
   deps: ReconcileDeps,
-  tenantId: TenantId,
   classified: Classification,
   remediation: Map<string, OrphanRemediation>,
   now: Date,
@@ -462,7 +443,6 @@ async function raiseRowIncidents(
   for (const group of groups.values()) {
     const first = group[0]!;
     const inserted = await deps.incidents(tx, {
-      tenantId,
       tillId: brandTillId(first.row.tillId),
       error: incidentFor(first.klass, group, remediation),
       severity: SEVERITY[first.klass],
@@ -550,7 +530,6 @@ function incidentFor(
 async function raiseMissingLocal(
   tx: Transaction,
   deps: ReconcileDeps,
-  tenantId: TenantId,
   missing: SettlementRecord[],
   now: Date,
 ): Promise<number> {
@@ -558,7 +537,7 @@ async function raiseMissingLocal(
   for (const record of missing) {
     if (record.hint !== undefined) hintedIds.add(record.hint.workingOrderId);
   }
-  const tills = await tillsForWorkingOrders(tx, tenantId, [...hintedIds]);
+  const tills = await tillsForWorkingOrders(tx, [...hintedIds]);
 
   const byTill = new Map<string, { record: SettlementRecord; paymentRef: string }[]>();
   for (const record of missing) {
@@ -574,7 +553,6 @@ async function raiseMissingLocal(
   let raised = 0;
   for (const [tillId, group] of byTill) {
     const inserted = await deps.incidents(tx, {
-      tenantId,
       tillId: brandTillId(tillId),
       error: new AppError(CODE.missingLocal, {
         count: group.length,
@@ -650,7 +628,6 @@ interface RemediationFailure {
  * transaction the failure path needs. Returns how many incidents were really inserted. */
 async function raiseRemediationFailures(
   deps: ReconcileDeps,
-  tenantId: TenantId,
   failures: RemediationFailure[],
   now: Date,
 ): Promise<number> {
@@ -662,10 +639,9 @@ async function raiseRemediationFailures(
   }
 
   let raised = 0;
-  await withTenant(deps.db, tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     for (const [tillId, group] of byTill) {
       const inserted = await deps.incidents(tx, {
-        tenantId,
         tillId: brandTillId(tillId),
         error: new AppError(CODE.remediationFailed, {
           count: group.length,

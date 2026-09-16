@@ -2,13 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { insertInitiated, resolvePaymentTenant } from "@waitron/payments";
+import { hasPaymentWithExternalRef, insertInitiated } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { mountWebhook } from "./webhook.js";
 import type { WebhookDeps } from "./webhook.js";
@@ -19,8 +18,8 @@ import {
 } from "./testing/fake-stripe-webhook.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants — being non-superuser is what makes those
-// grants the ceiling. Everything the route does below (read the credential, resolve the tenant across the
-// #26 seam, settle under `withTenant`) is exercised as the deployment role's view of the world.
+// grants the ceiling. Everything the route does below (read the credential, look the payment up by its
+// session id, settle under `withTransaction`) is exercised as the deployment role's view of the world.
 // PGlite (webhook.test.ts) runs every connection as a superuser and cannot show any of it.
 const PROBE_ROLE = "server_webhook_probe";
 const PROBE_PASSWORD = "probe";
@@ -43,27 +42,25 @@ function deps(db: Database, nodeId: string = NODE_A): WebhookDeps {
 }
 
 interface SeededPayment {
-  tenantId: TenantId;
   sessionId: string;
 }
 
-/** Seeds a tenant, an open working order, one `initiated` stripe payment (external_ref = a fresh
+/** Seeds an open working order, one `initiated` stripe payment (external_ref = a fresh
  * session id) and a `payments.stripe` credential — all as the superuser admin (pure
  * setup). The route then acts on it as the non-superuser probe. */
 async function seedInitiated(admin: Database, webhookSecret: string): Promise<SeededPayment> {
-  const tenantId = await seedTenant(admin);
+  await seedTenant(admin);
   const sessionId = `cs_${randomUUID()}`;
   const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Counter', array['es'], 'Retail') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Counter', array['es'], 'Retail') returning id`);
   const till = await admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+    insert into tills (location_id, name)
+    values (${loc.rows[0]!.id}, 'Till 1') returning id`);
   const wo = await admin.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${till.rows[0]!.id}, 1) returning id`);
-  await withTenant(admin, tenantId, (tx) =>
+    insert into working_orders (till_id, order_number) values (${till.rows[0]!.id}, 1) returning id`);
+  await withTransaction(admin, (tx) =>
     insertInitiated(tx, {
-      tenantId,
       workingOrderId: wo.rows[0]!.id,
       provider: "stripe",
       paymentRef: randomUUID(),
@@ -71,9 +68,8 @@ async function seedInitiated(admin: Database, webhookSecret: string): Promise<Se
       amount: decimal("12.10"),
     }),
   );
-  await withTenant(admin, tenantId, (tx) =>
+  await withTransaction(admin, (tx) =>
     putCredential(tx, ring, {
-      tenantId,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_probe",
@@ -83,7 +79,7 @@ async function seedInitiated(admin: Database, webhookSecret: string): Promise<Se
       },
     }),
   );
-  return { tenantId, sessionId };
+  return { sessionId };
 }
 
 function completedEvent(sessionId: string): string {
@@ -95,35 +91,21 @@ function completedEvent(sessionId: string): string {
   });
 }
 
-async function stateOf(
-  db: Database,
-  tenantId: TenantId,
-  sessionId: string,
-): Promise<string | undefined> {
+async function stateOf(db: Database, sessionId: string): Promise<string | undefined> {
   const rows = await db.execute<{ state: string }>(
-    sql`select state from payments where tenant_id = ${tenantId} and external_ref = ${sessionId}`,
+    sql`select state from payments where external_ref = ${sessionId}`,
   );
   return rows.rows[0]?.state;
 }
 
 describe("the webhook resolves and settles as the non-superuser deployment role", () => {
-  it("crosses the #26 seam, settles under withTenant, and is idempotent — all as app_user", async () => {
-    // A SECOND tenant with its own initiated payment, so "resolve crosses exactly one tenant" is a
-    // real claim: the seam must return THIS session's owner, not merely some tenant.
-    const other = await seedInitiated(suite.admin, "whsec_other");
+  it("looks the payment up, settles under withTransaction, and is idempotent — all as app_user", async () => {
     const seeded = await seedInitiated(suite.admin, "whsec_probe");
 
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      // Exercise the tenant-resolution function as app_user against both seeded payment
-      // references. This checks the callable seam and its returned tenant ids through a
-      // non-superuser connection.
-      expect(await resolvePaymentTenant(probe, "stripe", seeded.sessionId)).toBe(
-        String(seeded.tenantId),
-      );
-      expect(await resolvePaymentTenant(probe, "stripe", other.sessionId)).toBe(
-        String(other.tenantId),
-      );
+      // The route's lookup, as app_user: its SELECT grant on payments covers it.
+      expect(await hasPaymentWithExternalRef(probe, "stripe", seeded.sessionId)).toBe(true);
 
       const app = new Hono();
       mountWebhook(app, deps(probe), () => {});
@@ -131,26 +113,24 @@ describe("the webhook resolves and settles as the non-superuser deployment role"
       const body = completedEvent(seeded.sessionId);
       const sig = signStripeBody(body, "whsec_probe");
 
-      // The settle runs `readCredential` + `settleInitiated` under `withTenant` as app_user: SELECT
+      // The settle runs `readCredential` + `settleInitiated` under `withTransaction` as app_user: SELECT
       // on tenant_credentials and UPDATE on payments both had to succeed as the deployment role.
-      const first = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {
+      const first = await app.request("/webhooks/stripe", {
         method: "POST",
         body,
         headers: { "stripe-signature": sig },
       });
       expect(first.status).toBe(200);
-      expect(await stateOf(suite.admin, seeded.tenantId, seeded.sessionId)).toBe("captured");
-      // The other tenant's row is untouched — the settle was scoped to the resolved/path tenant.
-      expect(await stateOf(suite.admin, other.tenantId, other.sessionId)).toBe("initiated");
+      expect(await stateOf(suite.admin, seeded.sessionId)).toBe("captured");
 
       // At-least-once redelivery, still as app_user: idempotent, 2xx, still captured.
-      const second = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {
+      const second = await app.request("/webhooks/stripe", {
         method: "POST",
         body,
         headers: { "stripe-signature": sig },
       });
       expect(second.status).toBe(200);
-      expect(await stateOf(suite.admin, seeded.tenantId, seeded.sessionId)).toBe("captured");
+      expect(await stateOf(suite.admin, seeded.sessionId)).toBe("captured");
     } finally {
       await probe.close();
     }

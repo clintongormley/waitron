@@ -37,10 +37,9 @@ import { verifyBreakGlass } from "./break-glass.js";
 // subscription itself is driven through the injected `replication` seam, so no replication-ready
 // container / live publisher is needed to prove the ORDER and CLEANUP. CLAUDE.md §4.
 
-// The five ids the mirror mirrors — a hand-built `AdoptResult` (adopt inserts no rows any more, so no
+// The four ids the mirror mirrors — a hand-built `AdoptResult` (adopt inserts no rows any more, so no
 // venue provisioning is needed here). A fixed set is enough: adopt never reads these back from the DB.
 const DESIGNATED = {
-  tenantId: "11111111-1111-4111-8111-111111111111",
   locationId: "22222222-2222-4222-8222-222222222222",
   tillId: "33333333-3333-4333-8333-333333333333",
   nodeId: "44444444-4444-4444-8444-444444444444",
@@ -255,7 +254,6 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
     // NOT the primary's, and no sync-pool env (the outbox is gone).
     expect(persistedTrading).toHaveLength(1);
     expect(persistedTrading[0]).toMatchObject({
-      tenantId: DESIGNATED.tenantId,
       locationId: DESIGNATED.locationId,
       tillId: DESIGNATED.tillId,
       seriesId: DESIGNATED.seriesId,
@@ -288,7 +286,6 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
     const pending = JSON.parse(
       await readFile(join(stateDir, "pending-adoption.json"), "utf8"),
     ) as PendingAdoption;
-    expect(pending.tenantId).toBe(DESIGNATED.tenantId);
     expect(pending.locationId).toBe(DESIGNATED.locationId);
     expect(pending.originNodeId).toBe(DESIGNATED.nodeId);
     expect(pending.standby.nodeId).toBe(capturedStandby!.nodeId);
@@ -402,7 +399,7 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
     // Seed a DIFFERENT tenant into the mirror, then adopt a bundle for our tenant identity: refused.
     await mirrorAdmin.execute(
       sql`insert into tenants (id, country, tax_id, legal_name)
-          values (${DESIGNATED.tenantId}, 'ES', '99999999R', 'Incumbent SL')`,
+          values (1, 'ES', '99999999R', 'Incumbent SL')`,
     );
     const rep = recordingReplication();
     const error = await adoptFromPrimary(deps(rep.verbs), REQ).catch((e: unknown) => e);
@@ -414,10 +411,10 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
   it("refuses a same-tenant venue before native copy", async () => {
     await mirrorAdmin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name)
-      values (${DESIGNATED.tenantId}, 'ES', '80000001K', 'Incumbent SL')`);
+      values (1, 'ES', '80000001K', 'Incumbent SL')`);
     await mirrorAdmin.execute(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${DESIGNATED.tenantId}, 'Existing venue', array['en-GB'], 'Hospitality')`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Existing venue', array['en-GB'], 'Hospitality')`);
     const rep = recordingReplication();
     const error = await adoptFromPrimary(deps(rep.verbs), REQ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.second_venue");

@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, readNodeMembership, withTenant, writeNodeMembership } from "@waitron/db";
+import { asAppUser, readNodeMembership, withTransaction, writeNodeMembership } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -43,7 +43,7 @@ const DRAINED: SlotDrain = {
   retainedBytes: 0n,
 };
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
@@ -54,7 +54,7 @@ function nextNif(): string {
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; nodeId: string }> {
+async function setupTenant(): Promise<{ nodeId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -89,19 +89,18 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string }> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
   });
-  return { tenantId: venue.tenantId, nodeId: venue.nodeId };
+  return { nodeId: venue.nodeId };
 }
 
 /** A Hono app carrying the management API (for its login route) plus the box-retire route under test.
  * Both surfaces share the owner db + tenant, so a cookie minted on one resolves on the other. */
 function buildApp(
-  tenantId: string,
   nodeId: string,
   readSlotDrain: (() => Promise<SlotDrain>) | undefined,
   // The boot carrier retireSelf checks the fresh held chart against; matches the seeded serving-primary
@@ -113,7 +112,7 @@ function buildApp(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -125,7 +124,6 @@ function buildApp(
     {
       appDb: suite.admin,
       ring: RING,
-      tenantId,
       nodeId,
       readSlotDrain,
       fenceLsn: FENCE_LSN,
@@ -159,16 +157,15 @@ function membershipDoc(term: number, nodes: readonly MembershipNode[]): SignedMe
 }
 
 describe("POST /api/box/retire (real postgres)", () => {
-  let tenantId: string;
   let nodeId: string;
   let managerCookie: string;
 
   beforeAll(async () => {
-    ({ tenantId, nodeId } = await setupTenant());
+    ({ nodeId } = await setupTenant());
     // Establish the node identity so the mint on the happy path has a key to sign with; harmless to
     // the refusal paths, which return before any mint.
-    await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, tenantId, nodeId);
-    managerCookie = await login(buildApp(tenantId, nodeId, undefined), MANAGER_EMAIL);
+    await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, nodeId);
+    managerCookie = await login(buildApp(nodeId, undefined), MANAGER_EMAIL);
   });
 
   it("401s without a management session", async () => {
@@ -177,7 +174,7 @@ describe("POST /api/box/retire (real postgres)", () => {
       suite.admin,
       membershipDoc(5, [{ nodeId, contactUrl: "", standing: "serving-primary" }]),
     );
-    const app = buildApp(tenantId, nodeId, undefined);
+    const app = buildApp(nodeId, undefined);
     const res = await app.request("/api/box/retire", { method: "POST" });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
@@ -190,7 +187,7 @@ describe("POST /api/box/retire (real postgres)", () => {
       suite.admin,
       membershipDoc(5, [{ nodeId, contactUrl: "", standing: "serving-primary" }]),
     );
-    const app = buildApp(tenantId, nodeId, undefined);
+    const app = buildApp(nodeId, undefined);
     const res = await app.request("/api/box/retire", {
       method: "POST",
       headers: { cookie: managerCookie },
@@ -210,7 +207,6 @@ describe("POST /api/box/retire (real postgres)", () => {
       ]),
     );
     const app = buildApp(
-      tenantId,
       nodeId,
       () => Promise.resolve(DRAINED),
       CARRIER_NODE_ID, // the boot carrier matches the held serving-primary → freshness guard passes

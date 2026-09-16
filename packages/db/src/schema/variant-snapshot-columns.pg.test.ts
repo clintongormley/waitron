@@ -12,7 +12,6 @@ import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-const TENANT = "11111111-1111-4111-8111-111111111111";
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
@@ -22,35 +21,33 @@ const AT = "2026-07-20T19:20:30+00:00";
 const LOCALES = ["es", "ca"] as const;
 
 describe("B1 snapshot columns and the variant-descriptions locales trigger (real PG)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  // The venue, catalogue and order below are seeded ONCE in `beforeAll`, so the per-test truncation
+  // `useTemplateDb` runs by default would empty them after the first case. Each case that writes a
+  // line uses its own `line_no` and reads back only its own row, so they do not need the reset.
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
   let db: Database;
   let productId = "";
   let orderId = "";
 
   beforeAll(async () => {
     db = suite.admin;
-    await db.insert(tenants).values({
-      id: TENANT,
-      country: "ES",
-      taxId: "B00000000",
-      legalName: "Fixture Tenant",
-    });
+    await db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
     await db.insert(locations).values({
       id: LOCATION,
-      tenantId: TENANT,
       name: "Fixture Location",
       invoiceLocales: [...LOCALES],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL, tenantId: TENANT, locationId: LOCATION, name: "A1" });
+    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "A1" });
     const [cat] = await db
       .insert(catalogues)
-      .values({ tenantId: TENANT, name: "Deli" })
+      .values({ name: "Deli" })
       .returning({ id: catalogues.id });
     const [prod] = await db
       .insert(products)
       .values({
-        tenantId: TENANT,
         catalogueId: cat.id,
         name: "Café solo",
         pricingUnit: "each",
@@ -61,14 +58,13 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
     productId = prod.id;
     const [order] = await db
       .insert(workingOrders)
-      .values({ tenantId: TENANT, tillId: TILL, orderNumber: 1, status: "open", openedAt: AT })
+      .values({ tillId: TILL, orderNumber: 1, status: "open", openedAt: AT })
       .returning({ id: workingOrders.id });
     orderId = order.id;
   });
 
   function lineValues(overrides: Record<string, unknown> = {}) {
     return {
-      tenantId: TENANT,
       workingOrderId: orderId,
       lineNo: 1,
       name: "Café solo",

@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, or, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { diningTables, sales, workingOrders, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
@@ -11,6 +11,7 @@ export async function readReceiptOrder(
   workingOrderId: string,
   opts: { atIssuance?: boolean } = {},
 ): Promise<{ orderLabel: string | null; orderNumber: number }> {
+  void cfg;
   const [order] = await tx
     .select({
       orderNumber: workingOrders.orderNumber,
@@ -19,11 +20,8 @@ export async function readReceiptOrder(
       saleId: sales.id,
     })
     .from(workingOrders)
-    .leftJoin(
-      sales,
-      and(eq(sales.tenantId, workingOrders.tenantId), eq(sales.workingOrderId, workingOrders.id)),
-    )
-    .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.tenantId, cfg.tenantId)));
+    .leftJoin(sales, eq(sales.workingOrderId, workingOrders.id))
+    .where(eq(workingOrders.id, workingOrderId));
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId });
   }
@@ -35,12 +33,9 @@ export async function readReceiptOrder(
     .select({ label: diningTables.label })
     .from(diningTables)
     .where(
-      and(
-        eq(diningTables.tenantId, cfg.tenantId),
-        or(
-          eq(diningTables.tabId, workingOrderId),
-          order.deliveryTableId === null ? undefined : eq(diningTables.id, order.deliveryTableId),
-        ),
+      or(
+        eq(diningTables.tabId, workingOrderId),
+        order.deliveryTableId === null ? undefined : eq(diningTables.id, order.deliveryTableId),
       ),
     )
     // Match the kitchen display: prefer a seated tab, with the table id breaking joins consistently.

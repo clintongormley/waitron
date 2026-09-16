@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -13,7 +13,7 @@ import { ALL_MODULES } from "./modules.js";
 // Real PostgreSQL retains the app_user read-privilege check.
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
@@ -24,7 +24,7 @@ function nextNif(): string {
 }
 
 /** Provision one venue as the owner; the fixture mirrors `management-api.status.test.ts`'s `setupTenant()`. */
-async function setupVenue(): Promise<{ tenantId: string; nodeId: string }> {
+async function setupVenue(): Promise<{ nodeId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -58,15 +58,14 @@ async function setupVenue(): Promise<{ tenantId: string; nodeId: string }> {
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  return { tenantId: venue.tenantId, nodeId: venue.nodeId };
+  return { nodeId: venue.nodeId };
 }
 
 describe("readChainHeight (real postgres)", () => {
-  let tenantId: string;
   let nodeId: string;
 
   beforeAll(async () => {
-    ({ tenantId, nodeId } = await setupVenue());
+    ({ nodeId } = await setupVenue());
   });
 
   it("returns 0 / null for a node with no cadenas row", async () => {
@@ -76,7 +75,7 @@ describe("readChainHeight (real postgres)", () => {
     // — it is reached by a node_id that has no chain row under this tenant. A random uuid is
     // exactly that: the `node_id` predicate matches nothing, and the reader falls back to `{
     // height: 0, lastAt: null }`.
-    const result = await withTenant(suite.admin, tenantId, async (tx) => {
+    const result = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return readChainHeight(tx, randomUUID());
     });
@@ -89,11 +88,11 @@ describe("readChainHeight (real postgres)", () => {
     // — it advances the head through `registerSif`'s locked upsert. Seeding as owner keeps that
     // bypass out of the app role, and the READ below is what runs under the app role.
     await suite.admin.execute(sql`
-      insert into cadenas (tenant_id, node_id, secuencia, actualizado_en)
-      values (${tenantId}, ${nodeId}, 7, '2026-08-29T10:00:00Z')
-      on conflict (tenant_id, node_id) do update set secuencia = 7, actualizado_en = '2026-08-29T10:00:00Z'`);
+      insert into cadenas (node_id, secuencia, actualizado_en)
+      values (${nodeId}, 7, '2026-08-29T10:00:00Z')
+      on conflict (node_id) do update set secuencia = 7, actualizado_en = '2026-08-29T10:00:00Z'`);
 
-    const result = await withTenant(suite.admin, tenantId, async (tx) => {
+    const result = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return readChainHeight(tx, nodeId);
     });

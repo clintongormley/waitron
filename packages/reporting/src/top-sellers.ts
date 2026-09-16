@@ -22,8 +22,8 @@ import type { TopSeller, TopSellersInput } from "./types.js";
  * large coffee and a small one are ranked apart, which is what an operator is asking when they ask
  * what sold. The returned `name` is the two joined via `staffPresentationName`, so the row carries the
  * same label a till button shows. Same exclusions and predicates as the VAT roll-up
- * (`aggregateVatByRate`): the explicit tenant predicate scopes the tenant, the node
- * predicate applies only when `nodeId` is given, and `activeSalesClause` drops voided sales and
+ * (`aggregateVatByRate`): the node predicate applies only when `nodeId` is given, and
+ * `activeSalesClause` drops voided sales and
  * F3-canje substitutes. Corrections (rectificativas) are NOT excluded — their negative lines net the
  * quantity and total down, so a returned coffee reduces its rank.
  *
@@ -56,11 +56,10 @@ export async function computeTopSellers(
       sum(sl.quantity)::numeric(12, 3)::text as quantity,
       sum(sl.line_total)::numeric(12, 2)::text as total
     from sale_lines sl
-    join sales s on s.tenant_id = sl.tenant_id and s.id = sl.sale_id
-    where s.tenant_id = ${input.tenantId}
+    join sales s on s.id = sl.sale_id
+    where ${businessDayRangeClause(sql`s.issued_at`, input)}
       ${nodeClause}
-      and ${businessDayRangeClause(sql`s.issued_at`, input)}
-      and ${activeSalesClause({ tenantId: input.tenantId })}
+      and ${activeSalesClause()}
     group by sl.name, sl.variant_name
     order by sum(sl.quantity) desc, sl.name asc, sl.variant_name asc
     limit ${input.limit}

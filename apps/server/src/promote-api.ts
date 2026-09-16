@@ -10,7 +10,7 @@
 //    the primary that held the admin's credentials is the very node that died. A wrong secret is
 //    `promotion.break_glass_invalid` (401) and `run` is never reached.
 //  - Otherwise the admin-login path — `loginManagerById` → `authorizeManager("node.promote")` →
-//    `endManagementSession`, as `app_user` under `withTenant`, the `mirror-bundle-api.ts` shape.
+//    `endManagementSession`, as `app_user` under `withTransaction`, the `mirror-bundle-api.ts` shape.
 //    `node.promote` is ADMIN-only, so a staff credential authenticates but fails authorization (403).
 //  - Neither usable (no secret, and no well-formed id+password) → `password.invalid` (401), the same
 //    code a wrong password gets, so the response never says which field was missing.
@@ -18,7 +18,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { FenceAttestation } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
@@ -39,14 +39,13 @@ export interface PromoteRunResult {
 }
 
 /**
- * `appDb` authenticates + authorizes (as `app_user` under `withTenant` + `asAppUser`, the
- * dashboard-login shape) AND backs `verifyBreakGlass`'s verifier read; `tenantId` scopes the auth
- * transaction. `run` is the boot-wired promote closure (Task 7) — the endpoint delegates to it and
+ * `appDb` authenticates + authorizes (as `app_user` under `withTransaction` + `asAppUser`, the
+ * dashboard-login shape) AND backs `verifyBreakGlass`'s verifier read. `run` is the boot-wired
+ * promote closure (Task 7) — the endpoint delegates to it and
  * never calls the promote functions itself.
  */
 export interface PromoteApiDeps {
   appDb: Database;
-  tenantId: string;
   run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
 }
 
@@ -111,10 +110,9 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         // The `isUuid` screen turns a malformed id into this path's clean 401 rather than a `22P02` →
         // opaque 500 when it reaches the `uuid` column.
         const { personId, password, totp } = body;
-        await withTenant(deps.appDb, deps.tenantId, async (tx) => {
+        await withTransaction(deps.appDb, async (tx) => {
           await asAppUser(tx);
           const session = await loginManagerById(tx, {
-            tenantId: deps.tenantId,
             personId,
             password,
             totp,

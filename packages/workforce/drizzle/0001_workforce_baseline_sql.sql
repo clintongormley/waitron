@@ -1,3 +1,4 @@
+-- Custom SQL migration file, put your code below! --
 REVOKE ALL ON "employments" FROM app_user;
 --> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "employments" TO app_user;

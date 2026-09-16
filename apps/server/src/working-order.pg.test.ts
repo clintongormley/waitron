@@ -16,14 +16,13 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, verifyAmendmentChain, withTenant } from "@waitron/db";
+import { asAppUser, verifyAmendmentChain, withTransaction } from "@waitron/db";
 import type { Transaction, VerifiableAmendment } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -35,7 +34,6 @@ import {
   addTabRound,
   advanceTicket,
   advanceTicketItem,
-  bumpCourseReady,
   cancelPlacedOrder,
   fireCourse,
   getHeldOrder,
@@ -116,7 +114,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -182,11 +179,11 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -194,7 +191,7 @@ async function setupVenue(): Promise<SeededVenue> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await createProduct(tx, cfg.tenantId, {
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -225,12 +222,12 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
 }
 
-/** This tenant's OUTSTANDING (issued-but-unsettled) sales, read as the app role under the tenant —
- *  the surface an invoice-first order shows on between placing and collect. */
-async function outstandingFor(cfg: TillConfig): Promise<{ saleId: string; amountDue: string }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+/** The OUTSTANDING (issued-but-unsettled) sales, read as the app role — the surface an
+ *  invoice-first order shows on between placing and collect. */
+async function outstanding(): Promise<{ saleId: string; amountDue: string }[]> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await listOutstandingSales(tx, cfg.tenantId);
+    const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: r.saleId, amountDue: r.amountDue }));
   });
 }
@@ -433,7 +430,7 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
     select ti.id
     from ticket_items ti
     join working_order_lines wol
-      on wol.id = ti.working_order_line_id and wol.tenant_id = ti.tenant_id
+      on wol.id = ti.working_order_line_id
     where ti.working_order_id = ${orderId}
     order by wol.line_no
   `);
@@ -443,29 +440,30 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
 /**
  * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) under a cfg's
  * tenant + `app_user` scope. Unlike the old deps-based `advancePrep`, these verbs run on a
- * CALLER-supplied transaction, so the suite opens the `withTenant` + `asAppUser` scope for them — as
+ * CALLER-supplied transaction, so the suite opens the `withTransaction` + `asAppUser` scope for them — as
  * `app_user`, the role production runs them under.
  */
 async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
 }
 
 /**
- * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s tenant, node, series and
- * location and differs only in `till_id`. The row is inserted as the OWNER under `withTenant`,
- * exactly as `applyVenue` writes a till (the insert carries an explicit `tenant_id`). Proving
+ * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location and
+ * differs only in `till_id`. The row is inserted as the OWNER under `withTransaction`, exactly as
+ * `applyVenue` writes a till. Proving
  * cross-till retrieval needs a genuine second till row because both `working_orders.till_id` and
  * `sales.till_id` FK onto `tills` — a fabricated uuid would fail those.
  */
 async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await tx.execute(sql`
-      insert into tills (id, tenant_id, location_id, name)
-      values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+      insert into tills (id, location_id, name)
+      values (${id}, ${cfg.locationId}, ${name})`);
   });
   return { ...cfg, tillId: brandTillId(id) };
 }
@@ -474,15 +472,15 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
  * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
  * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
  * they are venue-wide (till-reroute §3.6): a node reaches the venue's open tabs regardless of the
- * `node_id` they carry. Inserted as the owner under `withTenant`, the way `applyVenue`'s create-node
+ * `node_id` they carry. Inserted as the owner under `withTransaction`, the way `applyVenue`'s create-node
  * does; `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await tx.execute(sql`
-      insert into nodes (id, tenant_id, location_id, name)
-      values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+      insert into nodes (id, location_id, name)
+      values (${id}, ${cfg.locationId}, ${name})`);
   });
   return { ...cfg, nodeId: brandNodeId(id) };
 }
@@ -683,7 +681,7 @@ describe("payWorkingOrder", () => {
     // Change the catalogue price AFTER the lock — the exact mutation across the park→pay gap that
     // separates the two pricing models (CLAUDE.md §1: a measurement where both answers look alike
     // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`update products set unit_price = '9.99' where id = ${cafe.id}`);
     });
@@ -849,7 +847,7 @@ describe("payWorkingOrder", () => {
       lines: [{ productId: cafe.id, quantity: "1" }],
     });
     // Abandon it (open → abandoned), then try to pay.
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
     });
@@ -1153,8 +1151,8 @@ describe("cross-till end-to-end", () => {
 
     // THE CHAIN: the two sales on this node (A/1 walk-up on till A, A/2 cross-till on till B) verify as
     // one intact huella chain.
-    const report = await withTenant(suite.admin, tillA.tenantId, (tx) =>
-      backend.checkIntegrity(tx, tillA.tenantId, tillA.nodeId),
+    const report = await withTransaction(suite.admin, (tx) =>
+      backend.checkIntegrity(tx, tillA.nodeId),
     );
     expect(report.ok).toBe(true);
     expect(report.checked).toBe(2);
@@ -1209,90 +1207,6 @@ describe("cross-till end-to-end", () => {
       code: "working_order.not_found",
       params: { workingOrderId: orderId },
     });
-  });
-});
-
-// Two tenants in ONE database. Production holds one tenant per database, but tenant isolation is
-// enforced at the QUERY, never left to the deployment invariant (#255): `withTenant` stopped isolating
-// SELECTs when RLS was dropped, so a by-id read's own tenant predicate is its only scope, and the
-// harness + dev DBs really are multi-tenant. Venue-wide (§3.6) means every NODE of one tenant, never
-// across tenants — the six S3 read sites are uniformly `eq(tenantId, cfg.tenantId)`. Real Postgres
-// as `app_user` (rolsuper=f): on PGlite every connection is a superuser and the leak would pass silently.
-describe("cross-tenant isolation — a by-id read never reaches another tenant's order (#255, till-reroute §3.6)", () => {
-  it("getHeldOrder against a FOREIGN tenant's order id throws not_found — never the other tenant's basket", async () => {
-    const { cfg: tenantA } = await setupVenue();
-    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
-    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
-
-    const bOrderId = randomUUID();
-    await parkOrder({ db: suite.admin }, tenantB, {
-      id: bOrderId,
-      lines: [{ productId: cafeB.id, quantity: "1" }],
-      label: "B private",
-    });
-
-    // As tenant A the foreign id is invisible, exactly as a non-existent id is.
-    await expect(getHeldOrder({ db: suite.admin }, tenantA, bOrderId)).rejects.toMatchObject({
-      code: "working_order.not_found",
-      params: { workingOrderId: bOrderId },
-    });
-
-    // B's order is untouched: still open, one line, still labelled — read back as B.
-    const stillOpen = await getHeldOrder({ db: suite.admin }, tenantB, bOrderId);
-    expect(stillOpen.label).toBe("B private");
-    expect(stillOpen.lines).toHaveLength(1);
-  });
-
-  it("abandonHeldOrder against a FOREIGN tenant's order id throws not_open — never abandons the other tenant's order", async () => {
-    const { cfg: tenantA } = await setupVenue();
-    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
-    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
-
-    const bOrderId = randomUUID();
-    await parkOrder({ db: suite.admin }, tenantB, {
-      id: bOrderId,
-      lines: [{ productId: cafeB.id, quantity: "1" }],
-      label: "B private",
-    });
-
-    await expect(abandonHeldOrder({ db: suite.admin }, tenantA, bOrderId)).rejects.toMatchObject({
-      code: "working_order.not_open",
-      params: { workingOrderId: bOrderId },
-    });
-
-    // B's order stays OPEN — the abandon did not cross the tenant boundary.
-    expect((await getHeldOrder({ db: suite.admin }, tenantB, bOrderId)).id).toBe(bOrderId);
-  });
-
-  it("updateHeldOrder against a FOREIGN tenant's order id throws not_open — never a raw 23503, never mutates it", async () => {
-    const { cfg: tenantA, cafe: cafeA } = await setupVenue();
-    const { cfg: tenantB, cafe: cafeB } = await setupVenue();
-    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
-
-    const bOrderId = randomUUID();
-    await parkOrder({ db: suite.admin }, tenantB, {
-      id: bOrderId,
-      lines: [{ productId: cafeB.id, quantity: "1" }],
-      label: "B private",
-    });
-
-    // `cafeA` is tenant A's own product, so pricing succeeds under A and — before the fix — the lock
-    // finds B's row by id alone and the path runs on to the line insert, failing only at the composite
-    // FK (23503). After the fix the tenant predicate makes the lock miss, so it is a clean not_open.
-    await expect(
-      updateHeldOrder({ db: suite.admin }, tenantA, bOrderId, {
-        lines: [{ productId: cafeA.id, quantity: "2" }],
-      }),
-    ).rejects.toMatchObject({
-      code: "working_order.not_open",
-      params: { workingOrderId: bOrderId },
-    });
-
-    // B's basket is unchanged: one line, its original label — the aborted tx touched nothing.
-    const afterAttempt = await getHeldOrder({ db: suite.admin }, tenantB, bOrderId);
-    expect(afterAttempt.label).toBe("B private");
-    expect(afterAttempt.lines).toHaveLength(1);
-    expect(Number(afterAttempt.lines[0]!.quantity)).toBe(1);
   });
 });
 
@@ -1542,7 +1456,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     // Pay + issue are the same instant, so nothing is ever owed.
-    expect(await outstandingFor(cfg)).toEqual([]);
+    expect(await outstanding()).toEqual([]);
   });
 
   // The unit-abbreviation freeze, end to end. The café sits on the legacy `each` unit, whose NAME
@@ -1602,9 +1516,9 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // OUTSTANDING (what is owed).
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
-    const outstanding = await outstandingFor(cfg);
-    expect(outstanding).toHaveLength(1);
-    expect(outstanding[0]!.amountDue).toBe("3.50");
+    const due = await outstanding();
+    expect(due).toHaveLength(1);
+    expect(due[0]!.amountDue).toBe("3.50");
 
     // COLLECT → settle the EXISTING invoice, placed → settled, filing NOTHING new.
     const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
@@ -1638,7 +1552,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1); // STILL one sale — no second file at collect
     expect(await registroCount(id)).toBe(1); // STILL one registro
-    expect(await outstandingFor(cfg)).toEqual([]); // settled → no longer owed
+    expect(await outstanding()).toEqual([]); // settled → no longer owed
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
   });
 
@@ -1772,7 +1686,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]); // one settlement
-    expect(await outstandingFor(cfg)).toEqual([]);
+    expect(await outstanding()).toEqual([]);
   });
 
   // MODE T (ticket_then_pay): at PLACE no fiscal doc, open → placed; at COLLECT `recordSale` immediate
@@ -1797,7 +1711,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(placed.invoiceNumber).toBeUndefined(); // no invoice issued at placing
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(id)).toBe(0); // nothing filed yet
-    expect(await outstandingFor(cfg)).toEqual([]); // no issued invoice → nothing outstanding
+    expect(await outstanding()).toEqual([]); // no issued invoice → nothing outstanding
 
     // COLLECT → file `recordSale` IMMEDIATE, placed → settled.
     const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
@@ -1879,7 +1793,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // its handover marker is unset.
     await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
@@ -1901,7 +1815,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 
     // The order-level handover marker is now set, so the default station drops the collected order.
     expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
     // The ticket item ITSELF is untouched — collected_at is an ORDER marker, not a ticket kitchen state.
     expect(await ticketStateOf(id)).toBe("queued");
   });
@@ -1917,7 +1831,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // PLACE issues the deferred invoice AND fires the ticket item to the default station.
     await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
@@ -1935,7 +1849,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 
     // Set, and the default station drops the collected order.
     expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
   });
 
   it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
@@ -1999,7 +1913,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 // Postgres: the verbs write `ticket_items` as the non-superuser `app_user`, whose grants PGlite's
 // all-superuser connection would hold regardless (CLAUDE.md §4). `sendToPrep` (Mode P) and
 // `placeOrder` (Modes I/T) are the FIRES that put items on the queue; their settled-only guard is
-// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTenant` +
+// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTransaction` +
 // `asAppUser` scope), as `app_user`.
 describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
@@ -2078,7 +1992,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // Whole-ticket bump to `preparing`: only the still-queued item[1] advances; item[0] (ready) is untouched.
     await asTenant(cfg, (tx) => advanceTicket(tx, cfg, id, station, "preparing"));
 
-    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
     const group = queue.find((g) => g.orderId === id)!;
     expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
   });
@@ -2105,7 +2019,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     await placeOrder({ db: suite.admin, backend, clock }, cfg, id2, OPERATOR, cfg.tillId);
 
     // Both orders show, oldest first, each one line, at `queued`, carrying the order's label + queued_at.
-    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
     expect(queue.map((g) => g.orderId)).toEqual([id1, id2]);
     expect(queue[0]).toMatchObject({
       orderId: id1,
@@ -2120,9 +2034,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const [item1] = await ticketItemIdsFor(id1);
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item1!, "preparing"));
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).find(
-        (g) => g.orderId === id1,
-      )?.items[0]?.state,
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).find((g) => g.orderId === id1)
+        ?.items[0]?.state,
     ).toBe("preparing");
 
     // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
@@ -2132,7 +2045,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       update working_orders set status = 'settled', settled_at = now(), collected_at = now()
       where id = ${id1}`);
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id2]);
 
     // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
@@ -2146,7 +2059,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       OPERATOR,
     );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
   });
 
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node (till-reroute §3.6)", async () => {
@@ -2174,8 +2087,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     });
     await placeOrder({ db: suite.admin, backend, clock }, nodeB, idB, OPERATOR, nodeB.tillId);
 
-    const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, nodeA, station));
-    const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, nodeB, station));
+    const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, station));
+    const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, station));
 
     // Same station on both sides, each holding BOTH orders (oldest-first: A fired before B) — the
     // reads no longer separate by node.
@@ -2214,7 +2127,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 // the per-station `listStationQueue` it takes NO station arg, and since till-reroute §3.6 it is not
 // node-scoped either. PGlite proves the join/grouping/exclusions (working-order.test.ts); this case takes
 // the SAME venue-wide shape the `listStationQueue` test above uses, retargeted at `listExpoQueue`. The
-// reads run through {@link asTenant} (a `withTenant` + `asAppUser` scope), as `app_user`.
+// reads run through {@link asTenant} (a `withTransaction` + `asAppUser` scope), as `app_user`.
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
@@ -2274,7 +2187,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
       OPERATOR,
     );
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
 
     // Walk the line all the way to `ready` — a ready line STAYS on the queue until the order collects.
@@ -2282,7 +2195,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
-    const readyQueue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    const readyQueue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
     // Still listed — a ready-but-uncollected order lingers (the bug was that it could NEVER leave) — and
     // the group carries the order's `status`, so the till surfaces the collect action (collectable = settled).
     expect(readyQueue.map((g) => g.orderId)).toEqual([id]);
@@ -2292,7 +2205,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     await markCollected({ db: suite.admin }, cfg, id);
     expect(await collectedAtSet(id)).toBe(true);
     // GONE from the station queue — the regression is closed.
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
     // Its fiscal state is untouched — still settled with settled_at intact (only collected_at moved).
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
   });
@@ -2370,16 +2283,16 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
 // `setLineCourse`/`sendLines`/`recallLines`. PGlite proved their LOGIC (working-order.test.ts) on a
 // single backend; the cases below prove that a `sendLines` racing a `recallLines` (or a `fireCourse`)
 // on the SAME line serialises via `lockOpenTab`'s FOR UPDATE into one clean serial outcome with no
-// lost update. Every write runs through `withTenant` + `asAppUser`, as `app_user`; the owner reads
+// lost update. Every write runs through `withTransaction` + `asAppUser`, as `app_user`; the owner reads
 // below use `suite.admin` (superuser) deliberately, to witness the committed state from outside.
 
-/** Insert an active dining table under `cfg`'s tenant + location as the owner and return its id — the
- *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTenant` with an
- *  explicit `tenant_id`, the same shape `addTill`/`addNode` above use. */
+/** Insert an active dining table under `cfg`'s location as the owner and return its id — the
+ *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTransaction`, the
+ *  same shape `addTill`/`addNode` above use. */
 async function addTable(tx: Transaction, cfg: TillConfig): Promise<string> {
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
+    insert into dining_tables (location_id, label)
+    values (${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
   return rows[0]!.id;
 }
 
@@ -2409,7 +2322,7 @@ async function tabSnapshot(tabId: string): Promise<
            ti.state
     from working_order_lines wol
     join ticket_items ti
-      on ti.working_order_line_id = wol.id and ti.tenant_id = wol.tenant_id
+      on ti.working_order_line_id = wol.id
     where wol.working_order_id = ${tabId}
     order by wol.line_no`);
   return rows.map((r) => ({
@@ -2421,21 +2334,19 @@ async function tabSnapshot(tabId: string): Promise<
   }));
 }
 
-/** The `print_jobs` ids belonging to a tenant (owner read) — the before-set the race diffs against to
- *  find slips enqueued by the two racing verbs. */
-async function tenantJobIds(tenantId: string): Promise<Set<string>> {
-  const { rows } = await suite.admin.execute<{ id: string }>(
-    sql`select id from print_jobs where tenant_id = ${tenantId}`,
-  );
+/** Every `print_jobs` id (owner read) — the before-set the race diffs against to find slips
+ *  enqueued by the two racing verbs. */
+async function printJobIds(): Promise<Set<string>> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`select id from print_jobs `);
   return new Set(rows.map((r) => r.id));
 }
 
 /** Count the RECALLED correction slips a tenant gained since `before` — a print job whose decoded ESC/POS
  *  payload carries the "RECALLED" header `formatCorrectionSlip` writes. A `sendLines` fire enqueues a
  *  plain kitchen ticket (no such header); only a `recallLines` of a fired line enqueues a RECALLED slip. */
-async function recalledSlipsSince(tenantId: string, before: Set<string>): Promise<number> {
+async function recalledSlipsSince(before: Set<string>): Promise<number> {
   const { rows } = await suite.admin.execute<{ id: string; payload: Buffer }>(
-    sql`select id, payload from print_jobs where tenant_id = ${tenantId}`,
+    sql`select id, payload from print_jobs `,
   );
   return rows.filter((r) => !before.has(r.id) && decodeTicket(r.payload).includes("RECALLED"))
     .length;
@@ -2448,20 +2359,20 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
     // fired line enqueues a RECALLED correction slip — the paper trail the no-lost-update invariant reads.
     const station = await defaultStationId(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+      await attachPrinterToStation(tx, { stationId: station, printerId });
     });
 
     // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
     // default station. Nothing has printed yet.
-    const tabId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const tabId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const tableId = await addTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
@@ -2471,7 +2382,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     expect(await tabSnapshot(tabId)).toEqual([
       { lineNo: 1, lineCourse: null, itemCourse: null, fired: false, state: "queued" },
     ]);
-    const jobsBefore = await tenantJobIds(cfg.tenantId);
+    const jobsBefore = await printJobIds();
 
     // TWO distinct backends racing the INVERSE verbs on the SAME held line. Load-bearing: distinct backend
     // PROCESSES — on PGlite they collapse onto one and the FOR UPDATE serialisation never happens (a false
@@ -2491,11 +2402,11 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
       // lock runs to completion and commits first, then the other runs against its committed result. Both
       // verbs are legal on this line in either order, so BOTH succeed.
       const results = await Promise.allSettled([
-        withTenant(connA, cfg.tenantId, async (tx) => {
+        withTransaction(connA, async (tx) => {
           await asAppUser(tx);
           await sendLines(tx, cfg, tabId, [1]);
         }),
-        withTenant(connB, cfg.tenantId, async (tx) => {
+        withTransaction(connB, async (tx) => {
           await asAppUser(tx);
           await recallLines(tx, cfg, tabId, [1]);
         }),
@@ -2519,7 +2430,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the lost
     // update the FOR UPDATE prevents (recall un-firing off a stale pre-send read, the paper kitchen never
     // told to pull the printed line) — this assertion fails on that torn state.
-    const recalledSlips = await recalledSlipsSince(cfg.tenantId, jobsBefore);
+    const recalledSlips = await recalledSlipsSince(jobsBefore);
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
   });
 });
@@ -2532,21 +2443,21 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // paper trail); the invariant below reads the tab snapshot, not paper, but a real fire path is the
     // faithful racer.
     const station = await defaultStationId(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+      await attachPrinterToStation(tx, { stationId: station, printerId });
     });
 
     // Two live courses. `café` is routed to `postres`, so its HELD line 1 sits in `postres`; the racer
     // `fireCourse(postres)` fires exactly that line, while `setLineCourse(line 1 → otros)` tries to move
     // it out from under the pass.
-    const { postres, otros, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { postres, otros, tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       const otros = await createCourse(tx, cfg, { name: "Otros", displayOrder: 10 });
@@ -2580,11 +2491,11 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
       expect(new Set(pids).size).toBe(2);
 
       const [sc, fc] = await Promise.allSettled([
-        withTenant(connA, cfg.tenantId, async (tx) => {
+        withTransaction(connA, async (tx) => {
           await asAppUser(tx);
           await setLineCourse(tx, cfg, tabId, 1, otros.id);
         }),
-        withTenant(connB, cfg.tenantId, async (tx) => {
+        withTransaction(connB, async (tx) => {
           await asAppUser(tx);
           await fireCourse(tx, cfg, tabId, postres.id);
         }),
@@ -2632,20 +2543,20 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
     // fired line enqueues a RECALLED correction slip — the paper trail the invariant reads.
     const station = await defaultStationId(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+      await attachPrinterToStation(tx, { stationId: station, printerId });
     });
 
     // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line
     // and `recallLines([1])` targets it. Nothing printed yet.
-    const { postres, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { postres, tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
@@ -2657,7 +2568,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     expect(await tabSnapshot(tabId)).toEqual([
       { lineNo: 1, lineCourse: postres.id, itemCourse: postres.id, fired: false, state: "queued" },
     ]);
-    const jobsBefore = await tenantJobIds(cfg.tenantId);
+    const jobsBefore = await printJobIds();
 
     // TWO distinct backends racing `recallLines([1])` (un-fire the line) against `fireCourse(postres)`
     // (fire it). Load-bearing: distinct backend PROCESSES — on PGlite they collapse onto one and the
@@ -2675,11 +2586,11 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
       expect(new Set(pids).size).toBe(2);
 
       const results = await Promise.allSettled([
-        withTenant(connA, cfg.tenantId, async (tx) => {
+        withTransaction(connA, async (tx) => {
           await asAppUser(tx);
           await recallLines(tx, cfg, tabId, [1]);
         }),
-        withTenant(connB, cfg.tenantId, async (tx) => {
+        withTransaction(connB, async (tx) => {
           await asAppUser(tx);
           await fireCourse(tx, cfg, tabId, postres.id);
         }),
@@ -2704,108 +2615,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the torn state
     // the lock prevents (recall un-firing off a stale pre-fire read, the paper kitchen never told to pull
     // the ticket `fireCourse` printed) — this assertion fails on it.
-    const recalledSlips = await recalledSlipsSince(cfg.tenantId, jobsBefore);
+    const recalledSlips = await recalledSlipsSince(jobsBefore);
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
-  });
-});
-
-// Cross-tenant isolation for the ticket-prep verbs (CLAUDE.md §3, conventions-data.md "A by-id read
-// still needs its own eq(table.tenantId, cfg.tenantId)"). These three verbs update `ticket_items`
-// filtered by a working-order/course/station/item id but WITHOUT a tenant predicate today, so a
-// caller under tenant A can advance tenant B's kitchen rows. `withTenant` does not isolate these
-// writes (RLS was dropped, #255). Real Postgres as `app_user` (rolsuper=f): on PGlite every
-// connection is a superuser, so the leak would pass silently. Each verb's assertion differs by its
-// not-found behaviour: the two silent no-op verbs (bumpCourseReady/advanceTicket) resolve either way,
-// so the load-bearing check is that tenant B's rows are UNCHANGED; advanceTicketItem does throw.
-describe("cross-tenant isolation — a ticket-prep verb never advances another tenant's items", () => {
-  it("bumpCourseReady with a FOREIGN tenant's order+course ids leaves that tenant's items unchanged", async () => {
-    const { cfg: tenantA } = await setupVenue();
-    const { cfg: tenantB, cafe: cafeB } = await modeVenue("prepay");
-    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
-
-    // Route B's café to a course so its fired item carries a non-null course_id (bumpCourseReady
-    // filters on course_id, and `course_id = NULL` never matches — an unrouted item would make the
-    // probe vacuous, CLAUDE.md §4).
-    const courseB = await asTenant(tenantB, (tx) => createCourse(tx, tenantB, { name: "Único" }));
-    await asTenant(tenantB, (tx) => setProductCourse(tx, tenantB, cafeB.id, courseB.id));
-
-    const bOrderId = randomUUID();
-    await payWorkingOrder(
-      { db: suite.admin, backend, clock },
-      tenantB,
-      {
-        id: bOrderId,
-        lines: [{ productId: cafeB.id, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    expect(await ticketStateOf(bOrderId)).toBe("queued"); // B's fired item, bump-able
-
-    // As tenant A, call bump with B's real order + course ids. It resolves (a silent no-op verb), but
-    // must touch nothing of B's.
-    await expect(
-      asTenant(tenantA, (tx) => bumpCourseReady(tx, tenantA, bOrderId, courseB.id)),
-    ).resolves.toBeUndefined();
-
-    expect(await ticketStateOf(bOrderId)).toBe("queued"); // unchanged — before the fix it is bumped to `ready`
-  });
-
-  it("advanceTicket with a FOREIGN tenant's order+station ids leaves that tenant's items unchanged", async () => {
-    const { cfg: tenantA } = await setupVenue();
-    const { cfg: tenantB, cafe: cafeB } = await modeVenue("ticket_then_pay");
-    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
-
-    const bOrderId = randomUUID();
-    await parkOrder({ db: suite.admin }, tenantB, {
-      id: bOrderId,
-      lines: [{ productId: cafeB.id, quantity: "1" }],
-    });
-    await placeOrder(
-      { db: suite.admin, backend, clock },
-      tenantB,
-      bOrderId,
-      OPERATOR,
-      tenantB.tillId,
-    );
-    const stationB = await defaultStationId(tenantB);
-    expect(await ticketStateOf(bOrderId)).toBe("queued");
-
-    await expect(
-      asTenant(tenantA, (tx) => advanceTicket(tx, tenantA, bOrderId, stationB, "preparing")),
-    ).resolves.toBeUndefined();
-
-    expect(await ticketStateOf(bOrderId)).toBe("queued"); // unchanged — before the fix it advances to `preparing`
-  });
-
-  it("advanceTicketItem against a FOREIGN tenant's item id throws invalid_transition — never advances it", async () => {
-    const { cfg: tenantA } = await setupVenue();
-    const { cfg: tenantB, cafe: cafeB } = await modeVenue("prepay");
-    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
-
-    const bOrderId = randomUUID();
-    await payWorkingOrder(
-      { db: suite.admin, backend, clock },
-      tenantB,
-      {
-        id: bOrderId,
-        lines: [{ productId: cafeB.id, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    const [bItem] = await ticketItemIdsFor(bOrderId);
-    expect(await ticketStateOf(bOrderId)).toBe("queued"); // B's item is genuinely advanceable
-
-    // As tenant A the foreign item is invisible: the scoped update matches nothing and the scoped
-    // read-back finds no row, so it is refused exactly as a non-existent item is.
-    await expect(
-      asTenant(tenantA, (tx) => advanceTicketItem(tx, tenantA, bItem!, "preparing")),
-    ).rejects.toMatchObject({
-      code: "ticket.invalid_transition",
-      params: { ticketItemId: bItem },
-    });
-
-    expect(await ticketStateOf(bOrderId)).toBe("queued"); // unchanged — before the fix A advances it to `preparing`
   });
 });

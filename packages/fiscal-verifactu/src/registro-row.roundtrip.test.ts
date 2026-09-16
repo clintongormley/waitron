@@ -32,7 +32,6 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;
   const saleId = await seedSale(pg.db, till, invoiceSequence);
   const row = toRegistroRow(record, {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     sifId: till.sifId,

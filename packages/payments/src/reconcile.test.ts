@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { AppError, decimal, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
@@ -53,9 +53,8 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
 }
 
 async function capture(seeded: Seeded, paymentRef: string, externalRef: string, amount = "10.00") {
-  await withTenant(pg.db, seeded.tenantId, (tx) =>
+  await withTransaction(pg.db, (tx) =>
     insertCapturedPayment(tx, {
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -70,9 +69,8 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
  * tender that a later `forward()` pass cleared. `settled` is auditable (so it reaches the orphan
  * class) but has no reversal path, which is exactly what the claim gate has to respect. */
 async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef: string) {
-  await withTenant(pg.db, seeded.tenantId, async (tx) => {
+  await withTransaction(pg.db, async (tx) => {
     await insertAcceptedOffline(tx, {
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -80,7 +78,7 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
       amount: decimal("10.00"),
       settledAt: OLD_SETTLED,
     });
-    await settleForwarded(tx, { tenantId: seeded.tenantId, provider: PROVIDER, paymentRef });
+    await settleForwarded(tx, { provider: PROVIDER, paymentRef });
   });
 }
 
@@ -95,25 +93,22 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     )
   ).rows;
   const till2 = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Till 2') returning id`);
+    insert into tills (location_id, name) values (${till.location_id}, 'Till 2') returning id`);
   const tillId = till2.rows[0].id;
   const node2 = await pg.db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
+    insert into nodes (location_id, name) values (${till.location_id}, 'Node 2') returning id`);
   const wo2 = await pg.db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, order_number) values (${seeded.tenantId}, ${tillId}, 1) returning id`);
+    insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
   return {
-    tenantId: seeded.tenantId,
     tillId,
     nodeId: node2.rows[0].id,
     workingOrderId: wo2.rows[0].id,
   };
 }
 
-async function openIncidentCodes(tenantId: string): Promise<string[]> {
+async function openIncidentCodes(): Promise<string[]> {
   const { rows } = await pg.db.execute<{ code: string }>(
-    sql`select code from incidents where tenant_id = ${tenantId} order by code`,
+    sql`select code from incidents order by code`,
   );
   return rows.map((r) => r.code);
 }
@@ -124,13 +119,7 @@ function settlement(over: Partial<SettlementRecord> = {}): SettlementRecord {
 
 describe("reconcilePayments", () => {
   it("answers all-empty for a tenant with nothing to check", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    const result = await reconcilePayments(
-      deps(new FakeSettlementReport([])),
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result).toMatchObject({
       checked: 0,
       unsettled: [],
@@ -149,13 +138,12 @@ describe("reconcilePayments", () => {
     await associate(seeded, "p1");
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()])),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
     expect(result.checked).toBe(1);
     expect(result.incidentsRaised).toBe(0);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([]);
+    expect(await openIncidentCodes()).toEqual([]);
   });
 
   it("raises one aggregated unsettled incident covering every stale payment on the till", async () => {
@@ -165,12 +153,7 @@ describe("reconcilePayments", () => {
     // Deliberately NOT associated with a sale: the working order stays "open", so the orphan rule
     // (which requires a non-open working order) never fires — these two rows are unsettled only.
     // (Associating both would also collide on seedSale's fixed invoice-series code 'A' per node.)
-    const result = await reconcilePayments(
-      deps(new FakeSettlementReport([])),
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result.unsettled).toHaveLength(2);
     expect(result.incidentsRaised).toBe(1);
     const { rows } = await pg.db.execute<{
@@ -194,12 +177,7 @@ describe("reconcilePayments", () => {
     const second = await seedSecondTill(seeded);
     await capture(seeded, "p1", "ext-1");
     await capture(second, "p2", "ext-2", "20.00");
-    const result = await reconcilePayments(
-      deps(new FakeSettlementReport([])),
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result.unsettled).toHaveLength(2);
     expect(result.incidentsRaised).toBe(2);
     const { rows } = await pg.db.execute<{ till_id: string; params: { count: number } }>(
@@ -215,8 +193,8 @@ describe("reconcilePayments", () => {
     await capture(seeded, "p1", "ext-1");
     await associate(seeded, "p1");
     const d = deps(new FakeSettlementReport([]));
-    const first = await reconcilePayments(d, brandTenantId(seeded.tenantId), PERIOD, NOW);
-    const second = await reconcilePayments(d, brandTenantId(seeded.tenantId), PERIOD, NOW);
+    const first = await reconcilePayments(d, PERIOD, NOW);
+    const second = await reconcilePayments(d, PERIOD, NOW);
     expect(first.incidentsRaised).toBe(1);
     // Still reported as a mismatch — the audit finding is always reported — but the open incident
     // already exists, so nothing new was inserted.
@@ -230,13 +208,12 @@ describe("reconcilePayments", () => {
     await associate(seeded, "p1");
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement({ amount: decimal("9.00") })])),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
     expect(result.drift).toHaveLength(1);
     expect(result.drift[0]).toMatchObject({ localAmount: "10.00", settledAmount: "9.00" });
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_drift"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_drift"]);
     // The declared params shape, asserted whole: a human resolving this incident needs BOTH
     // figures, and the pair is the entire content of the finding.
     const { rows } = await pg.db.execute<{
@@ -253,9 +230,8 @@ describe("reconcilePayments", () => {
 
   it("classifies an initiated row the report settled as lostSettlement", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-init",
@@ -266,12 +242,11 @@ describe("reconcilePayments", () => {
     const now = { from: new Date(Date.now() - 60_000), to: new Date(Date.now() + 60_000) };
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()])),
-      brandTenantId(seeded.tenantId),
       now,
       NOW,
     );
     expect(result.lostSettlement).toHaveLength(1);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_lost_settlement"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_lost_settlement"]);
     // The declared params shape, asserted whole: this incident names a settlement the processor
     // confirmed for a payment we never locally marked captured — the working order is the only
     // thing pointing a human back at what was actually paid for.
@@ -288,17 +263,15 @@ describe("reconcilePayments", () => {
   });
 
   it("reports an unattributable missingLocal WITHOUT raising an incident", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement({ references: ["ext-ghost"] })])),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
     expect(result.missingLocal).toHaveLength(1);
     expect(result.missingLocal[0]).toMatchObject({ paymentRef: null, references: ["ext-ghost"] });
     expect(result.incidentsRaised).toBe(0);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([]);
+    expect(await openIncidentCodes()).toEqual([]);
   });
 
   it("raises an incident for a missingLocal the processor attributed via a hint", async () => {
@@ -312,13 +285,12 @@ describe("reconcilePayments", () => {
           }),
         ]),
       ),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
     expect(result.missingLocal).toHaveLength(1);
     expect(result.incidentsRaised).toBe(1);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_missing_local"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_missing_local"]);
     // The declared params shape, asserted whole: this incident names money we hold NO row for, so
     // every processor reference, the amount, the settlement time and the hinted payment_ref are all
     // a human has to go on.
@@ -354,9 +326,8 @@ describe("reconcilePayments", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     // ext-2 has a local row, but settled OUTSIDE the swept PERIOD — existingReferences still finds
     // it (unbounded by period, same as the single-record test below), so it must not be reported.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-elsewhere",
@@ -372,7 +343,6 @@ describe("reconcilePayments", () => {
           settlement({ references: ["ext-2"] }),
         ]),
       ),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -390,7 +360,6 @@ describe("reconcilePayments", () => {
     };
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()])),
-      brandTenantId(seeded.tenantId),
       elsewhere,
       NOW,
     );
@@ -399,30 +368,16 @@ describe("reconcilePayments", () => {
   });
 
   it("fetches the report even when there are no local rows at all", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const report = new FakeSettlementReport([settlement({ references: ["ext-ghost"] })]);
-    await reconcilePayments(deps(report), brandTenantId(seeded.tenantId), PERIOD, NOW);
+    await reconcilePayments(deps(report), PERIOD, NOW);
     expect(report.windows).toHaveLength(1);
   });
 
   it("fetches the report over a window widened by the settlement lag", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const report = new FakeSettlementReport([]);
-    await reconcilePayments(deps(report), brandTenantId(seeded.tenantId), PERIOD, NOW);
+    await reconcilePayments(deps(report), PERIOD, NOW);
     expect(report.windows[0].from).toEqual(PERIOD.from);
     expect(report.windows[0].to).toEqual(new Date(PERIOD.to.getTime() + DEFAULT_SETTLEMENT_LAG_MS));
-  });
-
-  it("scopes the report fetch to the tenant being swept", async () => {
-    // The port takes the tenant as an ARGUMENT, not at construction: one reconciler sweeps many
-    // tenants and the processor account may be shared between them. A source that could not see the
-    // tenant would answer with the whole account's settlements, and every other tenant's would fail
-    // this tenant's existence check and be reported as `missingLocal` — other people's money in the
-    // sweep's authoritative result, every run.
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    const report = new FakeSettlementReport([]);
-    await reconcilePayments(deps(report), brandTenantId(seeded.tenantId), PERIOD, NOW);
-    expect(report.tenants).toEqual([seeded.tenantId]);
   });
 });
 
@@ -431,7 +386,7 @@ async function associate(seeded: Seeded, paymentRef: string): Promise<void> {
   const saleId = await seedSale(pg.db, seeded);
   await pg.db.execute(sql`
     update payments set sale_id = ${saleId}
-    where tenant_id = ${seeded.tenantId} and payment_ref = ${paymentRef}`);
+    where payment_ref = ${paymentRef}`);
 }
 
 /** Sets a seeded working order's status. `settled` also needs `settled_at` (the biconditional
@@ -451,7 +406,6 @@ describe("orphan remediation", () => {
     const reverse = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()]), reverse.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -506,12 +460,7 @@ describe("orphan remediation", () => {
       );
       markersAtCallTime.push(rows[0]?.reconcile_remediated_at ?? null);
     };
-    await reconcilePayments(
-      deps(new FakeSettlementReport([settlement()]), reverse),
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    await reconcilePayments(deps(new FakeSettlementReport([settlement()]), reverse), PERIOD, NOW);
     expect(markersAtCallTime).toHaveLength(1);
     expect(markersAtCallTime[0]).not.toBeNull();
   });
@@ -523,14 +472,13 @@ describe("orphan remediation", () => {
     const reverse = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()]), reverse.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
     expect(result.orphan).toHaveLength(1);
     expect(result.remediated).toBe(0);
     expect(reverse.calls).toEqual([]);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_orphan"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
     const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
@@ -561,7 +509,6 @@ describe("orphan remediation", () => {
     const reverse = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()]), reverse.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -570,7 +517,7 @@ describe("orphan remediation", () => {
     expect(result.remediated).toBe(0);
     expect(result.remediationFailures).toEqual([]);
     expect(reverse.calls).toEqual([]);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_orphan"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
     const incident = await pg.db.execute<{
       params: { payments: { remediation: string }[] };
     }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
@@ -587,8 +534,8 @@ describe("orphan remediation", () => {
     await setOrderStatus(seeded, "abandoned");
     const reverse = recordingReverse();
     const d = deps(new FakeSettlementReport([settlement()]), reverse.fn);
-    await reconcilePayments(d, brandTenantId(seeded.tenantId), PERIOD, NOW);
-    const second = await reconcilePayments(d, brandTenantId(seeded.tenantId), PERIOD, NOW);
+    await reconcilePayments(d, PERIOD, NOW);
+    const second = await reconcilePayments(d, PERIOD, NOW);
     // Still REPORTED — the audit finding never disappears — but not reversed again.
     expect(second.orphan).toHaveLength(1);
     expect(second.remediated).toBe(0);
@@ -604,7 +551,6 @@ describe("orphan remediation", () => {
     };
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()]), refusing),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -614,7 +560,7 @@ describe("orphan remediation", () => {
     ]);
     // One orphan aggregate + one remediation-failed aggregate.
     expect(result.incidentsRaised).toBe(2);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([
+    expect(await openIncidentCodes()).toEqual([
       "payment.reconcile_orphan",
       "payment.reconcile_remediation_failed",
     ]);
@@ -651,7 +597,6 @@ describe("orphan remediation", () => {
         ]),
         flaky,
       ),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -687,14 +632,13 @@ describe("orphan remediation", () => {
         ]),
         refusingBoth,
       ),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
     expect(result.remediated).toBe(0);
     // Both orphans share a null sale_id and the same till: without aggregation, the second
     // `payment.reconcile_remediation_failed` insert would collide on the open-incident dedup key
-    // (tenant, till, code, sale_id) and be silently dropped.
+    // (till, code, sale_id) and be silently dropped.
     const { rows } = await pg.db.execute<{
       params: { count: number; payments: { paymentRef: string; amount: string; reason: string }[] };
     }>(sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`);
@@ -725,18 +669,18 @@ describe("orphan remediation", () => {
       ]),
       refusing,
     );
-    const first = await reconcilePayments(d, brandTenantId(seeded.tenantId), PERIOD, NOW);
+    const first = await reconcilePayments(d, PERIOD, NOW);
     expect(first.remediationFailures).toEqual([
       { paymentRef: "p1", reason: "payment.not_refundable" },
     ]);
 
     // A NEW orphan on the SAME till, while the first sweep's remediation-failed incident is still
-    // open. Its incident collides on the open-incident dedup key (tenant, till, code, sale_id) and
+    // open. Its incident collides on the open-incident dedup key (till, code, sale_id) and
     // is dropped — and unlike the five mismatch classes, this finding is never re-detected, because
     // the marker means no later sweep will ever claim p2 again. The result list is therefore the
     // ONLY record it has, which is exactly why the field exists.
     await capture(seeded, "p2", "ext-2", "20.00");
-    const second = await reconcilePayments(d, brandTenantId(seeded.tenantId), PERIOD, NOW);
+    const second = await reconcilePayments(d, PERIOD, NOW);
     expect(second.incidentsRaised).toBe(0);
     expect(second.remediationFailures).toEqual([
       { paymentRef: "p2", reason: "payment.not_refundable" },
@@ -751,12 +695,7 @@ describe("orphan remediation", () => {
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const first = recordingReverse();
-    await reconcilePayments(
-      deps(new FakeSettlementReport([settlement()]), first.fn),
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    await reconcilePayments(deps(new FakeSettlementReport([settlement()]), first.fn), PERIOD, NOW);
     expect(first.calls).toEqual(["p1"]);
 
     // Acknowledge the first sweep's incident before the second runs. Without this the assertion
@@ -765,12 +704,11 @@ describe("orphan remediation", () => {
     // NULL`, so while the first stays open the second sweep's insert is deduplicated away.
     await pg.db.execute(sql`
       update incidents set acknowledged_at = now()
-      where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'`);
+      where code = 'payment.reconcile_orphan'`);
 
     const second = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()]), second.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -795,12 +733,7 @@ describe("orphan remediation", () => {
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
     const first = recordingReverse();
-    await reconcilePayments(
-      deps(new FakeSettlementReport([settlement()]), first.fn),
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    await reconcilePayments(deps(new FakeSettlementReport([settlement()]), first.fn), PERIOD, NOW);
     expect(first.calls).toEqual(["p1"]);
 
     // Acknowledge the first sweep's incident before the second runs — as in the test above, the
@@ -809,13 +742,12 @@ describe("orphan remediation", () => {
     // (`claimed`) instead of the second sweep's.
     await pg.db.execute(sql`
       update incidents set acknowledged_at = now()
-      where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'`);
+      where code = 'payment.reconcile_orphan'`);
 
     // The second sweep's report now drifts the amount for the already-claimed row.
     const second = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })]), second.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -843,7 +775,6 @@ describe("orphan remediation", () => {
     const reverse = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })]), reverse.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -862,7 +793,7 @@ describe("orphan remediation", () => {
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([
+    expect(await openIncidentCodes()).toEqual([
       "payment.reconcile_drift",
       "payment.reconcile_orphan",
     ]);
@@ -890,7 +821,6 @@ describe("orphan remediation", () => {
     const reverse = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement()]), reverse.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -918,7 +848,6 @@ describe("orphan remediation", () => {
     const reverse = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([]), reverse.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -944,7 +873,6 @@ describe("orphan remediation", () => {
     const reverse = recordingReverse();
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })]), reverse.fn),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );
@@ -974,7 +902,6 @@ describe("orphan remediation", () => {
         ]),
         reverse.fn,
       ),
-      brandTenantId(seeded.tenantId),
       PERIOD,
       NOW,
     );

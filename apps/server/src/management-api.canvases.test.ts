@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
@@ -23,7 +23,7 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & st
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
@@ -37,7 +37,7 @@ function nextNif(): string {
 }
 
 /** A canvas name unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the
- *  canvas set accumulates per tenant and `(tenant, name)` is unique, so a fixed name could collide. */
+ *  canvas set accumulates across tests and `(name)` is unique, so a fixed name could collide. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
@@ -49,9 +49,17 @@ function phoneCanvas(title: string): CanvasDef {
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
+/** The suite's one venue. The clone holds one tenant (one tenant per database) and is not reset between
+ *  tests, so both groups share the venue provisioned on first use rather than provisioning another. */
+let provisioned: Promise<Record<string, never>> | undefined;
+function setupTenant(): Promise<Record<string, never>> {
+  provisioned ??= provisionTenant();
+  return provisioned;
+}
+
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string }> {
-  const venue = await applyVenue(
+async function provisionTenant(): Promise<Record<string, never>> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -85,19 +93,19 @@ async function setupTenant(): Promise<{ tenantId: string }> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
   });
-  return { tenantId: venue.tenantId };
+  return {};
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -106,7 +114,7 @@ function mountApp(tenantId: string): Hono {
       // nodeId sentinel: the canvas/theme management routes never read cfg.nodeId, but
       // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the
       // sibling management tests (management-api.pg.test.ts, …-status/-passkey).
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -130,16 +138,15 @@ async function login(app: Hono, email: string): Promise<string> {
 const JSON_HEADERS = { "content-type": "application/json" };
 
 describe("Management API — layout-canvas CRUD (Task 11)", () => {
-  let tenantId: string;
   let managerCookie: string;
 
   beforeAll(async () => {
-    ({ tenantId } = await setupTenant());
-    managerCookie = await login(mountApp(tenantId), MANAGER_EMAIL);
+    await setupTenant();
+    managerCookie = await login(mountApp(), MANAGER_EMAIL);
   });
 
   it("round-trips create → list → get → update → delete", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const name = uniqueName("Front counter");
     const definition = phoneCanvas("Floor A");
 
@@ -202,7 +209,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("GET by an unknown (well-formed) id → 404 canvas.not_found", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request(`/management-api/canvases/${randomUUID()}`, {
       headers: { cookie: managerCookie },
     });
@@ -213,7 +220,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("PUT to an unknown (well-formed) id → 404 canvas.not_found (no silent no-op)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request(`/management-api/canvases/${randomUUID()}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -226,7 +233,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("DELETE an unknown (well-formed) id → 404 canvas.not_found (no silent no-op)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request(`/management-api/canvases/${randomUUID()}`, {
       method: "DELETE",
       headers: { cookie: managerCookie },
@@ -238,9 +245,9 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("DELETE a canvas a device profile still references → 409 canvas.in_use, canvas survives", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // Create a canvas, then bind a device profile to it as the owner (fixture setup). The
-    // composite FK device_profiles_canvas_fk is ON DELETE RESTRICT, so the DELETE trips a 23001 the
+    // FK device_profiles_canvas_fk is ON DELETE RESTRICT, so the DELETE trips a 23001 the
     // store translates to canvas.in_use → the house 409.
     const created = await app.request("/management-api/canvases", {
       method: "POST",
@@ -251,8 +258,8 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
     const { id } = (await created.json()) as { id: string };
 
     await suite.admin.execute(sql`
-      insert into device_profiles (tenant_id, name, form_factor, canvas_id)
-      values (${tenantId}, ${uniqueName("Binding profile")}, 'till', ${id})`);
+      insert into device_profiles (name, form_factor, canvas_id)
+      values (${uniqueName("Binding profile")}, 'till', ${id})`);
 
     const res = await app.request(`/management-api/canvases/${id}`, {
       method: "DELETE",
@@ -270,7 +277,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("GET by a MALFORMED id → 404 canvas.not_found (the requireCanvasId screen)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/canvases/not-a-uuid", {
       headers: { cookie: managerCookie },
     });
@@ -281,7 +288,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("POST with an invalid definition → 400 canvas.invalid", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // `{}` has no formFactor — validateCanvas refuses it (canvas.invalid) after authorize.
     const res = await app.request("/management-api/canvases", {
       method: "POST",
@@ -295,7 +302,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("POST with a body missing name / definition → 400 management.request_invalid naming the field", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const noName = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -333,7 +340,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("PUT with a malformed body → 400 management.request_invalid naming the field", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // A real canvas to target, so the body screen — not a not-found — is what fires.
     const created = await app.request("/management-api/canvases", {
       method: "POST",
@@ -379,7 +386,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("POST a duplicate name → 409 canvas.name_taken", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const name = uniqueName("Twin");
     const first = await app.request("/management-api/canvases", {
       method: "POST",
@@ -400,7 +407,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("refuses every canvas route for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
     // Seed a canvas as the manager so the GET-by-id / PUT / DELETE targets exist (the 403 must fire
     // regardless — the gate runs before any read/write).
@@ -438,7 +445,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   });
 
   it("refuses the canvas routes unauthenticated with 401", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/canvases");
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -448,23 +455,22 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
 });
 
 describe("Management API — tenant theme (Task 11)", () => {
-  let tenantId: string;
   let managerCookie: string;
 
   beforeAll(async () => {
-    ({ tenantId } = await setupTenant());
-    managerCookie = await login(mountApp(tenantId), MANAGER_EMAIL);
+    await setupTenant();
+    managerCookie = await login(mountApp(), MANAGER_EMAIL);
   });
 
   it("GET returns { theme: null } for a tenant that has never authored a theme", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/theme", { headers: { cookie: managerCookie } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ theme: null });
   });
 
   it("PUT → 204, then GET reads the theme back (round-trip)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const theme: ThemeOverride = { tokens: { "--wt-color-primary": "#ff0000" } };
     const put = await app.request("/management-api/theme", {
       method: "PUT",
@@ -480,7 +486,7 @@ describe("Management API — tenant theme (Task 11)", () => {
   });
 
   it("PUT with an unknown token → 400 theme.invalid", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/theme", {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -493,7 +499,7 @@ describe("Management API — tenant theme (Task 11)", () => {
   });
 
   it("PUT with a body omitting theme → 400 management.request_invalid naming the field", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const empty = await app.request("/management-api/theme", {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -519,7 +525,7 @@ describe("Management API — tenant theme (Task 11)", () => {
   });
 
   it("refuses the theme routes for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
     const cases = [
       app.request("/management-api/theme", { headers: { cookie: staffCookie } }),
@@ -538,7 +544,7 @@ describe("Management API — tenant theme (Task 11)", () => {
   });
 
   it("refuses the theme routes unauthenticated with 401", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/theme");
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({

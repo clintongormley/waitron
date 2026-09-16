@@ -37,8 +37,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * reason to be in the real-PG tier at all needs Docker regardless: its race tests (a settlement in
  * `settle-sale.test.ts`, marking an incident handled in `incidents.concurrency.test.ts`) run across two
  * DISTINCT backends, which PGlite — one backend, every query serialised — cannot stage at all, so a
- * lock test there is a false pass. (`settle-sale.test.ts` also still carries a cross-tenant
- * `sale.not_found` case; it goes when the schema does.) CLAUDE.md §4 documents that this
+ * lock test there is a false pass. CLAUDE.md §4 documents that this
  * repo's real-Postgres test tier needs a local Docker daemon (plus `TESTCONTAINERS_RYUK_DISABLED`);
  * `dockerRequired` turns the raw testcontainers daemon error into that guidance when Docker is absent.
  */

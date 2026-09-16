@@ -2,7 +2,7 @@
 // connection. Printer resolution locks an active row through enqueue so deactivation cannot race it.
 // Originals and duplicates are separate actions; a queue resend preserves the original job bytes.
 import { and, eq } from "drizzle-orm";
-import { drawerOpens, locations, printers, tenants, tills } from "@waitron/db";
+import { drawerOpens, locations, printers, readTenant, tills } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
@@ -17,7 +17,7 @@ export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 
 /** The tenant + location scope `enqueuePrintJob` runs under — `TillConfig` carries both. */
 function printConfig(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 /** The till's active receipt printer and the settings its receipts are laid out for. */
@@ -27,8 +27,8 @@ export interface ReceiptPrinter extends ReceiptPrinterSettings {
 
 /**
  * Resolve the calling till's ACTIVE receipt printer, or `undefined` when none applies (no printer set,
- * or the named one is inactive). Joined `tills → printers` on the tenant-consistent
- * (tenant_id, receipt_printer_id) key and filtered to `active = true`; `FOR SHARE OF printers` row-locks
+ * or the named one is inactive). Joined `tills → printers` on `receipt_printer_id` and
+ * filtered to `active = true`; `FOR SHARE OF printers` row-locks
  * the matched printer so a concurrent `deactivatePrinter` cannot flip it inactive before
  * `enqueuePrintJob`'s READ-COMMITTED re-check. Shared by all three consumers — the
  * print-on-sale hook, the reprint, and the manual drawer-open — so the ONE place a till's printer is
@@ -47,15 +47,8 @@ export async function resolveReceiptPrinter(
       characterSet: printers.characterSet,
     })
     .from(tills)
-    .innerJoin(
-      printers,
-      and(
-        eq(printers.tenantId, tills.tenantId),
-        eq(printers.id, tills.receiptPrinterId),
-        eq(printers.active, true),
-      ),
-    )
-    .where(and(eq(tills.tenantId, cfg.tenantId), eq(tills.id, cfg.tillId)))
+    .innerJoin(printers, and(eq(printers.id, tills.receiptPrinterId), eq(printers.active, true)))
+    .where(eq(tills.id, cfg.tillId))
     .for("share", { of: printers });
   return printer;
 }
@@ -68,23 +61,20 @@ async function buildReceiptBytes(
   duplicate: boolean,
   printer: ReceiptPrinterSettings,
 ): Promise<Uint8Array | undefined> {
-  const [issuer] = await tx
-    .select({ venueName: tenants.legalName, nif: tenants.taxId })
-    .from(tenants)
-    .where(eq(tenants.id, cfg.tenantId));
+  const taxpayer = await readTenant(tx);
   /* v8 ignore start */
-  if (issuer === undefined) {
-    // Structurally unreachable: `cfg.tenantId` is this till's own tenant (provisioning stamped
-    // it), so the row always exists and the by-id lookup returns it. Degrade to NOT printing
+  if (taxpayer === null) {
+    // Structurally unreachable: the taxpayer row is the database's one row (provisioning wrote
+    // it), so the by-id lookup always returns it. Degrade to NOT printing
     // rather than throwing — a throw in the sale-tx hook would roll the filed sale back (§5). The
     // boot handler treats the same absence as corruption.
     return undefined;
   }
   /* v8 ignore stop */
-  const receipt = await getReceipt(tx, cfg.tenantId);
+  const receipt = await getReceipt(tx);
   return formatReceipt({
     result: ticket,
-    issuer: ticket.issuer ?? issuer,
+    issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
     invoiceLocale: cfg.locale,
     printer,
@@ -125,7 +115,7 @@ export async function enqueueSaleReceipt(
   const [loc] = await tx
     .select({ mode: locations.receiptPrintMode })
     .from(locations)
-    .where(and(eq(locations.tenantId, cfg.tenantId), eq(locations.id, cfg.locationId)));
+    .where(eq(locations.id, cfg.locationId));
   if (loc?.mode !== "auto") return;
   await enqueueOriginalReceipt(tx, cfg, ticket);
 }
@@ -173,7 +163,6 @@ export async function enqueueManualDrawerOpen(
   viaOverride: boolean,
 ): Promise<void> {
   await tx.insert(drawerOpens).values({
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     personId: operatorId,
     reason: "manual",
@@ -205,7 +194,6 @@ export async function enqueueCashSaleDrawer(
   const printer = await resolveReceiptPrinter(tx, cfg);
   if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     personId: operatorId,
     reason: "cash_sale",

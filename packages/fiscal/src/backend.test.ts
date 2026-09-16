@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimal, nodeId, saleId, seriesId, tenantId, tillId } from "@waitron/shared";
+import { decimal, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
 import type { FiscalBackend, IntegrityReport, SaleForFiscalRecord } from "./backend.js";
 import { emptyDrainResult } from "./backend.js";
 import { FakeFiscalBackend } from "./testing/fake-backend.js";
@@ -23,14 +23,13 @@ describe("emptyDrainResult", () => {
     const b = emptyDrainResult();
     expect(a).not.toBe(b);
     expect(a.skipped).not.toBe(b.skipped);
-    a.skipped.push({ tenantId: TENANT, errorCode: "x" });
+    a.skipped.push({ errorCode: "x" });
     a.recordsSubmitted = 5;
     expect(b.skipped).toEqual([]);
     expect(b.recordsSubmitted).toBe(0);
   });
 });
 
-const TENANT = tenantId("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
 const TILL = tillId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 const NODE = nodeId("7ba7b810-9dad-11d1-80b4-00c04fd430c1");
 
@@ -44,7 +43,6 @@ describe("FiscalBackend", () => {
 
   it("accepts a sale whose monetary fields are exact decimals", () => {
     const sale: SaleForFiscalRecord = {
-      tenantId: TENANT,
       tillId: TILL,
       nodeId: NODE,
       saleId: saleId("11111111-2222-3333-4444-555555555555"),

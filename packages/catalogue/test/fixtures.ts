@@ -7,7 +7,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -20,37 +20,35 @@ import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { createUnit } from "../src/units.js";
 
 export interface SeededVenue {
-  tenantId: TenantId;
   locationId: string;
   tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
 
-/** Seed the two legacy product choices with real tenant-scoped unit identities. */
-export async function seedLegacySellingUnits(db: Database, tenantId: string): Promise<void> {
+/** Seed the two legacy product choices with real unit identities. */
+export async function seedLegacySellingUnits(db: Database): Promise<void> {
   await db.execute(sql`
-    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each","fr":"unité"}'::jsonb, '{"en":"ea","fr":"u"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg","fr":"kg"}'::jsonb, '{"en":"kg","fr":"kg"}'::jsonb, 3, 'kg')`);
+    insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
+      ('each', '{"en":"each","fr":"unité"}'::jsonb, '{"en":"ea","fr":"u"}'::jsonb, 0, null),
+      ('kg', '{"en":"kg","fr":"kg"}'::jsonb, '{"en":"kg","fr":"kg"}'::jsonb, 3, 'kg')`);
 }
 
 export async function seedVenue(db: Database): Promise<SeededVenue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en-GB'], 'Test op') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en-GB'], 'Test op') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`,
   );
   const tillId = brandTillId(till.rows[0]!.id);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A') returning id`,
+    sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
   );
   const seriesId = brandSeriesId(series.rows[0]!.id);
-  return { tenantId, locationId, tillId, nodeId, seriesId };
+  return { locationId, tillId, nodeId, seriesId };
 }
 
 export interface SeededCatalogue {
@@ -62,28 +60,18 @@ export interface SeededCatalogue {
 
 export async function seedCatalogueFixture(
   tx: Transaction,
-  venue: { tenantId: TenantId; locationId: string },
+  venue: { locationId: string },
 ): Promise<SeededCatalogue> {
-  const catalogue = await createCatalogue(tx, venue.tenantId, { name: "Deli" });
-  const food = await createCategory(tx, venue.tenantId, { name: { en: "Food" } });
-  const drinks = await createCategory(tx, venue.tenantId, { name: { en: "Drinks" } });
+  const catalogue = await createCatalogue(tx, { name: "Deli" });
+  const food = await createCategory(tx, { name: { en: "Food" } });
+  const drinks = await createCategory(tx, { name: { en: "Drinks" } });
   const eachUnitId = (
-    await createUnit(
-      tx,
-      venue.tenantId,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
-      "en",
-    )
+    await createUnit(tx, { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } }, "en")
   ).id;
   const kgUnitId = (
-    await createUnit(
-      tx,
-      venue.tenantId,
-      { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
-      "en",
-    )
+    await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } }, "en")
   ).id;
-  const slicedHam = await createProduct(tx, venue.tenantId, {
+  const slicedHam = await createProduct(tx, {
     catalogueId: catalogue.id,
     categoryId: food.id,
     name: "sliced ham",
@@ -91,7 +79,7 @@ export async function seedCatalogueFixture(
     unitPrice: "24.90",
     vatClass: "reduced",
   });
-  const water = await createProduct(tx, venue.tenantId, {
+  const water = await createProduct(tx, {
     catalogueId: catalogue.id,
     categoryId: drinks.id,
     name: "water",

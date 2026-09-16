@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { AckState } from "@waitron/fiscal";
 
@@ -69,10 +69,9 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
   if (state === null) return; // non-terminal estado — no ack yet
 
   await tx.execute(sql`
-    insert into acks (registro_id, tenant_id, submitted_at, csv, state, delivered_at)
+    insert into acks (registro_id, submitted_at, csv, state, delivered_at)
     select
       e.registro_id,
-      e.tenant_id,
       coalesce(e.enviado_en, ${now.toISOString()}::timestamptz),
       e.csv,
       ${state},
@@ -95,9 +94,9 @@ export async function deleteAck(tx: Transaction, registroId: string): Promise<vo
   await tx.execute(sql`delete from acks where registro_id = ${registroId}`);
 }
 
-/** Every undelivered ack for the requested tenant, oldest submission first. */
-export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]> {
-  return withTenant(db, tenantId, async (tx) => {
+/** Every undelivered ack, oldest submission first. */
+export async function pendingAcks(db: Database): Promise<Ack[]> {
+  return withTransaction(db, async (tx) => {
     const { rows } = await tx.execute<{
       registro_id: string;
       submitted_at: string | Date;
@@ -106,7 +105,7 @@ export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]
     }>(sql`
       select registro_id, submitted_at, csv, state
       from acks
-      where tenant_id = ${tenantId} and delivered_at is null
+      where delivered_at is null
       order by submitted_at, registro_id
     `);
     return rows.map((r) => ({
@@ -118,16 +117,10 @@ export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]
   });
 }
 
-/** Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTenant`. */
-export async function markDelivered(
-  db: Database,
-  tenantId: string,
-  recordId: string,
-): Promise<void> {
-  await withTenant(db, tenantId, (tx) =>
-    tx.execute(
-      sql`update acks set delivered_at = now() where tenant_id = ${tenantId} and registro_id = ${recordId}`,
-    ),
+/** Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTransaction`. */
+export async function markDelivered(db: Database, recordId: string): Promise<void> {
+  await withTransaction(db, (tx) =>
+    tx.execute(sql`update acks set delivered_at = now() where registro_id = ${recordId}`),
   );
 }
 

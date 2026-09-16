@@ -41,8 +41,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         country: string;
       }>(sql`
         select l.catalogue_id, l.province, t.country from locations l
-        join tenants t on t.id = l.tenant_id
-        where l.tenant_id = ${node.tenantId} and l.id = ${node.locationId}`);
+        cross join tenants t
+        where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
       // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: the deli writes its
       // menu in Spanish, Catalan and English, and nothing in setup asks which languages a venue
@@ -74,35 +74,33 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         sql`, `,
       )}]::text[]`;
       await tx.execute(sql`
-        insert into content_languages (tenant_id, default_language, languages)
-        values (${node.tenantId}, ${defaultLanguage}, ${languageArray})
-        on conflict (tenant_id) do nothing`);
+        insert into content_languages (default_language, languages)
+        values (${defaultLanguage}, ${languageArray})
+        on conflict (id) do nothing`);
       const claimed = await tx.execute(sql`
-        insert into unit_seed_states (tenant_id) values (${node.tenantId})
-        on conflict (tenant_id) do nothing returning tenant_id`);
+        insert into unit_seed_states default values
+        on conflict (id) do nothing returning id`);
       if (claimed.rows.length > 0) {
         await tx.execute(sql`
-          insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
-            (${node.tenantId}, 'g', ${JSON.stringify(UNIT_NAMES.g)}::jsonb, ${JSON.stringify(UNIT_ABBR.g)}::jsonb, 0, 'g'),
-            (${node.tenantId}, 'kg', ${JSON.stringify(UNIT_NAMES.kg)}::jsonb, ${JSON.stringify(UNIT_ABBR.kg)}::jsonb, 3, 'kg'),
-            (${node.tenantId}, 'mg', ${JSON.stringify(UNIT_NAMES.mg)}::jsonb, ${JSON.stringify(UNIT_ABBR.mg)}::jsonb, 0, 'mg'),
-            (${node.tenantId}, 'ml', ${JSON.stringify(UNIT_NAMES.ml)}::jsonb, ${JSON.stringify(UNIT_ABBR.ml)}::jsonb, 0, null),
-            (${node.tenantId}, 'l', ${JSON.stringify(UNIT_NAMES.l)}::jsonb, ${JSON.stringify(UNIT_ABBR.l)}::jsonb, 3, null)`);
+          insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
+            ('g', ${JSON.stringify(UNIT_NAMES.g)}::jsonb, ${JSON.stringify(UNIT_ABBR.g)}::jsonb, 0, 'g'),
+            ('kg', ${JSON.stringify(UNIT_NAMES.kg)}::jsonb, ${JSON.stringify(UNIT_ABBR.kg)}::jsonb, 3, 'kg'),
+            ('mg', ${JSON.stringify(UNIT_NAMES.mg)}::jsonb, ${JSON.stringify(UNIT_ABBR.mg)}::jsonb, 0, 'mg'),
+            ('ml', ${JSON.stringify(UNIT_NAMES.ml)}::jsonb, ${JSON.stringify(UNIT_ABBR.ml)}::jsonb, 0, null),
+            ('l', ${JSON.stringify(UNIT_NAMES.l)}::jsonb, ${JSON.stringify(UNIT_ABBR.l)}::jsonb, 3, null)`);
       }
       let catalogueId = location.rows[0]?.catalogue_id ?? null;
       if (catalogueId === null) {
         const created = await tx.execute<{ id: string }>(sql`
-          insert into catalogues (tenant_id, name)
-          values (${node.tenantId}, 'Menu') returning id`);
+          insert into catalogues (name) values ('Menu') returning id`);
         catalogueId = created.rows[0]!.id;
         await tx.execute(sql`
           update locations set catalogue_id = ${catalogueId}
-          where tenant_id = ${node.tenantId} and id = ${node.locationId}`);
+          where id = ${node.locationId}`);
       }
       await tx.execute(sql`
-        insert into location_catalogues (tenant_id, location_id, catalogue_id)
-        values (${node.tenantId}, ${node.locationId}, ${catalogueId})
-        on conflict (tenant_id, location_id, catalogue_id) do nothing`);
+        insert into location_catalogues (location_id, catalogue_id) values (${node.locationId}, ${catalogueId})
+        on conflict (location_id, catalogue_id) do nothing`);
       return "initial menu ready";
     },
   },

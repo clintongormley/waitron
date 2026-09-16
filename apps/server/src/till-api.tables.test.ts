@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -21,7 +21,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -32,7 +31,7 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these routes are wiring — session guard + isUuid screen + STATUS mapping
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
-// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the composite FKs)
+// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the FKs)
 // live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
 // re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
 // into core, so the shared ordered set is the fixture.
@@ -42,47 +41,48 @@ let ana: { id: string };
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
 // key match the location's `es-ES` locale).
 let productId: string;
-// A real `floor_zones` row in the counter location — a table's `zoneId` is now a composite FK to
+// A real `floor_zones` row in the counter location — a table's `zoneId` is now a FK to
 // `floor_zones`, not a free-text string, so the create/patch table tests point at THIS id. (The zone
 // CRUD verbs have no HTTP route yet — that is a later FP-1 task — so it is seeded directly here.)
 let seededZoneId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    const tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedTenant(db);
+    await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The product is authored under the BARE `es` key;
     // `priceOrderLines` re-keys its descriptions to the location's `es-ES` before the tab
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly — the same constraint the park route's harness documents.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
     // as the PGlite superuser here, as the surrounding venue rows are.
-    await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
+    await seedKitchenStation(db, { locationId: brandLocationId(loc.rows[0]!.id) });
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+      insert into tills (location_id, name)
+      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
     // A node the tab's working-order write needs: `openTab`/`addTabRound` create an `open`
-    // working_orders row whose composite FK `(tenant_id, node_id) → nodes(tenant_id, id)` requires a
+    // working_orders row whose FK `(node_id) → nodes(id)` requires a
     // real row; `cfg.nodeId` names THIS one.
-    const nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
     // Ana logs in with PIN "5555"; the session cookie the routes require names her shift.
     const person = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
     // One product in a catalogue assigned to the counter location, seeded on the APP role via the
-    // catalogue helpers — the same `withTenant` + `asAppUser` path the tab verbs price it through, so
+    // catalogue helpers — the same `withTransaction` + `asAppUser` path the tab verbs price it through, so
     // the active/assignment filters are real, not bypassed by a superuser insert.
-    const product = await withTenant(db, tenantId, async (tx) => {
+    const product = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-      const p = await createProduct(tx, tenantId, {
+      const cat = await createCatalogue(tx, { name: "Carta" });
+      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const p = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua mineral",
@@ -95,10 +95,10 @@ const suite = usePgliteDb({
     });
     productId = product.id;
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Terraza') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${loc.rows[0]!.id}, 'Terraza') returning id`);
     seededZoneId = zone.rows[0]!.id;
-    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
 
@@ -112,14 +112,8 @@ function collect(
 /** The till's config for the seeded tenant. `seriesId` is unused by these routes (no fiscal write on
  *  the tab/table path) so it carries a fresh uuid; `nodeId`/`locationId` are the seeded rows the tab
  *  and table reads write/scope by. */
-function makeCfg(
-  tenantId: TenantId,
-  tillId: string,
-  locationId: string,
-  nodeId: string,
-): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
-    tenantId,
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -164,13 +158,12 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
  *  `loginWithPin` path the login route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       personId: ana.id,
       pin: "5555",
@@ -219,7 +212,7 @@ describe("table + tab routes", () => {
 
   it("POST /api/tables with an unknown zoneId → 404 zone.not_found", async () => {
     // The table create route now forwards `zoneId` to `createTable`; one naming no `floor_zones` row
-    // trips the composite `dining_tables_zone_fk` (23503), surfaced as the domain `zone.not_found`
+    // trips `dining_tables_zone_fk` (23503), surfaced as the domain `zone.not_found`
     // (404 via the STATUS map) rather than an opaque 500. A real zoneId is proven by the create test
     // above; this is its negative counterpart.
     const res = await request("/api/tables", {

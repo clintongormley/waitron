@@ -19,7 +19,6 @@ export const productVariants = pgTable(
   "product_variants",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     productId: uuid("product_id").notNull(),
     // Staff-facing variant name — plain text, like the product's own name.
     name: text("name").notNull(),
@@ -36,10 +35,11 @@ export const productVariants = pgTable(
     displayOrder: integer("display_order").notNull().default(0),
   },
   (t) => [
-    unique("product_variants_tenant_product_id_key").on(t.tenantId, t.productId, t.id),
+    // The target of menu_item_variants_variant_fk: a published variant belongs to the offer's product.
+    unique("product_variants_product_id_key").on(t.productId, t.id),
     foreignKey({
-      columns: [t.tenantId, t.productId],
-      foreignColumns: [products.tenantId, products.id],
+      columns: [t.productId],
+      foreignColumns: [products.id],
       name: "product_variants_product_fk",
     }).onDelete("restrict"),
     check("product_variants_price_ck", sql`${t.unitPrice} >= 0`),
@@ -50,7 +50,6 @@ export const productVariants = pgTable(
 export const menuItemVariants = pgTable(
   "menu_item_variants",
   {
-    tenantId: uuid("tenant_id").notNull(),
     menuItemId: uuid("menu_item_id").notNull(),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id").notNull(),
@@ -59,15 +58,15 @@ export const menuItemVariants = pgTable(
     displayOrder: integer("display_order").notNull().default(0),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.menuItemId, t.variantId], name: "menu_item_variants_pk" }),
+    primaryKey({ columns: [t.menuItemId, t.variantId], name: "menu_item_variants_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.menuItemId, t.productId],
-      foreignColumns: [menuItems.tenantId, menuItems.id, menuItems.productId],
+      columns: [t.menuItemId, t.productId],
+      foreignColumns: [menuItems.id, menuItems.productId],
       name: "menu_item_variants_offer_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.productId, t.variantId],
-      foreignColumns: [productVariants.tenantId, productVariants.productId, productVariants.id],
+      columns: [t.productId, t.variantId],
+      foreignColumns: [productVariants.productId, productVariants.id],
       name: "menu_item_variants_variant_fk",
     }).onDelete("restrict"),
     check("menu_item_variants_price_ck", sql`${t.unitPrice} >= 0`),

@@ -20,7 +20,7 @@ import {
   printTransport,
   receiptPrintMode,
   tills,
-  withTenant,
+  withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -62,10 +62,10 @@ import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
 
 /**
- * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` is the FULL
- * `TillConfig` (branded ids), not a `{ tenantId, locationId }` subset: the shared join verbs
+ * The deployment holds one taxpayer per database. Everything `mountPrintApi` needs. `cfg` is the FULL
+ * `TillConfig` (branded ids), not a `{ locationId }` subset: the shared join verbs
  * (`createJoinRequest`, `readAgentJoinStatus`, and the accept verb in join-api.ts) are typed `cfg:
- * TillConfig` and read `cfg.tenantId`/`cfg.locationId`, and the pull route echoes `cfg.nodeId` so the
+ * TillConfig` and read `cfg.locationId`, and the pull route echoes `cfg.nodeId` so the
  * agent can tell which node it is talking to. `readMembership` reads the venue's held chart so the pull
  * can list its routable servers (the agent follows the primary across a failover, mirroring the till's
  * `GET /api/till`). `pairingMode` is the venue-wide window the knock is admitted under — the SAME holder
@@ -106,7 +106,7 @@ const RECENT_JOBS_LIMIT = 100;
  *  - Agent auth: `agent.unauthorized` (the `requireAgent` fold of missing/unknown/revoked, 401).
  *  - The knock (join-and-accept, the shared join_requests mechanism): `device.pairing_closed` (a knock
  *    while the venue's window is shut, 403 — the ORDINARY state, not an anomaly), `device.join_full`
- *    (the tenant already holds the per-(tenant,kind) cap of pending requests, 429) and
+ *    (the database already holds the per-KIND cap of pending requests, 429) and
  *    `device.join_rate_limited` (the knock flood guard, 429, thrown BEFORE any DB work). These are the
  *    SHARED device knock codes: the agent joins through the same mechanism a device does, and its client
  *    reads the HTTP status, not the code string, so there is no `agent.*` sibling to mint.
@@ -135,7 +135,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "print_job.not_resendable": 409,
   "printer.invalid_config": 422,
   // A second registration of a physical device already registered in this venue — the partial UNIQUE
-  // (tenant_id, location_id, local_key), mapped friendly by `createPrinter`/`updatePrinter` (§9).
+  // (location_id, local_key), mapped friendly by `createPrinter`/`updatePrinter` (§9).
   "printer.already_registered": 409,
   "agent.not_found": 404,
   "station.not_found": 404,
@@ -325,14 +325,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     fn: (tx: Transaction) => Promise<T>,
     permission: Permission = PRINTER_MANAGE_PERMISSION,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
-      const authorization = await authorizeManager(tx, {
+      await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission,
       });
-      if (authorization.tenantId !== deps.cfg.tenantId)
-        throw new AppError("authorization.not_permitted", { permission });
       return fn(tx);
     });
 
@@ -350,7 +348,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
-      const made = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const made = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return createJoinRequest(tx, deps.cfg, { kind: "print_agent", label: name });
       });
@@ -378,7 +376,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // A non-uuid selector names nothing — answered `not_approved` HERE, before it reaches a bare-uuid
       // comparison (which would `22P02` → an opaque 500), the device sibling's guard.
       if (!isUuid(joinId)) return c.json({ status: "not_approved" as const });
-      const status = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const status = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return readAgentJoinStatus(tx, deps.cfg, joinId, secret);
       });
@@ -395,7 +393,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // location.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
-      const { agentId } = await requireAgent({ db: deps.db, cfg: deps.cfg }, c);
+      const { agentId } = await requireAgent({ db: deps.db }, c);
       const body = await readJsonBody<{ visible?: unknown; scanned?: unknown; host?: unknown }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
@@ -424,27 +422,23 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         .map((v) => v.localKey);
 
       // CLAIM-and-COMMIT within the request (Controller Ruling 6): the locking claim runs inside this
-      // `withTenant` transaction, which COMMITS when the handler returns — the HTTP response is the
+      // `withTransaction` transaction, which COMMITS when the handler returns — the HTTP response is the
       // commit boundary. The server then holds NO lock or transaction across the remote agent's socket
       // write; the agent pushes the bytes and REPORTs via `/result`.
       // TODO(multi-location): `deps.cfg.locationId` is THIS server's location, which equals the agent's
       // under one-location-per-DB. A future multi-location tenant reads the agent's own
       // `print_agents.location_id` instead of the server's.
-      const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const claimed = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         if (host !== undefined) {
           await tx
             .update(printAgents)
             .set({ host })
             .where(
-              and(
-                eq(printAgents.tenantId, deps.cfg.tenantId),
-                eq(printAgents.id, agentId),
-                sql`${printAgents.host} is distinct from ${host}`,
-              ),
+              and(eq(printAgents.id, agentId), sql`${printAgents.host} is distinct from ${host}`),
             );
         }
-        return claimPrintJobs(tx, deps.cfg, agentId, {
+        return claimPrintJobs(tx, agentId, {
           locationId: deps.cfg.locationId,
           visibleKeys,
         });
@@ -478,7 +472,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // ── Report one job's delivery outcome (AGENT-GATED) ──────────────────────────────────────────────
   app.post("/print-api/agent/jobs/:id/result", (c) =>
     run(c, log, async () => {
-      const { agentId } = await requireAgent({ db: deps.db, cfg: deps.cfg }, c);
+      const { agentId } = await requireAgent({ db: deps.db }, c);
       // A non-uuid job id is a clear client bug (the agent builds this URL from a claimed job's id) →
       // a clean `shared.invalid_id` 400, never a `22P02` 500 in the `uuid` column.
       const jobId = requireUuidParam(c.req.param("id"), "PrintJobId");
@@ -495,9 +489,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // printers, so a cross-agent report changes nothing. The response is a plain 204 whether or not a
       // row matched — an idempotent status sink (a job that is not this agent's, already terminal, or
       // unknown is a no-op), never disclosing which job ids exist. The agent-scope is proven by deletion.
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return reportPrintJob(tx, deps.cfg, { agentId, jobId, outcome });
+        return reportPrintJob(tx, { agentId, jobId, outcome });
       });
       return c.body(null, 204);
     }),
@@ -507,10 +501,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-agents", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Tenant-scoped like every other read (§3): since RLS was dropped (#255) `withTenant` no longer
-      // isolates SELECTs, so without the explicit `tenantId` predicate a manager would see every
-      // tenant's agents in a multi-tenant DB (mirrors the revoke/allow routes below and device-api.ts).
-      // Newest enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
+      // Every agent in the database is this tenant's (one tenant per database). Newest enrolment
+      // first. The `token_hash` is NEVER selected — a secret never leaves the row.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
@@ -525,7 +517,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             enrolledAt: printAgents.enrolledAt,
           })
           .from(printAgents)
-          .where(eq(printAgents.tenantId, deps.cfg.tenantId))
           .orderBy(desc(printAgents.enrolledAt)),
       );
       return c.json(rows);
@@ -543,7 +534,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ name })
-          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .where(eq(printAgents.id, id))
           .returning({ id: printAgents.id }),
       );
       if (rows.length === 0) throw new AppError("agent.not_found", { id });
@@ -563,7 +554,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ active: false })
-          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .where(eq(printAgents.id, id))
           .returning({ id: printAgents.id }),
       );
       if (updated.length === 0) throw new AppError("agent.not_found", { id });
@@ -583,7 +574,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ active: true })
-          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .where(eq(printAgents.id, id))
           .returning({ id: printAgents.id }),
       );
       if (updated.length === 0) throw new AppError("agent.not_found", { id });
@@ -618,10 +609,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // The dashboard's create flow (design §6/§10): every device the agents currently report, each carrying
   // the registered printer it matches (`printerId` — a usb/bluetooth device on its `local_key`, a network
   // device on host:port) and the time of the report that last carried it (`lastSeenAt`). Stale entries
-  // (a device the box stopped reporting) are pruned by the TTL first. Two tenant-scoped reads back the
-  // merge — the registered printers' ids and connection columns, and the agents' names — both under an
-  // explicit `tenant_id` predicate (CLAUDE.md §3: a list read carries its own, one-tenant-per-db is not
-  // the query boundary).
+  // (a device the box stopped reporting) are pruned by the TTL first. Two reads back the merge — the
+  // registered printers' ids and connection columns, and the agents' names.
   app.get("/management-api/discovered-printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -636,12 +625,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             host: printers.host,
             port: printers.port,
           })
-          .from(printers)
-          .where(eq(printers.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
-        agents: await tx
-          .select({ id: printAgents.id, name: printAgents.name })
-          .from(printAgents)
-          .where(eq(printAgents.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
+          .from(printers),
+        agents: await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents),
       }));
       const names = new Map(agents.map((a) => [a.id, a.name]));
       // A usb/bluetooth device matches a registered printer on its stable local key; a network printer
@@ -746,7 +731,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             count(*) filter (where status in ('queued', 'printing')
               or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))::int as pending_jobs,
             (extract(epoch from max(delivered_at)) * 1000)::double precision as last_print_at
-          from print_jobs where tenant_id = ${deps.cfg.tenantId}
+          from print_jobs
           group by printer_id`);
         const byPrinter = new Map(summaries.rows.map((row) => [row.printer_id, row]));
         return configured.map((printer) => {
@@ -850,18 +835,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const recentCompleted = tx
           .select({ id: printJobs.id })
           .from(printJobs)
-          .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.status, "done")))
+          .where(eq(printJobs.status, "done"))
           .orderBy(sql`${printJobs.deliveredAt} desc nulls last`, desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
         const recentFailed = tx
           .select({ id: printJobs.id })
           .from(printJobs)
           .where(
-            and(
-              eq(printJobs.tenantId, deps.cfg.tenantId),
-              eq(printJobs.status, "failed"),
-              gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
-            ),
+            and(eq(printJobs.status, "failed"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
@@ -878,14 +859,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           })
           .from(printJobs)
           .where(
-            and(
-              eq(printJobs.tenantId, deps.cfg.tenantId),
-              or(
-                and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
-                and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
-                inArray(printJobs.id, recentCompleted),
-                inArray(printJobs.id, recentFailed),
-              ),
+            or(
+              and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
+              and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+              inArray(printJobs.id, recentCompleted),
+              inArray(printJobs.id, recentFailed),
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
@@ -903,11 +881,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintJobId");
-      const result = await gated(
-        sessionId,
-        (tx) => resendPrintJob(tx, deps.cfg, id),
-        "print.resend",
-      );
+      const result = await gated(sessionId, (tx) => resendPrintJob(tx, id), "print.resend");
       return c.json(result, 202);
     }),
   );
@@ -924,11 +898,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             resolution: printers.resolution,
           })
           .from(printJobs)
-          .innerJoin(
-            printers,
-            and(eq(printers.tenantId, printJobs.tenantId), eq(printers.id, printJobs.printerId)),
-          )
-          .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.id, id))),
+          .innerJoin(printers, eq(printers.id, printJobs.printerId))
+          .where(eq(printJobs.id, id)),
       );
       if (job === undefined) throw new AppError("print_job.not_found", { id });
       // The printer's CURRENT settings: a job built for 42 columns previews as it would print now.
@@ -953,9 +924,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
-      await gated(sessionId, (tx) =>
-        attachPrinterToStation(tx, deps.cfg, { stationId, printerId }),
-      );
+      await gated(sessionId, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
       return c.body(null, 204);
     }),
   );
@@ -979,8 +948,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // ── List a station's printers (printer.manage)
   // ─────────────────────────────────────────────────── The station-centric read: which printers
   // a station prints to (the config editor's per-station view). `:sid` is
-  // `requireUuidParam`-screened first. `listStationPrinters` explicitly filters by
-  // `cfg.tenantId`.
+  // `requireUuidParam`-screened first.
   app.get("/management-api/stations/:sid/printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1012,8 +980,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // persisted value across a reload. Lives beside the sibling `PATCH
   // …/tills/:id/receipt-printer`, funnelled through the SAME `gated` helper so `printer.manage`
   // is enforced identically (the by-deletion proof on that helper covers this route too). Runs in
-  // `gated`'s `withTenant` + `asAppUser` transaction, with an explicit `tenant_id` predicate
-  // matching the sibling till/location writes. Ordered by name for a stable list.
+  // `gated`'s `withTransaction` + `asAppUser` transaction. Ordered by name for a stable list.
   app.get("/management-api/tills", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1026,7 +993,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             receiptPrinterId: tills.receiptPrinterId,
           })
           .from(tills)
-          .where(eq(tills.tenantId, deps.cfg.tenantId))
           .orderBy(tills.name),
       );
       return c.json(rows);
@@ -1042,7 +1008,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // `requireUuidParam`-screened (`shared.invalid_id`, 400) before any query; a present `printerId` must
   // be UUID-shaped (else a `22P02` → 500) via `requireBodyUuid`. A named printer is validated to be an
   // ACTIVE printer in the till's OWN location (the picker's source) — absent/inactive/foreign/other-location
-  // → `printer.not_found` (404, reused from Slice A), which also keeps the composite FK from 23503-ing an
+  // → `printer.not_found` (404, reused from Slice A), which also keeps the FK from 23503-ing an
   // opaque 500. An unknown till, and a body missing `printerId` entirely, are `management.request_invalid`
   // (400) — there is no `till.*` code (retired at the node-id rekey, errors.ts), and naming a
   // non-existent till in a config PATCH is a request-shape fault, the generic code these routes already use.
@@ -1058,13 +1024,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const printerId =
         body.printerId === null ? null : requireBodyUuid(body.printerId, "printerId");
       await gated(sessionId, async (tx) => {
-        // The till must exist in this tenant (checked by the explicit tenant predicate). Read its
-        // location so a named printer is validated against the till's OWN location — "from the
-        // location's printers" (§5).
+        // The till must exist. Read its location so a named printer is validated against the till's
+        // OWN location — "from the location's printers" (§5).
         const [till] = await tx
           .select({ locationId: tills.locationId })
           .from(tills)
-          .where(and(eq(tills.tenantId, deps.cfg.tenantId), eq(tills.id, tillId)));
+          .where(eq(tills.id, tillId));
         if (till === undefined) {
           throw new AppError("management.request_invalid", { field: "tillId" });
         }
@@ -1074,7 +1039,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             .from(printers)
             .where(
               and(
-                eq(printers.tenantId, deps.cfg.tenantId),
                 eq(printers.id, printerId),
                 eq(printers.locationId, till.locationId),
                 eq(printers.active, true),
@@ -1082,10 +1046,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             );
           if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
         }
-        await tx
-          .update(tills)
-          .set({ receiptPrinterId: printerId })
-          .where(and(eq(tills.tenantId, deps.cfg.tenantId), eq(tills.id, tillId)));
+        await tx.update(tills).set({ receiptPrinterId: printerId }).where(eq(tills.id, tillId));
       });
       return c.body(null, 204);
     }),
@@ -1096,9 +1057,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // per-location print-mode toggle (`auto`/`on_request`/`never`, which the print-on-sale hook
   // reads). Same `gated` / `printer.manage` gate + `requireUuidParam` id screen as the till route
   // above. `mode` is screened to the `receipt_print_mode` enum's members
-  // (`management.request_invalid`, 400, before the enum column). An unknown location or one
-  // excluded by the tenant predicate is `management.request_invalid` (400) — there is no
-  // `location.*` code, the same request-shape treatment the unknown-till case above takes.
+  // (`management.request_invalid`, 400, before the enum column). An unknown location is
+  // `management.request_invalid` (400) — there is no `location.*` code, the same request-shape treatment the unknown-till case above takes.
   app.patch("/management-api/locations/:id/receipt-print-mode", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1109,7 +1069,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const updated = await tx
           .update(locations)
           .set({ receiptPrintMode: mode })
-          .where(and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, locationRowId)))
+          .where(eq(locations.id, locationRowId))
           .returning({ id: locations.id });
         if (updated.length === 0) {
           throw new AppError("management.request_invalid", { field: "locationId" });
@@ -1125,9 +1085,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // hook reads). One-for-one SIBLING of the receipt-print-mode route above: same `gated` /
   // `printer.manage` gate + `requireUuidParam` id screen. `policy` is screened to the
   // `drawer_open_policy` enum's members (`management.request_invalid`, 400, before the enum
-  // column). An unknown location or one excluded by the tenant predicate is
-  // `management.request_invalid` (400) — there is no `location.*` code, the same request-shape
-  // treatment the receipt-print-mode route takes.
+  // column). An unknown location is `management.request_invalid` (400) — there is no `location.*`
+  // code, the same request-shape treatment the receipt-print-mode route takes.
   app.patch("/management-api/locations/:id/drawer-open-policy", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1138,7 +1097,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const updated = await tx
           .update(locations)
           .set({ drawerOpenPolicy: policy })
-          .where(and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, locationRowId)))
+          .where(eq(locations.id, locationRowId))
           .returning({ id: locations.id });
         if (updated.length === 0) {
           throw new AppError("management.request_invalid", { field: "locationId" });

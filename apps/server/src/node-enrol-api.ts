@@ -2,7 +2,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { createErrorBoundary, readJsonBody, requireString } from "@waitron/server-kit";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
@@ -59,7 +59,7 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
       if (!deps.isPrimary) throw new AppError("node.enrol_unavailable", {});
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
-      const { token } = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const { token } = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return selfEnrolNodeAgent(tx, deps.cfg, { nodeId: deps.nodeId, name });
       });

@@ -20,14 +20,13 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, drawerOpens, printJobs, withTenant } from "@waitron/db";
+import { asAppUser, drawerOpens, printJobs, withTransaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
@@ -100,7 +99,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -156,11 +154,11 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -201,7 +199,6 @@ function integratedDeps(
   const provider = new StripeTerminalProvider({
     client,
     db: app,
-    tenantId: cfg.tenantId,
     nodeId: cfg.nodeId,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
@@ -266,11 +263,11 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
 /** Create a receipt printer (cloud_poll) and point the till at it. `receipt_print_mode` defaults to
  *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
 async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
-      { tenantId: cfg.tenantId, locationId: cfg.locationId },
+      { locationId: cfg.locationId },
       { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
     await tx.execute(sql`update tills set receipt_printer_id = ${id} where id = ${cfg.tillId}`);
@@ -280,7 +277,8 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
 
 /** The receipt payloads enqueued to `printerId` (bytea → Buffer via the customType). */
 async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Buffer[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ payload: printJobs.payload })
@@ -292,7 +290,8 @@ async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Buf
 
 /** The count of `drawer_opens` rows for this tenant — an integrated card sale records NONE. */
 async function drawerOpenCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx.select().from(drawerOpens);
     return rows.length;
@@ -328,10 +327,10 @@ async function defaultStationId(cfg: TillConfig): Promise<string> {
 
 /** The order ids on a station's queue (`listStationQueue`), read under the tenant + `app_user` scope the
  *  till runs it in. A COLLECTED order (`collected_at IS NOT NULL`) drops out — the read Task 6 wires. */
-async function stationQueueOrderIds(cfg: TillConfig, stationId: string): Promise<string[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+async function stationQueueOrderIds(stationId: string): Promise<string[]> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const groups = await listStationQueue(tx, cfg, stationId);
+    const groups = await listStationQueue(tx, stationId);
     return groups.map((g) => g.orderId);
   });
 }
@@ -402,12 +401,10 @@ async function saleIdFor(workingOrderId: string): Promise<string> {
 
 /** This tenant's outstanding (issued-but-unsettled) sales, read as the app role — the "what is owed?"
  *  list a decline must leave intact. Each test owns its tenant, so it lists only this test's sales. */
-async function outstandingSalesFor(
-  cfg: TillConfig,
-): Promise<{ saleId: string; amountDue: string }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+async function outstandingSalesFor(): Promise<{ saleId: string; amountDue: string }[]> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await listOutstandingSales(tx, cfg.tenantId);
+    const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: String(r.saleId), amountDue: String(r.amountDue) }));
   });
 }
@@ -442,7 +439,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const provider = new SimulatorPaymentProvider(app, cfg.tenantId);
+      const provider = new SimulatorPaymentProvider(app);
       const id = randomUUID();
       const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
         id,
@@ -465,7 +462,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const provider = new SimulatorPaymentProvider(app, cfg.tenantId);
+      const provider = new SimulatorPaymentProvider(app);
       const id = randomUUID();
       const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
         id,
@@ -711,7 +708,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
       expect(await saleCount(id)).toBe(0);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
       const { deps } = integratedDeps(cfg, app);
@@ -729,7 +726,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       // This IS a counter collect (a placed card collect over the terminal): `collected_at` is stamped in
       // the settle UPDATE, so the order leaves its station queue.
       expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+      expect(await stationQueueOrderIds(station)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -855,16 +852,15 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     await FakeFiscalBackend.install(suite.admin);
     const fake = new FakeFiscalBackend(suite.admin);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await fake.registerNode(tx, cfg.nodeId, { tenantId: cfg.tenantId });
+      await fake.registerNode(tx, cfg.nodeId);
     });
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const provider = new StripeTerminalProvider({
         client: new FakeStripe(),
         db: app,
-        tenantId: cfg.tenantId,
         nodeId: cfg.nodeId,
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
@@ -909,15 +905,14 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     capturedAmount: string,
   ): Promise<{ id: string; externalRef: string }> {
     const id = randomUUID();
-    // `payments_provider_ref_key` is tenant-scoped but `payments_provider_external_ref_key` is GLOBAL
-    // per provider, and the shared container accumulates every test's rows, so both refs are made
-    // unique per seed (mirrors `nextNif`'s reason for per-venue NIFs).
+    // `payments_provider_ref_key` and `payments_provider_external_ref_key` are both unique per
+    // provider across the database, and the shared container accumulates every test's rows, so both
+    // refs are made unique per seed (mirrors `nextNif`'s reason for per-venue NIFs).
     const externalRef = `pi_lost_${randomUUID()}`;
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await createOpenOrder(tx, cfg, id, [{ productId: cafe.id, quantity }], null);
       await insertCapturedPayment(tx, {
-        tenantId: cfg.tenantId,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -980,10 +975,9 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         lines: [{ productId: cafe.id, quantity: "1" }],
       });
       await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await insertCapturedPayment(tx, {
-          tenantId: cfg.tenantId,
           workingOrderId: id,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -992,7 +986,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
           externalRef: `pi_lost_${randomUUID()}`,
         });
       });
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
       const { deps, client } = integratedDeps(cfg, app);
@@ -1007,7 +1001,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       // A recovered PLACED collect leaves its station queue: collected_at stamped in the settle UPDATE.
       expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+      expect(await stationQueueOrderIds(station)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -1183,8 +1177,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
       const { deps, client } = integratedDeps(cfg, app);
@@ -1201,11 +1195,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-      expect(await outstandingSalesFor(cfg)).toEqual([]);
+      expect(await outstandingSalesFor()).toEqual([]);
       // A settle IS a counter collect: `collected_at` stamped in the placed → settled UPDATE, so the
       // order leaves its station queue (the fiscal settle itself is byte-unchanged).
       expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+      expect(await stationQueueOrderIds(station)).toEqual([]);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);
@@ -1261,7 +1255,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
       // No tender was written (nothing settled); the provider's T2 wrote a `failed` audit row, unlinked.
       expect(await tendersFor(id)).toEqual([]);
       expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
@@ -1325,7 +1319,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       // The settlement rolled back: no tender, the order stays PLACED, the invoice is still outstanding.
       expect(await tendersFor(id)).toEqual([]);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
     } finally {
       await app.close();
     }
@@ -1337,16 +1331,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   describe("lost-T2 recovery settles (never re-files)", () => {
     /** Seed the lost-T2 state on an already-placed invoice-first order: a captured stripe payment for it
      *  whose sale_id is NULL. `capturedAmount` is the GROSS the card was charged (amount due, or +tip). */
-    async function seedLostCaptureOnPlaced(
-      cfg: TillConfig,
-      id: string,
-      capturedAmount: string,
-    ): Promise<string> {
+    async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await insertCapturedPayment(tx, {
-          tenantId: cfg.tenantId,
           workingOrderId: id,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -1364,8 +1353,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id } = await placeInvoiceFirst(cfg, cafe); // placing fires the ticket item to the station
-        const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total
-        expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+        const externalRef = await seedLostCaptureOnPlaced(id, "1.50"); // charged exactly the total
+        expect(await stationQueueOrderIds(station)).toEqual([id]);
         expect(await collectedAtSet(id)).toBe(false);
 
         const { deps, client } = integratedDeps(cfg, app);
@@ -1380,11 +1369,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         expect(await paymentCount(id)).toBe(1);
         expect(await filedSaleTotal(id)).toBe("1.50");
         expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-        expect(await outstandingSalesFor(cfg)).toEqual([]);
+        expect(await outstandingSalesFor()).toEqual([]);
         // An invoice-first recovery is always a PLACED counter collect: collected_at stamped, order leaves
         // the station queue (settle files nothing new — fiscally byte-unchanged).
         expect(await collectedAtSet(id)).toBe(true);
-        expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+        expect(await stationQueueOrderIds(station)).toEqual([]);
         expect(await tendersFor(id)).toEqual([
           { method: "card", amount: "1.50", tipAmount: "0.00" },
         ]);
@@ -1402,7 +1391,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id } = await placeInvoiceFirst(cfg, cafe);
-        await seedLostCaptureOnPlaced(cfg, id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
+        await seedLostCaptureOnPlaced(id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
 
         const { deps, client } = integratedDeps(cfg, app);
         const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -1427,7 +1416,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
-        await seedLostCaptureOnPlaced(cfg, id, "1.00"); // below the 1.50 amount due — cannot even cover it
+        await seedLostCaptureOnPlaced(id, "1.00"); // below the 1.50 amount due — cannot even cover it
 
         const { deps, client } = integratedDeps(cfg, app);
         await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
@@ -1437,7 +1426,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         // captured payment is untouched (still a sale_id-NULL orphan for reconcile).
         expect(await tendersFor(id)).toEqual([]);
         expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-        expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+        expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
         expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
       } finally {
         await app.close();
@@ -1450,7 +1439,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const appB = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id } = await placeInvoiceFirst(cfg, cafe);
-        await seedLostCaptureOnPlaced(cfg, id, "1.50");
+        await seedLostCaptureOnPlaced(id, "1.50");
 
         // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) with an outstanding
         // invoice → recover-settle; finalizeSettleRecovery's FOR UPDATE fully serialises them, so one

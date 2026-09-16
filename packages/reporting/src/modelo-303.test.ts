@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decimal, subtractDecimal } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { mapModelo303 } from "./modelo-303.js";
 import { DR303_LAYOUT } from "./dr303-layout.js";
 import { formatNumericField } from "./dr303.js";
@@ -9,11 +9,9 @@ import type { VatReturn } from "./types.js";
 // A pure mapping over a VatReturn — no DB, so a plain unit test with constructed inputs (the DB-backed
 // aggregate that produces a VatReturn is covered by vat-return.test.ts / input-vat.test.ts).
 const d = (s: string): Decimal => decimal(s);
-const TENANT = "11111111-1111-1111-1111-111111111111" as unknown as TenantId;
 
 function vatReturn(over: Partial<VatReturn> = {}): VatReturn {
   return {
-    tenantId: TENANT,
     year: 2026,
     period: { kind: "month", month: 8 },
     byRate: [],
@@ -46,7 +44,7 @@ describe("mapModelo303", () => {
     });
 
     const m = mapModelo303(ret);
-    expect(m).toMatchObject({ tenantId: TENANT, year: 2026, period: { kind: "month", month: 8 } });
+    expect(m).toMatchObject({ year: 2026, period: { kind: "month", month: 8 } });
     expect(m.boxes).toEqual({
       // IVA devengado — 10% → 04/05/06, 21% → 07/08/09 (rate box holds the tipo)
       "04": "160.00",

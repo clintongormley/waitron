@@ -6,7 +6,7 @@ import {
   optionGroupItems,
   optionGroups,
   productOptionGroups,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { createModifier } from "./modifiers.js";
 import {
@@ -25,17 +25,17 @@ import { seedLegacySellingUnits, seedVenue, useCatalogueDb } from "../test/fixtu
 const suite = useCatalogueDb();
 
 it("publishes an attached text modifier without requiring choice rows", async () => {
-  const { tenantId, locationId } = await seedVenue(suite.db);
-  await seedLegacySellingUnits(suite.db, tenantId);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  const { locationId } = await seedVenue(suite.db);
+  await seedLegacySellingUnits(suite.db);
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const menu = await createCatalogue(tx, { name: "Menu" });
     await assignCatalogueToLocation(tx, locationId, menu.id);
-    const section = await createMenuSection(tx, tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -45,40 +45,38 @@ it("publishes an attached text modifier without requiring choice rows", async ()
     });
     const text = await createModifier(
       tx,
-      tenantId,
       { type: "text", name: { en: "Message" }, available: true },
       "en",
     );
     await tx.insert(productOptionGroups).values(
       [text].map((modifier, sort) => ({
-        tenantId,
         productId: product.id,
         groupId: modifier.id,
         sort,
       })),
     );
-    await createMenuItem(tx, tenantId, {
+    await createMenuItem(tx, {
       menuId: menu.id,
       productId: product.id,
       sectionId: section.id,
       grossPrice: "2.00",
     });
-    expect((await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers).toEqual([text]);
+    expect((await listMenuOffers(tx, [menu.id]))[0]!.modifiers).toEqual([text]);
     expect((await listAvailableProducts(tx, locationId)).products[0]!.modifiers).toEqual([text]);
   });
 });
 
 it("projects only published available choices, clears excluded defaults, and keeps empty required modifiers", async () => {
-  const { tenantId } = await seedVenue(suite.db);
-  await seedLegacySellingUnits(suite.db, tenantId);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await seedVenue(suite.db);
+  await seedLegacySellingUnits(suite.db);
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
-    const section = await createMenuSection(tx, tenantId, {
+    const menu = await createCatalogue(tx, { name: "Menu" });
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -90,7 +88,6 @@ it("projects only published available choices, clears excluded defaults, and kee
     const chosenId = randomUUID();
     const options = await createModifier(
       tx,
-      tenantId,
       {
         type: "options",
         name: { en: "Milk" },
@@ -106,7 +103,6 @@ it("projects only published available choices, clears excluded defaults, and kee
     const extraId = randomUUID();
     const extras = await createModifier(
       tx,
-      tenantId,
       {
         type: "extras",
         name: { en: "Extras" },
@@ -129,45 +125,44 @@ it("projects only published available choices, clears excluded defaults, and kee
     );
     await tx.insert(productOptionGroups).values(
       [options, extras].map((modifier, sort) => ({
-        tenantId,
         productId: product.id,
         groupId: modifier.id,
         sort,
       })),
     );
-    const item = await createMenuItem(tx, tenantId, {
+    const item = await createMenuItem(tx, {
       menuId: menu.id,
       productId: product.id,
       sectionId: section.id,
       grossPrice: "2.00",
     });
     await expect(
-      setMenuItemOptionGroups(tx, tenantId, item.id, [
+      setMenuItemOptionGroups(tx, item.id, [
         { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
         { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "-0.75" }] },
       ]),
     ).rejects.toMatchObject({ code: "modifier.invalid" });
     await expect(
-      setMenuItemOptionGroups(tx, tenantId, item.id, [
+      setMenuItemOptionGroups(tx, item.id, [
         { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "1.00" }] },
       ]),
     ).rejects.toMatchObject({ code: "modifier.invalid" });
     // The per-item price obeys the same ten-whole-digit limit as a modifier's own price.
     await expect(
-      setMenuItemOptionGroups(tx, tenantId, item.id, [
+      setMenuItemOptionGroups(tx, item.id, [
         { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
         { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "10000000000.00" }] },
       ]),
     ).rejects.toMatchObject({ code: "modifier.invalid", params: { field: "priceDelta" } });
-    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+    await setMenuItemOptionGroups(tx, item.id, [
       { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
       { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "9999999999.99" }] },
     ]);
-    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+    await setMenuItemOptionGroups(tx, item.id, [
       { groupId: options.id, options: [{ optionId: chosenId, priceDelta: "0.00" }] },
       { groupId: extras.id, options: [{ optionId: extraId, priceDelta: "0.75" }] },
     ]);
-    let projected = (await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers;
+    let projected = (await listMenuOffers(tx, [menu.id]))[0]!.modifiers;
     expect(projected[0]).toMatchObject({
       type: "options",
       defaultChoiceId: null,
@@ -183,7 +178,7 @@ it("projects only published available choices, clears excluded defaults, and kee
       .set({ active: false })
       .where(eq(optionGroupItems.id, chosenId));
     await tx.update(optionGroups).set({ active: false }).where(eq(optionGroups.id, extras.id));
-    projected = (await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers;
+    projected = (await listMenuOffers(tx, [menu.id]))[0]!.modifiers;
     // Deactivating the options choice empties that group's choices; deactivating the whole extras
     // group no longer hides it, because a modifier cannot be turned off as a whole.
     expect(projected).toEqual([

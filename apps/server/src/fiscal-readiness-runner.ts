@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import { createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
-import { nodeId, seriesId, tenantId, tillId } from "@waitron/shared";
+import { nodeId, seriesId, tillId } from "@waitron/shared";
 import {
   applyVenue,
   planVenue,
@@ -89,20 +89,18 @@ export async function submitFiscalReadiness(args: {
     }
     const venue = await testVenue(db, args.venue, args.modules);
     const secret = args.contribution.provisioningSecret;
-    if (secret !== undefined)
-      await secret.seal({ db, ring: args.ring }, venue.tenantId, args.secret);
+    if (secret !== undefined) await secret.seal({ db, ring: args.ring }, args.secret);
 
     const existing = await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from sales where tenant_id = ${venue.tenantId}
+      select count(*)::int as count from sales
     `);
     if (existing.rows[0]!.count === 0) {
       const now = (args.now ?? (() => new Date()))();
-      await withTenant(db, venue.tenantId, (tx) =>
+      await withTransaction(db, (tx) =>
         recordSale(
           tx,
           args.contribution.makeBackend({ db, clock: systemClock(), environment: "preproduction" }),
           {
-            tenantId: tenantId(venue.tenantId),
             tillId: tillId(venue.tillId),
             nodeId: nodeId(venue.nodeId),
             seriesId: seriesId(venue.seriesIds[0]!),

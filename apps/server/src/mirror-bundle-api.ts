@@ -23,7 +23,7 @@ import {
   asAppUser,
   persistNodeMembershipIfNewer,
   readNodeMembership,
-  withTenant,
+  withTransaction,
   type Database,
 } from "@waitron/db";
 import { withMember } from "@waitron/membership";
@@ -41,9 +41,9 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (as `app_user`
- * under `withTenant` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
- * designated-node identity inside `assembleMirrorBundle`. `designated` are the five ids the primary
- * till was provisioned with (`config.till.*`) — its `tenantId` scopes the auth transaction.
+ * under `withTransaction` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
+ * designated-node identity inside `assembleMirrorBundle`. `designated` are the four ids the primary
+ * till was provisioned with (`config.till.*`).
  * `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own
  * relay coordinates (`loadTunnelConfig`), `undefined` when no tunnel is configured — the endpoint then
  * refuses `mirror.no_relay` rather than minting an undial-able bundle. `replication` is the primary's
@@ -171,10 +171,9 @@ export function mountMirrorBundleApi(
       // email, but this path never uses it:
       // `loginManagerById` is the id sibling that shares all the same credential checks
       // (`packages/identity/src/manager-login.ts`) and resolves the admin by id regardless.
-      await withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
+      await withTransaction(deps.appDb, async (tx) => {
         await asAppUser(tx);
         const session = await loginManagerById(tx, {
-          tenantId: deps.designated.tenantId,
           personId,
           password,
           totp,
@@ -216,7 +215,7 @@ export function mountMirrorBundleApi(
       // The standby joins the org chart AT ADOPT and BEFORE the response, so a bundle is never handed
       // out for a node the chart omits (till-reroute design §3.3) — a till reroutes by `contactUrl`,
       // which must be published before the failover that needs it. Deliberately OUTSIDE assembly's own
-      // `withTenant` transactions (CLAUDE.md §3), which have already bumped the standby's installation
+      // `withTransaction` transactions (CLAUDE.md §3), which have already bumped the standby's installation
       // counter. Read-mint-write behind `persistNodeMembershipIfNewer`'s term guard: two adopts that
       // both mint term N+1 cannot silently drop one, because the loser's write is refused and it
       // re-reads the winner's chart before minting again. Exhausting the bound is a hard 503, NEVER a
@@ -255,7 +254,6 @@ async function appendStandbyToChart(
     const document = await mintNextMembershipDocument(
       { db: deps.appDb, ring: deps.ring },
       {
-        tenantId: deps.designated.tenantId,
         heldDocument: held,
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
         signerNodeId: deps.designated.nodeId,

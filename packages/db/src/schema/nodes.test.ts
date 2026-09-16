@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
@@ -16,8 +16,6 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from tenants`);
 });
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const NODE_A1 = "aaaaaaaa-2222-4000-8000-000000000001";
@@ -31,21 +29,18 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es"],
       operationDescription: "Restaurant",
     },
     {
       id: LOCATION_B,
-      tenantId: TENANT_B,
       name: "Fixture Location B",
       invoiceLocales: ["es"],
       operationDescription: "Restaurant",
@@ -62,61 +57,46 @@ describe("nodes schema", () => {
   });
 
   it("inserts a node under its tenant", async () => {
-    await db.insert(nodes).values({ tenantId: TENANT_A, locationId: LOCATION_A, name: "Node A1" });
-    const found = await db
-      .select({ name: nodes.name })
-      .from(nodes)
-      .where(eq(nodes.tenantId, TENANT_A));
+    await db.insert(nodes).values({ locationId: LOCATION_A, name: "Node A1" });
+    const found = await db.select({ name: nodes.name }).from(nodes);
     expect(found.map((r) => r.name)).toEqual(["Node A1"]);
   });
 
-  it("rejects a duplicate (tenant_id, id) with 23505", async () => {
-    // `id` is the primary key, so a duplicate `(tenant_id, id)` is necessarily
-    // also a duplicate `id`: the PK (`nodes_pkey`) and the composite unique
-    // (`nodes_tenant_id_key`) are coextensive on this table and cannot be
-    // isolated from each other by an insert. Both raise 23505; asserting the
-    // SQLSTATE is what the brief's "unique (tenant_id, id) rejects a duplicate"
-    // check comes down to here. The composite constraint's DISTINCT role — a
-    // tenant-consistent FK target for later tables — is verified by the
-    // introspection test below, which is the only thing that tells it apart
-    // from the PK.
-    await db
-      .insert(nodes)
-      .values({ id: NODE_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "N" });
+  it("rejects a duplicate id with 23505", async () => {
+    // `id` is the primary key, and it is what the foreign keys from the fiscal and commercial
+    // tables point at (see the definition test below).
+    await db.insert(nodes).values({ id: NODE_A1, locationId: LOCATION_A, name: "N" });
     const error = await captureError(() =>
-      db
-        .insert(nodes)
-        .values({ id: NODE_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "N again" }),
+      db.insert(nodes).values({ id: NODE_A1, locationId: LOCATION_A, name: "N again" }),
     );
     expect(pgErrorCode(error)).toBe("23505");
   });
 
-  it("carries a unique constraint nodes_tenant_id_key on (tenant_id, id)", async () => {
-    // The reason the constraint exists at all: a composite target so a fiscal or
-    // commercial table can carry a tenant-consistent (tenant_id, node_id) FK —
-    // the role invoice_series_tenant_id_key / sales_tenant_id_key already play.
-    // The PK on (id) alone cannot serve as that target, so this asserts the pair
-    // exists as a UNIQUE index by name, not merely that duplicates are rejected.
-    const found = await rows<{ indexname: string; indexdef: string }>(
+  it("is what the fiscal and commercial node foreign keys point at, by its id", async () => {
+    // Read the definition back rather than trusting that an FK named for `nodes` has this shape.
+    const found = await rows<{ conname: string; def: string }>(
       db,
-      sql`select indexname, indexdef from pg_indexes where tablename = 'nodes'`,
+      sql`select conname, pg_get_constraintdef(oid) as def from pg_constraint
+           where conname in ('invoice_series_node_fk', 'sales_node_fk') order by conname`,
     );
-    const composite = found.filter(
-      (i) => /UNIQUE/i.test(i.indexdef) && /\(tenant_id, id\)/.test(i.indexdef),
-    );
-    expect(composite.map((i) => i.indexname)).toEqual(["nodes_tenant_id_key"]);
+    expect(found).toEqual([
+      { conname: "invoice_series_node_fk", def: "FOREIGN KEY (node_id) REFERENCES nodes(id)" },
+      {
+        conname: "sales_node_fk",
+        def: "FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE RESTRICT",
+      },
+    ]);
   });
 
   it("rejects a node whose location does not exist with a foreign-key violation", async () => {
-    // The brief frames this as "a location_id belonging to another tenant", but
-    // `nodes` carries no composite (tenant_id, location_id) FK to `locations`
-    // (none is in scope — mirroring `tills`), so another tenant's location is a
-    // perfectly valid FK target and would NOT be rejected. What the plain
-    // `location_id -> locations.id` FK actually guarantees is referential
-    // existence, so that is what is asserted: a location that does not exist is
-    // rejected with 23503 (foreign_key_violation).
+    // The brief framed this as "a location_id belonging to another tenant" — a
+    // framing the schema never had and no longer could, since there is one
+    // taxpayer per database. What the plain `location_id -> locations.id` FK
+    // actually guarantees is referential existence, so that is what is asserted:
+    // a location that does not exist is rejected with 23503
+    // (foreign_key_violation).
     const error = await captureError(() =>
-      db.insert(nodes).values({ tenantId: TENANT_A, locationId: LOCATION_MISSING, name: "Orphan" }),
+      db.insert(nodes).values({ locationId: LOCATION_MISSING, name: "Orphan" }),
     );
     expect(pgErrorCode(error)).toBe("23503");
   });

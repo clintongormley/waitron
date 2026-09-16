@@ -1,5 +1,5 @@
 {
-  "id": "6d3fd57e-8b0a-4cab-9962-98b67d561fc6",
+  "id": "db692948-52db-4267-b4b1-58962eb2c8d6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "person_id": {
           "name": "person_id",
@@ -81,30 +75,9 @@
         }
       },
       "indexes": {
-        "absences_tenant_id_idx": {
-          "name": "absences_tenant_id_idx",
+        "absences_person_idx": {
+          "name": "absences_person_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "absences_tenant_person_idx": {
-          "name": "absences_tenant_person_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "person_id",
               "isExpression": false,
@@ -125,19 +98,6 @@
         }
       },
       "foreignKeys": {
-        "absences_tenant_fk": {
-          "name": "absences_tenant_fk",
-          "tableFrom": "absences",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "absences_person_fk": {
           "name": "absences_person_fk",
           "tableFrom": "absences",
@@ -187,12 +147,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "person_id": {
           "name": "person_id",
           "type": "uuid",
@@ -238,30 +192,9 @@
         }
       },
       "indexes": {
-        "availability_tenant_id_idx": {
-          "name": "availability_tenant_id_idx",
+        "availability_person_idx": {
+          "name": "availability_person_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "availability_tenant_person_idx": {
-          "name": "availability_tenant_person_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "person_id",
               "isExpression": false,
@@ -276,19 +209,6 @@
         }
       },
       "foreignKeys": {
-        "availability_tenant_fk": {
-          "name": "availability_tenant_fk",
-          "tableFrom": "availability",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "availability_person_fk": {
           "name": "availability_person_fk",
           "tableFrom": "availability",
@@ -341,12 +261,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "person_id": {
           "name": "person_id",
           "type": "uuid",
@@ -392,30 +306,9 @@
         }
       },
       "indexes": {
-        "employments_tenant_id_idx": {
-          "name": "employments_tenant_id_idx",
+        "employments_person_idx": {
+          "name": "employments_person_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "employments_tenant_person_idx": {
-          "name": "employments_tenant_person_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "person_id",
               "isExpression": false,
@@ -430,19 +323,6 @@
         }
       },
       "foreignKeys": {
-        "employments_tenant_fk": {
-          "name": "employments_tenant_fk",
-          "tableFrom": "employments",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "employments_person_fk": {
           "name": "employments_person_fk",
           "tableFrom": "employments",
@@ -482,12 +362,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "location_id": {
           "name": "location_id",
@@ -536,30 +410,9 @@
         }
       },
       "indexes": {
-        "roster_versions_tenant_id_idx": {
-          "name": "roster_versions_tenant_id_idx",
+        "roster_versions_location_idx": {
+          "name": "roster_versions_location_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "roster_versions_tenant_location_idx": {
-          "name": "roster_versions_tenant_location_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "location_id",
               "isExpression": false,
@@ -575,12 +428,6 @@
         "roster_versions_published_period_uq": {
           "name": "roster_versions_published_period_uq",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "location_id",
               "isExpression": false,
@@ -608,19 +455,6 @@
         }
       },
       "foreignKeys": {
-        "roster_versions_tenant_fk": {
-          "name": "roster_versions_tenant_fk",
-          "tableFrom": "roster_versions",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "roster_versions_location_fk": {
           "name": "roster_versions_location_fk",
           "tableFrom": "roster_versions",
@@ -673,12 +507,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "requested_by_person_id": {
           "name": "requested_by_person_id",
@@ -733,30 +561,9 @@
         }
       },
       "indexes": {
-        "shift_swaps_tenant_id_idx": {
-          "name": "shift_swaps_tenant_id_idx",
+        "shift_swaps_from_shift_idx": {
+          "name": "shift_swaps_from_shift_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "shift_swaps_tenant_from_shift_idx": {
-          "name": "shift_swaps_tenant_from_shift_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "from_shift_id",
               "isExpression": false,
@@ -771,19 +578,6 @@
         }
       },
       "foreignKeys": {
-        "shift_swaps_tenant_fk": {
-          "name": "shift_swaps_tenant_fk",
-          "tableFrom": "shift_swaps",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "shift_swaps_requested_by_person_fk": {
           "name": "shift_swaps_requested_by_person_fk",
           "tableFrom": "shift_swaps",
@@ -867,12 +661,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "location_id": {
           "name": "location_id",
           "type": "uuid",
@@ -918,30 +706,9 @@
         }
       },
       "indexes": {
-        "shift_templates_tenant_id_idx": {
-          "name": "shift_templates_tenant_id_idx",
+        "shift_templates_location_idx": {
+          "name": "shift_templates_location_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "shift_templates_tenant_location_idx": {
-          "name": "shift_templates_tenant_location_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "location_id",
               "isExpression": false,
@@ -956,19 +723,6 @@
         }
       },
       "foreignKeys": {
-        "shift_templates_tenant_fk": {
-          "name": "shift_templates_tenant_fk",
-          "tableFrom": "shift_templates",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "shift_templates_location_fk": {
           "name": "shift_templates_location_fk",
           "tableFrom": "shift_templates",
@@ -1016,12 +770,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "person_id": {
           "name": "person_id",
@@ -1080,30 +828,9 @@
         }
       },
       "indexes": {
-        "shifts_tenant_id_idx": {
-          "name": "shifts_tenant_id_idx",
+        "shifts_person_starts_idx": {
+          "name": "shifts_person_starts_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "shifts_tenant_person_starts_idx": {
-          "name": "shifts_tenant_person_starts_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "person_id",
               "isExpression": false,
@@ -1139,19 +866,6 @@
         }
       },
       "foreignKeys": {
-        "shifts_tenant_fk": {
-          "name": "shifts_tenant_fk",
-          "tableFrom": "shifts",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "shifts_person_fk": {
           "name": "shifts_person_fk",
           "tableFrom": "shifts",
@@ -1221,12 +935,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "person_id": {
           "name": "person_id",
@@ -1334,30 +1042,9 @@
         }
       },
       "indexes": {
-        "time_entries_tenant_id_idx": {
-          "name": "time_entries_tenant_id_idx",
+        "time_entries_person_event_idx": {
+          "name": "time_entries_person_event_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "time_entries_tenant_person_event_idx": {
-          "name": "time_entries_tenant_person_event_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "person_id",
               "isExpression": false,
@@ -1395,12 +1082,6 @@
           "name": "time_entries_chain_position_uq",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "node_id",
               "isExpression": false,
               "asc": true,
@@ -1426,19 +1107,6 @@
         }
       },
       "foreignKeys": {
-        "time_entries_tenant_fk": {
-          "name": "time_entries_tenant_fk",
-          "tableFrom": "time_entries",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "time_entries_person_fk": {
           "name": "time_entries_person_fk",
           "tableFrom": "time_entries",
@@ -1570,12 +1238,6 @@
       "name": "workforce_chains",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "node_id": {
           "name": "node_id",
           "type": "uuid",
@@ -1623,19 +1285,6 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "workforce_chains_tenant_id_tenants_id_fk": {
-          "name": "workforce_chains_tenant_id_tenants_id_fk",
-          "tableFrom": "workforce_chains",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "workforce_chains_node_id_nodes_id_fk": {
           "name": "workforce_chains_node_id_nodes_id_fk",
           "tableFrom": "workforce_chains",
@@ -1677,10 +1326,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "workforce_chains_tenant_id_node_id_location_id_pk": {
-          "name": "workforce_chains_tenant_id_node_id_location_id_pk",
+        "workforce_chains_node_id_location_id_pk": {
+          "name": "workforce_chains_node_id_location_id_pk",
           "columns": [
-            "tenant_id",
             "node_id",
             "location_id"
           ]

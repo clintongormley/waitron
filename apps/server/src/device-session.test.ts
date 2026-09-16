@@ -3,7 +3,7 @@ import { type Context, Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -39,8 +39,8 @@ import "./errors.js";
 const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "manifest" });
 
-function asApp<T>(db: Database, cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -52,16 +52,15 @@ function asApp<T>(db: Database, cfg: TillConfig, fn: (tx: Transaction) => Promis
  */
 async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   const admin = suite.admin;
-  const tenantId = await seedTenant(admin);
+  await seedTenant(admin);
   const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(admin, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -71,7 +70,7 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const st = await asApp(admin, cfg, (tx) =>
+  const st = await asApp(admin, (tx) =>
     createStation(tx, cfg, { name: "Cocina", isDefault: true }),
   );
   return { cfg, stationId: st.id };
@@ -90,7 +89,7 @@ async function enrolDeviceFixture(): Promise<{
   const { cfg, stationId } = await setupStation();
   // A device is DEFINED by its profile now (Task 7): a `kds` profile with NO capabilities — the
   // station-bound kitchen screen the old station-only mint produced, its capability set empty.
-  const deviceProfileId = await seedDeviceProfile(cfg, "Pantalla profile", "kds", []);
+  const deviceProfileId = await seedDeviceProfile("Pantalla profile", "kds", []);
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: "Pantalla",
     profileId: deviceProfileId,
@@ -115,15 +114,14 @@ const NO_BINDINGS = {
  * Insert a device profile for the capability checks. canvasId is optional.
  */
 async function seedDeviceProfile(
-  cfg: TillConfig,
   name: string,
   formFactor: FormFactor,
   capabilities: CapabilityFlag[],
   canvasId: string | null = null,
 ): Promise<string> {
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, canvas_id, capabilities)
-    values (${cfg.tenantId}, ${name}, ${formFactor}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
+    insert into device_profiles (name, form_factor, canvas_id, capabilities)
+    values (${name}, ${formFactor}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -141,15 +139,14 @@ async function enrolTillDeviceFixture(): Promise<{
 }> {
   const { cfg } = await setupStation();
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into canvases (tenant_id, name, definition)
-    values (${cfg.tenantId}, 'Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
+    insert into canvases (name, definition)
+    values ('Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
     returning id`);
   const canvasId = prof.rows[0]!.id;
   // This fixture explicitly grants reader and drawer access. Its canvas reference is the front-counter canvas —
   // the device binds that canvas SOLELY through this profile (the direct device→canvas link was dropped
   // in the Task 10 cutover). A `till` profile AUTO-CREATES the register the device rings against (Task 7).
   const deviceProfileId = await seedDeviceProfile(
-    cfg,
     "Counter",
     "till",
     ["integrated-card-payment", "open-cash-drawer"],
@@ -203,12 +200,11 @@ type ProbeResult = { ok: true; binding: DeviceBinding } | { ok: false; code: str
  * `handler` and interpret `{ res, thrown }`; the setup lives here once.
  */
 async function runProbe(
-  cfg: TillConfig,
   cookieValue: string | null,
-  handler: (deps: { db: Database; cfg: { tenantId: string } }, c: Context) => Promise<Response>,
+  handler: (deps: { db: Database }, c: Context) => Promise<Response>,
 ): Promise<{ res: Response; thrown: unknown }> {
   const app = new Hono();
-  const deps = { db: suite.admin, cfg: { tenantId: cfg.tenantId } };
+  const deps = { db: suite.admin };
   let thrown: unknown;
   app.get("/probe", (c) => handler(deps, c));
   app.onError((err, c) => {
@@ -224,8 +220,8 @@ async function runProbe(
 
 /** Run `requireDevice` behind the shared scaffold. Returns the binding on success or the thrown code on
  * failure. */
-async function probe(cfg: TillConfig, cookieValue: string | null): Promise<ProbeResult> {
-  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) =>
+async function probe(cookieValue: string | null): Promise<ProbeResult> {
+  const { res, thrown } = await runProbe(cookieValue, async (deps, c) =>
     c.json(await requireDevice(deps, c)),
   );
   if (res.status === 200) {
@@ -245,12 +241,7 @@ async function enrolHandheldFixture(): Promise<{
   const { cfg } = await setupStation();
   // A handheld is defined by a `phone-portrait`/`tablet-landscape` profile and, being sale-capable,
   // binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
-  const deviceProfileId = await seedDeviceProfile(
-    cfg,
-    "Waiter phone profile",
-    "phone-portrait",
-    [],
-  );
+  const deviceProfileId = await seedDeviceProfile("Waiter phone profile", "phone-portrait", []);
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
@@ -262,11 +253,8 @@ async function enrolHandheldFixture(): Promise<{
 /** Run the NON-throwing `tryReadDevice` behind the shared scaffold, returning the binding or `null` it
  * resolves the cookie to — the `probe` shape, but reading the JSON-encoded value instead of catching a
  * throw (a `null` round-trips as `null`). */
-async function probeTry(
-  cfg: TillConfig,
-  cookieValue: string | null,
-): Promise<DeviceBinding | null> {
-  const { res } = await runProbe(cfg, cookieValue, async (deps, c) =>
+async function probeTry(cookieValue: string | null): Promise<DeviceBinding | null> {
+  const { res } = await runProbe(cookieValue, async (deps, c) =>
     c.json((await tryReadDevice(deps, c)) ?? null),
   );
   return (await res.json()) as DeviceBinding | null;
@@ -276,10 +264,9 @@ async function probeTry(
  * the thrown code when it refuses. The one firewall guard left after the tender-split was removed, so the
  * scaffold is inlined here rather than factored across probes. */
 async function probeAssert(
-  cfg: TillConfig,
   cookieValue: string | null,
 ): Promise<{ ok: true } | { ok: false; code: string }> {
-  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
+  const { res, thrown } = await runProbe(cookieValue, async (deps, c) => {
     await assertNotHandheld(deps, c, "record_sale");
     return c.body(null, 204);
   });
@@ -298,13 +285,13 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
 }> {
   const { cfg } = await setupStation();
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into canvases (tenant_id, name, definition)
-    values (${cfg.tenantId}, 'Waiter phone', ${JSON.stringify(DEFAULT_CANVASES["phone-portrait"])}::jsonb)
+    insert into canvases (name, definition)
+    values ('Waiter phone', ${JSON.stringify(DEFAULT_CANVASES["phone-portrait"])}::jsonb)
     returning id`);
   const canvasId = prof.rows[0]!.id;
   // The profile declares NO capabilities — the render/firewall source of truth after the Task 9 cutover.
   // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till (§16.4).
-  const deviceProfileId = await seedDeviceProfile(cfg, "Waiter", "phone-portrait", [], canvasId);
+  const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
@@ -316,12 +303,11 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
 /** Run `assertDeviceCapability` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no
  * throw), or the thrown code + params when it refuses. */
 async function probeCapability(
-  cfg: TillConfig,
   cookieValue: string | null,
   capability: CapabilityFlag,
   action: string,
 ): Promise<{ ok: true } | { ok: false; code: string; params: unknown }> {
-  const { res, thrown } = await runProbe(cfg, cookieValue, async (deps, c) => {
+  const { res, thrown } = await runProbe(cookieValue, async (deps, c) => {
     await assertDeviceCapability(deps, c, capability, action);
     return c.body(null, 204);
   });
@@ -459,10 +445,10 @@ describe("device cookie helpers", () => {
 
 describe("requireDevice (real Postgres)", () => {
   it("authenticates a valid cookie and touches last_seen_at", async () => {
-    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
-    const result = await probe(cfg, `${deviceId}.${token}`);
+    const result = await probe(`${deviceId}.${token}`);
     expect(result).toEqual({
       ok: true,
       binding: {
@@ -479,12 +465,12 @@ describe("requireDevice (real Postgres)", () => {
   });
 
   it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
-    const { cfg, deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
+    const { deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
     // A `till` device with a NON-NULL profile, till and hardware binding surfaces every column
     // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo. The canvas is no
     // longer a device field; it resolves THROUGH the profile at `/api/till` (Task 10 cutover). The till
     // is the register the `till` profile auto-created at enrol (Task 7).
-    expect(await probe(cfg, `${deviceId}.${token}`)).toEqual({
+    expect(await probe(`${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
         deviceId,
@@ -502,15 +488,15 @@ describe("requireDevice (real Postgres)", () => {
   });
 
   it("rejects a WRONG token with device.unauthorized and does not touch last_seen_at", async () => {
-    const { cfg, deviceId } = await enrolDeviceFixture();
-    const result = await probe(cfg, `${deviceId}.not-the-real-token`);
+    const { deviceId } = await enrolDeviceFixture();
+    const result = await probe(`${deviceId}.not-the-real-token`);
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
     // A failed authentication is a no-op on the row: the sighting is recorded only after verify.
     expect(await lastSeenAt(deviceId)).toBeNull();
   });
 
   it("rejects a MALFORMED cookie (no dot, empty part, non-uuid selector, absent) with device.unauthorized", async () => {
-    const { cfg } = await enrolDeviceFixture();
+    await enrolDeviceFixture();
     for (const bad of [
       "no-dot-here", // no separator
       "", // empty
@@ -518,34 +504,34 @@ describe("requireDevice (real Postgres)", () => {
       "11111111-1111-4111-8111-111111111111.", // empty token
       "not-a-uuid.sometoken", // non-uuid selector
     ]) {
-      expect(await probe(cfg, bad)).toEqual({ ok: false, code: "device.unauthorized" });
+      expect(await probe(bad)).toEqual({ ok: false, code: "device.unauthorized" });
     }
-    expect(await probe(cfg, null)).toEqual({ ok: false, code: "device.unauthorized" });
+    expect(await probe(null)).toEqual({ ok: false, code: "device.unauthorized" });
   });
 
   it("rejects an UNKNOWN device id with device.unauthorized", async () => {
-    const { cfg, token } = await enrolDeviceFixture();
-    const result = await probe(cfg, `${randomUUID()}.${token}`);
+    const { token } = await enrolDeviceFixture();
+    const result = await probe(`${randomUUID()}.${token}`);
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
   });
 
   it("rejects a REVOKED device (active = false) with device.unauthorized — instant revocation", async () => {
-    const { cfg, deviceId, token } = await enrolDeviceFixture();
+    const { deviceId, token } = await enrolDeviceFixture();
     // It authenticates while active…
-    expect((await probe(cfg, `${deviceId}.${token}`)).ok).toBe(true);
+    expect((await probe(`${deviceId}.${token}`)).ok).toBe(true);
     // …and stops the instant it is revoked, with no token TTL to wait out. This is the differential
     // proof of the `active = true` filter (proven by deletion in the task-4 report).
     await revoke(deviceId);
-    const result = await probe(cfg, `${deviceId}.${token}`);
+    const result = await probe(`${deviceId}.${token}`);
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
   });
 });
 
 describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
-    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
-    expect(await probeTry(cfg, `${deviceId}.${token}`)).toEqual({
+    expect(await probeTry(`${deviceId}.${token}`)).toEqual({
       deviceId,
       formFactor: "kds",
       label: "Pantalla",
@@ -564,29 +550,29 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
       `${randomUUID()}.${token}`,
       `${deviceId}.not-the-real-token`,
     ]) {
-      expect(await probeTry(cfg, bad)).toBeNull();
+      expect(await probeTry(bad)).toBeNull();
     }
-    expect(await probeTry(cfg, null)).toBeNull(); // absent cookie
+    expect(await probeTry(null)).toBeNull(); // absent cookie
   });
 
   it("assertNotHandheld refuses an ACTIVE handheld with device.forbidden_action", async () => {
-    const { cfg, deviceId, token } = await enrolHandheldFixture();
-    expect(await probeAssert(cfg, `${deviceId}.${token}`)).toEqual({
+    const { deviceId, token } = await enrolHandheldFixture();
+    expect(await probeAssert(`${deviceId}.${token}`)).toEqual({
       ok: false,
       code: "device.forbidden_action",
     });
   });
 
   it("assertNotHandheld passes a non-handheld device, an absent cookie, and a failed device cookie", async () => {
-    const { cfg, deviceId, token } = await enrolDeviceFixture();
+    const { deviceId, token } = await enrolDeviceFixture();
     // A kds_station device is not order-only — it never posts to a sale route, and the firewall does
     // not block it here.
-    expect(await probeAssert(cfg, `${deviceId}.${token}`)).toEqual({ ok: true });
+    expect(await probeAssert(`${deviceId}.${token}`)).toEqual({ ok: true });
     // An ordinary till carries NO device cookie: `tryReadDevice` → null → the firewall passes.
-    expect(await probeAssert(cfg, null)).toEqual({ ok: true });
+    expect(await probeAssert(null)).toEqual({ ok: true });
     // A malformed/unauthenticated device cookie is a miss (null), not a handheld, so it passes too —
     // the order-only rule blocks ONLY a verified handheld, never a non-device caller.
-    expect(await probeAssert(cfg, "not-a-uuid.sometoken")).toEqual({ ok: true });
+    expect(await probeAssert("not-a-uuid.sometoken")).toEqual({ ok: true });
   });
 });
 
@@ -595,23 +581,23 @@ describe("assertDeviceCapability (real Postgres)", () => {
     // The handheld's profile carries `capabilities: []` — it lacks BOTH fenced flags. Prove-by-
     // deletion: drop the `!resolved.capabilities.includes(...)` check in `assertDeviceCapability` and
     // these pass.
-    const { cfg, deviceId, token } = await enrolHandheldWithCanvasFixture();
+    const { deviceId, token } = await enrolHandheldWithCanvasFixture();
+    expect(await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).toEqual(
+      { ok: false, code: "device.forbidden_action", params: { action: "pay" } },
+    );
     expect(
-      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
-    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "pay" } });
-    expect(
-      await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
+      await probeCapability(`${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
     ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "drawer_open" } });
   });
 
   it("passes a device whose assigned PROFILE HAS the capability", async () => {
     // This till fixture explicitly declares reader and drawer capabilities.
-    const { cfg, deviceId, token } = await enrolTillDeviceFixture();
+    const { deviceId, token } = await enrolTillDeviceFixture();
+    expect(await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).toEqual(
+      { ok: true },
+    );
     expect(
-      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
-    ).toEqual({ ok: true });
-    expect(
-      await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
+      await probeCapability(`${deviceId}.${token}`, "open-cash-drawer", "drawer_open"),
     ).toEqual({ ok: true });
   });
 
@@ -620,21 +606,21 @@ describe("assertDeviceCapability (real Postgres)", () => {
     // fail-closed case is a profile that declares an EMPTY capability set — `enrolDeviceFixture`'s kds
     // profile has `capabilities: []`, so a device bound to it is refused every fenced action. Prove-by
     // deletion: drop the `!resolved.capabilities.includes(capability)` guard and this returns ok.
-    const { cfg, deviceId, token } = await enrolDeviceFixture();
-    expect(
-      await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay"),
-    ).toEqual({ ok: false, code: "device.forbidden_action", params: { action: "pay" } });
+    const { deviceId, token } = await enrolDeviceFixture();
+    expect(await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).toEqual(
+      { ok: false, code: "device.forbidden_action", params: { action: "pay" } },
+    );
   });
 
   it("passes when there is NO device cookie (an env-configured / legacy till)", async () => {
     // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass, exactly as `assertNotHandheld`.
     // Nothing blocks a sale on a cookie-less till (CLAUDE.md §5). Prove-by-deletion: drop the
     // `device === null` early return and this throws instead of passing.
-    const { cfg } = await enrolDeviceFixture();
-    expect(await probeCapability(cfg, null, "integrated-card-payment", "pay")).toEqual({
+    await enrolDeviceFixture();
+    expect(await probeCapability(null, "integrated-card-payment", "pay")).toEqual({
       ok: true,
     });
-    expect(await probeCapability(cfg, null, "open-cash-drawer", "drawer_open")).toEqual({
+    expect(await probeCapability(null, "open-cash-drawer", "drawer_open")).toEqual({
       ok: true,
     });
   });
@@ -643,12 +629,12 @@ describe("assertDeviceCapability (real Postgres)", () => {
     // The behaviour `assertNotHandheld` enforced by KIND is now enforced by CAPABILITY: a handheld's
     // capability-less profile carries neither flag, so pay and drawer are refused exactly as before —
     // but via the capability, not the device kind.
-    const { cfg, deviceId, token } = await enrolHandheldWithCanvasFixture();
+    const { deviceId, token } = await enrolHandheldWithCanvasFixture();
     expect(
-      (await probeCapability(cfg, `${deviceId}.${token}`, "integrated-card-payment", "pay")).ok,
+      (await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).ok,
     ).toBe(false);
     expect(
-      (await probeCapability(cfg, `${deviceId}.${token}`, "open-cash-drawer", "drawer_open")).ok,
+      (await probeCapability(`${deviceId}.${token}`, "open-cash-drawer", "drawer_open")).ok,
     ).toBe(false);
   });
 });
@@ -680,13 +666,13 @@ async function enrolDevDevices(): Promise<{
   const { cfg, stationId } = await setupStation();
   // Device A — a `till` device (its profile auto-creates a register), whose cookie stands in for the
   // current identity.
-  const tillProfileId = await seedDeviceProfile(cfg, "Till A profile", "till", []);
+  const tillProfileId = await seedDeviceProfile("Till A profile", "till", []);
   const devA = await enrolDeviceForTest(suite.admin, cfg, {
     name: "Till A",
     profileId: tillProfileId,
   });
   // Device B — a `kds` device bound to a station, the override target.
-  const kdsProfileId = await seedDeviceProfile(cfg, "KDS B profile", "kds", []);
+  const kdsProfileId = await seedDeviceProfile("KDS B profile", "kds", []);
   const devB = await enrolDeviceForTest(suite.admin, cfg, {
     name: "KDS B",
     profileId: kdsProfileId,
@@ -702,18 +688,18 @@ async function enrolDevDevices(): Promise<{
 
 describe("dev-override header (real Postgres)", () => {
   it("is IGNORED when devMode is false (fail-closed) — cookie wins", async () => {
-    const { cfg, deviceAId, deviceACookie, deviceBId } = await enrolDevDevices();
+    const { deviceAId, deviceACookie, deviceBId } = await enrolDevDevices();
     const binding = await readWithHeaders(
-      { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: false },
+      { db: suite.admin, devMode: false },
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
     expect(binding?.deviceId).toBe(deviceAId); // NOT deviceBId
   });
 
   it("is honoured when devMode is true — header wins over cookie, no token needed", async () => {
-    const { cfg, deviceACookie, deviceBId } = await enrolDevDevices();
+    const { deviceACookie, deviceBId } = await enrolDevDevices();
     const binding = await readWithHeaders(
-      { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: true },
+      { db: suite.admin, devMode: true },
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
     expect(binding?.deviceId).toBe(deviceBId);
@@ -723,10 +709,10 @@ describe("dev-override header (real Postgres)", () => {
   });
 
   it("an unknown/malformed override id is a miss, with NO cookie fallback", async () => {
-    const { cfg, deviceACookie } = await enrolDevDevices();
+    const { deviceACookie } = await enrolDevDevices();
     for (const bad of ["not-a-uuid", randomUUID()]) {
       const binding = await readWithHeaders(
-        { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: true },
+        { db: suite.admin, devMode: true },
         { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: bad },
       );
       expect(binding).toBeNull();
@@ -734,58 +720,43 @@ describe("dev-override header (real Postgres)", () => {
   });
 
   it("with no override header, devMode reads the cookie unchanged", async () => {
-    const { cfg, deviceAId, deviceACookie } = await enrolDevDevices();
+    const { deviceAId, deviceACookie } = await enrolDevDevices();
     const binding = await readWithHeaders(
-      { db: suite.admin, cfg: { tenantId: cfg.tenantId }, devMode: true },
+      { db: suite.admin, devMode: true },
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}` },
     );
     expect(binding?.deviceId).toBe(deviceAId);
   });
 });
 
-describe("tryReadDevice is tenant-scoped (real Postgres)", () => {
-  // CLAUDE.md §3 / the till-reroute-S3 incident: since RLS was dropped (#255) `withTenant` no longer
-  // isolates SELECTs, so a by-id device read must carry its OWN `tenant_id` predicate —
-  // one-tenant-per-db is NOT the query's isolation boundary. Seeded DIRECTLY (not through the enrol
-  // path, which Tasks 6-7 still owe), so these two cases are self-contained. The dev-override path
-  // carries no token, so without the predicate it would resolve ANY tenant's device by UUID.
-  async function seedKdsDeviceUnderNewTenant(): Promise<{ tenantId: string; deviceId: string }> {
+describe("tryReadDevice dev override resolves a seeded device (real Postgres)", () => {
+  // Seeded DIRECTLY (not through the enrol path), so the case is self-contained. The dev-override
+  // path carries no token and reads the device by id alone.
+  async function seedKdsDeviceUnderNewTenant(): Promise<{ deviceId: string }> {
     const admin = suite.admin;
-    const tenantId = await seedTenant(admin);
+    await seedTenant(admin);
     const loc = await admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const st = await admin.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name, is_default)
-      values (${tenantId}, ${locationId}, 'Cocina', true) returning id`);
+      insert into kitchen_stations (location_id, name, is_default)
+      values (${locationId}, 'Cocina', true) returning id`);
     // A kds profile → the binding rule requires a station and no register.
     const prof = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor)
-      values (${tenantId}, 'Pantalla', 'kds') returning id`);
+      insert into device_profiles (name, form_factor)
+      values ('Pantalla', 'kds') returning id`);
     const dev = await admin.execute<{ id: string }>(sql`
-      insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, active)
-      values (${tenantId}, ${locationId}, ${prof.rows[0]!.id}, ${st.rows[0]!.id}, 'Pantalla Cocina',
+      insert into devices (location_id, device_profile_id, station_id, label, token_hash, active)
+      values (${locationId}, ${prof.rows[0]!.id}, ${st.rows[0]!.id}, 'Pantalla Cocina',
               'scrypt$00$00', true) returning id`);
-    return { tenantId, deviceId: dev.rows[0]!.id };
+    return { deviceId: dev.rows[0]!.id };
   }
 
-  it("does NOT resolve a device that belongs to ANOTHER tenant (dev-override, no token)", async () => {
-    const other = await seedKdsDeviceUnderNewTenant();
-    // A DIFFERENT tenant the request is scoped to — it owns no device.
-    const scoped = await seedTenant(suite.admin);
-    const binding = await readWithHeaders(
-      { db: suite.admin, cfg: { tenantId: scoped }, devMode: true },
-      { [DEV_DEVICE_HEADER]: other.deviceId },
-    );
-    // Without `eq(devices.tenantId, cfg.tenantId)` this resolves the foreign device by its UUID.
-    expect(binding).toBeNull();
-  });
-
   it("DOES resolve a device scoped to its OWN tenant", async () => {
-    const { tenantId, deviceId } = await seedKdsDeviceUnderNewTenant();
+    const { deviceId } = await seedKdsDeviceUnderNewTenant();
     const binding = await readWithHeaders(
-      { db: suite.admin, cfg: { tenantId }, devMode: true },
+      { db: suite.admin, devMode: true },
       { [DEV_DEVICE_HEADER]: deviceId },
     );
     expect(binding?.deviceId).toBe(deviceId);

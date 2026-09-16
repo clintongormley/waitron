@@ -1,15 +1,14 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
 import "./errors.js";
 import { nodes } from "./schema/nodes.js";
 import { invoiceSeries } from "./schema/series.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 
 export interface ReservedNodeInput {
   id: string; // the standby's own nodeId
-  tenantId: string;
   locationId: string;
   name: string;
   filingModule: string | null;
@@ -22,7 +21,7 @@ export interface ReservedNodeInput {
  * Insert the standby's OWN dormant node row (design §6 R2): its distinct nodeId, its public key, and
  * the primary's endorsement of that key, all in one INSERT so public_key and endorsement land together.
  * Owner-role: `nodes` grants app_user SELECT only (`drizzle/0001_db_baseline_sql.sql`), so these writes need the
- * owner (adopt already runs on ownerDb). Caller supplies a `withTenant` tx so this commits with the
+ * owner (adopt already runs on ownerDb). Caller supplies a `withTransaction` tx so this commits with the
  * reserved SIF + sealed key in one transaction (CLAUDE.md §3 — a write-path helper takes a `tx`).
  */
 export async function insertReservedNodeTx(
@@ -33,7 +32,6 @@ export async function insertReservedNodeTx(
 }
 
 export interface ReservedSeriesInput {
-  tenantId: string;
   nodeId: string;
   code: string;
   purpose: string; // "standard" | "rectificative"
@@ -57,12 +55,8 @@ export async function insertReservedSeriesTx(
  * A provisioned primary with no endorsement trusts its own key; mirror promotion includes a
  * stored endorsement when signing its new membership document.
  */
-export function readNodeEndorsement(
-  db: Database,
-  tenantId: string,
-  nodeId: string,
-): Promise<Endorsement | null> {
-  return withTenant(db, brandTenantId(tenantId), async (tx) => {
+export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endorsement | null> {
+  return withTransaction(db, async (tx) => {
     const [row] = await tx
       .select({ endorsement: nodes.endorsement })
       .from(nodes)
@@ -76,21 +70,16 @@ export function readNodeEndorsement(
  * The id of a node's LIVE standard-purpose invoice series, inside the caller's tenant transaction.
  * Reads only `retired_at IS NULL` rows — a retired series is history, never the one to number from.
  * Caps the read at TWO rows and fails LOUD on a second live standard series rather than picking one
- * silently: nothing enforces one standard series per node (the natural key is `(tenant_id, node_id,
+ * silently: nothing enforces one standard series per node (the natural key is `(node_id,
  * code)`, not purpose), and two would make the invoice number non-deterministic. Reachable only by a
  * corrupt write; a plain `Error`, not a code, because it is a programming-level invariant.
  */
-export async function readStandardSeriesIdTx(
-  tx: Transaction,
-  tenantId: string,
-  nodeId: string,
-): Promise<string> {
+export async function readStandardSeriesIdTx(tx: Transaction, nodeId: string): Promise<string> {
   const rows = await tx
     .select({ id: invoiceSeries.id })
     .from(invoiceSeries)
     .where(
       and(
-        eq(invoiceSeries.tenantId, tenantId),
         eq(invoiceSeries.nodeId, nodeId),
         eq(invoiceSeries.purpose, "standard"),
         isNull(invoiceSeries.retiredAt),
@@ -99,7 +88,7 @@ export async function readStandardSeriesIdTx(
     .limit(2);
   const [row, extra] = rows;
   if (row === undefined) {
-    throw new AppError("series.no_standard_for_node", { tenantId, nodeId });
+    throw new AppError("series.no_standard_for_node", { nodeId });
   }
   if (extra !== undefined) {
     throw new Error(`invoice_series: node ${nodeId} has more than one standard series`);
@@ -107,15 +96,9 @@ export async function readStandardSeriesIdTx(
   return row.id;
 }
 
-/** {@link readStandardSeriesIdTx} under its own `withTenant` (app_user SELECT suffices). */
-export function readStandardSeriesId(
-  db: Database,
-  tenantId: string,
-  nodeId: string,
-): Promise<string> {
-  return withTenant(db, brandTenantId(tenantId), (tx) =>
-    readStandardSeriesIdTx(tx, tenantId, nodeId),
-  );
+/** {@link readStandardSeriesIdTx} under its own `withTransaction` (app_user SELECT suffices). */
+export function readStandardSeriesId(db: Database, nodeId: string): Promise<string> {
+  return withTransaction(db, (tx) => readStandardSeriesIdTx(tx, nodeId));
 }
 
 /**
@@ -124,21 +107,11 @@ export function readStandardSeriesId(
  * (`drizzle/0001_db_baseline_sql.sql`), and no runtime path retires a series — a restore does, on its
  * privileged connection, before opening the node's replacement series.
  */
-export async function retireNodeSeriesTx(
-  tx: Transaction,
-  tenantId: string,
-  nodeId: string,
-): Promise<number> {
+export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
   const rows = await tx
     .update(invoiceSeries)
     .set({ retiredAt: sql`now()` })
-    .where(
-      and(
-        eq(invoiceSeries.tenantId, tenantId),
-        eq(invoiceSeries.nodeId, nodeId),
-        isNull(invoiceSeries.retiredAt),
-      ),
-    )
+    .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)))
     .returning({ id: invoiceSeries.id });
   return rows.length;
 }
@@ -151,7 +124,6 @@ export async function retireNodeSeriesTx(
  */
 export async function insertNodeSeriesTx(
   tx: Transaction,
-  tenantId: string,
   nodeId: string,
   series: readonly { code: string; purpose: string }[],
 ): Promise<void> {
@@ -166,7 +138,6 @@ export async function insertNodeSeriesTx(
     .from(invoiceSeries)
     .where(
       and(
-        eq(invoiceSeries.tenantId, tenantId),
         eq(invoiceSeries.nodeId, nodeId),
         inArray(
           invoiceSeries.code,
@@ -180,6 +151,6 @@ export async function insertNodeSeriesTx(
   }
   await insertReservedSeriesTx(
     tx,
-    series.map((s) => ({ tenantId, nodeId, code: s.code, purpose: s.purpose })),
+    series.map((s) => ({ nodeId, code: s.code, purpose: s.purpose })),
   );
 }

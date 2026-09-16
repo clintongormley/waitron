@@ -1,5 +1,12 @@
 # Image library
 
+> **2026-09-14 — the tenant column is gone.** Every `tenant_id` column, every tenant argument and
+> the `WAITRON_TILL_TENANT_ID` environment variable were removed: one database holds one taxpayer,
+> as the single row of `tenants`, and nothing filters by a tenant. The text below is left as the
+> record of what was built at the time; anywhere it names a tenant id, a tenant predicate or that
+> variable, read it as history. Spec:
+> [drop-tenant-id](2026-09-14-drop-tenant-id-design.md).
+
 ## Implementation status, 2026-09-12
 
 The `image-library` branch implements the mandatory media module, database image storage, language

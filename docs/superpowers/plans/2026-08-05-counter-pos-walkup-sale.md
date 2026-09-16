@@ -1,5 +1,12 @@
 # Counter POS — walk-up cash sale (sub-project 7, slice 1) — Implementation Plan
 
+> **2026-09-14 — the tenant column is gone.** Every `tenant_id` column, every tenant argument and
+> the `WAITRON_TILL_TENANT_ID` environment variable were removed: one database holds one taxpayer,
+> as the single row of `tenants`, and nothing filters by a tenant. The text below is left as the
+> record of what was built at the time; anywhere it names a tenant id, a tenant predicate or that
+> variable, read it as history. Spec:
+> [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A logged-in operator rings up a cash sale at the deli counter — pick products (weighed by keypad), take cash, the sale files with AEAT, and a legally-correct ticket + QR displays — with no fiscal machinery reimplemented.

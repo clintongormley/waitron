@@ -8,24 +8,24 @@ import {
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { DEFAULT_CANVASES } from "./default-canvases.js";
 import type { FormFactor, CanvasDef } from "./canvas.js";
 import { validateCanvas } from "./validate-canvas.js";
 
 /**
  * The list/get/create/update/delete service over `canvases` (design §4, SP-A.2 §16.3). MANY
- * rows per tenant, keyed by `id`, names unique per tenant.
+ * rows, keyed by `id`, with distinct names.
  *
  * Every function takes the caller's transaction, opened with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `withTransaction(deps.db, …)` + `asAppUser(tx)`. Exercised in
  * `canvas-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite holds
  * every grant, CLAUDE.md §4). Mirrors the other stores in this package (`theme-store.ts`, `receipt-store.ts`).
  *
  * The writers run, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCanvas` — fail-closed on an invalid
  * `definition` (throws `canvas.invalid` before the write); (3) the drizzle write, whose 23505 on the
- * per-tenant name unique is translated to `canvas.name_taken` (see `translateWriteError`). `deleteCanvas`
+ * name unique is translated to `canvas.name_taken` (see `translateWriteError`). `deleteCanvas`
  * authorises but has no definition to validate. Reads cast the opaque jsonb back to `CanvasDef`
  * WITHOUT re-running `validateCanvas` — the value was validated on the write that stored it and the
  * only writer is this service (the return-a-typed-shape-without-re-validating rationale). The `as` cast re-attaches the
@@ -39,13 +39,12 @@ import { validateCanvas } from "./validate-canvas.js";
  *   - a `canvases_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
  *     `canvas.name_taken`. This closes the Phase-3 reviewer's flagged gap: a duplicate name must
  *     return a clean 409, not the raw 23505 an unwrapped INSERT/UPDATE would surface as a 500. It
- *     matches on the CONSTRAINT NAME, not merely on 23505: `canvases` also carries a `(tenant_id, id)`
- *     unique (the composite-FK target devices point at), and any 23505 on THAT — or any constraint
- *     added later — is re-thrown untouched rather than mislabelled `canvas.name_taken`. When the
- *     driver reports no constraint name (PGlite omits it) it falls back to translating: the name key is
- *     the only NON-composite unique these writes can trip on an author-supplied value (a
- *     `(tenant_id, id)` clash is a cryptographically-unreachable `defaultRandom()` collision, and an
- *     UPDATE never changes `id`). The same constraint-targeted shape as identity's `asEmailTaken`;
+ *     matches on the CONSTRAINT NAME, not merely on 23505: any 23505 on a constraint added later is
+ *     re-thrown untouched rather than mislabelled `canvas.name_taken`. When the driver reports no
+ *     constraint name (PGlite omits it) it falls back to translating: the name key is the only unique
+ *     these writes can trip on an author-supplied value (the primary key is a
+ *     cryptographically-unreachable `defaultRandom()` collision, and an UPDATE never changes `id`).
+ *     The same constraint-targeted shape as identity's `asEmailTaken`;
  *   - a `device_profiles_canvas_fk` violation (a delete of a canvas a device profile still references,
  *     ON DELETE RESTRICT, SQLSTATE 23001) → `canvas.in_use` — a clean 409 rather than a raw 500.
  *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
@@ -67,10 +66,9 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All of the current tenant's canvases. The tenant predicate scopes the read. */
+/** All canvases, in no defined order (the query has no ORDER BY). */
 export async function listCanvases(
   tx: Transaction,
-  tenantId: string,
 ): Promise<{ id: string; name: string; definition: CanvasDef }[]> {
   const rows = await tx
     .select({
@@ -78,8 +76,7 @@ export async function listCanvases(
       name: canvases.name,
       definition: canvases.definition,
     })
-    .from(canvases)
-    .where(eq(canvases.tenantId, tenantId));
+    .from(canvases);
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -87,10 +84,9 @@ export async function listCanvases(
   }));
 }
 
-/** One canvas by id, or `undefined` when the tenant has no such canvas. */
+/** One canvas by id, or `undefined` when no canvas carries that id. */
 export async function getCanvas(
   tx: Transaction,
-  tenantId: string,
   id: string,
 ): Promise<{ id: string; name: string; definition: CanvasDef } | undefined> {
   const [row] = await tx
@@ -100,15 +96,15 @@ export async function getCanvas(
       definition: canvases.definition,
     })
     .from(canvases)
-    .where(and(eq(canvases.tenantId, tenantId), eq(canvases.id, id)));
+    .where(eq(canvases.id, id));
   if (row === undefined) return undefined;
   return { id: row.id, name: row.name, definition: row.definition as CanvasDef };
 }
 
-/** Create a canvas for the tenant, returning its generated id. Manager/admin only (`layout.configure`). */
+/** Create a canvas, returning its generated id. Manager/admin only (`layout.configure`). */
 export async function createCanvas(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; name: string; definition: unknown },
+  input: { managementSessionId: string; name: string; definition: unknown },
 ): Promise<{ id: string }> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
@@ -118,7 +114,7 @@ export async function createCanvas(
   try {
     const [row] = await tx
       .insert(canvases)
-      .values({ tenantId: input.tenantId, name: input.name, definition })
+      .values({ name: input.name, definition })
       .returning({ id: canvases.id });
     return { id: row!.id };
   } catch (error) {
@@ -128,7 +124,7 @@ export async function createCanvas(
 
 /**
  * Replace a canvas's name + definition in place. Manager/admin only (`layout.configure`). An absent id
- * (or another tenant's row, excluded by the tenant predicate) throws `canvas.not_found` — the by-id config-CRUD idiom the
+ * throws `canvas.not_found` — the by-id config-CRUD idiom the
  * direct siblings on this same management surface use (`updateZone`/`updateTable`/`updateStatus` in
  * `apps/server/src/tables.ts`), read back via `.returning({ id })` so a PUT that matched zero rows is
  * a 404, never a masked "saved" 204 (e.g. a PUT to a canvas another session just deleted). A name
@@ -138,7 +134,8 @@ export async function updateCanvas(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
+    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
+     * when those callers do. */
     id: string;
     name: string;
     definition: unknown;
@@ -154,7 +151,7 @@ export async function updateCanvas(
     updated = await tx
       .update(canvases)
       .set({ name: input.name, definition, updatedAt: sql`now()` })
-      .where(and(eq(canvases.tenantId, input.tenantId), eq(canvases.id, input.id)))
+      .where(eq(canvases.id, input.id))
       .returning({ id: canvases.id });
   } catch (error) {
     translateWriteError(error);
@@ -165,17 +162,17 @@ export async function updateCanvas(
 }
 
 /**
- * Delete a canvas. Manager/admin only (`layout.configure`). No definition to validate. An absent id (or
- * another tenant's row, excluded by the tenant predicate) throws `canvas.not_found`, read back via `.returning({ id })` —
+ * Delete a canvas. Manager/admin only (`layout.configure`). No definition to validate. An absent id
+ * throws `canvas.not_found`, read back via `.returning({ id })` —
  * the same by-id config-CRUD idiom `deactivateZone`/`deactivateTable`/`deactivateStatus` (`tables.ts`)
  * use, so a DELETE that matched zero rows is a 404 rather than a silent success. A device profile still
- * referencing the canvas (the composite FK `device_profiles_canvas_fk`, ON DELETE RESTRICT) trips a
+ * referencing the canvas (`device_profiles_canvas_fk`, ON DELETE RESTRICT) trips a
  * 23001 restrict_violation, which `translateWriteError` turns into `canvas.in_use` (a clean 409) rather
  * than letting the raw DB error propagate to a 500.
  */
 export async function deleteCanvas(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; id: string },
+  input: { managementSessionId: string; id: string },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
@@ -185,7 +182,7 @@ export async function deleteCanvas(
   try {
     deleted = await tx
       .delete(canvases)
-      .where(and(eq(canvases.tenantId, input.tenantId), eq(canvases.id, input.id)))
+      .where(eq(canvases.id, input.id))
       .returning({ id: canvases.id });
   } catch (error) {
     translateWriteError(error);
@@ -196,25 +193,19 @@ export async function deleteCanvas(
 }
 
 /**
- * The tenant's first stored canvas of `formFactor`, else the built-in `DEFAULT_CANVASES[formFactor]`
+ * The first stored canvas of `formFactor`, else the built-in `DEFAULT_CANVASES[formFactor]`
  * — the "return-a-default-when-unauthored" precedent shared with `getReceipt` (receipt-store.ts). The form factor is
  * carried inside the opaque `definition` jsonb (`->> 'formFactor'`), not a column; "first" is by
- * `created_at` for a stable pick when a tenant has several of one form factor.
+ * `created_at` for a stable pick when several canvases share one form factor.
  */
 export async function getCanvasForFormFactor(
   tx: Transaction,
-  tenantId: string,
   formFactor: FormFactor,
 ): Promise<CanvasDef> {
   const [row] = await tx
     .select({ definition: canvases.definition })
     .from(canvases)
-    .where(
-      and(
-        eq(canvases.tenantId, tenantId),
-        eq(sql`${canvases.definition} ->> 'formFactor'`, formFactor),
-      ),
-    )
+    .where(eq(sql`${canvases.definition} ->> 'formFactor'`, formFactor))
     .orderBy(asc(canvases.createdAt))
     .limit(1);
   if (row === undefined) return DEFAULT_CANVASES[formFactor];

@@ -8,12 +8,12 @@ import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
-import type { SaleId, TenantId, TillId } from "@waitron/shared";
+import type { SaleId, TillId } from "@waitron/shared";
 
 export type IncidentSeverity = "warning" | "error";
 
 export interface RecordIncidentInput {
-  tenantId: TenantId;
+  /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
   tillId: TillId;
   saleId?: SaleId;
   /** The structured error itself. `code` and `params` are taken from it, never re-derived —
@@ -36,7 +36,7 @@ export interface Incident {
 
 /**
  * Records a fiscal incident on the caller's transaction, deduplicated to at most one OPEN incident
- * per `(tenant_id, till_id, code, sale_id)` by the `incidents_open_dedup` partial unique index
+ * per `(till_id, code, sale_id)` by the `incidents_open_dedup` partial unique index
  * (`ON CONFLICT DO NOTHING`). Always the caller's transaction, never a fresh connection: an incident
  * that committed while its sale rolled back would report a failure for a sale that never existed.
  * Only `.code` and `.params` are written (an `AppError` instance would not survive the jsonb round
@@ -52,7 +52,6 @@ export async function recordIncident(tx: Transaction, input: RecordIncidentInput
   await tx
     .insert(incidents)
     .values({
-      tenantId: input.tenantId,
       tillId: input.tillId,
       saleId: input.saleId ?? null,
       code: input.error.code,
@@ -65,7 +64,7 @@ export async function recordIncident(tx: Transaction, input: RecordIncidentInput
 
 /**
  * Like `recordIncident`, but reports whether it actually inserted (`true`) or de-duped against an
- * existing OPEN incident for the same `(tenant_id, till_id, code, sale_id)` (`false`) — so a periodic
+ * existing OPEN incident for the same `(till_id, code, sale_id)` (`false`) — so a periodic
  * caller that re-detects a still-open condition each sweep counts only real raises. Race-free: the
  * `incidents_open_dedup` partial unique index (`NULLS NOT DISTINCT`, `WHERE acknowledged_at IS NULL`)
  * is the arbiter, so two concurrent same-key callers serialise on it and exactly one inserts — the
@@ -78,11 +77,10 @@ export async function recordIncidentOnce(
 ): Promise<boolean> {
   const saleId = input.saleId ?? null;
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into incidents (tenant_id, till_id, sale_id, code, params, severity, detected_at)
-    values (${input.tenantId}, ${input.tillId}, ${saleId}, ${input.error.code},
+    insert into incidents (till_id, sale_id, code, params, severity, detected_at) values (${input.tillId}, ${saleId}, ${input.error.code},
             ${JSON.stringify(input.error.params)}::jsonb, ${input.severity},
             ${input.detectedAt.toISOString()})
-    on conflict ("tenant_id", "till_id", "code", "sale_id") where acknowledged_at is null
+    on conflict ("till_id", "code", "sale_id") where acknowledged_at is null
     do nothing
     returning id
   `);
@@ -91,7 +89,7 @@ export async function recordIncidentOnce(
 
 /**
  * Unacknowledged incidents for one till, newest first. Only tests call it: the till shows no
- * incidents, and the dashboard alerts read a whole tenant's through `listOpenIncidents`.
+ * incidents, and the dashboard alerts read them all through `listOpenIncidents`.
  */
 export async function openIncidents(tx: Transaction, tillId: TillId): Promise<Incident[]> {
   const rows = await tx
@@ -167,15 +165,12 @@ function toTenantIncident(row: TenantIncidentRow): TenantIncident {
   };
 }
 
-/** Every open incident in the tenant, newest first; ties break on id so the order is stable. */
-export async function listOpenIncidents(
-  tx: Transaction,
-  tenantId: TenantId,
-): Promise<TenantIncident[]> {
+/** Every open incident, newest first; ties break on id so the order is stable. */
+export async function listOpenIncidents(tx: Transaction): Promise<TenantIncident[]> {
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
-    .where(and(eq(incidents.tenantId, tenantId), isNull(incidents.acknowledgedAt)))
+    .where(isNull(incidents.acknowledgedAt))
     .orderBy(desc(incidents.detectedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
 }
@@ -183,32 +178,19 @@ export async function listOpenIncidents(
 /** Incidents handled at or after `handledSince`, most recently handled first, ties by id. */
 export async function listHandledIncidents(
   tx: Transaction,
-  tenantId: TenantId,
   handledSince: Date,
 ): Promise<TenantIncident[]> {
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
-    .where(
-      and(
-        eq(incidents.tenantId, tenantId),
-        gte(incidents.acknowledgedAt, handledSince.toISOString()),
-      ),
-    )
+    .where(gte(incidents.acknowledgedAt, handledSince.toISOString()))
     .orderBy(desc(incidents.acknowledgedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
 }
 
-/** One incident by id, scoped to the tenant: another tenant's id reads as absent. */
-export async function findIncident(
-  tx: Transaction,
-  tenantId: TenantId,
-  id: string,
-): Promise<TenantIncident | null> {
-  const [row] = await tx
-    .select(tenantIncidentColumns)
-    .from(incidents)
-    .where(and(eq(incidents.tenantId, tenantId), eq(incidents.id, id)));
+/** One incident by id, or `null` when no incident has that id. */
+export async function findIncident(tx: Transaction, id: string): Promise<TenantIncident | null> {
+  const [row] = await tx.select(tenantIncidentColumns).from(incidents).where(eq(incidents.id, id));
   return row === undefined ? null : toTenantIncident(row);
 }
 
@@ -219,16 +201,10 @@ export async function findIncident(
  */
 export async function markIncidentHandled(
   tx: Transaction,
-  input: { tenantId: TenantId; id: string; personId: string; handledAt: Date },
+  input: { id: string; personId: string; handledAt: Date },
 ): Promise<void> {
   await tx
     .update(incidents)
     .set({ acknowledgedAt: input.handledAt.toISOString(), acknowledgedBy: input.personId })
-    .where(
-      and(
-        eq(incidents.tenantId, input.tenantId),
-        eq(incidents.id, input.id),
-        isNull(incidents.acknowledgedAt),
-      ),
-    );
+    .where(and(eq(incidents.id, input.id), isNull(incidents.acknowledgedAt)));
 }

@@ -78,7 +78,7 @@ declare module "@waitron/shared" {
     /** Raised as an INCIDENT (never thrown) by a reconcile sweep: payments we believe settled that
      * the processor's report still shows nothing for, past the in-flight tolerance. AGGREGATED —
      * one incident per (till, code) carrying every payment, because the open-incident dedup index
-     * keys on `(tenant, till, code, sale_id)` and these rows share a null sale_id, so N same-key
+     * keys on `(till, code, sale_id)` and these rows share a null sale_id, so N same-key
      * rows would silently collapse into one (the PR #25 lesson, applied deliberately here).
      * `settledAt` is ISO-8601 (never null: a row only reaches this class once it is `captured` or
      * `settled`, and both states always stamp `settled_at` at insert time). */
@@ -138,7 +138,7 @@ declare module "@waitron/shared" {
      * processor refused (or the payment could not be addressed at all). Aggregated per till, for the
      * same reason `payment.reconcile_orphan` and its siblings are: these payments have a null
      * `sale_id` by definition (that is what makes them orphans), so N same-key incidents racing for
-     * one open-incident dedup slot (`tenant, till, code, sale_id`) would silently collapse to one,
+     * one open-incident dedup slot (`till, code, sale_id`) would silently collapse to one,
      * dropping every failure but the first. Each entry's `reason` is a structured code — the failed
      * reversal's `AppError` code, or the literal `"unknown"` for a non-`AppError` failure — never
      * prose. The remediation marker is already stamped for every payment named here, so none of them

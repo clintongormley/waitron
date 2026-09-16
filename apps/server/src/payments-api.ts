@@ -10,7 +10,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, devices, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, devices, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   cardProviderById,
   cardReaders,
@@ -36,8 +36,8 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything `mountPaymentsApi` needs. One tenant per database (`cfg.tenantId` scopes every query and
- * every by-id read — one-tenant-per-db is NOT the query's isolation boundary, CLAUDE.md §3). `ring` is
+ * Everything `mountPaymentsApi` needs. One taxpayer per database, so a by-id read needs only the
+ * id. `ring` is
  * the vault key ring the host opened once at boot: this is the FIRST dashboard write to the credential
  * vault. `pool` is the lazy card-provider pool — these routes only `evict` it so a credential change
  * takes effect without a restart; the pay path (Task 12) is what `get`s from it. `providers` is the
@@ -117,18 +117,18 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
 /**
  * Mounts the payments-management routes on an existing Hono app — the `mountPrintApi` convention.
  * Every route is `requireManagementSession`-gated then funnels its DB work through the local `gated`
- * helper, which opens a tenant-scoped app-role transaction and `authorizeManager`s `payments.manage`
+ * helper, which opens an app-role transaction and `authorizeManager`s `payments.manage`
  * before the op runs, in exactly one place. Provider `connect`/reader calls reach the network, so they
- * run OUTSIDE any transaction (a `withTenant` is never held across a provider round-trip); the gate
+ * run OUTSIDE any transaction (a `withTransaction` is never held across a provider round-trip); the gate
  * runs first, in its own `gated` call, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // `payments.manage`, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place (print-api.ts's seam). Proven by deletion: removing
   // the `authorizeManager(...)` call makes a staff session succeed on every gated route.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -137,13 +137,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       return fn(tx);
     });
 
-  // The runtime context every provider seat call takes — this tenant's db handle, the vault key ring,
-  // the tenant id, and the test-injected fetch when present. Built identically at each reader call
+  // The runtime context every provider seat call takes — the db handle, the vault key ring, and the
+  // test-injected fetch when present. Built identically at each reader call
   // (add / status / remove), so it lives in one place.
   const runtimeDeps = (): CardProviderRuntimeDeps => ({
     db: deps.db,
     ring: deps.ring,
-    tenantId: deps.cfg.tenantId,
     ...(deps.fetch ? { fetch: deps.fetch } : {}),
   });
 
@@ -154,17 +153,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     const [credential] = await tx
       .select({ purpose: tenantCredentials.purpose })
       .from(tenantCredentials)
-      .where(
-        and(
-          eq(tenantCredentials.tenantId, deps.cfg.tenantId),
-          eq(tenantCredentials.purpose, seat.credentialPurpose),
-        ),
-      );
+      .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
     if (credential === undefined)
       throw new AppError("reader.provider_disconnected", { providerId: seat.providerId });
   };
-  const readerWhere = (id: string) =>
-    and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, id));
+  const readerWhere = (id: string) => eq(cardReaders.id, id);
   const requireReader = async (tx: Transaction, id: string) => {
     // Local mutations decide from the locked row, so Enable cannot race a committed unpair.
     const [reader] = await tx.select().from(cardReaders).where(readerWhere(id)).for("update");
@@ -182,12 +175,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         tx
           .select({ providerRef: cardReaders.providerRef, active: cardReaders.active })
           .from(cardReaders)
-          .where(
-            and(
-              eq(cardReaders.tenantId, deps.cfg.tenantId),
-              eq(cardReaders.provider, seat.providerId),
-            ),
-          ),
+          .where(eq(cardReaders.provider, seat.providerId)),
       );
       const registered = new Map(rows.map((row) => [row.providerRef, row.active]));
       return c.json(
@@ -222,9 +210,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await requireConnected(tx, seat);
         const [saved] = await tx
           .insert(cardReaders)
-          .values({ tenantId: deps.cfg.tenantId, provider: providerId, providerRef, name })
+          .values({ provider: providerId, providerRef, name })
           .onConflictDoUpdate({
-            target: [cardReaders.tenantId, cardReaders.provider, cardReaders.providerRef],
+            target: [cardReaders.provider, cardReaders.providerRef],
             set: { name, active: true, disabledAt: null, unpairedAt: null },
           })
           .returning({ id: cardReaders.id });
@@ -278,14 +266,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/providers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // "Connected" = a sealed credential exists for the seat's purpose. Read the purposes THIS tenant
-      // holds (metadata only — no ciphertext, no decrypt, never a secret), scoped by the explicit
-      // `tenant_id` predicate (CLAUDE.md §3, one-tenant-per-db is not the query boundary).
+      // "Connected" = a sealed credential exists for the seat's purpose. Read the purposes the database
+      // holds (metadata only — no ciphertext, no decrypt, never a secret).
       const rows = await gated(sessionId, (tx) =>
-        tx
-          .select({ purpose: tenantCredentials.purpose })
-          .from(tenantCredentials)
-          .where(eq(tenantCredentials.tenantId, deps.cfg.tenantId)),
+        tx.select({ purpose: tenantCredentials.purpose }).from(tenantCredentials),
       );
       const connected = new Set(rows.map((r) => r.purpose));
       // `merchantName` is deliberately omitted here: it is not stored (only returned at connect time),
@@ -315,13 +299,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, async () => {});
       const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
       // The seat verifies the credential and returns the merchant name to confirm PLUS the complete
-      // payload to seal. `environment` AND `tenantId` MUST both be passed or the Stripe prefix/env
-      // guard silently no-ops (it refuses a wrong-environment key only when it knows the host's env).
+      // payload to seal. `environment` MUST be passed or the Stripe prefix/env guard silently no-ops
+      // (it refuses a wrong-environment key only when it knows the host's env).
       const { merchantName, sealedPayload } = await seat.connect(
         {
           ...(deps.fetch ? { fetch: deps.fetch } : {}),
           environment: deps.environment,
-          tenantId: deps.cfg.tenantId,
         },
         payload,
       );
@@ -330,7 +313,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // a provider that returns a wrong-shaped payload fails loudly rather than sealing junk.
         validatePayload(seat.credentialPurpose, sealedPayload);
         await putCredential(tx, deps.ring, {
-          tenantId: deps.cfg.tenantId,
           purpose: seat.credentialPurpose,
           value: sealedPayload,
         });
@@ -349,24 +331,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, async (tx) => {
         const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
         // Refuse while any ACTIVE reader still uses this provider — the operator disables those first.
-        // `activeReaders` is a COUNT (never a reader id or a secret), scoped to the tenant.
+        // `activeReaders` is a COUNT (never a reader id or a secret).
         const active = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)
-          .where(
-            and(
-              eq(cardReaders.tenantId, deps.cfg.tenantId),
-              eq(cardReaders.provider, id),
-              eq(cardReaders.active, true),
-            ),
-          );
+          .where(and(eq(cardReaders.provider, id), eq(cardReaders.active, true)));
         if (active.length > 0) {
           throw new AppError("payment.provider_in_use", { activeReaders: active.length });
         }
-        await deleteCredential(tx, {
-          tenantId: deps.cfg.tenantId,
-          purpose: seat.credentialPurpose,
-        });
+        await deleteCredential(tx, { purpose: seat.credentialPurpose });
       });
       deps.pool.evict(id);
       return c.body(null, 204);
@@ -378,7 +351,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // Active AND disabled: `active` on each row lets the dashboard show a disabled reader (historical
-      // payments still resolve its name). `deviceCount` comes from a SEPARATE tenant-scoped aggregate
+      // payments still resolve its name). `deviceCount` comes from a SEPARATE aggregate
       // rather than a correlated subquery over the `.from()` base — a `sql` scalar correlated to the
       // base table binds to the subquery's table and returns a wrong answer (CLAUDE.md §3, #152).
       const { readers, counts } = await gated(sessionId, async (tx) => ({
@@ -391,7 +364,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             canEnable: sql<boolean>`${cardReaders.unpairedAt} is null`,
           })
           .from(cardReaders)
-          .where(eq(cardReaders.tenantId, deps.cfg.tenantId))
           .orderBy(cardReaders.name),
         counts: await tx
           .select({
@@ -399,7 +371,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             n: sql<number>`count(*)::int`,
           })
           .from(deviceCardReaders)
-          .where(eq(deviceCardReaders.tenantId, deps.cfg.tenantId))
           .groupBy(deviceCardReaders.readerId),
       }));
       const countByReader = new Map(counts.map((r) => [r.readerId, r.n]));
@@ -424,12 +395,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [cred] = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
-          .where(
-            and(
-              eq(tenantCredentials.tenantId, deps.cfg.tenantId),
-              eq(tenantCredentials.purpose, seat.credentialPurpose),
-            ),
-          );
+          .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
         if (cred === undefined) throw new AppError("reader.provider_disconnected", { providerId });
       });
       // Relay to the seat (pairs SumUp / verifies Stripe) OUTSIDE any transaction — a provider
@@ -445,17 +411,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [cred] = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
-          .where(
-            and(
-              eq(tenantCredentials.tenantId, deps.cfg.tenantId),
-              eq(tenantCredentials.purpose, seat.credentialPurpose),
-            ),
-          );
+          .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
         if (cred === undefined) return undefined;
         const [row] = await tx
           .insert(cardReaders)
           .values({
-            tenantId: deps.cfg.tenantId,
             provider: providerId,
             providerRef: result.providerRef,
             name,
@@ -479,13 +439,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const readerId = requireUuidParam(c.req.param("id"), "CardReaderId");
-      // Load the reader BY ID with an explicit `tenant_id` predicate — a by-id read still scopes to the
-      // tenant (CLAUDE.md §3); another tenant's reader id is `reader.not_found`, never readable.
+      // Load the reader BY ID — an unknown reader id is `reader.not_found`, never readable.
       const reader = await gated(sessionId, async (tx) => {
         const [row] = await tx
           .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
           .from(cardReaders)
-          .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, readerId)));
+          .where(eq(cardReaders.id, readerId));
         if (row === undefined) throw new AppError("reader.not_found", { id: readerId });
         return row;
       });
@@ -525,12 +484,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         tx
           .select({ readerId: deviceCardReaders.readerId })
           .from(deviceCardReaders)
-          .where(
-            and(
-              eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
-              eq(deviceCardReaders.deviceId, deviceId),
-            ),
-          ),
+          .where(eq(deviceCardReaders.deviceId, deviceId)),
       );
       return c.json({ readerId: rows[0]?.readerId ?? null });
     }),
@@ -548,43 +502,29 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
-        // The device must be THIS tenant's (by-id, tenant-scoped) — an unknown/foreign device id is
-        // `device.not_found`, which also keeps the composite device FK from 23503-ing an opaque 500.
+        // The device must exist (by id) — an unknown device id is `device.not_found`, which also keeps the device FK from 23503-ing an opaque 500.
         const [device] = await tx
           .select({ id: devices.id })
           .from(devices)
-          .where(and(eq(devices.tenantId, deps.cfg.tenantId), eq(devices.id, deviceId)));
+          .where(eq(devices.id, deviceId));
         if (device === undefined) throw new AppError("device.not_found", { deviceId });
         if (readerId === null) {
           // Clear the default = delete the row (idempotent; a device with none just has no default).
-          await tx
-            .delete(deviceCardReaders)
-            .where(
-              and(
-                eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
-                eq(deviceCardReaders.deviceId, deviceId),
-              ),
-            );
+          await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
           return;
         }
-        // A named reader must be THIS tenant's AND active — a foreign or disabled reader is
-        // `reader.not_found`, never assignable (CLAUDE.md §3; keeps the composite reader FK from a 500).
+        // A named reader must exist AND be active — an unknown or disabled reader is `reader.not_found`,
+        // never assignable (keeps the reader FK from a 500).
         const [reader] = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)
-          .where(
-            and(
-              eq(cardReaders.tenantId, deps.cfg.tenantId),
-              eq(cardReaders.id, readerId),
-              eq(cardReaders.active, true),
-            ),
-          );
+          .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
         if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
         await tx
           .insert(deviceCardReaders)
-          .values({ tenantId: deps.cfg.tenantId, deviceId, readerId })
+          .values({ deviceId, readerId })
           .onConflictDoUpdate({
-            target: [deviceCardReaders.tenantId, deviceCardReaders.deviceId],
+            target: [deviceCardReaders.deviceId],
             set: { readerId },
           });
       });

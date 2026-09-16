@@ -3,11 +3,11 @@
 // changes; `grep -nE 'status_id|statusId|table_service_statuses|tableServiceStatuses'` over those files
 // → empty. The reset is a trigger + an openTab edit; the fiscal pay path is byte-unchanged.
 import { randomUUID } from "node:crypto";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import "./errors.js";
@@ -16,16 +16,15 @@ import "./errors.js";
 // app_user, whose UPDATE on `dining_tables` PGlite's superuser connection would hold regardless, so
 // this needs the real cluster the shared container provides; a Docker-absent run fails at the package
 // globalSetup, not here.
-const suite = useTemplateDb({ template: "core" });
+const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
-function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
 }
 
-let tenantId = "";
 let tillId = "";
 let nodeId = "";
 let locationId = "";
@@ -38,15 +37,15 @@ async function statusOf(tableId: string): Promise<string | null> {
 }
 
 beforeAll(async () => {
-  tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Loc', array['es'], 'Hostelería') returning id`);
   locationId = loc.rows[0]!.id;
   const till = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'A1') returning id`);
+    insert into tills (location_id, name) values (${locationId}, 'A1') returning id`);
   tillId = till.rows[0]!.id;
-  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
 });
 
 /** Seed a status + an open working order + N tables whose tab_id points at that order, each carrying the
@@ -54,23 +53,23 @@ beforeAll(async () => {
 let orderSeq = 0;
 async function seedJoinedTab(tableCount: number): Promise<{ orderId: string; tableIds: string[] }> {
   orderSeq += 1;
-  return asApp(tenantId, async (tx) => {
+  return asApp(async (tx) => {
     const statusId = (
       await tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantId}, ${"Bill " + randomUUID()}, '#ef4444') returning id`,
+        sql`insert into table_service_statuses (label, color) values (${"Bill " + randomUUID()}, '#ef4444') returning id`,
       )
     ).rows[0]!.id;
     const orderId = (
       await tx.execute<{ id: string }>(sql`
-        insert into working_orders (tenant_id, till_id, node_id, order_number, status)
-        values (${tenantId}, ${tillId}, ${nodeId}, ${orderSeq}, 'open') returning id`)
+        insert into working_orders (till_id, node_id, order_number, status)
+        values (${tillId}, ${nodeId}, ${orderSeq}, 'open') returning id`)
     ).rows[0]!.id;
     const tableIds: string[] = [];
     for (let i = 0; i < tableCount; i += 1) {
       const t = (
         await tx.execute<{ id: string }>(sql`
-          insert into dining_tables (tenant_id, location_id, label, tab_id, status_id)
-          values (${tenantId}, ${locationId}, ${"T-" + randomUUID()}, ${orderId}, ${statusId}) returning id`)
+          insert into dining_tables (location_id, label, tab_id, status_id)
+          values (${locationId}, ${"T-" + randomUUID()}, ${orderId}, ${statusId}) returning id`)
       ).rows[0]!.id;
       tableIds.push(t);
     }
@@ -84,7 +83,7 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
     expect(await statusOf(tableIds[0]!)).not.toBeNull();
     expect(await statusOf(tableIds[1]!)).not.toBeNull();
 
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`update working_orders set status = 'settled', settled_at = now() where id = ${orderId}`,
       ),
@@ -102,13 +101,13 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
     expect(await statusOf(tableIds[0]!)).not.toBeNull();
 
     // open → placed is NOT terminal, so the status is not cleared here (NEW.status not settled/abandoned).
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update working_orders set status = 'placed' where id = ${orderId}`),
     );
     expect(await statusOf(tableIds[0]!)).not.toBeNull();
 
     // placed → settled IS terminal → the broadened WHEN fires and clears the table.
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`update working_orders set status = 'settled', settled_at = now() where id = ${orderId}`,
       ),
@@ -118,7 +117,7 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
 
   it("abandoning a tab clears its table's status too", async () => {
     const { orderId, tableIds } = await seedJoinedTab(1);
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update working_orders set status = 'abandoned' where id = ${orderId}`),
     );
     expect(await statusOf(tableIds[0]!)).toBeNull();
@@ -127,19 +126,19 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
   it("a status on a FREE table is NOT cleared when an UNRELATED tab settles (needs-cleaning still shows)", async () => {
     // A free table (no tab) carrying a status.
     const { orderId } = await seedJoinedTab(1); // the tab that will settle
-    const freeTable = await asApp(tenantId, async (tx) => {
+    const freeTable = await asApp(async (tx) => {
       const statusId = (
         await tx.execute<{ id: string }>(
-          sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantId}, ${"Clean " + randomUUID()}, '#f59e0b') returning id`,
+          sql`insert into table_service_statuses (label, color) values (${"Clean " + randomUUID()}, '#f59e0b') returning id`,
         )
       ).rows[0]!.id;
       return (
         await tx.execute<{ id: string }>(sql`
-          insert into dining_tables (tenant_id, location_id, label, status_id)
-          values (${tenantId}, ${locationId}, ${"Free-" + randomUUID()}, ${statusId}) returning id`)
+          insert into dining_tables (location_id, label, status_id)
+          values (${locationId}, ${"Free-" + randomUUID()}, ${statusId}) returning id`)
       ).rows[0]!.id;
     });
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`update working_orders set status = 'settled', settled_at = now() where id = ${orderId}`,
       ),

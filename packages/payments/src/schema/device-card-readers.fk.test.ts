@@ -1,6 +1,7 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { freshNif } from "../../test/seed.js";
@@ -9,147 +10,116 @@ import { deviceCardReaders } from "./device-card-readers.js";
 
 // Real Postgres, not PGlite: this suite doubles as the grant check (CLAUDE.md §4), writing under
 // app_user's grants (`asAppUser`) so a missing SELECT/INSERT/UPDATE/DELETE grant from
-// 0006_device_card_readers_sql.sql fails here. A clone of the `core_payments` template (CORE + PAYMENTS).
+// 0001_payments_baseline_sql.sql fails here. A clone of the `core_payments` template (CORE + PAYMENTS).
 const postgres = useTemplateDb({ template: "core_payments" });
 
 interface Seeded {
-  tenantId: string;
   deviceId: string;
   readerId: string;
 }
 
 /**
- * Seeds one tenant with a location, a `till`-form-factor device profile, a till, one device bound
- * to that till, and one card reader — everything device_card_readers' three composite FKs
- * (tenant, tenant+device, tenant+reader) need a real row to point at.
+ * Seeds a location, a `till`-form-factor device profile, a till, one device bound to that till, and
+ * one card reader — the rows device_card_readers' device and reader FKs point at.
  */
 async function seedDeviceAndReader(db: Database): Promise<Seeded> {
-  const t = await db.execute<{ id: string }>(sql`
-    insert into tenants (country, tax_id, legal_name)
-    values ('ES', ${freshNif()}, 'Test SL') returning id`);
-  const tenantId = t.rows[0]!.id;
+  // One `tenants` row so the database looks like a provisioned one; nothing below references it.
+  await db.execute(sql`
+    insert into tenants (id, country, tax_id, legal_name)
+    values (1, 'ES', ${freshNif()}, 'Test SL')
+    on conflict (id) do nothing`);
   const l = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Counter', array['es'], 'Hostelería') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Counter', array['es'], 'Hostelería') returning id`);
   const locationId = l.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`);
+    insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`);
   const tillId = till.rows[0]!.id;
   const profile = await db.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor)
-    values (${tenantId}, 'Profile', 'till') returning id`);
+    insert into device_profiles (name, form_factor) values ('Profile', 'till') returning id`);
   const profileId = profile.rows[0]!.id;
   const device = await db.execute<{ id: string }>(sql`
-    insert into devices (tenant_id, location_id, device_profile_id, till_id, label, token_hash)
-    values (${tenantId}, ${locationId}, ${profileId}, ${tillId}, 'Counter till', 'scrypt$00$00') returning id`);
+    insert into devices (location_id, device_profile_id, till_id, label, token_hash) values (${locationId}, ${profileId}, ${tillId}, 'Counter till', 'scrypt$00$00') returning id`);
   const deviceId = device.rows[0]!.id;
   const reader = await db
     .insert(cardReaders)
-    .values({ tenantId, provider: "sumup", providerRef: `rdr_${deviceId}`, name: "Counter" })
+    .values({ provider: "sumup", providerRef: `rdr_${deviceId}`, name: "Counter" })
     .returning({ id: cardReaders.id });
-  return { tenantId, deviceId, readerId: reader[0]!.id };
+  return { deviceId, readerId: reader[0]!.id };
 }
 
 describe("device_card_readers", () => {
   it("stores a device's default reader, round-trips, and a delete clears the default", async () => {
     const db = postgres.admin;
-    const { tenantId, deviceId, readerId } = await seedDeviceAndReader(db);
+    const { deviceId, readerId } = await seedDeviceAndReader(db);
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      await tx.insert(deviceCardReaders).values({ tenantId, deviceId, readerId });
+      await tx.insert(deviceCardReaders).values({ deviceId, readerId });
     });
 
-    const stored = await withTenant(db, tenantId, async (tx) => {
+    const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(deviceCardReaders)
-        .where(
-          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
-        );
+      return tx.select().from(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
-    expect(stored[0]!.tenantId).toBe(tenantId);
 
     // The mapping is mutable — DELETE clears the device's default (unlike an append-only ledger).
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      await tx
-        .delete(deviceCardReaders)
-        .where(
-          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
-        );
+      await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
     });
-    const afterDelete = await withTenant(db, tenantId, async (tx) => {
+    const afterDelete = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(deviceCardReaders)
-        .where(
-          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
-        );
+      return tx.select().from(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
     });
     expect(afterDelete).toHaveLength(0);
   });
 
-  it("rejects a second default reader for the same device (PK tenant_id, device_id)", async () => {
+  it("rejects a second default reader for the same device (PK device_id)", async () => {
     const db = postgres.admin;
-    const { tenantId, deviceId, readerId } = await seedDeviceAndReader(db);
+    const { deviceId, readerId } = await seedDeviceAndReader(db);
     const reader2 = await db
       .insert(cardReaders)
       .values({
-        tenantId,
         provider: "sumup",
         providerRef: `rdr_second_${deviceId}`,
         name: "Second",
       })
       .returning({ id: cardReaders.id });
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      await tx.insert(deviceCardReaders).values({ tenantId, deviceId, readerId });
+      await tx.insert(deviceCardReaders).values({ deviceId, readerId });
     });
 
     const dup = await captureError(() =>
-      withTenant(db, tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        await tx.insert(deviceCardReaders).values({ tenantId, deviceId, readerId: reader2[0]!.id });
+        await tx.insert(deviceCardReaders).values({ deviceId, readerId: reader2[0]!.id });
       }),
     );
     expect(pgErrorCode(dup)).toBe("23505"); // unique_violation (the PK)
   });
 
-  it("rejects a reader naming a DIFFERENT tenant (composite FK)", async () => {
+  it("refuses a device or a reader that does not exist", async () => {
     const db = postgres.admin;
-    const a = await seedDeviceAndReader(db);
-    const b = await seedDeviceAndReader(db);
-
-    const e = await captureError(() =>
-      withTenant(db, a.tenantId, async (tx) => {
+    const { deviceId, readerId } = await seedDeviceAndReader(db);
+    const noDevice = await captureError(() =>
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        await tx
-          .insert(deviceCardReaders)
-          .values({ tenantId: a.tenantId, deviceId: a.deviceId, readerId: b.readerId });
+        await tx.insert(deviceCardReaders).values({ deviceId: randomUUID(), readerId });
       }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
-  });
-
-  it("rejects a device naming a DIFFERENT tenant (composite FK)", async () => {
-    const db = postgres.admin;
-    const a = await seedDeviceAndReader(db);
-    const b = await seedDeviceAndReader(db);
-
-    const e = await captureError(() =>
-      withTenant(db, a.tenantId, async (tx) => {
+    expect(pgErrorCode(noDevice)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorMessage(noDevice)).toMatch(/device_card_readers_device_fk/);
+    const noReader = await captureError(() =>
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        await tx
-          .insert(deviceCardReaders)
-          .values({ tenantId: a.tenantId, deviceId: b.deviceId, readerId: a.readerId });
+        await tx.insert(deviceCardReaders).values({ deviceId, readerId: randomUUID() });
       }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorCode(noReader)).toBe("23503");
+    expect(pgErrorMessage(noReader)).toMatch(/device_card_readers_reader_fk/);
   });
 });

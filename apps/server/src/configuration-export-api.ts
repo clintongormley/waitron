@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -21,7 +21,7 @@ const run = createErrorBoundary(STATUS, "configuration_export.failed");
 
 export interface ConfigurationExportDeps {
   db: Database;
-  cfg: { tenantId: string; locationId: string; tillId: string; nodeId: string };
+  cfg: { locationId: string; tillId: string; nodeId: string };
   modules: readonly WaitronModule[];
   moduleVersions: Record<string, number>;
   now?: () => Date;
@@ -41,20 +41,13 @@ export function mountConfigurationExportApi(
       if (typeof passphrase !== "string" || passphrase.length < 12) {
         throw new AppError("management.request_invalid", { field: "passphrase" });
       }
-      const bundle = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const bundle = await withTransaction(deps.db, async (tx) => {
         await tx.execute(sql`set transaction isolation level repeatable read`);
         await asAppUser(tx);
         const authorization = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "system.manage",
         });
-        const tenantMember = await tx.execute(sql`
-          select 1 from persons
-          where tenant_id = ${deps.cfg.tenantId} and id = ${authorization.authorizedBy}
-        `);
-        if (tenantMember.rows.length === 0) {
-          throw new AppError("authorization.not_permitted", { permission: "system.manage" });
-        }
         return buildConfigurationBundle(
           tx,
           { ...deps.cfg, sourceOperatorId: authorization.authorizedBy },

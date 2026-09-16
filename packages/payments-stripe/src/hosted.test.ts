@@ -1,11 +1,7 @@
 // Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
 import { describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import {
-  decimal,
-  tenantId as brandTenantId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
@@ -19,15 +15,13 @@ const PROBE_PASSWORD = "probe";
 const suite = useTemplateDb({ template: "core_payments" });
 
 describe("the stripe hosted-checkout adapter against a real database", () => {
-  // The third adapter that carried the same impossible "TENANT-SCOPED `Database` handle"
-  // requirement. It scopes from `params.tenantId` now — `initiate` is its only database method.
+  // `initiate` is this adapter's only database method; it must write through a plain handle.
   it("initiate() writes its initiated row when handed the only Database handle the API can build", async () => {
     const t = await seedWorkingOrder(suite.admin, freshNif());
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: probe });
       const res = await provider.initiate({
-        tenantId: brandTenantId(t.tenantId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("12.10"),
         paymentRef: "hosted-rls-1",

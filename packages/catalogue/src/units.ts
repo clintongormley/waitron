@@ -79,17 +79,15 @@ function toSellableUnit(row: {
 
 export async function createUnit(
   tx: Transaction,
-  tenantId: string,
   input: CreateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
-  await validateContentTranslations(tx, tenantId, input.name, fallbackLanguage);
-  await validateContentTranslations(tx, tenantId, input.abbreviation, fallbackLanguage);
+  await validateContentTranslations(tx, input.name, fallbackLanguage);
+  await validateContentTranslations(tx, input.abbreviation, fallbackLanguage);
   validateUnitPrecision(input.precision);
   const [row] = await tx
     .insert(units)
     .values({
-      tenantId,
       name: input.name,
       abbreviation: input.abbreviation,
       precision: input.precision,
@@ -98,62 +96,46 @@ export async function createUnit(
   return row!;
 }
 
-export async function listUnits(tx: Transaction, tenantId: string): Promise<Unit[]> {
-  return tx
-    .select(UNIT_COLUMNS)
-    .from(units)
-    .where(eq(units.tenantId, tenantId))
-    .orderBy(asc(units.id));
+export async function listUnits(tx: Transaction): Promise<Unit[]> {
+  return tx.select(UNIT_COLUMNS).from(units).orderBy(asc(units.id));
 }
 
-export async function getUnit(tx: Transaction, tenantId: string, unitId: string): Promise<Unit> {
-  const [row] = await tx
-    .select(UNIT_COLUMNS)
-    .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
+export async function getUnit(tx: Transaction, unitId: string): Promise<Unit> {
+  const [row] = await tx.select(UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return row;
 }
 
 /** Sale-facing read; the scale mapping is stored data and is never inferred from editable text. */
-export async function getSellableUnit(
-  tx: Transaction,
-  tenantId: string,
-  unitId: string,
-): Promise<SellableUnit> {
-  const [row] = await tx
-    .select(SELLABLE_UNIT_COLUMNS)
-    .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
+export async function getSellableUnit(tx: Transaction, unitId: string): Promise<SellableUnit> {
+  const [row] = await tx.select(SELLABLE_UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return toSellableUnit(row);
 }
 
-/** Resolve a legacy product choice to the tenant's retained seed, never to a made-up identifier. */
+/** Resolve a legacy product choice to the retained seed unit, never to a made-up identifier. */
 export async function getSeededUnit(
   tx: Transaction,
-  tenantId: string,
   seedKey: "each" | "kg",
 ): Promise<SellableUnit | null> {
   const [row] = await tx
     .select(SELLABLE_UNIT_COLUMNS)
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.seedKey, seedKey)));
+    .where(eq(units.seedKey, seedKey));
   return row === undefined ? null : toSellableUnit(row);
 }
 
 export async function updateUnit(
   tx: Transaction,
-  tenantId: string,
   unitId: string,
   patch: UpdateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
   if (patch.name !== undefined) {
-    await validateContentTranslations(tx, tenantId, patch.name, fallbackLanguage);
+    await validateContentTranslations(tx, patch.name, fallbackLanguage);
   }
   if (patch.abbreviation !== undefined) {
-    await validateContentTranslations(tx, tenantId, patch.abbreviation, fallbackLanguage);
+    await validateContentTranslations(tx, patch.abbreviation, fallbackLanguage);
   }
   if (patch.precision !== undefined) validateUnitPrecision(patch.precision);
   if (
@@ -161,12 +143,12 @@ export async function updateUnit(
     patch.precision === undefined &&
     patch.abbreviation === undefined
   ) {
-    return getUnit(tx, tenantId, unitId);
+    return getUnit(tx, unitId);
   }
   const [row] = await tx
     .update(units)
     .set(patch)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .where(eq(units.id, unitId))
     .returning(UNIT_COLUMNS);
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return row;
@@ -174,28 +156,24 @@ export async function updateUnit(
 
 export async function assignProductUnit(
   tx: Transaction,
-  tenantId: string,
   productId: string,
   unitId: string,
 ): Promise<void> {
   const [unit] = await tx
     .select({ id: units.id })
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .where(eq(units.id, unitId))
     .for("key share");
   if (unit === undefined) throw new AppError("unit.not_found", { unitId });
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+    .where(eq(products.id, productId));
   if (product === undefined) throw new AppError("product.not_found", { productId });
-  await tx
-    .insert(productUnits)
-    .values({ tenantId, productId, unitId })
-    .onConflictDoUpdate({
-      target: [productUnits.tenantId, productUnits.productId],
-      set: { unitId },
-    });
+  await tx.insert(productUnits).values({ productId, unitId }).onConflictDoUpdate({
+    target: productUnits.productId,
+    set: { unitId },
+  });
 }
 
 /** Move the listed products onto the target unit, in ONE statement scoped to the products still on
@@ -204,18 +182,16 @@ export async function assignProductUnit(
  * its row locks in one scan instead of interleaving N separate statements' locks across a loop. The
  * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
  * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
- * an unknown id or another tenant's included — matches no row and is skipped, never an error. A
+ * an unknown id included — matches no row and is skipped, never an error. A
  * `null` target instead deletes those rows and, in the same transaction, sets their `pricing_unit`
  * to `'each'`, so the listed products become Each (no unit) with the no-unit ⟺ each invariant held. */
 export async function reassignProductsToUnit(
   tx: Transaction,
-  tenantId: string,
   sourceUnitId: string,
   productIds: readonly string[],
   targetUnitId: string | null,
 ): Promise<void> {
   const scope = and(
-    eq(productUnits.tenantId, tenantId),
     eq(productUnits.unitId, sourceUnitId),
     inArray(productUnits.productId, productIds),
   );
@@ -228,12 +204,9 @@ export async function reassignProductsToUnit(
       .update(products)
       .set({ pricingUnit: "each" })
       .where(
-        and(
-          eq(products.tenantId, tenantId),
-          inArray(
-            products.id,
-            tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
-          ),
+        inArray(
+          products.id,
+          tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
         ),
       );
     await tx.delete(productUnits).where(scope);
@@ -242,7 +215,7 @@ export async function reassignProductsToUnit(
   const [target] = await tx
     .select({ id: units.id })
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, targetUnitId)))
+    .where(eq(units.id, targetUnitId))
     .for("key share");
   if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
   await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
@@ -253,60 +226,45 @@ export async function reassignProductsToUnit(
  * unit for the same product — the editor needs the real "no unit" so the form can preselect Each. */
 export async function readProductUnitId(
   tx: Transaction,
-  tenantId: string,
   productId: string,
 ): Promise<string | null> {
   const [row] = await tx
     .select({ productId: products.id, unitId: productUnits.unitId })
     .from(products)
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .where(eq(products.id, productId));
   if (row === undefined) throw new AppError("product.not_found", { productId });
   return row.unitId;
 }
 
 /** Remove a product's unit assignment (it then reads as Each). A no-op when there is no row. */
-export async function clearProductUnit(
-  tx: Transaction,
-  tenantId: string,
-  productId: string,
-): Promise<void> {
-  await tx
-    .delete(productUnits)
-    .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.productId, productId)));
+export async function clearProductUnit(tx: Transaction, productId: string): Promise<void> {
+  await tx.delete(productUnits).where(eq(productUnits.productId, productId));
 }
 
-/** The products that assign this unit, each with its availability, ordered stably by product id.
- * Tenant-scoped on both tables (one tenant per database is not the query's isolation boundary). */
+/** The products that assign this unit, each with its availability, ordered stably by product id. */
 export async function productsUsingUnit(
   tx: Transaction,
-  tenantId: string,
   unitId: string,
 ): Promise<ProductUsingUnit[]> {
   return tx
     .select({ id: products.id, name: products.name, available: products.active })
     .from(productUnits)
-    .innerJoin(
-      products,
-      and(eq(products.tenantId, productUnits.tenantId), eq(products.id, productUnits.productId)),
-    )
-    .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.unitId, unitId)))
+    .innerJoin(products, eq(products.id, productUnits.productId))
+    .where(eq(productUnits.unitId, unitId))
     .orderBy(asc(products.id));
 }
 
-export async function deleteUnit(tx: Transaction, tenantId: string, unitId: string): Promise<void> {
+export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {
   const [locked] = await tx
     .select({ id: units.id })
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .where(eq(units.id, unitId))
     .for("update");
   if (locked === undefined) throw new AppError("unit.not_found", { unitId });
-  const references = await productsUsingUnit(tx, tenantId, unitId);
+  const references = await productsUsingUnit(tx, unitId);
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
-  await tx.delete(units).where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
+  await tx.delete(units).where(eq(units.id, unitId));
 }

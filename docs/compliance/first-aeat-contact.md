@@ -48,7 +48,7 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
 
 1. **Renewal is now an operational deadline.** The certificate expires 2027-10-03. A Veri*Factu host
    whose certificate silently expires stops being able to file, and the failure would first appear
-   as a drain pass that skips every tenant — the same shape as having no certificate at all. Nothing
+   as a drain pass that skips its due work — the same shape as having no certificate at all. Nothing
    currently warns on approaching expiry.
 2. **The obligado's NIF is not the certificate holder's ID.** The certificate identifies a natural
    person acting for the company; the filing is made for the company. `ObligadoEmision.NIF` must be

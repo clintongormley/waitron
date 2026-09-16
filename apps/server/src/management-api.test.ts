@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
@@ -13,7 +13,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -25,12 +24,13 @@ import { mountManagementApi } from "./management-api.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
-// carries a login email. Uniqueness is per-tenant (persons_tenant_email_uq), so these constants are
-// safe across the container's accumulating tenants.
+// carries a login email. `persons_tenant_email_uq` is unique on `lower(email)` across the WHOLE
+// database, so these constants are safe here because `setupTenant()` runs ONCE for the file (this
+// suite sets `resetPerTest: false`) — not because anything scopes them per tenant.
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
@@ -44,7 +44,7 @@ function nextNif(): string {
 }
 
 /** A name/label unique within the shared tenant+location, so tests are order-independent (CLAUDE.md §4):
- *  the zone/table set accumulates across tests and `(tenant, location, name|label)` is unique, so a fixed
+ *  the zone/table set accumulates across tests and `(location, name|label)` is unique, so a fixed
  *  value would collide. Every list assertion is therefore a membership check, never an exact-list one. */
 function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
@@ -86,15 +86,15 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerId, staffId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
@@ -106,7 +106,6 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
  *  helper in `move-merge.pg.test.ts`; `boot.ts` threads the real `till` config here in production. */
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -124,7 +123,7 @@ function mountApp(venue: VenueResult): Hono {
     app,
     {
       db: suite.admin,
-      cfg: { tenantId: venue.tenantId, nodeId: venue.nodeId },
+      cfg: { nodeId: venue.nodeId },
       // The venue's own config (tenant + location) the zone/table config routes scope to.
       venueCfg: tillConfigFromVenue(venue),
       secureCookies: false,
@@ -428,21 +427,6 @@ describe("/management-api/zones", () => {
       expect(res.status).toBe(401);
       expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
-  });
-
-  it("a manager cannot see another tenant's zones (cross-tenant isolation)", async () => {
-    const other = await setupTenant();
-    const otherApp = mountApp(other.venue);
-    const otherManager = await login(otherApp, MANAGER_EMAIL);
-
-    const mine = unique("MineOnly");
-    const id = await createZone(mine);
-
-    const theirs = (await (
-      await otherApp.request("/management-api/zones", { headers: { cookie: otherManager } })
-    ).json()) as { id: string; name: string }[];
-    expect(theirs.find((z) => z.id === id)).toBeUndefined();
-    expect(theirs.find((z) => z.name === mine)).toBeUndefined();
   });
 });
 
@@ -850,7 +834,7 @@ async function readPlacement(tableId: string): Promise<{
   shape: string | null;
   rotation: number | null;
 }> {
-  return withTenant(suite.admin, venue.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { rows } = await tx.execute<{
       pos_x: number | null;
@@ -1362,15 +1346,15 @@ describe("/management-api/stations (KDS-1 config)", () => {
   it("PUT /categories/:id/station and /products/:id/station set + clear the route; bad body/station → 400/404; a malformed target is a no-op", async () => {
     const stationId = await createStation(unique("Route"));
     // Seed a real category + product to route, on the app role under this venue's tenant.
-    const { categoryId, productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const { categoryId, productId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+      const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
       });
-      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+      const category = await createCategory(tx, {
         name: { [LOCALE]: unique("Cat") },
       });
-      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
+      const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: category.id,
         name: unique("Prod"),
@@ -1628,15 +1612,15 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product is a no-op", async () => {
     const courseId = await createCourse(unique("Course"));
     // Seed a real product to route, on the app role under this venue's tenant.
-    const { productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const { productId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+      const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
       });
-      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+      const category = await createCategory(tx, {
         name: { [LOCALE]: unique("Cat") },
       });
-      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
+      const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: category.id,
         name: unique("Prod"),

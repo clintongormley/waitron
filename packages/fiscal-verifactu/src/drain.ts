@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { emptyDrainResult, type DrainResult } from "@waitron/fiscal";
-import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared";
-import type { SaleId, TenantId, TillId } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
+import type { SaleId, TillId } from "@waitron/shared";
 import { MAX_REGISTROS_POR_ENVIO, resolveEstadoEfectivo } from "@waitron/verifactu";
 import type {
   Cabecera,
@@ -22,9 +22,9 @@ import type { Entorno, RegistroRow } from "./registro-row.js";
 
 /**
  * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`,
- * `@waitron/verifactu/src/testing/fake-aeat.ts`) — the wait a tenant with no `envio_flujo` row
+ * `@waitron/verifactu/src/testing/fake-aeat.ts`) — the wait a database with no `envio_flujo` row
  * yet (never sent, so `readFlujo` reports `tiempoEsperaSeg: 0`) should assume before its first
- * envío. `drainTenant`'s own `let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG` is the
+ * envío. `drainDue`'s own `let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG` is the
  * one call site — kept as a named constant, not a bare literal, so this file's one guess at "what
  * to wait before we've ever heard from AEAT" is stated once rather than duplicated.
  */
@@ -42,10 +42,10 @@ export const TIEMPO_ESPERA_INICIAL_SEG = 60;
 export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 
 /**
- * How long after a SKIPPED tenant `drain` reports work is due again.
+ * How long after a SKIPPED pass `drain` reports work is due again.
  *
  * A skip used to report `now`, which a host sleeping on `nextDueAt` turns into its MIN_TICK floor
- * — 5 seconds, forever, for a tenant whose certificate only a human can provision. Five minutes is
+ * — 5 seconds, forever, while the certificate only a human can provision is missing. Five minutes is
  * twelve retries inside art. 16.4's hour, so a transient skip (an expired vault key, a dead
  * credentials connection) costs minutes of that legal budget rather than all of it.
  *
@@ -88,21 +88,13 @@ export function backoffMs(intentos: number): number {
 export interface DrainDeps {
   db: Database;
   /**
-   * The tenant's own AEAT transport. A FUNCTION, not a fixed client: this sweep enumerates its own
-   * tenants across `envios_tenants_with_work`, while a Veri*Factu certificate identifies ONE
-   * presenter — so a single injected client submitted every tenant's records under whichever
-   * tenant's seal the host happened to construct it from.
-   *
-   * Mirrors `StripeReconcilerOptions.resolveAccount`, a function of `tenantId` for exactly
-   * this reason. A deployment that establishes it may lawfully submit for many issuers under one
-   * certificate returns the same client for every tenant; a fixed client could not express the
-   * other answer at all.
-   *
-   * Resolved lazily, INSIDE the per-tenant loop and only for tenants with due work: a certificate
-   * decrypted for a tenant with nothing to submit is a secret in memory for no reason.
+   * The venue's AEAT transport. A FUNCTION, not a fixed client, so the certificate is decrypted
+   * only when this pass actually has something to send: a certificate decrypted for a pass with
+   * nothing to submit is a secret in memory for no reason. Mirrors
+   * `StripeReconcilerOptions.resolveAccount`, resolved lazily for the same reason.
    */
-  resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
-  /** How long after a skipped tenant to report work due again. `DEFAULT_SKIP_RETRY_MS` owns the
+  resolveClient: () => Promise<VerifactuClient>;
+  /** How long after an abandoned pass to report work due again. `DEFAULT_SKIP_RETRY_MS` owns the
    * default and its reasoning; required here so a caller that forgets is a compile error rather
    * than a silent cadence. `VerifactuBackend` applies the default on its callers' behalf. */
   skipRetryMs: number;
@@ -118,7 +110,7 @@ export interface DrainDeps {
    *
    * `Entorno`, not a bare `string`, for the identical reason `VerifactuBackendOptions.deploymentEnvironment`
    * is typed that way: an unrepresentable value is a `tsc` error here, not a runtime surprise
-   * discovered only once a whole tenant's backlog is silently refused.
+   * discovered only once a whole backlog is silently refused.
    */
   environment: Entorno;
   /**
@@ -147,19 +139,16 @@ export interface DrainDeps {
 type DueRow = RegistroRow & { intentos: number };
 
 /**
- * Enumerate due work before opening each tenant's drain transaction, using the caller's grants.
- * Include lone stale claims so drainTenant can recover them even without a pending row.
- * The SQL interval in envios_tenants_with_work matches RECUPERACION_ENVIANDO_MS;
+ * Is there anything to send, read before the drain opens its own transaction and with the caller's
+ * grants? Lone stale claims count, so `drainDue` can recover them even with no pending row.
+ * The SQL interval in `envios_work_due` matches RECUPERACION_ENVIANDO_MS;
  * migrations.test.ts checks both sides of that threshold.
  */
-async function tenantsWithWork(db: Database, now: Date): Promise<TenantId[]> {
-  const rows = await db.execute<{ tenant_id: string }>(sql`
-    select tenant_id from envios_tenants_with_work(${now.toISOString()}::timestamptz) as t(tenant_id)
+async function workIsDue(db: Database, now: Date): Promise<boolean> {
+  const rows = await db.execute<{ due: boolean }>(sql`
+    select envios_work_due(${now.toISOString()}::timestamptz) as due
   `);
-  // Branded here, at the boundary where the raw SQL string enters TypeScript — every caller
-  // downstream (`DrainDeps.resolveClient`, `DrainResult.skipped`) then receives an already-branded
-  // `TenantId` with no second conversion.
-  return rows.rows.map((r) => brandTenantId(r.tenant_id));
+  return rows.rows[0]?.due === true;
 }
 
 export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
@@ -189,44 +178,41 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     }
   }
   const maxPorEnvio = deps.maxRegistrosPorEnvio ?? MAX_REGISTROS_POR_ENVIO;
-  for (const tenantId of await tenantsWithWork(deps.db, now)) {
-    // Counted the moment this tenant is attempted, before `resolveClient` — a tenant skipped for a
+  if (await workIsDue(deps.db, now)) {
+    // Counted the moment the work is attempted, before `resolveClient` — a pass skipped for a
     // missing cert still HAD due work, and the awaiting-cert flag (pass.ts) must tell a no-work pass
-    // (this loop never runs) apart from one that exercised the cert and skipped.
+    // (this branch never runs) apart from one that exercised the cert and skipped.
     result.tenantsWithWork += 1;
     try {
-      const client = await deps.resolveClient(tenantId);
-      await drainTenant(deps.db, client, tenantId, deps.environment, now, result, maxPorEnvio);
+      const client = await deps.resolveClient();
+      await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio);
     } catch (error) {
-      // Contained per tenant, deliberately. Before this, one tenant's failure threw straight out of
-      // the sweep and every LATER tenant's submission — each with its own legal clock — never
-      // happened, silently, because nothing above this called drain in a loop either.
-      result.skipped.push({ tenantId, errorCode: codeOf(error) });
+      // Contained, deliberately: a failure here is reported in `skipped` rather than thrown out of
+      // the sweep, so the host's pass still records what this duty did and schedules its retry.
+      result.skipped.push({ errorCode: codeOf(error) });
     }
   }
-  // NOT "a skipped tenant has no future instant of its own" (Copilot, 2026-07-27 — the same
+  // NOT "a skipped pass has no future instant of its own" (Copilot, 2026-07-27 — the same
   // correction F4 of that day's pre-merge review made to `runDue`'s twin comment, applied there and
-  // missed here). `drainTenant` calls `bumpNextDue` itself, per chunk, so a tenant that threw AFTER
+  // missed here). `drainDue` calls `bumpNextDue` itself, per chunk, so a pass that threw AFTER
   // sending one — a mid-sweep AEAT failure on its second batch, say — has already folded a real gate
-  // into `result.nextDueAt` and still lands in `skipped`. A skipped tenant may therefore have
+  // into `result.nextDueAt` and still lands in `skipped`. A skipped pass may therefore have
   // contributed to `nextDueAt`, and may have mutated state (claimed rows) besides.
   //
-  // What is genuinely true, and what this fold exists for, is the part that did NOT get that far:
-  // the tenant whose transport could not be built at all never reached `drainTenant`, so nothing
-  // was scheduled for it — no gate, no backoff row — and nothing else in this pass reports it.
-  // Reporting only whatever the tenants that DID run computed, or `null` when every due tenant
-  // skipped, would tell a long-running host nothing is due, and one transient failure (an expired
-  // vault key, a dead credentials connection) would stop it polling while a `pendiente` row sits
-  // past its art. 16.4 hour.
+  // What is genuinely true, and what this fold exists for, is the case that did NOT get that far:
+  // a transport that could not be built at all never reached `drainDue`, so nothing was scheduled —
+  // no gate, no backoff row — and nothing else in this pass reports it. Reporting only what the
+  // sweep itself computed, or `null` when it skipped, would tell a long-running host nothing is
+  // due, and one transient failure (an expired vault key, a dead credentials connection) would stop
+  // it polling while a `pendiente` row sits past its art. 16.4 hour.
   //
   // FOLDED AS A MINIMUM, not assigned — and folded through `bumpNextDue`, the same helper every
-  // successful tenant's gate goes through, so there is one definition of "fold an instant into
-  // `nextDueAt`" in this file rather than two that must be kept in step. This used to assign `now`
-  // unconditionally, and the comment here used to justify that by observing `now` is always earlier
-  // than any real gate — true, and no longer the point: `now + skipRetryMs` IS later than a gate a
-  // successful tenant may have computed this same pass, so assigning it would delay a healthy
-  // tenant's submission behind a broken tenant's retry. The minimum can only pull the reported
-  // instant earlier.
+  // gate goes through, so there is one definition of "fold an instant into `nextDueAt`" in this
+  // file rather than two that must be kept in step. This used to assign `now` unconditionally, and
+  // the comment here used to justify that by observing `now` is always earlier than any real gate —
+  // true, and no longer the point: `now + skipRetryMs` IS later than a gate this same pass may have
+  // computed before it failed, so assigning it would delay a submission behind a broken retry. The
+  // minimum can only pull the reported instant earlier.
   //
   // Not `now`, because a skip is frequently NOT transient: a certificate nobody has provisioned
   // produces the identical answer every pass, and `now` pins the host's loop at its MIN_TICK floor
@@ -244,14 +230,14 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  * called at the top of this function) has real committed `enviando` rows to recover after a crash.
  * `client.submit` then runs OUTSIDE any transaction. Each response is persisted in its own short
  * transaction (T2) — or, if `client.submit` throws, the claimed batch is backed off in a T2 of its
- * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤`maxPorEnvio`-row chunk this
- * tenant's due backlog is split into (spec §7.2's flow-control race, art. 16.4). `maxPorEnvio` is
+ * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤`maxPorEnvio`-row chunk the due
+ * backlog is split into (spec §7.2's flow-control race, art. 16.4). `maxPorEnvio` is
  * the batch cap `drain` resolved from `DrainDeps.maxRegistrosPorEnvio` (default
  * `MAX_REGISTROS_POR_ENVIO`, the XSD's 1000-row limit — production always takes the default; only a
  * test injects a smaller cap):
  *
  *   - If `envio_flujo.proximo_envio_en` (the "gate") has not yet elapsed AND fewer than
- *     `maxPorEnvio` rows are currently due, nothing is sent this pass — the tenant is
+ *     `maxPorEnvio` rows are currently due, nothing is sent this pass — the backlog is
  *     deferred to the gate (`bumpNextDue`), matching AEAT's own rule that a software system must
  *     otherwise wait `TiempoEsperaEnvio` seconds between envíos.
  *   - Otherwise (gate open, OR ≥ `maxPorEnvio` already accumulated), the pass is authorised: the
@@ -273,10 +259,9 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  * intentional break (a deferred tail) or the defensive `batch.length === 0` guard below (a
  * countDue/claimBatch race) — either way `bumpNextDue` below picks it up.
  */
-async function drainTenant(
+async function drainDue(
   db: Database,
   client: VerifactuClient,
-  tenantId: string,
   environment: Entorno,
   now: Date,
   result: DrainResult,
@@ -286,19 +271,19 @@ async function drainTenant(
   // it must COMMIT before anything else in this pass reads `envios`, so that a row it just
   // recovered is visible to countDue/claimBatch's own, later transactions as an ordinary
   // `pendiente` row rather than something they need to special-case.
-  await withTenant(db, tenantId, (tx) => recoverStaleClaims(tx, tenantId, now));
+  await withTransaction(db, (tx) => recoverStaleClaims(tx, now));
 
   // Read flow state + the current due count in one short tx — mirrors T1's own claim tx: short-
   // lived, no network call inside it.
-  const { flujo, dueCount0 } = await withTenant(db, tenantId, async (tx) => ({
-    flujo: await readFlujo(tx, tenantId),
-    dueCount0: await countDue(tx, tenantId, now),
+  const { flujo, dueCount0 } = await withTransaction(db, async (tx) => ({
+    flujo: await readFlujo(tx),
+    dueCount0: await countDue(tx, now),
   }));
   if (dueCount0 === 0) return;
 
   const gateOpen = flujo.proximoEnvioEn === null || flujo.proximoEnvioEn.getTime() <= now.getTime();
   // The race (spec §7.2, art. 16.4): send if the gate is open OR a full envío has already
-  // accumulated. Otherwise defer this tenant entirely — nothing claimed, nothing sent.
+  // accumulated. Otherwise defer the whole pass — nothing claimed, nothing sent.
   if (!gateOpen && dueCount0 < maxPorEnvio) {
     bumpNextDue(result, flujo.proximoEnvioEn);
     return;
@@ -310,7 +295,7 @@ async function drainTenant(
   // comment on `blockedSifIds`) — one `Set`, shared and mutated across every claim below, for the
   // WHOLE pass, not reset per chunk: that is what lets a LATER chunk's claim exclude a chain a
   // PREVIOUS chunk already found refused, rather than re-discovering (and re-incidenting) it.
-  // Reset to empty on every `drainTenant` call, i.e. fresh each pass — a chain blocked THIS pass
+  // Reset to empty on every `drainDue` call, i.e. fresh each pass — a chain blocked THIS pass
   // is re-examined, not assumed still-blocked, on the next one. For a chain blocked on a
   // MISMATCHED `entorno`, that means correcting `WAITRON_ENV` between passes needs no database
   // repair at all (that guard's own doc comment). For a chain blocked because a row's `entorno`
@@ -329,22 +314,14 @@ async function drainTenant(
     // every row in it belonged to a chain the environment guard just blocked (`claimBatch`'s own
     // doc comment) — and `blockedSifIds` growing is exactly what lets the NEXT attempt's SELECT
     // exclude that chain and reach whatever sendable work sorts behind it. Bounded: each iteration
-    // that finds nothing sendable adds at least one NEW sif_id to `blockedSifIds` (this tenant's
+    // that finds nothing sendable adds at least one NEW sif_id to `blockedSifIds` (the database's
     // own distinct chain count is finite), or `rawCount` is already 0 and the loop stops — so a
     // backlog of refused rows can cost extra round trips here but can never make sendable work
     // behind it unreachable, this pass or any later one.
     let claimed: { sendable: DueRow[]; rawCount: number };
     for (;;) {
-      claimed = await withTenant(db, tenantId, async (tx) => {
-        const c = await claimBatch(
-          tx,
-          tenantId,
-          now,
-          environment,
-          result,
-          blockedSifIds,
-          maxPorEnvio,
-        );
+      claimed = await withTransaction(db, async (tx) => {
+        const c = await claimBatch(tx, now, environment, result, blockedSifIds, maxPorEnvio);
         const kept = await haltOpenChainClaims(tx, c.sendable, now, result);
         return { sendable: kept, rawCount: c.rawCount };
       });
@@ -359,7 +336,7 @@ async function drainTenant(
     // existed, they just weren't submittable), which does NOT satisfy the retry loop's own break
     // condition — it loops again, and only stops once a LATER `claimBatch` call sees `rawCount ===
     // 0` (those rows are `detenido` now, not `pendiente`, so a fresh SELECT no longer finds them).
-    // The tenant is deferred to its next gated pass rather than re-attempting immediately.
+    // The backlog is deferred to the next gated pass rather than re-attempting immediately.
     if (batch.length === 0) break;
 
     const cabecera = cabeceraFor(batch[0]!);
@@ -370,9 +347,9 @@ async function drainTenant(
       const respuesta = await client.submit(cabecera, registros);
 
       // T2 — persist the response (CSV + estados) atomically, then recount what's still due.
-      dueCount = await withTenant(db, tenantId, async (tx) => {
+      dueCount = await withTransaction(db, async (tx) => {
         await persistResponse(tx, client, batch, respuesta, now, result);
-        return countDue(tx, tenantId, now);
+        return countDue(tx, now);
       });
       t = respuesta.TiempoEsperaEnvio;
       // A chunk was just sent this pass; if fewer than a full envío's worth remain due, that
@@ -387,29 +364,28 @@ async function drainTenant(
       //
       // T1 already committed this batch's claim, so nothing here is lost: back it off (->
       // pendiente, incidencia, an exponentially later proximo_intento_en per row) rather than
-      // leave it stuck `enviando`, and stop this tenant's loop — the retry is scheduled via each
+      // leave it stuck `enviando`, and stop the loop — the retry is scheduled via each
       // row's own `proximo_intento_en`, not retried immediately against a server that just failed.
-      await withTenant(db, tenantId, (tx) => backoffBatch(tx, batch, now, result));
+      await withTransaction(db, (tx) => backoffBatch(tx, batch, now, result));
       break;
     }
   }
 
-  // Persist the server's latest wait `t` as this tenant's gate for its NEXT pass — never an
-  // in-memory timer (envio-flujo.ts's own doc comment).
+  // Persist the server's latest wait `t` as the gate for the NEXT pass — never an in-memory timer
+  // (envio-flujo.ts's own doc comment).
   const proximoEnvioEn = new Date(now.getTime() + t * 1000);
-  await withTenant(db, tenantId, (tx) => upsertFlujo(tx, tenantId, proximoEnvioEn, t));
+  await withTransaction(db, (tx) => upsertFlujo(tx, proximoEnvioEn, t));
   // `dueCount > 0` here only via the defensive break above; see this function's own doc comment.
   if (dueCount > 0) bumpNextDue(result, proximoEnvioEn);
 }
 
-/** Current flow-control state for a tenant. No row yet = never sent = "may send now" (the gate
- * reads open) — `envio-flujo.ts`'s own doc comment on why the row is lazily created. */
+/** Current flow-control state. No row yet = never sent = "may send now" (the gate reads open) —
+ * `envio-flujo.ts`'s own doc comment on why the row is lazily created. */
 async function readFlujo(
   tx: Transaction,
-  tenantId: string,
 ): Promise<{ proximoEnvioEn: Date | null; tiempoEsperaSeg: number }> {
   const rows = await tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(sql`
-    select proximo_envio_en, tiempo_espera_seg from envio_flujo where tenant_id = ${tenantId}
+    select proximo_envio_en, tiempo_espera_seg from envio_flujo
   `);
   const row = rows.rows[0];
   return row
@@ -417,28 +393,23 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
-/** How many of this tenant's rows are due right now — the SAME predicate `claimBatch` re-runs a
- * moment later, so it can also be used to decide whether more work remains after a chunk. */
-async function countDue(tx: Transaction, tenantId: string, now: Date): Promise<number> {
+/** How many rows are due right now — the SAME predicate `claimBatch` re-runs a moment later, so it
+ * can also be used to decide whether more work remains after a chunk. */
+async function countDue(tx: Transaction, now: Date): Promise<number> {
   const rows = await tx.execute<{ count: string }>(sql`
     select count(*)::text as count from envios
-    where tenant_id = ${tenantId} and estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
+    where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
   `);
   return Number(rows.rows[0]!.count);
 }
 
-/** Upserts this tenant's flow-control row: when its next envío may go, and the `t` that produced
- * that gate — persisted, never an in-memory timer. */
-async function upsertFlujo(
-  tx: Transaction,
-  tenantId: string,
-  proximoEnvioEn: Date,
-  t: number,
-): Promise<void> {
+/** Upserts the one flow-control row: when the next envío may go, and the `t` that produced that
+ * gate — persisted, never an in-memory timer. */
+async function upsertFlujo(tx: Transaction, proximoEnvioEn: Date, t: number): Promise<void> {
   await tx.execute(sql`
-    insert into envio_flujo (tenant_id, proximo_envio_en, tiempo_espera_seg)
-    values (${tenantId}, ${proximoEnvioEn.toISOString()}, ${t})
-    on conflict (tenant_id) do update set
+    insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+    values (1, ${proximoEnvioEn.toISOString()}, ${t})
+    on conflict (id) do update set
       proximo_envio_en = excluded.proximo_envio_en, tiempo_espera_seg = excluded.tiempo_espera_seg
   `);
 }
@@ -447,12 +418,12 @@ async function upsertFlujo(
  * Folds one instant into `result.nextDueAt` as a MINIMUM — the earliest instant `drain` needs
  * calling again, per `DrainResult`'s own doc comment.
  *
- * NOT only "one tenant's gate time" (F5 of the 2026-07-27 pre-merge review corrected this): that
- * was true of every call site until the skip-cadence fix, but `drain`'s own skip branch now folds
- * `now + skipRetryMs` through this same helper too, and that instant is neither a gate time nor
- * attributable to a DRAINED tenant — it exists precisely for the tenant this pass did NOT drain.
- * One definition of "fold an instant into `nextDueAt`" either way, which is the point; the doc
- * just no longer gets to say every caller's instant means the same thing.
+ * NOT only "the gate time" (F5 of the 2026-07-27 pre-merge review corrected this): that was true
+ * of every call site until the skip-cadence fix, but `drain`'s own skip branch now folds
+ * `now + skipRetryMs` through this same helper too, and that instant is not a gate time at all —
+ * it exists precisely for the work this pass did NOT drain. One definition of "fold an instant into
+ * `nextDueAt`" either way, which is the point; the doc just no longer gets to say every caller's
+ * instant means the same thing.
  */
 function bumpNextDue(result: DrainResult, at: Date | null): void {
   if (at === null) return;
@@ -461,22 +432,22 @@ function bumpNextDue(result: DrainResult, at: Date | null): void {
 }
 
 /**
- * Resets a tenant's timed-out `enviando` rows back to `pendiente`, raising `incidencia` — the
- * signal that this record needed operator attention, even though the happy path below will most
- * likely resubmit and accept it within the same pass. Runs BEFORE `claimBatch`, in its own
- * committed transaction (`drainTenant`'s own doc comment on the split), so a row it recovers here
- * is an ordinary committed `pendiente` row by the time `countDue`/`claimBatch` look at this
- * tenant — no special-casing needed anywhere else.
+ * Resets timed-out `enviando` rows back to `pendiente`, raising `incidencia` — the signal that this
+ * record needed operator attention, even though the happy path below will most likely resubmit and
+ * accept it within the same pass. Runs BEFORE `claimBatch`, in its own committed transaction
+ * (`drainDue`'s own doc comment on the split), so a row it recovers here is an ordinary committed
+ * `pendiente` row by the time `countDue`/`claimBatch` look — no special-casing needed anywhere
+ * else.
  *
  * `incidencia = true` is deliberately NOT paired with an `incidents` table row here — the
  * boolean flag is this task's whole scope; the incident RECORD is Task 9 (see this file's own
  * scope note, `drain.test.ts`, and the Task 8 brief).
  */
-async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date): Promise<void> {
+async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
   const cutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
   await tx.execute(sql`
     update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
-    where tenant_id = ${tenantId} and estado = 'enviando' and enviado_en < ${cutoff}
+    where estado = 'enviando' and enviado_en < ${cutoff}
   `);
 }
 
@@ -486,10 +457,8 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * from, and `intentos` (returned already incremented) is what `backoffBatch` computes THIS
  * attempt's wait from if the submit below fails.
  *
- * `FOR UPDATE OF e SKIP LOCKED`: two tenants' claims never contend (each `drainTenant` call is
- * scoped to one `tenantId`, so this WHERE never matches another tenant's rows), but two concurrent
- * drainers racing the SAME tenant do — e.g. two scheduler instances, or a retried call overlapping
- * a slow one. Without row locking here, both transactions' plain `SELECT` would each see the same
+ * `FOR UPDATE OF e SKIP LOCKED`: two concurrent drainers race
+ * over the same rows — e.g. two scheduler instances, or a retried call overlapping a slow one. Without row locking here, both transactions' plain `SELECT` would each see the same
  * `pendiente` rows (READ COMMITTED takes a fresh per-statement snapshot, but neither SELECT blocks
  * on the other), and both would go on to submit the SAME batch to AEAT — a genuine duplicate
  * submission, not merely a wasted query. `FOR UPDATE` alone would already prevent this (the second
@@ -527,7 +496,7 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * own doc comment (below) calls unacceptable, just for a NEWLY-discovered gap rather than an
  * already-recorded rejection. So: the MOMENT a row is found refused, its `sif_id` is added to
  * `blockedSifIds` (mutated in place — the caller's SAME `Set` instance, shared across every
- * `claimBatch` call in this tenant's current pass), and every row on that chain seen AFTERWARDS —
+ * `claimBatch` call in this pass), and every row on that chain seen AFTERWARDS —
  * in this same call's iteration, or a LATER call within the same pass, via the `sif_id not in`
  * exclusion below — is dropped silently, with NO second incident: one incident per newly-blocked
  * chain per pass, mirroring `haltOpenChainClaims`'s own "flag once, don't duplicate" precedent for
@@ -544,12 +513,12 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  *
  * **The no-successor-submitted guarantee is per-drainer within one pass, not global** — a known,
  * accepted limitation, not something this task closes. `blockedSifIds` is a plain in-memory `Set`,
- * process-local to this one `drainTenant()` call; nothing about a block is written anywhere
+ * process-local to this one `drainDue()` call; nothing about a block is written anywhere
  * another drainer's transaction can see, unlike the `rechazado`/`detenido` estados
  * `haltOpenChainClaims` reads (a real, committed fact any drainer's claim observes). So two
  * concurrent drainers CAN still submit a successor over an environment-refused predecessor: drainer
  * A claims and refuses row 1 of chain X, blocking it only in ITS OWN `blockedSifIds`; drainer B,
- * racing the same tenant, has its `SELECT ... SKIP LOCKED` skip A's locked row 1 (A's claim
+ * racing the same backlog, has its `SELECT ... SKIP LOCKED` skip A's locked row 1 (A's claim
  * transaction is still open) and successfully claim X's later, correctly-stamped rows instead —
  * B has no way to know A just found this chain's predecessor unsendable, and submits them carrying
  * `Encadenamiento.RegistroAnterior` pointing at a huella A never sent. Narrow (needs the claim
@@ -565,14 +534,13 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * at the production default, or however many distinct blocked chains sort ahead of everything else
  * under `order by sif_id` fill the `limit`) would
  * return the SAME rows to every subsequent `claimBatch` call THIS PASS, since nothing about a
- * refused row changes its own due-ness — `drainTenant`'s retry loop could never advance past it,
+ * refused row changes its own due-ness — `drainDue`'s retry loop could never advance past it,
  * and any genuinely sendable work sorting behind it would starve, this pass and every later one,
  * forever. Filtering already-blocked chains out of the SELECT itself is what lets a LATER call in
- * the same pass reach past them to whatever sorts next — see `drainTenant`'s own retry loop.
+ * the same pass reach past them to whatever sorts next — see `drainDue`'s own retry loop.
  */
 async function claimBatch(
   tx: Transaction,
-  tenantId: string,
   now: Date,
   environment: Entorno,
   result: DrainResult,
@@ -583,7 +551,7 @@ async function claimBatch(
   const rows = await tx.execute<DueRow>(sql`
     select r.*, e.intentos from envios e
     join registros_facturacion r on r.id = e.registro_id
-    where e.tenant_id = ${tenantId} and e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
+    where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
       ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
     order by r.sif_id, r.secuencia
     limit ${maxPorEnvio}
@@ -641,7 +609,7 @@ async function claimBatch(
   // never part of that UPDATE, so its own `intentos` was never touched either, and it is never
   // returned from here for a caller to see a bumped value that was never actually persisted.
   //
-  // `rawCount` (this call's `rows.rows.length`, BEFORE partitioning) is what `drainTenant`'s retry
+  // `rawCount` (this call's `rows.rows.length`, BEFORE partitioning) is what `drainDue`'s retry
   // loop uses to tell "everything in this window was refused/blocked, try again past it" apart
   // from "genuinely nothing left" — `sendable.length` alone cannot distinguish the two.
   return {
@@ -1012,7 +980,6 @@ async function raiseIncident(
   result: DrainResult,
 ): Promise<void> {
   await recordIncident(tx, {
-    tenantId: row.tenant_id as TenantId,
     tillId: row.till_id as TillId,
     saleId: row.sale_id as SaleId,
     error,

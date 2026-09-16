@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -23,10 +23,10 @@ import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
+// (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
@@ -36,8 +36,16 @@ function nextNif(): string {
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
+/** The suite's one venue. The clone holds one tenant (one tenant per database) and is not reset between
+ *  tests, so every group shares the venue provisioned on first use rather than provisioning another. */
+let provisioned: Promise<{ nodeId: string; managerId: string }> | undefined;
+function setupTenant(): Promise<{ nodeId: string; managerId: string }> {
+  provisioned ??= provisionTenant();
+  return provisioned;
+}
+
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
+async function provisionTenant(): Promise<{ nodeId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -72,15 +80,15 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const managerId = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const managerId = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return manager.rows[0]!.id;
   });
-  return { tenantId: venue.tenantId, nodeId: venue.nodeId, managerId };
+  return { nodeId: venue.nodeId, managerId };
 }
 
 /**
@@ -89,7 +97,6 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string; manage
  * feeds BOTH the cert reader and the duties snapshot; `tlsCertPath` toggles the cert branch.
  */
 function buildApp(
-  tenantId: string,
   nodeId: string,
   opts: {
     now: Date;
@@ -102,7 +109,7 @@ function buildApp(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -113,7 +120,7 @@ function buildApp(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       environment: "preproduction",
       health: createHealthState(opts.now),
       now: () => opts.now,
@@ -147,8 +154,8 @@ describe("GET /api/box/status (real postgres)", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId } = await setupTenant();
-    app = buildApp(tenantId, nodeId, {
+    const { nodeId } = await setupTenant();
+    app = buildApp(nodeId, {
       now: new Date("2026-08-29T10:00:00Z"),
       tlsCertPath: undefined,
     });
@@ -188,8 +195,8 @@ describe("GET /api/box/status (real postgres)", () => {
     utimesSync(artifact, mtime, mtime);
     const backend = buildBackend({ kind: "local-fs", id: "primary", dir });
 
-    const { tenantId, nodeId } = await setupTenant();
-    const backupApp = buildApp(tenantId, nodeId, {
+    const { nodeId } = await setupTenant();
+    const backupApp = buildApp(nodeId, {
       now,
       tlsCertPath: undefined,
       readBackup: () => readBackupStatus([backend], 60_000, now),
@@ -212,13 +219,13 @@ describe("GET /api/box/status with a configured TLS cert (real postgres)", () =>
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId } = await setupTenant();
+    const { nodeId } = await setupTenant();
     // A real leaf on disk exercises the cert-configured branch + `readCertExpiry` closure end-to-end
     // (the undefined-cert suite above never touches them). `now` is 30 days before the fixture's
     // notAfter, so `daysRemaining` is a deterministic 30.
     const certPath = join(mkdtempSync(join(tmpdir(), "box-status-cert-")), "server.crt");
     writeFileSync(certPath, FIXTURE_CERT_PEM);
-    app = buildApp(tenantId, nodeId, {
+    app = buildApp(nodeId, {
       now: new Date("2036-07-27T13:07:51.000Z"),
       tlsCertPath: certPath,
     });

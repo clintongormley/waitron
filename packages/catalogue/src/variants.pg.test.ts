@@ -1,9 +1,8 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { type TenantId } from "@waitron/shared";
 import { createCatalogue, createProduct, createMenuSection, createMenuItem } from "./operations.js";
 import {
   listProductVariants,
@@ -16,23 +15,22 @@ import { staffPresentationName, customerPresentationText } from "./product-prese
 import { createUnit } from "./units.js";
 
 const suite = useTemplateDb({ template: "core" });
-function app<T>(db: Database, tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+function app<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
 }
 async function fixture() {
-  const tenantId = await seedTenant(suite.admin);
-  return app(suite.admin, tenantId, async (tx) => {
-    const menu = await createCatalogue(tx, tenantId, { name: "Bar" });
+  await seedTenant(suite.admin);
+  return app(suite.admin, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Bar" });
     const unit = await createUnit(
       tx,
-      tenantId,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
       "en",
     );
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -44,11 +42,11 @@ async function fixture() {
     });
     expect(product.description).toEqual({ en: "Freshly roasted" });
     expect(product.kitchenName).toBe("BAR COFFEE");
-    const section = await createMenuSection(tx, tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const offer = await createMenuItem(tx, tenantId, {
+    const offer = await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
@@ -56,7 +54,6 @@ async function fixture() {
     });
     const variants = await setProductVariants(
       tx,
-      tenantId,
       product.id,
       [
         {
@@ -70,33 +67,32 @@ async function fixture() {
       ],
       "en",
     );
-    return { tenantId, productId: product.id, offerId: offer.id, variant: variants[0]! };
+    return { productId: product.id, offerId: offer.id, variant: variants[0]! };
   });
 }
 
 it("creates, reads, edits and deletes variants as the non-superuser app role", async () => {
-  const { tenantId, productId, variant } = await fixture();
-  await app(suite.admin, tenantId, async (tx) => {
+  const { productId, variant } = await fixture();
+  await app(suite.admin, async (tx) => {
     const role = await tx.execute<{ role: string; superuser: boolean }>(
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
     );
     expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-    expect(await listProductVariants(tx, tenantId, productId)).toEqual([variant]);
+    expect(await listProductVariants(tx, productId)).toEqual([variant]);
     expect(
       await setProductVariants(
         tx,
-        tenantId,
         productId,
         [{ ...variant, available: false, unitPrice: "2.50" }],
         "en",
       ),
     ).toEqual([{ ...variant, available: false, unitPrice: "2.50" }]);
-    expect(await setProductVariants(tx, tenantId, productId, [], "en")).toEqual([]);
+    expect(await setProductVariants(tx, productId, [], "en")).toEqual([]);
   });
 });
 
 it("a concurrent variant removal waits for publication and then reports the dependency", async () => {
-  const { tenantId, productId, offerId, variant } = await fixture();
+  const { productId, offerId, variant } = await fixture();
   const [publisher, remover] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let release!: () => void;
   let ready!: () => void;
@@ -111,17 +107,15 @@ it("a concurrent variant removal waits for publication and then reports the depe
   try {
     const pid = (await remover.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
-    publishing = app(publisher, tenantId, async (tx) => {
-      await setMenuVariants(tx, tenantId, offerId, [
+    publishing = app(publisher, async (tx) => {
+      await setMenuVariants(tx, offerId, [
         { variantId: variant.id, unitPrice: "4.00", available: true },
       ]);
       ready();
       await gate;
     });
     await Promise.race([published, publishing]);
-    removing = app(remover, tenantId, (tx) =>
-      setProductVariants(tx, tenantId, productId, [], "en"),
-    );
+    removing = app(remover, (tx) => setProductVariants(tx, productId, [], "en"));
     const rejected = expect(removing).rejects.toMatchObject({
       code: "product.variant_in_use",
       params: { variantId: variant.id, menuItemIds: [offerId] },
@@ -139,9 +133,7 @@ it("a concurrent variant removal waits for publication and then reports the depe
     release();
     await publishing;
     await rejected;
-    expect(
-      await app(suite.admin, tenantId, (tx) => listProductVariants(tx, tenantId, productId)),
-    ).toEqual([variant]);
+    expect(await app(suite.admin, (tx) => listProductVariants(tx, productId))).toEqual([variant]);
   } finally {
     release();
     await Promise.allSettled([publishing, removing]);
@@ -154,22 +146,21 @@ it("a concurrent variant removal waits for publication and then reports the depe
 // name, customer name, kitchen name and image). Seeded with raw SQL so it does not depend on
 // createProduct (which a later task rewrites for the renamed products.name).
 it("a variant round-trips staff name, customer name, kitchen name and image through set/list", async () => {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const { id: catalogueId } = (
     await suite.admin.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Bar') returning id`,
+      sql`insert into catalogues (name) values ('Bar') returning id`,
     )
   ).rows[0]!;
   const { id: productId } = (
     await suite.admin.execute<{ id: string }>(
-      sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${tenantId}, ${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+      sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
     )
   ).rows[0]!;
-  await app(suite.admin, tenantId, async (tx) => {
+  await app(suite.admin, async (tx) => {
     await setProductVariants(
       tx,
-      tenantId,
       productId,
       [
         {
@@ -183,7 +174,7 @@ it("a variant round-trips staff name, customer name, kitchen name and image thro
       ],
       "en",
     );
-    const [variant] = await listProductVariants(tx, tenantId, productId);
+    const [variant] = await listProductVariants(tx, productId);
     expect(variant).toMatchObject({
       name: "Large",
       customerName: { en: "Large cup" },
@@ -257,18 +248,18 @@ describe("selectMenuVariant returns the six product and variant name pieces", ()
 // Self-contained apply/round-trip proof for the A2 columns, seeded with raw SQL so it does not
 // depend on createProduct (which a later task rewrites for the renamed products.name).
 it("round-trips a variant's new name, customer_name, kitchen_name and image columns", async () => {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   // The return type is INFERRED from `execute`, which widens to drizzle's `Assume<T, ...>`; writing
   // `Promise<T>` here would need a cast, and each call site names a concrete row shape anyway.
   async function one<T extends Record<string, unknown>>(query: ReturnType<typeof sql>) {
     return (await suite.admin.execute<T>(query)).rows[0]!;
   }
   const { id: catalogueId } = await one<{ id: string }>(
-    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Bar') returning id`,
+    sql`insert into catalogues (name) values ('Bar') returning id`,
   );
   const { id: productId } = await one<{ id: string }>(
-    sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+    sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
   );
   const row = await one<{
     name: string;
@@ -277,8 +268,8 @@ it("round-trips a variant's new name, customer_name, kitchen_name and image colu
     image: string | null;
   }>(
     sql`insert into product_variants
-          (tenant_id, product_id, name, customer_name, kitchen_name, image, unit_price)
-        values (${tenantId}, ${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', '2.00')
+          (product_id, name, customer_name, kitchen_name, image, unit_price)
+        values (${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', '2.00')
         returning name, customer_name, kitchen_name, image`,
   );
   expect(row).toEqual({

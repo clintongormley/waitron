@@ -1,6 +1,6 @@
 {
-  "id": "380bf2a2-278d-4915-b2d4-884008fd8d02",
-  "prevId": "1b869027-0398-4ba9-8379-4a285b6ccc38",
+  "id": "b215c23d-3714-4b6a-b184-cecf8b6844e4",
+  "prevId": "5c6b78a6-b79b-4d94-a6e7-fa549fc48cfb",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "department_id": {
           "name": "department_id",
@@ -52,12 +46,10 @@
           "name": "department_hours_department_fk",
           "tableFrom": "department_hours",
           "columnsFrom": [
-            "tenant_id",
             "department_id"
           ],
           "tableTo": "departments",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -69,7 +61,6 @@
         "department_hours_interval_key": {
           "name": "department_hours_interval_key",
           "columns": [
-            "tenant_id",
             "department_id",
             "weekday",
             "opens_at",
@@ -98,12 +89,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "location_id": {
           "name": "location_id",
           "type": "uuid",
@@ -128,6 +113,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "active": {
           "name": "active",
           "type": "boolean",
@@ -145,29 +137,14 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "departments_tenant_fk": {
-          "name": "departments_tenant_fk",
-          "tableFrom": "departments",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "tableTo": "tenants",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
-        },
         "departments_location_fk": {
           "name": "departments_location_fk",
           "tableFrom": "departments",
           "columnsFrom": [
-            "tenant_id",
             "location_id"
           ],
           "tableTo": "locations",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -176,18 +153,9 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "departments_tenant_id_key": {
-          "name": "departments_tenant_id_key",
-          "columns": [
-            "tenant_id",
-            "id"
-          ],
-          "nullsNotDistinct": false
-        },
         "departments_location_name_key": {
           "name": "departments_location_name_key",
           "columns": [
-            "tenant_id",
             "location_id",
             "name"
           ],
@@ -207,12 +175,6 @@
       "name": "device_zone_defaults",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "device_id": {
           "name": "device_id",
           "type": "uuid",
@@ -232,12 +194,10 @@
           "name": "device_zone_defaults_device_fk",
           "tableFrom": "device_zone_defaults",
           "columnsFrom": [
-            "tenant_id",
             "device_id"
           ],
           "tableTo": "devices",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -247,12 +207,10 @@
           "name": "device_zone_defaults_zone_fk",
           "tableFrom": "device_zone_defaults",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "tableTo": "floor_zones",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -263,7 +221,6 @@
         "device_zone_defaults_pk": {
           "name": "device_zone_defaults_pk",
           "columns": [
-            "tenant_id",
             "device_id"
           ]
         }
@@ -277,12 +234,6 @@
       "name": "order_service_contexts",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "working_order_id": {
           "name": "working_order_id",
           "type": "uuid",
@@ -320,12 +271,10 @@
           "name": "order_service_contexts_order_fk",
           "tableFrom": "order_service_contexts",
           "columnsFrom": [
-            "tenant_id",
             "working_order_id"
           ],
           "tableTo": "working_orders",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -335,12 +284,10 @@
           "name": "order_service_contexts_zone_fk",
           "tableFrom": "order_service_contexts",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "tableTo": "floor_zones",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -350,12 +297,10 @@
           "name": "order_service_contexts_department_fk",
           "tableFrom": "order_service_contexts",
           "columnsFrom": [
-            "tenant_id",
             "department_id"
           ],
           "tableTo": "departments",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -366,7 +311,6 @@
         "order_service_contexts_pk": {
           "name": "order_service_contexts_pk",
           "columns": [
-            "tenant_id",
             "working_order_id"
           ]
         }
@@ -391,12 +335,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "location_id": {
           "name": "location_id",
@@ -441,12 +379,6 @@
           "name": "preparation_routes_lookup_idx",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "location_id",
               "isExpression": false,
               "asc": true,
@@ -482,12 +414,10 @@
           "name": "preparation_routes_location_fk",
           "tableFrom": "preparation_routes",
           "columnsFrom": [
-            "tenant_id",
             "location_id"
           ],
           "tableTo": "locations",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -497,12 +427,10 @@
           "name": "preparation_routes_zone_fk",
           "tableFrom": "preparation_routes",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "tableTo": "floor_zones",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -525,12 +453,10 @@
           "name": "preparation_routes_product_fk",
           "tableFrom": "preparation_routes",
           "columnsFrom": [
-            "tenant_id",
             "product_id"
           ],
           "tableTo": "products",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -540,12 +466,10 @@
           "name": "preparation_routes_station_fk",
           "tableFrom": "preparation_routes",
           "columnsFrom": [
-            "tenant_id",
             "station_id"
           ],
           "tableTo": "kitchen_stations",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -553,16 +477,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "preparation_routes_tenant_id_key": {
-          "name": "preparation_routes_tenant_id_key",
-          "columns": [
-            "tenant_id",
-            "id"
-          ],
-          "nullsNotDistinct": false
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "preparation_routes_subject_ck": {
@@ -580,12 +495,6 @@
       "name": "working_line_contexts",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "working_order_line_id": {
           "name": "working_order_line_id",
           "type": "uuid",
@@ -627,6 +536,60 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_name": {
+          "name": "unit_name",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_precision": {
+          "name": "unit_precision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hardware_unit": {
+          "name": "hardware_unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vat_class": {
+          "name": "vat_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "allergens": {
+          "name": "allergens",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diet": {
+          "name": "diet",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diet_derivation": {
+          "name": "diet_derivation",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diet_override": {
+          "name": "diet_override",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -635,12 +598,10 @@
           "name": "working_line_contexts_line_fk",
           "tableFrom": "working_line_contexts",
           "columnsFrom": [
-            "tenant_id",
             "working_order_line_id"
           ],
           "tableTo": "working_order_lines",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -650,12 +611,10 @@
           "name": "working_line_contexts_menu_item_fk",
           "tableFrom": "working_line_contexts",
           "columnsFrom": [
-            "tenant_id",
             "menu_item_id"
           ],
           "tableTo": "menu_items",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -666,26 +625,32 @@
         "working_line_contexts_pk": {
           "name": "working_line_contexts_pk",
           "columns": [
-            "tenant_id",
             "working_order_line_id"
           ]
         }
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "working_line_contexts_unit_precision_ck": {
+          "name": "working_line_contexts_unit_precision_ck",
+          "value": "\"working_line_contexts\".\"unit_precision\" between 0 and 3"
+        },
+        "working_line_contexts_hardware_unit_ck": {
+          "name": "working_line_contexts_hardware_unit_ck",
+          "value": "\"working_line_contexts\".\"hardware_unit\" is null or \"working_line_contexts\".\"hardware_unit\" in ('kg','g','mg')"
+        },
+        "working_line_contexts_vat_class_ck": {
+          "name": "working_line_contexts_vat_class_ck",
+          "value": "\"working_line_contexts\".\"vat_class\" in ('general','reduced','super_reduced','zero')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.zone_menus": {
       "name": "zone_menus",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "zone_id": {
           "name": "zone_id",
           "type": "uuid",
@@ -711,12 +676,6 @@
           "name": "zone_menus_order_idx",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "zone_id",
               "isExpression": false,
               "asc": true,
@@ -740,12 +699,10 @@
           "name": "zone_menus_zone_fk",
           "tableFrom": "zone_menus",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "tableTo": "zone_service_policies",
           "columnsTo": [
-            "tenant_id",
             "zone_id"
           ],
           "onUpdate": "no action",
@@ -755,12 +712,10 @@
           "name": "zone_menus_menu_fk",
           "tableFrom": "zone_menus",
           "columnsFrom": [
-            "tenant_id",
             "menu_id"
           ],
           "tableTo": "catalogues",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -771,7 +726,6 @@
         "zone_menus_pk": {
           "name": "zone_menus_pk",
           "columns": [
-            "tenant_id",
             "zone_id",
             "menu_id"
           ]
@@ -786,12 +740,6 @@
       "name": "zone_service_policies",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "location_id": {
           "name": "location_id",
           "type": "uuid",
@@ -821,6 +769,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "is_counter_default": {
+          "name": "is_counter_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},
@@ -829,12 +784,10 @@
           "name": "zone_service_policies_location_fk",
           "tableFrom": "zone_service_policies",
           "columnsFrom": [
-            "tenant_id",
             "location_id"
           ],
           "tableTo": "locations",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -844,12 +797,10 @@
           "name": "zone_service_policies_zone_fk",
           "tableFrom": "zone_service_policies",
           "columnsFrom": [
-            "tenant_id",
             "zone_id"
           ],
           "tableTo": "floor_zones",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -859,12 +810,10 @@
           "name": "zone_service_policies_department_fk",
           "tableFrom": "zone_service_policies",
           "columnsFrom": [
-            "tenant_id",
             "department_id"
           ],
           "tableTo": "departments",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -874,12 +823,10 @@
           "name": "zone_service_policies_default_menu_fk",
           "tableFrom": "zone_service_policies",
           "columnsFrom": [
-            "tenant_id",
             "default_menu_id"
           ],
           "tableTo": "catalogues",
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onUpdate": "no action",
@@ -890,7 +837,6 @@
         "zone_service_policies_pk": {
           "name": "zone_service_policies_pk",
           "columns": [
-            "tenant_id",
             "zone_id"
           ]
         }

@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 // See record-correction.test.ts's own note: there is no `@waitron/fiscal/testing` subpath; the real
 // import path is `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -16,7 +16,7 @@ import {
   saleLines,
   saleSubstitutions,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
@@ -27,7 +27,6 @@ import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
@@ -50,15 +49,15 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the precondition
   // void below needs an authorizer, exactly as the record-void suite arranges.
   const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+    sql`insert into persons (display_name, pin_hash, role)
+        values ('P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const session = await withTenant(suite.db, tenantId, (tx) =>
-    loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
+  const session = await withTransaction(suite.db, (tx) =>
+    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
 });
@@ -94,7 +93,6 @@ const RECIPIENT = { taxId: "B12345678", legalName: "Acme Corp SL", countryCode: 
  * makes "the F3 is unsettled" a real assertion rather than a vacuous one. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -137,7 +135,6 @@ function substitutionInput(
   overrides: Partial<RecordSubstitutionInput> = {},
 ): RecordSubstitutionInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -174,9 +171,9 @@ function substitutionInput(
 /** Records an ORIGINAL simplified ticket exactly as the application will: as `app_user`, in one
  * transaction, on a node already registered with the backend. */
 async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
 }
@@ -187,17 +184,17 @@ async function substitute(
   substitutedSaleIds: SaleId[],
   overrides: Partial<RecordSubstitutionInput> = {},
 ) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordSubstitution(tx, backend, substitutionInput(substitutedSaleIds, overrides));
   });
 }
 
-/** Rows for the CURRENT test's tenant, table-wide — the suite shares one PGlite instance and seeds
- * a fresh tenant per test, so an unscoped count would fold in every earlier test. */
+/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
+ * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -242,7 +239,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     // reuses `sale.voided`, the same code `recordCorrection` reuses for the analogous refusal.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId });
     });
@@ -253,7 +250,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
   });
 
   it("refuses to substitute a ticket already substituted by a prior F3 (at most once)", async () => {
-    // The `unique(tenant_id, substituted_sale_id)` on sale_substitutions is the real control — a
+    // The `unique(substituted_sale_id)` on sale_substitutions is the real control — a
     // ticket exchanged twice would put the same operation in two canje invoices. Translated to
     // `sale.already_substituted`, the way `recordVoid` translates its own double-void unique
     // violation into `sale.already_voided`.
@@ -270,26 +267,31 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
 describe("recordSubstitution — error propagation", () => {
   it("propagates a sale_substitutions error that is not a unique violation, untranslated", async () => {
     // The insert's OTHER failure path: any reason `sale_substitutions` could reject BESIDES the
-    // `(tenant_id, substituted_sale_id)` unique (a future constraint, an FK violation) must reach
-    // the caller as-is rather than being misreported as `sale.already_substituted` — mirrors
-    // record-void.ts's identical "not a unique violation" test.
+    // `substituted_sale_id` unique (a constraint added later, an FK violation) must reach the caller
+    // as-is rather than being misreported as `sale.already_substituted` — mirrors record-void.ts's
+    // identical "not a unique violation" test.
     //
-    // Provoked with a ticket belonging to a second seeded tenant: the existence check reads `sales`
-    // by id alone (no tenant predicate — record-substitution.ts step 1b) on a PGlite superuser
-    // connection, so the ticket IS found; the composite FK `(tenant_id, substituted_sale_id) →
-    // sales` then rejects the insert with a foreign-key violation (23503), not a unique one — which
-    // is what exercises the untranslated rethrow.
+    // Provoked by adding a CHECK that no row can satisfy, which is the "a constraint added later"
+    // case stated literally: the insert then fails with 23514, not 23505. The constraint is dropped
+    // in the `finally` so nothing after this case sees it.
     const backend = new FakeFiscalBackend(suite.db);
-    const other = await seedTenant(suite.db);
-    const foreignTicket = await seedBareSale(suite.db, other);
-
-    const error = await captureError(() =>
-      withTenant(suite.db, tenantId, (tx) =>
-        recordSubstitution(tx, backend, substitutionInput([foreignTicket])),
-      ),
+    const { saleId } = await sellTicket(backend);
+    await suite.db.execute(
+      sql`alter table sale_substitutions add constraint tmp_refuse_everything check (false) not valid`,
     );
-    expect(error).not.toBeInstanceOf(AppError);
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation, not 23505 (unique)
+    try {
+      const error = await captureError(() =>
+        withTransaction(suite.db, (tx) =>
+          recordSubstitution(tx, backend, substitutionInput([saleId])),
+        ),
+      );
+      expect(error).not.toBeInstanceOf(AppError);
+      expect(pgErrorCode(error)).toBe("23514"); // check_violation, not 23505 (unique)
+    } finally {
+      await suite.db.execute(
+        sql`alter table sale_substitutions drop constraint tmp_refuse_everything`,
+      );
+    }
   });
 });
 
@@ -309,7 +311,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     // number from another node's counter would let two chains issue from one series.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    const other = await seedTenant(suite.db, { tenantId });
+    const other = await seedTenant(suite.db);
     await expect(substitute(backend, [saleId], { seriesId: other.seriesId })).rejects.toMatchObject(
       {
         code: "sale.series_wrong_node",
@@ -326,7 +328,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     // is chained.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    const rectSeries = await seedRectificativeSeries(suite.db, tenantId, nodeId);
+    const rectSeries = await seedRectificativeSeries(suite.db, nodeId);
     await expect(substitute(backend, [saleId], { seriesId: rectSeries })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
       params: { seriesId: rectSeries, expected: "standard", actual: "rectificative" },
@@ -463,7 +465,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
     const { saleId: recorded } = await sellTicket(backend); // number 1, has a fiscal record
     const unrecorded = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { invoiceNumber: 99 }, // distinct number: avoids the series-unique collision with the ticket
     );
 

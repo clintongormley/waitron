@@ -12,7 +12,6 @@ import {
   cardReaders,
 } from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
-import type { TenantId } from "@waitron/shared";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { TtlCache } from "./ttl-cache.js";
@@ -105,7 +104,7 @@ export function backupAlertSource(deps: {
 
 /**
  * The awaiting-certificate alert source. `holder` is the same in-memory cell the fiscal pass flips
- * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a tenant for a missing AEAT
+ * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain pass is skipped for a missing AEAT
  * certificate — no database read. Shares the `fiscal` area with the module's own submission source
  * (`packages/fiscal-verifactu/src/submission-alerts.ts`); Task 1's relaxed registry is what lets two
  * sources own the same area.
@@ -147,7 +146,7 @@ export function printingAlertSource(): AlertSource {
   return {
     area: "printing",
     permission: "printer.manage",
-    async read({ tx, tenantId, now }): Promise<readonly OngoingAlert[]> {
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const alerts: OngoingAlert[] = [];
 
       // `last_seen_at` and `created_at` are drizzle mode:"string" columns, so the thresholds are ISO
@@ -158,7 +157,6 @@ export function printingAlertSource(): AlertSource {
         .from(printAgents)
         .where(
           and(
-            eq(printAgents.tenantId, tenantId),
             eq(printAgents.active, true),
             // A NULL `last_seen_at` (an agent never seen) is UNKNOWN under `lt`, so it is excluded and
             // `seen` below is always a real timestamp.
@@ -179,11 +177,7 @@ export function printingAlertSource(): AlertSource {
         });
       }
 
-      // One row per active printer with at least one waiting document job. The composite FK
-      // (tenant_id, printer_id) → printers(tenant_id, id) enforces that a job's printer is same-tenant,
-      // so a cross-tenant print_jobs row is not insertable; the per-table tenant predicate plus that FK
-      // isolate this query, and the two-tenant test proves partition without independently exercising
-      // each predicate. The predicates stay as defense-in-depth (CLAUDE.md §3).
+      // One row per active printer with at least one waiting document job.
       const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();
       const rows = await tx
         .select({
@@ -196,9 +190,7 @@ export function printingAlertSource(): AlertSource {
         .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
         .where(
           and(
-            eq(printers.tenantId, tenantId),
             eq(printers.active, true),
-            eq(printJobs.tenantId, tenantId),
             eq(printJobs.kind, "document"),
             or(
               // Waiting too long in a non-terminal state…
@@ -247,15 +239,13 @@ export const BATTERY_ERROR = 10;
  */
 export function batteryAlertSource(deps: {
   providers: readonly CardProviderContribution[];
-  runtimeDeps: (tenantId: TenantId) => CardProviderRuntimeDeps;
+  runtimeDeps: () => CardProviderRuntimeDeps;
   cache: TtlCache<number | null>;
 }): AlertSource {
   return {
     area: "card_reader",
     permission: "payments.manage",
-    async read({ tx, tenantId }): Promise<readonly OngoingAlert[]> {
-      // A by-id/list read still scopes to the tenant — one database per tenant is NOT the query's
-      // isolation boundary (CLAUDE.md §3).
+    async read({ tx }): Promise<readonly OngoingAlert[]> {
       const readers = await tx
         .select({
           id: cardReaders.id,
@@ -264,7 +254,7 @@ export function batteryAlertSource(deps: {
           name: cardReaders.name,
         })
         .from(cardReaders)
-        .where(and(eq(cardReaders.tenantId, tenantId), eq(cardReaders.active, true)));
+        .where(eq(cardReaders.active, true));
       // Each reader's reading is an independent EXTERNAL provider call (via `runtimeDeps`, not a query
       // on this transaction), so they run CONCURRENTLY — the "await queries on one transaction in turn"
       // rule governs tx queries, which these are not. Any one call throwing rejects `Promise.all` and
@@ -280,7 +270,7 @@ export function batteryAlertSource(deps: {
             // misconfigured reader is surfaced as a broken check, not silently dropped. That is why
             // there is no null-check here.
             const seat = cardProviderById(deps.providers, r.provider);
-            const status = await seat.readers.status(deps.runtimeDeps(tenantId), r.ref);
+            const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
             return status.batteryPercent ?? null;
           }),
         ),

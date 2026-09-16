@@ -1,7 +1,7 @@
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -24,27 +24,26 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 // backend, so it cannot test contention, see chain.pglite-cannot-test-contention.test.ts. What the
 // app role may do on `workforce_chains` is the privilege matrix's
 // (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`), not this
-// suite's. PGlite connects as a superuser holding every grant, so no withTenant/asAppUser wrapper is
+// suite's. PGlite connects as a superuser holding every grant, so no withTransaction/asAppUser wrapper is
 // needed here.
 const pg = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
-let tenantId: string;
 let personId: string;
 let locationId: string;
 let nodeId: string;
 
 beforeEach(async () => {
-  tenantId = await seedTenant(pg.db);
-  personId = await seedPerson(pg.db, tenantId);
-  locationId = await seedLocation(pg.db, tenantId);
-  nodeId = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
+  await seedTenant(pg.db);
+  personId = await seedPerson(pg.db);
+  locationId = await seedLocation(pg.db);
+  nodeId = await seedNode(pg.db, brandLocationId(locationId));
 });
 
-/** The chain key for this suite's default (tenant, node, location). */
+/** The chain key for this suite's default (node, location). */
 function key(location = locationId, node = nodeId): ChainKey {
-  return { tenantId, nodeId: node, locationId: location };
+  return { nodeId: node, locationId: location };
 }
 
 /** A base `in` clock event's append input at a given instant. */
@@ -66,7 +65,7 @@ function clockEvent(): TimeEntryAppend {
 /** Seeds a till at a location so a captured event can attribute to it. Returns its id. */
 async function seedTill(location: string): Promise<string> {
   const { rows } = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${location}, 'Till 1')
+    insert into tills (location_id, name) values (${location}, 'Till 1')
     returning id`);
   return rows[0]!.id;
 }
@@ -104,7 +103,7 @@ describe("appendToChain", () => {
       last_recorded_at: string | null;
     }>(sql`
       select sequence_no, last_entry_id, last_entry_hash, last_recorded_at from workforce_chains
-      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]).toMatchObject({
       sequence_no: 1,
       last_entry_id: id,
@@ -115,12 +114,8 @@ describe("appendToChain", () => {
   });
 
   it("keeps a separate, independent chain per (node, location)", async () => {
-    const otherLocation = await seedLocation(pg.db, tenantId);
-    const otherNode = await seedNode(
-      pg.db,
-      brandTenantId(tenantId),
-      brandLocationId(otherLocation),
-    );
+    const otherLocation = await seedLocation(pg.db);
+    const otherNode = await seedNode(pg.db, brandLocationId(otherLocation));
     await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
     await pg.db.transaction((tx) =>
       appendToChain(tx, key(otherLocation, otherNode), inputAt("2026-01-05T09:00:00Z")),
@@ -135,7 +130,7 @@ describe("appendToChain", () => {
   it("keeps one chain per (node, location); two nodes at one location do not collide", async () => {
     // A location's chain is written by two nodes across a promotion (spec §2.1); their entries take
     // the same sequence_no values but ride different chains, so they never clash on the position uq.
-    const nodeB = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const nodeB = await seedNode(pg.db, brandLocationId(locationId));
     const k1 = key(locationId, nodeId);
     const k2 = key(locationId, nodeB);
     await pg.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));
@@ -199,10 +194,9 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
           ${personId}, '2026-01-05T09:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -214,10 +208,9 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
           ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -231,10 +224,9 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
           ${personId}, '2026-01-05T18:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23505");
@@ -247,10 +239,9 @@ describe("appendToChain", () => {
     // recognise. Mirrors fiscal chain.test.ts's equivalent.
     await pg.db.execute(sql`
       insert into time_entries (
-        tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (
-        ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
+      ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
         ${personId}, '2026-01-05T08:00:00Z', ${"1".repeat(64)}, 1, true)`);
 
     const error = await pg.db
@@ -258,7 +249,7 @@ describe("appendToChain", () => {
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ tenantId, nodeId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ nodeId, locationId, attempts: 3 });
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
@@ -273,7 +264,7 @@ describe("appendToChain", () => {
     );
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ tenantId, nodeId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ nodeId, locationId, attempts: 3 });
   });
 
   it("does not retry an error that is not a chain collision", async () => {
@@ -367,7 +358,7 @@ describe("lockChainHead", () => {
     });
     const { rows } = await pg.db.execute<{ count: number }>(sql`
       select count(*)::int as count from workforce_chains
-      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 
@@ -380,7 +371,7 @@ describe("lockChainHead", () => {
     expect(head.lastRecordedAt).not.toBeNull();
     const { rows } = await pg.db.execute<{ count: number }>(sql`
       select count(*)::int as count from workforce_chains
-      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 });

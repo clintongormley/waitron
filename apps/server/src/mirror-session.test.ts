@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { withTenant, type Database, type DeploymentMode } from "@waitron/db";
+import { withTransaction, type Database, type DeploymentMode } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { resolveManagementSession, verifyPin } from "@waitron/identity";
@@ -20,17 +20,16 @@ import {
 // app_user-authenticated pool, so exercise them through one: `app_login` is a cluster LOGIN role that
 // is a MEMBER of `app_user` (apps/server/src/testing/global-setup.ts), inheriting its grants — the
 // same production shape the sibling real-Postgres suites use.
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // One shared tenant for the whole file. The viewer is a fixed-id SINGLETON (its PK is a constant), so
 // it belongs to whichever tenant first seeds it; a fresh tenant per test would make the second test's
 // `on conflict (id) do nothing` leave the person on tenant #1 while tenant #2 looked for its own. The
 // mirror is single-tenant, so one tenant is also the faithful shape. Data only — nothing to close, so
 // no teardown (useTemplateDb owns the clone).
-let tenantId: string;
 
 beforeAll(async () => {
-  tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
 });
 
 /**
@@ -50,8 +49,8 @@ async function withAppUserDb<T>(fn: (db: Database) => Promise<T>): Promise<T> {
 describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
   it("ensureMirrorViewer seeds an admin viewer + a live session that resolves", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId);
-      const person = await withTenant(db, tenantId, (tx) =>
+      await ensureMirrorViewer(db);
+      const person = await withTransaction(db, (tx) =>
         tx.execute<{
           role: string;
           display_name: string;
@@ -80,7 +79,7 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
       expect(verifyPin("", stored.pin_hash)).toBe(false);
       expect(stored.password_hash).toBeNull();
 
-      const resolved = await withTenant(db, tenantId, (tx) =>
+      const resolved = await withTransaction(db, (tx) =>
         resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID),
       );
       expect(resolved).toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID, role: "admin" });
@@ -89,9 +88,9 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
 
   it("ensureMirrorViewer is idempotent (a second call does not throw or duplicate)", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId);
-      await ensureMirrorViewer(db, tenantId);
-      const n = await withTenant(db, tenantId, (tx) =>
+      await ensureMirrorViewer(db);
+      await ensureMirrorViewer(db);
+      const n = await withTransaction(db, (tx) =>
         tx.execute<{ c: string }>(
           sql`select count(*)::text as c from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
         ),
@@ -100,32 +99,30 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
     });
   });
 
-  const readLastSeen = (db: Database, tenantId: string): Promise<string> =>
-    withTenant(db, tenantId, (tx) =>
+  const readLastSeen = (db: Database): Promise<string> => {
+    return withTransaction(db, (tx) =>
       tx.execute<{ last_seen_at: string }>(
         sql`select last_seen_at from management_sessions where id = ${MIRROR_VIEWER_SESSION_ID}`,
       ),
     ).then((r) => r.rows[0]!.last_seen_at);
+  };
 
   // Age the ambient session past the 1-minute throttle (and past the 30-minute IDLE_TIMEOUT_MS) so the
   // next request's keepalive must fire. A fixed literal interval — never built from a variable.
-  const backdateLastSeen = (db: Database, tenantId: string): Promise<unknown> =>
-    withTenant(db, tenantId, (tx) =>
+  const backdateLastSeen = (db: Database): Promise<unknown> => {
+    return withTransaction(db, (tx) =>
       tx.execute(
         sql`update management_sessions set last_seen_at = now() - interval '2 minutes'
             where id = ${MIRROR_VIEWER_SESSION_ID}`,
       ),
     );
+  };
 
-  const driveOnce = async (
-    db: Database,
-    tenantId: string,
-    mode: DeploymentMode = "mirror",
-  ): Promise<Response> => {
+  const driveOnce = async (db: Database, mode: DeploymentMode = "mirror"): Promise<Response> => {
     const app = new Hono();
     app.use(
       "*",
-      mirrorSession(db, tenantId, false, () => mode),
+      mirrorSession(db, false, () => mode),
     );
     app.get("/thing", (c) => c.text("ok"));
     return app.request("/thing");
@@ -133,71 +130,67 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
 
   it("mirrorSession refreshes a STALE session's last_seen_at (the idle-mirror keepalive) and sets the cookie", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId);
+      await ensureMirrorViewer(db);
       // An idle mirror: last_seen_at is older than the 1-minute throttle (and, in reality, older than the
       // 30-minute IDLE_TIMEOUT_MS that would 401 the next request). The keepalive must refresh it.
-      await backdateLastSeen(db, tenantId);
-      const before = await readLastSeen(db, tenantId);
+      await backdateLastSeen(db);
+      const before = await readLastSeen(db);
 
-      const res = await driveOnce(db, tenantId);
+      const res = await driveOnce(db);
 
       expect(res.status).toBe(200);
       // No cookie on the request → the middleware injects the ambient session's id.
       expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
       // Proven by deletion: dropping the keepalive `update` in mirrorSession leaves last_seen_at at the
       // backdated value, so `after` no longer advances past `before` and this reddens.
-      const after = await readLastSeen(db, tenantId);
+      const after = await readLastSeen(db);
       expect(new Date(after).getTime()).toBeGreaterThan(new Date(before).getTime());
     });
   });
 
   it("mirrorSession SKIPS the write for a FRESH session (the throttle — no per-request amplification)", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId); // seeds last_seen_at = now(), well within the 1-minute throttle
-      const before = await readLastSeen(db, tenantId);
+      await ensureMirrorViewer(db); // seeds last_seen_at = now(), well within the 1-minute throttle
+      const before = await readLastSeen(db);
 
-      const res = await driveOnce(db, tenantId);
+      const res = await driveOnce(db);
 
       expect(res.status).toBe(200);
       expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
       // The throttle guard (`last_seen_at < now() - interval '1 minute'`) matches no row, so last_seen_at
       // is byte-for-byte unchanged — the amplification fix. Proven by deletion: dropping the throttle
       // clause makes this write unconditionally and `after` advances, reddening this assertion.
-      const after = await readLastSeen(db, tenantId);
+      const after = await readLastSeen(db);
       expect(after).toBe(before);
     });
   });
 
   const driveWithCookie = async (
     db: Database,
-    tenantId: string,
     cookie: string,
     mode: DeploymentMode = "mirror",
   ): Promise<Response> => {
     const app = new Hono();
     app.use(
       "*",
-      mirrorSession(db, tenantId, false, () => mode),
+      mirrorSession(db, false, () => mode),
     );
     app.get("/thing", (c) => c.text("ok"));
     return app.request("/thing", { headers: { cookie } });
   };
 
-  const isEnded = (db: Database, tenantId: string): Promise<boolean> =>
-    withTenant(db, tenantId, (tx) =>
+  const isEnded = (db: Database): Promise<boolean> => {
+    return withTransaction(db, (tx) =>
       tx.execute<{ ended: boolean }>(
         sql`select ended_at is not null as ended from management_sessions where id = ${MIRROR_VIEWER_SESSION_ID}`,
       ),
     ).then((r) => r.rows[0]!.ended);
+  };
 
   it("mirrorSession leaves the AMBIENT cookie untouched (no redundant Set-Cookie)", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId);
-      const res = await driveWithCookie(
-        db,
-        tenantId,
-        `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
-      );
+      await ensureMirrorViewer(db);
+      const res = await driveWithCookie(db, `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`);
       expect(res.status).toBe(200);
       // The request already carries the ambient session id, so the middleware sets no new cookie.
       expect(res.headers.get("set-cookie")).toBeNull();
@@ -206,13 +199,13 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
 
   it("mirrorSession OVERWRITES a corrupted/forged non-ambient cookie with the ambient session", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId);
+      await ensureMirrorViewer(db);
       // A corrupted/non-UUID cookie (and, equally, a forged valid-UUID one) must not survive: left
       // untouched it would fail requireManagementSession's shape check (or resolve to no row) and 401,
       // breaking the unauthenticated dashboard posture. The middleware overwrites anything that is not
       // already the ambient id. Proven by deletion: reverting the guard to `=== null` leaves the bad
       // cookie in place and injects nothing, reddening the Set-Cookie assertion.
-      const res = await driveWithCookie(db, tenantId, `${MANAGEMENT_COOKIE}=not-a-valid-uuid`);
+      const res = await driveWithCookie(db, `${MANAGEMENT_COOKIE}=not-a-valid-uuid`);
       expect(res.status).toBe(200);
       expect(res.headers.get("set-cookie")).toContain(
         `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
@@ -222,40 +215,39 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
 
   it("once promoted, a request WITHOUT the ambient cookie neither injects a cookie nor writes", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId);
+      await ensureMirrorViewer(db);
       // Promote (holder reads 'primary'). A fresh browser (no ambient cookie) gets nothing — real auth
       // applies. Backdate so an UNGUARDED mirror middleware WOULD write, proving the mode guard stops it.
-      await backdateLastSeen(db, tenantId);
-      const before = await readLastSeen(db, tenantId);
+      await backdateLastSeen(db);
+      const before = await readLastSeen(db);
 
-      const res = await driveOnce(db, tenantId, "primary");
+      const res = await driveOnce(db, "primary");
 
       expect(res.status).toBe(200);
       expect(res.headers.get("set-cookie")).toBeNull();
-      const after = await readLastSeen(db, tenantId);
+      const after = await readLastSeen(db);
       expect(after).toBe(before); // no keepalive write, even though last_seen_at is stale
-      expect(await isEnded(db, tenantId)).toBe(false); // an untouched session is left alone
+      expect(await isEnded(db)).toBe(false); // an untouched session is left alone
     });
   });
 
   it("once promoted, a request carrying the ambient cookie ENDS the session and CLEARS the cookie", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId);
+      await ensureMirrorViewer(db);
       // The security fix: a client holding a pre-promotion ambient cookie must NOT keep admin access once
       // the write gate opens. Promotion drops it — ends the ambient session (resolveManagementSession then
       // 401s it) and clears the cookie. Proven by deletion: removing the end+clear block leaves the session
       // live (isEnded false) and sets no clearing cookie, so a promoted node still auto-logs-in an admin.
       const res = await driveWithCookie(
         db,
-        tenantId,
         `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
         "primary",
       );
       expect(res.status).toBe(200);
-      expect(await isEnded(db, tenantId)).toBe(true);
+      expect(await isEnded(db)).toBe(true);
       // The ambient session no longer resolves — a promoted node requires real auth.
       await expect(
-        withTenant(db, tenantId, (tx) => resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID)),
+        withTransaction(db, (tx) => resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID)),
       ).rejects.toThrow();
       // A clearing Set-Cookie is emitted (an expiry), so the browser stops presenting the ambient id.
       expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
@@ -264,20 +256,20 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
 
   it("on a mirror, the keepalive REVIVES a session whose ended_at was stamped (even if last_seen_at is fresh)", async () => {
     await withAppUserDb(async (db) => {
-      await ensureMirrorViewer(db, tenantId); // fresh last_seen_at
+      await ensureMirrorViewer(db); // fresh last_seen_at
       // Defensively stamp ended_at while last_seen_at stays fresh — the throttle-only WHERE would skip the
       // write and leave the session dead. The `or ended_at is not null` clause must revive it.
-      await withTenant(db, tenantId, (tx) =>
+      await withTransaction(db, (tx) =>
         tx.execute(
           sql`update management_sessions set ended_at = now() where id = ${MIRROR_VIEWER_SESSION_ID}`,
         ),
       );
-      expect(await isEnded(db, tenantId)).toBe(true);
+      expect(await isEnded(db)).toBe(true);
 
-      const res = await driveOnce(db, tenantId); // mirror mode
+      const res = await driveOnce(db); // mirror mode
       expect(res.status).toBe(200);
       // Proven by deletion: dropping `or ended_at is not null` leaves ended_at set and this reddens.
-      expect(await isEnded(db, tenantId)).toBe(false);
+      expect(await isEnded(db)).toBe(false);
     });
   });
 });

@@ -15,7 +15,7 @@ import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
 // KDS-1 (design §3a) station config + routing verbs. Config only — plain inserts / by-id UPDATEs
-// on the caller's transaction under its tenant/app_user scope; the `till.configure` gate is
+// on the caller's transaction as app_user; the `till.configure` gate is
 // applied at the ROUTE layer (Task 7, the layout-routes model), exactly as the FP-1 zone/table
 // verbs in tables.ts rely on the route's authorizeManager rather than gating inside the verb.
 // Deliberately imports nothing from working-order.ts — the `order_prep` rework (Tasks 3/4/6)
@@ -42,12 +42,12 @@ export interface Station {
 }
 
 /**
- * The deployment holds one tenant per database. Assert `stationId` names a LIVE station of THIS
+ * The deployment holds one taxpayer per database. Assert `stationId` names a LIVE station of THIS
  * venue — present, `active`, and in `cfg.locationId`. NULL-or-false → `station.not_found`,
  * folding "absent / another venue's" and "deactivated" into the one code (errors.ts explains why
- * the inactive case is not distinct). The tenant-consistent
- * `categories_station_fk`/`products_station_fk` (and the default's own scope) enforce only
- * same-TENANT existence — they can see neither `active` nor the location — so this explicit read
+ * the inactive case is not distinct). The by-id
+ * `categories_station_fk`/`products_station_fk` enforce EXISTENCE only — they can see neither
+ * `active` nor the location — so this explicit read
  * is what rejects a retired or cross-venue station the FK would accept. One round trip via a
  * scalar subquery, the shape tables.ts's `setTableStatus` uses; the `location_id` predicate
  * narrows it to this venue.
@@ -85,7 +85,7 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
 
 /**
  * Create a kitchen station in the till's venue (its `cfg.locationId`), returning the minted id. A
- * duplicate `(tenant, location, name)` collides on `kitchen_stations_name_key` and is surfaced as
+ * duplicate `(location, name)` collides on `kitchen_stations_name_key` and is surfaced as
  * `station.name_taken` rather than the raw 23505 — the same shape tables.ts's `createZone` maps
  * `zone.name_taken` with. Marking the station default ADOPTS it as THE default: it clears any prior
  * default first (in this same tx), exactly as {@link setDefaultStation} does — so WITHIN one tx the
@@ -108,7 +108,6 @@ export async function createStation(
     const [row] = await tx
       .insert(kitchenStations)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
@@ -277,13 +276,11 @@ export async function setCategoryStation(
 }
 
 /**
- * The deployment holds one tenant per database. Set (or clear, with `null`) a product's OVERRIDE
- * routing station (KDS-1 §2b) — the per-product route that wins over its category default. Same
- * shape as {@link setCategoryStation}: a non-null `stationId` must be a LIVE station of this
- * venue (`station.not_found` otherwise), null clears it, and the UPDATE names the product by id AND
- * by tenant (an absent or FOREIGN `productId` is a no-op — the route layer resolves product ids, and
- * KDS-1 mints no `product.not_found`). The tenant predicate is this by-id write's own isolation
- * boundary: one tenant per database is a deployment invariant, not something the query may lean on.
+ * Set (or clear, with `null`) a product's OVERRIDE routing station (KDS-1 §2b) — the per-product
+ * route that wins over its category default. Same shape as {@link setCategoryStation}: a non-null
+ * `stationId` must be a LIVE station of this venue (`station.not_found` otherwise), null clears it,
+ * and the UPDATE names the product by id (an absent `productId` is a no-op — the route layer
+ * resolves product ids, and KDS-1 mints no `product.not_found`).
  */
 export async function setProductStation(
   tx: Transaction,
@@ -294,10 +291,7 @@ export async function setProductStation(
   if (stationId !== null) {
     await requireLiveStation(tx, cfg, stationId);
   }
-  await tx
-    .update(products)
-    .set({ stationId })
-    .where(and(eq(products.tenantId, cfg.tenantId), eq(products.id, productId)));
+  await tx.update(products).set({ stationId }).where(eq(products.id, productId));
 }
 
 /** The KDS-1 whole-ticket bump mode (§2e). `line` = per-line bump only; `ticket` = the station display
@@ -379,8 +373,8 @@ export async function setFireControl(
 // Config verbs mirroring the station-config verbs above, minus the default concept: `kitchen_courses`
 // has no `is_default` (a null course simply fires earliest, spec §2b), so there is no clear-then-set
 // dance and no partial unique to protect. Same shape otherwise — plain inserts / by-id UPDATEs on the
-// caller's transaction under its tenant/app_user scope, `course.name_taken` on a duplicate
-// `(tenant, location, name)` and `course.not_found` for an id this venue may not reach; the
+// caller's transaction as app_user, `course.name_taken` on a duplicate
+// `(location, name)` and `course.not_found` for an id this venue may not reach; the
 // `till.configure` gate is applied at the ROUTE layer (Task 5), exactly as the station verbs rely on.
 
 /** A configured kitchen course as the CRUD surface returns it — the slim shape the Cursos config editor
@@ -397,8 +391,8 @@ export interface Course {
  * Assert `courseId` names a LIVE course of THIS venue — present, `active`, and in
  * `cfg.locationId`. NULL-or-false → `course.not_found`, folding "absent / another venue's" and
  * "deactivated" into the one code (errors.ts explains why the inactive case is not distinct),
- * exactly as {@link requireLiveStation} does for a station. The tenant-consistent
- * `products_course_fk` enforces only same-TENANT existence — it can see neither `active` nor the
+ * exactly as {@link requireLiveStation} does for a station. The by-id
+ * `products_course_fk` enforces EXISTENCE only — it can see neither `active` nor the
  * location — so this explicit read is what rejects a retired or cross-venue course the FK would
  * accept. One round trip via a scalar subquery.
  *
@@ -451,7 +445,7 @@ export async function requireCourse(
 
 /**
  * Create a kitchen course in the till's venue (its `cfg.locationId`), returning the minted id. A
- * duplicate `(tenant, location, name)` collides on `kitchen_courses_name_key` and is surfaced as
+ * duplicate `(location, name)` collides on `kitchen_courses_name_key` and is surfaced as
  * `course.name_taken` rather than the raw 23505 — the same shape {@link createStation} maps
  * `station.name_taken` with. Simpler than `createStation`: no default to adopt, so no clear-then-set.
  */
@@ -464,7 +458,6 @@ export async function createCourse(
     const [row] = await tx
       .insert(kitchenCourses)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
@@ -556,14 +549,12 @@ export async function deactivateCourse(
 }
 
 /**
- * The deployment holds one tenant per database. Set (or clear, with `null`) a product's DEFAULT
- * kitchen course (KDS-2 §2b) — the per-product course a line falls to at ring time when the line
- * carries no override. Same shape as {@link setProductStation}: a non-null `courseId` must be a
- * LIVE course of this venue ({@link requireLiveCourse}, `course.not_found` otherwise), null
- * clears it, and the UPDATE names the product by id AND by tenant (an absent or FOREIGN `productId`
- * is a no-op — the route layer resolves product ids, and KDS-2 mints no `product.not_found`). The
- * tenant predicate is this by-id write's own isolation boundary, as it is for
- * {@link setProductStation}.
+ * Set (or clear, with `null`) a product's DEFAULT kitchen course (KDS-2 §2b) — the per-product
+ * course a line falls to at ring time when the line carries no override. Same shape as
+ * {@link setProductStation}: a non-null `courseId` must be a LIVE course of this venue
+ * ({@link requireLiveCourse}, `course.not_found` otherwise), null clears it, and the UPDATE names
+ * the product by id (an absent `productId` is a no-op — the route layer resolves product ids, and
+ * KDS-2 mints no `product.not_found`).
  */
 export async function setProductCourse(
   tx: Transaction,
@@ -574,8 +565,5 @@ export async function setProductCourse(
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
-  await tx
-    .update(products)
-    .set({ courseId })
-    .where(and(eq(products.tenantId, cfg.tenantId), eq(products.id, productId)));
+  await tx.update(products).set({ courseId }).where(eq(products.id, productId));
 }

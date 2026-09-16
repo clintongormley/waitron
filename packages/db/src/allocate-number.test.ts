@@ -1,10 +1,6 @@
 // Real PostgreSQL checks app_user allocation grants and competing backends.
 import { afterEach, beforeEach, expect, it } from "vitest";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { allocateInvoiceNumber } from "./allocate-number.js";
 import type { Database } from "./client.js";
 import { invoiceSeries } from "./schema/series.js";
@@ -12,10 +8,8 @@ import { locations, tenants, tills } from "./schema/tenants.js";
 import { describeEachTarget } from "./testing/harness.js";
 import { asAppUser } from "./testing/roles.js";
 import { seedNode } from "./testing/seed.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
@@ -28,37 +22,34 @@ const UNKNOWN_SERIES = "00000000-0000-4000-8000-000000000000";
 let nodeA1 = "";
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
     {
       id: LOCATION_B,
-      tenantId: TENANT_B,
       name: "Fixture Location B",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     },
   ]);
   await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
+    { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
+    { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
   ]);
-  nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
+  await seedNode(db, brandLocationId(LOCATION_B));
 }
 
 async function makeSeries(
   db: Database,
-  values: { tenantId: string; nodeId: string; code: string; nextNumber?: number },
+  values: { nodeId: string; code: string; nextNumber?: number },
 ): Promise<string> {
   const [row] = await db
     .insert(invoiceSeries)
@@ -95,8 +86,8 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
   });
 
   it("returns the starting number on the first allocation", async () => {
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const n = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
+    const n = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(n).toBe(1);
   });
 
@@ -105,21 +96,20 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // Hardcoding a start of 1 would silently restart the numbering and produce
     // duplicate numbers against records the tax authority already holds.
     const seriesId = await makeSeries(db, {
-      tenantId: TENANT_A,
       nodeId: nodeA1,
       code: "FA",
       nextNumber: 5000,
     });
-    const first = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
-    const second = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const first = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const second = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect([first, second]).toEqual([5000, 5001]);
   });
 
   it("increases strictly across successive allocations", async () => {
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const allocated: number[] = [];
     for (let i = 0; i < 5; i += 1) {
-      allocated.push(await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId)));
+      allocated.push(await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)));
     }
     expect(allocated).toEqual([1, 2, 3, 4, 5]);
   });
@@ -130,8 +120,8 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // produces numeric, would render as a string instead. An unconverted "1"
     // compares equal to 1 under == but not under toBe, and would reach the
     // invoice number column as text.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const n = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
+    const n = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(typeof n).toBe("number");
   });
 
@@ -142,10 +132,10 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // returned number satisfies it. Asserting `2` here would be asserting that
     // the counter escaped its transaction, which is the behaviour this task
     // deliberately does not implement.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     let allocated = 0;
     await expect(
-      withTenant(db, TENANT_A, async (tx) => {
+      withTransaction(db, async (tx) => {
         allocated = await allocateInvoiceNumber(tx, seriesId);
         // Stands in for every abort: a failed write, a crashed process, a
         // declined card after the number was taken.
@@ -154,7 +144,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     ).rejects.toThrow(/deliberate rollback/);
     expect(allocated).toBe(1);
 
-    const next = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const next = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(next).toBe(1);
   });
 
@@ -163,14 +153,14 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // used**. A rolled-back allocation was never used — nothing was recorded
     // under it and no receipt bearing it exists — so handing it out again is
     // not reuse. What must never happen is two *committed* sales sharing a
-    // number, and that is enforced by UNIQUE (tenant_id, series_id,
+    // number, and that is enforced by UNIQUE (series_id,
     // invoice_number) on `sales`, which Task 8 creates and Task 16 exercises
     // against the live write path.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const committed: number[] = [];
     for (let i = 0; i < 6; i += 1) {
       const abort = i % 2 === 0;
-      await withTenant(db, TENANT_A, async (tx) => {
+      await withTransaction(db, async (tx) => {
         const n = await allocateInvoiceNumber(tx, seriesId);
         if (abort) throw new Error("abort");
         committed.push(n);
@@ -185,11 +175,11 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
   it("allocates independently for two series on the same node", async () => {
     // One node, N series, one chain. The two counters must not interfere, and
     // neither may be derived from the other.
-    const fa = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const ra = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "RA" });
-    const a1 = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, fa));
-    const b1 = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, ra));
-    const a2 = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, fa));
+    const fa = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
+    const ra = await makeSeries(db, { nodeId: nodeA1, code: "RA" });
+    const a1 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, fa));
+    const b1 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, ra));
+    const a2 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, fa));
     expect([a1, b1, a2]).toEqual([1, 1, 2]);
   });
 
@@ -198,8 +188,8 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // GRANT UPDATE (next_number) is missing, allocation works in every test
     // that skips asAppUser and fails only in production — the exact shape of a
     // suite that asserts nothing.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const n = await withTenant(db, TENANT_A, async (tx) => {
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
+    const n = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return allocateInvoiceNumber(tx, seriesId);
     });
@@ -207,7 +197,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
   });
 
   it("throws series.not_found for an unknown series", async () => {
-    const error = await withTenant(db, TENANT_A, (tx) =>
+    const error = await withTransaction(db, (tx) =>
       allocateInvoiceNumber(tx, UNKNOWN_SERIES),
     ).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
@@ -222,10 +212,10 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
       // so a read-then-write implementation passes there by accident. Running
       // it on PGlite would be worse than skipping it — a green result that
       // means nothing. Real Postgres only, per the Global Constraint.
-      const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+      const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
       const results = await Promise.all(
         Array.from({ length: 20 }, () =>
-          withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId)),
+          withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)),
         ),
       );
       expect(new Set(results).size).toBe(20);

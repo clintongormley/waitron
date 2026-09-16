@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -22,7 +22,6 @@ import "./errors.js";
 // cannot show because every PGlite connection is a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let tillId: string;
 let nodeId: string;
 let locationId: string;
@@ -88,45 +87,46 @@ interface DaySeed {
 async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise<void> {
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
-      tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
+      till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
       total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
-      ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, ${invoiceNumber}, ${d.issuedAt}, 0,
+      ${tillId}, ${nodeId}, ${seriesId}, ${invoiceNumber}, ${d.issuedAt}, 0,
       ${d.total}, ${JSON.stringify([{ rate: d.rate, base: d.base, tax: d.tax }])}::jsonb,
       'es-ES', array['es-ES'], 'fake', 'recorded'
     ) returning id`);
   const saleId = sale.rows[0]!.id;
   await db.execute(sql`
-    insert into tenders (tenant_id, sale_id, method, amount, tip_amount, settled_at)
-    values (${tenantId}, ${saleId}, 'cash', ${d.tenderAmount}, ${d.tipAmount}, ${d.issuedAt})`);
+    insert into tenders (sale_id, method, amount, tip_amount, settled_at)
+    values (${saleId}, 'cash', ${d.tenderAmount}, ${d.tipAmount}, ${d.issuedAt})`);
   await db.execute(sql`
     insert into sale_lines
-      (tenant_id, sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
-    values (${tenantId}, ${saleId}, 1, ${d.line.name},
+      (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
+    values (${saleId}, 1, ${d.line.name},
             ${JSON.stringify(d.line.descriptions)}::jsonb,
             ${d.line.quantity}, '3.50', ${d.rate}, ${d.line.total})`);
 }
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+      insert into tills (location_id, name)
+      values (${locationId}, 'Caja 1') returning id`);
     tillId = till.rows[0]!.id;
     const node = await db.execute<{ id: string }>(sql`
-      insert into nodes (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Nodo 1') returning id`);
+      insert into nodes (location_id, name)
+      values (${locationId}, 'Nodo 1') returning id`);
     nodeId = node.rows[0]!.id;
     const series = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (tenant_id, node_id, code)
-      values (${tenantId}, ${nodeId}, 'A') returning id`);
+      insert into invoice_series (node_id, code)
+      values (${nodeId}, 'A') returning id`);
     seriesId = series.rows[0]!.id;
 
     await seedDay(db, 1, SEED.day1);
@@ -136,13 +136,13 @@ const suite = usePgliteDb({
     // report.export) and a STAFF person (holds neither) as the app role, each with a live management
     // session. The supervisor is what pins the routes to report.view specifically: a supervisor 200
     // proves they gate on report.view, not report.export (which the supervisor lacks).
-    const sids = await withTenant(db, tenantId, async (tx) => {
+    const sids = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mkPerson = async (name: string, role: string): Promise<string> => {
         const p = await tx.execute<{ id: string }>(sql`
-          insert into persons (tenant_id, display_name, pin_hash, role)
-          values (${tenantId}, ${name}, ${hashPin("1234")}, ${role}) returning id`);
-        const session = await startManagementSession(tx, { tenantId, personId: p.rows[0]!.id });
+          insert into persons (display_name, pin_hash, role)
+          values (${name}, ${hashPin("1234")}, ${role}) returning id`);
+        const session = await startManagementSession(tx, { personId: p.rows[0]!.id });
         return session.id;
       };
       return {
@@ -159,7 +159,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId } }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId } }, noopLog);
   return app;
 }
 

@@ -3,8 +3,8 @@
 Restaurant management for hospitality — point of sale, bookings, ordering, kitchen management and
 payments, with Spanish VERI\*FACTU fiscal compliance built in.
 
-Runs standalone and self-hosted on a single machine, or as a multi-tenant cloud service (the
-licensor's hosted offering), from the same codebase.
+Runs standalone and self-hosted on a single machine, or as a hosted cloud service (the licensor's
+offering — one dedicated instance per business, never a shared database), from the same codebase.
 
 > **Status: pre-release.** Not yet running in production anywhere. Interfaces change without
 > notice.
@@ -67,7 +67,7 @@ pnpm dev:setup
 ```
 
 This brings up a throwaway Postgres in Docker (`docker-compose.yml`), migrates it, provisions one
-venue (tenant, location, till, fiscal series), seeds a small catalogue and a cashier, and writes the
+venue (taxpayer, location, till, fiscal series), seeds a small catalogue and a cashier, and writes the
 ids to a gitignored `apps/server/.env`. It is idempotent: run it again and it reuses the same venue
 rather than minting a new fiscal chain.
 

@@ -44,8 +44,7 @@ function requirePlacementInt(value: number, max: number, field: string): void {
 
 /**
  * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
- * naming no `floor_zones` row for this tenant (a missing zone, or another tenant's, which the
- * tenant-consistent composite FK rejects too)? Walks the cause chain because Drizzle wraps every
+ * naming no `floor_zones` row at all? Walks the cause chain because Drizzle wraps every
  * failed query in a `DrizzleQueryError` whose own `.code` is undefined; the real SQLSTATE and the
  * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite — verified
  * against this file's PGlite suite, where the 23503 arrives at depth 1 with `constraint =
@@ -79,7 +78,7 @@ export interface DiningTable {
   id: string;
   label: string;
   /** The `floor_zones` row this table sits in (FP-1), or null. The successor to the former free-text
-   *  `zone` string — a composite FK (`dining_tables_zone_fk`), not an arbitrary label. */
+   *  `zone` string — a FK (`dining_tables_zone_fk`), not an arbitrary label. */
   zoneId: string | null;
   capacity: number | null;
   active: boolean;
@@ -97,10 +96,10 @@ export interface DiningTable {
 
 /**
  * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on the
- * CALLER's transaction under its tenant/app_user scope. A duplicate `(tenant, location, label)` collides
+ * CALLER's transaction as app_user. A duplicate `(location, label)` collides
  * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `table.label_taken` rather than the raw 23505. A `zoneId` naming no `floor_zones` row
- * (or another tenant's) trips the composite `dining_tables_zone_fk` (23503) and is surfaced as
+ * trips `dining_tables_zone_fk` (23503) and is surfaced as
  * `zone.not_found` — the location FK is a 23503 too, so the check reads the CONSTRAINT NAME
  * (`isZoneFkViolation`) rather than the bare code.
  */
@@ -113,7 +112,6 @@ export async function createTable(
     const [row] = await tx
       .insert(diningTables)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         label: input.label,
         zoneId: input.zoneId ?? null,
@@ -158,9 +156,8 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
 
 /**
  * Edit a table's `label`/`zoneId`/`capacity` (any subset). An absent id throws `table.not_found`;
- * a label collision throws `table.label_taken`; a `zoneId` naming no `floor_zones` row (or
- * another tenant's) throws `zone.not_found` (the composite `dining_tables_zone_fk`,
- * `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task
+ * a label collision throws `table.label_taken`; a `zoneId` naming no `floor_zones` row throws
+ * `zone.not_found` (`dining_tables_zone_fk`, `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task
  * deactivates via {@link deactivateTable}.
  */
 export async function updateTable(
@@ -221,7 +218,7 @@ export async function deactivateTable(
 /**
  * The deployment holds one tenant per database. Place a table on the FP-2 spatial floor plan
  * (design §placement): write its zone + canvas coordinates + shape + rotation. Runs on the
- * CALLER's transaction under its tenant/app_user scope. LOCATION-scoped to `cfg.locationId` (like
+ * CALLER's transaction as app_user. LOCATION-scoped to `cfg.locationId` (like
  * the sibling read {@link listTables}): a tenant can hold several venues, so both the table and
  * the zone must belong to THIS venue — a caller supplying another location's table or zone UUID
  * is refused, not allowed to reach across venues. Validates IN ORDER, each with its own precise
@@ -231,7 +228,7 @@ export async function deactivateTable(
  * 2. the `zoneId` is a LIVE zone of this LOCATION — present, `active`, and `location_id =
  *    cfg.locationId` (else `zone.not_found`; an inactive/absent/foreign/cross-location zone folds
  *    into the one code, matching the spec's "a live zone"). The `dining_tables_zone_fk` {@link
- *    createTable}/{@link updateTable} lean on is (tenant, zone) only — it can see neither
+ *    createTable}/{@link updateTable} lean on is (zone) only — it can see neither
  *    `active` nor the location — so this is an explicit read rather than a caught FK violation;
  * 3. `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation`
  *    integer in `0..359` — each failure is `placement.invalid` naming THAT field, never the
@@ -321,7 +318,7 @@ export interface FloorZone {
 
 /**
  * Create a floor-plan zone in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
- * the CALLER's transaction under its tenant/app_user scope. A duplicate `(tenant, location, name)`
+ * the CALLER's transaction as app_user. A duplicate `(location, name)`
  * collides on `floor_zones_name_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `zone.name_taken` rather than the raw 23505 — the same shape {@link createTable} maps
  * `table.label_taken` with.
@@ -335,7 +332,6 @@ export async function createZone(
     const [row] = await tx
       .insert(floorZones)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
@@ -459,14 +455,13 @@ async function requireConfigure(tx: Transaction, managementSessionId: string): P
 /**
  * Create a service status in the tenant's configured set. Manager/admin only (`venue.configure`, the
  * #81 venue-config permission — reused, not renamed): the authorize gate runs BEFORE any DB write,
- * proven by-deletion in the suite. A duplicate `(tenant, label)` collides on
+ * proven by-deletion in the suite. A duplicate `(label)` collides on
  * `table_service_statuses_tenant_label_key` and is surfaced as `status.label_taken`.
  */
 export async function createStatus(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
     label: string;
     color: string;
     displayOrder?: number;
@@ -478,7 +473,6 @@ export async function createStatus(
     const [row] = await tx
       .insert(tableServiceStatuses)
       .values({
-        tenantId: input.tenantId,
         label: input.label,
         color,
         displayOrder: input.displayOrder ?? 0,
@@ -509,8 +503,8 @@ export interface ServiceStatusOption {
  * operator cannot apply (`setTableStatus` rejects `status.inactive`) must not be offered.
  * SESSION-gated at the route — NOT `requireConfigure`, unlike the manager-only {@link
  * listStatuses}: an operator holds a till session, not a management one, so it takes no
- * `managementSessionId`. Takes NO `cfg`: the statuses table is tenant-wide with no location
- * column, so the read is unfiltered, unlike {@link listZones}'s location filter.
+ * `managementSessionId`. Takes NO `cfg`: the statuses table carries no location column, so the read
+ * is unfiltered, unlike {@link listZones}'s location filter.
  */
 export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatusOption[]> {
   return tx
@@ -532,7 +526,7 @@ export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatu
  */
 export async function listStatuses(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string },
+  input: { managementSessionId: string },
 ): Promise<ServiceStatus[]> {
   await requireConfigure(tx, input.managementSessionId);
   return tx
@@ -558,7 +552,6 @@ export async function updateStatus(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
     id: string;
     label?: string;
     color?: string;
@@ -596,7 +589,7 @@ export async function updateStatus(
  *  holds no DELETE on `table_service_statuses`). Manager/admin only. Absent id → `status.not_found`. */
 export async function deactivateStatus(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; id: string },
+  input: { managementSessionId: string; id: string },
 ): Promise<void> {
   await requireConfigure(tx, input.managementSessionId);
   const updated = await tx
@@ -615,7 +608,7 @@ export async function deactivateStatus(
  * route (`requireSession`, Task 8), NOT by `venue.configure`. Validates the table is active (an
  * absent or deactivated table → `table.not_found`, design §3b) and, when `statusId` is non-null,
  * that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
- * CALLER's transaction under its tenant/app_user scope. The status is occupancy-INDEPENDENT: a
+ * CALLER's transaction as app_user. The status is occupancy-INDEPENDENT: a
  * `free` table may carry one, so this never consults the tab state.
  */
 export async function setTableStatus(

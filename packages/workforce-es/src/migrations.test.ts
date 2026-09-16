@@ -6,33 +6,33 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedLocation } from "../test/fixtures.js";
 
-let tenantId: string;
 let locationId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // Core first — the tenants/locations foreign keys. Ordering across packages is the runtime's job
   // and nothing enforces it, so it is explicit here; this proves convenio_config applies core-first.
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
+    await seedTenant(db);
+    locationId = await seedLocation(db);
   },
 });
 
 describe("the workforce-es (convenio_config) migration set", () => {
   it("defaults every rule to the ET statutory floor / today's default for a bare row", async () => {
-    // A DEFAULT row — only tenant_id and location_id supplied. Every rule takes its column default,
+    // A DEFAULT row — only location_id supplied. Every rule takes its column default,
     // which is exactly what lets D2.0 reproduce current behaviour: 5-day week, daily-accrual headline,
     // the ET guardrail limits, false split-break, and NULL premiums (never an invented figure).
     await suite.db.execute(sql`
-      insert into convenio_config (tenant_id, location_id) values (${tenantId}, ${locationId})`);
+      insert into convenio_config (location_id) values (${locationId})`);
     const rows = await suite.db.execute<Record<string, unknown>>(sql`
       select working_days_per_week, overtime_model, reference_period_days, compensation_window_days,
         daily_target_minutes, max_weekly_minutes, min_inter_shift_rest_minutes,
         max_ordinary_daily_minutes, break_threshold_minutes, min_break_minutes, weekly_rest_minutes,
         annual_overtime_cap_hours, night_window_start_minute, night_window_end_minute,
         night_premium_pct, split_shift_premium, breaks_count_as_worked
-      from convenio_config where tenant_id = ${tenantId} and location_id = ${locationId}`);
+      from convenio_config where location_id = ${locationId}`);
     expect(rows.rows[0]).toEqual({
       working_days_per_week: 5,
       overtime_model: "daily_accrual",
@@ -59,8 +59,8 @@ describe("the workforce-es (convenio_config) migration set", () => {
     // NaN daily target. The check makes the database refuse it. Deleting the check lets 0 through.
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into convenio_config (tenant_id, location_id, working_days_per_week)
-        values (${tenantId}, ${locationId}, 0)`),
+        insert into convenio_config (location_id, working_days_per_week)
+        values (${locationId}, 0)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/convenio_config_working_days_ck/);
@@ -69,30 +69,49 @@ describe("the workforce-es (convenio_config) migration set", () => {
   it("rejects an overtime_model outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into convenio_config (tenant_id, location_id, overtime_model)
-        values (${tenantId}, ${locationId}, 'annual_hours')`),
+        insert into convenio_config (location_id, overtime_model)
+        values (${locationId}, 'annual_hours')`),
     );
     expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
   });
 
-  it("allows only one convenio_config per (tenant, location)", async () => {
-    const other = await seedLocation(suite.db, tenantId);
+  it("allows only one convenio_config per location", async () => {
+    const other = await seedLocation(suite.db);
     await suite.db.execute(sql`
-      insert into convenio_config (tenant_id, location_id) values (${tenantId}, ${other})`);
+      insert into convenio_config (location_id) values (${other})`);
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into convenio_config (tenant_id, location_id) values (${tenantId}, ${other})`),
+        insert into convenio_config (location_id) values (${other})`),
     );
     expect(pgErrorCode(error)).toBe("23505"); // unique_violation
-    expect(pgErrorMessage(error)).toMatch(/convenio_config_tenant_location_uq/);
+    expect(pgErrorMessage(error)).toMatch(/convenio_config_location_uq/);
   });
 
   it("rejects a row whose location does not exist", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into convenio_config (tenant_id, location_id)
-        values (${tenantId}, gen_random_uuid())`),
+        insert into convenio_config (location_id)
+        values (gen_random_uuid())`),
     );
     expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+  });
+});
+
+describe("convenio_config carries no tenant column", () => {
+  it("has no tenant_id column", async () => {
+    const rows = await suite.db.execute<{ column_name: string }>(sql`
+      select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = 'convenio_config'
+        and column_name = 'tenant_id'`);
+    expect(rows.rows).toEqual([]);
+  });
+
+  it("keys one row per location with convenio_config_location_uq, and no tenant index", async () => {
+    const rows = await suite.db.execute<{ indexname: string; indexdef: string }>(sql`
+      select indexname, indexdef from pg_indexes
+      where schemaname = 'public' and tablename = 'convenio_config'`);
+    const defs = Object.fromEntries(rows.rows.map((r) => [r.indexname, r.indexdef]));
+    expect(defs["convenio_config_location_uq"]).toContain("(location_id)");
+    expect(Object.keys(defs).filter((name) => name.includes("tenant"))).toEqual([]);
   });
 });

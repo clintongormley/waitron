@@ -9,7 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { nodes, tenants } from "@waitron/db";
+import { nodes } from "@waitron/db";
 
 /**
  * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación (findings §1). Append-mostly —
@@ -22,9 +22,6 @@ export const registroSif = pgTable(
   "registro_sif",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     // The node this SIF identity belongs to (node-id rekey, 2026-08-03: was `till_id`; the SIF IS
     // the node — #33). Plain one-argument FK.
     nodeId: uuid("node_id")
@@ -51,7 +48,7 @@ export const registroSif = pgTable(
     ),
     // At most one live identity per node. Partial, so revoked rows accumulate freely.
     uniqueIndex("registro_sif_activo_uq")
-      .on(t.tenantId, t.nodeId)
+      .on(t.nodeId)
       .where(sql`${t.revocadoEn} is null`),
     check("registro_sif_numero_ck", sql`${t.numeroInstalacion} > 0`),
   ],

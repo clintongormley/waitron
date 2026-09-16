@@ -18,7 +18,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -31,7 +31,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "../../src/till-config.js";
@@ -57,7 +56,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -100,7 +98,6 @@ async function provisionVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
   return {
-    tenantId: venue.tenantId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     // planVenue emits the standard series first, then the rectificative one.
@@ -112,7 +109,6 @@ async function provisionVenue(): Promise<Venue> {
 /** The till dependency bundle for the park/retrieve path — the same shape `boot.ts` assembles. */
 function tillConfigFor(venue: Venue): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesId),
@@ -134,8 +130,8 @@ describe("demo seed end-to-end", () => {
     // A small horizon so the back-dated sales are cheap but non-empty (fills yesterday fully).
     await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 3 });
 
-    // --- Read the seeded catalogue set and a business day's close in one tenant/app_user scope. ---
-    const read = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    // --- Read the seeded catalogue set and a business day's close in one app_user transaction. ---
+    const read = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
@@ -145,7 +141,6 @@ describe("demo seed end-to-end", () => {
       // Business day = yesterday (UTC), which the generator always fills fully and in the past.
       const businessDay = new Date(start - DAY_MS).toISOString().slice(0, 10);
       const close = await computeDailyClose(tx, {
-        tenantId: brandTenantId(venue.tenantId),
         nodeId: brandNodeId(venue.nodeId),
         businessDay,
         timeZone: "Europe/Madrid",
@@ -191,9 +186,9 @@ describe("demo seed end-to-end", () => {
     // filename shape AND resolves to image bytes in the database.
     expect(read.image).not.toBeNull();
     expect(read.image!).toMatch(MEDIA_FILENAME);
-    const storedImage = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const storedImage = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return readImageBytes(tx, venue.tenantId, read.image!);
+      return readImageBytes(tx, read.image!);
     });
     expect(storedImage?.contentType).toBe("image/png");
     expect(storedImage!.bytes.length).toBeGreaterThan(0);

@@ -5,15 +5,15 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+import { AppError, nodeId as brandNodeId, type NodeId } from "@waitron/shared";
 import {
-  AppError,
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-  type NodeId,
-  type TenantId,
-} from "@waitron/shared";
-import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
+  asAppUser,
+  readTenant,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   computeDailyClose,
   computeOverdueOrders,
@@ -39,7 +39,7 @@ import type { Logger } from "./logger.js";
  */
 export interface ReportApiDeps {
   db: Database;
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
 }
 
 /** The permissions gating the reporting routes, referenced through these constants (never an inline
@@ -105,19 +105,18 @@ function requireDeclarationType(raw: string | undefined): string {
 }
 
 /**
- * Read the configured data node's location clock, matching both tenant and location
- * on the join. Convert day_cutover to HH:MM. A missing location is a configuration
+ * Read the configured data node's location clock, joining the node to its location.
+ * Convert day_cutover to HH:MM. A missing location is a configuration
  * error surfaced as an opaque server error.
  */
 export async function resolveVenueClock(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: string,
 ): Promise<{ timeZone: string; dayCutover: string }> {
   const { rows } = await tx.execute<{ time_zone: string; day_cutover: string }>(sql`
     select l.time_zone, l.day_cutover
-    from nodes n join locations l on l.tenant_id = n.tenant_id and l.id = n.location_id
-    where n.id = ${nodeId} and n.tenant_id = ${tenantId}
+    from nodes n join locations l on l.id = n.location_id
+    where n.id = ${nodeId}
   `);
   const row = rows[0];
   /* v8 ignore start */
@@ -134,19 +133,17 @@ export async function resolveVenueClock(
 
 /**
  * Count active dining tables and open tabs at the data node's location.
- * The query explicitly matches tenant ids and the configured tenant.
  */
 async function countOpenTables(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<{ open: number; total: number }> {
   const { rows } = await tx.execute<{ total: string; open: string }>(sql`
     select count(*)::text as total,
            count(*) filter (where dt.tab_id is not null)::text as open
     from dining_tables dt
-    join nodes n on n.tenant_id = dt.tenant_id and n.location_id = dt.location_id
-    where dt.tenant_id = ${tenantId} and n.id = ${nodeId} and dt.active = true
+    join nodes n on n.location_id = dt.location_id
+    where n.id = ${nodeId} and dt.active = true
   `);
   return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
 }
@@ -164,28 +161,26 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     permission: Permission,
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
 
-  // The (tenantId, nodeId, clock) triple every reporting route below derives identically — extracted
+  // The (nodeId, clock) pair every reporting route below derives identically — extracted
   // so overview/daily-close/period cannot drift on branding or on how the venue clock is resolved.
   // Closes over `deps` (unlike `resolveVenueClock`, which is a top-level function taking `nodeId`
-  // explicitly); the modelo-303 route above does NOT use this, since it derives its own `tenantId`
-  // from the authoritative `tenants` row rather than from `deps.cfg`.
+  // explicitly); the modelo-303 route above does NOT use this, since it reads the taxpayer's own
+  // `tenants` row for the identity it files under.
   const buildReportContext = async (
     tx: Transaction,
   ): Promise<{
-    tenantId: TenantId;
     nodeId: NodeId;
     clock: { timeZone: string; dayCutover: string };
   }> => {
-    const tenantId = brandTenantId(deps.cfg.tenantId);
     const nodeId = brandNodeId(deps.cfg.nodeId);
-    const clock = await resolveVenueClock(tx, tenantId, deps.cfg.nodeId);
-    return { tenantId, nodeId, clock };
+    const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
+    return { nodeId, clock };
   };
 
   app.get("/management-api/reports/modelo-303", (c) =>
@@ -196,22 +191,15 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
       const record = await gated(sessionId, REPORT_EXPORT_PERMISSION, async (tx) => {
-        // Read the obligado identity from the configured tenant row.
-        const [issuer] = await tx
-          .select({ taxId: tenants.taxId, name: tenants.legalName })
-          .from(tenants)
-          .where(eq(tenants.id, deps.cfg.tenantId));
+        // The obligado identity is the database's one taxpayer row.
+        const issuer = await readTenant(tx);
         /* v8 ignore start */
-        if (issuer === undefined) {
-          // A missing configured tenant is a server configuration error.
-          throw new Error(`report-api: no tenant row for ${deps.cfg.tenantId}`);
+        if (issuer === null) {
+          // A missing taxpayer row is a server configuration error.
+          throw new Error("report-api: no taxpayer row");
         }
         /* v8 ignore stop */
-        // `VatReturnInput.tenantId` is the branded `TenantId`, but `cfg.tenantId` is a plain string
-        // (the deps shape the siblings share). Brand it here — the demo's `brandTenantId(...)` idiom —
-        // so the read is typed; `withTenant` above still takes the plain string, as purchasing-api does.
         const vatReturn = await computeVatReturn(tx, {
-          tenantId: brandTenantId(deps.cfg.tenantId),
           year,
           period,
         });
@@ -220,7 +208,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         // (monthly) can never mismatch the aggregate (spec D4).
         return toDr303Record(modelo, {
           taxId: issuer.taxId,
-          name: issuer.name,
+          name: issuer.legalName,
           year,
           period: token,
           declarationType,
@@ -244,12 +232,11 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { tenantId, nodeId, clock } = await buildReportContext(tx);
+        const { nodeId, clock } = await buildReportContext(tx);
         const businessDay = await currentBusinessDay(tx, clock);
         // No `nodeId` → venue-wide (all nodes). `nodeId` (from `buildReportContext`) still scopes the
         // open-tables tile below by its LOCATION.
         const input = {
-          tenantId,
           businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
@@ -258,14 +245,13 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         // them anyway, and pg 9 removes that queueing (docs/developers/conventions-data.md).
         const close = await computeDailyClose(tx, input);
         const topSellers = await computeTopSellers(tx, {
-          tenantId,
           fromBusinessDay: businessDay,
           toBusinessDay: businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
           limit: 5,
         });
-        const openTables = await countOpenTables(tx, tenantId, nodeId);
+        const openTables = await countOpenTables(tx, nodeId);
         return {
           businessDay,
           takings: {
@@ -291,9 +277,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const businessDay = requirePeriod(c.req.query("businessDay"), "businessDay");
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { tenantId, nodeId, clock } = await buildReportContext(tx);
+        const { nodeId, clock } = await buildReportContext(tx);
         const input = {
-          tenantId,
           nodeId,
           businessDay,
           timeZone: clock.timeZone,
@@ -302,7 +287,6 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
         const close = await computeDailyClose(tx, input);
         const topSellers = await computeTopSellers(tx, {
-          tenantId,
           nodeId,
           fromBusinessDay: businessDay,
           toBusinessDay: businessDay,
@@ -330,9 +314,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         throw new AppError("management.request_invalid", { field: "range" });
       }
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { tenantId, nodeId, clock } = await buildReportContext(tx);
+        const { nodeId, clock } = await buildReportContext(tx);
         const common = {
-          tenantId,
           nodeId,
           fromBusinessDay: from,
           toBusinessDay: to,
@@ -350,15 +333,15 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
 
   // The manager overview's "orders taking too long" list (KDS order-timing alerts, design §7.4): THIS
   // node's currently-open kitchen orders whose worst unserved line is overdue/forgotten, worst-first.
-  // A live snapshot, not a business-day query — `buildReportContext` is reused for the (tenantId,
-  // nodeId) pair only; its `clock` is irrelevant here (no business day involved) and left unused.
+  // A live snapshot, not a business-day query — `buildReportContext` is reused for its `nodeId`
+  // only; its `clock` is irrelevant here (no business day involved) and left unused.
   // Gated on `report.view`, the same seam the dashboard's other three live/period reads use.
   app.get("/management-api/reports/overdue-orders", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const orders = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { tenantId, nodeId } = await buildReportContext(tx);
-        return computeOverdueOrders(tx, { tenantId, nodeId });
+        const { nodeId } = await buildReportContext(tx);
+        return computeOverdueOrders(tx, { nodeId });
       });
       return c.json({ orders });
     }),

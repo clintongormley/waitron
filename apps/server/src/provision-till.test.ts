@@ -2,25 +2,18 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, TenantId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
+import type { NodeId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
-// PGlite exercises the explicit node-ownership comparison. Both PGlite and a superuser PostgreSQL
-// connection can expose a missing tenant predicate; withTenant adds no filtering. The fiscal seed
-// one layer down uses the same target in packages/fiscal-verifactu/src/provisioning.test.ts, as
-// do stripe-account.test.ts and aeat-transport.test.ts. No role or concurrency behaviour is under
-// test here, so a container adds
-//
-// no needed coverage (§4).
+// PGlite is enough: `provisionNode` looks a node up by id and runs each module's seed, no role or
+// concurrency behaviour under test, so a container adds no needed coverage (§4). The fiscal seed one
+// layer down uses the same target in packages/fiscal-verifactu/src/provisioning.test.ts, as do
+// stripe-account.test.ts and aeat-transport.test.ts.
 
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
-// never survives `tenantId()`'s brand.
+// never survives the `nodeId()` brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
 // The full manifest (`manifestSets()`), not just [core, fiscal]: each module lands on top of its
@@ -31,7 +24,6 @@ const suite = usePgliteDb({
 });
 
 interface Bootstrapped {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   nif: string;
@@ -64,35 +56,35 @@ function nextNif(): string {
  */
 async function bootstrapTenant(): Promise<Bootstrapped> {
   const nif = nextNif();
-  const tenant = await suite.db.execute<{ id: string }>(sql`
-    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Deli SL') returning id`);
-  const tenantId = brandTenantId(tenant.rows[0]!.id);
+  await suite.db.execute<{ id: string }>(sql`
+    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', ${nif}, 'Deli SL')
+    on conflict (id) do nothing`);
 
   const location = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Mostrador', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Mostrador', array['es-ES'], 'Venta en establecimiento') returning id`);
 
   const till = await suite.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Caja 1') returning id`);
+    insert into tills (location_id, name)
+    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
   const tillId = brandTillId(till.rows[0]!.id);
 
   const node = await suite.db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Node 1') returning id`);
+    insert into nodes (location_id, name)
+    values (${location.rows[0]!.id}, 'Node 1') returning id`);
   const nodeId = brandNodeId(node.rows[0]!.id);
 
   await suite.db.execute(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A')`);
+    insert into invoice_series (node_id, code) values (${nodeId}, 'A')`);
 
-  return { tenantId, tillId, nodeId, nif };
+  return { tillId, nodeId, nif };
 }
 
 describe("provisioning a node that has no SIF registration yet", () => {
   it("runs every module's seed for the node — fiscal registers it under the tenant's own NIF", async () => {
-    const { tenantId, nodeId, nif } = await bootstrapTenant();
+    const { nodeId, nif } = await bootstrapTenant();
 
-    const seeded = await provisionNode(suite.db, { tenantId, nodeId }, ALL_MODULES);
+    const seeded = await provisionNode(suite.db, { nodeId }, ALL_MODULES);
     expect(seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service", "fiscal-verifactu"]);
     expect(seeded[2]!.report).toMatch(/^SIF .* \(installation 1\)$/);
 
@@ -102,32 +94,15 @@ describe("provisioning a node that has no SIF registration yet", () => {
       id_sistema_informatico: string;
       numero_instalacion: number;
     }>(sql`select nif, id_sistema_informatico, numero_instalacion from registro_sif
-           where tenant_id = ${tenantId} and node_id = ${nodeId} and revocado_en is null`);
+           where node_id = ${nodeId} and revocado_en is null`);
     expect(live.rows).toEqual([{ nif, id_sistema_informatico: "W1", numero_instalacion: 1 }]);
   });
 
-  it("refuses a node belonging to a different tenant, and writes nothing", async () => {
-    const mine = await bootstrapTenant();
-    const theirs = await bootstrapTenant();
+  it("refuses a node id that names no node", async () => {
+    await bootstrapTenant();
 
     await expect(
-      provisionNode(suite.db, { tenantId: mine.tenantId, nodeId: theirs.nodeId }, ALL_MODULES),
-    ).rejects.toMatchObject({
-      code: "node.not_found",
-      params: { id: theirs.nodeId, tenantId: mine.tenantId },
-    });
-
-    const written = await suite.db.execute(
-      sql`select 1 from registro_sif where node_id = ${theirs.nodeId}`,
-    );
-    expect(written.rows).toEqual([]);
-  });
-
-  it("refuses a tenant that does not exist (the node is not its)", async () => {
-    const { nodeId } = await bootstrapTenant();
-
-    await expect(
-      provisionNode(suite.db, { tenantId: brandTenantId(ABSENT), nodeId }, ALL_MODULES),
-    ).rejects.toMatchObject({ code: "node.not_found", params: { id: nodeId, tenantId: ABSENT } });
+      provisionNode(suite.db, { nodeId: brandNodeId(ABSENT) }, ALL_MODULES),
+    ).rejects.toMatchObject({ code: "node.not_found", params: { id: ABSENT } });
   });
 });

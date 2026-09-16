@@ -33,16 +33,21 @@ import { recordCorrection, recordSale, settleSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  createPgliteDb,
+  runMigrations,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
@@ -76,7 +81,6 @@ function fixedClock(): TrustedClock {
 }
 
 interface Venue {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -92,37 +96,37 @@ interface Venue {
  * `tenants`, deliberately (a running POS cannot create tenants).
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  const t = await db.execute<{ id: string }>(
-    sql`insert into tenants (country, tax_id, legal_name) values ('ES', '50000000K', 'Deli Demo SL') returning id`,
+  await db.execute(
+    sql`insert into tenants (id, country, tax_id, legal_name)
+          values (1, 'ES', '50000000K', 'Deli Demo SL') on conflict (id) do nothing`,
   );
-  const tenantId = brandTenantId(t.rows[0]!.id);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`,
   );
   const tillId = brandTillId(till.rows[0]!.id);
   const node = await db.execute<{ id: string }>(
-    sql`insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Nodo 1') returning id`,
+    sql`insert into nodes (location_id, name) values (${locationId}, 'Nodo 1') returning id`,
   );
   const nodeId = brandNodeId(node.rows[0]!.id);
   const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A') returning id`,
+    sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
   );
   const seriesId = brandSeriesId(series.rows[0]!.id);
   const rSeries = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose)
-    values (${tenantId}, ${nodeId}, 'R', 'rectificative') returning id`);
+    insert into invoice_series (node_id, code, purpose)
+    values (${nodeId}, 'R', 'rectificative') returning id`);
   const rectificativeSeriesId = brandSeriesId(rSeries.rows[0]!.id);
   // A supervisor (holds `sale.rectify`), whose PIN is "1234", inserted as the PGlite superuser like
   // everything else here — the authorizer the rectificativa's gate requires.
   const person = await db.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, email, pin_hash, role)
-    values (${tenantId}, 'Supervisora', 'supervisor@daily-close.demo', ${hashPin("1234")}, 'supervisor') returning id`);
+    insert into persons (display_name, email, pin_hash, role)
+    values ('Supervisora', 'supervisor@daily-close.demo', ${hashPin("1234")}, 'supervisor') returning id`);
   const authorizerId = person.rows[0]!.id;
-  return { tenantId, tillId, nodeId, seriesId, rectificativeSeriesId, authorizerId };
+  return { tillId, nodeId, seriesId, rectificativeSeriesId, authorizerId };
 }
 
 async function main(): Promise<void> {
@@ -139,14 +143,13 @@ async function main(): Promise<void> {
 
     // Register the node once (a one-time admin action recordSale itself never performs), as app_user
     // in its own committed transaction so the later write transactions see it.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      await backend.registerNode(tx, venue.nodeId, { tenantId: venue.tenantId });
+      await backend.registerNode(tx, venue.nodeId);
     });
 
     // Sale A — immediate cash settlement, base 100.00 @ 21%.
     const saleAInput: RecordSaleInput = {
-      tenantId: venue.tenantId,
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
@@ -170,14 +173,13 @@ async function main(): Promise<void> {
         tenders: [{ method: "cash", amount: "121.00", tipAmount: "0.00", settledAt: ISSUED_AT }],
       },
     };
-    const saleA = await withTenant(db, venue.tenantId, async (tx) => {
+    const saleA = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, saleAInput);
     });
 
     // Sale B — deferred (invoice-first), base 50.00 @ 10%.
     const saleBInput: RecordSaleInput = {
-      tenantId: venue.tenantId,
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
@@ -198,16 +200,15 @@ async function main(): Promise<void> {
       clock,
       settlement: { kind: "deferred" },
     };
-    const saleB = await withTenant(db, venue.tenantId, async (tx) => {
+    const saleB = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, saleBInput);
     });
 
     // Settle Sale B later the same day, by card.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await settleSale(tx, {
-        tenantId: venue.tenantId,
         saleId: saleB.saleId,
         tenders: [{ method: "card", amount: "55.00", tipAmount: "0.00", settledAt: SETTLED_LATER }],
       });
@@ -215,10 +216,9 @@ async function main(): Promise<void> {
 
     // Open the supervisor's shift session — the authorizer the rectificativa's `sale.rectify` gate
     // requires — exactly as a till would at the start of a shift.
-    const authorizerSession = await withTenant(db, venue.tenantId, async (tx) => {
+    const authorizerSession = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         personId: venue.authorizerId,
         pin: "1234",
@@ -228,7 +228,6 @@ async function main(): Promise<void> {
     // A rectificativa correcting Sale A by −5.00 base @ 21% (total −6.05), authorised by the
     // supervisor session opened above.
     const correctionInput: RecordCorrectionInput = {
-      tenantId: venue.tenantId,
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.rectificativeSeriesId,
@@ -248,16 +247,15 @@ async function main(): Promise<void> {
       clock,
       authz: { sessionId: authorizerSession.id },
     };
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await recordCorrection(tx, backend, correctionInput);
     });
 
     // The read: as the application role, exactly as a till/report consumer would call it.
-    const close = await withTenant(db, venue.tenantId, async (tx) => {
+    const close = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return computeDailyClose(tx, {
-        tenantId: venue.tenantId,
         nodeId: venue.nodeId,
         businessDay: BUSINESS_DAY,
         timeZone: TIME_ZONE,

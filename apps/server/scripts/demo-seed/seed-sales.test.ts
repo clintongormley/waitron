@@ -2,8 +2,8 @@
 // Clone the whole manifest once per file and assert the stored environment and chain.
 
 import { describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
-import { asAppUser, sales, saleLines, withTenant } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { asAppUser, sales, saleLines, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -11,13 +11,7 @@ import type { VenueResult } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { computeDailyClose } from "@waitron/reporting";
-import {
-  addDecimal,
-  compareDecimal,
-  decimal,
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal, nodeId as brandNodeId } from "@waitron/shared";
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
@@ -110,7 +104,6 @@ async function provisionVenue(): Promise<VenueResult> {
 
 function venueFor(v: VenueResult): SeedSalesVenue {
   return {
-    tenantId: v.tenantId,
     tillId: v.tillId,
     nodeId: v.nodeId,
     // planVenue emits the standard series first, then the rectificative one.
@@ -133,12 +126,11 @@ describe("seedSales", () => {
     // (a) It recorded something.
     expect(count).toBeGreaterThan(0);
 
-    const read = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    const read = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const saleRows = await tx
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
-        .from(sales)
-        .where(eq(sales.tenantId, venue.tenantId));
+        .from(sales);
       const registros = await tx
         .select({ entorno: registrosFacturacion.entorno })
         .from(registrosFacturacion);
@@ -153,13 +145,12 @@ describe("seedSales", () => {
           coalesce(sum(t.amount), 0)::text as tendered,
           coalesce(sum(t.tip_amount), 0)::text as tips
         from sales s
-        join tenders t on t.sale_id = s.id and t.tenant_id = s.tenant_id
+        join tenders t on t.sale_id = s.id
         where s.id = ${sampled.id}
         group by s.total`);
       // Business day = yesterday (UTC), which the generator always fills fully and in the past.
       const businessDay = new Date(start - DAY_MS).toISOString().slice(0, 10);
       const close = await computeDailyClose(tx, {
-        tenantId: brandTenantId(venue.tenantId),
         nodeId: brandNodeId(venue.nodeId),
         businessDay,
         timeZone: "Europe/Madrid",
@@ -209,9 +200,9 @@ describe("seedSales", () => {
 
     expect(count).toBe(0);
 
-    const saleRows = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    const saleRows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, venue.tenantId));
+      return tx.select({ id: sales.id }).from(sales);
     });
     expect(saleRows.length).toBe(0);
   });
@@ -293,7 +284,7 @@ describe("seedSales", () => {
     });
     expect(count).toBeGreaterThan(0);
 
-    const rows = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({
@@ -303,8 +294,7 @@ describe("seedSales", () => {
           descriptions: saleLines.descriptions,
           vatRate: saleLines.vatRate,
         })
-        .from(saleLines)
-        .where(eq(saleLines.tenantId, venue.tenantId));
+        .from(saleLines);
     });
 
     const parents = rows.filter((r) => r.parentLineId === null);

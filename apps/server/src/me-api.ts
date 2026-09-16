@@ -1,8 +1,13 @@
 import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
-import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  readTenant,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -51,20 +56,15 @@ import type { OnboardingIntent } from "./trading-config.js";
 import type { AccountEmailSender } from "./account-email.js";
 
 /**
- * The deployment holds one tenant per database. The deps the "me" API needs — the SAME minimal
- * shape `mountScheduleApi` takes: no fiscal backend, clock or card provider, because these routes
- * touch only the identity session (`management_sessions`) and the planning tables
- * (`shifts`/`shift_swaps`/`absences`). `cfg.tenantId` is this venue's tenant, scoping every
- * `withTenant` below.
+ * The deps the "me" API needs: no fiscal backend, clock or card provider, because these routes touch
+ * only the identity session (`management_sessions`) and the planning tables
+ * (`shifts`/`shift_swaps`/`absences`). It carries the node id on top of the handle, so it is one
+ * field wider than `mountScheduleApi`'s.
  */
 export interface MeApiDeps {
   db: Database;
-  /**
-   * `tenantId` scopes every `withTenant` below. `nodeId` is this node's id, carried on the uniform
-   * write-path `cfg` shape every mounted API takes; it no longer stamps a capture origin (the
-   * application outbox and its capture triggers were removed).
-   */
-  cfg: { tenantId: string; nodeId: string };
+  /** This node's own id. */
+  cfg: { nodeId: string };
   /**
    * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts). Surfaced by the
    * public `GET /management-api/locales` as `venueDefault` — the language the dashboard defaults to
@@ -141,7 +141,7 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * ROLE-BLIND: it calls `resolveManagementSession` (which returns `personId` + `role` but gates
  * only on idle-timeout + suspension), NEVER `authorizeManager` — a `staff`-role person holds an
  * EMPTY permission set, so an `authorizeManager` gate would 403 every staff person, defeating the
- * whole surface. The verb then runs on the app role under this venue's tenant (`withTenant` +
+ * whole surface. The verb then runs on the app role under this venue's tenant (`withTransaction` +
  * `asAppUser`), in the database holding this tenant. The explicit `person_id` predicate scopes
  * the operation to the requester.
  */
@@ -151,10 +151,10 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   };
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
-  /** Run `fn` on the app role under this venue's tenant — the one place the withTenant/asAppUser pair
+  /** Run `fn` on the app role under this venue's tenant — the one place the withTransaction/asAppUser pair
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -195,11 +195,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me/profile", (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
-      return c.json(
-        await asStaff((tx) =>
-          readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId }),
-        ),
-      );
+      return c.json(await asStaff((tx) => readOwnProfile(tx, { managementSessionId })));
     }),
   );
   app.put("/management-api/session/me/profile", (c) =>
@@ -207,7 +203,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         displayName: textField(body, "displayName"),
         firstNames: textField(body, "firstNames"),
@@ -246,7 +241,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       const email = await asStaff((tx) =>
         confirmOwnEmailChange(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           code: textField(body, "code"),
           codeKey: accountActionCodeKey,
@@ -261,7 +255,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         password: textField(body, "password"),
         ...credentials(body),
@@ -275,7 +268,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         pin: textField(body, "pin"),
         ...credentials(body),
@@ -289,7 +281,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         id: requireUuidParam(c.req.param("id"), "passkey"),
         ...credentials(body),
@@ -305,7 +296,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.json(
         await updateProfile(managementSessionId, (tx) =>
           beginOwnTotpEnrollment(tx, {
-            tenantId: deps.cfg.tenantId,
             managementSessionId,
             ...credentials(body),
           }),
@@ -319,7 +309,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       const result = await updateProfile(managementSessionId, (tx) =>
         finishOwnTotpEnrollment(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           enrollmentId: requireBodyUuid(body.enrollmentId, "enrollmentId"),
           code: textField(body, "code"),
@@ -336,7 +325,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.json(
         await updateProfile(managementSessionId, (tx) =>
           regenerateOwnRecoveryCodes(tx, {
-            tenantId: deps.cfg.tenantId,
             managementSessionId,
             ...credentials(body),
           }),
@@ -350,7 +338,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       await updateProfile(managementSessionId, (tx) =>
         disableOwnTotp(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           ...credentials(body),
         }),
@@ -364,7 +351,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       await updateProfile(managementSessionId, (tx) =>
         unlinkOwnGoogle(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           ...credentials(body),
         }),
@@ -373,15 +359,12 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  /** Read the configured tenant's public display identity inside the same tenant-scoped app-role
+  /** Read the configured tenant's public display identity inside the same app-role
    * transaction as its caller. A missing row means the boot configuration names no tenant. */
   const readVenueName = async (tx: Transaction): Promise<string> => {
-    const [venue] = await tx
-      .select({ venueName: tenants.legalName })
-      .from(tenants)
-      .where(eq(tenants.id, deps.cfg.tenantId));
-    if (venue === undefined) throw new Error("Configured tenant does not exist");
-    return venue.venueName;
+    const venue = await readTenant(tx);
+    if (venue === null) throw new Error("Configured tenant does not exist");
+    return venue.legalName;
   };
 
   // No session is required: like GET /api/locales, this exposes only public identity and languages.
@@ -465,7 +448,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const locale = typeof body.locale === "string" ? body.locale : "";
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+        await setPersonLocale(tx, { personId, locale });
       });
       return c.body(null, 204);
     }),
@@ -483,7 +466,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        await markPasskeyOffered(tx, { tenantId: deps.cfg.tenantId, personId });
+        await markPasskeyOffered(tx, { personId });
       });
       return c.body(null, 204);
     }),
@@ -497,7 +480,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const to = requirePeriod(c.req.query("to"), "to");
       const rows = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return listShiftsForPerson(tx, { tenantId: deps.cfg.tenantId, personId, from, to });
+        return listShiftsForPerson(tx, { personId, from, to });
       });
       return c.json(rows);
     }),
@@ -509,7 +492,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       const rows = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return listSwapsForPerson(tx, { tenantId: deps.cfg.tenantId, personId });
+        return listSwapsForPerson(tx, { personId });
       });
       return c.json(rows);
     }),
@@ -527,7 +510,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const swapId = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
         return requestSwap(tx, {
-          tenantId: deps.cfg.tenantId,
           requestedByPersonId: personId,
           fromShiftId,
           toPersonId,
@@ -546,7 +528,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return acceptSwap(tx, { tenantId: deps.cfg.tenantId, swapId, acceptingPersonId: personId });
+        return acceptSwap(tx, { swapId, acceptingPersonId: personId });
       });
       return c.body(null, 204);
     }),
@@ -558,7 +540,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       const rows = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return listAbsencesForPerson(tx, { tenantId: deps.cfg.tenantId, personId });
+        return listAbsencesForPerson(tx, { personId });
       });
       return c.json(rows);
     }),
@@ -576,7 +558,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const absenceId = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
         return createAbsence(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           kind,
           startsOn,

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   seedNodeAndSeries,
@@ -27,14 +27,13 @@ beforeEach(async () => {
 
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<import("./types.js").VatSummary> {
   const input: DailyCloseInput = {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay: DAY,
     timeZone: TZ,
     dayCutover: "05:00",
     ...overrides,
   };
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeVatSummary(tx, input);
   });
@@ -96,7 +95,7 @@ describe("computeVatSummary", () => {
       total: "121.00",
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
-    await seedVoid(suite.db, { tenantId: venue.tenantId, saleId: s }, noonUtc);
+    await seedVoid(suite.db, { saleId: s }, noonUtc);
     expect((await run()).byRate).toEqual([]);
   });
 
@@ -114,7 +113,6 @@ describe("computeVatSummary", () => {
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
     await seedSubstitution(suite.db, {
-      tenantId: venue.tenantId,
       substitutionSaleId: f3,
       substitutedSaleId: ticket,
     });
@@ -161,17 +159,6 @@ describe("computeVatSummary", () => {
       taxTotal: "0.00",
       grossTotal: "0.00",
     });
-  });
-
-  it("excludes another tenant's sales (the tenant predicate)", async () => {
-    const other = await seedVenue(suite.db); // a different tenant entirely
-    await seedSale(suite.db, other, {
-      invoiceNumber: 1,
-      issuedAt: noonUtc,
-      total: "121.00",
-      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
-    });
-    expect((await run()).byRate).toEqual([]); // our tenant has nothing
   });
 
   it("excludes another node in the SAME tenant (the node predicate)", async () => {

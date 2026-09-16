@@ -42,9 +42,8 @@ export function assertNoOperationalVenue(presentVenueIds: readonly string[]): vo
 /**
  * The one-tenant-per-database fiscal-safety DECISION, in ONE place. Every tenant-creation entry
  * point — the setup-api provision handler (`provisionVenue`), the `venue` CLI, and the mirror adopt
- * orchestrator (`adoptFromPrimary`) — calls this before stamping or applying: with row-level security
- * dropped on the premise of one tenant per database, `withTenant` no longer filters rows by tenant
- * (`packages/db/src/tenancy.ts`), so a second `(country, tax_id)` in the same database would expose
+ * orchestrator (`adoptFromPrimary`) — calls this before stamping or applying: no query filters rows by
+ * tenant and `withTransaction` (`packages/db/src/tenancy.ts`) isolates nothing, so a second `(country, tax_id)` in the same database would expose
  * one business's rows to the other — a cross-tenant leak a hash-chained fiscal record (§5) cannot take
  * back. Refuses if any EXISTING identity differs from the one being applied; the SAME identity and an
  * empty database both pass (the caller decides what a same-identity match means). `applied` is the

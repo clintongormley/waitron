@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
@@ -22,7 +22,7 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & st
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
@@ -36,7 +36,7 @@ function nextNif(): string {
 }
 
 /** A profile (or canvas) name unique within the shared tenant, so tests are order-independent
- *  (CLAUDE.md §4) — the profile set accumulates per tenant and `(tenant, name)` is unique, so a fixed
+ *  (CLAUDE.md §4) — the profile set accumulates across tests and `(name)` is unique, so a fixed
  *  name could collide across tests. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
@@ -50,8 +50,8 @@ function phoneCanvas(title: string): CanvasDef {
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string }> {
-  const venue = await applyVenue(
+async function setupTenant(): Promise<void> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -85,19 +85,18 @@ async function setupTenant(): Promise<{ tenantId: string }> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
   });
-  return { tenantId: venue.tenantId };
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -106,7 +105,7 @@ function mountApp(tenantId: string): Hono {
       // nodeId sentinel: the device-profile management routes never read cfg.nodeId, but
       // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the sibling
       // management tests (management-api.canvases.test.ts, …-status/-passkey).
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -150,16 +149,15 @@ async function seedCanvas(app: Hono, cookie: string, name: string): Promise<stri
 }
 
 describe("Management API — device-profile CRUD (Task 4)", () => {
-  let tenantId: string;
   let managerCookie: string;
 
   beforeAll(async () => {
-    ({ tenantId } = await setupTenant());
-    managerCookie = await login(mountApp(tenantId), MANAGER_EMAIL);
+    await setupTenant();
+    managerCookie = await login(mountApp(), MANAGER_EMAIL);
   });
 
   it("round-trips create → list → get → update → delete", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const name = uniqueName("Front counter");
 
     // CREATE → 201, the stored row (canvasId null, the two till capabilities).
@@ -249,7 +247,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("binds a profile to a real canvasId (create → get round-trip)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const canvasId = await seedCanvas(app, managerCookie, uniqueName("Bound canvas"));
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
@@ -270,7 +268,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST + PUT persist inactivityTimeoutSeconds; PUT wipes it when the key is omitted (full-replace)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // CREATE a `phone-portrait` (handheld) profile carrying a 300 s auto-logout timeout — the store
     // keeps a positive integer for a non-kds form factor. The created row echoes it.
     const created = await app.request("/management-api/device-profiles", {
@@ -326,7 +324,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST with a non-positive inactivityTimeoutSeconds → 400 device_profile.invalid (the store's domain rule)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // 0 and -5 clear the server SHAPE screen (both integers) and reach the store, whose
     // `validateInactivityTimeout` rejects a non-null value < 1 → device_profile.invalid.
     for (const bad of [0, -5]) {
@@ -351,7 +349,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST with a non-integer-typed inactivityTimeoutSeconds → 400 management.request_invalid (the server shape screen)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // A string and a fractional number are neither null nor an integer number, so the server SHAPE
     // screen refuses them naming the field — before the store's domain rule is reached.
     for (const bad of ["300", 12.5]) {
@@ -379,7 +377,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST a kds profile coerces inactivityTimeoutSeconds to null even when a value is sent", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // A kds display has no operator session to log out, so the store forces the timeout to null
     // regardless of the body value (validateInactivityTimeout returns null for `kds`).
     const created = await app.request("/management-api/device-profiles", {
@@ -398,7 +396,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("GET by an unknown (well-formed) id → 404 device_profile.not_found", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request(`/management-api/device-profiles/${randomUUID()}`, {
       headers: { cookie: managerCookie },
     });
@@ -409,7 +407,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("GET by a MALFORMED id → 404 device_profile.not_found (the requireDeviceProfileId screen)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/device-profiles/not-a-uuid", {
       headers: { cookie: managerCookie },
     });
@@ -420,7 +418,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("PUT to an unknown (well-formed) id → 404 device_profile.not_found (no silent no-op)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request(`/management-api/device-profiles/${randomUUID()}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -438,7 +436,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("DELETE an unknown (well-formed) id → 404 device_profile.not_found (no silent no-op)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request(`/management-api/device-profiles/${randomUUID()}`, {
       method: "DELETE",
       headers: { cookie: managerCookie },
@@ -450,7 +448,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST with a canvasId that references no canvas → 400 device_profile.invalid (bad_canvas_ref)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -470,7 +468,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST with an unknown capability → 400 device_profile.invalid (bad_capabilities)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -490,9 +488,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // Create a profile, then bind a device to it as the owner (fixture setup), reusing the
-    // venue's provisioned location. The composite FK devices_device_profile_fk is ON DELETE RESTRICT, so
+    // venue's provisioned location. The FK devices_device_profile_fk is ON DELETE RESTRICT, so
     // the DELETE trips a 23001 the store translates to device_profile.in_use → the house 409.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
@@ -508,16 +506,14 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const { id } = (await created.json()) as ProfileRow;
 
     const location = await suite.admin.execute<{ id: string }>(
-      sql`select id from locations where tenant_id = ${tenantId} limit 1`,
+      sql`select id from locations  limit 1`,
     );
     // The profile is a `till` form factor, so `device_binding_rule_insert / _update` requires the device to carry a
     // till_id (and no station) — bind the venue's provisioned till (fixture setup).
-    const till = await suite.admin.execute<{ id: string }>(
-      sql`select id from tills where tenant_id = ${tenantId} limit 1`,
-    );
+    const till = await suite.admin.execute<{ id: string }>(sql`select id from tills  limit 1`);
     await suite.admin.execute(sql`
-      insert into devices (tenant_id, location_id, till_id, label, token_hash, device_profile_id)
-      values (${tenantId}, ${location.rows[0]!.id}, ${till.rows[0]!.id}, ${uniqueName("Bound device")}, 'scrypt$00$00', ${id})`);
+      insert into devices (location_id, till_id, label, token_hash, device_profile_id)
+      values (${location.rows[0]!.id}, ${till.rows[0]!.id}, ${uniqueName("Bound device")}, 'scrypt$00$00', ${id})`);
 
     const res = await app.request(`/management-api/device-profiles/${id}`, {
       method: "DELETE",
@@ -535,7 +531,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST a duplicate name → 409 device_profile.name_taken", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const name = uniqueName("Twin");
     const first = await app.request("/management-api/device-profiles", {
       method: "POST",
@@ -555,7 +551,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("POST with a malformed body → 400 management.request_invalid naming the field", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
 
     // A bare JSON array (not an object) → the body-shape screen.
     const arrayBody = await app.request("/management-api/device-profiles", {
@@ -646,7 +642,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("PUT with a malformed body → 400 management.request_invalid naming the field", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     // A real profile to target, so the body screen — not a not-found — is what fires.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
@@ -710,7 +706,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("refuses every device-profile route for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
     // Seed a profile as the manager so the GET-by-id / PUT / DELETE targets exist (the 403 must fire
     // regardless — the gate runs before any read/write).
@@ -763,7 +759,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   it("refuses the device-profile routes unauthenticated with 401", async () => {
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const res = await app.request("/management-api/device-profiles");
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({

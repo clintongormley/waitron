@@ -1,9 +1,9 @@
 // Real PostgreSQL checks same-key incident writers blocking across independent backends.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { AppError, tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
+import { AppError, tillId as brandTillId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
@@ -17,7 +17,6 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
   it("an orphan (sale_id NULL) raise blocks a concurrent same-key raise, which then de-dups", async () => {
     const s = await seedWorkingOrder(postgres.admin, freshNif());
     const raiseInput = {
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       // no saleId — orphan; exercises NULLS NOT DISTINCT
       error: new AppError("payment.offline_forward_declined", {
@@ -38,7 +37,7 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
 
       // Holder inserts the incident, signals it has, and holds the transaction open.
-      holding = withTenant(holder, s.tenantId, async (tx) => {
+      holding = withTransaction(holder, async (tx) => {
         const raised = await recordIncidentOnce(tx, raiseInput);
         expect(raised).toBe(true);
         acquire();
@@ -48,12 +47,12 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
 
       // The waiter's same-key raise blocks on the arbiter index until the holder commits.
       let waiterResolved = false;
-      const waiting = withTenant(waiter, s.tenantId, (tx) =>
-        recordIncidentOnce(tx, raiseInput),
-      ).then((r) => {
-        waiterResolved = true;
-        return r;
-      });
+      const waiting = withTransaction(waiter, (tx) => recordIncidentOnce(tx, raiseInput)).then(
+        (r) => {
+          waiterResolved = true;
+          return r;
+        },
+      );
       // It must NOT resolve while the holder holds the row.
       const settledEarly = await Promise.race([
         waiting.then(() => true),
@@ -69,7 +68,7 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
 
       const { rows } = await postgres.admin.execute<{ n: string }>(sql`
         select count(*)::text as n from incidents
-        where tenant_id = ${s.tenantId} and code = 'payment.offline_forward_declined'
+        where code = 'payment.offline_forward_declined'
           and sale_id is null and acknowledged_at is null`);
       expect(rows[0].n).toBe("1");
     } finally {

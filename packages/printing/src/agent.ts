@@ -12,7 +12,7 @@ import { verifySecret } from "@waitron/identity";
 // to its `print_agents` row id, or throws `agent.unauthorized`; a revoked (`active = false`) agent
 // fails instantly. Agent enrolment is join-and-accept (the shared join_requests mechanism, in
 // apps/server/src/join-requests.ts) — there is no pairing-code verb here. The Task-6 route layer wraps
-// this call in `withTenant`/`asAppUser`, owns the HTTP status mapping and parses the Bearer header.
+// this call in `withTransaction`/`asAppUser`, owns the HTTP status mapping and parses the Bearer header.
 //
 // The agent token's secret half is LONG-LIVED and salted per row, so it is hashed with scrypt
 // (verifySecret, @waitron/identity) — the same KDF PINs, passwords and device tokens use — and the
@@ -20,11 +20,10 @@ import { verifySecret } from "@waitron/identity";
 
 /**
  * The tenant + venue scope an agent is minted under. The route resolves it (single-tenant deli
- * deployment, `deps.tenantId` + the location) and passes it down, so this verb never derives scope
- * from client input. `authenticateAgent` reads only `tenantId` (typed narrower at its call site).
+ * deployment, the location) and passes it down, so this verb never derives scope from client
+ * input.
  */
 export interface PrintAgentConfig {
-  tenantId: string;
   locationId: string;
 }
 
@@ -43,8 +42,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * The agent-auth CORE (§3a, Ruling 5). Resolves a presented bearer token STRING to its agent id, or
  * throws `agent.unauthorized`. The Task-6 Hono wrapper (`requireAgent`) extracts the
  * `Authorization: Bearer <token>` header and calls this; header parsing is that wrapper's trivial
- * concern, so this core takes a plain string and never sees Hono. The `tx` is already tenant-scoped by
- * that wrapper (`withTenant` + `asAppUser`), the machine-to-machine shape.
+ * concern, so this core takes a plain string and never sees Hono. The `tx` is opened by that wrapper
+ * (`withTransaction` + `asAppUser`), the machine-to-machine shape.
  *
  * The token is `${agentId}.${secret}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
  * needed to fetch the salt) and the secret VALIDATES it. Every failure — a malformed token, a
@@ -62,7 +61,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  */
 export async function authenticateAgent(
   tx: Transaction,
-  cfg: { tenantId: string },
   token: string,
 ): Promise<{ agentId: string }> {
   // Split on the FIRST `.` only: the id is a uuid (no dots) and a base64url secret has none either,
@@ -80,16 +78,9 @@ export async function authenticateAgent(
   const [row] = await tx
     .select({ tokenHash: printAgents.tokenHash })
     .from(printAgents)
-    // `active = true` is the revocation filter: a revoked agent is simply not found. The explicit
-    // `tenant_id` predicate limits the lookup to `cfg.tenantId`, matching the predicate on
-    // `acceptPrintAgentJoinRequest`'s consuming DELETE. All bind as `$n`, never string-concatenated.
-    .where(
-      and(
-        eq(printAgents.id, agentId),
-        eq(printAgents.tenantId, cfg.tenantId),
-        eq(printAgents.active, true),
-      ),
-    );
+    // `active = true` is the revocation filter: a revoked agent is simply not found. All bind as `$n`,
+    // never string-concatenated.
+    .where(and(eq(printAgents.id, agentId), eq(printAgents.active, true)));
   if (row === undefined) throw new AppError("agent.unauthorized", {});
   // Constant-time scrypt check (REUSED, never home-rolled): the secret is never compared with `===`.
   if (!verifySecret(secret, row.tokenHash)) throw new AppError("agent.unauthorized", {});

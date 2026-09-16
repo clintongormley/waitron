@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { AppError } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import type { Decimal } from "@waitron/shared";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   CollectParams,
@@ -27,7 +26,7 @@ const DEFAULT_POLL = {
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
   /** A plain `Database` handle. This adapter opens its own transactions and scopes each one with
-   * `withTenant(db, tenantId, …)`, so nothing is required of the handle itself.
+   * `withTransaction(db, …)`, so nothing is required of the handle itself.
    *
    * This option once demanded a "TENANT-SCOPED `Database` handle", which cannot be constructed —
    * see `StripeOnDeviceProviderOptions.db` for the mechanism and
@@ -36,13 +35,8 @@ export interface StripeTerminalProviderOptions {
    * (T1 precedes the reader network call, so no money moved), which is the only reason this
    * adapter's version was less serious than the on-device one. `stripe.test.ts` is the proof. */
   db: Database;
-  /** The tenant this provider serves. A terminal provider is a per-till object and a till belongs
-   * to exactly one tenant, so the scope is known at construction — which is what makes every
-   * database phase below scopable without threading a tenant through methods (`void`/`refund`
-   * carry only a payment reference). The host builds one provider per tenant. */
-  tenantId: TenantId;
   /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path. A
-   * per-till provider serves one node, so the id is known at construction, exactly like `tenantId`. */
+   * per-till provider serves one node, so the id is known at construction. */
   nodeId: string;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
@@ -52,9 +46,8 @@ export interface StripeTerminalProviderOptions {
  * network, the outcome after, PI id in `external_ref`. A stalled reader (poll window exhausted) is
  * cancelled and the payment resolves to `failed` — the caller always gets a `PaymentResult`, never
  * an exception; the `stripe.collect_timeout` code stays declared in `errors.ts` for a future
- * incident. Reversals (void / refund / partialRefund) look the payment up untenanted via
- * `findPaymentByRef` (the interface method carries only a ref) — this works under the hermetic
- * (superuser) suite and a tenanted caller; the untenanted webhook case is deferred by design.
+ * incident. Reversals (void / refund / partialRefund) look the payment up via `findPaymentByRef`
+ * (the interface method carries only a ref).
  *
  * Deliberately carries NO session/PaymentIntent metadata analogous to the hosted create's
  * `metadata` stamp — see `hosted-client.ts`'s `createCheckoutSession` doc for why that stamp exists
@@ -69,39 +62,14 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
   }
 
-  /** The tenant this provider serves — the single source of truth for scope. A method-supplied
-   * tenant is VALIDATED against it; the two are equal thereafter, so which one the writes below
-   * use does not matter (they use `params`, unchanged).
-   *
-   * That is the rule, not an exception: an object with a per-tenant identity scopes from that
-   * identity, and an object without one (`StripeHostedProvider`, whose only database method is
-   * `initiate`) scopes from its parameters. Both are "the tenant is established exactly once, as
-   * early as it is known".
-   *
-   * Compared case-INSENSITIVELY. `tenantId()` validates the UUID shape with a case-insensitive
-   * pattern and returns the value unchanged, so a host reading `A1B2…` from config and a caller
-   * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
-   * strings in JavaScript's. A `!==` here would reject every sale on that till.
-   *
-   * Throws `stripe.tenant_mismatch` before any network call: the on-device path charges the card
-   * before writing its local row. */
-  private requireOwnTenant(supplied: TenantId): void {
-    if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
-      throw new AppError("stripe.tenant_mismatch", {
-        expected: this.opts.tenantId,
-        supplied,
-      });
-    }
-  }
-
-  /** Every database phase runs through here, so no transaction this adapter opens can be left
-   * unscoped — the failure that made `collect` throw `42501` on every sale under a real role. */
-  private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(this.opts.db, this.opts.tenantId, fn);
+  /** The adapter's ONE transaction boundary: every database phase runs through here, and the
+   * adapter opens no transaction of its own. `tenant-scoping.test.ts` is the guard — it refuses a
+   * bare `.transaction(` anywhere in this package's production sources. */
+  private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(this.opts.db, fn);
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    this.requireOwnTenant(params.tenantId);
     // The reader ref is a PER-COLLECT input, not baked into the provider: one cached provider serves
     // every reader on this vendor, and the sale carries the reader it chose. A Terminal collect
     // cannot proceed without one — its absence is a host wiring error, not an operator condition.
@@ -113,12 +81,11 @@ export class StripeTerminalProvider implements PaymentProvider {
     const paymentRef = randomUUID();
     // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the on-device provider).
     const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
-    const key = { tenantId: params.tenantId, provider: PROVIDER, paymentRef };
+    const key = { provider: PROVIDER, paymentRef };
 
     // T1 — commit the attempt before any network call.
-    await this.inTenant((tx) =>
+    await this.inTransaction((tx) =>
       insertAttempting(tx, {
-        tenantId: params.tenantId,
         workingOrderId: params.workingOrderId,
         provider: PROVIDER,
         paymentRef,
@@ -130,7 +97,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     const outcome = await this.drive(readerId, params.amount, stripeIdempotencyKey);
 
     // T2 — persist the terminal outcome.
-    const row = await this.inTenant((tx) =>
+    const row = await this.inTransaction((tx) =>
       outcome.captured
         ? captureAttempting(tx, { ...key, settledAt: outcome.settledAt, externalRef: outcome.piId })
         : failAttempting(tx, key),
@@ -199,12 +166,9 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
-  /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
-   * place a transaction's is. The three public methods below differ only in kind and amount.
-   * The reversal checks the returned payment's tenant id before any money moves. */
+  /** The one reversal path; the three public methods below differ only in kind and amount. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
-      tenantId: this.opts.tenantId,
       nodeId: this.opts.nodeId,
     });
   }

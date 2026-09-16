@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, printJobs, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -24,11 +24,10 @@ afterEach(() => {
 });
 
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
+  return { locationId: rows[0]!.id };
 }
 
 /** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model so `payload`
@@ -63,7 +62,7 @@ function spyOnNoSocketOpened() {
 describe("enqueuePrintJob (never-block outbox)", () => {
   it("enqueues a queued job with no socket I/O", async () => {
     const cfg = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
@@ -83,7 +82,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
   it("throws printer.not_found for an absent printer, still opening no socket", async () => {
     const cfg = await setup();
     const noNet = spyOnNoSocketOpened();
-    const code = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const code = await withTransaction(suite.db, async (tx) => {
       try {
         // A well-formed uuid that names no printer: the DB-only pre-check SELECT finds nothing and
         // throws BEFORE any insert, so the caller's transaction is never poisoned.
@@ -104,7 +103,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     // pass here means the `active = true` pre-check conjunct (not some unrelated reason) is doing the
     // work. Without that conjunct the deactivated enqueue succeeds and this test goes red.
     const cfg = await setup();
-    const code = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const code = await withTransaction(suite.db, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
@@ -130,7 +129,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
 describe("resendPrintJob", () => {
   it.each(["done", "failed"] as const)("refuses a terminal %s drawer command", async (status) => {
     const cfg = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Drawer",
         transport: "network_tcp",
@@ -147,7 +146,7 @@ describe("resendPrintJob", () => {
         .update(printJobs)
         .set({ status, attempts: 5 })
         .where(eq(printJobs.id, original.jobId));
-      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "print_job.not_resendable",
       });
       const jobs = await tx.select().from(printJobs).where(eq(printJobs.printerId, printer.id));
@@ -161,7 +160,7 @@ describe("resendPrintJob", () => {
     "copies a terminal %s job byte-for-byte into a new queue entry",
     async (status) => {
       const cfg = await setup();
-      await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.db, async (tx) => {
         const printer = await createPrinter(tx, cfg, {
           name: "Resend",
           transport: "network_tcp",
@@ -179,19 +178,13 @@ describe("resendPrintJob", () => {
           })
           .where(eq(printJobs.id, original.jobId));
         const [before] = await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId));
-        const otherLocation = await tx.execute<{ id: string }>(
-          sql`insert into locations (tenant_id, name, invoice_locales, operation_description) values (${cfg.tenantId}, 'Other', array['es-ES'], 'Sale') returning id`,
-        );
-        const result = await resendPrintJob(
-          tx,
-          { ...cfg, locationId: otherLocation.rows[0]!.id },
-          original.jobId,
-        );
+        // The copy goes back to the ORIGINAL job's location, which `resendPrintJob` reads off the
+        // job row itself — the caller no longer supplies a location at all.
+        const result = await resendPrintJob(tx, original.jobId);
         expect(result.jobId).not.toBe(original.jobId);
         const [copy] = await tx.select().from(printJobs).where(eq(printJobs.id, result.jobId));
         expect(copy).toMatchObject({
           kind: "document",
-          tenantId: cfg.tenantId,
           locationId: cfg.locationId,
           printerId: printer.id,
           status: "queued",
@@ -215,7 +208,7 @@ describe("resendPrintJob", () => {
     ["failed", 4],
   ] as const)("refuses a %s job that can still print automatically", async (status, attempts) => {
     const cfg = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Pending",
         transport: "network_tcp",
@@ -223,7 +216,7 @@ describe("resendPrintJob", () => {
       });
       const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
       await tx.update(printJobs).set({ status, attempts }).where(eq(printJobs.id, original.jobId));
-      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "print_job.not_resendable",
       });
       expect(
@@ -232,10 +225,9 @@ describe("resendPrintJob", () => {
     });
   });
 
-  it("refuses unknown and foreign-tenant jobs, and disabled printers", async () => {
+  it("refuses unknown jobs and disabled printers", async () => {
     const cfg = await setup();
-    const foreign = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Disabled",
         transport: "network_tcp",
@@ -243,14 +235,11 @@ describe("resendPrintJob", () => {
       });
       const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
       await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, original.jobId));
-      await expect(resendPrintJob(tx, cfg, randomUUID())).rejects.toMatchObject({
-        code: "print_job.not_found",
-      });
-      await expect(resendPrintJob(tx, foreign, original.jobId)).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, randomUUID())).rejects.toMatchObject({
         code: "print_job.not_found",
       });
       await deactivatePrinter(tx, cfg, printer.id);
-      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "printer.not_found",
       });
     });

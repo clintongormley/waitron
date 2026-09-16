@@ -5,7 +5,6 @@ import {
   decimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -79,7 +78,6 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -116,11 +114,10 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   it("settles a tender, chains the sale, and associates the payment atomically", async () => {
     const backend = new FakeFiscalBackend(pg.db);
     const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakePaymentProvider(pg.db, s.tenantId);
+    const provider = new FakePaymentProvider(pg.db);
 
     // 1. The payment settles the tender.
     const paid = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -129,12 +126,11 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     expect(paid.settledAt).not.toBeNull();
 
     // 2. The sale and the associate-back happen in ONE transaction, so the linkage is atomic with
-    //    the sale it points at (the composite FK `payments_sale_fk` is satisfied within the tx
+    //    the sale it points at (the FK `payments_sale_fk` is satisfied within the tx
     //    because the sale row already exists there).
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));
       await associatePaymentWithSale(tx, {
-        tenantId: s.tenantId,
         provider: "fake",
         paymentRef: paid.paymentRef,
         saleId: recorded.saleId,
@@ -144,7 +140,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
 
     // 3. After commit, the payment row carries the committed sale's id.
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: paid.paymentRef }),
+      getPaymentByRef(tx, { provider: "fake", paymentRef: paid.paymentRef }),
     );
     expect(row?.saleId).toBe(saleId);
     expect(row?.state).toBe("captured");
@@ -153,11 +149,10 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   it("refuses the sale when the payment failed and leaves the tender unsettled", async () => {
     const backend = new FakeFiscalBackend(pg.db);
     const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakePaymentProvider(pg.db, s.tenantId);
+    const provider = new FakePaymentProvider(pg.db);
     provider.failNextCollect();
 
     const paid = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),

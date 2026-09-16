@@ -554,7 +554,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       // One tenant per database is the post-RLS isolation boundary (§5), enforced here, at the
       // setup-api provision handler (`provisionVenue`) and at the mirror adopt orchestrator
       // (`adoptFromPrimary`) — every tenant-creation path — through the shared `assertNoForeignTenant`
-      // guard: with row-level security gone, `withTenant` no longer filters by tenant, so a foreign
+      // guard: no query filters rows by tenant, so a foreign
       // `(country, tax_id)` in this database would expose one business's rows to the other. The SAME
       // identity proceeds to `applyVenue`, which reuses an exact same-venue plan and refuses different
       // venue details — and an empty database proceeds as the first tenant. The identity applied is the
@@ -590,7 +590,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         // resolves (design §4). After the apply commits; a no-op when the writer is not wired.
         if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
         deps.io.stdout("");
-        deps.io.stdout(`tenant:   ${result.tenantId}`);
         deps.io.stdout(`node:     ${result.nodeId}`);
         for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
         return 0;
@@ -784,10 +783,10 @@ function connectFailure(
  * The flag value is trimmed, so flag and prompt behave IDENTICALLY — the prompt already trims
  * (`.trim()` below). This keeps every field's flag and prompt paths in step (a stored `legalName`,
  * `city`, etc. carries no leading/trailing spaces either way). For the fiscal identity specifically,
- * the casing / leading-or-trailing-whitespace footgun is now closed further in — `planVenue`
- * canonicalizes `country`/`taxId` (`.trim().toUpperCase()`) and `deriveTenantId` self-normalizes —
- * so a non-interactive `--tax-id " B12345678 "` can no longer derive a different, permanent,
- * unmergeable tenant than the trimmed form an interactive operator would produce; this trim is
+ * the casing / leading-or-trailing-whitespace footgun is closed further in — `planVenue`
+ * canonicalizes `country`/`taxId` (`.trim().toUpperCase()`) — so a non-interactive
+ * `--tax-id " B12345678 "` compares equal to the trimmed form an interactive operator would produce
+ * when `assertNoForeignTenant` checks it against the stored taxpayer row; this trim is
  * belt-and-suspenders for it. (Only surrounding whitespace and letter case are collapsed; INTERNAL
  * whitespace is left intact, so `--tax-id "B123 45678"` stays a distinct identity.)
  */
@@ -961,19 +960,19 @@ function assertEnvironment(environment: string): DeploymentEnvironment {
 }
 
 /** The shape of an ISO-3166-1 alpha-2 country code — two ASCII letters. Not a membership check
- * (there is no list here): it rejects the typo an operator makes, `ESP` or `E1`, before the derived
- * tenant id (tenant-id.ts) is built from it. The regex accepts either case; the value is UPPER-CASED
- * before it is returned. This upper-casing is now BELT-AND-SUSPENDERS rather than the sole defence:
- * `planVenue` canonicalizes BOTH `country` and `taxId` (`.trim().toUpperCase()`) for BOTH paths — so
- * the wizard, which never calls `assertCountry`, is covered, and a taxId that differs only in letter
- * case or in leading/trailing whitespace is handled too — and `deriveTenantId` self-normalizes as a
- * backstop. The footgun this all defends: `es`/`ES` (or a taxId differing only in case or surrounding
- * whitespace) for one business would otherwise derive DIFFERENT tenant ids and mint two permanent,
- * unmergeable tenants — a same-venue retry would silently start a second SIF chain instead
- * of reusing the first (§5). `.trim().toUpperCase()` collapses exactly case and surrounding
+ * (there is no list here): it rejects the typo an operator makes, `ESP` or `E1`, before it is stored
+ * on the taxpayer row. The regex accepts either case; the value is UPPER-CASED before it is
+ * returned. This upper-casing is BELT-AND-SUSPENDERS rather than the sole defence: `planVenue`
+ * canonicalizes BOTH `country` and `taxId` (`.trim().toUpperCase()`) for BOTH paths — so the wizard,
+ * which never calls `assertCountry`, is covered, and a taxId that differs only in letter case or in
+ * leading/trailing whitespace is handled too. The footgun this all defends: `assertNoForeignTenant`
+ * (`tenant-guard.ts`) compares a fresh plan's `(country, taxId)` byte-for-byte against the stored
+ * taxpayer row, so `es` against a stored `ES` (or a taxId differing only in case or surrounding
+ * whitespace) would read as a DIFFERENT business and refuse a same-venue retry with
+ * `provisioning.foreign_tenant` (§5). `.trim().toUpperCase()` collapses exactly case and surrounding
  * whitespace; INTERNAL whitespace is left intact (a taxId's inner content is not ours to alter), so
  * `"B123 45678"` stays a distinct identity. Canonicalizing collapses the case/space variants to the
- * one tenant (ISO-3166 alpha-2 is upper-case by convention); there is no data to preserve either
+ * one taxpayer (ISO-3166 alpha-2 is upper-case by convention); there is no data to preserve either
  * way (pre-production, no backfill). Keeping the shape-validation + upper-casing here is harmless and
  * still refuses a mistyped code early. `value` is echoed: it is operator-typed configuration, never a
  * secret. */

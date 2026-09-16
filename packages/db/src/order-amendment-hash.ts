@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
  * `prev_entry_hash`/`sequence_no`); the legal term (art. 29.2.j LGT) lives only in the schema
  * comment, not in the hashed vocabulary.
  *
- * The chain is keyed per `(tenant, working_order)`, not per location: an order's amendments form
+ * The chain is keyed per working order, not per location: an order's amendments form
  * their own short chain, opened by the `order_placed` genesis entry. There is no chain-head table
  * (Decision 2) — the parent `working_orders` row IS the lock, so this module never sees head state.
  */

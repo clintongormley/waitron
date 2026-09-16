@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@wai
 import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   insertAbsence,
@@ -17,15 +17,14 @@ import {
   seedPerson,
 } from "../test/fixtures.js";
 
-let tenantId: string;
-
 const suite = usePgliteDb({
-  // Core first (the tenants FK), then identity (persons — employments/time_entries FK it), then
-  // workforce. Ordering across packages is the runtime's job and nothing enforces it, so it is
-  // explicit here.
+  resetPerTest: false,
+  // Core first (shifts point at its `locations`, `tills` and `nodes`), then identity (persons —
+  // employments/time_entries FK it), then workforce. Ordering across packages is the runtime's job
+  // and nothing enforces it, so it is explicit here.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
   },
 });
 
@@ -37,30 +36,30 @@ const PIN = hashPin("1234");
 describe("persons, from the identity migration set layered under workforce", () => {
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
-      insert into persons (tenant_id, display_name, pin_hash)
-      values (${tenantId}, 'Ana', ${PIN})`);
+      insert into persons (display_name, pin_hash)
+      values ('Ana', ${PIN})`);
     const rows = await suite.db.execute<{ role: string; status: string }>(sql`
-      select role, status from persons where tenant_id = ${tenantId} and display_name = 'Ana'`);
+      select role, status from persons where display_name = 'Ana'`);
     expect(rows.rows[0]).toEqual({ role: "staff", status: "active" });
   });
 
   it("accepts every person_role value", async () => {
     for (const role of ["staff", "supervisor", "manager", "admin"]) {
       await suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, ${`role-${role}`}, ${PIN}, ${role})`);
+        insert into persons (display_name, pin_hash, role)
+        values (${`role-${role}`}, ${PIN}, ${role})`);
     }
     const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from persons
-      where tenant_id = ${tenantId} and role in ('staff','supervisor','manager','admin')`);
+      where role in ('staff','supervisor','manager','admin')`);
     expect(rows.rows[0]!.n).toBeGreaterThanOrEqual(4);
   });
 
   it("rejects a role outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'Bad role', ${PIN}, 'ceo')`),
+        insert into persons (display_name, pin_hash, role)
+        values ('Bad role', ${PIN}, 'ceo')`),
     );
     expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
   });
@@ -68,8 +67,8 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("rejects a status outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash, status)
-        values (${tenantId}, 'Bad status', ${PIN}, 'fired')`),
+        insert into persons (display_name, pin_hash, status)
+        values ('Bad status', ${PIN}, 'fired')`),
     );
     expect(pgErrorCode(error)).toBe("22P02");
   });
@@ -77,8 +76,8 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("rejects an empty display_name", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash)
-        values (${tenantId}, '', ${PIN})`),
+        insert into persons (display_name, pin_hash)
+        values ('', ${PIN})`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/persons_display_name_ck/);
@@ -87,20 +86,11 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("rejects an empty pin_hash", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash)
-        values (${tenantId}, 'No pin', '')`),
+        insert into persons (display_name, pin_hash)
+        values ('No pin', '')`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/persons_pin_hash_ck/);
-  });
-
-  it("rejects a row whose tenant does not exist", async () => {
-    const error = await captureError(() =>
-      suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash)
-        values (gen_random_uuid(), 'Orphan', ${PIN})`),
-    );
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
   });
 });
 
@@ -110,9 +100,9 @@ describe("the D1a time & attendance tables", () => {
     locationId: string;
     nodeId: string;
   }> {
-    const personId = await seedPerson(suite.db, tenantId, `d1a-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
-    const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const personId = await seedPerson(suite.db, `d1a-${crypto.randomUUID()}`);
+    const locationId = await seedLocation(suite.db);
+    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     return { personId, locationId, nodeId };
   }
 
@@ -121,10 +111,9 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, 'lunch', '2026-01-05T09:00:00Z', 0, ${personId})`),
+        ) values (${personId}, ${locationId}, 'lunch', '2026-01-05T09:00:00Z', 0, ${personId})`),
     );
     expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
   });
@@ -137,10 +126,9 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 900,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 900,
           ${personId}, '2026-01-05T09:00:00Z', ${"A".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
@@ -152,8 +140,8 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into employments (
-          tenant_id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
-        ) values (${tenantId}, ${personId}, -1, 'full_time', '2026-01-01', '15.00')`),
+          person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
+        ) values (${personId}, -1, 'full_time', '2026-01-01', '15.00')`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/employments_contracted_minutes_ck/);
@@ -164,9 +152,9 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into employments (
-          tenant_id, person_id, contracted_minutes_per_week, contract_type,
+          person_id, contracted_minutes_per_week, contract_type,
           start_date, end_date, pay_rate
-        ) values (${tenantId}, ${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', '15.00')`),
+        ) values (${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', '15.00')`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/employments_dates_ck/);
@@ -180,19 +168,18 @@ describe("the D1b correction columns", () => {
     nodeId: string;
     entryId: string;
   }> {
-    const personId = await seedPerson(suite.db, tenantId, `d1b-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
-    const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const personId = await seedPerson(suite.db, `d1b-${crypto.randomUUID()}`);
+    const locationId = await seedLocation(suite.db);
+    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     // Genesis chain columns (node_id, recorded_at + the Slice-4 columns, all NOT NULL) so this base
     // event is a valid position-1 entry; the D1b tests below append their (deliberately malformed)
     // correction at position 2 of the SAME (node, location), so the chain columns never collide on
     // time_entries_chain_position_uq.
     const rows = await suite.db.execute<{ id: string }>(sql`
       insert into time_entries (
-        tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (
-        ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+      ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
         ${personId}, '2026-01-05T09:00:00Z', ${"A".repeat(64)}, 1, true
       ) returning id`);
     return { personId, locationId, nodeId, entryId: rows.rows[0]!.id };
@@ -204,11 +191,10 @@ describe("the D1b correction columns", () => {
     const { personId, locationId, nodeId, entryId } = await seedBaseEntry();
     await suite.db.execute(sql`
       insert into time_entries (
-        tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
         correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-      ) values (
-        ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
+      ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
         ${personId}, '2026-01-05T18:00:00Z', ${entryId}, 'forgot to clock out', 'approved', ${personId},
         ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`);
     const rows = await suite.db.execute<{ n: number }>(sql`
@@ -226,11 +212,10 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
           ${personId}, '2026-01-05T18:00:00Z', ${entryId}, ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
@@ -246,11 +231,10 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, correction_status, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
           ${personId}, '2026-01-05T09:00:00Z', 'requested', ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -264,11 +248,10 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
           correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
           ${personId}, '2026-01-05T18:00:00Z', ${crypto.randomUUID()}, 'dangling', 'approved', ${personId},
           ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
@@ -278,14 +261,14 @@ describe("the D1b correction columns", () => {
 
 describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
-    const personId = await seedPerson(suite.db, tenantId, `d2-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
+    const personId = await seedPerson(suite.db, `d2-${crypto.randomUUID()}`);
+    const locationId = await seedLocation(suite.db);
     return { personId, locationId };
   }
 
   it("stores a draft roster version defaulting status to draft with a null published_at", async () => {
     const { locationId } = await seedPersonAndLocation();
-    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
+    const versionId = await insertRosterVersion(suite.db, { locationId });
     const rows = await suite.db.execute<{ status: string; published_at: string | null }>(sql`
       select status, published_at from roster_versions where id = ${versionId}`);
     expect(rows.rows[0]).toEqual({ status: "draft", published_at: null });
@@ -295,8 +278,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (tenant_id, location_id, period_start, period_end)
-        values (${tenantId}, ${locationId}, '2026-03-08', '2026-03-02')`),
+        insert into roster_versions (location_id, period_start, period_end)
+        values (${locationId}, '2026-03-08', '2026-03-02')`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/roster_versions_period_ck/);
@@ -309,8 +292,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (tenant_id, location_id, period_start, period_end, status)
-        values (${tenantId}, ${locationId}, '2026-03-02', '2026-03-08', 'published')`),
+        insert into roster_versions (location_id, period_start, period_end, status)
+        values (${locationId}, '2026-03-02', '2026-03-08', 'published')`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
@@ -320,26 +303,26 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (tenant_id, location_id, period_start, period_end, published_at)
-        values (${tenantId}, ${locationId}, '2026-03-02', '2026-03-08', now())`),
+        insert into roster_versions (location_id, period_start, period_end, published_at)
+        values (${locationId}, '2026-03-02', '2026-03-08', now())`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
-  it("rejects a second published version for the same (tenant, location, period) via the partial unique index", async () => {
-    // roster_versions_published_period_uq (migration 0009): at most one PUBLISHED version per (tenant,
-    // location, exact period). Insert one published row directly (with a stamp so publish-shape passes),
+  it("rejects a second published version for the same (location, period) via the partial unique index", async () => {
+    // roster_versions_published_period_uq at most one PUBLISHED version per (location,
+    // exact period). Insert one published row directly (with a stamp so publish-shape passes),
     // then a second identical-period published row is rejected 23505. Prove by deletion: drop the
-    // CREATE UNIQUE INDEX from 0009 and the second insert succeeds (two published rows coexist).
+    // CREATE UNIQUE INDEX and the second insert succeeds (two published rows coexist).
     const { locationId } = await seedPersonAndLocation();
     await suite.db.execute(sql`
-      insert into roster_versions (tenant_id, location_id, period_start, period_end, status, published_at)
-      values (${tenantId}, ${locationId}, '2026-05-04', '2026-05-10', 'published', now())`);
+      insert into roster_versions (location_id, period_start, period_end, status, published_at)
+      values (${locationId}, '2026-05-04', '2026-05-10', 'published', now())`);
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (tenant_id, location_id, period_start, period_end, status, published_at)
-        values (${tenantId}, ${locationId}, '2026-05-04', '2026-05-10', 'published', now())`),
+        insert into roster_versions (location_id, period_start, period_end, status, published_at)
+        values (${locationId}, '2026-05-04', '2026-05-10', 'published', now())`),
     );
     expect(pgErrorCode(error)).toBe("23505"); // unique_violation
     expect(pgErrorMessage(error)).toMatch(/roster_versions_published_period_uq/);
@@ -351,27 +334,25 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     // wrongly reject a second draft for a period being re-planned.
     const { locationId } = await seedPersonAndLocation();
     await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-05-11",
       periodEnd: "2026-05-17",
     });
     await insertRosterVersion(suite.db, {
-      tenantId,
       locationId,
       periodStart: "2026-05-11",
       periodEnd: "2026-05-17",
     });
     const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from roster_versions
-      where tenant_id = ${tenantId} and location_id = ${locationId}
+      where location_id = ${locationId}
         and period_start = '2026-05-11' and period_end = '2026-05-17'`);
     expect(rows.rows[0]!.n).toBe(2);
   });
 
   it("stores a draft shift with a null roster_version_id", async () => {
     const { personId, locationId } = await seedPersonAndLocation();
-    const shiftId = await insertDraftShift(suite.db, { tenantId, personId, locationId });
+    const shiftId = await insertDraftShift(suite.db, { personId, locationId });
     const rows = await suite.db.execute<{ roster_version_id: string | null }>(sql`
       select roster_version_id from shifts where id = ${shiftId}`);
     expect(rows.rows[0]!.roster_version_id).toBeNull();
@@ -381,7 +362,6 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { personId, locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       insertDraftShift(suite.db, {
-        tenantId,
         personId,
         locationId,
         startsAt: "2026-03-03T17:00:00Z",
@@ -396,7 +376,6 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { personId, locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       insertDraftShift(suite.db, {
-        tenantId,
         personId,
         locationId,
         startsOffsetMinutes: 900,
@@ -409,14 +388,14 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
 
 describe("the D2.2 planning tables (absences, availability, shift_templates, shift_swaps)", () => {
   async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
-    const personId = await seedPerson(suite.db, tenantId, `d22-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
+    const personId = await seedPerson(suite.db, `d22-${crypto.randomUUID()}`);
+    const locationId = await seedLocation(suite.db);
     return { personId, locationId };
   }
 
   it("stores an absence defaulting status to requested with a null note", async () => {
     const { personId } = await seedPersonAndLocation();
-    const id = await insertAbsence(suite.db, { tenantId, personId, status: "requested" });
+    const id = await insertAbsence(suite.db, { personId, status: "requested" });
     const rows = await suite.db.execute<{ status: string; note: string | null }>(sql`
       select status, note from absences where id = ${id}`);
     expect(rows.rows[0]).toEqual({ status: "requested", note: null });
@@ -426,7 +405,6 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const { personId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       insertAbsence(suite.db, {
-        tenantId,
         personId,
         startsOn: "2026-03-10",
         endsOn: "2026-03-05",
@@ -439,16 +417,14 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   it("rejects an absence_kind outside the enum", async () => {
     const { personId } = await seedPersonAndLocation();
     const error = await captureError(() =>
-      insertAbsence(suite.db, { tenantId, personId, kind: "sabbatical" }),
+      insertAbsence(suite.db, { personId, kind: "sabbatical" }),
     );
     expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
   });
 
   it("rejects an availability weekday outside 0–6", async () => {
     const { personId } = await seedPersonAndLocation();
-    const error = await captureError(() =>
-      insertAvailability(suite.db, { tenantId, personId, weekday: 7 }),
-    );
+    const error = await captureError(() => insertAvailability(suite.db, { personId, weekday: 7 }));
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/availability_weekday_ck/);
   });
@@ -457,7 +433,6 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const { personId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       insertAvailability(suite.db, {
-        tenantId,
         personId,
         availableFromMinute: 600,
         availableToMinute: 600,
@@ -471,7 +446,6 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const { personId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       insertAvailability(suite.db, {
-        tenantId,
         personId,
         effectiveFrom: "2026-06-01",
         effectiveTo: "2026-01-01",
@@ -484,7 +458,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   it("rejects a shift_template with an empty label", async () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
-      insertShiftTemplate(suite.db, { tenantId, locationId, label: "" }),
+      insertShiftTemplate(suite.db, { locationId, label: "" }),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/shift_templates_label_ck/);
@@ -493,7 +467,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   it("rejects a shift_template weekday outside 0–6", async () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
-      insertShiftTemplate(suite.db, { tenantId, locationId, weekday: -1 }),
+      insertShiftTemplate(suite.db, { locationId, weekday: -1 }),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/shift_templates_weekday_ck/);
@@ -504,10 +478,9 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     // shift is gone, so deleting the shift discards the swap (changing the FK to `restrict` fails the
     // delete; to `set null` leaves the row and fails the count-0 assertion).
     const { personId, locationId } = await seedPersonAndLocation();
-    const toPerson = await seedPerson(suite.db, tenantId, `d22to-${crypto.randomUUID()}`);
-    const fromShiftId = await insertDraftShift(suite.db, { tenantId, personId, locationId });
+    const toPerson = await seedPerson(suite.db, `d22to-${crypto.randomUUID()}`);
+    const fromShiftId = await insertDraftShift(suite.db, { personId, locationId });
     const swapId = await insertShiftSwap(suite.db, {
-      tenantId,
       requestedByPersonId: personId,
       fromShiftId,
       toPersonId: toPerson,
@@ -526,15 +499,73 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
 
   it("rejects a shift_swap whose from_shift references no shift", async () => {
     const { personId } = await seedPersonAndLocation();
-    const toPerson = await seedPerson(suite.db, tenantId, `d22to-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, `d22to-${crypto.randomUUID()}`);
     const error = await captureError(() =>
       insertShiftSwap(suite.db, {
-        tenantId,
         requestedByPersonId: personId,
         fromShiftId: crypto.randomUUID(),
         toPersonId: toPerson,
       }),
     );
     expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+  });
+});
+
+describe("the workforce set carries no tenant column", () => {
+  const TABLES = [
+    "employments",
+    "time_entries",
+    "workforce_chains",
+    "roster_versions",
+    "shifts",
+    "absences",
+    "availability",
+    "shift_templates",
+    "shift_swaps",
+  ];
+
+  it("has no tenant_id column on any of its tables", async () => {
+    const rows = await suite.db.execute<{ table_name: string }>(sql`
+      select table_name from information_schema.columns
+      where table_schema = 'public' and column_name = 'tenant_id'
+        and table_name in (${sql.join(
+          TABLES.map((t) => sql`${t}`),
+          sql`, `,
+        )})`);
+    expect(rows.rows).toEqual([]);
+  });
+
+  it("keys the working-time chain head by (node_id, location_id) alone", async () => {
+    const rows = await suite.db.execute<{ column_name: string }>(sql`
+      select a.attname as column_name
+      from pg_constraint c
+      join lateral unnest(c.conkey) with ordinality as k(attnum, ord) on true
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+      where c.conrelid = 'workforce_chains'::regclass and c.contype = 'p'
+      order by k.ord`);
+    expect(rows.rows.map((r) => r.column_name)).toEqual(["node_id", "location_id"]);
+  });
+
+  it("rebuilds the multi-column keys on their remaining columns", async () => {
+    const rows = await suite.db.execute<{ indexname: string; indexdef: string }>(sql`
+      select indexname, indexdef from pg_indexes
+      where schemaname = 'public' and tablename in (${sql.join(
+        TABLES.map((t) => sql`${t}`),
+        sql`, `,
+      )})`);
+    const defs = Object.fromEntries(rows.rows.map((r) => [r.indexname, r.indexdef]));
+    expect(defs["time_entries_chain_position_uq"]).toContain("(node_id, location_id, sequence_no)");
+    expect(defs["roster_versions_published_period_uq"]).toContain(
+      "(location_id, period_start, period_end) WHERE (status = 'published'",
+    );
+    expect(defs["absences_person_idx"]).toContain("(person_id, starts_on)");
+    expect(defs["availability_person_idx"]).toContain("(person_id)");
+    expect(defs["employments_person_idx"]).toContain("(person_id)");
+    expect(defs["roster_versions_location_idx"]).toContain("(location_id)");
+    expect(defs["shifts_person_starts_idx"]).toContain("(person_id, starts_at)");
+    expect(defs["shift_templates_location_idx"]).toContain("(location_id)");
+    expect(defs["shift_swaps_from_shift_idx"]).toContain("(from_shift_id)");
+    expect(defs["time_entries_person_event_idx"]).toContain("(person_id, event_at)");
+    expect(Object.keys(defs).filter((name) => name.includes("tenant"))).toEqual([]);
   });
 });

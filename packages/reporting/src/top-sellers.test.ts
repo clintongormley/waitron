@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   seedNodeAndSeries,
@@ -40,7 +40,6 @@ beforeEach(async () => {
 
 function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
   const input: TopSellersInput = {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     fromBusinessDay: DAY,
     toBusinessDay: DAY,
@@ -49,7 +48,7 @@ function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
     limit: 5,
     ...overrides,
   };
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeTopSellers(tx, input);
   });
@@ -271,7 +270,7 @@ describe("computeTopSellers", () => {
         },
       ],
     });
-    await seedVoid(suite.db, { tenantId: venue.tenantId, saleId: voided }, noonUtc);
+    await seedVoid(suite.db, { saleId: voided }, noonUtc);
     await seedSale(suite.db, venue, {
       invoiceNumber: 2,
       issuedAt: noonUtc,
@@ -321,7 +320,6 @@ describe("computeTopSellers", () => {
       ],
     });
     await seedSubstitution(suite.db, {
-      tenantId: venue.tenantId,
       substitutionSaleId: f3,
       substitutedSaleId: ticket,
     });
@@ -388,25 +386,6 @@ describe("computeTopSellers", () => {
   });
 
   it("returns [] for an empty range", async () => {
-    expect(await run()).toEqual([]);
-  });
-
-  it("excludes another tenant's sales (the tenant predicate)", async () => {
-    const other = await seedVenue(suite.db);
-    await seedSale(suite.db, other, {
-      invoiceNumber: 1,
-      issuedAt: noonUtc,
-      total: "50.00",
-      lines: [
-        {
-          vatRate: "10.00",
-          lineTotal: "50.00",
-          name: coffeeName,
-          descriptions: coffeeText,
-          quantity: "5.000",
-        },
-      ],
-    });
     expect(await run()).toEqual([]);
   });
 });

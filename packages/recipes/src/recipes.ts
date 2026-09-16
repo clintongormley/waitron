@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { ingredients, recipeLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import {
   applyDietDerivation,
   applyRecipeDerivation,
@@ -82,7 +81,6 @@ export async function recomputeProductDerivations(
 /** Replace a product's recipe with exactly `ingredientIds`, then recompute its allergens + diet. */
 export async function setProductRecipe(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
   ingredientIds: string[],
 ): Promise<void> {
@@ -90,7 +88,6 @@ export async function setProductRecipe(
   if (ingredientIds.length > 0) {
     await tx.insert(recipeLines).values(
       ingredientIds.map((ingredientId) => ({
-        tenantId,
         productId,
         ingredientId,
       })),

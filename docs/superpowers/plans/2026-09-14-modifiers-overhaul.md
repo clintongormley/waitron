@@ -1356,7 +1356,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Final cross-screen look**
 
-Start the dev stack from the worktree (`wa-wt demo waitron-modifiers-overhaul`; the dev till must be enrolled once with pairing code `DEMO` if you exercise the till). In the dashboard: create an extras modifier with a couple of choices (allergens + dietary via the new picker), a yes/no modifier (toggle its Available), open the details modal, and delete a modifier that a product uses. Confirm the till still shows a product's modifiers. Look in light and dark, phone width.
+Start the dev stack from the worktree (`wa-wt demo waitron-modifiers-overhaul`; 2026-09-16 correction — this line originally said the dev till must be enrolled once with the fixed pairing code `DEMO`, which had already been deleted when it was written: device join-and-accept replaced it in #287 on 2026-09-09, and in devMode the till's join request is accepted automatically, so there is no enrolment step). In the dashboard: create an extras modifier with a couple of choices (allergens + dietary via the new picker), a yes/no modifier (toggle its Available), open the details modal, and delete a modifier that a product uses. Confirm the till still shows a product's modifiers. Look in light and dark, phone width.
 
 - [ ] **Step 6: Commit**
 

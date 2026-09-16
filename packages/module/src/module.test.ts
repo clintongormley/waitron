@@ -39,7 +39,6 @@ describe("backup.restore seat", () => {
     expect(typeof withHook.backup?.restore).toBe("function");
     expect(without.backup?.restore).toBeUndefined();
     const outcome = await withHook.backup!.restore!({} as never, {
-      tenantId: "t" as never,
       locationId: "l" as never,
       nodeId: "n" as never,
     });

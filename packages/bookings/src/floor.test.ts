@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, DEFAULT_TIME_ZONE, withTenant } from "@waitron/db";
+import { asAppUser, DEFAULT_TIME_ZONE, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import "./errors.js";
@@ -22,21 +22,18 @@ beforeAll(() => {
 });
 
 interface Venue {
-  tenantId: TenantId;
   locationId: LocationId;
 }
 
 /** Stand up a fresh tenant + location (optionally with a pinned time zone) and its scoping ids. */
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   // The annotator derives venue-local "today"/"now" from this column (design §2b/§4); default the schema
   // default (Europe/Madrid) unless a test pins one.
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento', ${timeZone}) returning id`);
+    insert into locations (name, invoice_locales, operation_description, time_zone) values ('Barra', array['es-ES'], 'Venta en establecimiento', ${timeZone}) returning id`);
   return {
-    tenantId: brandTenantId(tenantId),
     locationId: brandLocationId(loc.rows[0]!.id),
   };
 }
@@ -44,8 +41,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
 /** Insert an ACTIVE dining table for the venue and return its id. */
 async function makeTable(v: Venue, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${v.tenantId}, ${v.locationId}, ${label}, true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${v.locationId}, ${label}, true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -58,30 +54,28 @@ async function insertBooking(
     date: string;
     time: string;
     status?: string;
-    tenantId?: TenantId;
     locationId?: LocationId;
   },
 ): Promise<void> {
-  const tenant = fields.tenantId ?? v.tenantId;
   const location = fields.locationId ?? v.locationId;
-  await withTenant(db, tenant, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into bookings
-        (tenant_id, location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
+        (location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
       values
-        (${tenant}, ${location}, ${fields.tableId}, ${fields.date}, ${fields.time},
+        (${location}, ${fields.tableId}, ${fields.date}, ${fields.time},
          2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
   });
 }
 
-/** Run the annotator inside the venue's tenant scope as `app_user`, exactly as production does. */
+/** Run the annotator as `app_user`, exactly as production does. */
 function annotate(
   v: Venue,
   now: Date,
   tableIds: string[],
 ): Promise<Map<string, { reservedTime: string | null }>> {
-  return withTenant(db, v.tenantId, async (tx: Transaction) => {
+  return withTransaction(db, async (tx: Transaction) => {
     await asAppUser(tx);
     return BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, v, now, tableIds);
   });
@@ -240,21 +234,5 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
     expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
     expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
-  });
-
-  it("scopes to cfg.tenantId — another tenant's booking on its own table is not surfaced (CLAUDE.md §3)", async () => {
-    // RLS was dropped (#255), so `withTenant` no longer isolates SELECTs — the annotator MUST filter
-    // `tenantId` itself. Scoped as tenant `v` but asked for BOTH tenants' table ids: `v`'s surfaces its
-    // booking; the OTHER tenant's table (its own `booked` row today) stays null. Deletion-provable —
-    // dropping the `tenantId` filter would leak the other tenant's booking through the shared DB.
-    const v = await setupVenue();
-    const other = await setupVenue();
-    const vt = await makeTable(v, "17");
-    const ot = await makeTable(other, "18");
-    await insertBooking(v, { tableId: vt, date: "2026-09-15", time: "14:00" });
-    await insertBooking(other, { tableId: ot, date: "2026-09-15", time: "15:00" });
-    const m = await annotate(v, MADRID_NOON, [vt, ot]);
-    expect(m.get(vt)).toEqual({ reservedTime: "14:00" });
-    expect(m.get(ot)).toEqual({ reservedTime: null });
   });
 });

@@ -41,7 +41,7 @@ export interface PromotionResult {
 export interface PromoteDeps {
   /**
    * The app pool — the holder-refresh READ (`app_user` holds SELECT on `deployment`) and the identity
-   * reads, all app-role: `readNodeIdentityKey` unseals the signing key under `withTenant` as `app_user`,
+   * reads, all app-role: `readNodeIdentityKey` unseals the signing key under `withTransaction` as `app_user`,
    * which holds SELECT on `tenant_credentials` (0001_credentials_baseline_sql.sql) — app-role at mirror
    * boot; `readNodeMembership` reads the held org chart via `app_user`'s SELECT on `node_membership`.
    */
@@ -60,9 +60,8 @@ export interface PromoteDeps {
   readonly log: Logger;
   /** The box key ring — unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
-  /** This node's tenant — scopes the identity-key read and the trust set. */
-  readonly tenantId: string;
-  /** This node's id — the new document's `signerNodeId` and the node that becomes serving-primary. */
+  /** This node's id — the new document's `signerNodeId`, the node that becomes serving-primary, and
+   * what the identity-key read, the series read and the endorsement read are each keyed on. */
   readonly nodeId: string;
 }
 
@@ -144,7 +143,6 @@ export async function promoteLocalSecondaryToPrimary(
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, ring: deps.ring },
     {
-      tenantId: deps.tenantId,
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
@@ -278,7 +276,7 @@ export async function promoteMirrorToPrimary(
 
   await refreshDeploymentHolders(deps.appDb, deps.holders);
   // Read the corrected series id up front — it is also the value an already-primary re-run returns.
-  const seriesId = await readStandardSeriesId(deps.appDb, deps.tenantId, deps.nodeId);
+  const seriesId = await readStandardSeriesId(deps.appDb, deps.nodeId);
 
   if (deps.holders.mode.current === "primary") {
     // Already promoted — idempotent no-op. trading.env was already corrected before this box's own PONR,
@@ -293,11 +291,10 @@ export async function promoteMirrorToPrimary(
   // non-setup key.
   const held = await readNodeMembership(deps.appDb);
   assertNotFenced(held, deps.nodeId); // before PONR/persist: a fenced mirror was superseded — refuse (§5)
-  const endorsement = await readNodeEndorsement(deps.appDb, deps.tenantId, deps.nodeId);
+  const endorsement = await readNodeEndorsement(deps.appDb, deps.nodeId);
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, ring: deps.ring },
     {
-      tenantId: deps.tenantId,
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,

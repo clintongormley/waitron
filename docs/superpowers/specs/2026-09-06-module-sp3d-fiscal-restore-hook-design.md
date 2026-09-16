@@ -1,5 +1,12 @@
 # SP-3d — The fiscal module's restore hook (fresh SIF, disjoint series; = BR-4)
 
+> **2026-09-14 — the tenant column is gone.** Every `tenant_id` column, every tenant argument and
+> the `WAITRON_TILL_TENANT_ID` environment variable were removed: one database holds one taxpayer,
+> as the single row of `tenants`, and nothing filters by a tenant. The text below is left as the
+> record of what was built at the time; anywhere it names a tenant id, a tenant predicate or that
+> variable, read it as history. Spec:
+> [drop-tenant-id](2026-09-14-drop-tenant-id-design.md).
+
 **Date:** 2026-09-06
 **Status:** built on feat/module-sp3d-fiscal-restore-hook; owner review at PR. **Owner-reviewed:** not yet — written in an unattended session, then reviewed
 fresh-context by Fable and read-only by Astra (both 2026-09-06; the findings that changed this text

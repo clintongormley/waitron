@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { freshNif } from "../testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -16,12 +16,8 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
 // Append-only links and sales retain their FK parents; each case uses a fresh fixture identity.
 beforeEach(() => {
-  TENANT_A = randomUUID();
-  TENANT_B = randomUUID();
   LOCATION_A = randomUUID();
-  LOCATION_B = randomUUID();
   TILL_A1 = randomUUID();
-  TILL_B1 = randomUUID();
 });
 
 /**
@@ -29,20 +25,14 @@ beforeEach(() => {
  * columns on `sales` (`counterparty_*`). docs/superpowers/plans/2026-08-02-f3-canje.md §2.1.
  */
 
-let TENANT_A = randomUUID();
-let TENANT_B = randomUUID();
 let LOCATION_A = randomUUID();
-let LOCATION_B = randomUUID();
 let TILL_A1 = randomUUID();
-let TILL_B1 = randomUUID();
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
-let seriesB = "";
-// sales.node_id is NOT NULL since the node-id rekey (2026-08-03); insertSale writes the node of
-// the sale's own tenant, which the composite (tenant_id, node_id) → nodes FK requires.
+// sales.node_id is NOT NULL since the node-id rekey (2026-08-03); insertSale writes the sale's node,
+// which the (node_id) → nodes FK requires.
 let nodeA = "";
-let nodeB = "";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
@@ -50,42 +40,24 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: 1, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-    {
-      id: LOCATION_B,
-      tenantId: TENANT_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
   ]);
-  await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
-  ]);
-  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeB = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
+  nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
-    .returning({ id: invoiceSeries.id });
-  const [b] = await db
-    .insert(invoiceSeries)
-    .values({ tenantId: TENANT_B, nodeId: nodeB, code: "FB", purpose: "standard" })
+    .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
-  seriesB = b.id;
 }
 
 // Raw insert of a sale HEADER — deliberately raw `sql`, not the drizzle `sales` object, so the RED
@@ -95,7 +67,6 @@ let invoiceCounter = 0;
 async function insertSale(
   db: Database,
   opts: {
-    tenantId?: string;
     tillId?: string;
     nodeId?: string;
     seriesId?: string;
@@ -103,11 +74,9 @@ async function insertSale(
     counterparty?: { taxId: string; legalName: string; countryCode: string } | null;
   } = {},
 ): Promise<string> {
-  const tenantId = opts.tenantId ?? TENANT_A;
   const tillId = opts.tillId ?? TILL_A1;
-  // node_id is NOT NULL and tenant-consistent with the sale: default to the node of whichever
-  // tenant this sale belongs to, so the cross-tenant fixture (tenant B) gets tenant B's node.
-  const nodeId = opts.nodeId ?? (tenantId === TENANT_B ? nodeB : nodeA);
+  // node_id is NOT NULL.
+  const nodeId = opts.nodeId ?? nodeA;
   const seriesId = opts.seriesId ?? seriesA;
   const locales = opts.invoiceLocales ?? ["es", "ca"];
   const cp = opts.counterparty ?? null;
@@ -118,12 +87,7 @@ async function insertSale(
   )}]::text[]`;
   const [row] = await rows<{ id: string }>(
     db,
-    sql`insert into sales (
-           tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-           issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend,
-           fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code
-         ) values (
-           ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
+    sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
            '1.00', '[]'::jsonb, ${locales[0]}, ${localesArray}, 'verifactu', 'recorded',
            ${cp?.taxId ?? null}, ${cp?.legalName ?? null}, ${cp?.countryCode ?? null}
          ) returning id`,
@@ -133,12 +97,11 @@ async function insertSale(
 
 async function insertSubstitution(
   db: Database,
-  opts: { tenantId?: string; substitutionSaleId: string; substitutedSaleId: string },
+  opts: { substitutionSaleId: string; substitutedSaleId: string },
 ): Promise<{ id: string }[]> {
   return rows<{ id: string }>(
     db,
-    sql`insert into sale_substitutions (tenant_id, substitution_sale_id, substituted_sale_id)
-         values (${opts.tenantId ?? TENANT_A}, ${opts.substitutionSaleId}, ${opts.substitutedSaleId})
+    sql`insert into sale_substitutions (substitution_sale_id, substituted_sale_id) values (${opts.substitutionSaleId}, ${opts.substitutedSaleId})
          returning id`,
   );
 }
@@ -253,26 +216,6 @@ describe("sale_substitutions — the N:1 link", () => {
       insertSubstitution(db, {
         substitutionSaleId: "99999999-9999-4999-8999-999999999999",
         substitutedSaleId: ticket1,
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
-  });
-
-  it("rejects a link that crosses tenants (tenant-consistent composite FK)", async () => {
-    // Both FKs are composite (tenant_id, *_sale_id) onto sales, mirroring sale_lines_sale_fk: a
-    // substitution row may only reference sales of its OWN tenant. Tenant A cannot substitute a
-    // ticket belonging to tenant B even though that id exists.
-    const foreignTicket = await insertSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-    });
-    const error = await captureError(() =>
-      insertSubstitution(db, {
-        tenantId: TENANT_A,
-        substitutionSaleId: f3SaleId,
-        substitutedSaleId: foreignTicket,
       }),
     );
     expect(pgErrorCode(error)).toBe("23503");

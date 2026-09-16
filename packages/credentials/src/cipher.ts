@@ -12,16 +12,12 @@ export interface Sealed {
 }
 
 /**
- * The additional authenticated data: the row's own identity. GCM covers it by the auth tag without
- * storing it, so a ciphertext only opens under the exact (tenant, purpose) it was sealed for — the
- * moved-row attack in cipher.test.ts.
- *
- * The NUL separator is not decoration. Without it `aadFor("ab", "c")` and `aadFor("a", "bc")` are
- * the same bytes, and two rows would seal interchangeably. Tenant ids are fixed-length uuids today,
- * so this only matters to a future caller — which is when nobody is looking for it.
+ * The additional authenticated data: the row's own identity, its purpose. GCM covers it by the auth
+ * tag without storing it, so a ciphertext only opens under the purpose it was sealed for — the
+ * moved-row attack in cipher.test.ts and store.test.ts.
  */
-export function aadFor(tenantId: string, purpose: string): Buffer {
-  return Buffer.from(`${tenantId}\0${purpose}`);
+export function aadFor(purpose: string): Buffer {
+  return Buffer.from(purpose, "utf8");
 }
 
 export function seal(key: Buffer, aad: Buffer, plaintext: string): Sealed {
@@ -36,7 +32,7 @@ export function seal(key: Buffer, aad: Buffer, plaintext: string): Sealed {
 
 /**
  * Null — never a throw, and never a reason — when authentication fails. The wrong key, a tampered
- * ciphertext and a row moved between (tenant, purpose) pairs are indistinguishable here on purpose:
+ * ciphertext and a row moved between purposes are indistinguishable here on purpose:
  * an error that told them apart would be an oracle for whoever caused it. The store turns the null
  * into `credentials.decrypt_failed`, because only the store knows which row it was.
  *

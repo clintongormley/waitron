@@ -21,7 +21,7 @@ export interface DutyReport {
   errorCode?: string;
   nextDueAt: Date | null;
   /**
-   * How many tenants this duty abandoned this pass — `DrainResult.skipped.length` for `drain`,
+   * How much due work this duty abandoned this pass — `DrainResult.skipped.length` for `drain`,
    * `TickResult.skipped.length` for reconcile (their element shapes differ, which is why each is
    * still logged under its own event in `runPass` below; this field only ever carries the count).
    * Undefined for a duty that threw — `attempt`'s catch branch never reaches the body that would
@@ -29,12 +29,12 @@ export interface DutyReport {
    * zero identically, so the distinction is not load-bearing, only honest about where the number
    * came from.
    *
-   * This is C2: a per-tenant skip is a per-tenant FAILURE of the duty, not a partial success, and
+   * This is C2: a contained skip is a FAILURE of the duty, not a partial success, and
    * `attempt` below only ever sets `ok: false` on a THROW — a `drain` or `runDue` call that returns
    * normally with a non-empty `skipped` list still reports `ok: true` here, on purpose (§6/§7: a
-   * skipped tenant has no ledger row and no incident, this pass's summary line is what carries it
+   * skipped drain has no ledger row and no incident, this pass's summary line is what carries it
    * to a reader at all). Before this field existed, `health.ts` had nothing to read but `ok`, so a
-   * tenant with due fiscal work and no usable certificate accumulated `pendiente` rows past its
+   * venue with due fiscal work and no usable certificate accumulated `pendiente` rows past its
    * art. 16.4 hour while `/health` answered 200 — see `health.ts`'s own comment on `recordPass`
    * (not `isStale`, which is about undeclared duties, not skips) for how this field closes that.
    */
@@ -46,7 +46,7 @@ export interface DutyReport {
   /**
    * How many of `TickResult.ran` this pass ended `outcome: "parked"` — a run that exhausted
    * `maxAttempts` (`@waitron/scheduler`'s `parkOrRetry`), whose `completeRun` wrote
-   * `next_attempt_at = null`: terminal, and nothing will claim that (tenant, duty, period) again.
+   * `next_attempt_at = null`: terminal, and nothing will claim that (duty, period) again.
    * This is the IDENTICAL gap `skipped` above closes, one duty over: a `runDue` call that parked
    * every period it touched still returns normally, with an empty `skipped` list (a park is not an
    * infrastructure failure mid-sweep, it is a duty that ran and lost every attempt), so `ok: true`
@@ -82,7 +82,7 @@ const AWAITING_CERT_ERROR = "credentials.missing";
 
 /**
  * A one-field live cell — the same holder pattern the deployment axes use — set true while the last
- * drain pass skipped a tenant for a missing `fiscal.aeat` credential. `runPass` writes it; box-status
+ * drain pass skipped its work for a missing `fiscal.aeat` credential. `runPass` writes it; box-status
  * reads it (`awaitingFiscalCertificate`). Shared by reference so a flip is observed with no restart.
  */
 export interface AwaitingCertStatus {
@@ -93,7 +93,7 @@ export interface PassDeps {
   drain: (now: Date) => Promise<DrainResult>;
   reconcile: (now: Date) => Promise<TickResult>;
   /**
-   * The awaiting-fiscal-certificate cell (above). The drain contains a missing cert as a per-tenant
+   * The awaiting-fiscal-certificate cell (above). The drain contains a missing cert as a contained
    * skip, not a throw, so this is set from `DrainResult.skipped`, not `attempt`'s catch branch.
    */
   awaitingCert: AwaitingCertStatus;
@@ -117,7 +117,7 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       const result = await deps.drain(now);
       let sawMissingCert = false;
       for (const skipped of result.skipped) {
-        // A tenant with due fiscal work this pass could not submit for is an unmet legal
+        // Due fiscal work this pass could not submit at all is an unmet legal
         // obligation. It has no ledger row and no incident (`incidents.till_id` is NOT NULL and a
         // drain has no till), so this line is the only place it exists.
         deps.log("warn", "drain.tenant_skipped", skipped);
@@ -126,7 +126,7 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       // The awaiting-cert flag ONLY transitions on a pass that actually exercised the cert. A no-work
       // pass (`tenantsWithWork === 0`) read no cert at all, so it leaves the flag UNCHANGED — clearing
       // it there would emit `fiscal.certificate_available` when nothing arrived. A pass that DID have
-      // due work either skipped a tenant for the missing cert (→ set) or resolved the cert and drained
+      // due work either skipped for the missing cert (→ set) or resolved the cert and drained
       // (→ clear). `noteAwaitingCert` records the transition ONCE on box-status and in a single log
       // line, alongside (not instead of) the per-pass `drain.tenant_skipped` trace above.
       if (result.tenantsWithWork > 0) {
@@ -147,7 +147,7 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       //
       //   1. A halted record is not an abandoned unit of work with nowhere else to look. The
       //      moment it happens, `raiseIncident` (packages/fiscal-verifactu/src/drain.ts) has
-      //      already written it to the `incidents` table — tenant/till/sale-scoped, its own
+      //      already written it to the `incidents` table — till/sale-scoped, its own
       //      structured code and severity, in the SAME transaction as the estado change — a
       //      persisted, queryable trail `TickResult`'s "parked" outcome has no equivalent of (a
       //      park writes `next_attempt_at = null` and nothing else record-shaped at all).
@@ -155,9 +155,9 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       //      data problem (a malformed field AEAT itself rejects) that says nothing about whether
       //      this host is working. Flipping `/health` on it would conflate "AEAT rejected this one
       //      invoice" with "this process is stuck" — the false-alarm noise `skipped` above is
-      //      already careful not to produce for an ordinary per-tenant retry.
+      //      already careful not to produce for an ordinary retry.
       //
-      // A tenant provisioned with the WRONG `certKind` (present, naming the other kind) is, I
+      // A venue provisioned with the WRONG `certKind` (present, naming the other kind) is, I
       // believe, still visible, just not through `/health` — unverified: the wrong kind only picks
       // the other AEAT endpoint, and if AEAT refuses the whole request the submit is retried and
       // records no incident. If AEAT answers per record instead, every batch keeps
@@ -280,8 +280,8 @@ function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
 
 /**
  * One line per run that did NOT succeed, carrying its `errorCode` and enough identity to act on —
- * `tenantId`, `duty`, `period` — rather than leaving a reader to correlate `reconcile.complete`'s
- * bare counts back to which (tenant, duty, period) they belong to. Level escalates with what the
+ * `duty` and `period` — rather than leaving a reader to correlate `reconcile.complete`'s
+ * bare counts back to which (duty, period) they belong to. Level escalates with what the
  * outcome actually means: `failed` is still retrying on its own backoff (`warn`), `parked` has
  * exhausted `maxAttempts` and nothing will claim it again (`error`) — the identical distinction
  * `DutyReport.parked`'s own doc comment draws for why only `parked` may flip `/health`.
@@ -289,7 +289,6 @@ function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
 function logNonSucceededRun(log: Logger, record: RunRecord): void {
   if (record.outcome === "succeeded") return;
   log(record.outcome === "parked" ? "error" : "warn", `reconcile.run_${record.outcome}`, {
-    tenantId: record.tenantId,
     duty: record.duty,
     period: { from: record.period.from.toISOString(), to: record.period.to.toISOString() },
     errorCode: record.errorCode,

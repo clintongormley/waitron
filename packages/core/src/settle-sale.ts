@@ -1,14 +1,14 @@
 // Side-effect import registers this package's sale.* codes (mirrors record-sale.ts).
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { isUniqueViolation, saleSettlements, saleVoids, sales, tenders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
-import type { SaleId, TenantId } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import type { RecordSaleTender } from "./record-sale.js";
 
 export interface SettleSaleInput {
-  tenantId: TenantId;
+  /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
   saleId: SaleId;
   tenders: RecordSaleTender[];
 }
@@ -21,18 +21,17 @@ export interface SettleSaleInput {
  */
 export async function settleSale(tx: Transaction, input: SettleSaleInput): Promise<void> {
   // Net the sale's fiscal total with every correction in a correlated scalar subquery,
-  // as listOutstandingSales does for correctionTotal. The outer lookup and corrective sum
-  // each filter by tenant.
+  // as listOutstandingSales does for correctionTotal.
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   const [sale] = await tx
     .select({
       tillId: sales.tillId,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id and c.tenant_id = ${input.tenantId}), 0)::numeric(12, 2)::text`,
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::numeric(12, 2)::text`,
     })
     .from(sales)
-    .where(and(eq(sales.id, input.saleId), eq(sales.tenantId, input.tenantId)));
+    .where(eq(sales.id, input.saleId));
   if (sale === undefined) {
     throw new AppError("sale.not_found", { saleId: input.saleId });
   }
@@ -42,7 +41,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const [voided] = await tx
     .select({ saleId: saleVoids.saleId })
     .from(saleVoids)
-    .where(and(eq(saleVoids.saleId, input.saleId), eq(saleVoids.tenantId, input.tenantId)));
+    .where(eq(saleVoids.saleId, input.saleId));
   if (voided !== undefined) {
     throw new AppError("sale.voided", { saleId: input.saleId });
   }
@@ -56,9 +55,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const [existing] = await tx
     .select({ saleId: saleSettlements.saleId })
     .from(saleSettlements)
-    .where(
-      and(eq(saleSettlements.saleId, input.saleId), eq(saleSettlements.tenantId, input.tenantId)),
-    );
+    .where(eq(saleSettlements.saleId, input.saleId));
   if (existing !== undefined) {
     throw new AppError("sale.already_settled", { saleId: input.saleId });
   }
@@ -112,7 +109,6 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     try {
       await tx.insert(tenders).values(
         input.tenders.map((tender) => ({
-          tenantId: input.tenantId,
           saleId: input.saleId,
           method: tender.method as (typeof tenders.$inferInsert)["method"],
           amount: tender.amount,
@@ -138,7 +134,6 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
 
   try {
     await tx.insert(saleSettlements).values({
-      tenantId: input.tenantId,
       saleId: input.saleId,
       settledAt: settledAt.toISOString(),
     });

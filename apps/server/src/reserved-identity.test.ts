@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { tenantId as brandTenantId, nodeId as brandNodeId } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import { ALL_MODULES } from "./modules.js";
@@ -15,7 +15,7 @@ import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./res
 
 // PGlite, not real Postgres: `establishReservedStandbyIdentity` seals a credential, inserts the
 // standby's own node (public_key + endorsement), and persists a reserved SIF + series, all under
-// one `withTenant`. PGlite exercises this round-trip and its behavioural assertions on a
+// one `withTransaction`. PGlite exercises this round-trip and its behavioural assertions on a
 // superuser connection; it does not check grants. CLAUDE.md §4.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -31,7 +31,6 @@ describe("establishReservedStandbyIdentity", () => {
     timeoutMs: 60_000,
   });
 
-  let tenantId: TenantId;
   let locationId: LocationId;
   let NIF: string;
 
@@ -39,13 +38,13 @@ describe("establishReservedStandbyIdentity", () => {
   // tenant with the establish case (which seals one). Tenants accumulate for the suite, each on its own
   // NIF via seedTenant's counter.
   beforeEach(async () => {
-    tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     const loc = await suite.db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id as LocationId;
     const t = await suite.db.execute<{ tax_id: string }>(
-      sql`select tax_id from tenants where id = ${tenantId}`,
+      sql`select tax_id from tenants where id = 1`,
     );
     NIF = t.rows[0]!.tax_id;
   });
@@ -55,7 +54,6 @@ describe("establishReservedStandbyIdentity", () => {
     await establishReservedStandbyIdentity(
       { ownerDb: suite.db, ring: RING },
       {
-        tenantId,
         locationId,
         standby,
         nodeName: "cloud",
@@ -72,20 +70,19 @@ describe("establishReservedStandbyIdentity", () => {
       },
     );
     // sealed private key present
-    const cred = await withTenant(suite.db, brandTenantId(tenantId), (tx) =>
+    const cred = await withTransaction(suite.db, (tx) =>
       tryGetCredential(tx, RING, {
-        tenantId: brandTenantId(tenantId),
         purpose: "membership.node_key",
       }),
     );
     expect(cred?.privateKey).toBe(standby.privateKey);
     // reserved SIF is the cloud node's live identity with the supplied number
-    const sif = await withTenant(suite.db, brandTenantId(tenantId), (tx) =>
-      currentSif(tx, brandTenantId(tenantId), brandNodeId(standby.nodeId)),
+    const sif = await withTransaction(suite.db, (tx) =>
+      currentSif(tx, brandNodeId(standby.nodeId)),
     );
     expect(sif.numeroInstalacion).toBe(7);
     // reserved series landed for the standby's node
-    const series = await withTenant(suite.db, brandTenantId(tenantId), (tx) =>
+    const series = await withTransaction(suite.db, (tx) =>
       tx.execute<{ n: number }>(
         sql`select count(*)::int as n from invoice_series where node_id = ${standby.nodeId}`,
       ),
@@ -96,7 +93,6 @@ describe("establishReservedStandbyIdentity", () => {
   it("is idempotent: a second call with a fresh identity is a no-op (keeps the first)", async () => {
     const first = generateStandbyIdentity();
     const base = {
-      tenantId,
       locationId,
       nodeName: "cloud",
       filingModule: null,
@@ -133,14 +129,13 @@ describe("establishReservedStandbyIdentity", () => {
       },
     );
     // the vault still holds the FIRST key; the SECOND node has no reserved SIF
-    const cred = await withTenant(suite.db, brandTenantId(tenantId), (tx) =>
+    const cred = await withTransaction(suite.db, (tx) =>
       tryGetCredential(tx, RING, {
-        tenantId: brandTenantId(tenantId),
         purpose: "membership.node_key",
       }),
     );
     expect(cred?.privateKey).toBe(first.privateKey);
-    const rows = await withTenant(suite.db, brandTenantId(tenantId), (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ n: number }>(
         sql`select count(*)::int as n from registro_sif where node_id = ${second.nodeId}`,
       ),
@@ -154,7 +149,6 @@ describe("establishReservedStandbyIdentity", () => {
       establishReservedStandbyIdentity(
         { ownerDb: suite.db, ring: RING },
         {
-          tenantId,
           locationId,
           standby,
           nodeName: "cloud",
@@ -178,7 +172,6 @@ describe("establishReservedStandbyIdentity", () => {
       establishReservedStandbyIdentity(
         { ownerDb: suite.db, ring: RING },
         {
-          tenantId,
           locationId,
           standby,
           nodeName: "cloud",

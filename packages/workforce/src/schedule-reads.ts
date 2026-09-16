@@ -13,7 +13,6 @@ import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 
 /** A window read of one person's shifts over a half-open local-date range `[from, to)`. */
 export interface ListShiftsForPersonInput {
-  tenantId: string;
   personId: string;
   /** Inclusive lower bound, `YYYY-MM-DD`, compared against each shift's LOCAL wall date. */
   from: string;
@@ -68,8 +67,8 @@ export interface PersonAbsenceRow {
  * The requester's shifts whose LOCAL wall date falls in the half-open window `[from, to)`, ordered by
  * `starts_at`. The window compares `(starts_at at time zone 'UTC' + starts_offset_minutes)::date`, the
  * same offset-aware local-date expression `publishRoster`/`plannedShiftsInPeriod` use (offset 0 in this
- * slice, so local = UTC), so a shift is placed by its LOCAL day rather than its raw UTC instant. Covered
- * by `shifts_tenant_person_starts_idx` on `(tenant_id, person_id, starts_at)` (plan fact 4).
+ * slice, so local = UTC), so a shift is placed by its LOCAL day rather than its raw UTC instant. The
+ * matching index is `shifts_person_starts_idx` on `(person_id, starts_at)`.
  */
 export async function listShiftsForPerson(
   tx: Transaction,
@@ -91,7 +90,7 @@ export async function listShiftsForPerson(
       to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
       ends_offset_minutes, role, roster_version_id
     from shifts
-    where tenant_id = ${input.tenantId} and person_id = ${input.personId}
+    where person_id = ${input.personId}
       and (starts_at at time zone 'UTC' + starts_offset_minutes * interval '1 minute')::date >= ${input.from}::date
       and (starts_at at time zone 'UTC' + starts_offset_minutes * interval '1 minute')::date < ${input.to}::date
     order by starts_at`);
@@ -117,7 +116,7 @@ export async function listShiftsForPerson(
  */
 export async function listSwapsForPerson(
   tx: Transaction,
-  input: { tenantId: string; personId: string },
+  input: { personId: string },
 ): Promise<PersonSwapRow[]> {
   const { rows } = await tx.execute<{
     id: string;
@@ -133,8 +132,7 @@ export async function listSwapsForPerson(
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
       case when requested_by_person_id = ${input.personId} then 'requested_by_me' else 'offered_to_me' end as direction
     from shift_swaps
-    where tenant_id = ${input.tenantId}
-      and (requested_by_person_id = ${input.personId} or to_person_id = ${input.personId})
+    where (requested_by_person_id = ${input.personId} or to_person_id = ${input.personId})
     order by created_at desc`);
   return rows.map((r) => ({
     id: r.id,
@@ -151,11 +149,11 @@ export async function listSwapsForPerson(
 /**
  * All of the requester's absences, EVERY status (not only `requested` like the manager queue), ordered by
  * `starts_on` desc — a staff member's own leave history and pending requests. Person-scoped in application
- * code. Covered by `absences_tenant_person_idx` on `(tenant_id, person_id, starts_on)`.
+ * code. The matching index is `absences_person_idx` on `(person_id, starts_on)`.
  */
 export async function listAbsencesForPerson(
   tx: Transaction,
-  input: { tenantId: string; personId: string },
+  input: { personId: string },
 ): Promise<PersonAbsenceRow[]> {
   const { rows } = await tx.execute<{
     id: string;
@@ -170,7 +168,7 @@ export async function listAbsencesForPerson(
     select id, person_id, absence_kind, starts_on::text as starts_on, ends_on::text as ends_on, status, note,
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
     from absences
-    where tenant_id = ${input.tenantId} and person_id = ${input.personId}
+    where person_id = ${input.personId}
     order by starts_on desc`);
   return rows.map((r) => ({
     id: r.id,

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { type Database, withTenant } from "@waitron/db";
+import { type Database, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, verifyPassword } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -24,10 +24,8 @@ function nextNif(): string {
 
 /** Stand up a fresh provisioned venue (as the owner). Provisioning seeds exactly one ADMIN with the
  * given password; returns the tenant plus that admin's id. */
-async function setupTenant(
-  adminPassword: string = OLD_PASSWORD,
-): Promise<{ tenantId: string; adminId: string }> {
-  const venue = await applyVenue(
+async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ adminId: string }> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -60,8 +58,8 @@ async function setupTenant(
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  const adminId = await readSoleAdminId(venue.tenantId);
-  return { tenantId: venue.tenantId, adminId };
+  const adminId = await readSoleAdminId();
+  return { adminId };
 }
 
 /** Open a fresh `app_login` (member of app_user) pool, run `fn`, and always close it — the house
@@ -75,11 +73,11 @@ async function withAppUserDb<T>(fn: (db: Database) => Promise<T>): Promise<T> {
   }
 }
 
-async function readSoleAdminId(tenantId: string): Promise<string> {
+async function readSoleAdminId(): Promise<string> {
   return withAppUserDb((db) =>
-    withTenant(db, tenantId, async (tx) => {
+    withTransaction(db, async (tx) => {
       const rows = await tx.execute<{ id: string }>(
-        sql`select id from persons where tenant_id = ${tenantId} and role = 'admin'`,
+        sql`select id from persons where role = 'admin'`,
       );
       return rows.rows[0]!.id;
     }),
@@ -88,11 +86,10 @@ async function readSoleAdminId(tenantId: string): Promise<string> {
 
 /** Read one person's password_hash + status back as the app role under the tenant. */
 async function readPerson(
-  tenantId: string,
   personId: string,
 ): Promise<{ passwordHash: string | null; status: string } | undefined> {
   return withAppUserDb((db) =>
-    withTenant(db, tenantId, async (tx) => {
+    withTransaction(db, async (tx) => {
       const rows = await tx.execute<{ password_hash: string | null; status: string }>(
         sql`select password_hash, status from persons where id = ${personId}`,
       );
@@ -122,22 +119,21 @@ async function run(
 
 // `null` (not `undefined`) means "omit the password env var" — an explicit `undefined` argument
 // would trigger the `= NEW_PASSWORD` default and defeat the very test that wants it absent.
-function baseEnv(tenantId: string, password: string | null = NEW_PASSWORD) {
+function baseEnv(password: string | null = NEW_PASSWORD) {
   return {
     DATABASE_URL: "postgres://ignored-in-test",
-    WAITRON_TILL_TENANT_ID: tenantId,
     ...(password === null ? {} : { WAITRON_BREAKGLASS_PASSWORD: password }),
   };
 }
 
 describe("runBreakGlassReset (real postgres, app role)", () => {
   it("resets the admin's password: the new one verifies, the old one fails (login restored)", async () => {
-    const { tenantId, adminId } = await setupTenant();
+    const { adminId } = await setupTenant();
 
-    const { code, out } = await run(baseEnv(tenantId));
+    const { code, out } = await run(baseEnv());
 
     expect(code).toBe(0);
-    const person = await readPerson(tenantId, adminId);
+    const person = await readPerson(adminId);
     expect(person).toBeDefined();
     // The real proof the reset took: the NEW password verifies against the stored hash, the OLD one
     // no longer does.
@@ -149,15 +145,15 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
   });
 
   it("optionally resets the PIN when WAITRON_BREAKGLASS_PIN is set", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    const before = await readPerson(tenantId, adminId);
+    const { adminId } = await setupTenant();
+    const before = await readPerson(adminId);
 
-    const { code } = await run({ ...baseEnv(tenantId), WAITRON_BREAKGLASS_PIN: "9999" });
+    const { code } = await run({ ...baseEnv(), WAITRON_BREAKGLASS_PIN: "9999" });
     expect(code).toBe(0);
 
     // Read the pin_hash directly and confirm it changed to the new PIN's hash-verifiable value.
     const after = await withAppUserDb((db) =>
-      withTenant(db, tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         const rows = await tx.execute<{ pin_hash: string }>(
           sql`select pin_hash from persons where id = ${adminId}`,
         );
@@ -172,33 +168,33 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
   });
 
   it("reactivates a suspended admin (status → active)", async () => {
-    const { tenantId, adminId } = await setupTenant();
+    const { adminId } = await setupTenant();
     // Suspend the admin as the owner (the app role holds UPDATE too, but the owner is simplest here).
-    await withTenant(suite.admin, tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
     });
-    expect((await readPerson(tenantId, adminId))!.status).toBe("suspended");
+    expect((await readPerson(adminId))!.status).toBe("suspended");
 
-    const { code } = await run(baseEnv(tenantId));
+    const { code } = await run(baseEnv());
     expect(code).toBe(0);
-    expect((await readPerson(tenantId, adminId))!.status).toBe("active");
+    expect((await readPerson(adminId))!.status).toBe("active");
   });
 
   it("clears second factors and linked login methods so the replacement password restores access", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    await withTenant(suite.admin, tenantId, async (tx) => {
+    const { adminId } = await setupTenant();
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(
         sql`update persons set totp_secret = 'sealed', google_subject = 'subject' where id = ${adminId}`,
       );
       await tx.execute(
-        sql`insert into webauthn_credentials (tenant_id, person_id, credential_id, public_key) values (${tenantId}, ${adminId}, 'credential', 'key')`,
+        sql`insert into webauthn_credentials (person_id, credential_id, public_key) values (${adminId}, 'credential', 'key')`,
       );
       await tx.execute(
-        sql`insert into recovery_codes (tenant_id, person_id, code_hash) values (${tenantId}, ${adminId}, ${"a".repeat(64)})`,
+        sql`insert into recovery_codes (person_id, code_hash) values (${adminId}, ${"a".repeat(64)})`,
       );
     });
 
-    expect((await run(baseEnv(tenantId))).code).toBe(0);
+    expect((await run(baseEnv())).code).toBe(0);
 
     const state = await suite.admin.execute<{
       totp_secret: string | null;
@@ -218,131 +214,108 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
   });
 
   it("missing new-password env → returns 2 (usage) and does NOT touch the row", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    const before = await readPerson(tenantId, adminId);
+    const { adminId } = await setupTenant();
+    const before = await readPerson(adminId);
 
-    const { code } = await run(baseEnv(tenantId, null));
+    const { code } = await run(baseEnv(null));
     expect(code).toBe(2);
 
-    const after = await readPerson(tenantId, adminId);
+    const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
   it("too-short new password → returns 2, row untouched", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    const before = await readPerson(tenantId, adminId);
+    const { adminId } = await setupTenant();
+    const before = await readPerson(adminId);
 
-    const { code } = await run(baseEnv(tenantId, "short")); // < MIN_PASSWORD_LENGTH (8)
+    const { code } = await run(baseEnv("short")); // < MIN_PASSWORD_LENGTH (8)
     expect(code).toBe(2);
 
-    const after = await readPerson(tenantId, adminId);
+    const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
   it("too-short PIN → returns 2, row untouched (same floor as the gated resetPin)", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    const before = await readPerson(tenantId, adminId);
+    const { adminId } = await setupTenant();
+    const before = await readPerson(adminId);
 
     // "12" is length 2, below MIN_PIN_LENGTH (4). A valid password rides along so only the PIN gate
     // can be what rejects it — a break-glass PIN below the floor would re-lock the operator.
-    const { code } = await run({ ...baseEnv(tenantId), WAITRON_BREAKGLASS_PIN: "12" });
+    const { code } = await run({ ...baseEnv(), WAITRON_BREAKGLASS_PIN: "12" });
     expect(code).toBe(2);
 
     // Rejected before any write — the password (and thus the whole row) is untouched.
-    const after = await readPerson(tenantId, adminId);
+    const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
-  it("missing DATABASE_URL / tenant id → returns 2", async () => {
-    const noUrl = await run({
-      WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
-      WAITRON_BREAKGLASS_PASSWORD: NEW_PASSWORD,
-    });
+  it("missing DATABASE_URL → returns 2", async () => {
+    const noUrl = await run({ WAITRON_BREAKGLASS_PASSWORD: NEW_PASSWORD });
     expect(noUrl.code).toBe(2);
-    const noTenant = await run({
-      DATABASE_URL: "postgres://ignored",
-      WAITRON_BREAKGLASS_PASSWORD: NEW_PASSWORD,
-    });
-    expect(noTenant.code).toBe(2);
   });
 
-  it("no admin for the tenant → returns 1, message names it", async () => {
-    // A tenant id with no provisioned venue.
-    const emptyTenant = "22222222-2222-4222-8222-222222222222";
-    const { code, out } = await run(baseEnv(emptyTenant));
+  it("no admin on the box → returns 1, and the message says so", async () => {
+    const { code, out } = await run(baseEnv());
     expect(code).toBe(1);
     expect(out.join("\n")).toMatch(/no admin/i);
   });
 
   it("two admins, no --person → returns 1 and lists both ids; --person resets exactly one", async () => {
-    const { tenantId, adminId } = await setupTenant();
+    const { adminId } = await setupTenant();
     // Insert a second admin as the app role (app_user holds INSERT on persons).
     const secondId = await withAppUserDb((db) =>
-      withTenant(db, tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         const rows = await tx.execute<{ id: string }>(sql`
-          insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-          values (${tenantId}, 'Second Admin', ${hashPin("1234")}, ${hashPassword(OLD_PASSWORD)}, 'admin')
+          insert into persons (display_name, pin_hash, password_hash, role)
+          values ('Second Admin', ${hashPin("1234")}, ${hashPassword(OLD_PASSWORD)}, 'admin')
           returning id`);
         return rows.rows[0]!.id;
       }),
     );
 
-    const ambiguous = await run(baseEnv(tenantId));
+    const ambiguous = await run(baseEnv());
     expect(ambiguous.code).toBe(1);
     const joined = ambiguous.out.join("\n");
     expect(joined).toMatch(adminId);
     expect(joined).toMatch(secondId);
     // Neither row was reset — both still verify the OLD password.
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(tenantId, adminId))!.passwordHash!)).toBe(
-      true,
-    );
-    expect(
-      verifyPassword(OLD_PASSWORD, (await readPerson(tenantId, secondId))!.passwordHash!),
-    ).toBe(true);
+    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
+    expect(verifyPassword(OLD_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(true);
 
     // With --person, exactly that one is reset and the other is left alone.
-    const targeted = await run(baseEnv(tenantId), ["--person", secondId]);
+    const targeted = await run(baseEnv(), ["--person", secondId]);
     expect(targeted.code).toBe(0);
-    expect(
-      verifyPassword(NEW_PASSWORD, (await readPerson(tenantId, secondId))!.passwordHash!),
-    ).toBe(true);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(tenantId, adminId))!.passwordHash!)).toBe(
-      true,
-    );
+    expect(verifyPassword(NEW_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(true);
+    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
   });
 
   it("--person as the last token (no following id) → returns 2 (usage), nothing reset", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    const before = await readPerson(tenantId, adminId);
+    const { adminId } = await setupTenant();
+    const before = await readPerson(adminId);
     // `--person` with nothing after it must not silently degrade to "no --person" and reset the
     // sole admin — it is an operator typo, so fail as a usage error and touch nothing.
-    const { code, out } = await run(baseEnv(tenantId), ["--person"]);
+    const { code, out } = await run(baseEnv(), ["--person"]);
     expect(code).toBe(2);
     expect(out.join("\n")).toMatch(/--person/);
-    const after = await readPerson(tenantId, adminId);
+    const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
   it("--person naming a non-admin/absent id → returns 1, nothing reset", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    const { code } = await run(baseEnv(tenantId), [
-      "--person",
-      "33333333-3333-4333-8333-333333333333",
-    ]);
+    const { adminId } = await setupTenant();
+    const { code } = await run(baseEnv(), ["--person", "33333333-3333-4333-8333-333333333333"]);
     expect(code).toBe(1);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(tenantId, adminId))!.passwordHash!)).toBe(
-      true,
-    );
+    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
   });
 
   it("the new credential is read from env, never argv: a password in argv is ignored", async () => {
-    const { tenantId, adminId } = await setupTenant();
-    const before = await readPerson(tenantId, adminId);
+    const { adminId } = await setupTenant();
+    const before = await readPerson(adminId);
     // No WAITRON_BREAKGLASS_PASSWORD in env; the secret is smuggled into argv instead.
-    const { code } = await run(baseEnv(tenantId, null), ["--person", adminId, NEW_PASSWORD]);
+    const { code } = await run(baseEnv(null), ["--person", adminId, NEW_PASSWORD]);
     // Usage error (no env password) and the row is untouched — argv never supplies the secret.
     expect(code).toBe(2);
-    const after = await readPerson(tenantId, adminId);
+    const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 });

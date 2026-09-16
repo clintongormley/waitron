@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 
 const RING = loadKeyRing({
@@ -67,23 +66,18 @@ function harness(stdin = "", files: Record<string, string> = {}, ring: KeyRing =
 
 describe("waitron-credentials set", () => {
   it("provisions a credential from stdin", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).toBe(0);
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenant_credentials where tenant_id = ${tenantId}`);
+      select count(*)::int as n from tenant_credentials`);
     expect(rows.rows[0]!.n).toBe(1);
   });
 
   it("provisions from --file", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness("", { "/creds.json": STRIPE_JSON });
     const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe", "--file", "/creds.json"],
+      ["set", "--purpose", "payments.stripe", "--file", "/creds.json"],
       h.deps,
     );
     expect(code).toBe(0);
@@ -105,19 +99,17 @@ describe("waitron-credentials set", () => {
     //   directly against node:util). `--value=<json>` binds the value to the flag regardless of
     //   whether the flag is known, so `strict: true` is the ONLY thing standing between this and
     //   an accepted secret. That is what makes this test airtight.
-    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
     const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe", `--value=${STRIPE_JSON}`],
+      ["set", "--purpose", "payments.stripe", `--value=${STRIPE_JSON}`],
       h.deps,
     );
     expect(code).not.toBe(0);
   });
 
   it("rejects an unknown purpose and names the legal ones", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
-    const code = await runCli(["set", "--tenant", tenantId, "--purpose", "nope"], h.deps);
+    const code = await runCli(["set", "--purpose", "nope"], h.deps);
     expect(code).not.toBe(0);
     // Asserts the CODE itself, not just that the message happens to mention a known purpose:
     // `USAGE` also lists every purpose, so a mutation that collapsed this whole branch to
@@ -128,38 +120,31 @@ describe("waitron-credentials set", () => {
     expect(h.err.join("\n")).toContain("payments.stripe");
   });
 
-  it("rejects a malformed --tenant instead of throwing out of runCli", async () => {
-    // `brandTenantId` throws a plain `AppError("shared.invalid_id")` on any non-UUID string, and
-    // `runCli` promises to resolve with an exit code for an ordinary operator mistake, never
-    // reject. Written as a plain `await`, not `.rejects`, so this itself fails loudly (an unhandled
-    // rejection) if that contract is ever broken again.
+  it("rejects a --tenant flag with usage", async () => {
+    // An operator script written for the per-tenant CLI must fail loudly, not have its tenant
+    // silently ignored.
     const h = harness(STRIPE_JSON);
     const code = await runCli(
-      ["set", "--tenant", "not-a-uuid", "--purpose", "payments.stripe"],
+      ["set", "--tenant", "11111111-1111-4111-8111-111111111111", "--purpose", "payments.stripe"],
       h.deps,
     );
-    expect(code).not.toBe(0);
-    expect(h.err.join("\n")).toContain("shared.invalid_id");
+    expect(code).toBe(2);
+    expect(h.err.join("\n")).toContain("usage:");
   });
 
-  it("rejects a missing --tenant with usage, not a UUID-format error", async () => {
-    // Distinguishes "the flag was never given" (USAGE, exit 2) from "the flag was given but was
-    // not a UUID" (a `shared.invalid_id` AppError, exit 1 via reportFailure) — a plain
-    // `code !== 0` check cannot tell these apart, since BOTH are non-zero. This is the test that
-    // must go red if `typeof tenant !== "string" ||` is ever dropped from the guard: with no
-    // --tenant, `tenant` is `undefined`, which validates as neither a legal UUID (skipping past
-    // the missing-check would route it into the invalid-UUID path, exit 1) nor legal usage.
+  it("rejects a missing --purpose with usage", async () => {
+    // Exit 2 exactly: without the `typeof purpose !== "string"` guard an absent purpose reaches
+    // `isPurpose` and fails as `credentials.unknown_purpose` with exit 1 instead.
     const h = harness(STRIPE_JSON);
-    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
+    const code = await runCli(["set"], h.deps);
     expect(code).toBe(2);
     expect(h.err.join("\n")).toContain("usage:");
   });
 
   it("rejects an unreadable --file path instead of throwing", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness();
     const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe", "--file", "/missing.json"],
+      ["set", "--purpose", "payments.stripe", "--file", "/missing.json"],
       h.deps,
     );
     expect(code).not.toBe(0);
@@ -176,13 +161,9 @@ describe("waitron-credentials set", () => {
     // Simulates what bin.ts's TTY guard does — readStdin rejecting — without needing a real
     // process or terminal. Proves cli.ts's own wrapping (not just bin.ts's) is what stands between
     // this and an uncaught rejection.
-    const tenantId = await seedTenant(suite.db);
     const h = harness();
     h.deps.io.readStdin = () => Promise.reject(new Error("stdin is a TTY"));
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).not.toBe(0);
     expect(h.err.join("\n")).toContain(
       'credentials.payload_unreadable {"source":"stdin","path":null}',
@@ -193,29 +174,20 @@ describe("waitron-credentials set", () => {
     // Pins `isPurpose`'s hasOwnProperty check, not `purpose in PURPOSES`: every plain object
     // inherits `toString`, so `"toString" in PURPOSES` is true even though it names no purpose
     // this package provisions. If the guard is ever loosened to `in`, this must go red.
-    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
-    const code = await runCli(["set", "--tenant", tenantId, "--purpose", "toString"], h.deps);
+    const code = await runCli(["set", "--purpose", "toString"], h.deps);
     expect(code).not.toBe(0);
   });
 
   it("rejects a payload with a typo'd field", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness(JSON.stringify({ secret_key: "x" }));
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).not.toBe(0);
   });
 
   it("rejects malformed JSON without echoing what it read", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness("{not json, sk_live_LEAK");
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).not.toBe(0);
     expect([...h.out, ...h.err].join("\n")).not.toContain("sk_live_LEAK");
   });
@@ -226,12 +198,8 @@ describe("waitron-credentials set", () => {
   // non-zero assertion stays green while the operand it is meant to pin is gone. The same guard in
   // `store.ts` already has one test per operand; this is that standard carried into the CLI.
   it("rejects valid JSON that is not an object (an array)", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness(JSON.stringify(["sk_live_LEAK"]));
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).toBe(2);
     expect([...h.out, ...h.err].join("\n")).not.toContain("sk_live_LEAK");
   });
@@ -242,63 +210,41 @@ describe("waitron-credentials set", () => {
     // TypeError — a non-AppError that `reportFailure` rethrows, so `runCli` REJECTS instead of
     // returning an exit code, breaking the contract its own doc comment states. Reachable from a
     // `jq` filter that matched nothing, or a template rendering an unset variable.
-    const tenantId = await seedTenant(suite.db);
     const h = harness("null");
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).toBe(2);
   });
 
   it("rejects valid JSON that is a bare scalar", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness("5");
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).toBe(2);
   });
 
-  it("rejects a missing --purpose", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const h = harness(STRIPE_JSON);
-    const code = await runCli(["set", "--tenant", tenantId], h.deps);
-    expect(code).not.toBe(0);
-  });
-
   it("rejects an unrecognized flag rather than silently ignoring it", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
-    const code = await runCli(
-      ["set", "--tenant", tenantId, "--purpose", "payments.stripe", "--bogus", "x"],
-      h.deps,
-    );
+    const code = await runCli(["set", "--purpose", "payments.stripe", "--bogus", "x"], h.deps);
     expect(code).not.toBe(0);
   });
 
   it("propagates an unexpected, non-AppError failure rather than swallowing it", async () => {
-    // A syntactically valid but never-seeded tenant fails the foreign key against `tenants`: a
-    // raw database error, not one of this package's `AppError`s.
-    // `reportFailure` deliberately does not swallow that: an unrecognised failure should crash
-    // loudly rather than be reported as an ordinary, expected rejection.
-    const neverSeeded = "00000000-0000-0000-0000-000000000000";
+    // A raw database failure, not one of this package's `AppError`s. `reportFailure` deliberately
+    // does not swallow that: an unrecognised failure should crash loudly rather than be reported as
+    // an ordinary, expected rejection.
     const h = harness(STRIPE_JSON);
-    await expect(
-      runCli(["set", "--tenant", neverSeeded, "--purpose", "payments.stripe"], h.deps),
-    ).rejects.toBeTruthy();
+    const failing = new Error("connection lost");
+    h.deps.db = { transaction: () => Promise.reject(failing) } as unknown as CliDeps["db"];
+    await expect(runCli(["set", "--purpose", "payments.stripe"], h.deps)).rejects.toBe(failing);
   });
 });
 
 describe("waitron-credentials list", () => {
   it("prints metadata and never a value", async () => {
-    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
-    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
+    await runCli(["set", "--purpose", "payments.stripe"], set.deps);
 
     const h = harness();
-    const code = await runCli(["list", "--tenant", tenantId], h.deps);
+    const code = await runCli(["list"], h.deps);
     expect(code).toBe(0);
     const printed = h.out.join("\n");
     expect(printed).toContain("payments.stripe");
@@ -306,47 +252,25 @@ describe("waitron-credentials list", () => {
     expect(printed).not.toContain("whsec_cli");
   });
 
-  it("enumerates across tenants when --tenant is omitted", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const set = harness(STRIPE_JSON);
-    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
-
-    const h = harness();
-    const code = await runCli(["list"], h.deps);
-    expect(code).toBe(0);
-    const printed = h.out.join("\n");
-    expect(printed).toContain(tenantId);
-    expect(printed).toContain("payments.stripe");
-    expect(printed).not.toContain("sk_test_cli");
-  });
-
-  it("lists a tenant holding two purposes exactly once each — the no---tenant de-duplication", async () => {
-    // `list` without --tenant enumerates through `credentialTenants` ONCE PER PURPOSE and flattens
-    // the results, so a tenant holding BOTH purposes is in that list twice before `cli.ts`'s
-    // `new Set(...)` collapses it. What makes the duplicate visible is an otherwise EMPTY table:
-    // `listCredentials` carries no tenant predicate (store.ts), so each visit prints every row it can
-    // see. With the Set the tenant is visited once and prints its 2 rows; without it, twice and 4.
-    // Truncating first is the fixture shape rotate.test.ts uses for the same reason — every test in
-    // this file seeds its own tenant and credential, so nothing later depends on the rows dropped
-    // here. Proven by deletion: removing the `new Set(...)` from cli.ts's no---tenant branch makes
-    // this read 4.
-    await suite.db.execute(sql`truncate tenant_credentials cascade`);
-    const tenantId = await seedTenant(suite.db);
+  it("prints one line per credential: purpose, key version and when it was written", async () => {
     const stripe = harness(STRIPE_JSON);
-    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], stripe.deps);
+    await runCli(["set", "--purpose", "payments.stripe"], stripe.deps);
     const aeat = harness(JSON.stringify({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" }));
-    await runCli(["set", "--tenant", tenantId, "--purpose", "fiscal.aeat"], aeat.deps);
+    await runCli(["set", "--purpose", "fiscal.aeat"], aeat.deps);
 
     const h = harness();
     expect(await runCli(["list"], h.deps)).toBe(0);
-    expect(h.out.filter((line) => line.startsWith(`${tenantId}\t`))).toHaveLength(2);
+    expect([...h.out].sort()).toEqual([
+      expect.stringMatching(/^fiscal\.aeat\tv1\t\S/),
+      expect.stringMatching(/^payments\.stripe\tv1\t\S/),
+    ]);
   });
 
-  it("rejects a malformed --tenant instead of throwing out of runCli", async () => {
+  it("rejects a --tenant flag with usage", async () => {
     const h = harness();
-    const code = await runCli(["list", "--tenant", "not-a-uuid"], h.deps);
-    expect(code).not.toBe(0);
-    expect(h.err.join("\n")).toContain("shared.invalid_id");
+    const code = await runCli(["list", "--tenant", "11111111-1111-4111-8111-111111111111"], h.deps);
+    expect(code).toBe(2);
+    expect(h.err.join("\n")).toContain("usage:");
   });
 
   it("rejects an unrecognized flag rather than silently ignoring it", async () => {
@@ -358,43 +282,26 @@ describe("waitron-credentials list", () => {
 
 describe("waitron-credentials delete", () => {
   it("removes a provisioned credential", async () => {
-    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
-    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
+    await runCli(["set", "--purpose", "payments.stripe"], set.deps);
 
     const h = harness();
-    expect(
-      await runCli(["delete", "--tenant", tenantId, "--purpose", "payments.stripe"], h.deps),
-    ).toBe(0);
+    expect(await runCli(["delete", "--purpose", "payments.stripe"], h.deps)).toBe(0);
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenant_credentials where tenant_id = ${tenantId}`);
+      select count(*)::int as n from tenant_credentials`);
     expect(rows.rows[0]!.n).toBe(0);
   });
 
   it("reports a non-zero code when there was nothing to delete", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const h = harness();
-    const code = await runCli(
-      ["delete", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
-    expect(code).not.toBe(0);
-  });
-
-  it("rejects a missing --purpose", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const h = harness();
-    const code = await runCli(["delete", "--tenant", tenantId], h.deps);
-    expect(code).not.toBe(0);
-  });
-
-  it("rejects a missing --tenant with usage, not a UUID-format error", async () => {
-    // Same reasoning as `set`'s equivalent test: distinguishes "the flag was never given" (USAGE,
-    // exit 2) from "the flag was given but was not a UUID" (exit 1 via reportFailure) — a plain
-    // `code !== 0` check cannot tell these apart. Must go red if `typeof tenant !== "string" ||`
-    // is ever dropped from cli.ts's combined guard here.
     const h = harness();
     const code = await runCli(["delete", "--purpose", "payments.stripe"], h.deps);
+    expect(code).not.toBe(0);
+  });
+
+  it("rejects a missing --purpose with usage", async () => {
+    // Exit 2 exactly: a plain `code !== 0` check would also pass the nothing-to-delete reply.
+    const h = harness();
+    const code = await runCli(["delete"], h.deps);
     expect(code).toBe(2);
     expect(h.err.join("\n")).toContain("usage:");
   });
@@ -405,39 +312,39 @@ describe("waitron-credentials delete", () => {
     // row, so both currently return a non-zero code — 2/USAGE for the former, 1/"no such
     // credential" for the latter. A plain `code !== 0` check cannot tell them apart; asserting the
     // exact code and USAGE text is what makes this mutation-checkable.
-    const tenantId = await seedTenant(suite.db);
     const h = harness();
-    const code = await runCli(["delete", "--tenant", tenantId, "--purpose", "nope"], h.deps);
+    const code = await runCli(["delete", "--purpose", "nope"], h.deps);
     expect(code).toBe(2);
     expect(h.err.join("\n")).toContain("usage:");
   });
 
-  it("rejects a malformed --tenant instead of throwing out of runCli", async () => {
+  it("rejects a --tenant flag with usage", async () => {
     const h = harness();
     const code = await runCli(
-      ["delete", "--tenant", "not-a-uuid", "--purpose", "payments.stripe"],
+      [
+        "delete",
+        "--tenant",
+        "11111111-1111-4111-8111-111111111111",
+        "--purpose",
+        "payments.stripe",
+      ],
       h.deps,
     );
-    expect(code).not.toBe(0);
-    expect(h.err.join("\n")).toContain("shared.invalid_id");
+    expect(code).toBe(2);
+    expect(h.err.join("\n")).toContain("usage:");
   });
 
   it("rejects an unrecognized flag rather than silently ignoring it", async () => {
-    const tenantId = await seedTenant(suite.db);
     const h = harness();
-    const code = await runCli(
-      ["delete", "--tenant", tenantId, "--purpose", "payments.stripe", "--bogus", "x"],
-      h.deps,
-    );
+    const code = await runCli(["delete", "--purpose", "payments.stripe", "--bogus", "x"], h.deps);
     expect(code).not.toBe(0);
   });
 });
 
 describe("waitron-credentials rotate", () => {
   it("reports what it did and never a value", async () => {
-    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
-    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
+    await runCli(["set", "--purpose", "payments.stripe"], set.deps);
 
     // ROTATED_RING, not the default RING: with the single-key RING every other test in this file
     // uses, the row just written is ALREADY on the ring's current version, so rotateCredentials
@@ -462,9 +369,8 @@ describe("waitron-credentials rotate", () => {
     // was already dropped, while rows are still stamped with that retired version. Same
     // fail-fast, resolve-don't-reject contract every other command in this file gets from
     // `reportFailure` — `rotate` did not have it until this test was added.
-    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
-    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
+    await runCli(["set", "--purpose", "payments.stripe"], set.deps);
 
     const noPrevious = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 4).toString("base64"),
@@ -479,15 +385,11 @@ describe("waitron-credentials rotate", () => {
 
 describe("there is deliberately no `get` command", () => {
   it("refuses to print a decrypted credential", async () => {
-    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
-    await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
+    await runCli(["set", "--purpose", "payments.stripe"], set.deps);
 
     const h = harness();
-    const code = await runCli(
-      ["get", "--tenant", tenantId, "--purpose", "payments.stripe"],
-      h.deps,
-    );
+    const code = await runCli(["get", "--purpose", "payments.stripe"], h.deps);
     expect(code).not.toBe(0);
     expect(h.out.join("\n")).not.toContain("sk_test_cli");
   });

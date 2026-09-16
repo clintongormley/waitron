@@ -1,1 +1,0 @@
-ALTER TABLE "working_line_contexts" ADD COLUMN "unit_id" uuid NOT NULL;

@@ -34,7 +34,6 @@ const sampleEnv: DevEnv = {
   WAITRON_HTTP_PORT: "8080",
   WAITRON_CREDENTIALS_KEY: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
-  WAITRON_TILL_TENANT_ID: "11111111-1111-1111-1111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-2222-2222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-3333-3333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-4444-444444444444",
@@ -57,7 +56,6 @@ describe("renderEnvFile", () => {
       "WAITRON_HTTP_PORT=8080",
       "WAITRON_CREDENTIALS_KEY=c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       "WAITRON_CREDENTIALS_KEY_VERSION=1",
-      "WAITRON_TILL_TENANT_ID=11111111-1111-1111-1111-111111111111",
       "WAITRON_TILL_TILL_ID=22222222-2222-2222-2222-222222222222",
       "WAITRON_TILL_NODE_ID=33333333-3333-3333-3333-333333333333",
       "WAITRON_TILL_SERIES_ID=44444444-4444-4444-4444-444444444444",
@@ -119,7 +117,6 @@ describe("the demo login PIN + seed locale", () => {
 // mapping is bare content locale → full display tag: `WAITRON_TILL_LOCALE` is a `SUPPORTED_LOCALES` code.
 describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
   const ids = {
-    tenantId: "11111111-1111-1111-1111-111111111111",
     tillId: "22222222-2222-2222-2222-222222222222",
     nodeId: "33333333-3333-3333-3333-333333333333",
     seriesId: "44444444-4444-4444-4444-444444444444",
@@ -224,11 +221,10 @@ describe("devSetup against real Postgres", () => {
     // auto-creates when it enrols (seedDemoDevices). The handheld shares "Mostrador" and adds none.
     expect(await tillsCount()).toBe(2);
 
-    // The five fiscal ids are real uuids and the file on disk matches the returned env.
+    // The four fiscal ids are real uuids and the file on disk matches the returned env.
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
     for (const key of [
-      "WAITRON_TILL_TENANT_ID",
       "WAITRON_TILL_TILL_ID",
       "WAITRON_TILL_NODE_ID",
       "WAITRON_TILL_SERIES_ID",
@@ -287,20 +283,19 @@ describe("devSetup against real Postgres", () => {
 
   it("writes a .env that loadConfig and loadKeyRing accept as valid server config", () => {
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
-    // loadConfig resolves the whole server config, including the five WAITRON_TILL_* ids via
+    // loadConfig resolves the whole server config, including the four WAITRON_TILL_* ids via
     // loadTillConfig — a throw here would be server.config_missing / server.till_config_* (the
     // codes dev-setup's whole purpose is to make impossible). Placeholder roots: loadConfig only
     // uses them as string fallbacks, never stats them.
     const config = loadConfig(written, "/dev/null/migrations", "/dev/null/state");
     expect(config.environment).toBe("preproduction");
     expect(config.httpPort).toBe(8080);
-    // dev-setup ALWAYS provisions a venue, so `loadConfig` resolves the five ids into `config.till`
+    // dev-setup ALWAYS provisions a venue, so `loadConfig` resolves the four ids into `config.till`
     // (never setup mode's `undefined` — which is exactly the state dev-setup exists to make
     // impossible). Assert it is present, then read the fiscal ids off it — the `?.` keeps each
     // assertion honest (an undefined till would fail the `toBe`, not throw) now that `config.till` is
     // optional (slice 1b).
     expect(config.till).toBeDefined();
-    expect(config.till?.tenantId).toBe(first.env.WAITRON_TILL_TENANT_ID);
     expect(config.till?.tillId).toBe(first.env.WAITRON_TILL_TILL_ID);
     expect(config.till?.seriesId).toBe(first.env.WAITRON_TILL_SERIES_ID);
     expect(config.till?.locationId).toBe(first.env.WAITRON_TILL_LOCATION_ID);
@@ -323,7 +318,6 @@ describe("devSetup against real Postgres", () => {
     // (no second SIF, no second chain).
     expect(await tillsCount()).toBe(2);
     // Same identity handed back, read from the untouched `.env`.
-    expect(second.env.WAITRON_TILL_TENANT_ID).toBe(first.env.WAITRON_TILL_TENANT_ID);
     expect(second.env.WAITRON_TILL_TILL_ID).toBe(first.env.WAITRON_TILL_TILL_ID);
     expect(second.env.WAITRON_TILL_NODE_ID).toBe(first.env.WAITRON_TILL_NODE_ID);
     expect(second.env.WAITRON_TILL_SERIES_ID).toBe(first.env.WAITRON_TILL_SERIES_ID);
@@ -338,7 +332,7 @@ describe("devSetup against real Postgres", () => {
       capabilities: string[];
     }>(
       sql`select name, canvas_id, capabilities from device_profiles
-          where tenant_id = ${first.env.WAITRON_TILL_TENANT_ID} order by name`,
+           order by name`,
     );
     expect(profiles).toEqual([
       {
@@ -382,7 +376,6 @@ describe("devSetup against real Postgres", () => {
           join device_profiles dp on dp.id = d.device_profile_id
           left join tills t on t.id = d.till_id
           left join kitchen_stations ks on ks.id = d.station_id
-          where d.tenant_id = ${first.env.WAITRON_TILL_TENANT_ID}
           order by d.label`,
     );
     expect(rows).toEqual([
@@ -407,13 +400,18 @@ describe("devSetup against real Postgres", () => {
 describe("inspectVenues reads existing venues with ordinary SELECT rights", () => {
   const suite = useTemplateDb({ template: "manifest" });
 
-  it("finds the expected tenant and refuses to overlook a different existing tenant", async () => {
-    const tenantId = "11111111-2222-3333-4444-555555555555";
+  it("finds the expected till and refuses to overlook a different existing venue", async () => {
+    const tillId = "11111111-2222-3333-4444-555555555555";
     await suite.admin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name)
-      values (${tenantId}, 'ES', '00000000T', 'Inspection SL')`);
+      values (1, 'ES', '00000000T', 'Inspection SL')`);
+    const location = await suite.admin.execute<{ id: string }>(sql`
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Inspection', array['es-ES'], 'Hospitality') returning id`);
+    await suite.admin.execute(sql`
+      insert into tills (id, location_id, name) values (${tillId}, ${location.rows[0]!.id}, 'Caja')`);
     const readerUri = roleUrl(suite.pg.uri, "app_login", "app_pw");
-    await expect(inspectVenues(readerUri, tenantId)).resolves.toEqual({
+    await expect(inspectVenues(readerUri, tillId)).resolves.toEqual({
       hasExpected: true,
       hasAny: true,
     });

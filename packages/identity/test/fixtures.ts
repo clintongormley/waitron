@@ -1,4 +1,4 @@
-import { captureError, withTenant } from "@waitron/db";
+import { captureError, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -15,14 +15,12 @@ import type { PersonRoleValue } from "../src/permissions.js";
  * english-only scan and the src coverage glob, mirroring `packages/workforce/test/fixtures.ts`.
  */
 
-/** Seed a location → till for `tenantId`. Returns the till id a session references. */
-export async function seedTill(db: Database, tenantId: string): Promise<string> {
+/** Seed a location → till. Returns the till id a session references. */
+export async function seedTill(db: Database): Promise<string> {
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en'], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en'], 'Sale on premises') returning id`);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Till 1') returning id`);
+    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till 1') returning id`);
   return till.rows[0]!.id;
 }
 
@@ -30,27 +28,21 @@ export async function seedTill(db: Database, tenantId: string): Promise<string> 
  * test seeds a real row of that shape rather than relying on a later UPDATE. */
 export async function seedPerson(
   db: Database,
-  tenantId: string,
   role: "staff" | "supervisor" | "manager" | "admin" = "staff",
   status: "pending" | "active" | "suspended" = "active",
 ): Promise<string> {
   const displayName = `P-${crypto.randomUUID()}`;
   const rows = await db.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role, status)
-    values (${tenantId}, ${displayName}, ${hashPin("1234")}, ${role}, ${status}) returning id`);
+    insert into persons (display_name, pin_hash, role, status)
+    values (${displayName}, ${hashPin("1234")}, ${role}, ${status}) returning id`);
   return rows.rows[0]!.id;
 }
 
 /** Opens a shift session for a person (PIN "1234") and returns its id, exactly as the till would:
  * `loginWithPin` verifies the PIN and inserts the row. */
-export async function openSession(
-  db: Database,
-  tenantId: string,
-  tillId: string,
-  personId: string,
-): Promise<string> {
-  const session = await withTenant(db, tenantId, (tx) =>
-    loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+export async function openSession(db: Database, tillId: string, personId: string): Promise<string> {
+  const session = await withTransaction(db, (tx) =>
+    loginWithPin(tx, { tillId, personId, pin: "1234" }),
   );
   return session.id;
 }
@@ -63,11 +55,10 @@ export async function openSession(
  */
 export async function seedPersonWithPassword(
   db: Database,
-  tenantId: string,
   role: PersonRoleValue = "manager",
 ): Promise<string> {
-  const personId = await seedPerson(db, tenantId, role);
-  await withTenant(db, tenantId, (tx) =>
+  const personId = await seedPerson(db, role);
+  await withTransaction(db, (tx) =>
     tx.execute(
       sql`update persons set password_hash = ${hashPassword("correct horse")} where id = ${personId}`,
     ),
@@ -78,16 +69,15 @@ export async function seedPersonWithPassword(
 /**
  * Seeds a person who can sign in on the DASHBOARD (management) path: a known `email`, the known
  * password "correct horse", plus an explicit `role`/`status`. `loginManager` now resolves by email,
- * so every management-login fixture must carry one (unique per tenant, case-insensitive — the seeded
- * value is already lowercase). Returns the person id.
+ * so every management-login fixture must carry one (unique case-insensitively — the seeded value is
+ * already lowercase). Returns the person id.
  */
 export async function seedManager(
   db: Database,
-  tenantId: string,
   opts: { email: string; role?: PersonRoleValue; status?: "pending" | "active" | "suspended" },
 ): Promise<string> {
-  const personId = await seedPerson(db, tenantId, opts.role ?? "manager", opts.status ?? "active");
-  await withTenant(db, tenantId, (tx) =>
+  const personId = await seedPerson(db, opts.role ?? "manager", opts.status ?? "active");
+  await withTransaction(db, (tx) =>
     tx.execute(
       sql`update persons set password_hash = ${hashPassword("correct horse")}, email = ${opts.email} where id = ${personId}`,
     ),
@@ -97,18 +87,17 @@ export async function seedManager(
 
 /**
  * Seeds a manager (known email + password) and returns an OPEN management session for them — the
- * dashboard analogue of `openSession`. The email is unique per call so many managers can be seeded in
- * one tenant without colliding on the per-tenant email index.
+ * dashboard analogue of `openSession`. The email is unique per call so many managers can be seeded
+ * without colliding on the email index.
  */
 export async function openManagementSession(
   db: Database,
-  tenantId: string,
   role: PersonRoleValue = "manager",
 ): Promise<{ personId: string; sessionId: string }> {
   const email = `mgr-${crypto.randomUUID()}@example.test`;
-  const personId = await seedManager(db, tenantId, { email, role });
-  const session = await withTenant(db, tenantId, (tx) =>
-    loginManager(tx, { tenantId, email, password: "correct horse" }),
+  const personId = await seedManager(db, { email, role });
+  const session = await withTransaction(db, (tx) =>
+    loginManager(tx, { email, password: "correct horse" }),
   );
   return { personId, sessionId: session.id };
 }

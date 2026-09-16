@@ -1,11 +1,10 @@
 import type { Transaction } from "@waitron/db";
-import type { LocationId, NodeId, TenantId } from "@waitron/shared";
+import type { LocationId, NodeId } from "@waitron/shared";
 
 /** The node a seed runs for. Built by the RUNNER from rows it inserted or read — never from operator
  * input; anything else a module needs (the tenant's tax id, its own product constants) it reads or
  * owns itself. */
 export interface ProvisionedNode {
-  readonly tenantId: TenantId;
   readonly locationId: LocationId;
   readonly nodeId: NodeId;
 }

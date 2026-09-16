@@ -16,7 +16,7 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** No purchase invoice with this id exists. `id` is the id looked up. */
     "purchase.not_found": { id: string };
-    /** The `(tenant, supplier_tax_id, supplier_invoice_number)` unique index rejected a second entry
+    /** The `(supplier_tax_id, supplier_invoice_number)` unique index rejected a second entry
      * of the same supplier invoice (the VAT record-book no-duplicate rule). */
     "purchase.duplicate": { supplierTaxId: string; supplierInvoiceNumber: string };
     /** A supplied invoice was rejected before any write: no VAT lines, a negative base or VAT amount, or a

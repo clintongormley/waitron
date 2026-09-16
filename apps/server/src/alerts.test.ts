@@ -1,7 +1,7 @@
 // PGlite: reads on one transaction, no concurrency and no connection-role question.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -9,7 +9,7 @@ import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron
 import { hashPin } from "@waitron/identity";
 import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
-import { AppError, tillId as brandTillId, type TenantId, type TillId } from "@waitron/shared";
+import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
 import {
   HANDLED_WINDOW_MS,
   UNCLAIMED,
@@ -39,19 +39,19 @@ const registry = createAlertRegistry({
 });
 const EVERYTHING = new Set(["fiscal.view", "payments.manage", "diagnostics.view"]);
 
-async function seedVenue(): Promise<{ tenantId: TenantId; tillId: TillId }> {
-  const tenantId = await seedTenant(db);
+async function seedVenue(): Promise<{ tillId: TillId }> {
+  await seedTenant(db);
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Caja 1') returning id`);
-  return { tenantId, tillId: brandTillId(till.rows[0]!.id) };
+    insert into tills (location_id, name)
+    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
+  return { tillId: brandTillId(till.rows[0]!.id) };
 }
 
-function asApp<T>(tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -59,14 +59,13 @@ function asApp<T>(tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Prom
 
 /** Records an incident with an arbitrary code; the registry is what is under test, not the code. */
 function raise(
-  v: { tenantId: TenantId; tillId: TillId },
+  v: { tillId: TillId },
   code: string,
   severity: "warning" | "error",
   detectedAt: Date,
 ): Promise<void> {
-  return asApp(v.tenantId, (tx) =>
+  return asApp((tx) =>
     recordIncident(tx, {
-      tenantId: v.tenantId,
       tillId: v.tillId,
       error: new AppError(code as never, {} as never),
       severity,
@@ -129,12 +128,12 @@ describe("readOpenAlerts", () => {
     await raise(v, "fiscal.registro_rechazado", "error", NOW);
     await raise(v, "chain.verification_failed", "error", NOW);
     await raise(v, "printing.mystery", "warning", NOW);
-    const deps = { registry, tenantId: v.tenantId, now: NOW, log: noopLog };
-    const paymentsOnly = await asApp(v.tenantId, (tx) =>
+    const deps = { registry, now: NOW, log: noopLog };
+    const paymentsOnly = await asApp((tx) =>
       readOpenAlerts(tx, deps, new Set(["payments.manage"])),
     );
     expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
-    const all = await asApp(v.tenantId, (tx) => readOpenAlerts(tx, deps, EVERYTHING));
+    const all = await asApp((tx) => readOpenAlerts(tx, deps, EVERYTHING));
     expect(all.map((a) => [a.code, a.area]).sort()).toEqual([
       ["chain.verification_failed", "fiscal"],
       ["fiscal.registro_rechazado", "fiscal"],
@@ -146,9 +145,9 @@ describe("readOpenAlerts", () => {
   it("builds an event alert from the incident", async () => {
     const v = await seedVenue();
     await raise(v, "payment.offline_forward_declined", "error", NOW);
-    const [incident] = await asApp(v.tenantId, (tx) => listOpenIncidents(tx, v.tenantId));
-    const [alert] = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(tx, { registry, tenantId: v.tenantId, now: NOW, log: noopLog }, EVERYTHING),
+    const [incident] = await asApp((tx) => listOpenIncidents(tx));
+    const [alert] = await asApp((tx) =>
+      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
     );
     expect(alert).toEqual({
       key: `incident:${incident!.id}`,
@@ -166,8 +165,8 @@ describe("readOpenAlerts", () => {
     await raise(v, "payment.offline_forward_declined", "warning", new Date(NOW.getTime() - 1_000));
     await raise(v, "fiscal.registro_rechazado", "error", new Date(NOW.getTime() - 5_000));
     await raise(v, "chain.verification_failed", "error", new Date(NOW.getTime() - 2_000));
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(tx, { registry, tenantId: v.tenantId, now: NOW, log: noopLog }, EVERYTHING),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
     );
     expect(alerts.map((a) => a.code)).toEqual([
       "chain.verification_failed",
@@ -177,7 +176,6 @@ describe("readOpenAlerts", () => {
   });
 
   it("puts alerts without a since last and breaks ties by key", async () => {
-    const v = await seedVenue();
     const at = "2026-09-14T11:00:00.000Z";
     const source: AlertSource = {
       area: "printing",
@@ -190,18 +188,13 @@ describe("readOpenAlerts", () => {
       ],
     };
     const r = createAlertRegistry({ claims: [], sources: [source] });
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(
-        tx,
-        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
-        new Set(["diagnostics.view"]),
-      ),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
     );
     expect(alerts.map((a) => a.key)).toEqual(["a:1", "b:1", "a:0"]);
   });
 
   it("orders since by instant, not by text", async () => {
-    const v = await seedVenue();
     const source: AlertSource = {
       area: "printing",
       permission: "diagnostics.view",
@@ -224,18 +217,13 @@ describe("readOpenAlerts", () => {
       ],
     };
     const r = createAlertRegistry({ claims: [], sources: [source] });
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(
-        tx,
-        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
-        new Set(["diagnostics.view"]),
-      ),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
     );
     expect(alerts.map((a) => a.key)).toEqual(["utc", "offset"]);
   });
 
   it("asks only the sources whose permission the session holds, and stamps kind and area", async () => {
-    const v = await seedVenue();
     const held: AlertSource = {
       area: "printing",
       permission: "payments.manage",
@@ -256,12 +244,8 @@ describe("readOpenAlerts", () => {
       read: vi.fn(async () => []),
     };
     const r = createAlertRegistry({ claims: [], sources: [held, notHeld] });
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(
-        tx,
-        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
-        new Set(["payments.manage"]),
-      ),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["payments.manage"])),
     );
     expect(alerts).toEqual([
       {
@@ -308,12 +292,8 @@ describe("readOpenAlerts", () => {
     };
     const r = createAlertRegistry({ claims: [], sources: [failing, healthy] });
     await raise(v, "payment.offline_forward_declined", "warning", NOW);
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(
-        tx,
-        { registry: r, tenantId: v.tenantId, now: NOW, log },
-        new Set(["diagnostics.view"]),
-      ),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log }, new Set(["diagnostics.view"])),
     );
     // This registry claims nothing, so the payment incident shows under diagnostics.
     expect(alerts.map((a) => a.code).sort()).toEqual([
@@ -337,7 +317,6 @@ describe("readOpenAlerts", () => {
     );
   });
   it("replaces a source that throws before returning a promise, and keeps reading the others", async () => {
-    const v = await seedVenue();
     const throwing: AlertSource = {
       area: "backup",
       permission: "diagnostics.view",
@@ -359,12 +338,8 @@ describe("readOpenAlerts", () => {
       ],
     };
     const r = createAlertRegistry({ claims: [], sources: [throwing, healthy] });
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(
-        tx,
-        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
-        new Set(["diagnostics.view"]),
-      ),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
     );
     expect(alerts.map((a) => a.key)).toEqual([
       "alert.source_unavailable:backup",
@@ -373,7 +348,6 @@ describe("readOpenAlerts", () => {
   });
 
   it("merges the alerts of two sources sharing an area", async () => {
-    const v = await seedVenue();
     const a: AlertSource = {
       area: "fiscal",
       permission: "fiscal.view",
@@ -401,12 +375,8 @@ describe("readOpenAlerts", () => {
       ],
     };
     const r = createAlertRegistry({ claims: [], sources: [a, b] });
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(
-        tx,
-        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
-        new Set(["fiscal.view"]),
-      ),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["fiscal.view"])),
     );
     expect(alerts.map((x) => x.code).sort()).toEqual([
       "fiscal.awaiting_certificate",
@@ -415,19 +385,14 @@ describe("readOpenAlerts", () => {
   });
 
   it("reports one source_unavailable per area when two sources in it throw", async () => {
-    const v = await seedVenue();
     const boom = (): Promise<never> => {
       throw new AppError("server.internal", {});
     };
     const a: AlertSource = { area: "fiscal", permission: "fiscal.view", read: boom };
     const b: AlertSource = { area: "fiscal", permission: "fiscal.view", read: boom };
     const r = createAlertRegistry({ claims: [], sources: [a, b] });
-    const alerts = await asApp(v.tenantId, (tx) =>
-      readOpenAlerts(
-        tx,
-        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
-        new Set(["fiscal.view"]),
-      ),
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["fiscal.view"])),
     );
     expect(alerts.filter((x) => x.code === "alert.source_unavailable")).toHaveLength(1);
   });
@@ -436,21 +401,20 @@ describe("readOpenAlerts", () => {
 describe("readHandledAlerts", () => {
   it("lists handled events from the last 30 days with who handled them", async () => {
     const v = await seedVenue();
-    const person = await asApp(v.tenantId, async (tx) => {
+    const person = await asApp(async (tx) => {
       const p = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${v.tenantId}, 'Ada', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('Ada', ${hashPin("1234")}, 'manager') returning id`);
       return p.rows[0]!.id;
     });
     await raise(v, "payment.offline_forward_declined", "error", NOW);
     await raise(v, "fiscal.registro_rechazado", "error", NOW);
     await raise(v, "chain.verification_failed", "error", NOW);
-    const open = await asApp(v.tenantId, (tx) => listOpenIncidents(tx, v.tenantId));
+    const open = await asApp((tx) => listOpenIncidents(tx));
     const byCode = new Map(open.map((i) => [i.code, i.id]));
     const mark = (code: string, personId: string, ageMs: number) =>
-      asApp(v.tenantId, (tx) =>
+      asApp((tx) =>
         markIncidentHandled(tx, {
-          tenantId: v.tenantId,
           id: byCode.get(code)!,
           personId,
           handledAt: new Date(NOW.getTime() - ageMs),
@@ -460,48 +424,17 @@ describe("readHandledAlerts", () => {
     await mark("payment.offline_forward_declined", person, 29 * DAY);
     await mark("fiscal.registro_rechazado", "00000000-0000-4000-8000-00000000abcd", DAY);
     await mark("chain.verification_failed", person, HANDLED_WINDOW_MS + DAY);
-    const handled = await asApp(v.tenantId, (tx) =>
-      readHandledAlerts(tx, { registry, tenantId: v.tenantId, now: NOW, log: noopLog }, EVERYTHING),
+    const handled = await asApp((tx) =>
+      readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
     );
     expect(handled.map((a) => [a.code, a.handledBy])).toEqual([
       ["fiscal.registro_rechazado", null],
       ["payment.offline_forward_declined", "Ada"],
     ]);
     expect(handled[1]!.handledAt).toBe(new Date(NOW.getTime() - 29 * DAY).toISOString());
-    const paymentsOnly = await asApp(v.tenantId, (tx) =>
-      readHandledAlerts(
-        tx,
-        { registry, tenantId: v.tenantId, now: NOW, log: noopLog },
-        new Set(["payments.manage"]),
-      ),
+    const paymentsOnly = await asApp((tx) =>
+      readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["payments.manage"])),
     );
     expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
-  });
-
-  it("does not name a handler from another tenant", async () => {
-    const v = await seedVenue();
-    const other = await seedVenue();
-    const outsider = await asApp(other.tenantId, async (tx) => {
-      const p = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${other.tenantId}, 'Outsider', ${hashPin("1234")}, 'manager') returning id`);
-      return p.rows[0]!.id;
-    });
-    await raise(v, "payment.offline_forward_declined", "error", NOW);
-    const [incident] = await asApp(v.tenantId, (tx) => listOpenIncidents(tx, v.tenantId));
-    await asApp(v.tenantId, (tx) =>
-      markIncidentHandled(tx, {
-        tenantId: v.tenantId,
-        id: incident!.id,
-        personId: outsider,
-        handledAt: NOW,
-      }),
-    );
-    const handled = await asApp(v.tenantId, (tx) =>
-      readHandledAlerts(tx, { registry, tenantId: v.tenantId, now: NOW, log: noopLog }, EVERYTHING),
-    );
-    expect(handled.map((a) => [a.code, a.handledBy])).toEqual([
-      ["payment.offline_forward_declined", null],
-    ]);
   });
 });

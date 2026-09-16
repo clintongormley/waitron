@@ -2,9 +2,9 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { decimal, tenantId as brandTenantId } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import type { ReconcileDeps } from "./reconcile.js";
 import { insertCapturedPayment } from "./store.js";
@@ -26,7 +26,7 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  * `reconcilePayments`'s single-winner guarantee for an orphan rests on TWO independent primitives:
  * `markReconcileRemediated`'s state-guarded UPDATE (store.ts, matches only a row whose
  * `reconcile_remediated_at` is still NULL) and `recordIncidentOnce`'s partial unique index on
- * `(tenant_id, till_id, code, sale_id) WHERE acknowledged_at IS NULL` (@waitron/core). Every
+ * `(till_id, code, sale_id) WHERE acknowledged_at IS NULL` (@waitron/core). Every
  * existing proof of either primitive runs a single sweep (reconcile.test.ts) or races bare store
  * calls against each other by hand
  * (incident-dedup.concurrency.test.ts, reversal.concurrency.test.ts). None of them proves the thing
@@ -55,9 +55,8 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
 describe("concurrent reconcile sweeps", () => {
   it("reverse an orphan exactly once and raise one incident, however they interleave", async () => {
     const seeded = await seedWorkingOrder(postgres.admin, "B66666666");
-    await withTenant(postgres.admin, seeded.tenantId, (tx) =>
+    await withTransaction(postgres.admin, (tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "race-1",
@@ -91,8 +90,8 @@ describe("concurrent reconcile sweeps", () => {
 
     try {
       const [a, b] = await Promise.all([
-        reconcilePayments(make(one), brandTenantId(seeded.tenantId), PERIOD, NOW),
-        reconcilePayments(make(two), brandTenantId(seeded.tenantId), PERIOD, NOW),
+        reconcilePayments(make(one), PERIOD, NOW),
+        reconcilePayments(make(two), PERIOD, NOW),
       ]);
 
       // Both sweeps REPORT the orphan — the audit finding is not a claim on it. Only one stamped
@@ -120,7 +119,7 @@ describe("concurrent reconcile sweeps", () => {
         params: { payments: { remediation: string }[] };
       }>(sql`
         select count(*) over () as n, params from incidents
-        where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'
+        where code = 'payment.reconcile_orphan'
           and acknowledged_at is null`);
       // `count(*) over ()` returns ZERO rows (not one row with n = 0) when no incident matches, so
       // this guards the failure mode explicitly: without it, a regression that raised no orphan

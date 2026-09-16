@@ -1,7 +1,6 @@
 CREATE TYPE "public"."overtime_model" AS ENUM('daily_accrual', 'period_net');--> statement-breakpoint
 CREATE TABLE "convenio_config" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
 	"working_days_per_week" integer DEFAULT 5 NOT NULL,
 	"overtime_model" "overtime_model" DEFAULT 'daily_accrual' NOT NULL,
@@ -21,10 +20,8 @@ CREATE TABLE "convenio_config" (
 	"split_shift_premium" numeric(12, 2),
 	"breaks_count_as_worked" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "convenio_config_tenant_location_uq" UNIQUE("tenant_id","location_id"),
+	CONSTRAINT "convenio_config_location_uq" UNIQUE("location_id"),
 	CONSTRAINT "convenio_config_working_days_ck" CHECK ("convenio_config"."working_days_per_week" between 1 and 7)
 );
 --> statement-breakpoint
-ALTER TABLE "convenio_config" ADD CONSTRAINT "convenio_config_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "convenio_config" ADD CONSTRAINT "convenio_config_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "convenio_config_tenant_id_idx" ON "convenio_config" USING btree ("tenant_id");
+ALTER TABLE "convenio_config" ADD CONSTRAINT "convenio_config_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;

@@ -83,8 +83,7 @@ function reservationGraceFloor(venueNow: string): string {
  * Bookings' floor annotator: the table's NEXT imminent `booked` reservation for the venue's TODAY at or
  * after the grace floor, as `HH:MM`, or `null`. The returned Map carries one entry PER input `tableId`.
  *
- * Scoped by tenant AND location (CLAUDE.md §3 — a by-id/by-location read never trusts a globally-unique
- * UUID or the one-tenant-per-db invariant). A plain per-`tableIds` query (`inArray`), NOT a correlated
+ * Scoped by location. A plain per-`tableIds` query (`inArray`), NOT a correlated
  * subquery, so the scalar-subquery trap does not apply. Ordered by `(tableId, bookingTime asc)`: the
  * first row seen per table is its earliest imminent booking. `booking_time` is a `time` (`HH:MM:SS`);
  * normalised to `HH:MM` at the presentation edge, as the floor renders "Reserved HH:MM".
@@ -100,7 +99,7 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
     const [loc] = await tx
       .select({ timeZone: locations.timeZone })
       .from(locations)
-      .where(and(eq(locations.id, cfg.locationId), eq(locations.tenantId, cfg.tenantId)));
+      .where(eq(locations.id, cfg.locationId));
     const timeZone = safeTimeZone(loc?.timeZone ?? DEFAULT_TIME_ZONE);
     const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
     const graceFloor = reservationGraceFloor(venueNow);
@@ -110,7 +109,6 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
       .from(bookings)
       .where(
         and(
-          eq(bookings.tenantId, cfg.tenantId),
           eq(bookings.locationId, cfg.locationId),
           inArray(bookings.tableId, tableIds),
           eq(bookings.status, "booked"),

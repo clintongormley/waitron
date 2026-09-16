@@ -1,4 +1,4 @@
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
@@ -11,11 +11,12 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
+  resetPerTest: false,
 });
 
-/** Runs `fn` inside a tenant transaction, as the non-owner application role. */
+/** Runs `fn` inside a transaction, as the non-owner application role. */
 async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(pg.db, TENANT_A.id, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -24,13 +25,12 @@ async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function insertRegistro(tx: Transaction, secuencia: number) {
   return tx.execute(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-    ) values (
-      ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+    ) values (${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"A/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
@@ -63,7 +63,7 @@ describe("registros_facturacion is immutable, as the app role", () => {
 
   it("rejects UPDATE by trigger even when the privilege is granted", async () => {
     // Grant within a rolled-back transaction so the UPDATE reaches the rejection trigger.
-    await withTenant(pg.db, TENANT_A.id, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await tx.execute(sql`grant update, delete on registros_facturacion to app_user`);
       await tx.execute(sql`set local role app_user`);
       await insertRegistro(tx, 4);
@@ -80,7 +80,7 @@ describe("registros_facturacion is immutable, as the app role", () => {
   it("rejects TRUNCATE by statement trigger", async () => {
     // TRUNCATE needs its own statement trigger. Grant access to every cascading table
     // inside the rolled-back transaction so privilege checks do not hide trigger execution.
-    await withTenant(pg.db, TENANT_A.id, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await tx.execute(
         sql`grant truncate on registros_facturacion, envios, cadenas, acks to app_user`,
       );

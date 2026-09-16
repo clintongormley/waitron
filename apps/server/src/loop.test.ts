@@ -157,7 +157,6 @@ describe("runLoop", () => {
       pass: () =>
         Promise.reject(
           new AppError("server.credential_unusable", {
-            tenantId: "t",
             purpose: "fiscal.aeat",
             field: "certKind",
           }),
