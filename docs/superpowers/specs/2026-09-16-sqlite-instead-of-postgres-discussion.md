@@ -173,9 +173,13 @@ Measured on the tree at `ba59aaf5`, 2026-09-16.
 
 ## 7. Open risks, named so they are not discovered later
 
-1. **Litestream is one project, one main author, at 0.5.** The features this depends on (follow mode,
-   the VFS, hydration, v0.5's LTX format) are recent. Read the release history and the issue tracker
-   before betting a venue's ledger on it.
+1. **The Litestream features this depends on are recent, though the project is mature.** Corrected
+   2026-09-16: Litestream is ~5.9 years old, 14,381 stars, 415 forks, actively maintained (latest
+   release v0.5.17, 2026-08-31), with two primary maintainers and 30+ contributors (GitHub API) — not
+   the "one author" this originally said. The recent part is the 0.5-line machinery the design leans on
+   (follow mode, the VFS, hydration, LTX). Mitigation: pin a 0.5.x release and let the gate-2 prototype
+   establish that those features behave as assumed on that pin. The topology design's §13 risk 1 carries
+   the full receipt.
 2. **The tail shipper is new fiscal-path code** (§4, Return). Its correctness argument is the same one
    the swap design makes — ledger rows are keyed by writer — and it needs the same two-node proof.
 3. **Money as integers** changes hash inputs; the alta fixture must pass the real validator afterwards.

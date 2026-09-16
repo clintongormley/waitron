@@ -725,9 +725,15 @@ Slice 1 begins when this passes.
 
 From the discussion note §7, plus what the design added:
 
-1. **Litestream is one project, one main author, at 0.5.** The features this leans on (follow mode, the
-   VFS, v0.5's LTX format) are recent. Read its release history and issue tracker before betting a
-   venue's ledger on it.
+1. **The Litestream features this leans on are recent, though the project is mature.** Litestream
+   itself is not the risk the earlier draft implied: it is ~5.9 years old (created 2020-10-06), 14,381
+   stars, 415 forks, not archived, actively maintained (last push 2026-09-14, latest release v0.5.17 on
+   2026-08-31), and carried by more than one hand — two primary maintainers (benbjohnson 368 commits,
+   corylanou 295) and 30+ contributors (GitHub API, 2026-09-16). What IS recent is the specific 0.5-line
+   machinery this design depends on: the LTX replication format, follow mode (`restore -f`), and the VFS.
+   The mitigation is therefore narrow — pin a 0.5.x release and let the gate-2 prototype (§12.2)
+   establish, on that pinned version, that those specific features behave as the design assumes — not
+   "read the tracker before betting on the project".
 2. **The tail shipper is new fiscal-path code** (§5.2); its in-place half can double-submit to AEAT if
    the state-regression guard is wrong (§5.2 finding 3), so it needs the two-node proof and a Fable read
    of its own before it is built.
@@ -762,6 +768,7 @@ From the discussion note §7, plus what the design added:
 | Owner decision §0.8 — switch on the simplification, retire the density gate | owner, 2026-09-16 | stated directly while gate 1 was being scoped; the two supporting reads are in §12.1 (`docs/backlog.md` standing decisions, and the discussion note's opening premise) |
 | Regulation names no DB privilege; hash chain + AEAT copy is the mechanism | RD 1007/2023 art. 8, 16 | quoted in the discussion note §1 (BOE text, `curl`, 2026-09-16) |
 | Litestream: full snapshots, follow mode, one writer per path, no encryption in 0.5, granularity | litestream.io docs | quoted in the discussion note §3 (`curl`, 2026-09-16) |
+| Litestream maturity (age, stars, forks, maintainers, latest release) | GitHub API `repos/benbjohnson/litestream` and its contributors/releases | `curl`, 2026-09-16 — corrected risk 1, which had called it "essentially one author, at 0.5" |
 | `ledger`/`state`/`local` classification; promotion/return shape; tail-clash shapes | `2026-09-05-outbox-to-native-replication-swap-design.md` §2, §4 | read |
 | Seats = reserved dormant identity at enrolment | `2026-09-03-reserved-standby-identity-and-promotion-design.md`; #208; memory `reserved-sif-seeded-at-join` | read |
 | Cold restore mints a fresh chain, never blocked | `2026-09-06-module-sp3d-fiscal-restore-hook-design.md`; memory `cold-recovery-no-hot-failover-posture` | read |
