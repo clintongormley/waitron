@@ -21,12 +21,18 @@ async function tableRoot(el: ProductList): Promise<ShadowRoot> {
 function product(overrides: Partial<Product> = {}): Product {
   return {
     id: "prod-1",
+    modifierIds: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
     categoryIds: ["category-1"],
     primaryCategoryId: "category-1",
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
+    unitId: "unit-each",
+    unit: { id: "unit-each", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    description: null,
+    kitchenName: null,
+    dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
@@ -35,6 +41,7 @@ function product(overrides: Partial<Product> = {}): Product {
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    variants: [],
     ...overrides,
   };
 }

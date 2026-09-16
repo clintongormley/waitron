@@ -42,12 +42,18 @@ const CATALOGUES: CatalogueSummary[] = [{ id: "cat-a", name: "Comida", active: t
 const PRODUCTS: Product[] = [
   {
     id: "p1",
+    modifierIds: [],
     catalogueId: "cat-a",
     categoryId: null,
     categoryIds: [],
     primaryCategoryId: null,
     name: "Bizcocho",
     customerName: { es: "Bizcocho de la abuela" },
+    unitId: "u1",
+    unit: { id: "u1", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    description: null,
+    kitchenName: null,
+    dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "3.50",
     vatClass: "reduced",
@@ -56,6 +62,7 @@ const PRODUCTS: Product[] = [
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    variants: [],
   },
 ];
 

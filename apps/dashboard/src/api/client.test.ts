@@ -638,44 +638,6 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("createProduct POSTs the input body and returns the created product", async () => {
-    const input = {
-      catalogueId: "c1",
-      categoryId: "cat1",
-      name: "Tarta de queso",
-      customerName: { es: "Tarta de queso de la abuela" },
-      pricingUnit: "each" as const,
-      unitPrice: "4.00",
-      vatClass: "reduced" as const,
-      allergens: { gluten: { presence: "contains" as const, source: "trigo" } },
-      image: "deadbeef.png",
-    };
-    const created = { id: "p9", ...input, active: true };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.createProduct(input)).toEqual(created);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-  });
-
-  it("updateProduct PATCHes the addressed product's mutable slice (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(
-      api.updateProduct("p1", { unitPrice: "2.00", active: false, image: null }),
-    ).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ unitPrice: "2.00", active: false, image: null }),
-    });
-  });
-
   it("imageLibraryRequest preserves multipart bodies and credentials", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ image: "deadbeef.png" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
@@ -2897,42 +2859,6 @@ describe("DashboardApi — option groups + product attach (Task 11/12)", () => {
     await expect(api.createOptionGroup({ name: {}, minSelect: 2, maxSelect: 1 })).rejects.toEqual({
       code: "options.group_invalid",
       status: 400,
-    });
-  });
-
-  it("createProduct carries an optionGroupIds attach list straight through in the body", async () => {
-    const input = {
-      catalogueId: "c1",
-      categoryId: null,
-      name: "Bocadillo",
-      customerName: { es: "Bocadillo del día" },
-      pricingUnit: "each" as const,
-      unitPrice: "4.00",
-      vatClass: "general" as const,
-      active: true,
-      optionGroupIds: ["og2", "og1"],
-    };
-    const created = { id: "p9", ...input };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.createProduct(input)).toEqual(created);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-  });
-
-  it("updateProduct carries an optionGroupIds attach list straight through in the patch", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.updateProduct("p1", { optionGroupIds: ["og1"] })).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ optionGroupIds: ["og1"] }),
     });
   });
 

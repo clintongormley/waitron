@@ -1,29 +1,13 @@
 import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
-import { validateAllergens, type ProductAllergens } from "./allergens.js";
+import { validateAllergens } from "./allergens.js";
 import { isProductPrice } from "./modifier-limits.js";
-import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
+import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import type { ProductVariantInput } from "./variants.js";
 import type { VatClass } from "./pricing.js";
+import type { ProductEditorInput } from "./product-types.js";
+export type { ProductEditorInput } from "./product-types.js";
 import "./errors.js";
-
-export interface ProductEditorInput {
-  name: string;
-  customerName: Record<string, string> | null;
-  description: Record<string, string> | null;
-  kitchenName: string | null;
-  image: string | null;
-  unitId: string | null;
-  unitPrice: string;
-  available: boolean;
-  vatClass: VatClass;
-  variants: ProductVariantInput[];
-  categoryIds: string[];
-  primaryCategoryId: string | null;
-  modifierIds: string[];
-  allergens: ProductAllergens | null;
-  dietaryDeclarations: DietaryLabel[];
-}
 
 function invalid(field: string): never {
   throw new AppError("product.invalid", { field });

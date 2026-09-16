@@ -10,13 +10,8 @@ export {
   validateUnitPrecision,
 } from "./unit-validation.js";
 import "./errors.js";
-
-export interface Unit {
-  id: string;
-  name: Record<string, string>;
-  precision: number;
-  abbreviation: Record<string, string>;
-}
+import type { Unit } from "./product-types.js";
+export type { Unit } from "./product-types.js";
 
 /** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
 export interface ProductUsingUnit {

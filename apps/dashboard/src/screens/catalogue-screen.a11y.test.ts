@@ -34,12 +34,18 @@ const categories: CategorySummary[] = [
 const products: Product[] = [
   {
     id: "p1",
+    modifierIds: [],
     catalogueId: "cat-a",
     categoryId: "c1",
     categoryIds: ["c1"],
     primaryCategoryId: "c1",
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
+    unitId: "u1",
+    unit: { id: "u1", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    description: null,
+    kitchenName: null,
+    dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
@@ -48,6 +54,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    variants: [],
   },
 ];
 

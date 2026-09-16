@@ -10,12 +10,20 @@ import type { ContentLanguages } from "@waitron/shared";
  * rides along; without it the session-guarded routes (`GET /management-api/staff`, the mutations)
  * 401.
  *
- * The types below are LOCAL copies of the server's JSON shapes, deliberately NOT imported from
+ * Most types below are LOCAL copies of the server's JSON shapes, deliberately NOT imported from
  * `@waitron/identity` (or any DB/server-touching `@waitron/*`). A runtime import from those packages
  * would drag their barrels — and through them `@waitron/db` and Node builtins — into the browser
  * bundle. A handful of duplicated field lists is the price of keeping the bundle free of server code,
  * exactly as `apps/till/src/api/client.ts` does. If those server shapes change, these follow — a
  * mismatch surfaces as a runtime shape error a view test catches, not a compile break.
+ *
+ * The product wire shapes are the EXCEPTION: they come from `@waitron/catalogue/src/product-types.js`,
+ * a browser-safe LEAF (types only, no runtime code — guarded by `scripts/dashboard-browser-purity.test.ts`),
+ * so `Product` and the editor shapes are the one authoritative copy the server and the dashboard share,
+ * checked by the compiler instead of drifting apart by hand. `ProductEditorInput` is catalogue's
+ * `ProductEditorBody` (the product fields plus the kitchen routing the editor sends) and
+ * `ProductEditorVariant` is catalogue's `ProductVariantInput`; the names are kept so the views that
+ * import them from here are unchanged.
  *
  * `TimingBand` below is the one exception, imported from `@waitron/shared` rather than re-declared —
  * that package is GENERIC (types + pure functions, no DB/Node builtins) and already a dashboard
@@ -28,6 +36,13 @@ import {
   type DashboardRequest,
   type FetchLike,
 } from "@waitron/dashboard-kit";
+import type {
+  Product,
+  ProductEditorValue,
+  ProductVariantInput as ProductEditorVariant,
+  ProductEditorBody as ProductEditorInput,
+} from "@waitron/catalogue/src/product-types.js";
+export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
 
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
@@ -304,141 +319,6 @@ export interface ProductUsingUnit {
   id: string;
   name: string;
   available: boolean;
-}
-
-/**
- * One variant as the editor sends and receives it. The three names fall back INDEPENDENTLY: `name`
- * is the plain staff-facing text, `customerName` is the translated text a guest reads, and
- * `kitchenName` is what a kitchen ticket shows; a blank customer or kitchen name falls back to
- * `name`. `packages/catalogue/src/product-presentation.ts` owns that fallback and the " · " join
- * onto the product's own name.
- */
-export interface ProductEditorVariant {
-  id?: string;
-  name: string;
-  customerName: Record<string, string> | null;
-  kitchenName: string | null;
-  image: string | null;
-  unitPrice: string;
-  available: boolean;
-}
-
-/**
- * The whole product editor body. `stationId` and `courseId` are part of it because the kitchen
- * routing is written on the same transaction as the product — a station this venue does not have
- * rolls the product back rather than leaving it saved without its routing.
- */
-export interface ProductEditorInput {
-  name: string;
-  customerName: Record<string, string> | null;
-  description: Record<string, string> | null;
-  kitchenName: string | null;
-  image: string | null;
-  unitId: string | null;
-  unitPrice: string;
-  available: boolean;
-  vatClass: VatClass;
-  variants: ProductEditorVariant[];
-  categoryIds: string[];
-  primaryCategoryId: string | null;
-  modifierIds: string[];
-  allergens: Record<string, { presence: "contains" | "may_contain" }> | null;
-  dietaryDeclarations: ("vegan" | "vegetarian" | "halal" | "kosher" | "no_meat" | "no_fish")[];
-  stationId: string | null;
-  courseId: string | null;
-}
-
-export interface ProductEditorValue extends ProductEditorInput {
-  id: string;
-}
-
-/**
- * The slice of one product row this dashboard reads out of `GET /management-api/catalogues/:id/products`
- * and `POST /management-api/products` — the server sends catalogue's whole `Product` (`operations.ts`),
- * of which the keys below are the ones read here. `unitPrice` is a GROSS (VAT-inclusive)
- * `numeric(12,2)` decimal STRING, never a number; `image` is a bare `<sha256>.<ext>` filename served
- * at `/media/<image>`, or null when there is no picture.
- */
-export interface Product extends ProductCategories {
-  id: string;
-  catalogueId: string;
-  categoryId: string | null;
-  /** The plain staff-facing name — what the dashboard, the till buttons and the sales reports show.
-   * NOT NULL, so nothing downstream needs a fallback for it. */
-  name: string;
-  /** The translated name a guest reads (locale → text), or null when the product has none. A blank
-   * customer name falls back to `name`; `packages/catalogue/src/product-presentation.ts` owns that
-   * fallback and is the only place allowed to apply it. */
-  customerName: Record<string, string> | null;
-  pricingUnit: PricingUnit;
-  unitPrice: string;
-  vatClass: VatClass;
-  active: boolean;
-  allergens: AllergenDeclaration;
-  /** The staff-authored allergen overlay — what a human explicitly declared, SEPARATE from the published
-   * `allergens` (which is the computed union of this overlay and any recipe-derived floor). The product
-   * editor seeds its allergen picker from THIS, so recipe-derived allergens are never re-saved as manual. */
-  manualAllergens: AllergenDeclaration;
-  /** The staff diet override ALONE (the diet twin of `manualAllergens`), or null when none. The product
-   * editor seeds its diet-override sub-form from THIS, so the recipe-derived profile is never
-   * double-counted into the override on the next save. */
-  dietOverride: DietOverride | null;
-  image: string | null;
-}
-
-/**
- * The `POST /management-api/products` body — mirrors catalogue's `CreateProductInput`. `allergens`
- * omitted leaves the product unreviewed (null); the server refuses an explicit `null` here, so the
- * form OMITS the key for a PENDING declaration. `image` is the same: the POST route accepts a string
- * or the key's absence, never a literal `null` (that 400s as `management.request_invalid`), so it is
- * typed `string` and omitted when there is no picture — only `ProductPatch.image` is nullable (a PATCH
- * clears the photo with `null`). `active` omitted leaves the product active (the column default);
- * `false` creates it inactive in the SAME request — the create is atomic, with no follow-up patch.
- * `optionGroupIds` (Task 11/12) is the ORDERED set of reusable option groups to attach in the SAME
- * request; omitted leaves the product with no attached groups (the create route treats an absent key
- * the same as `undefined` on `setProductOptionGroups` — never called, so nothing attaches).
- */
-export interface ProductInput {
-  catalogueId: string;
-  categoryId: string | null;
-  /** Required: the route refuses a missing or blank `name` as `management.request_invalid`. */
-  name: string;
-  /** Optional translated guest-facing name; omitted or null leaves the product without one. */
-  customerName?: Record<string, string> | null;
-  pricingUnit: PricingUnit;
-  unitPrice: string;
-  vatClass: VatClass;
-  allergens?: Record<string, AllergenEntry>;
-  /** The staff diet override; omitted or `null` leaves the product with no override (published `diet`
-   * is the recipe-derived profile alone). An EMPTY override is sent as `null`, never `{}`. */
-  dietOverride?: DietOverride | null;
-  image?: string;
-  active?: boolean;
-  optionGroupIds?: string[];
-}
-
-/**
- * The `PATCH /management-api/products/:id` body — the mutable slice, mirrors catalogue's
- * `UpdateProductInput`. Every key is optional; an absent key is left unchanged. `allergens: null`
- * clears the declaration back to unreviewed, `image: null` clears the photo, and `active` toggles the
- * product active/inactive through this one route. `optionGroupIds` (Task 11/12) is a FULL REPLACE of
- * the attached option groups, in the given order; omitted leaves the current attachment untouched, and
- * `[]` detaches every group.
- */
-export interface ProductPatch {
-  name?: string;
-  customerName?: Record<string, string> | null;
-  unitPrice?: string;
-  vatClass?: VatClass;
-  pricingUnit?: PricingUnit;
-  categoryId?: string | null;
-  allergens?: AllergenDeclaration;
-  /** Patch the staff diet override; `null` clears it (published `diet` reverts to the recipe-derived
-   * profile), omitted leaves it unchanged. An EMPTY override is sent as `null`, never `{}`. */
-  dietOverride?: DietOverride | null;
-  image?: string | null;
-  active?: boolean;
-  optionGroupIds?: string[];
 }
 
 // ── Option groups (reusable modifiers) + product attach (Task 11/12) ─────────────────────────────
@@ -2087,19 +1967,6 @@ export class DashboardApi {
 
   updateProductEditor(id: string, input: ProductEditorInput): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
-  }
-
-  /** `POST /management-api/products` — create a product; returns the created `Product` (201). */
-  createProduct(input: ProductInput): Promise<Product> {
-    return this.#request<Product>("/management-api/products", "POST", input);
-  }
-
-  /**
-   * `PATCH /management-api/products/:id` — patch a product's mutable slice (the two names, price, VAT,
-   * pricing unit, category, allergens, image, active). Answers an empty 204.
-   */
-  updateProduct(id: string, patch: ProductPatch): Promise<void> {
-    return this.#request<void>(`/management-api/products/${id}`, "PATCH", patch);
   }
 
   /** `GET /management-api/products/:id/option-groups` — the option groups attached to a product, as

@@ -7,19 +7,9 @@ import { menuItemVariants, productVariants } from "./schema/variants.js";
 import { isProductPrice } from "./modifier-limits.js";
 import type { ProductPresentation } from "./product-presentation.js";
 import "./errors.js";
+import type { ProductVariant, ProductVariantInput } from "./product-types.js";
+export type { ProductVariant, ProductVariantInput } from "./product-types.js";
 
-export interface ProductVariant {
-  id: string;
-  /** Staff-facing variant name — plain text, appended to the product's with " · " for display. */
-  name: string;
-  /** Customer-facing translated name; null or a blank entry falls back to `name`. */
-  customerName: Record<string, string> | null;
-  kitchenName: string | null;
-  image: string | null;
-  unitPrice: string;
-  available: boolean;
-}
-export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
 export interface MenuVariant {
   variantId: string;
   unitPrice: string;
