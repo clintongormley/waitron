@@ -438,6 +438,8 @@ What it left open:
   of use.
   Cosmetic, but it is the sort of duplication that
   hardens if nobody names it.
+  _Superseded 2026-09-16 (#370):_ `choice-form.ts` renders no allergen list of its own any more — it
+  delegates to the shared `dashboard-allergen-dietary-picker` widget, so the duplication is gone.
 - **The independent review did not cover the browser and rendering paths.** Claude's run-it reviewer
   worked to a bounded brief and said so; what it did run found a real repricing bug — reordering
   unchanged selections on a held order repriced an extra from 1.00 to 9.00 — which was fixed by
@@ -712,6 +714,50 @@ What it left open:
   distinction means for a product's own claims and for what the till withholds — it is not a
   mechanical copy, because a product declaring "may contain" is a real statement in a way a modifier
   choice's was not.
+
+**Modifier tables and nutrition editing refined — LANDED #385 (2026-09-16).** Clicking a modifier's
+row used to open a Products table with a second Menu items table stacked under it when there were
+any. It is now one table listing both, with a **Type** column you can sort and filter (Product /
+Menu item), one search box over the lot, and a name sort A–Z by default; a row's key is
+`type:id`, so a product and a menu item that share an id are still two rows. The delete
+confirmation keeps its two separate tables, and keeps its own search wording for each
+(`modifiers.search_products` / `modifiers.search_menus`) rather than calling both "Search products",
+which is what the shared helper used to do. In the modifiers list, the **Choices** column stopped
+being a number and became the choice names themselves, in the reader's own language, and it is
+searchable — so you can find a modifier by a choice inside it. That column's header in Spanish
+changed from "Nº de opciones" to "Opciones" to match. The row menu's header reads **Actions**
+instead of **Edit**, because it holds more than editing.
+
+In the choice editor, the Nutritional information section now opens expanded instead of collapsed,
+and its two lists are summary-first: Allergens and Dietary preferences each show what is chosen as
+plain text ("None selected" when nothing is), with an **Edit** button that swaps the summary for a
+multi-select combobox and moves focus into it. Leaving the combobox closes it back to the summary.
+Dietary preferences stopped being a row of native checkboxes and became the same combobox the
+allergens use, which is what gives both a consistent keyboard and screen-reader path. The closed
+combobox names the single choice when one is picked and a count when more are — "3 seleccionados"
+for allergens and "3 seleccionadas" for dietary preferences, which agree in gender with the Spanish
+nouns they count. `wt-combobox` only reaches that count label above one selection, so neither string
+can produce the "1 seleccionados" fault recorded further up this file.
+
+What it left open:
+
+- **Two different summary-first shapes now sit in the same dashboard.**
+  `dashboard-allergen-dietary-picker` has exactly one consumer,
+  `apps/dashboard/src/widgets/choice-form.ts`, and after this branch it summarises each field on its
+  own with an Edit button beside it. The product editor reaches the same goal a different way: a
+  separate widget, `dashboard-allergen-picker`, sits inside a `wt-disclosure` whose heading carries a
+  joined summary of every nutrition value, so the whole section collapses rather than each field.
+  Neither is wrong, but a manager moving between the two editors meets two interaction patterns for
+  what reads as the same task. **Next action:** whoever takes the already-open item above — adopting
+  the shared picker for products, ingredients and the till — picks one of the two shapes for both
+  rather than leaving the choice to whichever widget a screen happens to import.
+- **The picker collapses on `focusout` alone.** `#finishEditing` returns the field to its summary
+  whenever focus leaves the combobox, with no other way to close it and nothing distinguishing focus
+  moving inside the component's own popup from focus leaving it altogether. The branch's Chromium
+  tests pass, so if this is wrong it is wrong only on a path they do not walk — a touch interaction,
+  or a popup implementation that moves focus. **Next action:** if a reviewer or a real user reports
+  the editor snapping shut mid-selection, make the collapse depend on `relatedTarget` rather than on
+  the event alone.
 
 **The product editor reworked — LANDED #379 (2026-09-16).**
 
