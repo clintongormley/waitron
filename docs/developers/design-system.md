@@ -405,9 +405,9 @@ the input fill exactly that box via `inset: 0` with no size of its own. If you b
 where the hit target is a covering, invisible native control, size the *container*, not the
 control.
 
-### Focus delegation (`wt-button`, `wt-input`, `wt-switch`, `wt-combobox`)
+### Focus delegation
 
-Each interactive primitive sets:
+A primitive that wraps exactly one native focusable control (a single `<button>` or `<input>`) sets:
 
 ```ts
 static override shadowRootOptions = { ...LitElement.shadowRootOptions, delegatesFocus: true };
@@ -418,6 +418,11 @@ unfocused — `document.activeElement` becomes the host, but nothing inside its 
 receives focus, so keyboard interaction and `:focus-visible` styling never engage. A POS needs
 "focus the quantity field" constantly (e.g. after adding a line item); `delegatesFocus: true` makes
 `wtInput.focus()` actually focus the inner `<input>`.
+
+A primitive isn't a candidate for this when it wraps several native focusable controls of its own
+(there is no single one for a host `.focus()` to mean), or none (a pure container slotting other
+primitives, which already carry their own delegation). `grep -n delegatesFocusShadowRootOptions
+packages/ui/src/components/*.ts` shows which primitives set it today.
 
 ### Forms
 

@@ -56,11 +56,12 @@ export function joinCustomerPresentationText(
 }
 
 /**
- * A locale->text map that holds no non-blank text anywhere means the same as no map at all — the
- * staff name is what gets shown — so it folds to `null` here. Both product write paths (the editor's
- * parser and the catalogue routes' `screenCustomerName`) and the customer-name resolver below fold
- * the same way by calling this; that is what stops them disagreeing about whether `{ es: " " }`
- * counts as a value.
+ * A locale->text map that holds no non-blank text anywhere means the same as no map at all, so it
+ * folds to `null` here — every caller shares this one fold, which is what stops them disagreeing
+ * about whether `{ es: " " }` counts as a value. What the fold's `null` then MEANS is the caller's
+ * own concern: a customer-name caller reads it as "fall back to the staff name"; a description
+ * caller reads it as "no description stored". This function guarantees only the map-to-`null` fold,
+ * not any particular meaning for the result.
  */
 export function nonBlankTranslations<T extends Record<string, string>>(
   map: T | null | undefined,

@@ -1350,10 +1350,13 @@ export interface TabResult {
  * One line of an open tab from `GET /api/working-orders/:id/lines` (FP-1, design §3b) — what the
  * table-order screen renders per line. A LOCAL mirror of the server's `TabLine`
  * (`apps/server/src/working-order.ts`), deliberately NOT imported — same bundle-decoupling rationale as
- * every other type in this file. DISTINCT from {@link HeldOrder}'s `lines` (`productId` + `quantity`
- * only, for a basket rebuild that RE-prices): a tab does NOT re-price, so `unitPriceGross` is the gross
- * unit price LOCKED at add-time, carried back verbatim — never a catalogue recompute. `servedAt` is the
- * pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). The line's frozen
+ * every other type in this file. DISTINCT from {@link HeldOrder}'s `lines`, which mirror `SaleLine` in
+ * full — not just `productId`/`quantity` — plus an optional `product`: the server's stored offer
+ * snapshot for a contextual line, which the basket rebuild reuses verbatim; only a legacy line with no
+ * snapshot falls back to a live catalogue match. A tab, by contrast, does NOT re-price at all:
+ * `unitPriceGross` is the gross unit price LOCKED at add-time, carried back verbatim — never a
+ * catalogue recompute. `servedAt` is the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a
+ * timestamp ⇒ "Servido"). The line's frozen
  * staff `name` comes back with it, and the screen's `#nameForLine` renders that name — the catalogue
  * prop is only the fallback for a payload that omits it. `quantity`/`unitPriceGross` are decimal
  * strings as the server sends them.
@@ -1964,8 +1967,8 @@ export class TillApi {
    * (FP-1, design §3b). Each line carries its `lineNo`, `productId`, `quantity`, the LOCKED gross unit
    * price (`unitPriceGross` — a tab does NOT re-price, so this is the add-time lock, never a recompute)
    * and its `servedAt` marker (null ⇒ still to serve). A non-open/absent tab rejects with
-   * `{ code: "tab.not_open" }`; the screen resolves product names from its own catalogue prop
-   * (`TabLine` carries `productId` only, mirroring {@link retrieveWorkingOrder}).
+   * `{ code: "tab.not_open" }`; each line also carries the server's frozen staff `name` ({@link TabLine}),
+   * and the screen's own catalogue prop is only the fallback for a payload that omits it.
    */
   getTabLines(orderId: string): Promise<TabLine[]> {
     return this.#request<TabLine[]>(`/api/working-orders/${orderId}/lines`, "GET");
