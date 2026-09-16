@@ -2,9 +2,11 @@
 
 **Date:** 2026-09-16. **Status:** design, awaiting owner review. Not in any track — this is the
 architecture that would replace PostgreSQL if the two gates in §12 pass. **Model note:** brainstormed
-with Fable, written by Opus from the whole brainstorm; a fresh-context Fable read of the fiscal
-sections is owed before implementation (owner's model rule, and CLAUDE.md §1 — a spec touching fiscal
-invariants gets a second model reading cold).
+with Fable, written by Opus from the whole brainstorm, then read cold by a fresh-context Fable
+reviewer (owner's model rule, and CLAUDE.md §1 — a fiscal-touching spec gets a second model reading
+cold). That read produced nine findings, all folded in; the ones that changed the design carry an
+inline "Fable review finding N" marker, and the tail shipper still owes its own Fable read before it
+is built (§5.2, risk 2).
 
 **Companion:** [SQLite instead of PostgreSQL — a discussion](2026-09-16-sqlite-instead-of-postgres-discussion.md)
 (2026-09-16) is the feasibility note this builds on. It carries the receipts this spec cites: the
@@ -38,9 +40,9 @@ Each was put to the owner in the brainstorm and answered.
 
 3. **The stream lands in a provider object store** (S3-compatible), in an EU/Spain region, one prefix
    per venue, with the provider's server-side encryption under a per-venue key. Litestream 0.5 removed
-   its own encryption, and the fiscal records the bucket holds are already sent to AEAT, so provider
-   encryption is the floor for the stream. (Chosen over running our own object storage, and over
-   the box encrypting before upload.)
+   its own encryption, and the fiscal records the bucket holds are, once submitted, held by AEAT too, so
+   provider encryption is the floor for the stream. (Chosen over running our own object storage, and
+   over the box encrypting before upload.)
 
 4. **Cloud-primary failover is minutes, human-driven, no warm instance.** When the host running a
    cloud primary dies, recovery is "start a fresh instance on another host, restore from the bucket,
@@ -105,17 +107,38 @@ vice versa, or the two files could not be backed up independently.
 
 ### 2.2 Generations
 
-Each venue owns one prefix in the store, `venues/<venue-id>/`. Under it the history is a sequence of
-**generations**: `gen-0001/`, `gen-0002/`, … A generation is one primary's unbroken stream. Litestream
-documents that two applications must never replicate into one path ("it is your responsibility to
-ensure you do not have multiple applications replicating concurrently" — Tips & Caveats), so **a new
-primary always opens a new generation** and nothing ever writes an old one again. The generations are
-also the audit trail of every promotion: which node wrote what, and for how long.
+Each venue owns one prefix in the store, `venues/<venue-id>/`. Under it the history is a set of
+**generations**, one per primary's unbroken stream. Litestream documents that two applications must
+never replicate into one path ("it is your responsibility to ensure you do not have multiple
+applications replicating concurrently" — Tips & Caveats), so **a new primary always opens a new
+generation** and nothing ever writes an existing one again.
 
-A small **`current.json`** beside the generations names the live generation and the node writing it,
-**signed with that node's membership key**. A restorer, or a returning box, learns who is primary from
-the store alone — no peer need answer. `current.json` is the store-side twin of the membership
-document: same term, same signer, cross-checkable.
+**A generation's name must be unique to the promoter, not a shared sequence** (Fable review finding 1,
+2026-09-16). A plain `gen-0001`, `gen-0002`, … lets two nodes that promote independently — the offline
+double-promotion of §4.2/§4.4 — both pick `gen-n+1` and stream into one path, the exact corruption
+Litestream warns about. So a generation is named `gen-<term>-<node-id>` (term for ordering and audit,
+node id to break a term tie). Two rules follow, both enforced structurally, not by runbook:
+
+- **Open only your own.** A node streams or copies up **only** into the generation whose node id is its
+  own. The mirror box's copy-up job (§4.4) refuses to write a generation box A did not open.
+- **A term tie is broken deterministically.** If two generations share a term (two nodes promoted to
+  the same term while partitioned), the one whose signed `current.json` reached the store **first**
+  wins; the loser, on seeing it, fences itself and ships its ledger tail (§5.2). This is the one place
+  the design must handle two nodes believing they are primary at the same term; every other path is a
+  strictly increasing term.
+
+A small **`current.json`** at the venue prefix names the live generation and the node writing it,
+**signed with that node's membership key**, and is written with a compare-and-set (the store's
+conditional-put) so the term-tie "first wins" is decided by the store, not by a clock. A restorer, or a
+returning box, learns who is primary from the store alone — no peer need answer. `current.json` is the
+store-side twin of the membership document: same term, same signer, cross-checkable.
+
+> **Consequence for fencing.** `persistNodeMembershipIfNewer` adopts a document only when its term is
+> **strictly** higher (`packages/db/src/node-membership.ts:97` — the UPDATE fires only on a strictly
+> lower held term). So a term tie is invisible to the term guard and cannot be left to it: the tie
+> break above lives in the generation/`current.json` layer, and the losing node fences on the
+> `current.json` compare-and-set failing, not on a higher term arriving. This is why §6's self-check
+> reads `current.json`, not only the membership term.
 
 Retention prunes generations older than the configured window (§7).
 
@@ -129,22 +152,30 @@ invoice series codes. This is exactly the reserved dormant identity the current 
 adopt (R2, landed #208; memory `reserved-sif-seeded-at-join`), carried onto the new mechanism.
 
 Seats live in a `node_seats` table in `venue.db`, classified `state`, so they travel in the stream and
-every restorer has them. The primary is the sole allocator, as today. A seat is minted when a mirror is
-enrolled:
+every restorer has them. The primary is the sole allocator, as today. A seat is minted at three moments:
 
-- **A second box** generates its keypair at enrolment; the primary endorses the public key into the
+- **A second box is enrolled** — it generates its keypair, the primary endorses the public key into the
   trust set and mints the seat. This is today's adopt flow with the subscription removed.
-- **Cloud backup switched on** mints a *cloud seat* with no key yet. Whoever is promoted from the
+- **Cloud backup is switched on** — mints a *cloud seat* with no key yet. Whoever is promoted from the
   store claims it, generates a keypair *then*, and has it endorsed by a venue-scoped key that Waitron
   Cloud holds and that entered the box's trust set at enrolment (§6). That endorsement is the one
   place the closed-source control plane touches the trust chain — and it is the same point at which
   it already must, since it starts the instance.
+- **A returned node rejoins** (Fable review finding 2, 2026-09-16) — the new primary mints it a **fresh
+  seat** as part of rejoin (§5.2). A seat is consumed by the promotion that claims it, so a node that
+  has already been promoted once has no seat to claim on its next promotion; rather than let it resume
+  its own old node id, number and chain, the new primary allocates it a new one. This costs one cheap
+  sequential number per round trip and keeps CLAUDE.md §5's "re-registering a node starts a new chain"
+  literally true — a returned box never continues a chain across a promotion boundary.
 
 A seat is **claimed exactly once**, in the same transaction that activates it, and the claim records
-the term that claimed it. An unclaimed seat is a cheap sequential number, fiscally inert — a
-never-promoted tertiary just burns one number, which AEAT permits (many "SIF virtuales" per NIF, each
-with its own installation number; discussion note §1, memory `reserved-sif-seeded-at-join`). A venue
-with a box mirror and cloud backup carries two seats.
+the term that claimed it; the claim is a compare-and-set on the seat row so two nodes racing for the
+same seat cannot both win (proved by deletion, §9). An unclaimed seat is a cheap sequential number,
+fiscally inert — a never-promoted tertiary just burns one number, which AEAT permits (many "SIF
+virtuales" per NIF, each with its own installation number "propio y distinto"; the receipt is the AEAT
+FAQ quoted in
+[local-server-sif-and-failover](2026-08-01-local-server-sif-and-failover-design.md) §12, not the
+discussion note). A venue with a box mirror and cloud backup carries two seats.
 
 **Two rejected alternatives** (recorded so a future session does not silently reintroduce them):
 
@@ -167,6 +198,8 @@ Legend: **P** writes and streams; **F** follows (continuously restores a read-on
 
 The whole point: a mirror is not a database that receives rows. It is a place the stream lands, plus
 optionally a follower that keeps a local read-only copy warm. Every topology is the same three verbs.
+(`gen-n` / `gen-n+1` in the diagrams is shorthand for "the current / the next generation"; the actual
+name is `gen-<term>-<node-id>` per §2.2, which is what keeps two independent promotions from colliding.)
 
 ### 4.1 On-prem primary → cloud mirror
 
@@ -186,11 +219,14 @@ the box returns it sees the higher term, ships its ledger tail (§5.2), wipes an
 
 The box holds a read-only copy a second or two behind. Promotion (the venue's internet is gone for
 good, or the owner moves back on-prem): the box stops following, claims its seat, opens read-write,
-publishes the higher term, and streams to `gen-n+1` — **buffering to a local directory until the
-internet returns**, then copying up (the same copy-up job as §4.4). What the box **cannot** do while
-the internet is down is fence the cloud; that is accepted and safe, because nothing inside the venue
-can reach the cloud primary either, and when the link returns the cloud sees the higher term, goes
-read-only and ships its own ledger tail.
+publishes the higher term, and streams to its own `gen-<term>-<box-id>` — **buffering to a local
+directory until the internet returns**, then copying up (the same copy-up job as §4.4). What the box
+**cannot** do while the internet is down is fence the cloud. This is **assumed** safe, not proven
+(Fable review finding 7, 2026-09-16): the reasoning is that nothing inside the venue reaches the cloud
+primary either, but a handheld on mobile data or a till on a second uplink can follow the newest
+membership document it fetches and could reach the cloud while the box cannot. It is still fiscally
+survivable — each node sells under its own seat, so no chain forks — and when the link returns the tie
+break of §2.2 decides which generation is authoritative; the loser fences and ships its ledger tail.
 
 ### 4.3 Cloud primary → cloud mirror
 
@@ -202,8 +238,9 @@ Topology 4.1 with the box removed. The "mirror" is the store; there is no second
 A dies → the control plane starts an instance on host B, restores from `gen-n`, streams to `gen-n+1`.
 There is never more than one running instance per venue, so there is no lease and no split brain by
 construction. The cost is the restore time (seconds for a restaurant-sized file) plus the ~1 second of
-un-streamed writes — the same loss window logical replication has today. **This answers the owner's
-third question directly: a cloud primary needs no second instance; the store is the mirror.**
+un-streamed writes — comparable to the loss window of today's asynchronous logical replication (both
+are asynchronous; the exact window is a §12 measurement, not a claim). **This answers the owner's third
+question directly: a cloud primary needs no second instance; the store is the mirror.**
 
 ### 4.4 On-prem primary → on-prem mirror
 
@@ -249,12 +286,15 @@ Whether box B, a fresh cloud instance, or a box taking over from the cloud:
    the old primary is reachable, ask it to fence and flush (`litestream sync`, then compare its last
    transaction id with ours); if not, the human accepts the loss — the choice R3 records today. Then
    `PRAGMA integrity_check` and the existing hash-chain verifier over the tail of the fiscal ledger.
-2. **Claim the seat, in one transaction:** take the reserved node id, activate the reserved number and
-   series, write this node's identity into `node.db`, and mint membership term *n+1* signed with the
-   endorsed key. **Committing this is the point of no return**, as today.
-3. **Open the next generation:** write a signed `current.json` naming `gen-n+1` and this node, then
-   start Litestream streaming to it. If the target is unreachable (a box promoting with no internet),
-   stream to a local directory and let the copy-up job drain it later.
+2. **Claim the seat, in one transaction:** take the reserved node id from the seat this node holds
+   (§3 — minted at enrolment, or minted fresh for it at its last rejoin; a node without a seat cannot be
+   promoted, which is caught here, not discovered later), activate the reserved number and series, write
+   this node's identity into `node.db`, and mint membership term *n+1* signed with the endorsed key.
+   **Committing this is the point of no return**, as today.
+3. **Open the next generation:** write a signed `current.json` (via the store's compare-and-set, §2.2)
+   naming `gen-<term>-<this-node-id>` and this node, then start Litestream streaming to it. If the target
+   is unreachable (a box promoting with no internet), stream to a local directory and let the copy-up
+   job drain it later.
 4. **Tell the tills** through the existing reroute path — the till follows the primary named by the
    newest membership document (`2026-09-05-till-reroute-design.md`); nothing here changes how it learns
    that.
@@ -265,27 +305,49 @@ The old primary boots **fenced** (read-only), as Ruling C7 already has it. It lo
 two places — a peer's management API and the signed `current.json` in the store — and if neither is
 reachable it proceeds as primary (the accepted human-promotion window today). If a newer term exists:
 
-1. **Ship the tail.** For each `ledger` table, the rows this node owns (its `node_id`, or children off
-   its rows) that the new primary lacks. The new primary reports, per table, what it holds for this
-   node — the highest chain position for the chained tables, the id set in batches for the uuid-keyed
-   ones — and the box sends the difference over the management API as an **append-only batch**. The
-   receiver inserts them **verbatim, no recompute**, and **refuses any row not keyed by the sender's
-   node** — the rule the deleted application-level apply had for append-only tables (app-level sync
-   design §5). For the ledger tables the owner updates in place (`payments`, `sales`, `cadenas`,
-   `envios`, the close chain) the sender's version wins for sender-owned rows. The one natural-key
-   clash that can remain — a supplier invoice number typed on both nodes — is reported and skipped by a
-   human, the single review step the outbox-swap design also keeps (§4.2); the working-time chain is
-   per node since 2026-09-07 so it cannot clash.
+1. **Ship the tail.** For each `ledger` table, the rows this node owns that the new primary lacks. The
+   new primary reports, per table, what it holds for this node — the highest chain position for the
+   chained tables, the id set in batches for the uuid-keyed ones — and the box sends the difference over
+   the management API as an **append-only batch**, applied by the receiver in one transaction with
+   `foreign_keys = ON`, parents before children. Three rules govern the apply, and the spec **owns**
+   them rather than borrowing them (Fable review finding 4, 2026-09-16 — the cited app-level sync §5 is
+   about applying under `withTenant` with `ON CONFLICT (id) DO NOTHING`; it carries no refuse-by-origin
+   rule, so that rule is new here):
+   - **Verbatim, no recompute**, idempotent by primary key — a re-shipped row is a no-op, never a
+     duplicate chain link.
+   - **Keyed by the sender.** A row is accepted only if it belongs to the sending node — by `node_id`
+     on the tables that carry one (`sales`, `payments`, `registros_facturacion`, `cadenas`,
+     `registro_sif`, `envios`' parent), and by a join to a sender-owned parent for the child tables that
+     do not (`sale_lines`, `acks`, `envio_flujo`). A row keyed to any other node is refused.
+   - **Submission state never regresses** (Fable review finding 3, 2026-09-16). The receiver's fiscal
+     drain (`packages/fiscal-verifactu/src/drain.ts`, `claimBatch`) claims across **every** SIF with no
+     node filter, so once a shipped `registros_facturacion` row lands the receiver may submit it to AEAT
+     and mark its `envios` row `enviado`. A retried or partial ship must **not** let the sender's older
+     `pendiente` version overwrite that terminal state and cause a **double submission**. So for
+     `envios`/`acks`/`envio_flujo` the apply is **terminal-state-wins** (a row already `enviado`/acked
+     on the receiver is never regressed), and the whole ship for a given SIF runs with that SIF's drain
+     paused (the `blockedSifIds` mechanism `claimBatch` already takes). The append-only
+     `registros_facturacion`/`cadenas` rows are unaffected — they are insert-only and idempotent.
+
+   For the ledger tables the owner updates in place (`payments`, `sales`, `cadenas`, the close chain)
+   the sender's version wins for sender-owned rows, since the receiver's copy of them is by construction
+   older. The one natural-key clash that can remain — a supplier invoice number typed on both nodes — is
+   reported and skipped by a human, the single review step the outbox-swap design also keeps (§4.2); the
+   working-time chain is per node since 2026-09-07 so it cannot clash.
 2. **Confirm** (receiver's counts match the sender's), then **wipe** `venue.db`, restore the current
-   generation, and follow. `state` never travels back and never lingers — the wipe removes it — so
-   primary and standby cannot diverge on a settings row (the outbox-swap design's reasoning, unchanged).
+   generation, take a **fresh seat** the new primary mints for this returning node (§3, finding 2), and
+   follow. `state` never travels back and never lingers — the wipe removes it — so primary and standby
+   cannot diverge on a settings row (the outbox-swap design's reasoning, unchanged). The returning node
+   is now a follower holding a dormant fresh identity; if it is ever promoted again it claims that new
+   seat, never its old one.
 
 **Why the tail shipper is bounded** where the deleted outbox was not: one direction, once per return,
-`ledger` tables only, keyed by writer, no cursors, no retention, no peer table. Its correctness
-argument is the outbox-swap design's own: ledger rows cannot collide because they are keyed by the
-node that wrote them (every fiscal table carries `node_id` since the server-as-SIF rekey; children hang
-off `sale_id`/`registro_id`; everything else is uuid-keyed). This is the **largest new fiscal-path
-component** and gets the §12 two-node proof and the Fable read.
+`ledger` tables only, keyed by writer, no cursors, no retention, no peer table. Its append-only half
+cannot collide because those rows are keyed by the node that wrote them (every fiscal table carries
+`node_id` since the server-as-SIF rekey; children join to a `node_id`-carrying parent; everything else
+is uuid-keyed). Its in-place half is the part that needs the state-regression guard above — that is
+where the care goes. This is the **largest new fiscal-path component** and gets the §12 two-node proof
+and a Fable read of its own before it is built.
 
 ---
 
@@ -302,8 +364,11 @@ additions:
   primary or sign a membership document — it only vouches for a key.
 - **Periodic self-check.** A node already checks for a higher term at boot (Ruling C7). A primary also
   re-reads `current.json` on a slow timer, so a box promoted past while it was running fences itself
-  within minutes rather than at its next reboot. Two writers into one generation stay impossible
-  regardless: a promoted node always opens a new generation.
+  within minutes rather than at its next reboot. Because a term tie is invisible to the strictly-higher
+  term guard (§2.2), this self-check compares the **live generation** in `current.json` against its own,
+  not only the term: a primary whose generation is no longer the one `current.json` names fences, even
+  at an equal term. Two writers into one generation stay impossible by the naming and compare-and-set of
+  §2.2, not by term ordering alone.
 
 ---
 
@@ -337,7 +402,9 @@ the premier, default backup; the archive is the self-host / extra-copy path.**
 | No offsite destination at all | Litestream does not run; the scheduled archive is the only backup; the "only copy is on the box" warning stays up |
 
 A free-tier venue has a **coarser loss window** (the archive interval, not ~1 second). That is the
-product difference, not a safety difference — the fiscal records are at AEAT either way. When the owner
+product difference more than a safety one — a lost record that was already **submitted** is recoverable
+from AEAT (a still-`pendiente` tail and the commercial detail are not, the accepted cold-recovery
+posture, memory `cold-recovery-no-hot-failover-posture`). When the owner
 later switches on Waitron Cloud, the primary opens `gen-0001`, Litestream takes its first full snapshot,
 and the cloud seat is minted; the venue becomes topology 4.1 with no restart and no wipe.
 
@@ -347,16 +414,23 @@ The regime's decision 5 required offsite storage to see only ciphertext under th
 key. The stream cannot honour that — Litestream 0.5 removed its own encryption. **For the stream** the
 floor becomes the provider's server-side encryption under a per-venue key (§0.3). The **archive keeps**
 the recovery-key floor unchanged. This split is the one place this spec weakens a stated posture, and it
-is weakened knowingly: the records the stream holds are already transmitted to AEAT.
+is weakened knowingly: the records the stream holds are, once submitted, already transmitted to AEAT.
 
 ### 7.5 Three restore shapes
 
 1. **Rejoin or return** — a fresh copy of the current generation; `node.db` identity kept (§5.2).
-2. **Cold restore, no surviving peer** (box destroyed) — restore the latest state from the store (or an
-   archive if the store is gone) onto a new box or cloud instance; the fiscal module's restore hook
-   mints a fresh chain and series (SP-3d,
-   `2026-09-06-module-sp3d-fiscal-restore-hook-design.md`). Going live again is never blocked — the
-   standing priority (memory `cold-recovery-no-hot-failover-posture`).
+2. **Cold restore, no surviving peer** (box destroyed) — and here the identity rule depends on **which
+   artifact** is restored, because `node.db` is not in the stream (Fable review finding 6, 2026-09-16):
+   - **From the store** (stream only, no `node.db`): the restored `venue.db` has no identity, so the new
+     box or instance **claims a seat** exactly as a promotion does (§5.1) and comes up under a fresh
+     node id, number and chain. This is a promotion in all but name.
+   - **From an archive** (which carries `node.db`, §7.2): the fiscal module's restore hook re-registers
+     under the recovered node id, minting a fresh chain and series for it (SP-3d,
+     `2026-09-06-module-sp3d-fiscal-restore-hook-design.md`).
+
+   Exactly one path runs per restore, chosen by the artifact — never both, or one event would mint two
+   installation numbers. Either way going live again is never blocked — the standing priority (memory
+   `cold-recovery-no-hot-failover-posture`) — and either way the chain is fresh, never resumed.
 3. **Point-in-time** (an operator mistake) — restore to a **side** file and inspect. **Never over a
    live ledger**: rolling the ledger back would re-issue invoice numbers. Going back for real is a cold
    restore with a fresh chain, by design.
@@ -411,9 +485,19 @@ no-tenant-column guard.
 - **The tail shipper** — sender and receiver (§5.2).
 - **The mirror box's copy-up job** (§4.4), deletions included.
 - **`VACUUM INTO` archiving**, replacing `pg_dump` in the archive path (§7.2).
-- **Drizzle on its SQLite dialect** — enums → text + check; arrays → JSON; `numeric` money → **integer
-  cents**; timestamps → ISO-8601 text; uuids → text. The money change touches fiscal hash inputs and is
-  proven against the real validator (§9, §12).
+- **Drizzle on its SQLite dialect** — enums → text + check; arrays → JSON; timestamps → ISO-8601 text;
+  uuids → text; and the money and quantity conversion, which is **not** a blanket rule (Fable review
+  finding 5, 2026-09-16):
+  - **Money** (`numeric(12,2)` amounts) → **integer cents**. It does **not** touch the stored fiscal
+    hash fields — `cuota_total` and `importe_total` in `registros_facturacion` are already `text`
+    (`packages/fiscal-verifactu/src/schema/registros.ts:95-96`) and the huella hashes formatted strings
+    (`packages/verifactu/src/huella.ts` joins `trimValue`-formatted values). What it touches is the
+    **input to that formatting** — the arithmetic that produces the amount before it is formatted — so
+    the risk is a rounding difference, not a changed hash field.
+  - **Quantities and rates are not cents.** `quantity numeric(12,3)` and the `numeric(5,2)` rate columns
+    (`vat_rate`, `deductible_proportion`, `night_premium_pct`, `rate`) keep their scale — integer
+    thousandths for quantity, integer basis-points or an exact decimal string for rates. The plan reads
+    the scale off each column; "everything numeric becomes cents" would silently truncate them.
 
 ---
 
@@ -430,13 +514,19 @@ slice in §11 adds a step to it.
 Proved by deletion (CLAUDE.md §4):
 
 - the append-only trigger on each `ledger` table (delete it, a mutation must start succeeding);
-- a seat cannot be claimed twice (concurrent claims: one wins);
-- a second writer into an existing generation is refused;
-- the tail receiver refuses a row not keyed by the sender;
+- a seat cannot be claimed twice (concurrent claims: one wins) — the compare-and-set of §3;
+- two independent promotions do not collide: distinct generation names, and the `current.json`
+  compare-and-set decides the term tie (§2.2, finding 1);
+- a copy-up into a generation this node did not open is refused (§4.4, finding 1);
+- the tail receiver refuses a row not keyed by the sender, and a re-shipped batch does **not** regress
+  an `envios` row already `enviado` on the receiver (§5.2, finding 3) — the negative control is a ship
+  retried after the receiver's drain has submitted, asserting no second submission;
 - a restore from box B's **copied** replica equals one from a direct stream (§4.4);
-- money fixtures pass the **real fiscal validator** after the integer-cents change — the shared alta
-  fixture is re-run against the real check, per CLAUDE.md §4 ("a fixture no check reads is unverified
-  data").
+- money and quantity conversion is exact: the same fixture sale yields **byte-identical**
+  `CuotaTotal`/`ImporteTotal` and huella before and after the conversion (finding 5 — this is the test
+  that catches a rounding drift; "passes the validator" only proves the string is well-formed), and the
+  shared alta fixture is re-run against the real fiscal check, per CLAUDE.md §4 ("a fixture no check
+  reads is unverified data").
 
 Point-in-time restore lands only on file boundaries (discussion note §3) — a test asserts the *latest*
 restore is exact and that a between-boundaries request resolves to the nearest boundary, so no test
@@ -452,11 +542,18 @@ quietly assumes finer granularity than Litestream gives.
 - **Never-reused installation numbers** are preserved by seats: reserved by the sole allocator at
   enrolment, claimed once at promotion, never minted from a stale copied counter (§3).
 - **A promoted node starts a fresh chain**, never resumes the dead one — the seat's own node id and
-  series (fiscal §5; memory `cold-recovery-no-hot-failover-posture`).
-- **Nothing external blocks a sale** (CLAUDE.md §5): Litestream is a separate process and the sale path
-  never waits on it beyond the sub-second checkpoint write-lock (`busy_timeout` absorbs that).
-- **Money as integer cents** changes hash inputs; §9 and §12 require the real validator to pass the
-  converted fixtures before the change is believed.
+  series (fiscal §5; memory `cold-recovery-no-hot-failover-posture`). A **returned** node is no
+  exception: it takes a fresh seat at rejoin (§3, §5.2), so it never continues its own chain across a
+  promotion boundary either.
+- **Nothing external blocks a sale** (CLAUDE.md §5): Litestream is a separate process, and the sale
+  path waits on it only for the checkpoint write-lock, which Litestream documents as "periodic but
+  short" and covers with a recommended 5-second `busy_timeout` — short, not proven sub-second (Fable
+  review finding 8). With `wal_autocheckpoint = 0` only Litestream checkpoints, so the one shape that
+  could put our own process on the sale path is a long offline stretch (§4.2) letting the WAL grow
+  unbounded; **§12's prototype must run a multi-day offline write load and confirm the sale latency and
+  WAL size stay bounded** before this bullet is believed.
+- **Money and quantity conversion** does not change the stored hash fields (already `text`), only the
+  arithmetic feeding them; §9's byte-identical-huella test and §12 gate the change (finding 5).
 
 ---
 
@@ -491,8 +588,13 @@ Both from the discussion note §9; neither is optional.
    friend's concern does not apply at Waitron's scale.
 2. **Prove the SQLite failover loop end to end**, as a throwaway prototype: box (SQLite + Litestream) →
    store → promote to a new generation → box returns with an un-shipped tail → tail shipped → box
-   rejoins by restore. With the two natural-key clash shapes from the outbox-swap design's §4.2
-   injected, and the copied-replica-equals-direct-stream check from §4.4.
+   rejoins by restore. It must exercise the shapes the Fable review surfaced (2026-09-16): the two
+   natural-key clashes from the outbox-swap design's §4.2; the offline **double promotion** of
+   §4.2/§4.4 (both nodes reach term *n+1*), confirming the generation naming and `current.json`
+   tie-break keep the stream restorable and fence the loser; a tail ship **retried after the receiver's
+   drain has submitted**, confirming no second AEAT submission (§5.2, finding 3); the
+   copied-replica-equals-direct-stream check from §4.4; and a **multi-day offline write load** with
+   `wal_autocheckpoint = 0`, confirming sale latency and WAL size stay bounded (§10, finding 8).
 
 Only if (1) says PostgreSQL density is a real problem **and** (2) passes does slice 1 begin.
 
@@ -505,16 +607,22 @@ From the discussion note §7, plus what the design added:
 1. **Litestream is one project, one main author, at 0.5.** The features this leans on (follow mode, the
    VFS, v0.5's LTX format) are recent. Read its release history and issue tracker before betting a
    venue's ledger on it.
-2. **The tail shipper is new fiscal-path code** (§5.2); its correctness argument is the outbox-swap
-   design's and it needs the two-node proof and the Fable read.
-3. **Money as integers** changes hash inputs; the alta fixture must pass the real validator afterwards.
+2. **The tail shipper is new fiscal-path code** (§5.2); its in-place half can double-submit to AEAT if
+   the state-regression guard is wrong (§5.2 finding 3), so it needs the two-node proof and a Fable read
+   of its own before it is built.
+3. **Money and quantity conversion** feeds the hash inputs; the byte-identical-huella test (§9) must
+   pass, and the scale must be read per column, not assumed to be cents (§8.3 finding 5).
 4. **Stream encryption is ours to arrange** (Litestream 0.5 removed its own) — §7.4.
 5. **Drizzle's SQLite dialect** and its migration tooling are less exercised than its PostgreSQL one.
-6. **Promotion discipline:** continuing an old generation from the store corrupts the stream (§2.2,
-   §4). The generation change must be structural, not a runbook step.
+6. **Promotion discipline:** continuing an old generation, or two nodes promoting into the same
+   generation name, corrupts the stream (§2.2, §4). The generation naming and the `current.json`
+   compare-and-set must be structural, not a runbook step — this is the review's most serious finding
+   and the prototype exercises it directly (§12).
 7. **Point-in-time restore is approximate** (§7.5); latest-state restore is exact.
 8. **The on-prem-mirror copy-up must propagate deletions** or a cloud restore from it silently diverges
    (§4.4) — the prototype's explicit check.
+9. **A long offline stretch with `wal_autocheckpoint = 0`** could grow the WAL unbounded and put our own
+   process on the sale path (§10 finding 8) — the prototype's multi-day offline check bounds it.
 
 ---
 
@@ -531,3 +639,4 @@ From the discussion note §7, plus what the design added:
 | Backup regime decisions 4 and 5; manifest and hooks | `2026-09-04-backup-restore-regime-design.md` §3 | read |
 | Product images live in the DB (`media_image_data.bytes`), so the stream carries them | `packages/media/src/images.ts:223`; `packages/media/drizzle/0000_media_baseline.sql` | read 2026-09-16 |
 | Density cost of logical replication per subscription | PostgreSQL behaviour, **not measured** | §12 gate 1 is the measurement |
+| Fiscal soundness of seats, tail shipper, money conversion, offline promotion | fresh-context Fable read, 2026-09-16 | nine findings folded in; the load-bearing code claims (strict-term guard `node-membership.ts:97`, node-filterless `claimBatch` in `drain.ts`, `cuota_total`/`importe_total` already `text`, the non-money `numeric` columns) verified against the tree before folding |
