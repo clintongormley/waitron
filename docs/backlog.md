@@ -494,6 +494,19 @@ unowned): `createProduct` and `updateProduct` still duplicate the legacy-`pricin
 shared helper would keep the two from drifting; and the synthetic `EACH_UNIT` id lives as a literal in
 both `packages/catalogue/src/units.ts` and the till's `product-name.ts` with nothing pinning them equal.
 
+**Update (2026-09-16) — clicking a unit row is now a delete, and precision is a dropdown — LANDED
+#382.** Clicking a unit's row on the units screen still does the same thing it did before — it lists
+the products that have to be moved onto another unit before this one can go — but it now says so:
+the row's accessible label and the dialog heading both read Delete unit, instead of inviting the
+reader to view products. The `units.view_products` wording was removed in both languages. The
+sentence saying a unit is still in use is now painted in the danger colour, and the list of units to
+move those products onto is sorted by name in the reader's own language, with Each (no unit) above
+it. In the unit editor, Precision stopped being a number you type and became a dropdown offering 0
+to 3; reopening an existing unit now shows that unit's own precision, because every `<option>` marks
+itself with `.selected` — a `.value` binding on the `<select>` alone runs before the options exist,
+which is the trap `CLAUDE.md` §3 records. The two small items above stay open: #382 touched only
+`apps/dashboard`, so nothing in `packages/catalogue` changed.
+
 What it left open:
 
 - **Units still has no written contract, but the reason to write one has passed.** Categories and
