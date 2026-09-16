@@ -35,8 +35,8 @@ describe.each(["light", "dark"] as const)("modifiers screen (%s)", (theme) => {
         .fn()
         .mockResolvedValue([{ id: "x", type: "text", name: { es: "Nota" }, available: true }]),
       getModifierDependants: vi.fn().mockResolvedValue({
-        products: [{ id: "p1", name: { es: "Café" } }],
-        menus: [{ id: "mn1", name: { es: "Desayuno" } }],
+        products: [{ id: "p1", name: "Café" }],
+        menus: [{ id: "mn1", name: "Desayuno" }],
         orders: 0,
       }),
     } as unknown as DashboardApi;
@@ -55,7 +55,7 @@ describe.each(["light", "dark"] as const)("modifiers screen (%s)", (theme) => {
     await el.updateComplete;
     const modal = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
     await vi.waitFor(() =>
-      expect(modal.querySelector('[data-test="modifier-products"]')).not.toBeNull(),
+      expect(modal.querySelector('[data-test="modifier-usage"]')).not.toBeNull(),
     );
     await expectNoA11yViolations(host);
   });

@@ -160,7 +160,7 @@ export class ChoiceForm extends LitElement {
     });
   }
   #effects() {
-    return html`<details>
+    return html`<details open>
       <summary>${t("modifiers.effects")}</summary>
       <div class="fields">
         <dashboard-allergen-dietary-picker

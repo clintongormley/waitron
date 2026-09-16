@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CSSResult } from "lit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-allergen-dietary-picker` so `mountWidget` can create it.
 import { AllergenDietaryPicker, type AllergenDietaryValue } from "./allergen-dietary-picker.js";
+import { t } from "../i18n/t.js";
+import { allergenName } from "../i18n/domain.js";
 
 afterEach(cleanupWidgets);
 
@@ -24,20 +26,6 @@ async function pickAllergens(el: AllergenDietaryPicker, values: string[]): Promi
   await el.updateComplete;
 }
 
-/** Toggles one dietary checkbox by its label value, firing the native `change` the widget listens for. */
-async function toggleDiet(
-  el: AllergenDietaryPicker,
-  label: string,
-  checked: boolean,
-): Promise<void> {
-  const box = el.shadowRoot!.querySelector<HTMLInputElement>(
-    `[data-test="dietary"] input[value="${label}"]`,
-  )!;
-  box.checked = checked;
-  box.dispatchEvent(new Event("change", { bubbles: true }));
-  await el.updateComplete;
-}
-
 /** Collects every `value` payload the widget emits over the test's lifetime. */
 function trackChanges(el: AllergenDietaryPicker): AllergenDietaryValue[] {
   const changes: AllergenDietaryValue[] = [];
@@ -46,37 +34,48 @@ function trackChanges(el: AllergenDietaryPicker): AllergenDietaryValue[] {
 }
 
 describe("allergen-dietary-picker", () => {
-  it("renders one allergen list and four dietary checkboxes, no remove-allergens control", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>(
-      "dashboard-allergen-dietary-picker",
-      {},
+  it("shows comma-separated summaries and a None selected fallback", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+      value: { allergens: ["milk", "eggs"], dietary: [] },
+    });
+    expect(el.shadowRoot!.querySelector('[data-test="allergens-summary"]')!.textContent).toBe(
+      [allergenName("milk"), allergenName("eggs")].join(", "),
     );
-    expect(el.shadowRoot!.querySelector('[data-test="remove-allergens"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-test="add-allergens"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull();
-    expect(
-      el.shadowRoot!.querySelectorAll('[data-test="dietary"] input[type="checkbox"]').length,
-    ).toBe(4);
+    expect(el.shadowRoot!.querySelector('[data-test="dietary-summary"]')!.textContent).toBe(
+      t("modifiers.none_selected"),
+    );
+    expect(el.shadowRoot!.querySelectorAll("wt-combobox")).toHaveLength(0);
   });
 
-  it("gives each dietary checkbox a semantic name and a visible label", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>(
-      "dashboard-allergen-dietary-picker",
-      {},
-    );
-    const boxes = [
-      ...el.shadowRoot!.querySelectorAll<HTMLInputElement>(
-        '[data-test="dietary"] input[type="checkbox"]',
-      ),
-    ];
-    expect(boxes.map((b) => b.name)).toEqual([
-      "diet-vegan",
-      "diet-vegetarian",
-      "diet-halal",
-      "diet-kosher",
-    ]);
-    // Each checkbox is wrapped by a label whose text is its accessible name.
-    for (const box of boxes) expect(box.closest("label")?.textContent?.trim()).toBeTruthy();
+  it("turns each summary into a semantic multi-value combobox when Edit is clicked", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+      value: { allergens: ["milk"], dietary: ["vegan"] },
+    });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-allergens"]')!.click();
+    await el.updateComplete;
+    const allergens = el.shadowRoot!.querySelector<
+      HTMLElement & {
+        multiple: boolean;
+        name: string;
+        values: string[];
+      }
+    >('[data-test="allergens"]')!;
+    expect(allergens.multiple).toBe(true);
+    expect(allergens.name).toBe("allergens");
+    expect(allergens.values).toEqual(["milk"]);
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-dietary"]')!.click();
+    await el.updateComplete;
+    const dietary = el.shadowRoot!.querySelector<
+      HTMLElement & {
+        multiple: boolean;
+        name: string;
+        values: string[];
+      }
+    >('[data-test="dietary"]')!;
+    expect(dietary.multiple).toBe(true);
+    expect(dietary.name).toBe("dietary-preferences");
+    expect(dietary.values).toEqual(["vegan"]);
   });
 
   it("emits the chosen allergens and re-dispatches only its own wt-change", async () => {
@@ -84,39 +83,50 @@ describe("allergen-dietary-picker", () => {
       value: { allergens: [], dietary: [] },
     });
     const changes = trackChanges(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-allergens"]')!.click();
+    await el.updateComplete;
     await pickAllergens(el, ["gluten", "milk"]);
     // Exactly one event: the inner combobox's own wt-change is stopped, so the consumer never sees two.
     expect(changes).toHaveLength(1);
     expect(changes.at(-1)).toEqual({ allergens: ["gluten", "milk"], dietary: [] });
   });
 
-  it("adds a dietary label in canonical order without disturbing the allergens", async () => {
+  it("edits dietary preferences through a multi-value combobox in canonical order", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
       value: { allergens: ["milk"], dietary: ["vegetarian"] },
     });
     const changes = trackChanges(el);
-    await toggleDiet(el, "vegan", true);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-dietary"]')!.click();
+    await el.updateComplete;
+    const dietary = el.shadowRoot!.querySelector<HTMLElement & { values: string[] }>(
+      '[data-test="dietary"]',
+    )!;
+    dietary.values = ["vegetarian", "vegan"];
+    dietary.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { values: dietary.values },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
     // vegan precedes vegetarian in DIETARY_SUITABILITY, so the emitted list keeps that fixed order.
     expect(changes.at(-1)).toEqual({ allergens: ["milk"], dietary: ["vegan", "vegetarian"] });
   });
 
-  it("removes a dietary label when its checkbox is unchecked", async () => {
+  it("returns to the comma-separated summary when an edited field loses focus", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
       value: { allergens: [], dietary: ["vegan", "halal"] },
     });
-    const changes = trackChanges(el);
-    await toggleDiet(el, "vegan", false);
-    expect(changes.at(-1)).toEqual({ allergens: [], dietary: ["halal"] });
-  });
-
-  it("checks the boxes that match the current dietary value", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
-      value: { allergens: [], dietary: ["halal", "kosher"] },
-    });
-    const checked = [
-      ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('[data-test="dietary"] input:checked'),
-    ].map((i) => i.value);
-    expect(checked).toEqual(["halal", "kosher"]);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-dietary"]')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-allergens"]')!.focus();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="dietary"]')).toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="dietary-summary"]')!.textContent).toBe(
+      [t("editor.diet.vegan"), t("editor.diet.halal")].join(", "),
+    );
   });
 
   // Token-painting check. No dashboard widget scans its stylesheet yet, so this mirrors the proven
