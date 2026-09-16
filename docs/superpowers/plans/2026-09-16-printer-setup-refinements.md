@@ -79,3 +79,11 @@ retains the status and emits the event. No change was needed for that review que
 Review artifacts: `/tmp/waitron-printers-review-xycqpvw0/` holds the brief, report, timing, usage,
 triage and session probe. Physical NT-806 behavior is still unverified. The reviewer did not repeat
 the historical LAN probes; their original readings are recorded in the design.
+
+
+The first CI run found one additional prefix assertion in `till-api.receipt.test.ts`: it expected
+plain text immediately after ESC @. Reproduced locally with `-t 'lays the payment slip out'`, then
+updated the expected prefix to include FS . while retaining the no-table-selection, paper-width
+and EUR assertions. `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run
+src/till-api.receipt.test.ts` then passed all 29 tests. The other jobs in that CI run passed; the
+corrected commit requires a fresh current-head CI run.
