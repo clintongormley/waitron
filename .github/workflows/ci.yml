@@ -43,7 +43,8 @@ concurrency:
   # A PUSH IS NEVER GROUPED: its group is unique to the run, so no push can cancel or delay another.
   #
   # A push to `main` that changes code is the only thing that runs the unfiltered suite over the
-  # merged tree, and the only thing that publishes an image for that commit. Grouping pushes
+  # merged tree, and — until a `v*` tag is pushed at the same commit — the only thing that publishes
+  # an image for it. Grouping pushes
   # together cannot leave that alone, whatever `cancel-in-progress` says: GitHub allows only one
   # PENDING run per group and a newer arrival cancels the one already waiting, while
   # `cancel-in-progress` governs a run that has already STARTED and so never reaches that case. The
@@ -1689,16 +1690,20 @@ jobs:
             # `hold` still publishes this commit's immutable `sha-` tag; it only declines to move
             # `:main` backwards. Guard: `scripts/main-tag-guard.sh` and its suite.
             refs/heads/main)
-              # Assigned first, deliberately: inside an `if` condition a failing command
-              # substitution is swallowed by `set -e` and would read as "do not move the tag",
-              # quietly turning an error into a skipped publish. As an assignment it fails the step.
+              # Assigned on its own line, deliberately: `errexit` is SUSPENDED for a command inside
+              # an `if` condition, so a failing guard would read there as "do not move the tag" and
+              # turn an error into a silently skipped tag move. As an assignment it fails the step.
               decision=$(scripts/main-tag-guard.sh "$repo:main" "$REPOSITORY" "$SHA")
-              if [ "$decision" = "move" ]; then
-                tags="$tags,$repo:main"
-                agent_tags="$agent_tags,$agent_repo:main"
-              else
-                echo "leaving :main where it is - it is already built from a newer commit than $SHA"
-              fi
+              case "$decision" in
+                move)
+                  tags="$tags,$repo:main"
+                  agent_tags="$agent_tags,$agent_repo:main"
+                  ;;
+                hold) echo "leaving :main alone - it is already built from a newer commit than $SHA" ;;
+                # Neither answer means the guard changed under this step. Refusing here is what
+                # stops an unreadable answer from being read as `hold` for ever after.
+                *) echo "main-tag-guard.sh answered '$decision', which is neither move nor hold" >&2; exit 1 ;;
+              esac
               ;;
             # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
             # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.

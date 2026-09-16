@@ -97,7 +97,8 @@ const jobs = (() => {
  * The workflow-level `concurrency:` block, as two strings: the group expression and the
  * cancel-in-progress expression. Missing block, or a missing key, throws — an extraction that
  * silently found nothing would make every case below pass against an empty string. A key that is
- * PRESENT but empty still yields "", which is what the first case checks for.
+ * PRESENT but empty yields "" instead, which is why the cases assert on CONTENT rather than on
+ * having found a line.
  */
 const concurrency = (() => {
   const at = lines.indexOf("concurrency:");
@@ -491,11 +492,28 @@ describe("the workflow's concurrency group", () => {
   // time, and a registry tag is last-write-wins, so the publish job asks whether a newer commit
   // already holds `:main` before moving it. That script's own behaviour is
   // `scripts/main-tag-guard.test.mjs`; what this case pins is that the job still ASKS.
-  it("has the publish job ask before it moves the `:main` tag", () => {
-    const body = job("publish").body.join("\n");
-    expect(body).toContain("scripts/main-tag-guard.sh");
-    expect(body).toMatch(/decision=\$\(scripts\/main-tag-guard\.sh[^)]*\)/);
-    expect(body).toMatch(/\[ "\$decision" = "move" \]/);
+  it("has the publish job ask before it moves the `:main` tag, and obey the answer", () => {
+    const body = job("publish").body;
+    const text = body.join("\n");
+    expect(text).toMatch(/decision=\$\(scripts\/main-tag-guard\.sh[^)]*\)/);
+
+    // Asking is not obeying: a `tags=` line that added `:main` unconditionally would leave the call
+    // above in place and still publish the backwards tag. So every line that puts `:main` into a tag
+    // list must sit under the `move` arm — which here means after it and before the arm ends.
+    const moveArm = body.findIndex((line) => /^\s*move\)\s*$/.test(line));
+    const armEnd = body.findIndex((line, index) => index > moveArm && /^\s*;;\s*$/.test(line));
+    expect(moveArm).toBeGreaterThan(-1);
+    expect(armEnd).toBeGreaterThan(moveArm);
+
+    // Any assignment to a tag list that carries `:main` — however it is spelled — must sit under
+    // the `move` arm. Matching the VARIABLE and the tag, rather than one exact line, is what makes
+    // this catch a `:main` appended somewhere else in the step.
+    const setsMainTag = (line) => /[a-z_]*tags="[^"]*repo:main"/.test(line);
+    const setters = body
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => setsMainTag(line));
+    expect(setters.length).toBeGreaterThanOrEqual(2);
+    expect(setters.filter(({ index }) => index < moveArm || index > armEnd)).toEqual([]);
   });
 });
 

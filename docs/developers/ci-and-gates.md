@@ -121,33 +121,79 @@ ended at 13:54:06 — the group was serialising them.
 The backlog commit's run then completed green, but it is documentation, so `changes.code` was false
 and both `image` and `publish` were skipped. `:main` stayed on `sha-d0e0923`, the #381 merge, and
 the printer work in #380 was in no image at all. The §2 unfiltered main suite for #380 never ran
-either. This had been happening for weeks, mostly hidden because the next code merge republished
-`:main` within the hour; the discarded runs are what this lists:
+either.
+
+It had been happening for a long time, mostly hidden because the next code merge republished
+`:main` soon after. This lists CANCELLED runs on `main`, which is a SUPERSET — a run somebody
+cancelled by hand looks the same — and it cannot show the run described above any more, because
+re-running that one by hand made its conclusion `success`:
 
 ```
-gh run list --workflow CI --branch main --limit 60 \
+gh run list --workflow CI --branch main --limit 300 \
   --json conclusion,displayTitle,headSha,createdAt \
   -q '.[] | select(.conclusion=="cancelled")'
 ```
+
+On 2026-09-16 that returned 38 runs, the oldest at `2026-09-07T11:45:17Z` — and the oldest run in
+the window at all was `2026-09-07T08:59:53Z`, so the `--limit` is what bounds that answer, not the
+data. At `--limit 60` the same query returns 7 and reaches back two days, which is why the number
+here is a reading of a window rather than a count of the thing.
 
 The fix is separation, not a cancellation policy: on a push the group carries `github.run_id`, so a
 push is never grouped with anything, and a pull request keeps the ref so a force-push still
 supersedes the run it made stale. Guard: `scripts/ci-workflow.test.mjs`, which reads the block as
 text — it pins how the expression is written, not what GitHub evaluates it to.
 
-### Separated pushes overlap, so `:main` is not allowed to move backwards
+### Separated pushes overlap, so publishing asks before it takes `:main`
 
 Two `main` runs now build at the same time, and the one that finishes LAST is not always the one
 carrying the newest commit. A registry tag is last-write-wins, so the older run's publish would
 retag `:main` and pull every box following that tag back onto an older image — a race the old
 shared group hid, because a queue publishes in arrival order.
 
-So the publish job asks `scripts/main-tag-guard.sh` before adding `:main`: it reads
+So the publish job asks `scripts/main-tag-guard.sh` before adding `:main`. It reads
 `WAITRON_BUILD_ID` out of the image the tag currently points at, asks GitHub's compare endpoint
 where that commit sits relative to this one, and answers `move` or `hold`. A `hold` still publishes
-this commit's immutable `sha-` tag; it declines only to move `:main`. The script fails rather than
-guessing when it cannot reach an answer, because a publish that stops is repaired by the next merge
-while a `:main` moved the wrong way is noticed by nobody. Its suite,
+this commit's immutable `sha-` tag; it declines only to move `:main`.
+
+**What that does and does not buy.** It is a question asked before the build, not a compare-and-swap
+at the registry, so it covers the case this repository hits — a newer run that has ALREADY published
+— and not two publishes in flight at the same instant, which remain last-write-wins.
+
+The reads it makes were checked against the real registry on 2026-09-16, anonymously:
+
+```
+$ docker buildx imagetools inspect ghcr.io/clintongormley/waitron:main \
+    --format '{{range .Image.Config.Env}}{{println .}}{{end}}'
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+…
+WAITRON_BUILD_ID=1c57940203777e2a408258d34e363718c3d89181
+…
+$ docker buildx imagetools inspect ghcr.io/clintongormley/waitron:no-such-tag-xyz …
+ERROR: ghcr.io/clintongormley/waitron:no-such-tag-xyz: not found
+```
+
+The build id above is what `:main` held at that moment, and a later merge has moved it since —
+which is the tag doing its job. What the receipt is for is the two SHAPES: the template reads
+the environment of a published image, and a missing tag says so in those words.
+
+Three things that came out of those commands and are easy to get wrong:
+
+- The template works on the published image even though it is an index carrying a provenance
+  attestation, so no per-platform key is needed.
+- The missing-tag match is that exact wording and nothing wider. `not found` on its own also appears
+  in a missing credential helper, a proxy's 404 page and a missing `docker` binary, and reading any
+  of those as "no tag yet" publishes the backwards tag the guard exists to prevent. A package that
+  does not exist at all answers `403 Forbidden` instead, so the FIRST publish into a fresh package
+  stops there and needs a person.
+- **The print-agent image carries no `WAITRON_BUILD_ID`** — `deploy/Dockerfile` declares the build
+  arg only in the app stage — so the guard reads the app image and the print-agent tag rides along
+  on that decision.
+
+The script fails rather than guessing. A transient registry error is repaired by the next merge, but
+two states are NOT self-repairing: a `:main` carrying no build id, and one built from a commit this
+repository's history does not contain (an image built outside CI, or a rewritten history). Both
+wedge every later publish identically until `:main` is deleted or retagged by hand. Its suite,
 `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
 
 ### A cheap job can still be the critical path
