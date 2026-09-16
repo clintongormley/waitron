@@ -717,7 +717,32 @@ conditional-write support** — the atomic version-conditional `current.json` wr
 rests on (§2.2) — on the actual store Waitron Cloud will use, and on any self-host target the product
 claims to support.
 
-Slice 1 begins when this passes.
+**Moved, 2026-09-16 (owner decision): this gate now runs immediately before SLICE 2, not before slice
+1.** It is not dropped, weakened, or made optional — every scenario above still runs, and slice 2 does
+not begin until it passes.
+
+The reason is that the gate protects nothing in slice 1. Each of the five risks it checks lives in a
+later slice:
+
+| Risk this gate checks | The slice it lives in |
+| --- | --- |
+| 2 — the tail shipper's double-submit | 4 (return, tail shipper, rejoin) |
+| 6 — promotion discipline and generation naming | 3 (seats and promotion) |
+| 8 — copy-up propagating deletions | 5 (the on-prem mirror) |
+| 9 — an offline stretch with `wal_autocheckpoint = 0` | 2 (stream and cold restore) |
+| 11 — the store's conditional write | 2 (the store) |
+
+Slice 1 contains no streaming, no store, no generations, no seats and no promotion (§11), so none of
+these can arise in it. Risk 9 is the clearest case: it is conditioned on `wal_autocheckpoint = 0`, and
+the slice-1 spec leaves automatic checkpointing at SQLite's default precisely because Litestream — the
+thing that would do the checkpointing instead — does not arrive until slice 2.
+
+**What moving it gives up, stated so it is not discovered later.** If the topology is wrong, that is
+found at slice 2 rather than now. The exposure is limited, because slice 1 commits the repository to
+SQLite as its engine and to nothing else in this document — not Litestream, not generations, not seats,
+not the object store as the hub. The one piece of slice 1 shaped by this design is the two-file split
+(§2.1), which would have to be revisited if the streaming design changed; it is cheap and defensible on
+its own terms, and that is the accepted risk.
 
 ---
 
@@ -760,6 +785,27 @@ From the discussion note §7, plus what the design added:
 
 ---
 
+
+    **Partly established, 2026-09-16, from the providers' own documentation rather than a rig.** The
+    mechanism exists in the S3 API itself. Amazon's own words, from the markdown source of *How to
+    prevent object overwrites with conditional writes*: *"If multiple conditional writes or copies
+    occur for the same object name, the first write operation to finish succeeds. Amazon S3 then fails
+    subsequent writes with a `412 Precondition Failed` response."* That is exactly the property §2.2's
+    tie-break needs — of two nodes writing from the same base, one succeeds and the other is told so.
+    `If-None-Match` and `If-Match` are both supported on `PutObject` and `CompleteMultipartUpload`.
+    Cloudflare R2's S3 compatibility table lists `If-Match` and `If-None-Match` as supported on
+    `PutObject`, so at least two candidate targets have it.
+
+    **A caveat the implementation must not get wrong**, from the same AWS page: a concurrent request
+    can return `409 Conflict` rather than `412`, when a delete on that object completes before the
+    conditional write does. AWS says a `PutObject` may simply be retried after a `409`. **A `409` is
+    therefore not a lost tie-break**, and a promoter that treated it as one would fence itself when it
+    had not lost. The `412` is the loss; the `409` is a retry.
+
+    **What stays unverified:** the design does not yet name the provider (§0.3 says only "a provider
+    S3-compatible store, EU/Spain region"), so this is evidence that the mechanism is available, not
+    that the chosen store implements it correctly. Scenario S6 on the real target still owes that, and
+    a store that is merely "S3-compatible" is exactly where this can fail.
 ## Provenance
 
 | Claim | Source | How established |

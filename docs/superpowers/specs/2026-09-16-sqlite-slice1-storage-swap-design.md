@@ -29,7 +29,12 @@ object store, and no second node. Replication arrives in slices 2–5.
    both.** No test is deleted without its reason appearing in the plan (§7.3).
 5. **Append-only tables keep an abort trigger; the rest of what grants enforce becomes a guard that
    reads the source.** Not a trigger per grant, and not a convention with nothing checking it (§6.3).
-6. **Archiving moves into the flip**, not into slice 2 as the topology design had it. The pull request
+6. **Slice 1 does not wait for the gate-2 prototype** (2026-09-16). The prototype is not dropped — it
+   moves to immediately before slice 2, where all five of the risks it checks actually live. The
+   reasoning and the risk-to-slice mapping are in the topology design's §12.2. Slice 1 therefore starts
+   now, and what it commits the repository to is SQLite as its engine, not Litestream, generations,
+   seats or the object store as the hub.
+7. **Archiving moves into the flip**, not into slice 2 as the topology design had it. The pull request
    that deletes the `pg_dump` path is the one that must supply its replacement, or `main` lands with
    no way to take a copy of a venue at all (§6.5).
 
@@ -354,7 +359,7 @@ message after the flip. That keeps 23 files of churn out of the flip and keeps e
 
 The flip deletes `apps/server/src/pg-restore.ts` and the `pg_dump` path, so **the same pull request supplies
 `VACUUM INTO` in their place**. The topology design put archiving in slice 2; moving it forward is
-decision 6 in §0. Without it, `main` would sit between two slices with no way to take a copy of a
+decision 7 in §0. Without it, `main` would sit between two slices with no way to take a copy of a
 venue.
 
 ---
