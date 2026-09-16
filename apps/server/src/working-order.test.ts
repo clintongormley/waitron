@@ -378,8 +378,6 @@ describe("a sold line's label carries its variant", () => {
   });
 });
 
-describe("readTabLines", () => {});
-
 describe("parkOrder", () => {
   it("freezes the product's staff name and the variant's three names, each falling back alone", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
