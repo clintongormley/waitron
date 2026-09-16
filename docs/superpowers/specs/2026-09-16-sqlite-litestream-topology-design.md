@@ -121,17 +121,21 @@ node id to break a term tie). Two rules follow, both enforced structurally, not 
 
 - **Open only your own.** A node streams or copies up **only** into the generation whose node id is its
   own. The mirror box's copy-up job (§4.4) refuses to write a generation box A did not open.
-- **A term tie is broken deterministically.** If two generations share a term (two nodes promoted to
-  the same term while partitioned), the one whose signed `current.json` reached the store **first**
-  wins; the loser, on seeing it, fences itself and ships its ledger tail (§5.2). This is the one place
-  the design must handle two nodes believing they are primary at the same term; every other path is a
-  strictly increasing term.
+- **A term tie is broken deterministically, by the store.** If two nodes promote to the same term while
+  partitioned, the one whose signed `current.json` write the store **accepts** wins; the loser, on
+  seeing it, fences and ships its ledger tail (§5.2). The mechanism is a **conditional write**, not a
+  read-check-write (§5.1 spells out the sequence): a promoter reads `current.json` with its version
+  handle and writes the new one *only if the version is unchanged*, so of two nodes writing from the
+  same base exactly one succeeds — the store decides, not a clock. This is the one place the design
+  handles two nodes believing they are primary at the same term; every other path is a strictly
+  increasing term.
 
 A small **`current.json`** at the venue prefix names the live generation and the node writing it,
-**signed with that node's membership key**, and is written with a compare-and-set (the store's
-conditional-put) so the term-tie "first wins" is decided by the store, not by a clock. A restorer, or a
-returning box, learns who is primary from the store alone — no peer need answer. `current.json` is the
-store-side twin of the membership document: same term, same signer, cross-checkable.
+**signed with that node's membership key**. A restorer, or a returning box, learns who is primary from
+the store alone — no peer need answer. `current.json` is the store-side twin of the membership document:
+same term, same signer, cross-checkable. The whole tie-break rests on the store offering a conditional
+write (GCS generation preconditions, Azure ETag conditions, S3 `If-Match`/`If-None-Match`); §12 pins
+which store and verifies it, since an older S3-compatible target may lack it.
 
 > **Consequence for fencing.** `persistNodeMembershipIfNewer` adopts a document only when its term is
 > **strictly** higher (`packages/db/src/node-membership.ts:97` — the UPDATE fires only on a strictly
@@ -291,10 +295,19 @@ Whether box B, a fresh cloud instance, or a box taking over from the cloud:
    promoted, which is caught here, not discovered later), activate the reserved number and series, write
    this node's identity into `node.db`, and mint membership term *n+1* signed with the endorsed key.
    **Committing this is the point of no return**, as today.
-3. **Open the next generation:** write a signed `current.json` (via the store's compare-and-set, §2.2)
-   naming `gen-<term>-<this-node-id>` and this node, then start Litestream streaming to it. If the target
-   is unreachable (a box promoting with no internet), stream to a local directory and let the copy-up
-   job drain it later.
+3. **Open the next generation.** How this orders against step 2's point of no return depends on whether
+   the promoter can reach the store:
+   - **A promoter that can reach the store** (a cloud instance, or a box that still has internet) makes
+     winning the **conditional write** of `current.json` *part of* the point of no return. It reads
+     `current.json` with its version handle, and commits step 2 **only if** the conditional write —
+     `current.json` = `gen-<term>-<this-node-id>`, signed, written only if the version is unchanged —
+     succeeds. If the write is rejected (another node promoted first), it commits nothing, activates no
+     seat, and fences. So two online promoters racing cannot both commit.
+   - **A promoter that cannot reach the store** (a box promoting with no internet, §4.2) cannot do the
+     conditional write. It commits step 2 locally — the point of no return is local — sells under its
+     own seat, streams to a local directory, and performs the conditional write when the internet
+     returns. If it then loses, it fences and ships (§5.2, §5.3). This is safe fiscally because it sold
+     under its own distinct seat; the cost is in-flight service, which §5.3 covers.
 4. **Tell the tills** through the existing reroute path — the till follows the primary named by the
    newest membership document (`2026-09-05-till-reroute-design.md`); nothing here changes how it learns
    that.
@@ -348,6 +361,41 @@ cannot collide because those rows are keyed by the node that wrote them (every f
 is uuid-keyed). Its in-place half is the part that needs the state-regression guard above — that is
 where the care goes. This is the **largest new fiscal-path component** and gets the §12 two-node proof
 and a Fable read of its own before it is built.
+
+### 5.3 What the losing side of a split brain loses
+
+The tail shipper carries `ledger` back. `state` does not travel back — the wipe removes it (§5.2). For a
+**clean** failover (the old primary was genuinely dead) that is correct: the winner's live state is the
+only real one (the reasoning of the outbox-swap design's §4.3, owner-confirmed). But in an **offline
+double promotion** — a human promotes the cloud because the box's stream stopped and it *looks* dead,
+while the box is in fact alive and still serving — both sides served real customers, and the loser's
+live state is not stale. This is the case §4.2's "assumed, not proven" fencing gap opens.
+
+**Fiscally it is safe.** Each side sold under its own seat (its own node id, installation number,
+chain), so no chain forks and no number is reused; the loser's completed sales are `ledger` and ship to
+the winner verbatim. That half is settled by seats, independently of who won.
+
+**Operationally the loser's in-flight service is lost.** Open tabs and their lines (`working_orders`,
+`working_order_lines`), amendments, table state and unfinished kitchen tickets are all `state`, so when
+the loser fences and wipes they vanish from the authoritative primary. And the loser is usually the
+**box** — where the dinner service physically is — because it is the box that was wrongly superseded
+while cut off. Food already cooked, tabs about to be paid, tables mid-meal: gone from the primary,
+though no money is misfiled.
+
+**The MVP contract, short of the shelved conflict-merge work:**
+
+1. **Promotion asserts the other side is gone.** Across a partition a node cannot be *proven* dead —
+   unreachable is indistinguishable from switched-off — so promoting the cloud while the box may be
+   alive is the operator taking that risk, and the promotion surface must say so plainly. Not creating
+   the split brain is the real defence.
+2. **If the assertion is wrong, fiscal is safe and completed sales ship back; in-flight service is
+   lost** — the same family as the already-accepted "box-down and internet-down together is no
+   failover" (`docs/backlog.md` → MVP for go-live).
+3. **The mitigation is a fence-time export, not an auto-merge.** Before the loser wipes, it produces a
+   human-readable list of its open tabs, their lines, and unfinished kitchen tickets, so staff can
+   re-key or settle them on the new primary. Automatically merging two divergent live states — the
+   winner may hold its own tab for the same table — is the interactive conflict merge deliberately
+   shelved (wire-protocol §7); it is named here, not gated.
 
 ---
 
@@ -594,7 +642,10 @@ Both from the discussion note §9; neither is optional.
    tie-break keep the stream restorable and fence the loser; a tail ship **retried after the receiver's
    drain has submitted**, confirming no second AEAT submission (§5.2, finding 3); the
    copied-replica-equals-direct-stream check from §4.4; and a **multi-day offline write load** with
-   `wal_autocheckpoint = 0`, confirming sale latency and WAL size stay bounded (§10, finding 8).
+   `wal_autocheckpoint = 0`, confirming sale latency and WAL size stay bounded (§10, finding 8). It must
+   also **verify the target object store's conditional-write support** — the atomic
+   version-conditional `current.json` write the whole tie-break rests on (§2.2) — on the actual store
+   Waitron Cloud will use, and on any self-host target the product claims to support.
 
 Only if (1) says PostgreSQL density is a real problem **and** (2) passes does slice 1 begin.
 
@@ -623,6 +674,13 @@ From the discussion note §7, plus what the design added:
    (§4.4) — the prototype's explicit check.
 9. **A long offline stretch with `wal_autocheckpoint = 0`** could grow the WAL unbounded and put our own
    process on the sale path (§10 finding 8) — the prototype's multi-day offline check bounds it.
+10. **A split brain loses the losing side's in-flight service** (§5.3, owner-raised 2026-09-16): open
+    tabs and kitchen tickets are `state` and are wiped on the loser, usually the box. Fiscally safe;
+    operationally real. The MVP defence is human-promotion discipline plus a fence-time export; a true
+    live-service merge is shelved.
+11. **The tie-break depends on the object store's conditional write** (§2.2) — an older S3-compatible
+    target may not offer it, which would silently break the "one primary" guarantee. §12 verifies it per
+    store.
 
 ---
 
@@ -640,3 +698,4 @@ From the discussion note §7, plus what the design added:
 | Product images live in the DB (`media_image_data.bytes`), so the stream carries them | `packages/media/src/images.ts:223`; `packages/media/drizzle/0000_media_baseline.sql` | read 2026-09-16 |
 | Density cost of logical replication per subscription | PostgreSQL behaviour, **not measured** | §12 gate 1 is the measurement |
 | Fiscal soundness of seats, tail shipper, money conversion, offline promotion | fresh-context Fable read, 2026-09-16 | nine findings folded in; the load-bearing code claims (strict-term guard `node-membership.ts:97`, node-filterless `claimBatch` in `drain.ts`, `cuota_total`/`importe_total` already `text`, the non-money `numeric` columns) verified against the tree before folding |
+| Split brain loses the loser's in-flight service; conditional-write mechanism of the tie-break | owner, 2026-09-16 | owner raised the live-service loss; `working_orders`/`working_order_lines`/`dining_tables`/`kitchen_courses`/`print_jobs` confirmed `state` in `packages/db/src/classification.ts` |
