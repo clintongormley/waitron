@@ -2047,8 +2047,9 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
 /** One line of an OPEN tab, for the table-order screen (FP-1, design §3b). `unitPriceGross` is the gross
  *  unit price LOCKED at add-time (`working_order_lines.unit_price_gross`), NOT a re-price; `servedAt` is
  *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
- *  `productId` only — no product name, mirroring `HeldOrder`: the screen resolves names from its own
- *  catalogue prop. `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
+ *  frozen staff `name` as well as the `productId`: {@link readTabLines} joins the line's product and
+ *  variant labels into it, so the screen has no catalogue lookup left to do for a name.
+ *  `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
 export interface TabLine {
   /** The line's frozen STAFF label — `working_order_lines.name` joined to `variant_name` with " · ".
    * A table tab's line list is what a waiter reads while serving, so it carries the same name the

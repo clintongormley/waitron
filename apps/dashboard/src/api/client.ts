@@ -261,8 +261,8 @@ export interface CategoryDependants {
 }
 /** `GET /management-api/modifiers/:id/dependants` — what a delete confirmation must show. */
 export interface ModifierDependants {
-  /** A menu entry has no name of its own — it is identified by the staff name of the product it is. */
   products: { id: string; name: string }[];
+  /** A menu entry has no name of its own — it is identified by the staff name of the product it is. */
   menus: { id: string; name: string }[];
   orders: number;
 }

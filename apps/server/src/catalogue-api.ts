@@ -297,8 +297,8 @@ function parseOptionalVatClass(value: unknown): VatClass | null | undefined {
 /**
  * SHAPE-screen an optional product `dietOverride` body field (Task 4): `undefined` (leave unchanged)
  * and `null` (clear) are legitimate no-ops, and a present value must be a plain OBJECT — a non-object
- * (string/number/array) is `management.request_invalid` naming the field, mirroring how `descriptions`
- * is screened. This is a SHAPE screen only; the label/contains-tag/disjointness CONTENT is
+ * (string/number/array) is `management.request_invalid` naming the field, mirroring how
+ * `customerName` is screened by `screenCustomerName` below. This is a SHAPE screen only; the label/contains-tag/disjointness CONTENT is
  * `validateDietOverride`'s job inside `createProduct`/`updateProduct` (which throws the `diet.*` codes),
  * exactly as `validateAllergens` owns the `allergens` content.
  */
@@ -1013,7 +1013,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "active" });
       }
       // The optional staff diet override (Task 4): SHAPE-screened here (object or null, like
-      // `descriptions`), then threaded raw to `createProduct`, whose `validateDietOverride` is the
+      // `customerName`), then threaded raw to `createProduct`, whose `validateDietOverride` is the
       // authority on the label/contains-tag/disjointness content — exactly the posture `allergens`
       // takes with `validateAllergens`.
       screenDietOverride(body.dietOverride);

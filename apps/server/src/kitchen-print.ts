@@ -73,9 +73,13 @@ function ticketName(text: Record<string, string>, locale: string): string {
   const localised = text[locale];
   if (localised !== undefined) return localised;
   // Fallback: the first STORED key, which is not provably the venue's primary language — any is
-  // acceptable on this rare mis-config path. The caller only reaches here with a non-null map (an
-  // absent `unit_name` is branched out at the call site), so `Object.values(...)[0]` is a string —
-  // the `!` asserts that at compile time, leaving no uncovered runtime branch.
+  // acceptable on this rare mis-config path. What makes `Object.values(...)[0]` a string is that the
+  // map is never EMPTY — non-null alone would not give that, since `Object.values({})[0]` is
+  // undefined. `unit_name` freezes a unit's `abbreviation` (`packages/catalogue/src/pricing.ts`), and
+  // both unit write paths — `createUnit` and `updateUnit` in `packages/catalogue/src/units.ts` — put
+  // that abbreviation through `validateContentTranslations`, which refuses a map carrying no
+  // non-blank text in the default content language. A line with NO unit is branched out at the call
+  // site by `row.unitName == null`, so the `!` leaves no uncovered runtime branch.
   return Object.values(text)[0]!;
 }
 

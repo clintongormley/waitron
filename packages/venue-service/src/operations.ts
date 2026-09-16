@@ -394,9 +394,12 @@ export async function listVenueReadiness(
     }
     // The readiness list is staff-facing, so it names each product by its staff name rather than by
     // resolving customer-facing text per language. The id fallback stays: `products.name` is only
-    // NOT NULL (`packages/db/src/schema/catalogue.ts:91` carries no non-blank check), and the sole
-    // write path that rejects a blank one is the editor's parser
-    // (`packages/catalogue/src/product-editor-input.ts:64`), so an empty name is storable.
+    // NOT NULL (`packages/db/src/schema/catalogue.ts:91` carries no non-blank check). Every HTTP
+    // write path does refuse a blank one — `requiredText` in
+    // `packages/catalogue/src/product-editor-input.ts` for the editor, and the two hand-written
+    // checks in `apps/server/src/catalogue-api.ts` for create and patch — but a direct
+    // `createProduct` call (a demo seed script, say) bypasses all three, so an empty name is
+    // storable.
     const productsById = new Map(
       available.offers.map((offer) => [offer.productId, offer.name || offer.productId]),
     );

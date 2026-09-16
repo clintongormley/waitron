@@ -14,10 +14,9 @@ function join(product: string, variant: string | null): string {
   return variant ? `${product} · ${variant}` : product;
 }
 
-// Takes only the two staff names, not a whole `ProductPresentation`, so a caller holding a row that
-// has nothing else on it can reach the one join without inventing four empty fields —
-// `listImageUsages` (packages/media/src/images.ts) reads a product name and a variant name out of
-// one query and had been passing four `null`s to satisfy the wider signature.
+// Takes only the two staff names, not a whole `ProductPresentation`, so a caller holding a row with
+// nothing else on it — a top-sellers row, an image-usage row, a tab line — reaches the one join
+// without inventing four empty fields.
 export function staffPresentationName(
   p: Pick<ProductPresentation, "name" | "variantName">,
 ): string {

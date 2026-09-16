@@ -93,8 +93,10 @@ staff use, not the wording a diner reads on a receipt.
 you switch your default content language while text is still missing. A product's and a variant's
 customer-facing name is **optional**, so a wholly absent one — `null` or `{}` — is never a gap. Only
 a partly filled one is: fill in Spanish and leave English blank, and that is a gap, because you
-clearly meant to translate it and stopped. Category, unit, menu-section and modifier names have no
-fallback of their own and stay required.
+clearly meant to translate it and stopped. The other five kinds the query reports — `category`,
+`unit`, `section`, `option_group` and `option` — have no fallback of their own and stay required. A
+modifier contributes two of those kinds, not one: the group's own name (`option_group`) and each of
+its choices (`option`), each with its own table.
 
 ## Variants
 

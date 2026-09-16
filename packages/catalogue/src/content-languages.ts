@@ -41,8 +41,9 @@ export async function listContentTranslationGaps(
 ): Promise<{ kind: string; id: string }[]> {
   const code = contentLanguageCode(language);
   // A product's and a variant's customer-facing name is optional and falls back to the staff name, so
-  // a wholly-absent one (null or {}) is never a gap — only a partial one is. Category, unit, section
-  // and option names have no such fallback and stay required, so they are never null-filtered here.
+  // a wholly-absent one (null or {}) is never a gap — only a partial one is. The other five kinds the
+  // query below emits — `category`, `unit`, `section`, `option_group` and `option` — have no such
+  // fallback and stay required, so they are never null-filtered here.
   const result = await tx.execute<{
     kind: string;
     id: string;

@@ -1353,9 +1353,10 @@ export interface TabResult {
  * every other type in this file. DISTINCT from {@link HeldOrder}'s `lines` (`productId` + `quantity`
  * only, for a basket rebuild that RE-prices): a tab does NOT re-price, so `unitPriceGross` is the gross
  * unit price LOCKED at add-time, carried back verbatim — never a catalogue recompute. `servedAt` is the
- * pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). `productId` only —
- * the screen resolves names from its own catalogue prop, mirroring `HeldOrder`. `quantity`/
- * `unitPriceGross` are decimal strings as the server sends them.
+ * pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). The line's frozen
+ * staff `name` comes back with it, and the screen's `#nameForLine` renders that name — the catalogue
+ * prop is only the fallback for a payload that omits it. `quantity`/`unitPriceGross` are decimal
+ * strings as the server sends them.
  */
 export interface TabLine {
   /** The line's frozen STAFF label — the product's name joined to the variant's with " · ", resolved
