@@ -12,6 +12,8 @@ import type {
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
 
 const catalogues: CatalogueSummary[] = [
@@ -32,7 +34,8 @@ const products: Product[] = [
     categoryId: "c1",
     categoryIds: ["c1"],
     primaryCategoryId: "c1",
-    descriptions: { es: "Croquetas" },
+    name: "Croquetas",
+    customerName: { es: "Croquetas caseras de jamón" },
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
@@ -45,7 +48,8 @@ const products: Product[] = [
 ];
 const value: ProductEditorValue = {
   id: "p1",
-  name: { es: "Croquetas" },
+  name: "Croquetas",
+  customerName: { es: "Croquetas caseras de jamón" },
   description: { es: "Cremosas" },
   kitchenName: "CROQUETAS",
   image: null,
@@ -72,8 +76,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listModifiers: vi.fn().mockResolvedValue(modifiers),
     listStations: vi.fn().mockResolvedValue([]),
     listCourses: vi.fn().mockResolvedValue([]),
-    setProductStation: vi.fn().mockResolvedValue(undefined),
-    setProductCourse: vi.fn().mockResolvedValue(undefined),
     listProducts: vi
       .fn()
       .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? products : [])),
@@ -168,7 +170,7 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBeTruthy();
   });
 
-  it("loads and writes the existing station and course routing controls", async () => {
+  it("offers the venue's stations and courses and saves the routing inside the product write", async () => {
     const api = stubApi({
       listStations: vi.fn().mockResolvedValue([
         {
@@ -196,11 +198,214 @@ describe("catalogue-screen", () => {
     expect(editor(el).courses.map(({ id, name }) => ({ id, name }))).toEqual([
       { id: "k1", name: "Starters" },
     ]);
-    emit(editor(el), "wt-set-product-station", { productId: "p1", stationId: "s1" });
-    emit(editor(el), "wt-set-product-course", { productId: "p1", courseId: "k1" });
+    const routed: ProductEditorInput = { ...value, stationId: "s1", courseId: "k1" };
+    emit(editor(el), "wt-submit", { value: routed });
     await flush(el);
-    expect(api.setProductStation).toHaveBeenCalledWith("p1", "s1");
-    expect(api.setProductCourse).toHaveBeenCalledWith("p1", "k1");
+    // ONE write carries the product and its routing: a station this venue does not have has to roll
+    // the product back rather than leave it saved without its routing.
+    expect(api.updateProductEditor).toHaveBeenCalledExactlyOnceWith("p1", routed);
+    expect(api.createProductEditor).not.toHaveBeenCalled();
+  });
+
+  it("edits an attached modifier through the nested form and writes it back", async () => {
+    const api = stubApi({
+      updateModifier: vi
+        .fn()
+        .mockResolvedValue({ id: "m1", type: "text", name: { es: "Nota larga" }, available: true }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-edit-related", { kind: "modifier", id: "m1" });
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-modifier-form")!;
+    expect(form.open).toBe(true);
+    expect(form.value).toEqual(modifiers[0]);
+    emit(form, "wt-submit", {
+      value: { type: "text", name: { es: "Nota larga" }, available: true },
+    });
+    await flush(el);
+    expect(api.updateModifier).toHaveBeenCalledWith("m1", {
+      type: "text",
+      name: { es: "Nota larga" },
+      available: true,
+    });
+    expect(api.createModifier).not.toHaveBeenCalled();
+    expect(form.open).toBe(false);
+    // The product keeps the modifier it already had; editing one never attaches a second copy.
+    expect(editor(el).currentValue.modifierIds).toEqual(["m1"]);
+  });
+
+  it("opens the modifier form empty again after an edit was cancelled", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-edit-related", { kind: "modifier", id: "m1" });
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-modifier-form")!;
+    expect(form.value).toEqual(modifiers[0]);
+    emit(form, "wt-cancel", {});
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "modifier" });
+    await el.updateComplete;
+    // A stale edit target would turn the next CREATE into an update of the modifier just cancelled.
+    expect(form.value).toBeNull();
+  });
+
+  it("reports a refused save beside the field the server named, and clears it on the next product", async () => {
+    const api = stubApi({
+      updateProductEditor: vi.fn().mockRejectedValue({
+        code: "product.invalid",
+        params: { field: "kitchenName" },
+        status: 400,
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value });
+    await flush(el);
+    expect(editor(el).open).toBe(true);
+    expect(editor(el).fieldErrors).toEqual({ "kitchen-name": t("editor.field_rejected") });
+    // The refusal is said ONCE, beside the field — the screen's own banner is for a refusal with
+    // nothing to point at.
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    await editor(el).updateComplete;
+    // …and the section holding that field is no longer folded over it.
+    const kitchen = editor(el).shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      '[data-section="kitchen"]',
+    )!;
+    expect(kitchen.open).toBe(true);
+    emit(editor(el), "wt-cancel", {});
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    expect(editor(el).fieldErrors).toEqual({});
+  });
+
+  it("falls back to the screen's banner when a refusal names a field with no error display", async () => {
+    const api = stubApi({
+      updateProductEditor: vi.fn().mockRejectedValue({
+        code: "product.invalid",
+        params: { field: "available" },
+        status: 400,
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value });
+    await flush(el);
+    expect(editor(el).fieldErrors).toEqual({});
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBeTruthy();
+  });
+
+  it("reports a refused translation beside the input for the language the server named", async () => {
+    // The default content language is English and the product carries only a Spanish customer name,
+    // which is what the real save refuses: it names the missing LANGUAGE, never a field.
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] }),
+      updateProductEditor: vi.fn().mockRejectedValue({
+        code: "content.translation_required",
+        params: { language: "en" },
+        status: 400,
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value });
+    await flush(el);
+    expect(editor(el).open).toBe(true);
+    expect(editor(el).fieldErrors).toEqual({
+      "customer-name-en": codeMessage("content.translation_required"),
+    });
+    // Said once, beside the field — the screen's banner renders behind the open editor.
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    await editor(el).updateComplete;
+    const descriptors = editor(el).shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      '[data-section="descriptors"]',
+    )!;
+    await expect.poll(() => descriptors.open).toBe(true);
+    await expect
+      .poll(() => editor(el).shadowRoot!.activeElement?.getAttribute("name"))
+      .toBe("customer-name-en");
+    const input = editor(el).shadowRoot!.querySelector("[name=customer-name-en]") as unknown as {
+      error: string;
+      invalid: boolean;
+    };
+    expect(input).toMatchObject({
+      error: codeMessage("content.translation_required"),
+      invalid: true,
+    });
+    const summary = editor(el).shadowRoot!.querySelector("wt-form-error-summary") as unknown as {
+      errors: string[];
+    };
+    expect(summary.errors).toEqual([codeMessage("content.translation_required")]);
+  });
+
+  it("marks the variant whose translation the save refused, and reaches its window", async () => {
+    const variants = [
+      {
+        name: "Media",
+        customerName: { en: "Half", es: "Media" },
+        kitchenName: null,
+        image: null,
+        unitPrice: "4.50",
+        available: true,
+      },
+      {
+        name: "Entera",
+        customerName: { es: "Ración entera" },
+        kitchenName: null,
+        image: null,
+        unitPrice: "8.50",
+        available: true,
+      },
+    ];
+    // The product's own customer name is complete, so the only value missing English is the second
+    // variant's — the editor must not point at a field that is fine.
+    const product = { ...value, customerName: { en: "Croquettes", es: "Croquetas" }, variants };
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] }),
+      getProductEditor: vi.fn().mockResolvedValue(product),
+      updateProductEditor: vi.fn().mockRejectedValue({
+        code: "content.translation_required",
+        params: { language: "en" },
+        status: 400,
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value: product });
+    await flush(el);
+    expect(editor(el).fieldErrors).toEqual({
+      "variant-1-name": codeMessage("content.translation_required"),
+    });
+    await editor(el).updateComplete;
+    const table = editor(el).shadowRoot!.querySelector("dashboard-variant-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector("[data-test=error-1]")?.textContent).toContain(
+      codeMessage("content.translation_required"),
+    );
+    // A variant's names are only editable in its own window, so focus lands on the row's actions —
+    // the way into it. Every other control on the row belongs to a different variant or a different
+    // value.
+    await expect
+      .poll(() => table.shadowRoot!.activeElement?.getAttribute("data-test"))
+      .toBe("actions-1");
   });
 
   it("closes after a successful write even when the product refresh fails", async () => {
@@ -222,7 +427,7 @@ describe("catalogue-screen", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
     await el.updateComplete;
-    const before = { ...editor(el).currentValue, name: { es: "Borrador" } };
+    const before = { ...editor(el).currentValue, name: "Borrador" };
     (editor(el) as unknown as { draft: ProductEditorInput }).draft = before;
     emit(editor(el), "wt-create-related", { kind: "unit" });
     await el.updateComplete;
@@ -230,7 +435,7 @@ describe("catalogue-screen", () => {
     expect(form.open).toBe(true);
     emit(form, "wt-submit", { value: { name: { es: "ración" }, precision: 2 } });
     await flush(el);
-    expect(editor(el).currentValue.name).toEqual({ es: "Borrador" });
+    expect(editor(el).currentValue.name).toBe("Borrador");
     expect(editor(el).currentValue.unitId).toBe("u2");
   });
 

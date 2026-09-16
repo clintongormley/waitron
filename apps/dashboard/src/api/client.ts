@@ -254,15 +254,16 @@ export interface CategoryInput {
 }
 /** `GET /management-api/categories/:id/dependants` — what a delete confirmation must show. */
 export interface CategoryDependants {
-  products: { id: string; name: Record<string, string>; reporting: boolean }[];
+  products: { id: string; name: string; reporting: boolean }[];
   children: { id: string; name: Record<string, string> }[];
   parentId: string | null;
   routes: { id: string; station: string | null; zone: string | null }[];
 }
 /** `GET /management-api/modifiers/:id/dependants` — what a delete confirmation must show. */
 export interface ModifierDependants {
-  products: { id: string; name: Record<string, string> }[];
-  menus: { id: string; name: Record<string, string> }[];
+  products: { id: string; name: string }[];
+  /** A menu entry has no name of its own — it is identified by the staff name of the product it is. */
+  menus: { id: string; name: string }[];
   orders: number;
 }
 export interface ProductCategories {
@@ -275,7 +276,7 @@ export interface ProductCategoriesInput {
 }
 export interface CategoryProduct extends ProductCategories {
   id: string;
-  descriptions: Record<string, string>;
+  name: string;
   active: boolean;
 }
 
@@ -301,19 +302,35 @@ export interface UnitPatch {
 /** A product that assigns a unit — the row shape the deletion-blocked modal lists and links from. */
 export interface ProductUsingUnit {
   id: string;
-  name: Record<string, string>;
+  name: string;
   available: boolean;
 }
 
+/**
+ * One variant as the editor sends and receives it. The three names fall back INDEPENDENTLY: `name`
+ * is the plain staff-facing text, `customerName` is the translated text a guest reads, and
+ * `kitchenName` is what a kitchen ticket shows; a blank customer or kitchen name falls back to
+ * `name`. `packages/catalogue/src/product-presentation.ts` owns that fallback and the " · " join
+ * onto the product's own name.
+ */
 export interface ProductEditorVariant {
   id?: string;
-  name: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
+  kitchenName: string | null;
+  image: string | null;
   unitPrice: string;
   available: boolean;
 }
 
+/**
+ * The whole product editor body. `stationId` and `courseId` are part of it because the kitchen
+ * routing is written on the same transaction as the product — a station this venue does not have
+ * rolls the product back rather than leaving it saved without its routing.
+ */
 export interface ProductEditorInput {
-  name: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
@@ -327,25 +344,32 @@ export interface ProductEditorInput {
   modifierIds: string[];
   allergens: Record<string, { presence: "contains" | "may_contain" }> | null;
   dietaryDeclarations: ("vegan" | "vegetarian" | "halal" | "kosher" | "no_meat" | "no_fish")[];
-}
-
-export interface ProductEditorValue extends ProductEditorInput {
-  id: string;
   stationId: string | null;
   courseId: string | null;
 }
 
+export interface ProductEditorValue extends ProductEditorInput {
+  id: string;
+}
+
 /**
- * One product row as `GET /management-api/catalogues/:id/products` and `POST /management-api/products`
- * return it — a faithful mirror of catalogue's `Product` (`operations.ts`). `unitPrice` is a GROSS
- * (VAT-inclusive) `numeric(12,2)` decimal STRING, never a number; `image` is a bare `<sha256>.<ext>`
- * filename served at `/media/<image>`, or null when there is no picture.
+ * The slice of one product row this dashboard reads out of `GET /management-api/catalogues/:id/products`
+ * and `POST /management-api/products` — the server sends catalogue's whole `Product` (`operations.ts`),
+ * of which the keys below are the ones read here. `unitPrice` is a GROSS (VAT-inclusive)
+ * `numeric(12,2)` decimal STRING, never a number; `image` is a bare `<sha256>.<ext>` filename served
+ * at `/media/<image>`, or null when there is no picture.
  */
 export interface Product extends ProductCategories {
   id: string;
   catalogueId: string;
   categoryId: string | null;
-  descriptions: Record<string, string>;
+  /** The plain staff-facing name — what the dashboard, the till buttons and the sales reports show.
+   * NOT NULL, so nothing downstream needs a fallback for it. */
+  name: string;
+  /** The translated name a guest reads (locale → text), or null when the product has none. A blank
+   * customer name falls back to `name`; `packages/catalogue/src/product-presentation.ts` owns that
+   * fallback and is the only place allowed to apply it. */
+  customerName: Record<string, string> | null;
   pricingUnit: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
@@ -377,7 +401,10 @@ export interface Product extends ProductCategories {
 export interface ProductInput {
   catalogueId: string;
   categoryId: string | null;
-  descriptions: Record<string, string>;
+  /** Required: the route refuses a missing or blank `name` as `management.request_invalid`. */
+  name: string;
+  /** Optional translated guest-facing name; omitted or null leaves the product without one. */
+  customerName?: Record<string, string> | null;
   pricingUnit: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
@@ -399,7 +426,8 @@ export interface ProductInput {
  * `[]` detaches every group.
  */
 export interface ProductPatch {
-  descriptions?: Record<string, string>;
+  name?: string;
+  customerName?: Record<string, string> | null;
   unitPrice?: string;
   vatClass?: VatClass;
   pricingUnit?: PricingUnit;
@@ -1324,10 +1352,12 @@ export interface Till {
 // change these follow, and a mismatch surfaces as a runtime shape error a view test catches, not a
 // compile break.
 
-/** One top-sellers row (mirrors `@waitron/reporting`'s `TopSeller`) — the frozen per-line
- * `descriptions` snapshot (locale → label) plus its summed quantity and total, both decimal strings. */
+/** One top-sellers row (mirrors `@waitron/reporting`'s `TopSeller`) — the frozen `sale_lines`
+ * STAFF name (`name`/`variant_name`, joined via `staffPresentationName`; CLAUDE.md's three-name
+ * table) plus its summed quantity and total, both decimal strings. A sales report shows the staff
+ * name, so there is no locale map to resolve here. */
 export interface TopSellerRow {
-  descriptions: Record<string, string>;
+  name: string;
   quantity: string;
   total: string;
 }
@@ -2065,7 +2095,7 @@ export class DashboardApi {
   }
 
   /**
-   * `PATCH /management-api/products/:id` — patch a product's mutable slice (descriptions, price, VAT,
+   * `PATCH /management-api/products/:id` — patch a product's mutable slice (the two names, price, VAT,
    * pricing unit, category, allergens, image, active). Answers an empty 204.
    */
   updateProduct(id: string, patch: ProductPatch): Promise<void> {
@@ -2417,15 +2447,6 @@ export class DashboardApi {
     });
   }
 
-  /** `PUT /management-api/products/:id/station` — set (or clear, with `null`) a product's OVERRIDE
-   * routing station (wins over its category default). Same faults as {@link setCategoryStation}.
-   * Answers an empty 204. */
-  setProductStation(productId: string, stationId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/products/${productId}/station`, "PUT", {
-      stationId,
-    });
-  }
-
   /** `PUT /management-api/bump-mode` — set the venue's whole-ticket bump mode (`line`/`ticket`).
    * Answers an empty 204. */
   setBumpMode(mode: BumpMode): Promise<void> {
@@ -2461,12 +2482,6 @@ export class DashboardApi {
   /** `DELETE /management-api/courses/:id` — soft-delete (deactivate) a course. Answers an empty 204. */
   deactivateCourse(id: string): Promise<void> {
     return this.#request<void>(`/management-api/courses/${id}`, "DELETE");
-  }
-
-  /** `PUT /management-api/products/:id/course` — set (or clear, with `null`) a product's default kitchen
-   * course (KDS-2). A non-null course that is not live rejects `{ code: "course.not_found" }`. Answers 204. */
-  setProductCourse(productId: string, courseId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/products/${productId}/course`, "PUT", { courseId });
   }
 
   /** `GET /management-api/fire-control` — the venue's fire-control setting (`{ mode }`). */

@@ -156,6 +156,7 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
+          name: "Menú del día",
           descriptions: { [LOCALE]: "Menú del día" },
           quantity: "1",
           unitPrice: "100.00",
@@ -186,6 +187,7 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
+          name: "Cesta de productos",
           descriptions: { [LOCALE]: "Cesta de productos" },
           quantity: "1",
           unitPrice: "50.00",
@@ -235,6 +237,7 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
+          name: "Rectificación menú del día",
           descriptions: { [LOCALE]: "Rectificación menú del día" },
           quantity: "1",
           unitPrice: "-5.00",

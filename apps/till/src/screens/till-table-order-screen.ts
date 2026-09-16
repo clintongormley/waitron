@@ -1,4 +1,3 @@
-import { snapshotDescriptionFor } from "../widgets/dish-format.js";
 import { modifierSnapshotLabels } from "../widgets/modifier-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -19,7 +18,7 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
-import { productName, productUnit } from "../widgets/product-name.js";
+import { lineProductName, productName, productUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
@@ -541,14 +540,14 @@ export class TillTableOrderScreen extends LitElement {
     return this.lines.filter((line) => line.servedAt !== null);
   }
 
-  /** A line's display name from the catalogue, falling back to the raw id for a product deactivated
-   * since it was added (mirrors the retrieve path's productId-only philosophy). `null` — a child modifier
-   * line, which has no product — resolves to `""`; the screen never renders a name for such a row (the
-   * per-line action + course picker are guarded off it), so this is only a total-safety fallback. */
+  /** A line's display name: the STAFF label the server froze onto it and resolved, falling back to the
+   * live catalogue when a payload carries none. That catalogue fallback in turn falls back to the raw
+   * id for a product deactivated since the line was added (mirroring the retrieve path's
+   * productId-only philosophy). `null` — a child modifier line, which has no product — resolves to
+   * `""`; the screen never renders a name for such a row (the per-line action + course picker are
+   * guarded off it), so this is only a total-safety fallback. */
   #nameForLine(line: TabLine): string {
-    return line.descriptions === undefined
-      ? this.#nameFor(line.productId)
-      : snapshotDescriptionFor(line.descriptions, "");
+    return line.name ?? this.#nameFor(line.productId);
   }
 
   #nameFor(productId: string | null): string {
@@ -1059,7 +1058,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #roundCourseRow(line: OrderLine, index: number): TemplateResult {
-    const name = productName(line.product);
+    const name = lineProductName(line.product);
     const selected = this.#selectedCourseId(line);
     // The course name + its select live in their own `<label>` (kept `display: contents` so the row's flex
     // is unchanged); the hold switch is a SIBLING, not nested in that label — a `<label>` may wrap only its

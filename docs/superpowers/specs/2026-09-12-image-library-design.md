@@ -92,6 +92,10 @@ announcing branch readiness.
 
 These are implementation locations inspected on 2026-09-12, not test results:
 
+> **Pointer, 2026-09-16** (branch `feat/product-editor-rework`): `apps/dashboard/src/widgets/product-form.ts`
+> below no longer exists. The product editor is now `apps/dashboard/src/widgets/product-editor.ts`,
+> and its image control sits in that file.
+
 - `apps/server/src/catalogue-api.ts:945`: current multipart upload writes to `mediaDir`.
 - `apps/server/src/media-api.ts`: public filename validation and filesystem serving.
 - `apps/dashboard/src/widgets/image-upload.ts`: existing product upload widget.

@@ -24,7 +24,8 @@ function product(
 ): TillProduct {
   return {
     id: "dish",
-    descriptions: { en: "dish" },
+    name: "dish",
+    customerName: { en: "dish for the customer" },
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",
@@ -141,7 +142,8 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
   it("a line with no optionGroups at all still derives the dish's own diet", () => {
     const prod: TillProduct = {
       id: "dish",
-      descriptions: { en: "dish" },
+      name: "dish",
+      customerName: { en: "dish for the customer" },
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",

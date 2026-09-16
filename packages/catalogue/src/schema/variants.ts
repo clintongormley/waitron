@@ -8,6 +8,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  text,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -20,7 +21,16 @@ export const productVariants = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
     productId: uuid("product_id").notNull(),
-    name: jsonb("name").$type<Record<string, string>>().notNull(),
+    // Staff-facing variant name — plain text, like the product's own name.
+    name: text("name").notNull(),
+    // Customer-facing translated name; null or a blank entry means "use `name`".
+    customerName: jsonb("customer_name").$type<Record<string, string>>(),
+    // Optional kitchen-ticket name for the variant.
+    kitchenName: text("kitchen_name"),
+    // Path reference to the variant photo — a content-addressed filename, the same plain-text shape
+    // as products.image. There is no media FK: deletion protection is the application-level usage
+    // scan in packages/media/src/images.ts, which covers this column. Null = no picture.
+    image: text("image"),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     available: boolean("available").notNull().default(true),
     displayOrder: integer("display_order").notNull().default(0),

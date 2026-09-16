@@ -45,8 +45,6 @@ import type { AvailableProduct } from "@waitron/catalogue";
 import { tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 
-const LOCALE = "es-ES";
-
 interface Venue {
   tenantId: TenantId;
   locationId: string;
@@ -67,10 +65,10 @@ async function seedVenue(db: Database): Promise<Venue> {
   return { tenantId, locationId: loc.rows[0]!.id };
 }
 
-/** The product's display name, or a stable fallback. `apps/*` is out of the english-only guard's
- * scope, so the Spanish menu names are fine here. */
+/** The product's staff-facing name, or a stable fallback when it is blank. `apps/*` is out of the
+ * english-only guard's scope, so the Spanish menu names are fine here. */
 function label(p: AvailableProduct): string {
-  return p.descriptions[LOCALE] ?? `product ${p.id}`;
+  return p.name || `product ${p.id}`;
 }
 
 /** Three review states, kept distinct — the whole point of the demo (design D4). */
@@ -189,7 +187,7 @@ async function main(): Promise<void> {
       await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { [LOCALE]: "Empanada de trigo" },
+        name: "Empanada de trigo",
         pricingUnit: "each",
         unitPrice: "3.50",
         vatClass: "reduced",
@@ -203,7 +201,7 @@ async function main(): Promise<void> {
       await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: postres.id,
-        descriptions: { [LOCALE]: "Tarta de la casa" },
+        name: "Tarta de la casa",
         pricingUnit: "each",
         unitPrice: "4.20",
         vatClass: "reduced",
@@ -217,7 +215,7 @@ async function main(): Promise<void> {
       await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { [LOCALE]: "Ensalada de la huerta" },
+        name: "Ensalada de la huerta",
         pricingUnit: "each",
         unitPrice: "5.90",
         vatClass: "reduced",
@@ -228,7 +226,7 @@ async function main(): Promise<void> {
       await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { [LOCALE]: "Sopa del día" },
+        name: "Sopa del día",
         pricingUnit: "each",
         unitPrice: "4.50",
         vatClass: "reduced",

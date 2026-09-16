@@ -85,6 +85,14 @@ declare module "@waitron/shared" {
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
+    /** A product's variant COUNT is not allowed: a product has NO variants or at least `minimum` of
+     * them, so exactly one is refused — that stops an API caller bypassing the editor's "Regular"
+     * default variant rule. What every numeric-bound code here shares is that the NUMBER stays out
+     * of the code's name: `unit.precision_invalid` states its range in its doc and carries no params,
+     * `options.group_invalid` carries a `reason` code rather than the offending numbers. This one
+     * goes one step further and hands the caller the bound in `minimum`, so raising it later renames
+     * nothing. */
+    "product.variant_count_invalid": { minimum: number };
     "menu_section.not_found": { menuId?: string; sectionId: string };
     /**
      * An option group's AUTHORING config violated one of its DB invariants (ordering modifiers, Task

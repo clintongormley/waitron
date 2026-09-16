@@ -140,7 +140,7 @@ async function makeProduct(
   const { id } = await createProduct(tx, cfg.tenantId, {
     catalogueId,
     categoryId: null,
-    descriptions: { [LOCALE]: name },
+    name: name,
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "general",
@@ -890,26 +890,71 @@ it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", asy
   expect(paper).toContain("Milk: Oat");
 });
 
-it("prints the frozen kitchen name with the selected variant", async () => {
+/**
+ * Fire one line whose frozen kitchen/variant names are `frozen`, and return the printed ticket. The
+ * product's staff name ("Coffee") and its customer-facing text ("Café recién hecho") are deliberately
+ * DIFFERENT, so a ticket that fell back to the customer text reads differently from one that fell
+ * back to the staff name — the two are not tellable apart when a product carries only one name.
+ */
+async function ticketWithNames(frozen: {
+  kitchenName: string | null;
+  variantName: string | null;
+  variantKitchenName: string | null;
+}): Promise<string> {
   const { cfg, catalogueId } = await setupVenue();
   const jobs = await asApp(cfg, async (tx) => {
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const printerId = await makePrinter(tx, cfg, "Kitchen printer", "station");
     await attachPrinterToStation(tx, printCfg(cfg), { stationId: station.id, printerId });
-    const productId = await makeProduct(tx, cfg, catalogueId, "Coffee", { stationId: station.id });
+    const { id: productId } = await createProduct(tx, cfg.tenantId, {
+      catalogueId,
+      categoryId: null,
+      name: "Coffee",
+      customerName: { [LOCALE]: "Café recién hecho" },
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+    });
+    await setProductStation(tx, cfg, productId, station.id);
     const orderId = randomUUID();
     const { lineRows } = await createOpenOrder(tx, cfg, orderId, [line(productId)], null);
     const parent = lineRows[0]!;
-    await tx
-      .update(workingOrderLines)
-      .set({ kitchenName: "COFFEE BAR", variantName: { [LOCALE]: "Doble" } })
-      .where(eq(workingOrderLines.id, parent.id!));
+    await tx.update(workingOrderLines).set(frozen).where(eq(workingOrderLines.id, parent.id!));
     await enqueueKitchenTickets(tx, cfg, orderId, [
       { workingOrderLineId: parent.id!, stationId: station.id },
     ]);
     return printJobsFor(tx);
   });
-  const paper = decodeTicket(jobs[0]!.payload);
-  expect(paper).toContain("COFFEE BAR · Doble");
+  return decodeTicket(jobs[0]!.payload);
+}
+
+it("prints the frozen kitchen names of the product and the selected variant", async () => {
+  const paper = await ticketWithNames({
+    kitchenName: "COF",
+    variantName: "Large",
+    variantKitchenName: "LG",
+  });
+  expect(paper).toContain("COF · LG");
   expect(paper).not.toContain("Coffee");
+});
+
+it("falls back to the variant's staff name when it has no kitchen name", async () => {
+  const paper = await ticketWithNames({
+    kitchenName: "COF",
+    variantName: "Large",
+    variantKitchenName: null,
+  });
+  expect(paper).toContain("COF · Large");
+});
+
+// The product's kitchen name falls back to its STAFF name, not to the customer-facing text the
+// receipt prints — a cook reads the name the till buttons carry.
+it("falls back to the product's staff name when it has no kitchen name", async () => {
+  const paper = await ticketWithNames({
+    kitchenName: null,
+    variantName: "Large",
+    variantKitchenName: "LG",
+  });
+  expect(paper).toContain("Coffee · LG");
+  expect(paper).not.toContain("Café recién hecho");
 });

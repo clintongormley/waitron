@@ -40,15 +40,21 @@ export async function listContentTranslationGaps(
   language: string,
 ): Promise<{ kind: string; id: string }[]> {
   const code = contentLanguageCode(language);
+  // A product's and a variant's customer-facing name is optional and falls back to the staff name, so
+  // a wholly-absent one (null or {}) is never a gap — only a partial one is. The other five kinds the
+  // query below emits — `category`, `unit`, `section`, `option_group` and `option` — have no such
+  // fallback and stay required, so they are never null-filtered here.
   const result = await tx.execute<{
     kind: string;
     id: string;
     translations: Record<string, string>;
   }>(sql`
-    select 'product' as kind, id, descriptions as translations from products where tenant_id = ${tenantId}
+    select 'product' as kind, id, customer_name as translations from products
+      where tenant_id = ${tenantId} and customer_name is not null and customer_name <> '{}'::jsonb
     union all select 'category' as kind, id, name as translations from categories where tenant_id = ${tenantId}
     union all select 'unit' as kind, id, name as translations from units where tenant_id = ${tenantId}
-    union all select 'variant' as kind, id, name as translations from product_variants where tenant_id = ${tenantId}
+    union all select 'variant' as kind, id, customer_name as translations from product_variants
+      where tenant_id = ${tenantId} and customer_name is not null and customer_name <> '{}'::jsonb
     union all select 'section' as kind, id, name as translations from menu_sections where tenant_id = ${tenantId}
     union all select 'option_group' as kind, id, name as translations from option_groups where tenant_id = ${tenantId}
     union all select 'option' as kind, id, name as translations from option_group_items where tenant_id = ${tenantId}

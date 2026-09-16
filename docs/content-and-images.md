@@ -1,6 +1,6 @@
 # Languages and photographs for your menu
 
-You can add French descriptions to a Spanish menu without changing the language of the dashboard
+You can add French text to a Spanish menu without changing the language of the dashboard
 or your receipts. Start by choosing the languages your content supports, then add translations as
 you need them. The image library uses the same choices as your products, menu sections and
 [modifiers](modifiers.md). Modifier names and choices participate in the default-language
@@ -14,17 +14,22 @@ worked out from where it is. To add another, open **Products**, then **Content l
 your default, choose the language and select **Add**. Save the settings to make its translation
 fields available throughout your content editors.
 
-For example, with Spanish as the default and English alongside, a product named **Pan de verano**
-can leave its English description empty while you prepare the translation. Where English content is
-requested, it displays **Pan de verano** until you enter **Summer bread**. This fallback uses the
-Spanish text without copying it into the English field, so later Spanish edits remain visible
-where the translation is still missing.
+For example, with Spanish as the default and English alongside, a product whose customer-facing name
+reads **Pan de verano** in Spanish can leave its English one empty while you prepare the translation.
+Where English content is requested, it displays **Pan de verano** until you enter **Summer bread**.
+This fallback uses the Spanish text without copying it into the English field, so later Spanish edits
+remain visible where the translation is still missing.
 
 Required fields need text in the default language. Other translations can wait. To change the
-default to English, first complete the required English descriptions and image names.
+default to English, first complete the required English translations and image names.
 If the change is refused, check your products, modifiers, menu sections and image metadata for
 missing translations. You can edit sections with no products through **Venue operations**,
 **Menus**, **Sections**.
+
+A product's and a variant's customer-facing name is the exception, because it is optional: leave it
+empty in every language and Waitron falls back to the staff name, so it never blocks the change. Fill
+it in for Spanish and leave English blank, though, and that *is* a missing translation — you clearly
+meant to translate it — so it does hold the change up until you finish it or clear it.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. You cannot remove the default language
@@ -75,6 +80,6 @@ record changes the metadata wherever that photograph is reused.
 **Remove image** in a product editor clears that product's association when you save the product.
 The photograph stays in the library for your other products.
 
-To remove the photograph itself, choose **Delete** in the library and confirm. If any product still
-uses it, deletion is blocked and you see links to those products, including inactive products.
-Remove the associations and save those products before trying deletion again.
+To remove the photograph itself, choose **Delete** in the library and confirm. If any product or
+product variant still uses it, deletion is blocked and you see links to those products, including
+inactive products. Remove the associations and save those products before trying deletion again.

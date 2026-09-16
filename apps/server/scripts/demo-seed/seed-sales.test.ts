@@ -44,23 +44,32 @@ function nextNif(): string {
 const PRODUCTS: SeedSalesProduct[] = [
   {
     id: "p-general",
-    descriptions: { [LOCALE]: "Solomillo" },
+    name: "Solomillo",
+    customerName: { [LOCALE]: "Solomillo" },
     unitPrice: "18.50",
     vatClass: "general",
   },
   {
     id: "p-reduced",
-    descriptions: { [LOCALE]: "Pan de la casa" },
+    name: "Pan de la casa",
+    customerName: { [LOCALE]: "Pan de la casa" },
     unitPrice: "2.40",
     vatClass: "reduced",
   },
   {
     id: "p-super",
-    descriptions: { [LOCALE]: "Leche" },
+    name: "Leche",
+    customerName: { [LOCALE]: "Leche" },
     unitPrice: "1.30",
     vatClass: "super_reduced",
   },
-  { id: "p-zero", descriptions: { [LOCALE]: "Agua" }, unitPrice: "1.00", vatClass: "zero" },
+  {
+    id: "p-zero",
+    name: "Agua",
+    customerName: { [LOCALE]: "Agua" },
+    unitPrice: "1.00",
+    vatClass: "zero",
+  },
 ];
 
 async function provisionVenue(): Promise<VenueResult> {
@@ -213,7 +222,8 @@ describe("seedSales", () => {
   // VAT-override path (`vatClass: "reduced"` on one option vs `null`-inherit on the rest).
   const COFFEE_WITH_OPTIONS: SeedSalesProduct = {
     id: "p-coffee",
-    descriptions: { [LOCALE]: "Café" },
+    name: "Café",
+    customerName: { [LOCALE]: "Café" },
     unitPrice: "1.60",
     vatClass: "general",
     optionGroups: [

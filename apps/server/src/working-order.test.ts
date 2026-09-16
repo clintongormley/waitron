@@ -31,6 +31,8 @@ import {
   priceBasket,
   replaceProductCategories,
   setMenuItemOptionGroups,
+  setMenuVariants,
+  setProductVariants,
   updateCategory,
   EACH_UNIT,
 } from "@waitron/catalogue";
@@ -60,6 +62,8 @@ import {
   openTab,
   parkOrder,
   placeOrder,
+  priceStoredOrder,
+  readTabLines,
   recallLines,
   sendLines,
   sendToPrep,
@@ -150,7 +154,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       const cafe = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { [LOCALE]: "Café" },
+        name: "Café",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -160,7 +164,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       const agua = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { [LOCALE]: "Agua" },
+        name: "Agua",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -242,7 +246,305 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
   };
 }
 
+/**
+ * Publish one "Coffee" product with a "Large" variant on `catalogueId`, both carrying a
+ * customer-facing name of their own that DIFFERS from their staff name, and return the offer and
+ * variant ids. The two customer names differ from the staff names on purpose: a label built from the
+ * staff names, or from the product's customer name alone, reads differently from the joined one, so a
+ * reader that drops the variant is tellable apart from one that keeps it.
+ */
+async function seedVariantOffer(
+  tx: Transaction,
+  cfg: TillConfig,
+  catalogueId: string,
+): Promise<{ offerId: string; variantId: string; productId: string }> {
+  const product = await createProduct(tx, cfg.tenantId, {
+    catalogueId,
+    categoryId: null,
+    name: "Coffee",
+    customerName: { [LOCALE]: "Freshly ground coffee" },
+    kitchenName: "COF",
+    pricingUnit: "each",
+    unitPrice: "1.50",
+    vatClass: "general",
+  });
+  const section = await createMenuSection(tx, cfg.tenantId, {
+    menuId: catalogueId,
+    name: { [LOCALE]: "Cafés" },
+  });
+  const offer = await createMenuItem(tx, cfg.tenantId, {
+    menuId: catalogueId,
+    productId: product.id,
+    sectionId: section.id,
+    grossPrice: "2.50",
+  });
+  const variants = await setProductVariants(
+    tx,
+    cfg.tenantId,
+    product.id,
+    [
+      {
+        name: "Large",
+        customerName: { [LOCALE]: "Large cup" },
+        kitchenName: "LG",
+        image: null,
+        unitPrice: "3.00",
+        available: true,
+      },
+      {
+        name: "Small",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "2.00",
+        available: true,
+      },
+    ],
+    LOCALE,
+  );
+  await setMenuVariants(tx, cfg.tenantId, offer.id, [
+    { variantId: variants[0]!.id, unitPrice: "3.20", available: true },
+    { variantId: variants[1]!.id, unitPrice: "2.20", available: true },
+  ]);
+  return { offerId: offer.id, variantId: variants[0]!.id, productId: product.id };
+}
+
+/**
+ * Every screen that shows a sold line shows ONE label, and a line that named a variant froze its
+ * product text and its variant text in separate columns. Without the variant a large coffee and a
+ * small one are indistinguishable on the tab, on the kitchen queue, on the pass and on the retrieve
+ * screen, at prices that only make sense with the size.
+ *
+ * Which of the three names each reader shows is the other half of what this pins. A table tab's line
+ * list is read by a waiter, so it carries the STAFF pair. The station queue and the pass are read by
+ * cooks, so they carry the KITCHEN pair, exactly as the printed ticket does. The retrieve screen is
+ * the till's own and joins the staff halves itself (`lineProductName`,
+ * `apps/till/src/widgets/product-name.ts`), so it receives both halves unjoined.
+ *
+ * The fixture's three pairs are three different strings, so a reader that shows the wrong name fails
+ * here rather than passing. All four readers run over the SAME fired order, so one revert on any
+ * single reader fails this.
+ */
+describe("a sold line's label carries its variant", () => {
+  const STAFF = "Coffee · Large";
+  const KITCHEN = "COF · LG";
+
+  it("carries product and variant onto the tab, the station queue, the pass and the retrieve screen", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const orderId = randomUUID();
+    const { tabLines, stationItems, expoItems } = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const { offerId, variantId, productId } = await seedVariantOffer(tx, cfg, catalogueId);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      await tx.execute(sql`
+        insert into preparation_routes (tenant_id, location_id, zone_id, product_id, station_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${productId}, ${cocina.id})`);
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [{ menuItemId: offerId, variantId, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+      const fired = await tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+          note: workingOrderLines.note,
+          doneness: workingOrderLines.doneness,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      await fireLines(tx, cfg, orderId, fired);
+      return {
+        tabLines: await readTabLines(tx, cfg, orderId),
+        stationItems: (await listStationQueue(tx, cfg, cocina.id))[0]!.items,
+        expoItems: (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items,
+      };
+    });
+    // `getHeldOrder` opens its own transaction, so it runs outside the block above.
+    const held = await getHeldOrder({ db }, cfg, orderId);
+
+    expect(tabLines.map((l) => l.name)).toEqual([STAFF]);
+    expect(stationItems.map((i) => i.name)).toEqual([KITCHEN]);
+    expect(expoItems.map((i) => i.name)).toEqual([KITCHEN]);
+    expect(held.lines.map((l) => [l.product?.name, l.product?.variantName])).toEqual([
+      ["Coffee", "Large"],
+    ]);
+    // The frozen customer halves reach it too, still apart — the staff name is what the till shows,
+    // but a retrieved line that later prints must not have lost its customer text.
+    expect(held.lines.map((l) => l.product?.customerName)).toEqual([
+      { [LOCALE]: "Freshly ground coffee" },
+    ]);
+    expect(held.lines.map((l) => l.product?.variantCustomerName)).toEqual([
+      { [LOCALE]: "Large cup" },
+    ]);
+  });
+});
+
+describe("readTabLines", () => {
+  // Same shape as `priceStoredOrder` above: a by-id read whose tenant scope must be its own. Both
+  // venues share the database here, as a mis-wired mount would have them.
+  it("refuses ANOTHER venue's tab, and a foreign line cannot be planted on this one either", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const other = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+
+    const own = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return readTabLines(tx, cfg, id);
+    });
+    expect(own).toHaveLength(1);
+    await expect(
+      withTenant(db, other.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return readTabLines(tx, other.cfg, id);
+      }),
+    ).rejects.toMatchObject({ code: "tab.not_open" });
+
+    // Why the read's OWN tenant predicate cannot be told apart by a probe, stated as the experiment
+    // rather than as a conclusion: a line of another tenant pointing at this order cannot exist. The
+    // composite (tenant_id, working_order_id) foreign key refuses to create one — 23503 — so the
+    // predicate is defence in depth behind the gate above, not a reachable hole.
+    const planted = await captureError(() =>
+      db.execute(sql`
+        insert into working_order_lines
+          (tenant_id, working_order_id, line_no, name, descriptions, quantity, unit_price,
+           unit_price_gross, vat_rate, line_total)
+        values (${other.cfg.tenantId}, ${id}, 99, 'Planted', '{"es-ES":"Planted"}'::jsonb,
+                '1.000', '1.00', '1.00', '21.00', '1.00')`),
+    );
+    expect(pgErrorCode(planted)).toBe("23503");
+  });
+});
+
 describe("parkOrder", () => {
+  it("freezes the product's staff name and the variant's three names, each falling back alone", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const id = randomUUID();
+    const seeded = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const product = await createProduct(tx, cfg.tenantId, {
+        catalogueId,
+        categoryId: null,
+        name: "Coffee",
+        customerName: { [LOCALE]: "Freshly ground coffee" },
+        kitchenName: "COF",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      const section = await createMenuSection(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        name: { [LOCALE]: "Cafés" },
+      });
+      const offer = await createMenuItem(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        productId: product.id,
+        sectionId: section.id,
+        grossPrice: "2.50",
+      });
+      // "Large" carries all three names; "Small" carries only its staff name, so the row it freezes
+      // shows each of the other two falling back on its own.
+      const variants = await setProductVariants(
+        tx,
+        cfg.tenantId,
+        product.id,
+        [
+          {
+            name: "Large",
+            customerName: { [LOCALE]: "Large cup" },
+            kitchenName: "LG",
+            image: null,
+            unitPrice: "3.00",
+            available: true,
+          },
+          {
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
+        LOCALE,
+      );
+      await setMenuVariants(tx, cfg.tenantId, offer.id, [
+        { variantId: variants[0]!.id, unitPrice: "3.20", available: true },
+        { variantId: variants[1]!.id, unitPrice: "2.20", available: true },
+      ]);
+      return { offerId: offer.id, large: variants[0]!.id, small: variants[1]!.id };
+    });
+
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        { menuItemId: seeded.offerId, variantId: seeded.large, quantity: "1" },
+        { menuItemId: seeded.offerId, variantId: seeded.small, quantity: "1" },
+      ],
+    });
+
+    const frozen = await db.execute<{
+      name: string;
+      variant_name: string | null;
+      descriptions: Record<string, string>;
+      variant_descriptions: Record<string, string> | null;
+      kitchen_name: string | null;
+      variant_kitchen_name: string | null;
+    }>(sql`
+      select name, variant_name, descriptions, variant_descriptions, kitchen_name,
+             variant_kitchen_name
+      from working_order_lines where working_order_id = ${id} order by line_no`);
+    expect(frozen.rows).toEqual([
+      {
+        name: "Coffee",
+        variant_name: "Large",
+        descriptions: { [LOCALE]: "Freshly ground coffee" },
+        variant_descriptions: { [LOCALE]: "Large cup" },
+        kitchen_name: "COF",
+        variant_kitchen_name: "LG",
+      },
+      {
+        name: "Coffee",
+        variant_name: "Small",
+        descriptions: { [LOCALE]: "Freshly ground coffee" },
+        variant_descriptions: { [LOCALE]: "Small" },
+        kitchen_name: "COF",
+        variant_kitchen_name: null,
+      },
+    ]);
+  });
+
+  // One tenant per database is NOT the query's isolation boundary (CLAUDE.md §3). This reader feeds
+  // every filing path from a stored order, so a by-id read of another tenant's order would let one
+  // venue FILE another venue's composition into its own immutable fiscal record. Both venues are in
+  // the same database here, exactly as a mis-wired mount would have them.
+  it("refuses to price ANOTHER venue's stored order", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const other = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "2" }] });
+
+    // The owning venue prices it; the other venue sees no lines at all.
+    const own = await withTenant(db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return priceStoredOrder(tx, cfg, id);
+    });
+    expect(own.lines).toHaveLength(1);
+    await expect(
+      withTenant(db, other.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return priceStoredOrder(tx, other.cfg, id);
+      }),
+    ).rejects.toMatchObject({ code: "sale.empty_basket" });
+  });
+
   it("prices the selected menu offer and freezes its service context", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();
@@ -689,7 +991,28 @@ async function grossBasketTotal(
     await asAppUser(tx);
     const { products: available } = await listAvailableProducts(tx, cfg.locationId);
     const byId = new Map(available.map((p) => [p.id, p]));
-    const items = lines.map((l) => ({ product: byId.get(l.productId)!, quantity: l.quantity }));
+    // A catalogue row is not priceable as read: its customer-facing text is resolved from
+    // `name`/`customerName` by `product-presentation.ts` first, exactly as `priceOrderLines` does.
+    const items = lines.map((l) => {
+      const product = byId.get(l.productId)!;
+      return {
+        product: {
+          ...product,
+          descriptions: catalogue.customerPresentationText(
+            {
+              name: product.name,
+              customerName: product.customerName,
+              kitchenName: null,
+              variantName: null,
+              variantCustomerName: null,
+              variantKitchenName: null,
+            },
+            LOCALE,
+          ).product,
+        },
+        quantity: l.quantity,
+      };
+    });
     return priceBasket(items).total;
   });
 }
@@ -814,7 +1137,7 @@ describe("getHeldOrder", () => {
       const product = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
-        descriptions: { [LOCALE]: "Jamón" },
+        name: "Jamón",
         unitId,
         unitPrice: "12.00",
         vatClass: "general",
@@ -935,6 +1258,11 @@ describe("getHeldOrder", () => {
   it("returns the parked offer's identity and snapshots after its live product changes", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();
+    // Give the product a customer name that DIFFERS from its staff name before parking, so the two
+    // frozen halves below cannot be confused for one another.
+    await db.execute(sql`
+      update products set customer_name = ${JSON.stringify({ [LOCALE]: "Café de la casa" })}::jsonb
+      where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
     await parkOrder({ db }, cfg, {
       id,
       zoneId,
@@ -942,7 +1270,8 @@ describe("getHeldOrder", () => {
     });
     await db.execute(sql`
       update products
-      set descriptions = ${JSON.stringify({ [LOCALE]: "Renamed café" })}::jsonb,
+      set name = 'Renamed café',
+          customer_name = ${JSON.stringify({ [LOCALE]: "Renamed café de la casa" })}::jsonb,
           pricing_unit = 'weight', vat_class = 'reduced',
           allergens = ${JSON.stringify({ milk: { presence: "contains" } })}::jsonb
       where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
@@ -960,7 +1289,9 @@ describe("getHeldOrder", () => {
           id: cafeId,
           productId: cafeId,
           menuItemId: premiumCafeOfferId,
-          descriptions: { [LOCALE]: "Café" },
+          // Both frozen halves survive the rename, and they are distinct text.
+          name: "Café",
+          customerName: { [LOCALE]: "Café de la casa" },
           // The café is priced by the each (no unit), so its snapshot resolves to the synthetic
           // Each unit — frozen at park time, unaffected by the live product's switch to weight above.
           unit: {
@@ -1439,7 +1770,7 @@ async function makeProduct(
   const { id } = await createProduct(tx, cfg.tenantId, {
     catalogueId,
     categoryId: route.categoryId ?? null,
-    descriptions: { [LOCALE]: `P-${randomUUID().slice(0, 8)}` },
+    name: `P-${randomUUID().slice(0, 8)}`,
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "general",
@@ -2208,7 +2539,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("carries each line's snapshotted description + quantity, items ordered by line_no", async () => {
+  it("carries each line's snapshotted kitchen name + quantity, items ordered by line_no", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
@@ -2222,16 +2553,17 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const [group] = await listStationQueue(tx, cfg, cocina.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(2);
-      // Items in line_no order, each carrying the line's snapshotted dish description + quantity
+      // Items in line_no order, each carrying the line's snapshotted kitchen name + quantity
       // (numeric(12,3) read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
+      // Neither product carries a kitchen name of its own, so each falls back to its staff name.
       expect(group!.items[0]).toMatchObject({
-        descriptions: { [LOCALE]: "Café" },
+        name: "Café",
         unitName: { en: "ea" },
         unitPrecision: 0,
         quantity: "2.000",
       });
       expect(group!.items[1]).toMatchObject({
-        descriptions: { [LOCALE]: "Agua" },
+        name: "Agua",
         unitName: { en: "ea" },
         unitPrecision: 0,
         quantity: "3.000",
@@ -2351,7 +2683,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
-        descriptions: { [LOCALE]: "Hamburguesa" },
+        name: "Hamburguesa",
         pricingUnit: "each",
         unitPrice: "9.00",
         vatClass: "general",
@@ -2438,7 +2770,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const dish = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
-        descriptions: { [LOCALE]: "Ensalada" },
+        name: "Ensalada",
         pricingUnit: "each",
         unitPrice: "7.00",
         vatClass: "general",
@@ -2464,7 +2796,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const dish = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
-        descriptions: { [LOCALE]: "Crema" },
+        name: "Crema",
         pricingUnit: "each",
         unitPrice: "6.00",
         vatClass: "general",
@@ -2510,7 +2842,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const dish = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
-        descriptions: { [LOCALE]: "Ensalada" },
+        name: "Ensalada",
         pricingUnit: "each",
         unitPrice: "7.00",
         vatClass: "general",
@@ -3373,7 +3705,7 @@ describe("correction slips on recall & void (A6)", () => {
     const { id } = await createProduct(tx, cfg.tenantId, {
       catalogueId,
       categoryId: null,
-      descriptions: { [LOCALE]: name },
+      name: name,
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -3639,11 +3971,11 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(course.items.every((i) => i.state === "queued")).toBe(true);
       expect(course.items.every((i) => i.firedAt !== null)).toBe(true);
       expect(course.items.every((i) => i.awayAt === null)).toBe(true);
-      // The display snapshot rides through: `name` is the locale→description map, `qty` the numeric text.
+      // The display snapshot rides through: `name` is the resolved kitchen label, `qty` the numeric text.
       const soupItem = course.items.find((i) => i.stationName === "Cocina")!;
-      // `name` round-trips as the product's locale→description map (makeProduct seeds `P-<uuid>`), not a
-      // flattened string — exactly one locale key here, so toEqual pins the whole shape + value.
-      expect(soupItem.name).toEqual({ [LOCALE]: expect.stringMatching(/^P-/) });
+      // The fixture seeds no kitchen name, so the label is the product's staff name (`P-<uuid>`),
+      // a plain string rather than a locale map.
+      expect(soupItem.name).toMatch(/^P-/);
       expect(typeof soupItem.qty).toBe("string");
 
       // A COLLECTED order and an ABANDONED order are both excluded, the same two listStationQueue drops.
@@ -4682,7 +5014,7 @@ it("shows the dish's own allergens and diet for a nonprice option selection (no 
     const product = await createProduct(tx, cfg.tenantId, {
       catalogueId,
       categoryId: null,
-      descriptions: { [LOCALE]: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",

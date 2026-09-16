@@ -1,7 +1,6 @@
-import { resolveContentText } from "@waitron/shared";
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, currentContentLanguages, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import { t } from "../i18n/t.js";
@@ -14,29 +13,33 @@ export class ProductList extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      .product {
+      /* Every rule here crosses one shadow boundary on purpose. The cell markup below is built in
+         this file but handed to <wt-data-table> as a callback, so the nodes are parented in THAT
+         element's shadow root; a class selector in this stylesheet cannot reach them, and the cell
+         would render unstyled while every attribute assertion still passed. A part= attribute on the
+         markup plus ::part() here is what crosses it — the pattern categories-screen.ts uses. */
+      wt-data-table::part(product-cell) {
         display: flex;
         align-items: center;
         gap: var(--wt-space-3);
-        min-width: 12rem;
       }
-      .thumb,
-      .thumb-placeholder {
+      wt-data-table::part(thumb-frame),
+      wt-data-table::part(thumb-placeholder) {
         flex: none;
-        width: 40px;
-        height: 40px;
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         overflow: hidden;
         background: var(--wt-color-surface);
       }
-      .thumb img {
+      wt-data-table::part(thumbnail) {
         display: block;
         width: 100%;
         height: 100%;
         object-fit: cover;
       }
-      .badge {
+      wt-data-table::part(badge) {
         display: inline-flex;
         padding: 0 var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
@@ -46,12 +49,6 @@ export class ProductList extends LitElement {
   ];
 
   @property({ attribute: false }) products: Product[] = [];
-  @property() primaryLocale = "";
-
-  #name(product: Product): string {
-    const language = this.primaryLocale || currentContentLanguages().defaultLanguage;
-    return resolveContentText(product.descriptions, language, language) || product.id;
-  }
 
   #edit(event: Event, productId: string): void {
     event.stopPropagation();
@@ -70,24 +67,22 @@ export class ProductList extends LitElement {
       {
         key: "name",
         label: t("product.description"),
-        sortValue: (product) => this.#name(product),
-        cell: (product) => {
-          const name = this.#name(product);
-          return html`<span class="product">
+        sortValue: (product) => product.name,
+        cell: (product) =>
+          html`<span part="product-cell">
             ${
               product.image === null
                 ? html`<span
-                    class="thumb-placeholder"
+                    part="thumb-placeholder"
                     data-test="thumb-placeholder"
                     aria-hidden="true"
                   ></span>`
-                : html`<span class="thumb" data-test="thumb"
-                    ><img src=${`/media/${product.image}`} alt=""
+                : html`<span part="thumb-frame" data-test="thumb"
+                    ><img part="thumbnail" src=${`/media/${product.image}`} alt=""
                   /></span>`
             }
-            <strong>${name}</strong>
-          </span>`;
-        },
+            <strong>${product.name}</strong>
+          </span>`,
       },
       {
         key: "vat",
@@ -100,7 +95,7 @@ export class ProductList extends LitElement {
         label: t("product.active"),
         cell: (product) =>
           html`<span
-            class="badge"
+            part="badge"
             data-test="active-badge"
             data-active=${product.active ? "true" : "false"}
             >${product.active ? t("product.active_badge") : t("product.inactive_badge")}</span
@@ -112,7 +107,7 @@ export class ProductList extends LitElement {
         label: t("product.allergens"),
         cell: (product) => {
           const state = allergenState(product.allergens);
-          return html`<span class="badge" data-test="allergen-state" data-state=${state}
+          return html`<span part="badge" data-test="allergen-state" data-state=${state}
             >${allergenStateName(state)}</span
           >`;
         },
@@ -122,16 +117,14 @@ export class ProductList extends LitElement {
         key: "actions",
         label: t("staff.actions"),
         align: "end",
-        cell: (product) => {
-          const name = this.#name(product);
-          return html`<wt-button
+        cell: (product) =>
+          html`<wt-button
             variant="ghost"
             data-test=${`edit-${product.id}`}
-            aria-label=${`${editLabel} ${name}`}
+            aria-label=${`${editLabel} ${product.name}`}
             @click=${(event: Event) => this.#edit(event, product.id)}
             >${editLabel}</wt-button
-          >`;
-        },
+          >`,
       },
     ];
   }

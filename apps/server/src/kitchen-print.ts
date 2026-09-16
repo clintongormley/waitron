@@ -40,6 +40,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { perDishOptionQuantity } from "@waitron/shared";
+import { kitchenPresentationName } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
@@ -61,34 +62,26 @@ export interface FiredItem {
 }
 
 /**
- * Resolve the printed name for a fired line. `descriptions` is the line's SNAPSHOTTED locale→string map
- * (`working_order_lines.descriptions`), which the `check_locales` trigger holds to EXACTLY the venue's
- * configured invoice locales. The till's own `locale` is normally one of them, so `descriptions[locale]`
- * hits directly. The fallback covers a till whose UI locale is NOT among the venue's invoice locales:
- * the printed ticket keeps a venue language (SOME configured description — every key is a venue invoice
- * locale per `check_locales`, so any is a venue language; NOT guaranteed to be the venue's PRIMARY
- * locale, since `descriptions` key order is not held to `invoice_locales` order) rather than a blank
- * line, per the printed-receipt-keeps-venue-language rule.
+ * Pick one language out of a snapshotted locale→string map for the printed ticket. Its only caller is
+ * the line's UNIT LABEL (`working_order_lines.unit_name`); the line's own name is resolved from the
+ * frozen kitchen and staff names instead (`kitchenPresentationName`), which carry no per-language
+ * text.
+ * The till's own `locale` is normally one of the map's keys, so `text[locale]` hits directly. The
+ * fallback covers a till whose UI locale is NOT among the venue's languages: the ticket keeps SOME
+ * stored language rather than printing a blank, per the printed-receipt-keeps-venue-language rule.
  */
-function ticketName(descriptions: Record<string, string>, locale: string): string {
-  const localised = descriptions[locale];
+function ticketName(text: Record<string, string>, locale: string): string {
+  const localised = text[locale];
   if (localised !== undefined) return localised;
-  // Fallback: some venue-language description (every key is a venue invoice locale per `check_locales`;
-  // `Object.values(...)[0]` is the first STORED key, not provably `invoice_locales[0]` — any is acceptable
-  // on this rare mis-config path). `descriptions` is NOT NULL and `check_locales` requires ≥1 configured
-  // locale, so `Object.values(...)[0]` is always a string here — the `!` asserts that (compile-time only,
-  // so no runtime branch is left uncovered).
-  return Object.values(descriptions)[0]!;
-}
-
-function kitchenTicketName(
-  descriptions: Record<string, string>,
-  kitchenName: string | null,
-  variantName: Record<string, string> | null,
-  locale: string,
-): string {
-  if (kitchenName === null) return ticketName(descriptions, locale);
-  return variantName === null ? kitchenName : `${kitchenName} · ${ticketName(variantName, locale)}`;
+  // Fallback: the first STORED key, which is not provably the venue's primary language — any is
+  // acceptable on this rare mis-config path. What makes `Object.values(...)[0]` a string is that the
+  // map is never EMPTY — non-null alone would not give that, since `Object.values({})[0]` is
+  // undefined. `unit_name` freezes a unit's `abbreviation` (`packages/catalogue/src/pricing.ts`), and
+  // both unit write paths — `createUnit` and `updateUnit` in `packages/catalogue/src/units.ts` — put
+  // that abbreviation through `validateContentTranslations`, which refuses a map carrying no
+  // non-blank text in the default content language. A line with NO unit is branched out at the call
+  // site by `row.unitName == null`, so the `!` leaves no uncovered runtime branch.
+  return Object.values(text)[0]!;
 }
 
 /**
@@ -163,13 +156,13 @@ function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): 
 }
 
 /**
- * Each line's printed `KitchenTicketItem` — quantity, localised name, and its `+ <name>`/` xN`
- * modifier sub-lines — keyed by LINE ID, each carrying the line's `line_no` for a stable
- * within-station order. Factored from the fire path so the correction path formats a
+ * Each line's printed `KitchenTicketItem` — quantity, the cook's name for the line, and its
+ * `+ <name>`/` xN` modifier sub-lines — keyed by LINE ID, each carrying the line's `line_no` for a
+ * stable within-station order. Factored from the fire path so the correction path formats a
  * recalled/voided line's item BYTE-FOR-BYTE like the original ticket the cook is correcting: same
- * `descriptions`→name pick ({@link ticketName}), same per-option-quantity modifier labels, same
- * locale (`cfg.locale`). Reads the fired parents' qty + snapshotted `descriptions` and their
- * child modifier lines in ONE grouped read each (never N+1), explicitly tenant-filtered.
+ * name resolution (`kitchenPresentationName`), same per-option-quantity modifier labels, same
+ * locale (`cfg.locale`). Reads the fired parents' qty + their frozen names and their child modifier
+ * lines in ONE grouped read each (never N+1), explicitly tenant-filtered.
  * `lineIds` are the PARENT dish lines; a child modifier is never itself a key here (it is fetched
  * as sub-text of its parent).
  */
@@ -178,17 +171,21 @@ async function buildTicketItems(
   cfg: TillConfig,
   lineIds: string[],
 ): Promise<Map<string, { lineNo: number; item: KitchenTicketItem }>> {
-  // The fired lines' display fields — quantity + the snapshotted description map — for the qty×name lines.
+  // The fired lines' display fields — quantity + the frozen kitchen/staff names — for the qty×name
+  // lines. The customer-facing `descriptions` is deliberately NOT read: the cook's name falls back to
+  // the STAFF name, never to the receipt text — that is `kitchenPresentationName`'s rule, and the
+  // station queue reads the same one, so a cook sees one name on paper and on screen.
   const lineRows = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
-      descriptions: workingOrderLines.descriptions,
+      name: workingOrderLines.name,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       unitName: workingOrderLines.unitName,
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
+      variantKitchenName: workingOrderLines.variantKitchenName,
       // Per-line customisation (order-line customisation, spec §2/§3): the note/doneness printed as a
       // prominent doneness line + a note sub-line (`emitItem`). Read here so BOTH the fire path and the
       // recall/void correction slip carry them — a correction slip shows the same detail the cook has.
@@ -210,7 +207,7 @@ async function buildTicketItems(
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
-      descriptions: workingOrderLines.descriptions,
+      name: workingOrderLines.name,
     })
     .from(workingOrderLines)
     .where(
@@ -227,7 +224,8 @@ async function buildTicketItems(
   for (const child of childRows) {
     const parent = lineById.get(child.parentLineId!)!;
     const perDish = perDishOptionQuantity(child.quantity, parent.quantity);
-    const name = ticketName(child.descriptions, cfg.locale);
+    // A modifier sub-line prints the staff name the child line froze — its own label.
+    const name = child.name;
     const label = perDish > 1 ? `${name} x${perDish}` : name;
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
     names.push(label);
@@ -241,7 +239,7 @@ async function buildTicketItems(
       item: {
         qty: row.quantity,
         unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
-        name: kitchenTicketName(row.descriptions, row.kitchenName, row.variantName, cfg.locale),
+        name: kitchenPresentationName(row),
         // Nullable columns → `?? undefined` so a plain line carries neither key and prints exactly as
         // before; `emitItem` prints doneness prominently and the note as a sub-line.
         doneness: row.doneness ?? undefined,

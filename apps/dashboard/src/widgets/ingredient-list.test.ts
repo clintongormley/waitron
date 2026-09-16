@@ -9,8 +9,8 @@ afterEach(cleanupWidgets);
 /**
  * A representative ingredient carrying every field the list reads; individual tests override the one
  * field they exercise (allergens, name) via a spread so the fixture stays the single source for the
- * rest. Unlike a product, an ingredient has a single `name` string (no descriptions map) and a single
- * `allergens` declaration (no manual/published split).
+ * rest. Unlike a product, an ingredient has no customer-facing or kitchen name beside its `name`,
+ * and a single `allergens` declaration (no manual/published split).
  */
 function ingredient(overrides: Partial<Ingredient> = {}): Ingredient {
   return {

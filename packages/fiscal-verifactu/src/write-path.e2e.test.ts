@@ -320,6 +320,7 @@ describe("parent_line_id is not part of the huella", () => {
           lines: [
             {
               lineNo: 1,
+              name: "Hamburguesa",
               descriptions: { "es-ES": "Hamburguesa" },
               quantity: "2",
               unitPrice: "5.00",
@@ -328,6 +329,7 @@ describe("parent_line_id is not part of the huella", () => {
             },
             {
               lineNo: 2,
+              name: "Extra de queso",
               descriptions: { "es-ES": "Extra de queso" },
               quantity: "1",
               unitPrice: "2.10",
@@ -412,6 +414,7 @@ describe("line note/doneness are not part of the huella", () => {
   function linesWith(note: string, doneness: string) {
     const dish: RecordSaleLine = {
       lineNo: 1,
+      name: "Café solo",
       descriptions: { "es-ES": "Café solo" },
       quantity: "2",
       unitPrice: "5.00",
@@ -420,6 +423,7 @@ describe("line note/doneness are not part of the huella", () => {
     };
     const water: RecordSaleLine = {
       lineNo: 2,
+      name: "Agua",
       descriptions: { "es-ES": "Agua" },
       quantity: "1",
       unitPrice: "2.10",

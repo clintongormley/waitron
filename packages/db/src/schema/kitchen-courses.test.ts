@@ -53,7 +53,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       .values({
         tenantId: TENANT_A,
         catalogueId: cat!.id,
-        descriptions: { es: "Café solo" },
+        name: "Café solo",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",

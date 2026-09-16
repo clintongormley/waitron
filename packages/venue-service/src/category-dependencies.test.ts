@@ -70,7 +70,7 @@ it("an open order keeps its copied category label after the category is deleted"
     const product = await createProduct(tx, tenantId, {
       catalogueId: catalogue.id,
       categoryId: category.id,
-      descriptions: { en: "Bread" },
+      name: "Bread",
       unitId: unit.id,
       unitPrice: "2.00",
       vatClass: "general",
@@ -81,10 +81,10 @@ it("an open order keeps its copied category label after the category is deleted"
     `);
     await tx.execute(sql`
       insert into working_order_lines
-        (tenant_id, working_order_id, line_no, product_id, descriptions, quantity,
+        (tenant_id, working_order_id, line_no, product_id, name, descriptions, quantity,
          unit_price, unit_price_gross, vat_rate, line_total, category)
       values
-        (${tenantId}, ${order.rows[0]!.id}, 1, ${product.id}, '{"en":"Bread"}'::jsonb, 1,
+        (${tenantId}, ${order.rows[0]!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}'::jsonb, 1,
          2, 2, 10, 2, 'Bakery')
     `);
 

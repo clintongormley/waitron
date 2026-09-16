@@ -96,7 +96,7 @@ it("authors hierarchy and membership with the non-superuser deployment role", as
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: a.id,
-      descriptions: { en: "P" },
+      name: "P",
       pricingUnit: "each",
       unitPrice: "1",
       vatClass: "general",
@@ -134,7 +134,7 @@ it.each(["attach", "delete"] as const)(
       return createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: null,
-        descriptions: { en: "P" },
+        name: "P",
         pricingUnit: "each",
         unitPrice: "1",
         vatClass: "general",
@@ -227,7 +227,7 @@ const seedProduct = (tenantId: Awaited<ReturnType<typeof seedTenant>>) =>
       await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: null,
-        descriptions: { en: "P" },
+        name: "P",
         pricingUnit: "each",
         unitPrice: "1",
         vatClass: "general",
@@ -327,7 +327,7 @@ async function dependantsFixture() {
     const p1 = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "P1" },
+      name: "P1",
       pricingUnit: "each",
       unitPrice: "1",
       vatClass: "general",
@@ -335,7 +335,7 @@ async function dependantsFixture() {
     const p2 = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "P2" },
+      name: "P2",
       pricingUnit: "each",
       unitPrice: "1",
       vatClass: "general",

@@ -271,7 +271,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
     await createProduct(tx, tenant, {
       catalogueId: cat.id,
       categoryId: drinks.id,
-      descriptions: { en: "Mineral water" },
+      name: "Mineral water",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",

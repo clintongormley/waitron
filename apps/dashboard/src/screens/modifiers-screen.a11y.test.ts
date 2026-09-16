@@ -66,8 +66,8 @@ describe.each(["light", "dark"] as const)("modifiers screen (%s)", (theme) => {
         .fn()
         .mockResolvedValue([{ id: "m", type: "text", name: { es: "Nota" }, available: true }]),
       getModifierDependants: vi.fn().mockResolvedValue({
-        products: [{ id: "p1", name: { es: "Café" } }],
-        menus: [{ id: "mn1", name: { es: "Desayuno" } }],
+        products: [{ id: "p1", name: "Café" }],
+        menus: [{ id: "mn1", name: "Desayuno" }],
         orders: 0,
       }),
     } as unknown as DashboardApi;

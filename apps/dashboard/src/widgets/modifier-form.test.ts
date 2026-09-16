@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ModifierForm } from "./modifier-form.js";
 import type { Modifier } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { t, setLocale } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 const base = { id: "m", name: { es: "Extras", fr: "Suppléments" }, available: true };
@@ -409,6 +409,38 @@ it("reorders choices with the keyboard", async () => {
     "b",
     "a",
   ]);
+});
+it("announces a keyboard move to a polite live region", async () => {
+  // Three choices so the announced position (2) and total (3) are distinct numbers; a two-choice
+  // fixture would read "2 of 2" and could not tell an index bug from a total bug.
+  const el = await mount({
+    ...extra,
+    choices: [
+      ...extra.choices,
+      {
+        id: "c",
+        name: { es: "Cebolla" },
+        available: true,
+        priceDelta: "0.50",
+        maxQuantity: 1,
+        preselected: false,
+      },
+    ],
+  });
+  setLocale("en");
+  try {
+    const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-a"]')!;
+    handle.focus();
+    handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await el.updateComplete;
+    expect(choiceOrder(el)).toEqual(["b", "a", "c"]);
+    const status = el.shadowRoot!.querySelector('[role="status"]')!;
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    // "Queso" is choice a's content name; the surrounding chrome is the active UI locale (en here).
+    expect(status.textContent).toBe("Queso moved to position 2 of 3");
+  } finally {
+    setLocale("es-ES");
+  }
 });
 it("leaves the order alone at the ends, on another key, and while saving", async () => {
   // Three choices, not two: with two, moving the first one up past the start rearranges nothing

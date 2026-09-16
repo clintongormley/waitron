@@ -19,8 +19,8 @@ async function fixture() {
     insert into catalogues (tenant_id, name) values (${tenantA}, 'A') returning id
   `);
   const productA = await suite.admin.execute<{ id: string }>(sql`
-    insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-    values (${tenantA}, ${catalogueA.rows[0]!.id}, '{"en":"A"}'::jsonb, 'each', 1, 'general')
+    insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+    values (${tenantA}, ${catalogueA.rows[0]!.id}, 'A', 'each', 1, 'general')
     returning id
   `);
   return {

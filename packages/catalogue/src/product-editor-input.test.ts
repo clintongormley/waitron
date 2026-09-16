@@ -4,7 +4,8 @@ import { parseProductEditorInput, type ProductEditorInput } from "./product-edit
 const unitId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const categoryId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const input: ProductEditorInput = {
-  name: { en: "Coffee", es: "Café" },
+  name: "Coffee",
+  customerName: { en: "Coffee", es: "Café" },
   description: null,
   kitchenName: null,
   image: null,
@@ -50,8 +51,11 @@ it.each([
   ["unitPrice", "1e2"],
   ["unitPrice", "-1"],
   ["available", 0],
-  ["name", []],
-  ["name", { en: 42 }],
+  ["name", 42],
+  ["name", ""],
+  ["name", "   "],
+  ["customerName", { en: 42 }],
+  ["customerName", "Coffee"],
   ["description", { en: 42 }],
   ["description", undefined],
   ["kitchenName", 42],
@@ -111,17 +115,84 @@ it("normalizes optional text and prices without mutating caller or copied allerg
 });
 it.each([
   [null, "variants.0"],
-  [{ id: "bad", name: { en: "Small" }, unitPrice: "2.00", available: true }, "variants.0.id"],
+  [{ id: "bad", name: "Small", unitPrice: "2.00", available: true }, "variants.0.id"],
   [{ name: null, unitPrice: "2.00", available: true }, "variants.0.name"],
-  [{ name: { en: "Small" }, unitPrice: "2.001", available: true }, "variants.0.unitPrice"],
-  [{ name: { en: "Small" }, unitPrice: "2.00", available: "yes" }, "variants.0.available"],
+  [
+    { name: "Small", customerName: { en: 42 }, unitPrice: "2.00", available: true },
+    "variants.0.customerName",
+  ],
+  [
+    { name: "Small", kitchenName: 42, unitPrice: "2.00", available: true },
+    "variants.0.kitchenName",
+  ],
+  [{ name: "Small", image: 42, unitPrice: "2.00", available: true }, "variants.0.image"],
+  [{ name: "Small", unitPrice: "2.001", available: true }, "variants.0.unitPrice"],
+  [{ name: "Small", unitPrice: "2.00", available: "yes" }, "variants.0.available"],
 ] as const)("rejects a malformed variant %j", (variant, field) => {
+  // A malformed variant is rejected while parsing that variant, before the min-two count check.
   expect(() => parseProductEditorInput({ ...input, variants: [variant] })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
+it("refuses exactly one variant but accepts none or two, and parses each variant's own names", () => {
+  const one = {
+    name: "Small",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: "2.00",
+    available: true,
+  };
+  expect(() => parseProductEditorInput({ ...input, variants: [one] })).toThrow(
+    expect.objectContaining({ code: "product.variant_count_invalid", params: { minimum: 2 } }),
+  );
+  expect(parseProductEditorInput({ ...input, variants: [] }).variants).toEqual([]);
+  const parsed = parseProductEditorInput({
+    ...input,
+    variants: [
+      {
+        name: " Small ",
+        customerName: { en: "Small cup" },
+        kitchenName: " SM ",
+        image: "s.png",
+        unitPrice: "2",
+        available: true,
+      },
+      {
+        name: "Large",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.00",
+        available: false,
+      },
+    ],
+  });
+  expect(parsed.variants).toEqual([
+    {
+      name: "Small",
+      customerName: { en: "Small cup" },
+      kitchenName: "SM",
+      image: "s.png",
+      unitPrice: "2.00",
+      available: true,
+    },
+    {
+      name: "Large",
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: "3.00",
+      available: false,
+    },
+  ]);
+});
+it("treats a blank customer name as absent on the product and its variants", () => {
+  const parsed = parseProductEditorInput({ ...input, customerName: { en: "  " } });
+  expect(parsed.customerName).toBeNull();
+});
 it("rejects a repeated variant ID even with a different case", () => {
-  const variant = { id: unitId, name: { en: "Small" }, unitPrice: "2.00", available: true };
+  const variant = { id: unitId, name: "Small", unitPrice: "2.00", available: true };
   expect(() =>
     parseProductEditorInput({
       ...input,

@@ -119,6 +119,7 @@ async function recordCompleteSale(
       tenantId: (overrides.tenantId as string) ?? TENANT_A,
       saleId: sale.id,
       lineNo: 1,
+      name: "Café solo",
       descriptions: { es: "Café solo", ca: "Cafè sol" },
       quantity: "1.000",
       unitPrice: "1.00",
@@ -253,6 +254,7 @@ describeEachTarget("sales — the commercial record", (target) => {
           tenantId: TENANT_A,
           saleId: sale.id,
           lineNo: i + 1,
+          name: "Café solo",
           // Not `Línea`/`Línia`: `linea` is on english-only.ts's guarded
           // Spanish wordlist (SPANISH_WORDS), so that literal fails this
           // package's own English-only build. "Café solo"/"Cafè sol" is the
@@ -871,10 +873,10 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
     return rows<{ id: string }>(
       db,
       sql`insert into sale_lines (
-             tenant_id, sale_id, line_no, descriptions, quantity, unit_price, vat_rate, line_total,
-             parent_line_id
+             tenant_id, sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate,
+             line_total, parent_line_id
            ) values (
-             ${tenantId}, ${opts.saleId}, ${opts.lineNo}, ${descriptions}::jsonb, '1.000', '1.00',
+             ${tenantId}, ${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', '1.00',
              '10.00', '1.00', ${opts.parentLineId}
            ) returning id`,
     );

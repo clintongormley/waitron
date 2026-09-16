@@ -107,7 +107,7 @@ async function setupVenue(): Promise<Venue> {
       const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: null,
-        descriptions: { es: "Tostada" },
+        name: "Tostada",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",

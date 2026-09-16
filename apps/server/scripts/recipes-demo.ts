@@ -52,8 +52,6 @@ import { createIngredient, setProductRecipe, updateIngredient } from "@waitron/r
 import { tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 
-const LOCALE = "es-ES";
-
 interface Venue {
   tenantId: TenantId;
   locationId: string;
@@ -154,7 +152,7 @@ async function main(): Promise<void> {
       const bocadillo = await createProduct(tx, venue.tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { [LOCALE]: "bocadillo" },
+        name: "bocadillo",
         pricingUnit: "each",
         unitPrice: "5.50",
         vatClass: "reduced",

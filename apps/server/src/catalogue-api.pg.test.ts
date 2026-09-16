@@ -167,7 +167,7 @@ async function createProduct(
   const res = await send(app, "POST", "/management-api/products", cookie, {
     catalogueId,
     categoryId: null,
-    descriptions: { [LOCALE]: name },
+    name,
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",
@@ -291,7 +291,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
       await send(app, "POST", "/management-api/products", staffCookie, {
         catalogueId: "00000000-0000-0000-0000-000000000000",
         categoryId: null,
-        descriptions: { [LOCALE]: "Refused" },
+        name: "Refused",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -370,7 +370,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     const prodRes = await send(app, "POST", "/management-api/products", v.managerCookie, {
       catalogueId: catId,
       categoryId: null,
-      descriptions: { [LOCALE]: "Entrecot" },
+      name: "Entrecot",
       pricingUnit: "each",
       unitPrice: "18.00",
       vatClass: "general",
@@ -431,7 +431,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     const prodRes = await send(appA, "POST", "/management-api/products", a.managerCookie, {
       catalogueId: catA,
       categoryId: null,
-      descriptions: { [LOCALE]: "Producto A" },
+      name: "Producto A",
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",
@@ -593,7 +593,7 @@ it("accepts ordered modifierIds in the product contract and reads them back", as
   const create = await send(app, "POST", "/management-api/products", cookie, {
     catalogueId: menu.id,
     categoryId: null,
-    descriptions: { es: "Dish" },
+    name: "Dish",
     pricingUnit: "each",
     unitPrice: "5.00",
     vatClass: "reduced",

@@ -6,7 +6,8 @@ import type { DietProfile, TillProduct } from "./api/client.js";
 function product(id: string, catalogueId?: string): TillProduct {
   return {
     id,
-    descriptions: { en: id },
+    name: id,
+    customerName: { en: `${id} for the customer` },
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",

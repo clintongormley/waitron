@@ -69,13 +69,14 @@ export async function seedDemoRestaurant(
   });
 
   // AFTER the tx commits: seedSales opens its own per-sale `withTenant`, so it must see the committed
-  // catalogue. It maps the available products onto the fields the generator needs (id/descriptions/
+  // catalogue. It maps the available products onto the fields the generator needs (id/name/customerName/
   // gross unitPrice/vatClass/optionGroups); the rest of `AvailableProduct` is unused here.
   // `optionGroups` carries straight through — `listAvailableProducts` already resolved it from the
   // rows `seedOptions` just wrote, so a product with none reads back `[]` and the generator skips it.
   const salesProducts: SeedSalesProduct[] = products.map((p) => ({
     id: p.id,
-    descriptions: p.descriptions,
+    name: p.name,
+    customerName: p.customerName,
     unitPrice: p.unitPrice,
     vatClass: p.vatClass,
     optionGroups: p.optionGroups,

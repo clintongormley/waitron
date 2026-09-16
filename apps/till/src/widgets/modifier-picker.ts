@@ -8,7 +8,6 @@ import { selectStyles } from "../select-styles.js";
 import { lineGross } from "../state/order-line.js";
 import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
-import { resolveSnapshotText } from "@waitron/shared";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { OrderLine, SelectedLineOption } from "../state/working-order.js";
 import type {
@@ -183,25 +182,22 @@ export class TillModifierPicker extends LitElement {
     return (this.product.variants ?? []).filter((variant) => variant.available);
   }
 
+  /**
+   * The product as chosen: the variant's price and its three names carried ALONGSIDE the product's,
+   * never folded into them. Each name falls back and joins independently for the surface that shows
+   * it (`product-presentation.ts`), so the basket can render the staff join while a receipt renders
+   * the customer one — a single pre-joined string here would deny both.
+   */
   get #selectedProduct(): TillProduct {
     const variant = this.#variants.find((candidate) => candidate.id === this.variantId);
     if (variant === undefined) return this.product;
-    const productFallback = Object.keys(this.product.descriptions)[0] ?? "en";
-    const variantFallback = Object.keys(variant.name)[0] ?? productFallback;
-    const descriptions = Object.fromEntries(
-      [...new Set([...Object.keys(this.product.descriptions), ...Object.keys(variant.name)])].map(
-        (locale) => [
-          locale,
-          `${resolveSnapshotText(this.product.descriptions, locale, productFallback)} · ${resolveSnapshotText(variant.name, locale, variantFallback)}`,
-        ],
-      ),
-    );
     return {
       ...this.product,
-      descriptions,
       unitPrice: variant.unitPrice,
       variantId: variant.id,
       variantName: variant.name,
+      variantCustomerName: variant.customerName ?? null,
+      variantKitchenName: variant.kitchenName ?? null,
     };
   }
 
@@ -393,7 +389,7 @@ export class TillModifierPicker extends LitElement {
                         this.variantId = variant.id;
                       }}
                     />
-                    <span class="option-name">${descriptionFor(variant.name, variant.id)}</span>
+                    <span class="option-name">${variant.name}</span>
                     <span class="option-delta">${formatMoney(variant.unitPrice)}</span>
                   </label>`,
               )}

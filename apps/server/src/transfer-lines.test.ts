@@ -91,7 +91,7 @@ async function setupVenue(): Promise<Seeded> {
     const cafe = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Café" },
+      name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -99,7 +99,7 @@ async function setupVenue(): Promise<Seeded> {
     const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua" },
+      name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
@@ -107,7 +107,7 @@ async function setupVenue(): Promise<Seeded> {
     const jamon = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Jamón" },
+      name: "Jamón",
       pricingUnit: "weight",
       unitPrice: "24.90",
       vatClass: "reduced",

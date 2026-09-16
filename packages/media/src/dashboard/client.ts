@@ -14,11 +14,13 @@ export interface LibraryImage extends ImageMetadata {
 }
 export type ImageUsage =
   | { kind: "category"; id: string; names: Record<string, string> }
+  | { kind: "product"; id: string; catalogueId: string; name: string; active: boolean }
   | {
-      kind: "product";
+      kind: "variant";
       id: string;
+      productId: string;
       catalogueId: string;
-      names: Record<string, string>;
+      name: string;
       active: boolean;
     };
 export interface ImageQuery {

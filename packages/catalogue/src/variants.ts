@@ -4,11 +4,18 @@ import { AppError, decimal, toScale, type TenantId } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
 import { menuItems, menuSections } from "./schema/menu.js";
 import { menuItemVariants, productVariants } from "./schema/variants.js";
+import { isProductPrice } from "./modifier-limits.js";
+import type { ProductPresentation } from "./product-presentation.js";
 import "./errors.js";
 
 export interface ProductVariant {
   id: string;
-  name: Record<string, string>;
+  /** Staff-facing variant name — plain text, appended to the product's with " · " for display. */
+  name: string;
+  /** Customer-facing translated name; null or a blank entry falls back to `name`. */
+  customerName: Record<string, string> | null;
+  kitchenName: string | null;
+  image: string | null;
   unitPrice: string;
   available: boolean;
 }
@@ -21,6 +28,9 @@ export interface MenuVariant {
 const variantColumns = {
   id: productVariants.id,
   name: productVariants.name,
+  customerName: productVariants.customerName,
+  kitchenName: productVariants.kitchenName,
+  image: productVariants.image,
   unitPrice: productVariants.unitPrice,
   available: productVariants.available,
 };
@@ -31,7 +41,7 @@ const publicationColumns = {
 };
 
 function validatePrice(price: string): string {
-  if (typeof price !== "string" || !/^(0|[1-9]\d{0,9})(\.\d{1,2})?$/.test(price)) {
+  if (typeof price !== "string" || !isProductPrice(price)) {
     throw new AppError("product.variant_invalid", { field: "unitPrice" });
   }
   return toScale(decimal(price), 2);
@@ -107,7 +117,10 @@ export async function setProductVariants(
     }
     validateAvailability(input.available);
     const unitPrice = validatePrice(input.unitPrice);
-    await validateContentTranslations(tx, tenantId, input.name, fallbackLanguage);
+    // The staff `name` is plain text and needs no translation check; the customer-facing map is what
+    // must satisfy the enabled languages. A null customer name is legal — it falls back to `name`.
+    if (input.customerName != null)
+      await validateContentTranslations(tx, tenantId, input.customerName, fallbackLanguage);
     normalized.push({ ...input, unitPrice });
   }
   await lockProduct(tx, tenantId, productId);
@@ -144,6 +157,9 @@ export async function setProductVariants(
   for (const [displayOrder, input] of normalized.entries()) {
     const values = {
       name: input.name,
+      customerName: input.customerName,
+      kitchenName: input.kitchenName,
+      image: input.image,
       unitPrice: input.unitPrice,
       available: input.available,
       displayOrder,
@@ -262,18 +278,19 @@ export async function setMenuVariants(
   return listMenuVariants(tx, tenantId, menuItemId);
 }
 
-export interface SelectedVariant {
+// Extends ProductPresentation so the compiler keeps the six name pieces in step: a resolved
+// selection goes straight to that module's staff/customer/kitchen resolvers, and the " · " join and
+// the customerName-to-name fallback stay in ONE place.
+export interface SelectedVariant extends ProductPresentation {
   variantId: string | null;
-  productName: Record<string, string>;
-  variantName: Record<string, string> | null;
-  kitchenName: string | null;
   unitPrice: string;
 }
 
 export function selectMenuVariant(
   offer: {
     productId: string;
-    descriptions: Record<string, string>;
+    name: string;
+    customerName: Record<string, string> | null;
     kitchenName: string | null;
     grossPrice: string;
     variants: readonly ProductVariant[];
@@ -287,9 +304,12 @@ export function selectMenuVariant(
   if (variantId === null) {
     return {
       variantId: null,
-      productName: offer.descriptions,
-      variantName: null,
+      name: offer.name,
+      customerName: offer.customerName,
       kitchenName: offer.kitchenName,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
       unitPrice: offer.grossPrice,
     };
   }
@@ -300,9 +320,12 @@ export function selectMenuVariant(
   }
   return {
     variantId,
-    productName: offer.descriptions,
-    variantName: variant.name,
+    name: offer.name,
+    customerName: offer.customerName,
     kitchenName: offer.kitchenName,
+    variantName: variant.name,
+    variantCustomerName: variant.customerName,
+    variantKitchenName: variant.kitchenName,
     unitPrice: published.unitPrice,
   };
 }
@@ -316,7 +339,8 @@ export async function resolveMenuVariant(
   const [offer] = await tx
     .select({
       productId: products.id,
-      productName: products.descriptions,
+      name: products.name,
+      customerName: products.customerName,
       kitchenName: products.kitchenName,
       available: products.active,
       offerAvailable: menuItems.active,
@@ -353,9 +377,12 @@ export async function resolveMenuVariant(
   if (variantId === null)
     return {
       variantId: null,
-      productName: offer.productName,
-      variantName: null,
+      name: offer.name,
+      customerName: offer.customerName,
       kitchenName: offer.kitchenName,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
       unitPrice: offer.unitPrice,
     };
   const variant = variants.find((v) => v.id === variantId);
@@ -366,9 +393,12 @@ export async function resolveMenuVariant(
     throw new AppError("product.variant_unavailable", { variantId });
   return {
     variantId,
-    productName: offer.productName,
-    variantName: variant.name,
+    name: offer.name,
+    customerName: offer.customerName,
     kitchenName: offer.kitchenName,
+    variantName: variant.name,
+    variantCustomerName: variant.customerName,
+    variantKitchenName: variant.kitchenName,
     unitPrice: published.unitPrice,
   };
 }

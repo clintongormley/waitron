@@ -246,15 +246,15 @@ export async function deleteModifier(
 }
 
 export interface ModifierDependants {
-  products: { id: string; name: Record<string, string> }[];
-  menus: { id: string; name: Record<string, string> }[];
+  products: { id: string; name: string }[];
+  menus: { id: string; name: string }[];
   orders: number;
 }
 
 /** What deleting this modifier would touch — the preview the dashboard's delete confirmation reads.
  * Products and menus are detached (cascaded) by the delete; an open order refuses it, so `orders`
  * gates the confirm. A menu publication has no name of its own here, so it is identified by the
- * product the menu item is (its descriptions). */
+ * product the menu item is (its staff name). */
 export async function modifierDependants(
   tx: Transaction,
   tenantId: string,
@@ -262,7 +262,7 @@ export async function modifierDependants(
 ): Promise<ModifierDependants> {
   await getModifier(tx, tenantId, modifierId); // 404s a foreign/absent id, tenant-scoped
   const productRows = await tx
-    .select({ id: products.id, name: products.descriptions })
+    .select({ id: products.id, name: products.name })
     .from(products)
     .innerJoin(
       productOptionGroups,
@@ -275,7 +275,7 @@ export async function modifierDependants(
     .where(eq(products.tenantId, tenantId))
     .orderBy(products.id);
   const menuRows = await tx
-    .select({ id: menuItems.id, name: products.descriptions })
+    .select({ id: menuItems.id, name: products.name })
     .from(menuItemOptionGroups)
     .innerJoin(
       menuItems,

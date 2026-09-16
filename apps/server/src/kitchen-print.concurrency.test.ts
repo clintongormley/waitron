@@ -122,7 +122,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
         const { id: product } = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
-          descriptions: { [LOCALE]: "Chuleton" },
+          name: "Chuleton",
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",

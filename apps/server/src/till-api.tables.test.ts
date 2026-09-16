@@ -85,7 +85,7 @@ const suite = usePgliteDb({
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { es: "Agua mineral" },
+        name: "Agua mineral",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",

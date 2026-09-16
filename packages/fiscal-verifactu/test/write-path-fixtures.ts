@@ -80,6 +80,7 @@ export function saleInput(
     lines: [
       {
         lineNo: 1,
+        name: "Café solo",
         descriptions: { "es-ES": "Café solo" },
         quantity: "2",
         unitPrice: "5.00",
@@ -88,6 +89,7 @@ export function saleInput(
       },
       {
         lineNo: 2,
+        name: "Agua",
         descriptions: { "es-ES": "Agua" },
         quantity: "1",
         unitPrice: "2.10",

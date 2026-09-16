@@ -12,6 +12,25 @@ import type { Transaction } from "@waitron/db";
 import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct, PricingUnit } from "./pricing.js";
+import { customerPresentationText } from "./product-presentation.js";
+
+// The till resolves an AvailableProduct's customer-facing text (customerName, falling back to the
+// staff name) before pricing — the three-name model's seam between a catalogue read and a sale
+// line, owned by product-presentation.ts rather than re-implemented here.
+const toPriceable = (p: AvailableProduct): PriceableProduct => ({
+  ...p,
+  descriptions: customerPresentationText(
+    {
+      name: p.name,
+      customerName: p.customerName,
+      kitchenName: null,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
+    "en",
+  ).product,
+});
 import {
   addCatalogueToLocation,
   applyDietDerivation,
@@ -64,7 +83,8 @@ describe("catalogue operations", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: null,
-        descriptions: { en: "Coffee", es: "Café" },
+        name: "Coffee",
+        customerName: { en: "Coffee", es: "Café" },
         description: { en: "Freshly roasted beans", es: "Granos recién tostados" },
         kitchenName: "BAR COFFEE",
         pricingUnit: "each",
@@ -72,14 +92,16 @@ describe("catalogue operations", () => {
         vatClass: "reduced",
       });
       expect(product).toMatchObject({
-        descriptions: { en: "Coffee", es: "Café" },
+        name: "Coffee",
+        customerName: { en: "Coffee", es: "Café" },
         description: { en: "Freshly roasted beans", es: "Granos recién tostados" },
         kitchenName: "BAR COFFEE",
       });
       expect((await listProducts(tx, tenantId, menu.id))[0]).toEqual(product);
       await updateProduct(tx, tenantId, product.id, { description: null, kitchenName: null });
       expect((await listProducts(tx, tenantId, menu.id))[0]).toMatchObject({
-        descriptions: { en: "Coffee", es: "Café" },
+        name: "Coffee",
+        customerName: { en: "Coffee", es: "Café" },
         description: null,
         kitchenName: null,
       });
@@ -93,7 +115,7 @@ describe("catalogue operations", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: upstairs.id,
         categoryId: category.id,
-        descriptions: { en: "Negroni" },
+        name: "Negroni",
         unitId: eachUnitId,
         unitPrice: "0.00",
         vatClass: "general",
@@ -236,7 +258,7 @@ describe("catalogue operations", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: null,
-        descriptions: { en: "Water" },
+        name: "Water",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -264,7 +286,7 @@ describe("catalogue operations", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: null,
-        descriptions: { en: "Burger" },
+        name: "Burger",
         unitId: eachUnitId,
         unitPrice: "10.00",
         vatClass: "general",
@@ -395,7 +417,7 @@ describe("catalogue operations", () => {
       const ham = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "sliced ham" },
+        name: "sliced ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -403,7 +425,7 @@ describe("catalogue operations", () => {
       const water = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -412,7 +434,7 @@ describe("catalogue operations", () => {
       await createProduct(tx, tenantId, {
         catalogueId: other.id,
         categoryId: null,
-        descriptions: { en: "olives" },
+        name: "olives",
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
@@ -429,7 +451,7 @@ describe("catalogue operations", () => {
       });
       expect(seenHam.unitPrice).toBe("24.90");
       expect(seenHam.vatClass).toBe("reduced");
-      expect(seenHam.descriptions).toEqual({ en: "sliced ham" });
+      expect(seenHam.name).toBe("sliced ham");
       expect(seenHam.active).toBe(true);
     });
   });
@@ -442,7 +464,7 @@ describe("catalogue operations", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "loose sweets" },
+        name: "loose sweets",
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
@@ -465,7 +487,7 @@ describe("catalogue operations", () => {
       const created = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "loose sweets" },
+        name: "loose sweets",
         unitId: null,
         unitPrice: "0.00",
         vatClass: "general",
@@ -482,7 +504,7 @@ describe("catalogue operations", () => {
       const created = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "ham" },
+        name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -503,7 +525,7 @@ describe("catalogue operations", () => {
       const created = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "ham" },
+        name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -519,7 +541,7 @@ describe("catalogue operations", () => {
       const created = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "loose sweets" },
+        name: "loose sweets",
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
@@ -536,7 +558,7 @@ describe("catalogue operations", () => {
         createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
-          descriptions: { en: "mystery" },
+          name: "mystery",
           unitPrice: "0.00",
           vatClass: "general",
         }),
@@ -551,7 +573,7 @@ describe("catalogue operations", () => {
         createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
-          descriptions: { en: "mystery" },
+          name: "mystery",
           // A stray legacy value must be rejected at the boundary, not treated as weight.
           pricingUnit: "portion" as PricingUnit,
           unitPrice: "0.00",
@@ -570,7 +592,7 @@ describe("catalogue operations", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "ham" },
+        name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -590,7 +612,7 @@ describe("catalogue operations", () => {
       const ham = await createProduct(tx, tenantId, {
         catalogueId: catalogue.id,
         categoryId: null,
-        descriptions: { en: "ham" },
+        name: "ham",
         pricingUnit: "weight",
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -615,7 +637,7 @@ describe("catalogue operations", () => {
       const ham = await createProduct(tx, tenantId, {
         catalogueId: catalogue.id,
         categoryId: null,
-        descriptions: { en: "ham" },
+        name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -640,7 +662,7 @@ describe("catalogue operations", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: catalogue.id,
         categoryId: null,
-        descriptions: { en: "ham" },
+        name: "ham",
         pricingUnit: "each",
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -665,18 +687,18 @@ describe("catalogue operations", () => {
       const water = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
       });
       await updateProduct(tx, tenantId, water.id, {
         unitPrice: "1.80",
-        descriptions: { en: "sparkling water" },
+        name: "sparkling water",
       });
       const [seen] = await listProducts(tx, tenantId, cat.id);
       expect(seen!.unitPrice).toBe("1.80");
-      expect(seen!.descriptions).toEqual({ en: "sparkling water" });
+      expect(seen!.name).toBe("sparkling water");
     });
   });
 
@@ -687,7 +709,7 @@ describe("catalogue operations", () => {
       const withImage = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "ham" },
+        name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -698,7 +720,7 @@ describe("catalogue operations", () => {
       const noImage = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -726,7 +748,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -751,7 +773,7 @@ describe("catalogue operations", () => {
       const hidden = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "seasonal" },
+        name: "seasonal",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -762,7 +784,7 @@ describe("catalogue operations", () => {
       const shown = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -781,7 +803,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "bread" },
+        name: "bread",
         unitId: eachUnitId,
         unitPrice: "1.20",
         vatClass: "general",
@@ -799,7 +821,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -815,7 +837,7 @@ describe("catalogue operations", () => {
         createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
-          descriptions: { en: "mystery" },
+          name: "mystery",
           unitId: eachUnitId,
           unitPrice: "1.00",
           vatClass: "general",
@@ -831,7 +853,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "cake" },
+        name: "cake",
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
@@ -860,7 +882,7 @@ describe("catalogue operations", () => {
       await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "milk" },
+        name: "milk",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -878,7 +900,7 @@ describe("catalogue operations", () => {
       const burger = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "burger" },
+        name: "burger",
         unitId: eachUnitId,
         unitPrice: "9.00",
         vatClass: "general",
@@ -887,7 +909,7 @@ describe("catalogue operations", () => {
       const water = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -1045,7 +1067,7 @@ describe("catalogue operations", () => {
       await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "falafel wrap" },
+        name: "falafel wrap",
         unitId: eachUnitId,
         unitPrice: "6.00",
         vatClass: "general",
@@ -1069,7 +1091,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "sandwich" },
+        name: "sandwich",
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
@@ -1088,7 +1110,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "sandwich" },
+        name: "sandwich",
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
@@ -1113,7 +1135,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "sandwich" },
+        name: "sandwich",
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
@@ -1144,7 +1166,7 @@ describe("catalogue operations", () => {
       const forced = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "falafel" },
+        name: "falafel",
         unitId: eachUnitId,
         unitPrice: "4.00",
         vatClass: "general",
@@ -1153,7 +1175,7 @@ describe("catalogue operations", () => {
       const plain = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "plain" },
+        name: "plain",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -1173,7 +1195,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "x" },
+        name: "x",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -1231,7 +1253,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "plain" },
+        name: "plain",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -1250,7 +1272,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "falafel" },
+        name: "falafel",
         unitId: eachUnitId,
         unitPrice: "4.00",
         vatClass: "general",
@@ -1269,7 +1291,7 @@ describe("catalogue operations", () => {
         createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
-          descriptions: { en: "x" },
+          name: "x",
           unitId: eachUnitId,
           unitPrice: "1.00",
           vatClass: "general",
@@ -1287,7 +1309,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "mystery bowl" },
+        name: "mystery bowl",
         unitId: eachUnitId,
         unitPrice: "5.00",
         vatClass: "general",
@@ -1310,7 +1332,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "salad" },
+        name: "salad",
         unitId: eachUnitId,
         unitPrice: "6.00",
         vatClass: "general",
@@ -1334,7 +1356,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "salad" },
+        name: "salad",
         unitId: eachUnitId,
         unitPrice: "6.00",
         vatClass: "general",
@@ -1361,7 +1383,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "x" },
+        name: "x",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -1381,7 +1403,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "x" },
+        name: "x",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -1400,7 +1422,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "veg" },
+        name: "veg",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -1420,7 +1442,7 @@ describe("catalogue operations", () => {
       const p = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "veg" },
+        name: "veg",
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
@@ -1473,7 +1495,7 @@ describe("catalogue operations", () => {
       const p1 = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,
-        descriptions: { en: "sliced ham" },
+        name: "sliced ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -1481,7 +1503,7 @@ describe("catalogue operations", () => {
       const p2 = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -1505,7 +1527,7 @@ describe("catalogue operations", () => {
       const pMain = await createProduct(tx, tenantId, {
         catalogueId: main.id,
         categoryId: null,
-        descriptions: { en: "Steak" },
+        name: "Steak",
         unitId: eachUnitId,
         unitPrice: "20.00",
         vatClass: "general",
@@ -1513,7 +1535,7 @@ describe("catalogue operations", () => {
       const pLunch = await createProduct(tx, tenantId, {
         catalogueId: lunch.id,
         categoryId: null,
-        descriptions: { en: "Set menu" },
+        name: "Set menu",
         unitId: eachUnitId,
         unitPrice: "12.00",
         vatClass: "general",
@@ -1521,7 +1543,7 @@ describe("catalogue operations", () => {
       await createProduct(tx, tenantId, {
         catalogueId: other.id,
         categoryId: null,
-        descriptions: { en: "Hidden" },
+        name: "Hidden",
         unitId: eachUnitId,
         unitPrice: "9.00",
         vatClass: "general",
@@ -1717,7 +1739,7 @@ describe("catalogue operations", () => {
       await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
-        descriptions: { en: "water" },
+        name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
         vatClass: "general",
@@ -1752,19 +1774,20 @@ describe("catalogue operations", () => {
       await seedCatalogueFixture(tx, { tenantId, locationId });
       const { products: available } = await listAvailableProducts(tx, locationId);
       expect(available.map((p) => p.category).sort()).toEqual(["Drinks", "Food"]);
-      // Compile-time proof that AvailableProduct is structurally assignable to PriceableProduct:
-      // this only typechecks if every field priceBasket reads is present and correctly typed. Task 6
-      // relies on exactly this — feeding listAvailableProducts rows straight into priceBasket.
-      const priced = priceBasket(available.map((product) => ({ product, quantity: "1" })));
+      // The till prices catalogue rows by first resolving each one's customer-facing text; the
+      // resolved rows feed straight into priceBasket.
+      const priced = priceBasket(
+        available.map((product) => ({ product: toPriceable(product), quantity: "1" })),
+      );
       expect(priced.lines.length).toBe(2);
     });
   });
 
-  it("keeps AvailableProduct assignable to PriceableProduct", () => {
-    const widen = (p: AvailableProduct): PriceableProduct => p;
+  it("prices an AvailableProduct once its customer-facing text is resolved", () => {
     const sample: AvailableProduct = {
       id: "00000000-0000-0000-0000-000000000000",
-      descriptions: { en: "water" },
+      name: "water",
+      customerName: null,
       unit: {
         id: eachUnitId,
         name: { en: "each" },
@@ -1787,7 +1810,10 @@ describe("catalogue operations", () => {
       optionGroups: [],
       modifiers: [],
     };
-    expect(widen(sample).unitPrice).toBe("1.50");
+    const priceable = toPriceable(sample);
+    // A blank customer name falls back to the staff name for the snapshotted line text.
+    expect(priceable.descriptions).toEqual({ en: "water" });
+    expect(priceable.unitPrice).toBe("1.50");
   });
 
   // ── Option group + item authoring (Task 11) ────────────────────────────────────────────────────
@@ -2068,7 +2094,7 @@ describe("catalogue operations", () => {
         const burger = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
-          descriptions: { en: "burger" },
+          name: "burger",
           unitId: eachUnitId,
           unitPrice: "9.00",
           vatClass: "general",
@@ -2102,7 +2128,7 @@ describe("catalogue operations", () => {
         const product = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: null,
-          descriptions: { en: "steak" },
+          name: "steak",
           unitId: eachUnitId,
           unitPrice: "18.00",
           vatClass: "general",

@@ -47,8 +47,8 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
     const pricingError = await captureError(() =>
       db.execute(sql`insert into products
-        (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenant.id}, ${catalogue.id}, '{}', 'bogus', '1.00', 'general')`),
+        (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${tenant.id}, ${catalogue.id}, 'Fixture', 'bogus', '1.00', 'general')`),
     );
     expect(pgErrorCode(pricingError)).toBe("23514");
     expect(pgErrorMessage(pricingError)).toMatch(/products_pricing_unit_ck/);
@@ -56,8 +56,8 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     // Bad vat_class, VALID pricing_unit → only products_vat_class_ck can fire.
     const vatError = await captureError(() =>
       db.execute(sql`insert into products
-        (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenant.id}, ${catalogue.id}, '{}', 'each', '1.00', 'bogus')`),
+        (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${tenant.id}, ${catalogue.id}, 'Fixture', 'each', '1.00', 'bogus')`),
     );
     expect(pgErrorCode(vatError)).toBe("23514");
     expect(pgErrorMessage(vatError)).toMatch(/products_vat_class_ck/);
@@ -71,6 +71,20 @@ describe("catalogue — menu, taxonomy and priced items", () => {
              or (table_name = 'locations' and column_name = 'catalogue_id')`,
     );
     expect(cols).toHaveLength(3);
+  });
+
+  it("products carries a plain-text name and a nullable customer_name jsonb, and no descriptions", async () => {
+    const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
+      db,
+      sql`select column_name, data_type, is_nullable from information_schema.columns
+          where table_name = 'products'
+            and column_name in ('name','customer_name','descriptions')
+          order by column_name`,
+    );
+    expect(cols).toEqual([
+      { column_name: "customer_name", data_type: "jsonb", is_nullable: "YES" },
+      { column_name: "name", data_type: "text", is_nullable: "NO" },
+    ]);
   });
 
   it("products carries a nullable allergens jsonb column", async () => {

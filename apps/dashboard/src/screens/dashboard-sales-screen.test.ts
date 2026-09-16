@@ -34,10 +34,7 @@ const close: DailyCloseDto = {
     tipTotal: "8.00",
   },
   counts: { sales: 10, corrections: 1, voids: 2 },
-  // Short language-subtag keys — the catalogue/product `descriptions` shape (`invoiceLocales:
-  // ["es","ca"]`); localizedSnapshotName resolves it via the short-subtag arm (the overview-screen test
-  // covers the full-tag arm). Both keyings are live in the tree.
-  topSellers: [{ descriptions: { es: "Café", en: "Coffee" }, quantity: "5", total: "10.00" }],
+  topSellers: [{ name: "Café", quantity: "5", total: "10.00" }],
 };
 
 const period: SalesPeriodDto = {
@@ -49,10 +46,9 @@ const period: SalesPeriodDto = {
     taxTotal: "210.00",
     grossTotal: "1210.00",
   },
-  // Second row has no "es" key: exercises localizedSnapshotName's stored-language fallback.
   topSellers: [
-    { descriptions: { es: "Croqueta", en: "Croquette" }, quantity: "40", total: "80.00" },
-    { descriptions: { en: "Tortilla" }, quantity: "12", total: "36.00" },
+    { name: "Croqueta", quantity: "40", total: "80.00" },
+    { name: "Tortilla", quantity: "12", total: "36.00" },
   ],
 };
 
@@ -113,8 +109,8 @@ describe("dashboard-sales-screen", () => {
     expect(root.querySelector("[data-test=count-corrections]")!.textContent).toContain("1");
     expect(root.querySelector("[data-test=count-voids]")!.textContent).toContain("2");
 
-    // Top sellers, rendered through the shared table widget (stable `top-sellers-table` hook), name
-    // via the active locale (es).
+    // Top sellers, rendered through the shared table widget (stable `top-sellers-table` hook), with
+    // the row's plain staff name — no locale lookup.
     expect(root.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
     expect(root.querySelector("[data-test=seller-name]")!.textContent).toContain("Café");
 
@@ -143,7 +139,7 @@ describe("dashboard-sales-screen", () => {
     const names = [...root.querySelectorAll("[data-test=seller-name]")].map((n) =>
       n.textContent?.trim(),
     );
-    expect(names).toEqual(["Croqueta", "Tortilla"]); // es hit, then first-value fallback
+    expect(names).toEqual(["Croqueta", "Tortilla"]); // each row's plain staff name, in server order
   });
 
   it("switches to a period roll-up when `from` is an earlier date", async () => {

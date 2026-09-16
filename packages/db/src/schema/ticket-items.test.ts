@@ -62,7 +62,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       .values({
         tenantId: TENANT_A,
         catalogueId: catA!.id,
-        descriptions: { es: "Café solo" },
+        name: "Café solo",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -95,9 +95,9 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const orderId = order.rows[0]!.id;
     const line = await suite.admin.execute<{ id: string }>(
       sql`insert into working_order_lines
-            (tenant_id, working_order_id, line_no, product_id, descriptions,
+            (tenant_id, working_order_id, line_no, product_id, name, descriptions,
              quantity, unit_price, unit_price_gross, vat_rate, line_total)
-          values (${tenant}, ${orderId}, 1, ${product}, ${DESCRIPTIONS_A}::jsonb,
+          values (${tenant}, ${orderId}, 1, ${product}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
              '1.000', '1.00', '1.10', '10.00', '1.10') returning id`,
     );
     return { orderId, lineId: line.rows[0]!.id };

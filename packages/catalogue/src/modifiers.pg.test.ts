@@ -146,7 +146,7 @@ it("blocks a type change for attached definitions, but permits other edits", asy
     const product = await createProduct(tx, brandTenantId(tenant), {
       catalogueId: catalogue.id,
       categoryId: null,
-      descriptions: { en: "Dish" },
+      name: "Dish",
       pricingUnit: "each",
       unitPrice: "5.00",
       vatClass: "reduced",
@@ -178,7 +178,7 @@ it("serializes deletion behind an attachment write, then cascades the committed 
     return createProduct(tx, brandTenantId(tenant), {
       catalogueId: catalogue.id,
       categoryId: null,
-      descriptions: { en: "Dish" },
+      name: "Dish",
       pricingUnit: "each",
       unitPrice: "5.00",
       vatClass: "reduced",
@@ -279,7 +279,7 @@ it("preserves inactive attachments when editing a product, but refuses a new att
         await createProduct(tx, brandTenantId(tenant), {
           catalogueId: catalogue.id,
           categoryId: null,
-          descriptions: { en: "Dish" },
+          name: "Dish",
           pricingUnit: "each",
           unitPrice: "5.00",
           vatClass: "reduced",
@@ -331,7 +331,7 @@ it("deletes a modifier attached to a product and published on a menu, cascading 
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",
@@ -391,7 +391,7 @@ it("refuses to delete a modifier an open working order uses", async () => {
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",
@@ -411,6 +411,7 @@ it("refuses to delete a modifier an open working order uses", async () => {
       workingOrderId: order!.id,
       productId: product.id,
       lineNo: 1,
+      name: "Coffee",
       descriptions: { "en-GB": "Coffee" },
       optionGroupItemId: choice.id,
       quantity: "1",

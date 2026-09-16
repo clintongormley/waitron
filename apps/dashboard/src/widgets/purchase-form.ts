@@ -69,11 +69,11 @@ function inRange(value: string, min: number, max: number): boolean {
  *
  * The purchases screen drives it by setting `.open` and (for an edit) `.invoice`, and hears one of two
  * events: `create-purchase` (a `PurchaseInvoiceInput`) or `update-purchase { id, patch }` (a full
- * header + full desglose replacement — the op's "lines present ⇒ full replace" contract). Like
- * `product-form`, the form does NOT call the API and does NOT close itself on confirm — the screen
- * closes it on a successful write, so a rejected write leaves the entered values in place.
+ * header + full desglose replacement — the op's "lines present ⇒ full replace" contract). The form does
+ * NOT call the API and does NOT close itself on confirm — the screen closes it on a successful write,
+ * so a rejected write leaves the entered values in place.
  *
- * SEEDING mirrors `product-form`: `willUpdate` reseeds every field from `invoice` whenever it changes
+ * SEEDING: `willUpdate` reseeds every field from `invoice` whenever it changes
  * or the dialog opens — a create (`invoice` null) starts blank with one empty line, an edit fills every
  * field and one row per stored VAT line.
  *
@@ -188,7 +188,7 @@ export class PurchaseForm extends LitElement {
   }
 
   // Native `change` is `composed: false`; `stopPropagation` is defensive consistency with the composed
-  // handlers (the person-form/product-form pattern).
+  // handlers (the person-form pattern).
   #onRegimeChange(event: Event): void {
     event.stopPropagation();
     this.regime = (event.target as HTMLSelectElement).value as PurchaseRegime;
@@ -295,7 +295,7 @@ export class PurchaseForm extends LitElement {
     );
   }
 
-  /** The dialog closed. Drop `open`; like `product-form`, do NOT `stopPropagation` — the composed
+  /** The dialog closed. Drop `open`, and deliberately do NOT `stopPropagation` — the composed
    * `wt-close` must bubble on to the screen (the owner of the open state). */
   #onClose(): void {
     this.open = false;

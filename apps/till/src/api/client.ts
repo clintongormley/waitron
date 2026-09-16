@@ -355,7 +355,13 @@ export type ModifierSnapshot = { modifierId: string; name: Record<string, string
   | { type: "options"; choiceId: string; choiceName: Record<string, string> }
 );
 
-/** One sellable product from `GET /api/products` (mirrors catalogue's `AvailableProduct`). */
+/**
+ * One sellable product as the till's widgets consume it. It is built from exactly two payloads:
+ * {@link menuOfferToTillProduct} adapts a zone offer (`GET /api/service-zones/:zoneId/offers`), and
+ * `getHeldOrder` synthesises one per line of a retrieved order. It is NOT the shape of
+ * `GET /api/products` — that route's `AvailableProduct` carries neither variants nor a kitchen name,
+ * and {@link TillApi.listProducts} has no caller in the app.
+ */
 export interface TillProduct {
   id: string;
   /** The shared product identity used by recipes, stock and preparation routing. */
@@ -363,15 +369,29 @@ export interface TillProduct {
   /** The selling identity whose menu, price and offered modifiers were selected. */
   menuItemId?: string;
   variantId?: string;
-  variantName?: Record<string, string>;
+  /** The selected variant's staff-facing name — plain text, joined onto {@link name} for display. */
+  variantName?: string;
+  /** The selected variant's customer-facing text, locale -> text; null when it has none. */
+  variantCustomerName?: Record<string, string> | null;
+  variantKitchenName?: string | null;
   kitchenName?: string | null;
   variants?: {
     id: string;
-    name: Record<string, string>;
+    name: string;
+    customerName?: Record<string, string> | null;
+    kitchenName?: string | null;
+    image?: string | null;
     unitPrice: string;
     available: boolean;
   }[];
-  descriptions: Record<string, string>;
+  /**
+   * The product's STAFF-facing name — plain text, not per-language. This is what the till's own
+   * buttons and basket render: an operator reads the name the venue uses internally, never a
+   * customer translation. A retrieved line carries the name frozen onto it at add time.
+   */
+  name: string;
+  /** The product's customer-facing text, locale -> text; null or blank falls back to {@link name}. */
+  customerName?: Record<string, string> | null;
   unit?: {
     id: string;
     name: Record<string, string>;
@@ -466,7 +486,10 @@ export interface TillMenuOffer {
   active: boolean;
   menuName: string;
   sectionName: Record<string, string>;
-  descriptions: Record<string, string>;
+  /** The product's staff-facing name (`products.name`) — plain text, not per-language. */
+  name: string;
+  /** The product's customer-facing text, locale -> text; null or blank falls back to `name`. */
+  customerName: Record<string, string> | null;
   kitchenName: string | null;
   unit?: TillProduct["unit"];
   pricingUnit?: "each" | "weight";
@@ -480,7 +503,10 @@ export interface TillMenuOffer {
   courseId: string | null;
   variants?: {
     id: string;
-    name: Record<string, string>;
+    name: string;
+    customerName?: Record<string, string> | null;
+    kitchenName?: string | null;
+    image?: string | null;
     unitPrice: string;
     available: boolean;
   }[];
@@ -530,7 +556,8 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     id: offer.productId,
     productId: offer.productId,
     menuItemId: offer.id,
-    descriptions: offer.descriptions,
+    name: offer.name,
+    customerName: offer.customerName,
     kitchenName: offer.kitchenName,
     unit: offer.unit,
     pricingUnit: offer.pricingUnit,
@@ -803,10 +830,9 @@ export interface Station {
 
 /**
  * One selected option (ordering modifier) on a queue item — mirrors the server's `QueueModifier`
- * (`apps/server/src/working-order.ts`): the child modifier line's SNAPSHOTTED `descriptions` map, so
- * the KDS display localises it client-side exactly as it does the dish name, never a pre-flattened
- * string (the never-store-formatted rule). A dish is never its own ticket item; it rides here as
- * sub-text beneath its parent.
+ * (`apps/server/src/working-order.ts`): the child modifier line's SNAPSHOTTED `descriptions` map,
+ * which the KDS display localises client-side, per the never-store-formatted rule. A modifier is
+ * never its own ticket item; it rides here as sub-text beneath its parent.
  */
 export interface QueueModifier {
   descriptions: Record<string, string>;
@@ -843,11 +869,11 @@ export interface StationQueueItem {
   workingOrderLineId: string;
   state: TicketState;
   /**
-   * The line's snapshotted dish description (locale → text), so the kitchen display renders the dish
-   * name ("2× Paella"), not a bare line number. Resolved for display in the operator's locale with a
-   * fallback among the stored receipt-language descriptions.
+   * The line's snapshotted KITCHEN name, resolved server-side — the kitchen name falling back to the
+   * staff name, joined to the variant's the same way, so the display reads the dish as "2× Paella"
+   * and reads it identically to the printed ticket.
    */
-  descriptions: Record<string, string>;
+  name: string;
   /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
   quantity: string;
   /** Unit values frozen with the line. Absent/null only on older payloads. */
@@ -1017,17 +1043,17 @@ export interface DevDeviceList {
 
 /**
  * One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item carrying the
- * display fields the pass renders: the line's snapshotted `name` map + `qty`, the RESOLVED station name
- * (the cross-station label {@link StationQueueItem} deliberately omits, so the expediter sees the grill
- * lagging the cold station), the kitchen `state`, and the `firedAt`/`awayAt` lifecycle stamps. A LOCAL
- * mirror of the server's `ExpoItem` (`apps/server/src/working-order.ts`), NOT imported — same
- * bundle-decoupling rationale as every other type in this file. `name` is the locale→description map
- * (localised client-side, per the never-store-formatted rule), like {@link StationQueueItem.descriptions}.
+ * display fields the pass renders: the line's frozen kitchen `name` and its snapshotted `qty`, the
+ * RESOLVED station name (the cross-station label {@link StationQueueItem} deliberately omits, so the
+ * expediter sees the grill lagging the cold station), the kitchen `state`, and the `firedAt`/`awayAt`
+ * lifecycle stamps. A LOCAL mirror of the server's `ExpoItem` (`apps/server/src/working-order.ts`), NOT
+ * imported — same bundle-decoupling rationale as every other type in this file. `name` is the
+ * server-resolved kitchen label, like {@link StationQueueItem.name}.
  */
 export interface ExpoItem {
   modifierSnapshots?: ModifierSnapshot[];
   id: string;
-  name: Record<string, string>;
+  name: string;
   qty: string;
   /** Unit values frozen with the line. Absent/null only on older payloads. */
   unitName?: Record<string, string> | null;
@@ -1324,15 +1350,23 @@ export interface TabResult {
  * One line of an open tab from `GET /api/working-orders/:id/lines` (FP-1, design §3b) — what the
  * table-order screen renders per line. A LOCAL mirror of the server's `TabLine`
  * (`apps/server/src/working-order.ts`), deliberately NOT imported — same bundle-decoupling rationale as
- * every other type in this file. DISTINCT from {@link HeldOrder}'s `lines` (`productId` + `quantity`
- * only, for a basket rebuild that RE-prices): a tab does NOT re-price, so `unitPriceGross` is the gross
- * unit price LOCKED at add-time, carried back verbatim — never a catalogue recompute. `servedAt` is the
- * pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). `productId` only —
- * the screen resolves names from its own catalogue prop, mirroring `HeldOrder`. `quantity`/
- * `unitPriceGross` are decimal strings as the server sends them.
+ * every other type in this file. DISTINCT from {@link HeldOrder}'s `lines`, which mirror `SaleLine` in
+ * full — not just `productId`/`quantity` — plus an optional `product`: the server's stored offer
+ * snapshot for a contextual line, which the basket rebuild reuses verbatim; only a legacy line with no
+ * snapshot falls back to a live catalogue match. A tab, by contrast, does NOT re-price at all:
+ * `unitPriceGross` is the gross unit price LOCKED at add-time, carried back verbatim — never a
+ * catalogue recompute. `servedAt` is the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a
+ * timestamp ⇒ "Servido"). The line's frozen
+ * staff `name` comes back with it, and the screen's `#nameForLine` renders that name — the catalogue
+ * prop is only the fallback for a payload that omits it. `quantity`/`unitPriceGross` are decimal
+ * strings as the server sends them.
  */
 export interface TabLine {
-  descriptions?: Record<string, string>;
+  /** The line's frozen STAFF label — the product's name joined to the variant's with " · ", resolved
+   * server-side. A tab's line list is what a waiter reads, so it carries the same name the product
+   * buttons and the basket carry, never the customer-facing text a receipt prints. Absent only on a
+   * fixture that omits it, which falls back to the live catalogue name. */
+  name?: string;
   modifierSnapshots?: ModifierSnapshot[];
   lineNo: number;
   /** The line's product, or `null` for a CHILD MODIFIER line (ordering modifiers, Task 2) — a child has
@@ -1933,8 +1967,8 @@ export class TillApi {
    * (FP-1, design §3b). Each line carries its `lineNo`, `productId`, `quantity`, the LOCKED gross unit
    * price (`unitPriceGross` — a tab does NOT re-price, so this is the add-time lock, never a recompute)
    * and its `servedAt` marker (null ⇒ still to serve). A non-open/absent tab rejects with
-   * `{ code: "tab.not_open" }`; the screen resolves product names from its own catalogue prop
-   * (`TabLine` carries `productId` only, mirroring {@link retrieveWorkingOrder}).
+   * `{ code: "tab.not_open" }`; each line also carries the server's frozen staff `name` ({@link TabLine}),
+   * and the screen's own catalogue prop is only the fallback for a payload that omits it.
    */
   getTabLines(orderId: string): Promise<TabLine[]> {
     return this.#request<TabLine[]>(`/api/working-orders/${orderId}/lines`, "GET");

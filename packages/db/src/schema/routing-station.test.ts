@@ -64,7 +64,7 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
       .values({
         tenantId: TENANT_A,
         catalogueId: cat!.id,
-        descriptions: { es: "Café solo" },
+        name: "Café solo",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",

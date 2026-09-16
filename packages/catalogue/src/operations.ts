@@ -95,7 +95,8 @@ export interface MenuItem {
 export interface MenuOffer extends MenuItem {
   menuName: string;
   sectionName: Record<string, string>;
-  descriptions: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   kitchenName: string | null;
   unit: SellableUnit;
   vatClass: VatClass;
@@ -137,7 +138,8 @@ export interface Product {
   categoryId: string | null;
   categoryIds: string[];
   primaryCategoryId: string | null;
-  descriptions: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   unitId: string;
   unit: Unit;
   description: Record<string, string> | null;
@@ -168,7 +170,9 @@ export interface Product {
 export interface CreateProductInput {
   catalogueId: string;
   categoryId: string | null;
-  descriptions: Record<string, string>;
+  name: string;
+  /** Customer-facing translated name; omitted or null falls back to `name`. */
+  customerName?: Record<string, string> | null;
   /** The product's sellable unit. `null` = Each (no `product_units` row stored); a real id assigns
    * that unit; omitted falls back to the legacy `pricingUnit` compat path. */
   unitId?: string | null;
@@ -194,7 +198,8 @@ export interface CreateProductInput {
 /** The mutable slice of a product. Absent keys are left unchanged (the object literal a caller
  * passes carries only the columns it means to touch); `updatedAt` is always bumped. */
 export interface UpdateProductInput {
-  descriptions?: Record<string, string>;
+  name?: string;
+  customerName?: Record<string, string> | null;
   unitPrice?: string;
   vatClass?: VatClass;
   /** `null` clears the unit (the product then reads as Each); a real id sets it; omitted leaves the
@@ -256,13 +261,16 @@ export interface ResolvedOptionGroup {
 }
 
 /**
- * A product the till can sell at a location, shaped so it is structurally assignable to
- * {@link PriceableProduct} — Task 6 feeds `listAvailableProducts(...)` rows straight into
- * `priceBasket`. `category` is the resolved category NAME (left-joined), or null.
+ * A product the till can sell at a location. An `AvailableProduct` is NOT a {@link PriceableProduct}:
+ * it carries `name` + `customerName`, not the snapshot `descriptions` a sale line freezes. Before
+ * pricing, resolve the customer-facing text (customerName, falling back to the staff `name`, via the
+ * resolvers in `product-presentation.ts`) into a `PriceableProduct`, then hand THAT to `priceBasket`.
+ * `category` is the resolved category NAME (left-joined), or null.
  */
 export interface AvailableProduct {
   id: string;
-  descriptions: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   unit: SellableUnit;
   pricingUnit: PricingUnit;
   unitPrice: string;
@@ -271,7 +279,7 @@ export interface AvailableProduct {
   allergens: ProductAllergens | null;
   /** The PUBLISHED diet profile (`products.diet`) — vegan/vegetarian labels, contains-tags, and any
    * halal/kosher from the override — or null when unreviewed. The diet twin of `allergens`; Task 6's
-   * till menu filter reads it. Beyond `PriceableProduct` and ignored by priceBasket. */
+   * till menu filter reads it. Not part of the priceable projection. */
   diet: DietProfile | null;
   /** The recipe-derived diet overlay (`products.dietDerivation`) — the folded ingredient origins + a
    * `pending` flag — or null when there is no recipe. Carried so Task 5 can recompute the as-served
@@ -284,20 +292,19 @@ export interface AvailableProduct {
   dietaryDeclarations: DietaryLabel[];
   /** The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none. The
    * ring-time resolver reads it as the fallback (`<override> ?? course_id`), and the till's tab course
-   * picker reads it as the per-line PRE-SELECTED default. An extra field beyond `PriceableProduct`, so
-   * a `listAvailableProducts` row stays structurally assignable to it (priceBasket ignores it). */
+   * picker reads it as the per-line PRE-SELECTED default. Not part of the priceable projection, so it
+   * is dropped when a row is resolved into a `PriceableProduct`. */
   courseId: string | null;
   /** The catalogue (menu) this product is sold from — its `catalogues.id`. A location may sell across
    * several accessible catalogues (its default plus any `location_catalogues` members), so a row is
-   * tagged with which one it came from. An extra field beyond `PriceableProduct`, so the row stays
-   * structurally assignable to it (priceBasket ignores it, like `courseId`). */
+   * tagged with which one it came from. Not part of the priceable projection, like `courseId`. */
   catalogueId: string;
   /** The catalogue's display name (`catalogues.name`), for grouping products by menu in the till. Also
-   * beyond `PriceableProduct` and ignored by priceBasket. */
+   * not part of the priceable projection. */
   catalogueName: string;
   /** The product's attached ACTIVE option groups (Task 1 tables), each with its active items in sort
-   * order — `[]` when the product has none. Beyond `PriceableProduct` and ignored by priceBasket;
-   * later tasks price + validate a diner's selection against these. */
+   * order — `[]` when the product has none. Not part of the priceable projection; later tasks price +
+   * validate a diner's selection against these. */
   optionGroups: ResolvedOptionGroup[];
   modifiers: Modifier[];
 }
@@ -313,7 +320,8 @@ const PRODUCT_BASE_COLUMNS = {
   id: products.id,
   catalogueId: products.catalogueId,
   categoryId: products.categoryId,
-  descriptions: products.descriptions,
+  name: products.name,
+  customerName: products.customerName,
   pricingUnit: products.pricingUnit,
   unitPrice: products.unitPrice,
   vatClass: products.vatClass,
@@ -341,7 +349,8 @@ interface RawProduct {
   id: string;
   catalogueId: string;
   categoryId: string | null;
-  descriptions: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   unitId: string | null;
   unitName: Record<string, string> | null;
   unitAbbreviation: Record<string, string> | null;
@@ -802,7 +811,8 @@ export async function listMenuOffers(
       active: menuItems.active,
       menuName: catalogues.name,
       sectionName: menuSections.name,
-      descriptions: products.descriptions,
+      name: products.name,
+      customerName: products.customerName,
       kitchenName: products.kitchenName,
       unitId: units.id,
       unitName: units.name,
@@ -953,6 +963,9 @@ export async function listMenuOffers(
       menuItemId: menuItemVariants.menuItemId,
       id: productVariants.id,
       name: productVariants.name,
+      customerName: productVariants.customerName,
+      kitchenName: productVariants.kitchenName,
+      image: productVariants.image,
       unitPrice: menuItemVariants.unitPrice,
       productAvailable: productVariants.available,
       menuAvailable: menuItemVariants.available,
@@ -986,7 +999,8 @@ export async function listMenuOffers(
     active: row.active,
     menuName: row.menuName,
     sectionName: row.sectionName,
-    descriptions: row.descriptions,
+    name: row.name,
+    customerName: row.customerName,
     kitchenName: row.kitchenName,
     unit: sellableUnit(
       row.unitId,
@@ -1014,6 +1028,9 @@ export async function listMenuOffers(
       .map((variant) => ({
         id: variant.id,
         name: variant.name,
+        customerName: variant.customerName,
+        kitchenName: variant.kitchenName,
+        image: variant.image,
         unitPrice: variant.unitPrice,
         available: variant.productAvailable && variant.menuAvailable,
       })),
@@ -1213,7 +1230,8 @@ export async function createProduct(
       tenantId,
       catalogueId: input.catalogueId,
       categoryId: null,
-      descriptions: input.descriptions,
+      name: input.name,
+      customerName: input.customerName ?? null,
       description: input.description ?? null,
       kitchenName: input.kitchenName?.trim() || null,
       dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
@@ -1306,6 +1324,9 @@ export async function listProducts(
       productId: productVariants.productId,
       id: productVariants.id,
       name: productVariants.name,
+      customerName: productVariants.customerName,
+      kitchenName: productVariants.kitchenName,
+      image: productVariants.image,
       unitPrice: productVariants.unitPrice,
       available: productVariants.available,
     })
@@ -1624,7 +1645,8 @@ export async function listAvailableProducts(
     .select({
       id: products.id,
       tenantId: products.tenantId,
-      descriptions: products.descriptions,
+      name: products.name,
+      customerName: products.customerName,
       unitId: units.id,
       unitName: units.name,
       unitAbbreviation: units.abbreviation,
@@ -1754,7 +1776,8 @@ export async function listAvailableProducts(
   // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
     id: row.id,
-    descriptions: row.descriptions,
+    name: row.name,
+    customerName: row.customerName,
     unit: sellableUnit(
       row.unitId,
       row.unitName,

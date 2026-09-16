@@ -348,7 +348,8 @@ describe("TillApi", () => {
       products: [
         {
           id: "p",
-          descriptions: { es: "Café" },
+          name: "Café",
+          customerName: { es: "Café para el cliente" },
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
@@ -362,7 +363,8 @@ describe("TillApi", () => {
         },
         {
           id: "q",
-          descriptions: { es: "Agua mineral" },
+          name: "Agua mineral",
+          customerName: { es: "Agua mineral para el cliente" },
           pricingUnit: "each",
           unitPrice: "1.20",
           vatClass: "general",

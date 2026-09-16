@@ -98,7 +98,7 @@ async function seed(db: Database): Promise<void> {
     .values({
       tenantId: TENANT_A,
       catalogueId: catA.id,
-      descriptions: { es: "Café solo", ca: "Cafè sol" },
+      name: "Café solo",
       pricingUnit: "each",
       unitPrice: "1.30",
       vatClass: "general",
@@ -109,7 +109,7 @@ async function seed(db: Database): Promise<void> {
     .values({
       tenantId: TENANT_B,
       catalogueId: catB.id,
-      descriptions: { es: "Café solo" },
+      name: "Café solo",
       pricingUnit: "each",
       unitPrice: "1.30",
       vatClass: "general",
@@ -130,6 +130,7 @@ async function openOrder(db: Database, tenantId = TENANT_A, tillId = TILL_A1): P
 // Defaults to tenant A's product; the two tenant-B line inserts override productId to productB.
 const LINE = {
   lineNo: 1,
+  name: "Café solo",
   descriptions: { es: "Café solo", ca: "Cafè sol" },
   quantity: "1.000",
   unitPrice: "1.30",
@@ -596,10 +597,10 @@ describe("working_order_lines — modifier links", () => {
     return rows<{ id: string }>(
       db,
       sql`insert into working_order_lines (
-             tenant_id, working_order_id, line_no, product_id, descriptions, quantity, unit_price,
-             unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id
+             tenant_id, working_order_id, line_no, product_id, name, descriptions, quantity,
+             unit_price, unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id
            ) values (
-             ${tenantId}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId},
+             ${tenantId}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
              ${descriptions}::jsonb, '1.000', '1.30', '1.43', '10.00', '1.30',
              ${opts.parentLineId ?? null}, ${opts.optionGroupItemId ?? null}
            ) returning id`,

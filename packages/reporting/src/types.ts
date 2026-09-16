@@ -40,10 +40,14 @@ export interface TopSellersInput extends PeriodVatInput {
   limit: number;
 }
 
-/** One product in the top-sellers list, keyed on the frozen per-line `descriptions` snapshot. */
+/** One seller in the top-sellers list, keyed on the frozen per-line `name` AND `variant_name`
+ * snapshots (the STAFF names) — so a product's variants rank as separate sellers. A sales report
+ * shows the staff name, never the customer-facing text (which a receipt or customer display shows
+ * instead); see `packages/catalogue/src/product-presentation.ts`. */
 export interface TopSeller {
-  /** The frozen `sale_lines.descriptions` map (locale → label), returned intact for the frontend. */
-  descriptions: Record<string, string>;
+  /** The frozen `sale_lines.name`/`variant_name` staff names, joined via `staffPresentationName` —
+   * the same label a till button or the dashboard shows for this line. */
+  name: string;
   /** Σ line quantity over the range (numeric(12,3)); corrections net in, so it can fall. */
   quantity: Decimal;
   /** Σ line_total over the range (numeric(12,2)); corrections net in. */

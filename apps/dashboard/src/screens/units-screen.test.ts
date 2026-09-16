@@ -57,8 +57,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 }
 
 const inUseProducts: ProductUsingUnit[] = [
-  { id: "p1", name: { es: "Café", en: "Coffee" }, available: true },
-  { id: "p2", name: { es: "Té", en: "Tea" }, available: false },
+  { id: "p1", name: "Café", available: true },
+  { id: "p2", name: "Té", available: false },
 ];
 
 function inUseApi(products = inUseProducts): DashboardApi {
@@ -337,6 +337,10 @@ describe("units-screen", () => {
     expect(productTable.shadowRoot!.textContent).toContain("Café");
     // The availability column reuses the product active/inactive labels (es-ES is the test locale).
     expect(productTable.shadowRoot!.textContent).toContain("Inactivo");
+    // Each row's checkbox is the only place a screen reader hears which product it is ticking.
+    expect(
+      productTable.shadowRoot!.querySelector('[data-test="select-p1"]')!.getAttribute("aria-label"),
+    ).toBe(`${t("units.select_product")}: Café`);
   });
 
   it("filters the product list in the modal", async () => {
@@ -521,7 +525,7 @@ describe("units-screen", () => {
     setLocale("es-ES");
     const listUnitProducts = vi
       .fn()
-      .mockResolvedValue([{ id: "p1", name: { es: "Sopa", en: "Soup" }, available: true }]);
+      .mockResolvedValue([{ id: "p1", name: "Sopa", available: true }]);
     const el = await mount(stubApi({ listUnitProducts }));
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -540,7 +544,7 @@ describe("units-screen", () => {
     setLocale("es-ES");
     const listUnitProducts = vi
       .fn()
-      .mockResolvedValue([{ id: "p1", name: { es: "Sopa", en: "Soup" }, available: true }]);
+      .mockResolvedValue([{ id: "p1", name: "Sopa", available: true }]);
     const reassignProductsUnit = vi.fn().mockResolvedValue([]);
     const el = await mount(stubApi({ listUnitProducts, reassignProductsUnit }));
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

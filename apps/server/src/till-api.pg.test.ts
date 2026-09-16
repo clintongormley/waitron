@@ -193,7 +193,7 @@ async function setupVenue(): Promise<{
     const jamon = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
-      descriptions: { es: "Jamón cortado" },
+      name: "Jamón cortado",
       unitId: kgId,
       unitPrice: "24.90",
       vatClass: "reduced",
@@ -201,7 +201,7 @@ async function setupVenue(): Promise<{
     const agua = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { es: "Agua mineral" },
+      name: "Agua mineral",
       unitId: null, // Each (no unit) — the seeded "each" unit no longer exists.
       unitPrice: "1.50",
       vatClass: "general",
@@ -593,16 +593,13 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
           precision: number;
           hardwareUnit: "kg" | "g" | "mg" | null;
         };
-        descriptions: Record<string, string>;
+        name: string;
       }[];
     };
     const products = offers.map((offer) => ({ ...offer, menuItemId: offer.id }));
     // The two seeded, sellable products come back — the reduced-rate weighed one and the
     // general-rate each one — so the basket below genuinely mixes VAT rates.
-    expect(products.map((p) => p.descriptions.es).sort()).toEqual([
-      "Agua mineral",
-      "Jamón cortado",
-    ]);
+    expect(products.map((p) => p.name).sort()).toEqual(["Agua mineral", "Jamón cortado"]);
     const jamon = products.find((p) => p.unit.hardwareUnit === "kg")!; // 24.90 €/kg reduced(10%)
     const agua = products.find((p) => p.unit.hardwareUnit === null)!; // 1.50 per unit general(21%)
 
@@ -1453,7 +1450,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         id: string;
         workingOrderLineId: string;
         state: string;
-        descriptions: Record<string, string>;
+        name: string;
         quantity: string;
         course: { id: string; name: string; displayOrder: number } | null;
         firedAt: string | null;
@@ -1480,9 +1477,8 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             state: "queued",
             // The dish name + quantity the kitchen display renders, carried end to end from the fired
             // working-order line's snapshot through the HTTP route (KDS-1 Gap 2): "2× Agua mineral".
-            // Full-tag `es-ES`: the line snapshot is re-keyed from the bare-`es` catalogue content to
-            // the location's `invoice_locales` at `priceOrderLines` before the working-order line insert.
-            descriptions: { "es-ES": "Agua mineral" },
+            // The kitchen name, falling back to the staff name because this product carries none.
+            name: "Agua mineral",
             quantity: "2.000",
             unitName: {
               ca: "u",

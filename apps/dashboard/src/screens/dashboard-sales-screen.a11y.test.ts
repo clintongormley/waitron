@@ -27,7 +27,7 @@ const close: DailyCloseDto = {
     tipTotal: "5.00",
   },
   counts: { sales: 8, corrections: 0, voids: 1 },
-  topSellers: [{ descriptions: { es: "Café", en: "Coffee" }, quantity: "5", total: "10.00" }],
+  topSellers: [{ name: "Café", quantity: "5", total: "10.00" }],
 };
 
 const period: SalesPeriodDto = {
@@ -39,9 +39,7 @@ const period: SalesPeriodDto = {
     taxTotal: "210.00",
     grossTotal: "1210.00",
   },
-  topSellers: [
-    { descriptions: { es: "Croqueta", en: "Croquette" }, quantity: "40", total: "80.00" },
-  ],
+  topSellers: [{ name: "Croqueta", quantity: "40", total: "80.00" }],
 };
 
 function stubApi(): DashboardApi {

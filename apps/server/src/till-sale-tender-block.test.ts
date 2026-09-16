@@ -147,7 +147,7 @@ beforeAll(async () => {
     const product = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua" },
+      name: "Agua",
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",

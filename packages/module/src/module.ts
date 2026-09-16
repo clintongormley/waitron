@@ -113,7 +113,10 @@ export interface ZoneMenuOffer {
   readonly active: boolean;
   readonly menuName: string;
   readonly sectionName: Readonly<Record<string, string>>;
-  readonly descriptions: Readonly<Record<string, string>>;
+  /** The product's staff-facing name (`products.name`) — plain text, not per-language. */
+  readonly name: string;
+  /** The product's customer-facing text, locale -> text; `null` or blank falls back to `name`. */
+  readonly customerName: Readonly<Record<string, string>> | null;
   readonly kitchenName: string | null;
   readonly unit: {
     readonly id: string;
@@ -135,7 +138,10 @@ export interface ZoneMenuOffer {
   readonly dietaryDeclarations: readonly string[];
   readonly variants: readonly {
     readonly id: string;
-    readonly name: Readonly<Record<string, string>>;
+    readonly name: string;
+    readonly customerName: Readonly<Record<string, string>> | null;
+    readonly kitchenName: string | null;
+    readonly image: string | null;
     readonly unitPrice: string;
     readonly available: boolean;
   }[];

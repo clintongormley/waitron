@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { staffPresentationName } from "@waitron/catalogue";
 import type { Transaction } from "@waitron/db";
 import { decimal } from "@waitron/shared";
 import {
@@ -13,9 +14,14 @@ import type { TopSeller, TopSellersInput } from "./types.js";
 
 /**
  * The dashboard's top-N products over a closed business-day range, ranked by summed line quantity.
- * Groups `sale_lines` on the frozen `descriptions` snapshot — a filed line carries no product_id, so
- * the label frozen at sale time IS the bucket (architecture §6); a later catalogue rename can never
- * reach back into a completed row. Same exclusions and predicates as the VAT roll-up
+ * Groups `sale_lines` on the frozen `name` AND `variant_name` snapshots — the STAFF names, the same
+ * ones a sales report shows (CLAUDE.md's three-name table) — never the customer-facing text, which is
+ * for a receipt or customer display instead. A filed line carries no product_id, so the label frozen
+ * at sale time IS the bucket (architecture §6); a later catalogue rename can never reach back into a
+ * completed row. Both columns are in the key because a product's variants are separate sellers: a
+ * large coffee and a small one are ranked apart, which is what an operator is asking when they ask
+ * what sold. The returned `name` is the two joined via `staffPresentationName`, so the row carries the
+ * same label a till button shows. Same exclusions and predicates as the VAT roll-up
  * (`aggregateVatByRate`): the explicit tenant predicate scopes the tenant, the node
  * predicate applies only when `nodeId` is given, and `activeSalesClause` drops voided sales and
  * F3-canje substitutes. Corrections (rectificativas) are NOT excluded — their negative lines net the
@@ -37,18 +43,16 @@ export async function computeTopSellers(
     );
   }
   const nodeClause = nodeScopeClause(input.nodeId);
-  // `descriptions` comes back as a parsed object, not a string, on the test target: verified by
-  // top-sellers.test.ts's "returns the frozen descriptions map intact (jsonb → object)", which reads a
-  // live `'{…}'::jsonb` column back via `tx.execute` and asserts `typeof === "object"`. So no
-  // JSON.parse is needed on the read path.
-  // Deterministic order: quantity desc, then the descriptions text as a stable tiebreak for ties.
+  // Deterministic order: quantity desc, then the staff name/variant text as a stable tiebreak for ties.
   const { rows } = await tx.execute<{
-    descriptions: Record<string, string>;
+    name: string;
+    variant_name: string | null;
     quantity: string;
     total: string;
   }>(sql`
     select
-      sl.descriptions as descriptions,
+      sl.name as name,
+      sl.variant_name as variant_name,
       sum(sl.quantity)::numeric(12, 3)::text as quantity,
       sum(sl.line_total)::numeric(12, 2)::text as total
     from sale_lines sl
@@ -57,12 +61,12 @@ export async function computeTopSellers(
       ${nodeClause}
       and ${businessDayRangeClause(sql`s.issued_at`, input)}
       and ${activeSalesClause({ tenantId: input.tenantId })}
-    group by sl.descriptions
-    order by sum(sl.quantity) desc, sl.descriptions::text asc
+    group by sl.name, sl.variant_name
+    order by sum(sl.quantity) desc, sl.name asc, sl.variant_name asc
     limit ${input.limit}
   `);
   return rows.map((r) => ({
-    descriptions: r.descriptions,
+    name: staffPresentationName({ name: r.name, variantName: r.variant_name }),
     quantity: decimal(r.quantity),
     total: decimal(r.total),
   }));

@@ -20,6 +20,7 @@ import {
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
+  resolveSnapshotText,
   type SaleId,
   type StationThresholds,
   subtractDecimal,
@@ -61,11 +62,14 @@ import {
   toInvoiceLineDescriptions,
   readContentLanguages,
   selectMenuVariant,
-  productPresentationName,
+  customerPresentationText,
+  kitchenPresentationName,
+  staffPresentationName,
 } from "@waitron/catalogue";
 import type {
   BasketItemWithOptions,
   AvailableProduct,
+  ProductPresentation,
   DietaryLabel,
   DietProfile,
   LockedLine,
@@ -203,7 +207,8 @@ async function priceOrderLines(
   const available = usesOffers
     ? [...offerBySelectionId.values()].map((offer) => ({
         id: offer.id,
-        descriptions: offer.descriptions,
+        name: offer.name,
+        customerName: offer.customerName,
         kitchenName: offer.kitchenName,
         unit: offer.unit,
         pricingUnit: offer.unit.hardwareUnit === null ? "each" : "weight",
@@ -239,6 +244,10 @@ async function priceOrderLines(
       }))
     : catalogue.products;
   const invoiceLocales = catalogue.invoiceLocales;
+  // Read ONCE, before the line loop: the venue's default content language is what resolves a
+  // product's, a variant's and a modifier's text below, and what re-keys each line's customer text
+  // onto the invoice locales after pricing.
+  const contentConfig = await readContentLanguages(tx, cfg.tenantId, cfg.locale);
   // `priceBasketWithOptions` selects by its historical `productId` field. In offer mode that selector
   // is the menu-item id; keep the underlying product id separately for persisted rows and errors.
   const lines = requestedLines.map((line) => ({
@@ -261,9 +270,6 @@ async function priceOrderLines(
         note: string | null;
         doneness: Doneness | null;
         modifierSnapshots: ModifierSnapshot[];
-        variantId: string | null;
-        variantName: Record<string, string> | null;
-        kitchenName: string | null;
       }
     | { kind: "child"; optionGroupItemId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
@@ -284,9 +290,23 @@ async function priceOrderLines(
     }
     const underlyingProductId = offerBySelectionId.get(line.productId)?.productId ?? line.productId;
     const offer = offerBySelectionId.get(line.productId);
-    const presentation =
+    // The three names this line freezes. An OFFER may name a variant, so it resolves through
+    // `selectMenuVariant` (which also refuses a missing or unpublished one); the plain catalogue read
+    // never names a variant and carries no kitchen name, so it fills the same shape with nulls. Both
+    // then go through `product-presentation.ts`, the ONE home of the blank-falls-back-to-the-staff-name
+    // rule — nothing here re-implements it.
+    const presentation: ProductPresentation & { variantId: string | null; unitPrice: string } =
       offer === undefined
-        ? null
+        ? {
+            variantId: null,
+            name: baseProduct.name,
+            customerName: baseProduct.customerName,
+            kitchenName: null,
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+            unitPrice: baseProduct.unitPrice,
+          }
         : selectMenuVariant(
             offer,
             productVariantsByProduct.get(offer.productId) ?? [],
@@ -295,27 +315,18 @@ async function priceOrderLines(
     if (!usesOffers && line.variantId !== undefined) {
       throw new AppError("management.request_invalid", { field: "variantId" });
     }
-    const product =
-      presentation === null
-        ? baseProduct
-        : {
-            ...baseProduct,
-            unitPrice: presentation.unitPrice,
-            descriptions: Object.fromEntries(
-              [
-                ...new Set([
-                  ...Object.keys(presentation.productName),
-                  ...Object.keys(presentation.variantName ?? {}),
-                ]),
-              ].map((locale) => [
-                locale,
-                productPresentationName(presentation, locale, cfg.locale),
-              ]),
-            ),
-            variantId: presentation.variantId,
-            variantName: presentation.variantName,
-            kitchenName: presentation.kitchenName,
-          };
+    const customerText = customerPresentationText(presentation, contentConfig.defaultLanguage);
+    const product = {
+      ...baseProduct,
+      name: presentation.name,
+      unitPrice: presentation.unitPrice,
+      descriptions: customerText.product,
+      variantId: presentation.variantId,
+      variantName: presentation.variantName,
+      variantDescriptions: customerText.variant,
+      variantKitchenName: presentation.variantKitchenName,
+      kitchenName: presentation.kitchenName,
+    };
 
     // Per-line customisation (spec §2/§3), NON-FISCAL. Validate + normalise BEFORE pricing so a bad
     // value aborts the whole basket rather than half-persisting. The wire type is a lie (JSON), so the
@@ -485,7 +496,16 @@ async function priceOrderLines(
       quantity: line.quantity,
       modifierSnapshots,
       options: selectedOptions.map((option) => ({
-        name: option.name,
+        // A child modifier line has no product to take a staff name from, and
+        // `working_order_lines.name` is NOT NULL, so the option's OWN label — resolved in the venue's
+        // default content language — is that line's name. Pricing cannot do this itself: it holds no
+        // default language.
+        name: resolveSnapshotText(
+          option.name,
+          contentConfig.defaultLanguage,
+          contentConfig.defaultLanguage,
+        ),
+        descriptions: option.name,
         priceDelta: option.priceDelta,
         vatClass: option.vatClass,
         // The per-option count threads into `priceBasketWithOptions`, which prices the child at
@@ -503,9 +523,6 @@ async function priceOrderLines(
       note,
       doneness,
       modifierSnapshots,
-      variantId: presentation?.variantId ?? null,
-      variantName: presentation?.variantName ?? null,
-      kitchenName: presentation?.kitchenName ?? null,
     });
     for (const option of selectedOptions) {
       lineMeta.push({
@@ -546,14 +563,22 @@ async function priceOrderLines(
   // filed `sale_lines` (Task 4/5) — and through the working_order_lines self-FK built below.
   const priced = priceBasketWithOptions(items);
 
-  // New lines snapshot the location's receipt languages. Locked and issued lines keep their stored text.
-  const contentConfig = await readContentLanguages(tx, cfg.tenantId, cfg.locale);
+  // New lines snapshot the location's receipt languages. Locked and issued lines keep their stored
+  // text. The VARIANT's customer text is re-keyed alongside the product's, because
+  // `working_order_lines_check_variant_locales` holds it to the same configured invoice locales.
   for (const line of priced.lines) {
     line.descriptions = toInvoiceLineDescriptions(
       line.descriptions,
       invoiceLocales,
       contentConfig.defaultLanguage,
     );
+    if (line.variantDescriptions != null) {
+      line.variantDescriptions = toInvoiceLineDescriptions(
+        line.variantDescriptions,
+        invoiceLocales,
+        contentConfig.defaultLanguage,
+      );
+    }
   }
 
   // Pre-generate the line ids so a CHILD row's `parent_line_id` can name its PARENT's id in the SAME
@@ -581,6 +606,7 @@ async function priceOrderLines(
       // The priced product this draft line was built from — a PARENT dish only; a CHILD modifier has no
       // product (its price/name are snapshotted onto the line by value), so NULL.
       productId: meta.kind === "parent" ? meta.productId : null,
+      name: line.name,
       descriptions: line.descriptions,
       modifierSnapshots: line.modifierSnapshots ?? [],
       unitName: line.unitName,
@@ -618,9 +644,15 @@ async function priceOrderLines(
       // ticket item at fire (`fireLines`), never onto the sale.
       note: meta.kind === "parent" ? meta.note : null,
       doneness: meta.kind === "parent" ? meta.doneness : null,
-      variantId: meta.kind === "parent" ? meta.variantId : null,
-      variantName: meta.kind === "parent" ? meta.variantName : null,
-      kitchenName: meta.kind === "parent" ? meta.kitchenName : null,
+      // The whole name block comes from the priced row, never from the request: a PARENT carries its
+      // product's and its variant's names through `priceBasketWithOptions` and a CHILD's variant fields
+      // stay null, and the invoice re-key above rewrote the two customer maps on that row in place —
+      // so the priced row is the only copy holding the re-keyed text.
+      variantId: line.variantId ?? null,
+      variantName: line.variantName ?? null,
+      variantDescriptions: line.variantDescriptions ?? null,
+      variantKitchenName: line.variantKitchenName ?? null,
+      kitchenName: line.kitchenName ?? null,
     };
   });
   const lineContexts = lineMeta.flatMap((meta, index) =>
@@ -633,7 +665,7 @@ async function priceOrderLines(
 
 /**
  * Read a persisted order's STORED lines in `line_no` order — the columns `priceLockedLines` needs
- * (gross unit, quantity, rate, descriptions, category), each snapshotted at add-time, PLUS `id`,
+ * (gross unit, quantity, rate, the frozen product and variant names, category), each snapshotted at add-time, PLUS `id`,
  * `line_no` and `parent_line_id`, from which the returned `parentLineNo` is reconstructed so the
  * parent→child modifier linkage survives the lock round-trip (see below). THE ONE
  * reader shared by `payWorkingOrder` (a retrieved order), `placeOrder` (Mode-I's deferred file at
@@ -654,6 +686,7 @@ async function priceOrderLines(
  */
 export async function readLockedLines(
   tx: Transaction,
+  cfg: TillConfig,
   workingOrderId: string,
 ): Promise<LockedLine[]> {
   const stored = await tx
@@ -664,6 +697,7 @@ export async function readLockedLines(
       grossUnitPrice: workingOrderLines.unitPriceGross,
       quantity: workingOrderLines.quantity,
       vatRate: workingOrderLines.vatRate,
+      name: workingOrderLines.name,
       descriptions: workingOrderLines.descriptions,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       category: workingOrderLines.category,
@@ -671,10 +705,17 @@ export async function readLockedLines(
       unitPrecision: workingOrderLines.unitPrecision,
       variantId: workingOrderLines.variantId,
       variantName: workingOrderLines.variantName,
+      variantDescriptions: workingOrderLines.variantDescriptions,
+      variantKitchenName: workingOrderLines.variantKitchenName,
       kitchenName: workingOrderLines.kitchenName,
     })
     .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+    .where(
+      and(
+        eq(workingOrderLines.tenantId, cfg.tenantId),
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+      ),
+    )
     .orderBy(workingOrderLines.lineNo);
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
@@ -700,6 +741,7 @@ export async function readLockedLines(
     grossUnitPrice: line.grossUnitPrice,
     quantity: line.quantity,
     vatRate: line.vatRate,
+    name: line.name,
     descriptions: line.descriptions,
     modifierSnapshots: line.modifierSnapshots ?? [],
     category: line.category,
@@ -708,6 +750,8 @@ export async function readLockedLines(
     parentLineNo: line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
     variantId: line.variantId,
     variantName: line.variantName,
+    variantDescriptions: line.variantDescriptions,
+    variantKitchenName: line.variantKitchenName,
     kitchenName: line.kitchenName,
   }));
 }
@@ -722,9 +766,10 @@ export async function readLockedLines(
  */
 export async function priceStoredOrder(
   tx: Transaction,
+  cfg: TillConfig,
   workingOrderId: string,
 ): Promise<PricedLines> {
-  return priceLockedLines(await readLockedLines(tx, workingOrderId));
+  return priceLockedLines(await readLockedLines(tx, cfg, workingOrderId));
 }
 
 /**
@@ -2002,10 +2047,14 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
 /** One line of an OPEN tab, for the table-order screen (FP-1, design §3b). `unitPriceGross` is the gross
  *  unit price LOCKED at add-time (`working_order_lines.unit_price_gross`), NOT a re-price; `servedAt` is
  *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
- *  `productId` only — no product name, mirroring `HeldOrder`: the screen resolves names from its own
- *  catalogue prop. `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
+ *  frozen staff `name` as well as the `productId`: {@link readTabLines} joins the line's product and
+ *  variant labels into it, so the screen has no catalogue lookup left to do for a name.
+ *  `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
 export interface TabLine {
-  descriptions?: Record<string, string>;
+  /** The line's frozen STAFF label — `working_order_lines.name` joined to `variant_name` with " · ".
+   * A table tab's line list is what a waiter reads while serving, so it carries the same name the
+   * till's product buttons and basket carry, not the customer-facing text a receipt prints. */
+  name: string;
   modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
   lineNo: number;
   // Nullable since ordering modifiers (Task 2): a child modifier line has no product. Child-line
@@ -2048,6 +2097,9 @@ export async function readTabLines(
   cfg: TillConfig,
   tabId: string,
 ): Promise<TabLine[]> {
+  // `assertTabOpen` is tenant-scoped, so a foreign tab id never reaches the read below. The read
+  // names the tenant anyway: a by-id read is never allowed to rest on a predicate somewhere above it
+  // (CLAUDE.md §3).
   await assertTabOpen(tx, cfg, tabId);
   // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` AND `state` (coursing
   // corrections, C1) — one item per line at most (`ticket_items` is UNIQUE on
@@ -2060,10 +2112,11 @@ export async function readTabLines(
   // item", not as impossible for a parent. Both columns feed the tab's per-course waiter-fire (§5b) and
   // the till's recall-vs-cancel-only distinction (`firedAt` set + `state === "queued"` ⇒ recallable,
   // `state` "preparing"/"ready" ⇒ cancel-only); the existing pay/serve columns are unchanged.
-  return tx
+  const rows = await tx
     .select({
       lineNo: workingOrderLines.lineNo,
-      descriptions: workingOrderLines.descriptions,
+      name: workingOrderLines.name,
+      variantName: workingOrderLines.variantName,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       productId: workingOrderLines.productId,
       quantity: workingOrderLines.quantity,
@@ -2081,8 +2134,18 @@ export async function readTabLines(
         eq(ticketItems.workingOrderLineId, workingOrderLines.id),
       ),
     )
-    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .where(
+      and(
+        eq(workingOrderLines.tenantId, cfg.tenantId),
+        eq(workingOrderLines.workingOrderId, tabId),
+      ),
+    )
     .orderBy(workingOrderLines.lineNo);
+  // The tab shows one label per line, so the line's two frozen staff names are joined into it.
+  return rows.map(({ variantName, ...row }) => ({
+    ...row,
+    name: staffPresentationName({ name: row.name, variantName }),
+  }));
 }
 
 /**
@@ -2467,6 +2530,7 @@ async function carveOffLines(
       parentLineId: workingOrderLines.parentLineId,
       optionGroupItemId: workingOrderLines.optionGroupItemId,
       productId: workingOrderLines.productId,
+      name: workingOrderLines.name,
       descriptions: workingOrderLines.descriptions,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
@@ -2478,6 +2542,8 @@ async function carveOffLines(
       unitPrecision: workingOrderLines.unitPrecision,
       variantId: workingOrderLines.variantId,
       variantName: workingOrderLines.variantName,
+      variantDescriptions: workingOrderLines.variantDescriptions,
+      variantKitchenName: workingOrderLines.variantKitchenName,
       kitchenName: workingOrderLines.kitchenName,
     })
     .from(workingOrderLines)
@@ -2605,6 +2671,7 @@ async function carveOffLines(
         // guarantees a splittable line is top-level (no parent, no children), so it is always NULL here;
         // carrying the source's raw id would (were the refusal relaxed) point at a line on the SOURCE.
         optionGroupItemId: line.optionGroupItemId,
+        name: line.name,
         descriptions: line.descriptions,
         modifierSnapshots: line.modifierSnapshots ?? [],
         quantity,
@@ -2617,6 +2684,8 @@ async function carveOffLines(
         unitPrecision: line.unitPrecision,
         variantId: line.variantId,
         variantName: line.variantName,
+        variantDescriptions: line.variantDescriptions,
+        variantKitchenName: line.variantKitchenName,
         kitchenName: line.kitchenName,
       });
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
@@ -2841,7 +2910,15 @@ export interface HeldOrder {
       id: string;
       productId: string;
       menuItemId: string;
-      descriptions: Record<string, string>;
+      /** The staff-facing name frozen onto the line at add time — what the till's basket renders. */
+      name: string;
+      /** The line's frozen customer-facing text, locale -> text. */
+      customerName: Record<string, string>;
+      /** The selected variant's frozen names, absent when the line names no variant. Each is carried
+       * SEPARATELY from the product's, so the retrieving surface joins the one it shows. */
+      variantName?: string;
+      variantCustomerName?: Record<string, string> | null;
+      variantKitchenName?: string | null;
       unit: {
         id: string;
         name: Readonly<Record<string, string>>;
@@ -2952,6 +3029,7 @@ export async function getHeldOrder(
         productId: workingOrderLines.productId,
         quantity: workingOrderLines.quantity,
         descriptions: workingOrderLines.descriptions,
+        variantDescriptions: workingOrderLines.variantDescriptions,
         modifierSnapshots: workingOrderLines.modifierSnapshots,
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
@@ -2961,7 +3039,9 @@ export async function getHeldOrder(
         doneness: workingOrderLines.doneness,
         variantId: workingOrderLines.variantId,
         variantName: workingOrderLines.variantName,
+        variantKitchenName: workingOrderLines.variantKitchenName,
         kitchenName: workingOrderLines.kitchenName,
+        name: workingOrderLines.name,
       })
       .from(workingOrderLines)
       .where(
@@ -3028,9 +3108,15 @@ export async function getHeldOrder(
             id: line.productId,
             productId: line.productId,
             menuItemId: context.menuItemId,
-            descriptions: line.descriptions,
+            // The three names the line froze at add time, each kept apart from the others and from
+            // the variant's: the till's basket joins and shows the STAFF pair, and a surface that
+            // shows customer text joins the customer pair instead.
+            name: line.name,
+            customerName: line.descriptions,
             ...(line.variantId === null ? {} : { variantId: line.variantId }),
             ...(line.variantName === null ? {} : { variantName: line.variantName }),
+            variantCustomerName: line.variantDescriptions,
+            variantKitchenName: line.variantKitchenName,
             kitchenName: line.kitchenName,
             unit: {
               id: context.unitId,
@@ -3376,7 +3462,7 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const priced = await priceStoredOrder(tx, id);
+      const priced = await priceStoredOrder(tx, cfg, id);
       // SP-A.2 §16.4 split: the fiscal record's `till_id` is the DEVICE till (`saleTillId`), while the
       // `order_placed` amendment below records the box's CONFIGURED register (`cfg.tillId`). `nodeId`/
       // `seriesId` stay `cfg` — the chain is keyed by the node's SIF, not the device.
@@ -3756,9 +3842,9 @@ export interface StationQueueCourse {
 }
 
 /** One selected option (ordering modifier) on a queue item — the child modifier line's SNAPSHOTTED
- *  `descriptions` map (locale → text), so the KDS UI localises it client-side exactly as it does the
- *  dish name (never a pre-flattened string, the repo's never-store-formatted rule). A modifier is never
- *  its own ticket item; it rides here as sub-text beneath its parent dish. */
+ *  `descriptions` map (locale → text), which the KDS UI localises client-side, per the repo's
+ *  never-store-formatted rule. A modifier is never its own ticket item; it rides here as sub-text
+ *  beneath its parent dish. */
 export interface QueueModifier {
   descriptions: Record<string, string>;
   /** The extra's OWN allergens (the child option's `add_allergens`), shown beside the dish's own on the
@@ -3774,7 +3860,10 @@ export interface StationQueueItem {
   workingOrderLineId: string;
   state: TicketState;
   modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
-  descriptions: Record<string, string>;
+  /** The dish's frozen KITCHEN label — `kitchen_name` falling back to `name`, joined to the variant's
+   * with " · ". The same name the printed kitchen ticket carries (`apps/server/src/kitchen-print.ts`):
+   * a cook reads one name whether the ticket came off a printer or off a screen. */
+  name: string;
   quantity: string;
   unitName: Record<string, string> | null;
   unitPrecision: number | null;
@@ -3970,9 +4059,14 @@ export async function listStationQueue(
       workingOrderLineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       queuedAt: ticketItems.queuedAt,
-      // The DISPLAY fields the kitchen renders — the line's snapshotted dish description + quantity,
-      // carried from the joined working_order_lines row (the snapshot, never a live catalogue lookup).
-      descriptions: workingOrderLines.descriptions,
+      // The DISPLAY fields the kitchen renders — the line's four snapshotted staff/kitchen names +
+      // quantity, carried from the joined working_order_lines row (the snapshot, never a live
+      // catalogue lookup). Customer-facing text is deliberately not read: a cook reads the kitchen
+      // name, as the printed ticket does.
+      name: workingOrderLines.name,
+      kitchenName: workingOrderLines.kitchenName,
+      variantName: workingOrderLines.variantName,
+      variantKitchenName: workingOrderLines.variantKitchenName,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
       unitName: workingOrderLines.unitName,
@@ -4097,7 +4191,9 @@ export async function listStationQueue(
       id: row.itemId,
       workingOrderLineId: row.workingOrderLineId,
       state: row.state,
-      descriptions: row.descriptions,
+      // One label per queue item: the line's frozen kitchen names, each falling back to its staff
+      // name, joined — the same resolver the printed kitchen ticket uses.
+      name: kitchenPresentationName(row),
       modifierSnapshots: row.modifierSnapshots,
       quantity: row.quantity,
       unitName: row.unitName,
@@ -4140,16 +4236,18 @@ export async function listStationQueue(
 }
 
 /** One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item of an order,
- *  carrying the display fields the pass renders: the line's SNAPSHOTTED description map + quantity (the
- *  same snapshot `StationQueueItem` serialises, never a live catalogue lookup), the resolved STATION name
- *  (the cross-station join `listStationQueue` deliberately omits — the pass sees the grill lagging the
- *  cold station), the kitchen `state`, and the `fired`/`away` lifecycle stamps. `name` is the
- *  locale→description map (localised client-side, per the repo's never-store-formatted rule), mirroring
- *  `StationQueueItem.descriptions` rather than a pre-flattened string. */
+ *  carrying the display fields the pass renders: the line's frozen kitchen `name` and its snapshotted
+ *  `qty` (the same fields `StationQueueItem` serialises, never a live catalogue lookup), the resolved
+ *  STATION name (the cross-station join `listStationQueue` deliberately omits — the pass sees the grill
+ *  lagging the cold station), the kitchen `state`, and the `fired`/`away` lifecycle stamps. `name` is
+ *  resolved server-side by `kitchenPresentationName`, the same call `StationQueueItem.name` uses — a
+ *  pre-flattened string, not a locale map. */
 export interface ExpoItem {
   modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
   id: string;
-  name: Record<string, string>;
+  /** The dish's frozen KITCHEN label — the same one {@link StationQueueItem.name} carries, so the pass
+   * and the stations it is expediting read identical names. */
+  name: string;
   qty: string;
   unitName: Record<string, string> | null;
   unitPrecision: number | null;
@@ -4273,9 +4371,13 @@ export async function listExpoQueue(
       // draft edit never moves what the pass sees.
       note: ticketItems.note,
       doneness: ticketItems.doneness,
-      // The DISPLAY snapshot the pass renders — the line's frozen description map + quantity, carried
-      // from working_order_lines (never a live catalogue lookup), exactly as `listStationQueue` serialises.
-      descriptions: workingOrderLines.descriptions,
+      // The DISPLAY snapshot the pass renders — the line's four frozen staff/kitchen names + quantity,
+      // carried from working_order_lines (never a live catalogue lookup), exactly as
+      // `listStationQueue` serialises.
+      name: workingOrderLines.name,
+      kitchenName: workingOrderLines.kitchenName,
+      variantName: workingOrderLines.variantName,
+      variantKitchenName: workingOrderLines.variantKitchenName,
       modifierSnapshots: workingOrderLines.modifierSnapshots,
       quantity: workingOrderLines.quantity,
       unitName: workingOrderLines.unitName,
@@ -4446,7 +4548,9 @@ export async function listExpoQueue(
     const band = classifyBand(Date.now() - Number(row.ageMinutes) * 60_000, Date.now(), thresholds);
     course.items.push({
       id: row.itemId,
-      name: row.descriptions,
+      // One label per pass item: the line's frozen kitchen names, resolved exactly as the station
+      // queue and the printed ticket resolve them.
+      name: kitchenPresentationName(row),
       modifierSnapshots: row.modifierSnapshots,
       qty: row.quantity,
       unitName: row.unitName,

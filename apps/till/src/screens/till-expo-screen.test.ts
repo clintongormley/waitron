@@ -40,7 +40,7 @@ const threeCourseOrder: ExpoOrder = {
       items: [
         {
           id: "ti-0",
-          name: { "es-ES": "Pan" },
+          name: "Pan",
           qty: "1.000",
           stationName: "Barra",
           state: "ready",
@@ -61,7 +61,7 @@ const threeCourseOrder: ExpoOrder = {
       items: [
         {
           id: "ti-1",
-          name: { "es-ES": "Croquetas" },
+          name: "Croquetas",
           qty: "2.000",
           stationName: "Cocina",
           state: "ready",
@@ -82,7 +82,7 @@ const threeCourseOrder: ExpoOrder = {
       items: [
         {
           id: "ti-2",
-          name: { "es-ES": "Solomillo" },
+          name: "Solomillo",
           qty: "1.000",
           stationName: "Parrilla",
           state: "queued",
@@ -114,7 +114,7 @@ const firedNotReadyOrder: ExpoOrder = {
       items: [
         {
           id: "ti-3",
-          name: { "es-ES": "Flan" },
+          name: "Flan",
           qty: "1.000",
           stationName: "Cocina",
           state: "preparing",
@@ -146,7 +146,7 @@ const withAwayCourse: ExpoOrder = {
       items: [
         {
           id: "ti-4",
-          name: { "es-ES": "Gazpacho" },
+          name: "Gazpacho",
           qty: "1.000",
           stationName: "Cocina",
           state: "ready",
@@ -167,7 +167,7 @@ const withAwayCourse: ExpoOrder = {
       items: [
         {
           id: "ti-5",
-          name: { "es-ES": "Merluza" },
+          name: "Merluza",
           qty: "1.000",
           stationName: "Cocina",
           state: "ready",
@@ -355,7 +355,7 @@ describe("till-expo-screen", () => {
           items: [
             {
               id: "ti-9",
-              name: { "es-ES": "Cortado" },
+              name: "Cortado",
               qty: "1.000",
               stationName: "Cocina",
               state: "queued",
@@ -408,7 +408,7 @@ describe("till-expo-screen", () => {
           items: [
             {
               id: "ti-c",
-              name: { "es-ES": "Chuletón" },
+              name: "Chuletón",
               qty: "1.000",
               stationName: "Cocina",
               state: "queued",
@@ -494,7 +494,7 @@ describe("till-expo-screen", () => {
           items: [
             {
               id: "ti-a",
-              name: { "es-ES": "Hamburguesa" },
+              name: "Hamburguesa",
               qty: "1.000",
               stationName: "Cocina",
               state: "queued",
@@ -507,7 +507,7 @@ describe("till-expo-screen", () => {
             },
             {
               id: "ti-p",
-              name: { "es-ES": "Especial" },
+              name: "Especial",
               qty: "1.000",
               stationName: "Cocina",
               state: "queued",
@@ -545,7 +545,7 @@ describe("till-expo-screen", () => {
   describe("as-served diet badges (Task 7): vegan/vegetarian/contains chips, neutral not-reviewed note", () => {
     const dietItem = (id: string, asServedDiet: ExpoItem["asServedDiet"]): ExpoItem => ({
       id,
-      name: { "es-ES": "Ensalada" },
+      name: "Ensalada",
       qty: "1.000",
       stationName: "Cocina",
       state: "queued",
@@ -773,7 +773,7 @@ describe("till-expo-screen", () => {
           items: [
             {
               id: itemId,
-              name: { "es-ES": "Flan" },
+              name: "Flan",
               qty: "1.000",
               stationName: "Cocina",
               state: "preparing",

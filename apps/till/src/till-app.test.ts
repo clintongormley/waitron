@@ -39,7 +39,8 @@ const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -51,7 +52,8 @@ const cafe: TillProduct = {
 
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
   vatClass: "reduced",
@@ -292,7 +294,8 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       active: true,
       menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",
       sectionName: { en: product.category ?? "Other" },
-      descriptions: product.descriptions,
+      name: product.name,
+      customerName: product.customerName ?? null,
       kitchenName: product.kitchenName ?? null,
       pricingUnit: product.pricingUnit,
       vatClass: product.vatClass,
@@ -2535,7 +2538,8 @@ describe("till-app", () => {
       id: "seasonal-soup",
       productId: "seasonal-soup",
       menuItemId: "offer-seasonal-soup",
-      descriptions: { en: "Seasonal soup" },
+      name: "Seasonal soup",
+      customerName: { en: "Seasonal soup for the customer" },
       pricingUnit: "each",
       unitPrice: "8.50",
       vatClass: "reduced",
@@ -3222,7 +3226,8 @@ describe("till-app", () => {
             {
               ...cafe,
               id: "negroni",
-              descriptions: { en: "Negroni" },
+              name: "Negroni",
+              customerName: { en: "Negroni for the customer" },
               unitPrice: "11.00",
               catalogueId: "menu-dining",
               catalogueName: "Dining",
@@ -6258,7 +6263,8 @@ describe("till-app", () => {
     const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
     const bocadillo: TillProduct = {
       id: "bocadillo",
-      descriptions: { es: "Bocadillo" },
+      name: "Bocadillo",
+      customerName: { es: "Bocadillo para el cliente" },
       pricingUnit: "each",
       unitPrice: "3.00",
       vatClass: "general",
@@ -6269,7 +6275,8 @@ describe("till-app", () => {
     };
     const cerveza: TillProduct = {
       id: "cerveza",
-      descriptions: { es: "Cerveza" },
+      name: "Cerveza",
+      customerName: { es: "Cerveza para el cliente" },
       pricingUnit: "each",
       unitPrice: "2.50",
       vatClass: "general",
@@ -6540,13 +6547,15 @@ describe("remembered dietary filters", () => {
   const salad: TillProduct = {
     ...cafe,
     id: "salad",
-    descriptions: { es: "Ensalada" },
+    name: "Ensalada",
+    customerName: { es: "Ensalada para el cliente" },
     diet: { vegan: "yes", vegetarian: "yes", contains: [] },
   };
   const mixed: TillProduct = {
     ...cafe,
     id: "mixed",
-    descriptions: { es: "Mixto" },
+    name: "Mixto",
+    customerName: { es: "Mixto para el cliente" },
     diet: { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] },
   };
   const listProducts = () =>

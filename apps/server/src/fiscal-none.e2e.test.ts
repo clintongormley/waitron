@@ -206,6 +206,7 @@ async function ringSale(venue: GbVenue): Promise<{ saleId: SaleId; backendId: st
       lines: [
         {
           lineNo: 1,
+          name: "Coffee",
           descriptions: { [LOCALE]: "Coffee" },
           quantity: "1",
           unitPrice: "1.50",
@@ -280,6 +281,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
         lines: [
           {
             lineNo: 1,
+            name: "Refund",
             descriptions: { [LOCALE]: "Refund" },
             quantity: "-1",
             unitPrice: "1.50",
@@ -309,6 +311,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
         lines: [
           {
             lineNo: 1,
+            name: "Coffee",
             descriptions: { [LOCALE]: "Coffee" },
             quantity: "1",
             unitPrice: "1.50",

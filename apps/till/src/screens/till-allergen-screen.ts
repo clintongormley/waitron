@@ -7,7 +7,7 @@ import { FALLBACK_LOCALE } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
-import { productName } from "../widgets/product-name.js";
+import { customerProductName, productName } from "../widgets/product-name.js";
 import type { TillProduct } from "../api/client.js";
 import type { AllergenCode } from "@waitron/catalogue";
 
@@ -67,10 +67,14 @@ type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "pri
  * RENDERING approach is shared with `till-ticket-view`, which likewise renders its legal receipt in
  * `invoiceLocale` independent of the operator UI; the `globalThis.print()` hand-off is this component's
  * own — `till-ticket-view` has no print path. The printed allergen sheet is a customer document, so it
- * follows the customer's language. Product names,
- * the UI chrome and ALLERGEN names all resolve against the full region locale ("es-ES"): `allergenName`
- * strips the region subtag internally (its table keys on `en`/`es`), so "es-ES" yields "Leche" (proven
- * in the suite), and `t()` maps both `es` and `es-ES` in its catalogues.
+ * follows the customer's language: the UI chrome and ALLERGEN names resolve against the full region
+ * locale ("es-ES") — `allergenName` strips the region subtag internally (its table keys on `en`/`es`),
+ * so "es-ES" yields "Leche" (proven in the suite), and `t()` maps both `es` and `es-ES` in its
+ * catalogues.
+ *
+ * PRODUCT names are the exception, and not because of language: the two renders show two DIFFERENT
+ * names, not one name translated. The printed sheet names a dish the way the customer menu does; the
+ * on-screen matrix names it the way the venue does internally. See this class's own `#productLabel`.
  */
 @customElement("till-allergen-screen")
 export class TillAllergenScreen extends LitElement {
@@ -212,7 +216,8 @@ export class TillAllergenScreen extends LitElement {
     `,
   ];
 
-  /** The products to lay out, straight from `GET /api/products` (each carrying its `allergens`). */
+  /** The products to lay out, each carrying its `allergens` — fed by `till-counter-screen` from the
+   * same zone-offer list the sale grid shows, so the sheet and the till agree on what is sellable. */
   @property({ attribute: false }) products: TillProduct[] = [];
   /** The OPERATOR-UI locale the matrix renders in on-screen. The parent (`till-counter-screen`) feeds
    * the active `currentLocale()`; this default (FALLBACK_LOCALE, the neutral English floor) is only the
@@ -241,6 +246,17 @@ export class TillAllergenScreen extends LitElement {
   /** Resolve one UI-chrome key in the active locale. */
   #t(key: Chrome): string {
     return t(`allergens.${key}`, this.#activeLocale());
+  }
+
+  /**
+   * A product's name for the render in hand. The PRINTED sheet is a customer document (RD 126/2015
+   * Art. 6.5.a.2° puts the record in front of consumers as well as staff and inspectors), so it
+   * names dishes the way the customer menu does and in the invoice locale — otherwise a diner
+   * matching a dish on the menu to a row here finds no row that matches. On screen this is an
+   * operator lookup, so it reads the venue's own staff name.
+   */
+  #productLabel(product: TillProduct): string {
+    return this.printing ? customerProductName(product, this.invoiceLocale) : productName(product);
   }
 
   /** Open the detail dialog for `product`. */
@@ -297,7 +313,7 @@ export class TillAllergenScreen extends LitElement {
   /** One product row: a tappable name that opens its detail, then either the pending treatment (never an
    * all-clear row) or the fourteen reviewed cells. */
   #row(product: TillProduct) {
-    const name = productName(product, this.#activeLocale());
+    const name = this.#productLabel(product);
     const open = html`<wt-button
       class="row-open"
       variant="ghost"
@@ -369,7 +385,7 @@ export class TillAllergenScreen extends LitElement {
     return html`<wt-dialog
       class="detail"
       .open=${product !== undefined}
-      .heading=${product ? productName(product, this.#activeLocale()) : ""}
+      .heading=${product ? this.#productLabel(product) : ""}
       @wt-close=${() => this.#closeDetail()}
     >
       ${product ? this.#detailBody(product) : nothing}

@@ -1,13 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import {
-  baseStyles,
-  selectStyles,
-  disabledStyles,
-  currentContentLanguages,
-  submitOnEnter,
-} from "@waitron/ui";
+import { baseStyles, selectStyles, currentContentLanguages, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -15,10 +9,10 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import "@waitron/ui/src/components/wt-icon.js";
 import "./choice-form.js";
 import type { ChoiceDraft } from "./choice-form.js";
 import { reorder } from "./reorder.js";
+import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import { type Modifier, type ModifierInput, type ModifierExtraChoice } from "../api/client.js";
 import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
@@ -43,6 +37,7 @@ export class ModifierForm extends LitElement {
   static override styles = [
     baseStyles,
     selectStyles,
+    ReorderController.styles,
     css`
       :host {
         display: block;
@@ -83,28 +78,7 @@ export class ModifierForm extends LitElement {
       /* The name is the widest cell; let it wrap and cap it so the switch, default control and menu
          stay on screen at phone width instead of pushing the row into a horizontal scroll. */
       td:nth-child(2) {
-        max-width: 140px;
-      }
-      .handle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: 0;
-        border: 0;
-        border-radius: var(--wt-radius-md);
-        background: transparent;
-        color: var(--wt-color-text);
-        cursor: grab;
-        /* A touch that starts on the handle drags the row; without this the browser claims the
-           gesture and scrolls the modal instead. Not a themed value, so no token. */
-        touch-action: none;
-      }
-      /* The handle is a bespoke button, so it needs the shared disabled treatment the primitives in
-         the same row apply themselves. */
-      .handle:disabled {
-        ${disabledStyles}
+        max-width: var(--wt-cell-name-max-width);
       }
       .visually-hidden {
         position: absolute;
@@ -134,13 +108,23 @@ export class ModifierForm extends LitElement {
   @state() private defaultChoiceId: string | null = null;
   @state() private choiceOpen = false;
   @state() private editingChoice: FormChoice | null = null;
-  /** The live pointer drag: the choice being dragged and the pointer that owns the gesture. */
-  #drag: { id: string; pointerId: number } | null = null;
-  /** Each row's choice id and vertical bounds, measured from the top of the table body so scrolling
-   * the modal does not move them. Valid until the next render; null means measure again. */
-  #rowBounds: { id: string; top: number; bottom: number }[] | null = null;
-  /** Set by a keyboard move so the next update can return focus to the handle that moved. */
-  #refocus: string | null = null;
+  /** The drag-and-keyboard reorder table, shared with the product editor's variants table. It owns
+   * the gesture, the row geometry, refocus and the live region; this form owns the choices array a
+   * move rewrites and how a row is labelled. */
+  readonly #reorder = new ReorderController(this, {
+    order: () => this.choices.map((choice) => choice.id),
+    move: (id, to) => this.#moveChoice(id, to),
+    label: (id) => {
+      const language = currentContentLanguages().defaultLanguage;
+      return (
+        this.choices.find((choice) => choice.id === id)?.name[language] || t("modifiers.choice")
+      );
+    },
+    busy: () => this.busy,
+    get reorderLabel(): string {
+      return t("modifiers.reorder");
+    },
+  } satisfies ReorderModel);
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("fieldErrors")) {
       const errors: Record<string, string> = {};
@@ -242,74 +226,6 @@ export class ModifierForm extends LitElement {
     if (from < 0) return;
     this.choices = reorder(this.choices, from, to);
   }
-  #reorderKey(event: KeyboardEvent, id: string): void {
-    const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
-    if (delta === 0 || this.busy) return;
-    // Without this the arrow scrolls the modal, carrying the row out from under the handle.
-    event.preventDefault();
-    this.#moveChoice(id, this.#indexOfChoice(id) + delta);
-    // The move re-inserts the handle's DOM node, which drops focus; restore it after the update so
-    // repeated presses keep moving the same choice.
-    this.#refocus = id;
-  }
-  #startDrag(event: PointerEvent, id: string): void {
-    if (this.busy || this.#drag !== null) return;
-    // Keep the press from selecting the row's text or starting the browser's own drag.
-    event.preventDefault();
-    this.#drag = { id, pointerId: event.pointerId };
-    document.addEventListener("pointermove", this.#onPointerMove);
-    document.addEventListener("pointerup", this.#onPointerEnd);
-    document.addEventListener("pointercancel", this.#onPointerEnd);
-  }
-  readonly #onPointerMove = (event: PointerEvent): void => {
-    const drag = this.#drag;
-    // Ignore a stray second pointer: only the one that started the gesture moves the row.
-    if (drag === null || event.pointerId !== drag.pointerId) return;
-    const over = this.#choiceAt(event.clientY);
-    if (over === null || over === drag.id) return;
-    this.#moveChoice(drag.id, this.#indexOfChoice(over));
-  };
-  /** Ends the gesture. A cancelled pointer (the OS interrupting a touch) needs no separate handler:
-   * each crossed row has already been committed to `choices`, so there is nothing to commit here. */
-  readonly #onPointerEnd = (event: PointerEvent): void => {
-    if (this.#drag !== null && event.pointerId !== this.#drag.pointerId) return;
-    this.#endDrag();
-  };
-  #endDrag(): void {
-    this.#drag = null;
-    this.#rowBounds = null;
-    document.removeEventListener("pointermove", this.#onPointerMove);
-    document.removeEventListener("pointerup", this.#onPointerEnd);
-    document.removeEventListener("pointercancel", this.#onPointerEnd);
-  }
-  /** The choice whose row box contains `clientY`, or null when `clientY` is outside every row. */
-  #choiceAt(clientY: number): string | null {
-    const body = this.shadowRoot!.querySelector("tbody");
-    if (body === null) return null;
-    const origin = body.getBoundingClientRect().top;
-    this.#rowBounds ??= [...body.querySelectorAll("tr")].map((row) => {
-      const box = row.getBoundingClientRect();
-      return {
-        id: row.getAttribute("data-choice")!,
-        top: box.top - origin,
-        bottom: box.bottom - origin,
-      };
-    });
-    const y = clientY - origin;
-    return this.#rowBounds.find((row) => y >= row.top && y <= row.bottom)?.id ?? null;
-  }
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#endDrag();
-  }
-  override updated(): void {
-    // A render can move rows (a committed drag step re-inserts them), so the next move re-measures.
-    this.#rowBounds = null;
-    const id = this.#refocus;
-    if (id === null) return;
-    this.#refocus = null;
-    this.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
-  }
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
@@ -402,19 +318,7 @@ export class ModifierForm extends LitElement {
   #choiceRow(choice: FormChoice, language: string, extras: boolean) {
     const label = choice.name[language] || t("modifiers.choice");
     return html`<tr data-choice=${choice.id}>
-      <td>
-        <button
-          type="button"
-          class="handle"
-          data-test=${`drag-${choice.id}`}
-          aria-label=${`${t("modifiers.reorder")}: ${label}`}
-          ?disabled=${this.busy}
-          @keydown=${(event: KeyboardEvent) => this.#reorderKey(event, choice.id)}
-          @pointerdown=${(event: PointerEvent) => this.#startDrag(event, choice.id)}
-        >
-          <wt-icon name="grip"></wt-icon>
-        </button>
-      </td>
+      <td>${this.#reorder.handle(choice.id)}</td>
       <td>${label}</td>
       ${extras ? html`<td>${choice.priceDelta ?? "0.00"}</td>` : nothing}
       <td>
@@ -503,7 +407,8 @@ export class ModifierForm extends LitElement {
     </table>`;
   }
   #choicesSection() {
-    return html`<div class="choices-wrap">${this.#choicesTable()}</div>
+    return html`${this.#reorder.liveRegion()}
+      <div class="choices-wrap">${this.#choicesTable()}</div>
       ${this.#error("choices") ? html`<p class="error">${this.#error("choices")}</p>` : nothing}
       <div class="choice-actions">
         <wt-button

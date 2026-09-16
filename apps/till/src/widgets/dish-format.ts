@@ -3,10 +3,15 @@ import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
 
 /**
- * Shared display formatting for a line's dish (quantity × name), used by both the kitchen queue
- * ({@link "./station-queue.js"}) and the table order screen. Names are DATA keyed by locale (spec §9),
- * quantities are `numeric(_,3)` carried as text — neither is UI chrome, so this holds the two pure
- * string transforms both surfaces were duplicating.
+ * Shared display formatting for a till line: the pure string transforms several surfaces were
+ * duplicating. Text is DATA keyed by locale (spec §9) and a quantity is `numeric(_,3)` carried as
+ * text, so neither is UI chrome.
+ *
+ * A line's DISH NAME is no longer one of them: the kitchen queue and the expo screen render the
+ * server-resolved `item.name` as sent, and the table order screen reads the line's frozen `name`,
+ * importing only {@link trimQuantity} from here. What the locale-map resolvers still serve is unit
+ * labels, modifier snapshot text, and the live catalogue text the basket, the modifier picker and
+ * `product-name.ts` show.
  */
 
 /**

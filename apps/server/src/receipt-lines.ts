@@ -1,3 +1,4 @@
+import { joinCustomerPresentationText } from "@waitron/catalogue";
 import type { PricedLines } from "@waitron/catalogue";
 import type { TillSaleLine } from "./till-sale.js";
 
@@ -21,7 +22,10 @@ function trimQuantityForDisplay(quantity: string): string {
  */
 export function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
   return priced.lines.map((line, i) => ({
-    descriptions: line.descriptions,
+    // The identification of the goods (art. 7.1.e) is the product AND the variant: a filed line
+    // freezes the two customer maps in separate columns, so the label the receipt prints is the two
+    // joined. The join itself belongs to `product-presentation.ts` and is never rebuilt here.
+    descriptions: joinCustomerPresentationText(line.descriptions, line.variantDescriptions ?? null),
     modifierSnapshots: line.modifierSnapshots ?? [],
     quantity: trimQuantityForDisplay(line.quantity),
     unitName: line.unitName ?? null,

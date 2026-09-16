@@ -263,8 +263,9 @@ async function seedProduct(cfg: TillConfig): Promise<string> {
     sql`insert into catalogues (tenant_id, name) values (${cfg.tenantId}, 'Menu') returning id`,
   );
   const { rows } = await db.execute<{ id: string }>(sql`
-    insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-    values (${cfg.tenantId}, ${cat.rows[0]!.id}, '{}'::jsonb, 'each', 1.00, 'general') returning id`);
+    insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+    values (${cfg.tenantId}, ${cat.rows[0]!.id}, 'Routed product', 'each', 1.00, 'general')
+    returning id`);
   return rows[0]!.id;
 }
 
@@ -277,6 +278,23 @@ describe("routing config", () => {
     expect(await categoryStation(categoryId)).toBe(stationId);
     await asApp(cfg, (tx) => setCategoryStation(tx, cfg, categoryId, null));
     expect(await categoryStation(categoryId)).toBeNull();
+  });
+
+  // One tenant per database is NOT the query's isolation boundary (CLAUDE.md §3): a by-id write needs
+  // its own tenant predicate. Both venues live in the SAME database here, exactly as a mis-wired mount
+  // would, so a write that keyed on the id alone would land on the other venue's product.
+  it("refuses to route ANOTHER venue's product, even with a live station of its own", async () => {
+    const cfg = await setupVenue();
+    const other = await setupVenue();
+    const foreignProductId = await seedProduct(other);
+    const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Pase" }));
+    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" }));
+
+    await asApp(cfg, (tx) => setProductStation(tx, cfg, foreignProductId, stationId));
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, foreignProductId, courseId));
+
+    expect(await productStation(foreignProductId)).toBeNull();
+    expect(await productCourse(foreignProductId)).toBeNull();
   });
 
   it("setProductStation sets then clears the product's override station", async () => {

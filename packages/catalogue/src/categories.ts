@@ -203,7 +203,7 @@ export async function deleteCategory(tx: Transaction, tenantId: string, id: stri
   await tx.delete(categories).where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
 }
 export interface CategoryDependants {
-  products: { id: string; name: Record<string, string>; reporting: boolean }[];
+  products: { id: string; name: string; reporting: boolean }[];
   children: { id: string; name: Record<string, string> }[];
   parentId: string | null;
   routes: { id: string; station: string | null; zone: string | null }[];
@@ -216,7 +216,7 @@ export async function categoryDependants(
 ): Promise<CategoryDependants> {
   const category = await readCategory(tx, tenantId, id); // 404s a foreign/absent id, tenant-scoped
   const productRows = await tx
-    .select({ id: products.id, name: products.descriptions, primary: products.categoryId })
+    .select({ id: products.id, name: products.name, primary: products.categoryId })
     .from(products)
     .innerJoin(
       productCategories,
@@ -377,7 +377,7 @@ export async function listCategoryProducts(tx: Transaction, tenantId: string, ca
   return tx
     .select({
       id: products.id,
-      descriptions: products.descriptions,
+      name: products.name,
       active: products.active,
       primaryCategoryId: products.categoryId,
       categoryIds: sql<

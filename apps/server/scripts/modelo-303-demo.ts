@@ -505,6 +505,7 @@ async function main(): Promise<void> {
         lines: [
           {
             lineNo: 1,
+            name: s.description,
             descriptions: { [LOCALE]: s.description },
             quantity: "1",
             unitPrice: s.base,
@@ -548,6 +549,7 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
+          name: RECTIFICATIVA.description,
           descriptions: { [LOCALE]: RECTIFICATIVA.description },
           quantity: "1",
           unitPrice: RECTIFICATIVA.base,

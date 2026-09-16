@@ -162,6 +162,7 @@ async function recordSale(
       tenantId: TENANT_A,
       saleId: sale.id,
       lineNo: 1,
+      name: "Café solo",
       descriptions: { es: "Café solo", ca: "Cafè sol" },
       quantity: "1.000",
       unitPrice: total,

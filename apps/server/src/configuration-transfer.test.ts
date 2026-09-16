@@ -97,7 +97,7 @@ const bundle: ConfigurationBundle = {
     rectificativeSeriesCode: "R",
   },
   modules: { core: 1 },
-  tables: { products: [{ id: "p1", tenant_id: "tenant", descriptions: { "es-ES": "Café" } }] },
+  tables: { products: [{ id: "p1", tenant_id: "tenant", name: "Café" }] },
   reconnect: ["printers"],
 };
 
@@ -217,10 +217,10 @@ describe("configuration transfer database path", () => {
           ('11111111-aaaa-aaaa-aaaa-111111111111', ${source.tenantId}, 'Prepared menu')`);
       await tx.execute(sql`
         insert into products
-          (id, tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+          (id, tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
         values
           ('22222222-aaaa-aaaa-aaaa-222222222222', ${source.tenantId},
-           '11111111-aaaa-aaaa-aaaa-111111111111', '{"es-ES":"Café"}', 'each', 1.50, 'general')`);
+           '11111111-aaaa-aaaa-aaaa-111111111111', 'Café', 'each', 1.50, 'general')`);
       await tx.execute(
         sql`update products set image = ${uploaded.image.filename} where tenant_id = ${source.tenantId} and id = '22222222-aaaa-aaaa-aaaa-222222222222'`,
       );
@@ -379,7 +379,7 @@ describe("configuration transfer database path", () => {
         from categories c
         join category_details d on d.tenant_id = c.tenant_id and d.category_id = c.id
         join products p on p.tenant_id = c.tenant_id
-        where c.tenant_id = ${target.tenantId} and p.descriptions ->> 'es-ES' = 'Café'
+        where c.tenant_id = ${target.tenantId} and p.name = 'Café'
       `);
       expect(category.rows).toEqual([
         {
@@ -487,6 +487,7 @@ describe("configuration transfer database path", () => {
           lines: [
             {
               lineNo: 1,
+              name: "First live sale",
               descriptions: { "es-ES": "First live sale" },
               quantity: "1",
               unitPrice: "1.00",
@@ -543,7 +544,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     const product = await createProduct(tx, tenantId(source.tenantId), {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { es: "Café" },
+      name: "Café",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",

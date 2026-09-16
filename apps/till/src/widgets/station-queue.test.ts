@@ -34,7 +34,7 @@ const groupA: StationQueueGroup = {
       id: "ti-1",
       workingOrderLineId: "wol-1",
       state: "queued",
-      descriptions: { "es-ES": "Paella" },
+      name: "Paella",
       quantity: "2.000",
       // KDS-1 world: no courses, everything auto-fired (advanceable). KDS-2's course-grouping /
       // held-greying cases live in their own `describe` below with their own fixtures.
@@ -45,7 +45,7 @@ const groupA: StationQueueGroup = {
       id: "ti-2",
       workingOrderLineId: "wol-2",
       state: "preparing",
-      descriptions: { "es-ES": "Agua" },
+      name: "Agua",
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
@@ -67,7 +67,7 @@ const groupB: StationQueueGroup = {
       id: "ti-3",
       workingOrderLineId: "wol-3",
       state: "ready",
-      descriptions: { "es-ES": "Café" },
+      name: "Café",
       quantity: "3.000",
       course: null,
       firedAt: "2026-08-17T10:05:00.000Z",
@@ -188,7 +188,7 @@ describe("till-station-queue", () => {
     expect(cell.textContent).toContain("5");
   });
 
-  it("resolves the dish name in the operator locale, falling back to the first available description", async () => {
+  it("renders the dish name verbatim, with no locale resolution left to fall back from", async () => {
     const group: StationQueueGroup = {
       orderId: "wo-9",
       orderNumber: 9,
@@ -201,9 +201,9 @@ describe("till-station-queue", () => {
           id: "ti-x",
           workingOrderLineId: "wol-x",
           state: "queued",
-          // No es-ES key (the operator locale) — the widget degrades to the only value present,
-          // matching `productName`'s first-available fallback rather than blanking the cell.
-          descriptions: { en: "Fish" },
+          // `name` is the server-resolved kitchen label (a plain string, not a locale map) — the
+          // widget renders it as sent.
+          name: "Fish",
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
@@ -232,7 +232,7 @@ describe("till-station-queue", () => {
           id: "ti-9",
           workingOrderLineId: "wol-9",
           state: "queued",
-          descriptions: { "es-ES": "Cortado" },
+          name: "Cortado",
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
@@ -334,7 +334,7 @@ describe("till-station-queue", () => {
           id: "ti-c",
           workingOrderLineId: "wol-c",
           state: "queued",
-          descriptions: { "es-ES": "Chuletón" },
+          name: "Chuletón",
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
@@ -444,7 +444,7 @@ describe("till-station-queue", () => {
           id: "ti-a",
           workingOrderLineId: "wol-a",
           state: "queued",
-          descriptions: { "es-ES": "Hamburguesa" },
+          name: "Hamburguesa",
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
@@ -467,7 +467,7 @@ describe("till-station-queue", () => {
           id: "ti-p",
           workingOrderLineId: "wol-p",
           state: "queued",
-          descriptions: { "es-ES": "Especial" },
+          name: "Especial",
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
@@ -531,7 +531,7 @@ describe("till-station-queue", () => {
           id: "ti-v",
           workingOrderLineId: "wol-v",
           state: "queued",
-          descriptions: { "es-ES": "Ensalada" },
+          name: "Ensalada",
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
@@ -911,7 +911,7 @@ const coursedOrder: StationQueueGroup = {
       id: "it-main",
       workingOrderLineId: "wl-main",
       state: "queued",
-      descriptions: { "es-ES": "Solomillo" },
+      name: "Solomillo",
       quantity: "1.000",
       // Principales — HELD (fired_at null), display_order 2: must render LAST despite being listed first.
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
@@ -921,7 +921,7 @@ const coursedOrder: StationQueueGroup = {
       id: "it-start",
       workingOrderLineId: "wl-start",
       state: "preparing",
-      descriptions: { "es-ES": "Ensalada" },
+      name: "Ensalada",
       quantity: "1.000",
       // Entrantes — FIRED, display_order 1: renders after the null course, before Principales.
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
@@ -931,7 +931,7 @@ const coursedOrder: StationQueueGroup = {
       id: "it-bread",
       workingOrderLineId: "wl-bread",
       state: "queued",
-      descriptions: { "es-ES": "Pan" },
+      name: "Pan",
       quantity: "1.000",
       // The null course — auto-fired earliest — must render FIRST, and carries no header.
       course: null,

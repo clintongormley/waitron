@@ -2,6 +2,7 @@ import { html } from "lit";
 import { applyTokens, registerIcons, type WtDataTable } from "../src/index.js";
 import "../src/components/wt-button.js";
 import "../src/components/wt-card.js";
+import "../src/components/wt-disclosure.js";
 import "../src/components/wt-dialog.js";
 import "../src/components/wt-modal.js";
 import "../src/components/wt-form-actions.js";
@@ -9,6 +10,7 @@ import "../src/components/wt-form-error-summary.js";
 import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
+import "../src/components/wt-price-input.js";
 import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
 import "../src/components/wt-tabs.js";
@@ -85,6 +87,29 @@ const panel = (theme: "light" | "dark") => `
         ></wt-combobox>
       </div>
     </wt-card>
+    <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
+      <wt-disclosure heading="Cocina" summary="Sin opciones">
+        <wt-input label="Nota para cocina"></wt-input>
+      </wt-disclosure>
+      <wt-disclosure heading="Descriptores" summary="2 etiquetas" open>
+        <wt-switch label="Vegetariano" checked></wt-switch>
+      </wt-disclosure>
+      <wt-disclosure heading="Información nutricional" summary="Revisa este campo" has-error>
+        <wt-input label="Calorías" invalid error="Introduce un número."></wt-input>
+      </wt-disclosure>
+    </div>
+    <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
+      <wt-price-input class="demo-price" label="Precio" name="precio" value="1,80" unit="ud">
+      </wt-price-input>
+      <wt-price-input
+        class="demo-price"
+        label="Precio por peso"
+        name="precio-peso"
+        unit="kg"
+        error="Introduce un precio."
+      >
+      </wt-price-input>
+    </div>
     <wt-tabs label="Venue settings">
       <section slot="status"><p>Choose Team to manage your staff in a table.</p></section>
       <section slot="team">
@@ -279,6 +304,21 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     multi.options = [...multi.options, option];
     multi.values = [...multi.values, option.value];
   }) as EventListener);
+
+  const PRICE_UNITS = ["ud", "kg", "l"];
+  for (const price of el.querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>(
+    "wt-price-input",
+  )) {
+    // The trailing unit button cycles through a few units, so both the wt-unit-click event and the
+    // button itself are visibly exercised (the real editor opens a unit picker here instead).
+    price.addEventListener("wt-unit-click", () => {
+      price.unit = PRICE_UNITS[(PRICE_UNITS.indexOf(price.unit) + 1) % PRICE_UNITS.length];
+    });
+    // Typing clears the field's error, the same way the member modal clears its name error.
+    price.addEventListener("wt-change", () => {
+      price.error = "";
+    });
+  }
 }
 
 for (const trigger of app.querySelectorAll<HTMLElement>(".open-dialog")) {

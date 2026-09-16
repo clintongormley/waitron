@@ -902,13 +902,12 @@ export class TillStationQueue extends LitElement {
     </span>`;
   }
 
-  /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name resolves in
-   *  the operator locale with a stored receipt-language fallback ({@link snapshotDescriptionFor}, degrading to "" for an
-   *  empty map — the till's set-at-boot `currentLocale()` is `TillInfo.locale`); the quantity is the
-   *  line's numeric(_,3) trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
+  /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name is the
+   *  server-resolved kitchen label and is rendered as sent; the quantity is the line's numeric(_,3)
+   *  trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
   #dish(item: StationQueueItem): string {
     const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
-    return `${trimQuantity(item.quantity)}${unit}× ${snapshotDescriptionFor(item.descriptions, "")}`;
+    return `${trimQuantity(item.quantity)}${unit}× ${item.name}`;
   }
 
   /** The accessible name for a bump control — whole-ticket vs per-line, named with the order number. */

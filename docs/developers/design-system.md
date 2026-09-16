@@ -105,8 +105,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
-`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-opacity-disabled`,
-`--wt-opacity-hover`
+`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-cell-name-max-width`,
+`--wt-opacity-disabled`, `--wt-opacity-hover`
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
 opacity dip, the same treatment for every variant. A variant-specific background or border-colour
@@ -127,6 +127,13 @@ buttons" under "Page composition" below for the pattern this exists for.
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
 through a token.
+
+`--wt-cell-name-max-width` caps the NAME cell of a table a form owns — the modifier form's choices
+and the product editor's variants. The name is the one cell whose text can be long, so capping it
+makes the text wrap and keeps the controls after it (a switch, a row menu) on screen at phone width
+instead of pushing the row into a sideways scroll. Both of those tables spelled the same literal
+`140px` out for themselves until this token existed; the no-hardcoded-chrome guard would not have
+caught either, because it scans `packages/ui` and neither table lives there.
 
 ### `--wt-tap-min`
 
@@ -156,10 +163,12 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
+| `wt-disclosure` | `heading`, `summary` (a one-line summary shown beside the heading), `open` (reflected), `has-error` (reflected); default slot (body). The header is a `<button aria-expanded>` and the shadow root delegates focus to it; clicking it toggles `open`. `has-error` forces the section open and makes the header inert, so a section holding a validation error cannot be collapsed out of view | `wt-toggle` — `detail: { open: boolean }` |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
+| `wt-price-input` | `value`, `label`, `name`, `unit`, `required` (reflected), `disabled` (reflected), `error`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
 | `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
@@ -396,9 +405,9 @@ the input fill exactly that box via `inset: 0` with no size of its own. If you b
 where the hit target is a covering, invisible native control, size the *container*, not the
 control.
 
-### Focus delegation (`wt-button`, `wt-input`, `wt-switch`, `wt-combobox`)
+### Focus delegation
 
-Each interactive primitive sets:
+A primitive that wraps exactly one native focusable control (a single `<button>` or `<input>`) sets:
 
 ```ts
 static override shadowRootOptions = { ...LitElement.shadowRootOptions, delegatesFocus: true };
@@ -409,6 +418,11 @@ unfocused — `document.activeElement` becomes the host, but nothing inside its 
 receives focus, so keyboard interaction and `:focus-visible` styling never engage. A POS needs
 "focus the quantity field" constantly (e.g. after adding a line item); `delegatesFocus: true` makes
 `wtInput.focus()` actually focus the inner `<input>`.
+
+A primitive isn't a candidate for this when it wraps several native focusable controls of its own
+(there is no single one for a host `.focus()` to mean), or none (a pure container slotting other
+primitives, which already carry their own delegation). `grep -n delegatesFocusShadowRootOptions
+packages/ui/src/components/*.ts` shows which primitives set it today.
 
 ### Forms
 
@@ -470,6 +484,44 @@ Use `wt-help-tooltip` for short explanations that would distract from the form w
 Give its question-mark button a localized `aria-label`. It opens on click, stays open while you
 interact with it, and closes when you press Escape or click anywhere outside it. Place it in a
 `wt-input`'s `help` slot to align it beside that field's label.
+
+### Fold a long form into collapsible sections with summaries
+
+A form that shows everything an entity can carry becomes one long stack of cards, and the fields
+somebody actually changes most days get lost in it. Fold the optional detail away instead: keep the
+frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
+The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is the pattern's first home —
+Name, Categories, Available and Price stay on screen; Kitchen, Descriptors and Nutritional info fold.
+
+Three rules make the fold safe rather than merely tidy.
+
+**Every collapsed section carries a one-line summary of what is inside it**, passed as `summary`, so
+nothing a person has filled in becomes invisible. Build it from the values themselves, skipping the
+empty ones, joined with a middot: the Kitchen section reads `Café c/leche · Bar · Drinks`. An empty
+summary means an empty section, which is a useful signal in itself.
+
+**A section holding a validation error opens itself and cannot be closed again while the error
+stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the
+header click does nothing and the chevron stops presenting itself as a live control. Without this,
+an invalid submission can point at a field nobody can see. Clearing `has-error` does not re-collapse
+the section — the person is left looking at the field they just corrected.
+
+**Sections always start collapsed, and open/closed state is not remembered.** A remembered fold is a
+second piece of per-person state to get wrong, and it makes two people describing the same screen
+disagree about what is on it.
+
+The body is a plain default slot, so the section's content is ordinary form markup and every rule
+under "Forms" above still applies inside it — including the error summary, which stays at the top of
+the whole form and lists problems from folded sections too.
+
+Two notes on the primitives this pattern uses, both in the table above:
+
+- `wt-disclosure` emits `wt-toggle` with `{ open }`, and reflects `open` and `has-error` as
+  attributes, so a host can style or query the state from outside.
+- `wt-price-input` is the money field a priced form wants: an amount joined to a trailing unit
+  button. The button's visible text is its accessible name, so `unit` must never be empty. It emits
+  `wt-change` on input and `wt-unit-click` when the button is pressed — the product editor swaps
+  that button for the unit dropdown on `wt-unit-click` and back again once a unit is chosen.
 
 ### Dashboard banner
 

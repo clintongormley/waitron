@@ -27,7 +27,8 @@ beforeEach(async () => {
   }));
   catalogueId = setup.catalogue.id;
   input = {
-    name: { en: "Coffee", es: "Café" },
+    name: "Coffee",
+    customerName: { en: "Coffee", es: "Café" },
     description: { en: "Freshly roasted" },
     kitchenName: "BAR COFFEE",
     unitId: setup.unit.id,
@@ -35,7 +36,24 @@ beforeEach(async () => {
     available: false,
     vatClass: "reduced",
     image: null,
-    variants: [{ name: { en: "Small" }, unitPrice: "2.00", available: true }],
+    variants: [
+      {
+        name: "Small",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "2.00",
+        available: true,
+      },
+      {
+        name: "Large",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.00",
+        available: true,
+      },
+    ],
     categoryIds: [],
     primaryCategoryId: null,
     modifierIds: [],
@@ -66,7 +84,7 @@ it("saves and reads the canonical editor shape with independent content and vari
   expect(saved).toEqual({
     ...input,
     id: saved.id,
-    variants: [{ ...input.variants[0], id: saved.variants[0]!.id }],
+    variants: input.variants.map((v, i) => ({ ...v, id: saved.variants[i]!.id })),
     stationId: null,
     courseId: null,
   });
@@ -98,6 +116,28 @@ it("saves and reads the canonical editor shape with independent content and vari
     allergens: {},
     dietaryDeclarations: [],
   });
+});
+
+it("refuses a save with exactly one variant but allows none or two", async () => {
+  await expect(
+    withTenant(fx.db, tenantId, (tx) =>
+      saveProductEditor(
+        tx,
+        tenantId,
+        null,
+        catalogueId,
+        { ...input, variants: [input.variants[0]!] },
+        "en",
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "product.variant_count_invalid", params: { minimum: 2 } });
+  expect(
+    await withTenant(fx.db, tenantId, (tx) => listProducts(tx, tenantId, catalogueId)),
+  ).toEqual([]);
+  const none = await withTenant(fx.db, tenantId, (tx) =>
+    saveProductEditor(tx, tenantId, null, catalogueId, { ...input, variants: [] }, "en"),
+  );
+  expect(none.variants).toEqual([]);
 });
 
 it("changes the product's unit on update", async () => {
@@ -233,4 +273,50 @@ it.each([
   expect(
     await withTenant(fx.db, tenantId, (tx) => listProducts(tx, tenantId, catalogueId)),
   ).toEqual([]);
+});
+
+/**
+ * The refusals reachable from the product editor that name something OTHER than a field. The
+ * dashboard puts a refusal's message beside the input it belongs to, and it can only do that from
+ * what the refusal actually carries — so these shapes are pinned here, at the end that produces
+ * them, rather than assumed at the end that reads them.
+ */
+async function refusal(value: unknown): Promise<{ code: string; params: unknown }> {
+  const error = await withTenant(fx.db, tenantId, (tx) =>
+    saveProductEditor(tx, tenantId, null, catalogueId, value, "en").then(
+      () => null,
+      (error: unknown) => error as { code: string; params: unknown },
+    ),
+  );
+  if (error === null) throw new Error("the save was accepted");
+  return { code: error.code, params: error.params };
+}
+
+it("names the missing language, and nothing else, when a customer name skips the default", async () => {
+  expect(await refusal({ ...input, customerName: { es: "Café" } })).toEqual({
+    code: "content.translation_required",
+    params: { language: "en" },
+  });
+  // A VARIANT's customer name is checked the same way, and its refusal is indistinguishable from the
+  // product's: the language is all either one carries.
+  expect(
+    await refusal({
+      ...input,
+      variants: input.variants.map((variant, index) =>
+        index === 1 ? { ...variant, customerName: { es: "Grande" } } : variant,
+      ),
+    }),
+  ).toEqual({ code: "content.translation_required", params: { language: "en" } });
+});
+
+it.each([
+  [{ allergens: { peanut: { presence: "contains" } } }, "allergen.invalid_code"],
+  [{ allergens: { milk: { presence: "traces" } } }, "allergen.invalid_presence"],
+  [{ dietaryDeclarations: ["carnivore"] }, "diet.declaration_invalid"],
+])("refuses nutrition input without naming any field (%#)", async (patch, code) => {
+  const { code: thrown, params } = await refusal({ ...input, ...patch });
+  expect(thrown).toBe(code);
+  // Nothing here says "allergens" or "dietary", so a refusal of either cannot reach a field on the
+  // editor's Nutrition section.
+  expect(Object.keys(params as Record<string, unknown>)).not.toContain("field");
 });

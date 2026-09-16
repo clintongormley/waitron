@@ -36,7 +36,7 @@ async function mount(theme: "light" | "dark"): Promise<ImageLibrary> {
           kind: "product",
           id: "toast",
           catalogueId: "breakfast",
-          names: { es: "Tostada", en: "Toast" },
+          name: "Toast",
           active: true,
         },
       ],

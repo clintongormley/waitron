@@ -309,7 +309,7 @@ async function main(): Promise<void> {
       const product = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { [LOCALE]: "Café" },
+        name: "Café",
         pricingUnit: "each",
         unitPrice: "1.50", // €/item, gross (VAT-inclusive), general (21%)
         vatClass: "general",

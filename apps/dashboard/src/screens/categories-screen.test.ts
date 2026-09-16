@@ -38,7 +38,8 @@ const product: Product = {
   dietOverride: null,
   image: null,
   id: "p",
-  descriptions: { en: "Toast" },
+  name: "Toast",
+  customerName: { en: "Buttered toast" },
   categoryIds: ["food", "drink"],
   primaryCategoryId: "food",
   active: true,
@@ -231,7 +232,7 @@ it("opens the products modal from the name and lists members with lozenges", asy
   const lone: Product = {
     ...product,
     id: "r",
-    descriptions: { en: "Napkin" },
+    name: "Napkin",
     categoryIds: ["food"],
     primaryCategoryId: "food",
   };
@@ -275,8 +276,8 @@ it("opens the products modal from the name and lists members with lozenges", asy
 // shadow root. Selecting two rows and pressing Add sends both ids in one call.
 it("adds products via the table's own per-row selection in one call", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
-  const r: Product = { ...product, id: "r", descriptions: { en: "Napkin" }, categoryIds: [] };
+  const q: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
+  const r: Product = { ...product, id: "r", name: "Napkin", categoryIds: [] };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -319,8 +320,8 @@ it("adds products via the table's own per-row selection in one call", async () =
 // than a screen-side "select all visible" checkbox.
 it("adds products using the table's own select-all", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
-  const r: Product = { ...product, id: "r", descriptions: { en: "Napkin" }, categoryIds: [] };
+  const q: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
+  const r: Product = { ...product, id: "r", name: "Napkin", categoryIds: [] };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -373,7 +374,7 @@ it("titles the delete dialog with the category name, shows affected products, an
   setLocale("en-GB");
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue({
-    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    products: [{ id: "p", name: "Toast", reporting: true }],
     children: [],
     parentId: null,
     routes: [{ id: "r", station: "Pass", zone: null }],
@@ -429,7 +430,7 @@ it("shows the delete preview with the affected products and child links, disabli
   )!;
   expect(deleteButton.disabled).toBe(true);
   resolveDependants({
-    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    products: [{ id: "p", name: "Toast", reporting: true }],
     children: [{ id: "breakfast", name: { en: "Breakfast" } }],
     parentId: null,
     routes: [{ id: "r1", station: "Grill", zone: "Bar" }],
@@ -466,7 +467,7 @@ it("shows one red warning at the top combining every consequence, and drops the 
   const foodUnderMeals: CategorySummary = { ...food, parentId: "meals" };
   fx.api.listCategories.mockResolvedValue([meals, foodUnderMeals, drink]);
   fx.api.getCategoryDependants.mockResolvedValue({
-    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    products: [{ id: "p", name: "Toast", reporting: true }],
     children: [{ id: "breakfast", name: { en: "Breakfast" } }],
     parentId: "meals",
     routes: [],
@@ -1073,7 +1074,7 @@ it.each([
 
 it("starts the add-products list with an empty search each time it opens", async () => {
   const fx = apiFixture();
-  const juice: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
+  const juice: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
   fx.api.listLibraryProducts.mockResolvedValue([product, juice]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -1098,7 +1099,7 @@ it("starts the add-products list with an empty search each time it opens", async
 it("starts the delete preview's product list with an empty search each time it opens", async () => {
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue({
-    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    products: [{ id: "p", name: "Toast", reporting: true }],
     children: [],
     parentId: null,
     routes: [],
@@ -1201,8 +1202,8 @@ it("restores the categories table's sort after the screen is reopened, but not i
 
 it("keeps a picked product picked after a search hides it, and adds it with the rest", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
-  const r: Product = { ...product, id: "r", descriptions: { en: "Napkin" }, categoryIds: [] };
+  const q: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
+  const r: Product = { ...product, id: "r", name: "Napkin", categoryIds: [] };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -1378,4 +1379,68 @@ it("resets the Parent filter to All parents when the chosen parent stops being o
   await list.updateComplete;
   expect(parentFilter(el).value).toBe("");
   expect(listedKeys(el).sort()).toEqual(["drink", "food", "juice"]);
+});
+
+// The dashboard names a product by its STAFF name, never by the guest-facing translation. Every
+// surface of this screen that names one is covered here in one pass: the members table cell, that
+// table's search box, the row-actions menu label, the add-products checkbox label and the
+// membership dialog's opening line. The fixture's two names differ, so each of these fails if the
+// customer-facing name is read instead.
+it("names a product by its staff name on every surface of the products modal", async () => {
+  const { el } = await mount();
+  await openProducts(el, "food");
+  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await members.updateComplete;
+  expect(members.shadowRoot!.textContent).toContain("Toast");
+  expect(members.shadowRoot!.textContent).not.toContain("Buttered toast");
+  expect(members.shadowRoot!.querySelector("wt-row-actions")!.getAttribute("label")).toBe(
+    `${t("categories.actions")}: Toast`,
+  );
+  // The search box reads the same name the cell shows, so typing what is on screen finds the row…
+  await typeInto(el, "category-products", "Toast");
+  expect(renderedKeys(el, "category-products")).toEqual(["p"]);
+  // …and the guest-facing name, which is not on screen, matches nothing.
+  await typeInto(el, "category-products", "Buttered");
+  expect(renderedKeys(el, "category-products")).toEqual([]);
+});
+
+it("names a product by its staff name in the add-products checkbox label", async () => {
+  const fx = apiFixture();
+  // Only in Food, so opening Drinks offers it in the add list rather than the member list.
+  fx.api.listLibraryProducts.mockResolvedValue([
+    { ...product, categoryIds: ["food"], primaryCategoryId: "food" },
+  ]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  await openProducts(el, "drink");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-products"]')!.click();
+  await el.updateComplete;
+  const addTable = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-add-products"]',
+  )!;
+  await addTable.updateComplete;
+  expect(
+    addTable.shadowRoot!.querySelector('[data-test="select-p"]')!.getAttribute("aria-label"),
+  ).toBe(`${t("categories.add_products")}: Toast`);
+});
+
+it("names the product by its staff name in the membership dialog", async () => {
+  const { el } = await mount();
+  await openProducts(el, "food");
+  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await members.updateComplete;
+  members.shadowRoot!.querySelector("wt-row-actions")!.querySelectorAll("wt-button")[0]!.click();
+  await el.updateComplete;
+  const dialog = [...el.shadowRoot!.querySelectorAll("wt-modal")].find(
+    (modal) => modal.querySelector("dashboard-category-membership-picker") !== null,
+  )!;
+  expect(dialog.querySelector("p")!.textContent!.trim()).toBe("Toast");
 });

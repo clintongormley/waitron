@@ -24,6 +24,13 @@ import type { ImageApi, ImageMetadata, ImageQuery, ImageUsage, LibraryImage } fr
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { t } from "./strings.js";
 
+/** Where a blocking use sends the operator: a variant is edited inside its product's editor. */
+function usageHref(use: ImageUsage): string {
+  if (use.kind === "category") return `/manage/categories?category=${encodeURIComponent(use.id)}`;
+  const productId = use.kind === "variant" ? use.productId : use.id;
+  return `/manage/catalogue/product/${encodeURIComponent(productId)}`;
+}
+
 @customElement("dashboard-image-library")
 export class ImageLibrary extends LitElement {
   static override styles = [
@@ -581,7 +588,7 @@ export class ImageLibrary extends LitElement {
               ${this.deleteError ? html`<p role="alert" class="error">${t("image.delete_error")}</p>` : nothing}
               <p>${t(this.deletion.uses.length ? "image.in_use" : "image.confirm_help")}</p>
               <ul>
-                ${this.deletion.uses.map((use) => html`<li><a href=${use.kind === "category" ? `/manage/categories?category=${encodeURIComponent(use.id)}` : `/manage/catalogue/product/${encodeURIComponent(use.id)}`}>${this.#text(use.names)}${use.kind === "category" || use.active ? "" : ` (${t("image.inactive")})`}</a></li>`)}
+                ${this.deletion.uses.map((use) => html`<li><a href=${usageHref(use)}>${use.kind === "category" ? this.#text(use.names) : use.name}${use.kind === "category" || use.active ? "" : ` (${t("image.inactive")})`}</a></li>`)}
               </ul>
               <wt-form-actions slot="footer"
                 ><wt-button

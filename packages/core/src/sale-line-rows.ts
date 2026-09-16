@@ -11,6 +11,7 @@ export function saleLineRows(tenantId: string, saleId: string, lines: readonly R
     saleId,
     lineNo: line.lineNo,
     parentLineId: line.parentLineNo == null ? null : (byLineNo.get(line.parentLineNo) ?? null),
+    name: line.name,
     descriptions: line.descriptions,
     modifierSnapshots: line.modifierSnapshots ?? [],
     unitName: line.unitName ?? null,
@@ -22,6 +23,8 @@ export function saleLineRows(tenantId: string, saleId: string, lines: readonly R
     category: line.category ?? null,
     variantId: line.variantId ?? null,
     variantName: line.variantName ?? null,
+    variantDescriptions: line.variantDescriptions ?? null,
+    variantKitchenName: line.variantKitchenName ?? null,
     kitchenName: line.kitchenName ?? null,
   }));
 }

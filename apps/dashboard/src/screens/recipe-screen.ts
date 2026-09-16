@@ -1,4 +1,3 @@
-import { localizedName } from "../i18n/localized.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -303,10 +302,6 @@ export class RecipeScreen extends LitElement {
     return this.products.find((p) => p.id === this.selectedProductId) ?? null;
   }
 
-  #productName(product: Product): string {
-    return localizedName(product.descriptions) || product.id;
-  }
-
   override render(): TemplateResult {
     const hasCatalogue = this.catalogues.length > 0;
     return html`
@@ -363,7 +358,7 @@ export class RecipeScreen extends LitElement {
                     ${this.products.map(
                       (p) =>
                         html`<option value=${p.id} .selected=${p.id === this.selectedProductId}>
-                          ${this.#productName(p)}
+                          ${p.name}
                         </option>`,
                     )}
                   </select>

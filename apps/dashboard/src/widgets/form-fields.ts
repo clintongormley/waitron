@@ -1,6 +1,7 @@
 import { html } from "lit";
 import { currentContentLanguages } from "@waitron/ui";
 import { MAX_MODIFIER_INTEGER } from "@waitron/catalogue/src/modifier-limits.js";
+import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 
@@ -16,6 +17,11 @@ export interface FieldContext {
 /** A whole number from 1 to the largest quantity a modifier may store, written in plain digits. */
 export const isModifierQuantity = (text: string) =>
   /^\d+$/.test(text) && Number(text) >= 1 && Number(text) <= MAX_MODIFIER_INTEGER;
+
+/** The price field's label, naming the product's pricing unit when there is one. The variants table
+ * puts the same text in its price column header, so the two never disagree about the unit. */
+export const priceLabel = (unitLabel: string) =>
+  unitLabel.trim() ? t("editor.price_unit").replace("{unit}", unitLabel) : t("editor.price");
 
 /** A translated name without its blank entries, so a language left blank is not submitted. */
 export const nonBlankNames = (value: Record<string, string>) =>
@@ -70,6 +76,25 @@ export function nameFields(
       }}
     ></wt-input>`;
   });
+}
+
+/**
+ * One OPTIONAL input per content language, named `<key>-<locale>`. Unlike {@link nameFields} no
+ * language is required and none is marked with an asterisk: a customer-facing name or a description
+ * left blank falls back to the staff name rather than being a missing value.
+ */
+export function optionalTextFields(
+  context: FieldContext,
+  key: string,
+  label: string,
+  value: Record<string, string>,
+  change: (value: Record<string, string>) => void,
+) {
+  return context.locales.map((locale) =>
+    textField(context, `${key}-${locale}`, `${label} (${locale})`, value[locale] ?? "", (text) =>
+      change({ ...value, [locale]: text }),
+    ),
+  );
 }
 
 export function switchField(

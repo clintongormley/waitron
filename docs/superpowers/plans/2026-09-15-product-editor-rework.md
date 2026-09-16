@@ -8,6 +8,18 @@
 
 **Tech Stack:** TypeScript, Lit web components (dashboard + till + `@waitron/ui`), Drizzle ORM over PostgreSQL, Vitest (PGlite + Testcontainers real-PG + real headless Chromium for browser packages), Hono (server routes).
 
+**Migration numbers, 2026-09-16:** rebasing onto `main` collided with `0027`–`0029` there, so the
+`packages/db` migrations this plan names below were regenerated as `packages/db/drizzle/0030_product_names_and_line_snapshots.sql`
+(Tasks A1 and B1 together) and `0031_variant_descriptions_locales_sql.sql` (the custom trigger, which
+carries the `_sql` suffix every hand-written migration here carries). The `packages/catalogue`
+migration the plan names was NOT renumbered and is on disk exactly as written below. Read the
+`packages/db` numbers as the shape of the work, not as paths on disk.
+
+**Error code renamed, 2026-09-16:** the code this plan calls `product.variants_min_two` shipped as
+`product.variant_count_invalid` with a `minimum` parameter, to match its siblings' singular stem and
+to keep the number out of the code's name the way every other bounded code here does. The steps
+below keep the old name because they record what was planned.
+
 **Spec:** [docs/superpowers/specs/2026-09-15-product-editor-rework-design.md](../specs/2026-09-15-product-editor-rework-design.md). Read it alongside this plan. It supersedes the layout and naming model in `2026-09-12-product-editor-design.md`; that older spec's rules on menus, variant pricing precedence, tax choice, allergens and dietary suitability still stand.
 
 ## Global Constraints

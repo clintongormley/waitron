@@ -27,8 +27,8 @@ import { today } from "../date-utils.js";
  *     not roll up across days, so it is deliberately absent here.
  *
  * Money fields arrive pre-formatted as decimal strings from the server and are rendered verbatim
- * (there is no client-side currency formatter in this app). Top-seller names come from a per-locale
- * `descriptions` map resolved through the shared {@link localizedSnapshotName} helper. Every async path is
+ * (there is no client-side currency formatter in this app). Top-seller names are the plain staff
+ * name a sales report shows (CLAUDE.md's three-name table) — no locale lookup. Every async path is
  * `try/catch`ed into the `errorKey` banner (the roster/overview-screen pattern); a `from > to` range
  * is left for the server to reject (400 `management.request_invalid`, per report-api.ts's `from > to`
  * guard), which surfaces the same way. Read-only: it authors nothing.

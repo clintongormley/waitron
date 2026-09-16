@@ -116,8 +116,29 @@ describe("seedCatalogues", () => {
         join product_categories pc on pc.product_id = p.id and pc.tenant_id = p.tenant_id
         join product_variants pv on pv.product_id = p.id and pv.tenant_id = p.tenant_id
         join menu_item_variants mv on mv.product_id = p.id and mv.variant_id = pv.id and mv.tenant_id = p.tenant_id
-        where p.descriptions->>'en' = 'Coffee'
+        where p.name = 'Café'
         group by p.id, c.name`);
+      // The demo exists to show WHICH name each screen reads, so it has to seed products whose three
+      // names are three different strings. A seed that derives them all from one authored map cannot
+      // tell a correct screen from an incorrect one.
+      const { rows: threeNames } = await tx.execute<{
+        name: string;
+        customer_en: string | null;
+        kitchen_name: string | null;
+      }>(sql`
+        select p.name, p.customer_name->>'en' as customer_en, p.kitchen_name
+        from products p
+        where p.name = 'Bravas'`);
+      const { rows: distinctNames } = await tx.execute<{
+        differing: number;
+        with_kitchen: number;
+      }>(sql`
+        select
+          count(*) filter (
+            where p.customer_name is not null and p.name <> (p.customer_name->>'en')
+          )::int as differing,
+          count(*) filter (where p.kitchen_name is not null)::int as with_kitchen
+        from products p`);
       const { rows: customUnit } = await tx.execute<{
         precision: number;
         name: Record<string, string>;
@@ -126,7 +147,7 @@ describe("seedCatalogues", () => {
         select u.precision, u.name, u.abbreviation from units u
         join product_units pu on pu.unit_id = u.id and pu.tenant_id = u.tenant_id
         join products p on p.id = pu.product_id and p.tenant_id = pu.tenant_id
-        where p.descriptions->>'en' = 'Mixed salad'`);
+        where p.name = 'Mixed salad'`);
       return {
         out,
         menus,
@@ -136,6 +157,8 @@ describe("seedCatalogues", () => {
         drinksRoute,
         charcuterieRoute,
         editorDemo,
+        threeNames,
+        distinctNames,
         customUnit,
       };
     });
@@ -154,10 +177,8 @@ describe("seedCatalogues", () => {
     expect(menuNames).toEqual(new Set(["Casa Delgado", "Menú del Día", "Deli takeaway"]));
 
     // A known dish from each menu is present.
-    expect(res.products.some((p) => p.descriptions[LOCALE] === "Sliced Iberian ham (per kg)")).toBe(
-      true,
-    );
-    expect(res.products.some((p) => p.descriptions[LOCALE] === "Mixed salad")).toBe(true);
+    expect(res.products.some((p) => p.name === "Sliced Iberian ham (per kg)")).toBe(true);
+    expect(res.products.some((p) => p.name === "Mixed salad")).toBe(true);
 
     const cocina = res.stations.find((s) => s.name === "Kitchen");
     const downstairsBar = res.stations.find((s) => s.name === "Downstairs bar");
@@ -171,6 +192,14 @@ describe("seedCatalogues", () => {
     // Routing: a drinks category → the bar (Barra); a food category → the kitchen (Cocina).
     expect(res.drinksRoute[0]?.station_name).toBe("Downstairs bar");
     expect(res.charcuterieRoute[0]?.station_name).toBe("Deli counter");
+
+    // One product's three names in full, then a floor across the whole seed — so flattening the names
+    // back onto one authored string fails here rather than quietly producing an unusable demo.
+    expect(res.threeNames).toEqual([
+      { name: "Bravas", customer_en: "Spicy potatoes", kitchen_name: "BRAVAS" },
+    ]);
+    expect(res.distinctNames[0]!.differing).toBeGreaterThanOrEqual(10);
+    expect(res.distinctNames[0]!.with_kitchen).toBeGreaterThanOrEqual(5);
 
     expect(res.editorDemo).toEqual([
       {

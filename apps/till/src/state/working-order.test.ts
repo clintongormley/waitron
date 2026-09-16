@@ -10,7 +10,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 // A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -21,7 +22,8 @@ const cafe: TillProduct = {
 // A weight product priced per kg: 10.00/kg gross at the reduced rate.
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
   vatClass: "reduced",

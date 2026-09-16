@@ -23,7 +23,11 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
 import { ProductChildCreate, type ProductChildKind } from "../state/product-child-create.js";
-import type { ProductEditor } from "../widgets/product-editor.js";
+import {
+  productEditorField,
+  productEditorTranslationField,
+  type ProductEditor,
+} from "../widgets/product-editor.js";
 import "../widgets/category-form.js";
 import "../widgets/content-languages.js";
 import "../widgets/modifier-form.js";
@@ -79,6 +83,12 @@ export class CatalogueScreen extends LitElement {
   @state() private busy = false;
   @state() private errorKey: string | null = null;
   @state() private languageSettingsOpen = false;
+  /** The modifier the nested form is EDITING, or null when it is creating one. The product editor
+   * opens the same form for both, and this is what decides which write its Save performs. */
+  @state() private editingModifier: Modifier | null = null;
+  /** The rejected save's problem, keyed by the editor field that holds it. Empty when the server
+   * named no field this screen can point at. */
+  @state() private editorFieldErrors: Record<string, string> = {};
   #editorGeneration = 0;
   #linkedProduct: string | null = null;
 
@@ -100,7 +110,10 @@ export class CatalogueScreen extends LitElement {
     dashboardPath,
   );
   readonly #child = new ProductChildCreate(this, {
-    accept: (kind, value) => this.#editor()?.selectRelated(kind, value.id),
+    accept: (kind, value) => {
+      if (kind === "modifier") this.editingModifier = null;
+      this.#editor()?.selectRelated(kind, value.id);
+    },
     refresh: (kind) => this.#refreshRelated(kind),
     loadError: (error) => {
       this.errorKey = codeOf(error);
@@ -164,13 +177,22 @@ export class CatalogueScreen extends LitElement {
     await this.#openLinkedProduct();
   }
 
+  /** Drops everything that belonged to the editor's previous product — a half-finished nested
+   * create or edit, and the field the last refused save named — so a switched product never
+   * inherits any of it. */
+  #resetEditorState(): void {
+    this.#child.reset();
+    this.editingModifier = null;
+    this.editorFieldErrors = {};
+  }
+
   #editor(): ProductEditor | null {
     return this.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor") ?? null;
   }
 
   #openCreate(): void {
     this.#editorGeneration++;
-    this.#child.reset();
+    this.#resetEditorState();
     this.editorValue = null;
     this.errorKey = null;
     this.editorOpen = true;
@@ -178,7 +200,7 @@ export class CatalogueScreen extends LitElement {
 
   async #openProduct(productId: string): Promise<void> {
     if (!this.products.some(({ id }) => id === productId)) return;
-    this.#child.reset();
+    this.#resetEditorState();
     this.editorOpen = false;
     this.editorValue = null;
     this.errorKey = null;
@@ -203,7 +225,7 @@ export class CatalogueScreen extends LitElement {
 
   #closeEditor(writeUrl = true): void {
     this.#editorGeneration++;
-    this.#child.reset();
+    this.#resetEditorState();
     this.editorOpen = false;
     this.editorValue = null;
     this.#linkedProduct = null;
@@ -215,6 +237,7 @@ export class CatalogueScreen extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.errorKey = null;
+    this.editorFieldErrors = {};
     try {
       if (this.editorValue === null)
         await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
@@ -222,10 +245,37 @@ export class CatalogueScreen extends LitElement {
       this.#closeEditor();
       await this.#reloadProducts();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      const fieldErrors = this.#rejectedField(error, event.detail.value);
+      this.editorFieldErrors = fieldErrors;
+      // A refusal that names a field is reported INSIDE the editor, beside that field — which is
+      // also what opens the section the field is folded into. Only a refusal with nothing to point
+      // at falls back to this screen's own banner, so the same problem is never said twice.
+      this.errorKey = Object.keys(fieldErrors).length ? null : codeOf(error);
     } finally {
       this.busy = false;
     }
+  }
+
+  /**
+   * The editor field a rejected product write belongs to, as a `fieldErrors` entry. A refusal
+   * carries one of two things the editor has somewhere to put: the FIELD it is about, or — for the
+   * content languages — the LANGUAGE whose text is missing, which is the shape this editor's own
+   * translated inputs produce. Which refusals carry which is pinned by
+   * `packages/catalogue/src/product-editor.test.ts`; a nutrition refusal carries neither, so it
+   * reaches the screen's banner like any other refusal with nothing to point at.
+   */
+  #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {
+    const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
+    if (typeof params.field === "string") {
+      const name = productEditorField(params.field, this.contentLanguages?.defaultLanguage ?? "");
+      return name === null ? {} : { [name]: t("editor.field_rejected") };
+    }
+    const code = codeOf(error);
+    if (code === "content.translation_required" && typeof params.language === "string") {
+      const name = productEditorTranslationField(submitted, params.language);
+      return name === null ? {} : { [name]: codeMessage(code) };
+    }
+    return {};
   }
 
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
@@ -252,10 +302,24 @@ export class CatalogueScreen extends LitElement {
 
   #submitModifier(event: CustomEvent<{ value: ModifierInput }>): void {
     event.stopPropagation();
+    const editing = this.editingModifier;
     void this.#child.submit(async () => {
-      const value = await this.api.createModifier(event.detail.value);
+      const value = editing
+        ? await this.api.updateModifier(editing.id, event.detail.value)
+        : await this.api.createModifier(event.detail.value);
       return { id: value.id, name: value.name };
     });
+  }
+
+  /** The product editor asked to edit one of its attached modifiers. The list is already loaded, so
+   * this opens the same nested form the create path uses, seeded with that modifier. */
+  #editRelated(event: CustomEvent<{ kind: ProductChildKind; id: string }>): void {
+    event.stopPropagation();
+    if (event.detail.kind !== "modifier") return;
+    const modifier = this.modifiers.find(({ id }) => id === event.detail.id);
+    if (!modifier) return;
+    this.editingModifier = modifier;
+    this.#child.open("modifier");
   }
 
   override render() {
@@ -311,7 +375,6 @@ export class CatalogueScreen extends LitElement {
         this.catalogues.length
           ? html`<dashboard-product-list
               .products=${this.products}
-              .primaryLocale=${this.contentLanguages?.defaultLanguage ?? ""}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId);
@@ -326,6 +389,7 @@ export class CatalogueScreen extends LitElement {
         .childOpen=${this.#child.kind !== null}
         .locales=${locales}
         .value=${this.editorValue}
+        .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
         .categories=${this.categories}
         .modifiers=${this.modifiers}
@@ -341,30 +405,7 @@ export class CatalogueScreen extends LitElement {
           event.stopPropagation();
           this.#child.open(event.detail.kind);
         }}
-        @wt-set-product-station=${async (
-          event: CustomEvent<{ productId: string; stationId: string | null }>,
-        ) => {
-          event.stopPropagation();
-          try {
-            await this.api.setProductStation(event.detail.productId, event.detail.stationId);
-            if (this.editorValue?.id === event.detail.productId)
-              this.editorValue = { ...this.editorValue, stationId: event.detail.stationId };
-          } catch (error) {
-            this.errorKey = codeOf(error);
-          }
-        }}
-        @wt-set-product-course=${async (
-          event: CustomEvent<{ productId: string; courseId: string | null }>,
-        ) => {
-          event.stopPropagation();
-          try {
-            await this.api.setProductCourse(event.detail.productId, event.detail.courseId);
-            if (this.editorValue?.id === event.detail.productId)
-              this.editorValue = { ...this.editorValue, courseId: event.detail.courseId };
-          } catch (error) {
-            this.errorKey = codeOf(error);
-          }
-        }}
+        @wt-edit-related=${this.#editRelated}
       ></dashboard-product-editor>
       <dashboard-unit-form
         .open=${this.#child.kind === "unit"}
@@ -392,8 +433,12 @@ export class CatalogueScreen extends LitElement {
         .open=${this.#child.kind === "modifier"}
         .busy=${this.#child.busy}
         .locales=${locales}
+        .value=${this.editingModifier}
         @wt-submit=${this.#submitModifier}
-        @wt-cancel=${() => this.#child.cancel()}
+        @wt-cancel=${() => {
+          this.editingModifier = null;
+          this.#child.cancel();
+        }}
       ></dashboard-modifier-form>
       ${
         this.contentLanguages

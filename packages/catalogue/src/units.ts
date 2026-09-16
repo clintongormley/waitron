@@ -21,7 +21,7 @@ export interface Unit {
 /** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
 export interface ProductUsingUnit {
   id: string;
-  name: Record<string, string>;
+  name: string;
   available: boolean;
 }
 
@@ -287,7 +287,7 @@ export async function productsUsingUnit(
   unitId: string,
 ): Promise<ProductUsingUnit[]> {
   return tx
-    .select({ id: products.id, name: products.descriptions, available: products.active })
+    .select({ id: products.id, name: products.name, available: products.active })
     .from(productUnits)
     .innerJoin(
       products,

@@ -45,7 +45,15 @@ const SEED = {
     total: "121.00",
     tenderAmount: "121.00",
     tipAmount: "3.00",
-    line: { descriptions: { "es-ES": "Tortilla" }, quantity: "2.000", total: "10.00" },
+    // `name` (staff) and `descriptions` (customer text) are deliberately distinct — a sales report
+    // shows the staff name (CLAUDE.md's three-name table), so a test reading the customer text
+    // instead of the staff name would fail here.
+    line: {
+      name: "Tortilla",
+      descriptions: { "es-ES": "Tortilla francesa" },
+      quantity: "2.000",
+      total: "10.00",
+    },
   },
   day2: {
     issuedAt: "2026-06-11T12:00:00Z",
@@ -55,7 +63,12 @@ const SEED = {
     total: "55.00",
     tenderAmount: "55.00",
     tipAmount: "1.00",
-    line: { descriptions: { "es-ES": "Agua" }, quantity: "1.000", total: "2.00" },
+    line: {
+      name: "Agua",
+      descriptions: { "es-ES": "Agua mineral" },
+      quantity: "1.000",
+      total: "2.00",
+    },
   },
 } as const;
 
@@ -67,7 +80,7 @@ interface DaySeed {
   total: string;
   tenderAmount: string;
   tipAmount: string;
-  line: { descriptions: Record<string, string>; quantity: string; total: string };
+  line: { name: string; descriptions: Record<string, string>; quantity: string; total: string };
 }
 
 /** Seed one sale + its tender + one sale_line on a FIXED business day (issued/settled at a literal
@@ -87,8 +100,10 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
     insert into tenders (tenant_id, sale_id, method, amount, tip_amount, settled_at)
     values (${tenantId}, ${saleId}, 'cash', ${d.tenderAmount}, ${d.tipAmount}, ${d.issuedAt})`);
   await db.execute(sql`
-    insert into sale_lines (tenant_id, sale_id, line_no, descriptions, quantity, unit_price, vat_rate, line_total)
-    values (${tenantId}, ${saleId}, 1, ${JSON.stringify(d.line.descriptions)}::jsonb,
+    insert into sale_lines
+      (tenant_id, sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
+    values (${tenantId}, ${saleId}, 1, ${d.line.name},
+            ${JSON.stringify(d.line.descriptions)}::jsonb,
             ${d.line.quantity}, '3.50', ${d.rate}, ${d.line.total})`);
 }
 
@@ -171,13 +186,13 @@ interface DailyCloseBody {
   vat: VatSummaryBody;
   cash: { byTill: { tillId: string }[]; tenderTotal: string; tipTotal: string };
   counts: { sales: number; corrections: number; voids: number };
-  topSellers: { descriptions: Record<string, string>; quantity: string; total: string }[];
+  topSellers: { name: string; quantity: string; total: string }[];
 }
 interface PeriodBody {
   from: string;
   to: string;
   vat: VatSummaryBody;
-  topSellers: { descriptions: Record<string, string>; quantity: string; total: string }[];
+  topSellers: { name: string; quantity: string; total: string }[];
 }
 
 describe("mountReportApi — /reports/daily-close", () => {
@@ -197,9 +212,9 @@ describe("mountReportApi — /reports/daily-close", () => {
     expect(body.cash.tipTotal).toBe("3.00");
     // One ordinary sale on the day.
     expect(body.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
-    // The single seeded line, keyed on its frozen descriptions snapshot.
+    // The single seeded line, keyed on its frozen STAFF name — never the customer-facing text.
     expect(body.topSellers).toEqual([
-      { descriptions: SEED.day1.line.descriptions, quantity: "2.000", total: "10.00" },
+      { name: SEED.day1.line.name, quantity: "2.000", total: "10.00" },
     ]);
   });
 
@@ -261,8 +276,8 @@ describe("mountReportApi — /reports/period", () => {
     expect(body.vat.grossTotal).toBe("176.00");
     // Both lines, ranked by quantity desc: Tortilla (2.000) before Agua (1.000).
     expect(body.topSellers).toEqual([
-      { descriptions: SEED.day1.line.descriptions, quantity: "2.000", total: "10.00" },
-      { descriptions: SEED.day2.line.descriptions, quantity: "1.000", total: "2.00" },
+      { name: SEED.day1.line.name, quantity: "2.000", total: "10.00" },
+      { name: SEED.day2.line.name, quantity: "1.000", total: "2.00" },
     ]);
   });
 
@@ -272,7 +287,7 @@ describe("mountReportApi — /reports/period", () => {
     const body = (await res.json()) as PeriodBody;
     expect(body.vat.byRate).toEqual([{ rate: "10.00", base: "50.00", tax: "5.00" }]);
     expect(body.topSellers).toEqual([
-      { descriptions: SEED.day2.line.descriptions, quantity: "1.000", total: "2.00" },
+      { name: SEED.day2.line.name, quantity: "1.000", total: "2.00" },
     ]);
   });
 

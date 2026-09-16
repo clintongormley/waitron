@@ -162,7 +162,7 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
     await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua mineral" },
+      name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",

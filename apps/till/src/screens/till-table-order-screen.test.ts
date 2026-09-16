@@ -9,7 +9,8 @@ import type { TillTenderPay } from "../widgets/tender-pay.js";
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -22,7 +23,8 @@ const cafe: TillProduct = {
 const jamon: TillProduct = {
   ...cafe,
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "20.00",
 };
@@ -109,13 +111,15 @@ describe("till-table-order-screen", () => {
     const veganDish: TillProduct = {
       ...cafe,
       id: "vegan",
-      descriptions: { es: "Ensalada" },
+      name: "Ensalada",
+      customerName: { es: "Ensalada para el cliente" },
       diet: { vegan: "yes", vegetarian: "yes", contains: [] },
     };
     const meatDish: TillProduct = {
       ...cafe,
       id: "meat",
-      descriptions: { es: "Chuleta" },
+      name: "Chuleta",
+      customerName: { es: "Chuleta para el cliente" },
       diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
     };
     const { el } = await mount({ products: [veganDish, meatDish] });
@@ -1226,7 +1230,8 @@ describe("till-table-order-screen", () => {
     const bocadillo: TillProduct = {
       ...cafe,
       id: "bocadillo",
-      descriptions: { es: "Bocadillo" },
+      name: "Bocadillo",
+      customerName: { es: "Bocadillo para el cliente" },
       courseId: null,
       catalogueId: "cat-food",
       catalogueName: "Comida",
@@ -1234,7 +1239,8 @@ describe("till-table-order-screen", () => {
     const cerveza: TillProduct = {
       ...cafe,
       id: "cerveza",
-      descriptions: { es: "Cerveza" },
+      name: "Cerveza",
+      customerName: { es: "Cerveza para el cliente" },
       courseId: null,
       catalogueId: "cat-drinks",
       catalogueName: "Bebidas",
@@ -1303,11 +1309,13 @@ it("sends explicit modifier answers in table rounds without sending local charge
 
 it("shows a retained table line's recorded name and modifier answer after live names change", async () => {
   const { el } = await mount({
-    products: [{ ...cafe, descriptions: { es: "Nuevo nombre" } }],
+    products: [
+      { ...cafe, name: "Nuevo nombre", customerName: { es: "Nuevo nombre para el cliente" } },
+    ],
     lines: [
       {
         ...pendingLine,
-        descriptions: { "es-ES": "Nombre guardado" },
+        name: "Nombre guardado",
         modifierSnapshots: [
           {
             modifierId: "cut",

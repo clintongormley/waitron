@@ -180,6 +180,7 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
+          name: description,
           descriptions: { [LOCALE]: description },
           quantity: "1",
           unitPrice: baseAmount,

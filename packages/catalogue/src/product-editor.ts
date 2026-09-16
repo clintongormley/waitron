@@ -25,7 +25,8 @@ export type ProductEditorValue = Omit<ProductEditorInput, "variants"> & {
 };
 const columns = {
   id: products.id,
-  name: products.descriptions,
+  name: products.name,
+  customerName: products.customerName,
   description: products.description,
   kitchenName: products.kitchenName,
   image: products.image,
@@ -70,7 +71,12 @@ export async function saveProductEditor(
   fallbackLanguage: string,
 ): Promise<ProductEditorValue> {
   const value = parseProductEditorInput(input);
-  await validateContentTranslations(tx, tenantId, value.name, fallbackLanguage);
+  // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
+  // must satisfy the enabled languages. A blank one is legal (it falls back to `name`), so only a
+  // supplied customer name is validated — validateContentTranslations({}) would wrongly demand a
+  // default-language entry.
+  if (value.customerName !== null)
+    await validateContentTranslations(tx, tenantId, value.customerName, fallbackLanguage);
   if (productId !== null) {
     const [product] = await tx
       .select({ id: products.id })
@@ -89,7 +95,8 @@ export async function saveProductEditor(
     const created = await createProduct(tx, tenantId, {
       catalogueId,
       categoryId: null,
-      descriptions: value.name,
+      name: value.name,
+      customerName: value.customerName,
       description: value.description,
       kitchenName: value.kitchenName,
       unitId: value.unitId,
@@ -103,7 +110,8 @@ export async function saveProductEditor(
     productId = created.id;
   } else {
     await updateProduct(tx, tenantId, productId, {
-      descriptions: value.name,
+      name: value.name,
+      customerName: value.customerName,
       description: value.description,
       kitchenName: value.kitchenName,
       unitId: value.unitId,

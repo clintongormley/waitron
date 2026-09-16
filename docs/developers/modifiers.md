@@ -131,7 +131,7 @@ on `pricingUnit === "each"`.
 
 Held responses carry the original snapshots and explicit selections. A quantity-only update sends
 `workingOrderLineId` and the same selections, preserving the original prices. Changed answers take
-the normal new-selection validation path. `TabLine.descriptions` and `modifierSnapshots`, receipt
+the normal new-selection validation path. `TabLine.name` and `modifierSnapshots`, receipt
 lines and kitchen lines carry stored presentation facts. Allergen and dietary information is resolved
 live from a saved choice's current declarations, never stored. The till basket and the kitchen/expo
 screens do not combine a dish with its extras into an "as-served" figure: the dish shows its own

@@ -18,7 +18,7 @@ import { createUnit } from "./units.js";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 describe("site content languages", () => {
-  it("requires variant names in a new default language but leaves descriptions optional", async () => {
+  it("requires a variant's customer name in a new default language but leaves the product's optional", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, async (tx) => {
       const catalogue = await createCatalogue(tx, tenantId, { name: "Bar" });
@@ -28,10 +28,12 @@ describe("site content languages", () => {
         { name: { en: "each", fr: "unité" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
+      // The product has only a staff name (no customer name), so it never gaps; the variant carries a
+      // partial customer name and is the sole gap until it is completed.
       const product = await createProduct(tx, tenantId, {
         catalogueId: catalogue.id,
         categoryId: null,
-        descriptions: { en: "Coffee", fr: "Café" },
+        name: "Coffee",
         description: { en: "Freshly roasted" },
         unitPrice: "9.00",
         unitId: unit.id,
@@ -41,7 +43,16 @@ describe("site content languages", () => {
         tx,
         tenantId,
         product.id,
-        [{ name: { en: "Small" }, unitPrice: "2.00", available: true }],
+        [
+          {
+            name: "Small",
+            customerName: { en: "Small cup" },
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
         "en",
       );
       expect(await listContentTranslationGaps(tx, tenantId, "fr")).toEqual([
@@ -51,7 +62,7 @@ describe("site content languages", () => {
         tx,
         tenantId,
         product.id,
-        [{ ...variant!, name: { en: "Small", fr: "Petit" } }],
+        [{ ...variant!, customerName: { en: "Small cup", fr: "Petit" } }],
         "en",
       );
       expect(await listContentTranslationGaps(tx, tenantId, "fr")).toEqual([]);
@@ -59,6 +70,70 @@ describe("site content languages", () => {
       expect((await readContentLanguages(tx, tenantId, "en")).defaultLanguage).toBe("fr");
     });
   });
+  it("counts a partial customer name as a gap but a blank one as none", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Bar" });
+      const unit = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
+      const base = {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        unitId: unit.id,
+        vatClass: "reduced" as const,
+      };
+      // No customer name → never a gap in any language.
+      const plain = await createProduct(tx, tenantId, {
+        ...base,
+        name: "Water",
+        unitPrice: "1.00",
+      });
+      // A customer name in en only → a gap for es.
+      const partial = await createProduct(tx, tenantId, {
+        ...base,
+        name: "Coffee",
+        customerName: { en: "Fresh Coffee" },
+        unitPrice: "2.00",
+      });
+      // A variant with no customer name → not a gap.
+      const variants = await setProductVariants(
+        tx,
+        tenantId,
+        partial.id,
+        [
+          {
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+          {
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "3.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      const esGaps = await listContentTranslationGaps(tx, tenantId, "es");
+      expect(esGaps).toContainEqual({ kind: "product", id: partial.id });
+      expect(esGaps).not.toContainEqual({ kind: "product", id: plain.id });
+      for (const v of variants) expect(esGaps).not.toContainEqual({ kind: "variant", id: v.id });
+      // In en, even the partial customer name is complete → no product/variant gap.
+      const enGaps = await listContentTranslationGaps(tx, tenantId, "en");
+      expect(enGaps).not.toContainEqual({ kind: "product", id: partial.id });
+    });
+  });
+
   it.each(["", "invalid_locale", "und"])(
     "uses the shared fallback for an absent setting and invalid preference %j",
     async (fallbackLanguage) => {
@@ -84,8 +159,8 @@ describe("site content languages", () => {
       const menu = await tx.execute<{ id: string }>(
         sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
       );
-      await tx.execute(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Bread","fr-FR":"Pain"}'::jsonb, 'each', '2.00', 'general')`);
+      await tx.execute(sql`insert into products (tenant_id, catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class)
+        values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', '{"en":"Bread","fr-FR":"Pain"}'::jsonb, 'each', '2.00', 'general')`);
       await expect(
         writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr", "en"] }),
       ).resolves.toBeUndefined();
@@ -133,8 +208,8 @@ describe("site content languages", () => {
       const menu = await tx.execute<{ id: string }>(
         sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
       );
-      await tx.execute(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Bread"}'::jsonb, 'each', '2.00', 'general')`);
+      await tx.execute(sql`insert into products (tenant_id, catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class)
+        values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', '2.00', 'general')`);
     });
     await expect(
       withTenant(suite.db, tenantId, (tx) =>
@@ -147,7 +222,7 @@ describe("site content languages", () => {
     await withTenant(suite.db, tenantId, async (tx) => {
       expect((await readContentLanguages(tx, tenantId, "es")).defaultLanguage).toBe("en");
       await tx.execute(
-        sql`update products set descriptions = '{"en":"Bread","fr":"Pain"}'::jsonb where tenant_id = ${tenantId}`,
+        sql`update products set customer_name = '{"en":"Bread","fr":"Pain"}'::jsonb where tenant_id = ${tenantId}`,
       );
       await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] });
       expect(await readContentLanguages(tx, tenantId, "es")).toEqual({
@@ -155,10 +230,10 @@ describe("site content languages", () => {
         languages: ["fr", "en"],
       });
       await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr"] });
-      const descriptions = await tx.execute<{ descriptions: Record<string, string> }>(
-        sql`select descriptions from products where tenant_id = ${tenantId}`,
+      const customerNames = await tx.execute<{ customer_name: Record<string, string> }>(
+        sql`select customer_name from products where tenant_id = ${tenantId}`,
       );
-      expect(descriptions.rows[0]!.descriptions).toEqual({ en: "Bread", fr: "Pain" });
+      expect(customerNames.rows[0]!.customer_name).toEqual({ en: "Bread", fr: "Pain" });
     });
   });
   it("refuses to change the default while a unit lacks its translation", async () => {

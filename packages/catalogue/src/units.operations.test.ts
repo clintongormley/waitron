@@ -23,8 +23,8 @@ async function product(tx: Transaction, tenantId: string, name: string) {
     insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
   return (
     await tx.execute<{ id: string }>(sql`
-      insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-      values (${tenantId}, ${menu.rows[0]!.id}, ${JSON.stringify({ en: name })}::jsonb, 'each', '1', 'general')
+      insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+      values (${tenantId}, ${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
       returning id`)
   ).rows[0]!.id;
 }
@@ -94,7 +94,7 @@ describe("unit operations", () => {
         update products set active = false where tenant_id = ${tenantId} and id = ${productId}`);
       await expect(deleteUnit(tx, tenantId, unit.id)).rejects.toMatchObject({
         code: "unit.in_use",
-        params: { products: [{ id: productId, name: { en: "Soup" }, available: false }] },
+        params: { products: [{ id: productId, name: "Soup", available: false }] },
       });
     });
   });
@@ -121,8 +121,8 @@ describe("unit operations", () => {
       expect(using).toHaveLength(2);
       expect(using).toEqual(
         expect.arrayContaining([
-          { id: soup, name: { en: "Soup" }, available: true },
-          { id: tea, name: { en: "Tea" }, available: false },
+          { id: soup, name: "Soup", available: true },
+          { id: tea, name: "Tea", available: false },
         ]),
       );
     });

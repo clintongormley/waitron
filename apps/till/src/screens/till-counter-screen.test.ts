@@ -9,7 +9,8 @@ import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
 const cafe: TillProduct = {
   id: "p1",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -212,7 +213,7 @@ describe("till-counter-screen", () => {
             id: "ti-1",
             workingOrderLineId: "wol-1",
             state: "queued" as const,
-            descriptions: { "es-ES": "Paella" },
+            name: "Paella",
             quantity: "2.000",
             course: null,
             firedAt: "2026-08-17T10:00:00.000Z",
@@ -277,13 +278,15 @@ describe("till-counter-screen", () => {
   const veganDish: TillProduct = {
     ...cafe,
     id: "vegan",
-    descriptions: { es: "Ensalada" },
+    name: "Ensalada",
+    customerName: { es: "Ensalada para el cliente" },
     diet: { vegan: "yes", vegetarian: "yes", contains: [] },
   };
   const meatDish: TillProduct = {
     ...cafe,
     id: "meat",
-    descriptions: { es: "Chuleta" },
+    name: "Chuleta",
+    customerName: { es: "Chuleta para el cliente" },
     diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
   };
 

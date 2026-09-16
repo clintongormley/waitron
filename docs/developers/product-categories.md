@@ -14,11 +14,11 @@ choose or clear a parent. You cannot choose the category itself or any of its de
 
 A primary category is optional in the data model and on the write path every current UI flow uses:
 a product may hold memberships with no reporting category at all.
-`dashboard-category-membership-picker`'s reporting-category dropdown offers an explicit "None" option,
-and the product editor's category picker can be left on its default "Choose…" placeholder; both
-submit with `primaryCategoryId: null` through `replaceProductCategories`, whose only remaining check
-is that a primary, if set, must be one of the currently selected categories. Removing the last
-membership clears primary.
+`dashboard-category-membership-picker`'s reporting-category dropdown offers an explicit "None"
+option, and the product editor reaches that same picker (see the end of this file), so both the
+Categories screen and the editor submit with `primaryCategoryId: null` through
+`replaceProductCategories`, whose only remaining check is that a primary, if set, must be one of the
+currently selected categories. Removing the last membership clears primary.
 
 One older write path is the exception, and the API is not uniform because of it. Sending
 `categoryId: null` in a product patch (`updateProduct`, the `PATCH` product route) still refuses with
@@ -72,7 +72,7 @@ returns the canonical saved object; delete returns an empty 204.
 | `PATCH /management-api/categories/:id` | Any supplied fields from create → `Category` |
 | `DELETE /management-api/categories/:id` | Cascades, then 204 |
 | `GET /management-api/categories/:id/dependants` | What the delete would touch → `CategoryDependants` |
-| `GET /management-api/categories/:id/products` | Direct products with descriptions, active state and full membership |
+| `GET /management-api/categories/:id/products` | Direct products with their staff name, active state and full membership |
 | `POST /management-api/categories/:id/products` | `{ productIds }` adds them all in one write → 204 |
 | `GET /management-api/products` | All tenant products, including inactive products, each once |
 | `GET /management-api/products/:id/categories` | `{ categoryIds, primaryCategoryId }` |
@@ -83,8 +83,11 @@ returns the canonical saved object; delete returns an empty 204.
 A colour is lower-case `#rrggbb` or null; anything else is refused as `category.color_invalid` (400).
 
 `CategoryDependants` is `{ products, children, parentId, routes }`, where `products` carries
-`{ id, name, reporting }` per direct member (`reporting` marks the ones this category is the
-reporting category for), `children` carries `{ id, name }` per direct child, and `routes` carries
+`{ id, name, reporting }` per direct member — `name` here is the product's plain staff-facing name,
+a `string`, not a language map, since a product's name is no longer translated
+([Product names, variants and the product editor](products.md)) — and `reporting` marks the ones this
+category is the reporting category for. `children` carries `{ id, name }` per direct child, where
+`name` IS a language map because a category name still is one. `routes` carries
 `{ id, station, zone }` per preparation route. `routes` is always empty when the venue-service
 module is not installed, since that is the module owning the table.
 
@@ -140,9 +143,12 @@ in the reader's language; the chosen categories as coloured lozenges; and a repo
 dropdown (field name `primary-category`) offering "None" and the chosen categories, disabled until a
 category is chosen. The first category chosen into an empty set becomes the reporting category, and
 removing the reporting category from the set clears it. The Categories screen uses it for
-category-side assignment and removal. The product editor (`apps/dashboard/src/widgets/product-editor.ts`)
-does not: it has its own membership controls and reporting-category select, and saves through the
-product editor route, which calls `replaceProductCategories`.
+category-side assignment and removal. The product editor
+(`apps/dashboard/src/widgets/product-editor.ts`) now uses it too, rather than the membership controls
+and reporting-category select it used to carry: the editor draws the chosen categories as lozenges,
+the reporting one ringed, and clicking any of them opens this picker inside a `wt-modal`. Submitting
+it updates the product draft only; the write still happens through the product editor route, which
+calls `replaceProductCategories`.
 
 ## Storage and migration
 
