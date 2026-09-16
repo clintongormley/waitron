@@ -1,5 +1,5 @@
 -- AFTER the generated tenant_id drop: put back, on their remaining column, every hand-written object
--- 0027 took off, and rewrite the four trigger functions whose bodies read `tenant_id`.
+-- 0032 took off, and rewrite the four trigger functions whose bodies read `tenant_id`.
 --
 -- Each foreign key below was a pair `(tenant_id, x) → parent(tenant_id, id)` and is now `(x) →
 -- parent(id)`. That still refuses a value naming no parent row, because `id` is the parent's primary

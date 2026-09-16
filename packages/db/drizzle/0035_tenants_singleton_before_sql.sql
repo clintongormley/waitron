@@ -1,4 +1,4 @@
--- BEFORE the generated tenants change (the 0030/0032 pattern in this set).
+-- BEFORE the generated tenants change (the 0032/0034 pattern in this set).
 --
 -- `tenants.id` stops being a random uuid and becomes the integer 1. PostgreSQL has no cast from
 -- uuid to integer, so the generated `ALTER COLUMN "id" SET DATA TYPE integer` in the next migration
@@ -9,7 +9,7 @@
 -- nothing.
 --
 -- `USING 1` is the whole conversion. There is at most one taxpayer in any database (the unique on
--- country + tax_id, and every foreign key to this table went in 0031), and that taxpayer becomes
+-- country + tax_id, and every foreign key to this table went in 0033), and that taxpayer becomes
 -- row 1. The column keeps its position, which dropping and re-adding it would not.
 
 -- The default is dropped first: `gen_random_uuid()` cannot be cast to integer either, and

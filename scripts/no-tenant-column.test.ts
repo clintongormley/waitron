@@ -67,7 +67,7 @@ const TS_IDENTIFIER = /[tT]enant[Ii][Dd]s?\b/;
 
 /**
  * The core migrations that name `tenant_id`: the baselines that created it, the later migrations
- * that touched tables carrying it, and `0030`–`0032`, which drop it. `packages/db` is the one set
+ * that touched tables carrying it, and `0032`–`0034`, which drop it. `packages/db` is the one set
  * with an upgrade test, so its column was removed by migration rather than by regenerating a
  * baseline the way the eleven module sets were.
  *
@@ -84,9 +84,9 @@ const HISTORICAL_TENANT_SQL: ReadonlySet<string> = new Set([
   "packages/db/drizzle/0014_central_printer_provisioning_sql.sql",
   "packages/db/drizzle/0015_print_agent_node_id.sql",
   "packages/db/drizzle/0020_category_names.sql",
-  "packages/db/drizzle/0030_drop_tenant_id_before_sql.sql",
-  "packages/db/drizzle/0031_drop_tenant_id.sql",
-  "packages/db/drizzle/0032_drop_tenant_id_after_sql.sql",
+  "packages/db/drizzle/0032_drop_tenant_id_before_sql.sql",
+  "packages/db/drizzle/0033_drop_tenant_id.sql",
+  "packages/db/drizzle/0034_drop_tenant_id_after_sql.sql",
 ]);
 
 /**

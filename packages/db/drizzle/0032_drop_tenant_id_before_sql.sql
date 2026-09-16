@@ -1,4 +1,5 @@
--- BEFORE the generated tenant_id drop (the media 0004/0006 and venue-service 0007/0009 pattern).
+-- BEFORE the generated tenant_id drop: the same before/after pair every module set used for its own
+-- drop (a hand-written migration each side of the generated one).
 --
 -- Every object below is HAND-WRITTEN in an earlier custom migration, so it is absent from
 -- drizzle/meta/*.json and `drizzle-kit generate` emits no DROP for it. Each one names `tenant_id`,
@@ -8,8 +9,8 @@
 -- generated one.
 --
 -- Relying on `DROP COLUMN tenant_id` to remove them implicitly would work but is silent (the lesson
--- the bookings set paid for in its 0003): a constraint that vanishes without a statement naming it
--- is a constraint nobody re-adds. IF EXISTS keeps each statement idempotent.
+-- the bookings set paid for): a constraint that vanishes without a statement naming it is a
+-- constraint nobody re-adds. IF EXISTS keeps each statement idempotent.
 
 --> statement-breakpoint
 ALTER TABLE "categories" DROP CONSTRAINT IF EXISTS "categories_station_fk";

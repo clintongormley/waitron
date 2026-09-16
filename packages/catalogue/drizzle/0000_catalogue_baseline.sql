@@ -95,7 +95,10 @@ CREATE TABLE "menu_item_variants" (
 CREATE TABLE "product_variants" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"product_id" uuid NOT NULL,
-	"name" jsonb NOT NULL,
+	"name" text NOT NULL,
+	"customer_name" jsonb,
+	"kitchen_name" text,
+	"image" text,
 	"unit_price" numeric(12, 2) NOT NULL,
 	"available" boolean DEFAULT true NOT NULL,
 	"display_order" integer DEFAULT 0 NOT NULL,
