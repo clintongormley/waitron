@@ -2191,7 +2191,10 @@ credentials; this repo only ever *talks to* a provisioned instance. **Do not res
 work until the Waitron↔Waitron-Cloud boundary contract is settled.** The proof to run then: on-prem
 primary → adopt → mirror → human promotion → tills reroute to the promoted cloud → the venue sells
 and files. [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)
-is a discussion, not an approved spec; the
+is a discussion, not an approved spec, and so is
+[SQLite instead of PostgreSQL](superpowers/specs/2026-09-16-sqlite-instead-of-postgres-discussion.md)
+(2026-09-16: the regulation names no database privilege; Litestream covers standby and rejoin but not
+a returned box's ledger tail; decide on a density measurement first); the
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
 paid offering. Remote-access bot protection (Cloudflare Turnstile on internet-facing login and
 recovery, never in the local-only product) belongs to that offering.
