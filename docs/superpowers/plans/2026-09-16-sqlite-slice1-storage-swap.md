@@ -26,6 +26,12 @@ Every task's requirements implicitly include this section.
 - **Comments state the invariant and the non-obvious why, never the history.** The receipt goes in the commit message and the pull request thread.
 - **Plain English in commit messages and pull request text.** Exact file, function and error-code names appear once as pointers; a command that was run goes in verbatim.
 - **Money is whole cents; quantity is whole thousandths; rates are whole basis points.** Never a blanket "numeric becomes cents" — the scales differ and truncating them is silent corruption.
+- **A new workspace package must be wired in, or the root guards fail.** Guards that the pre-push
+  hook and CI's lint job run on every push read workspace members BY NAME. Measured on 2026-09-16 by
+  adding a member and then removing the wiring: unwired, `npx vitest run` at the repository root gives
+  `Test Files  3 failed | 39 passed`, including `scripts/coverage-thresholds.test.ts` crashing with
+  `ENOENT` looking for a `vitest.config.ts`; wired, `42 passed` and 3033 tests. This bites task F1,
+  which creates `packages/store`.
 - **`WAITRON_ENV` unset means preproduction.** Nothing in this plan may make a production database reachable by accident.
 
 ### The review boundary the campaign runner obeys
@@ -446,7 +452,7 @@ Expected: PASS, all three.
 
 - [ ] **Step 5: Convert package by package**
 
-One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — those name a real container deliberately, and F1 decides each one's fate as part of the 66-test disposition (task F1 step 9).
+One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — those name a real container deliberately, and F1 decides each one's fate as part of the 66-test disposition (task F1 step 24).
 
 - [ ] **Step 6: Verify each package**
 
@@ -1835,16 +1841,37 @@ Two Drizzle instances, one per file — a Drizzle table cannot name a table in a
 
 Pragmas: write-ahead mode, `busy_timeout = 5000`, `foreign_keys = ON`. **Leave automatic checkpointing at SQLite's default.** The topology design sets it to zero, which is right only once Litestream does the checkpointing instead; that arrives in slice 2. Put that reason in a comment, because the next reader will otherwise "fix" it to match the design.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 9: Wire the new package into the guards that read members by name**
+
+`packages/store` is a new workspace member, and three root guards fail until it is wired in — see
+Global Constraints for the measurement. Three things to add:
+
+- `packages/store/vitest.config.ts`, carrying the coverage bar this package is assigned.
+  `scripts/coverage-thresholds.test.ts` pins which bar; `packages/store` holds fiscal-adjacent
+  machinery — the write queue and the append-only triggers — so it takes the higher `98/98/98/95`
+  bar, not the general floor. Say so in the pull request rather than leaving it to be inferred.
+- The shard lists in `scripts/changed-scope.mjs`.
+- The corresponding subtraction in `.github/workflows/ci.yml`.
+
+Do **not** add it to `PACKAGES_WITHOUT_TESTS` — that list is for members declaring no `test:coverage`
+script at all, and this one has tests.
+
+- [ ] **Step 10: Run the root guards, then commit**
 
 ```bash
+npx vitest run
 pnpm --filter @waitron/store test:coverage
+```
+
+Expected: all root guard files pass. Then:
+
+```bash
 git commit -s -m "Open the venue and node databases, with the settings the engine needs"
 ```
 
 ### Step group 4 — the schema
 
-- [ ] **Step 10: Switch the vocabulary to SQLite**
+- [ ] **Step 11: Switch the vocabulary to SQLite**
 
 `packages/db/src/schema/columns.ts` is the only file whose column types change. Per the spec's §5.1:
 
@@ -1866,11 +1893,11 @@ export const table = sqliteTable;
 
 If P1a's report said the enum could not be hidden, apply that report's resolution here rather than inventing a new one.
 
-- [ ] **Step 11: Fix what the vocabulary could not cover**
+- [ ] **Step 12: Fix what the vocabulary could not cover**
 
 `check()`, `index()`, `unique()`, `foreignKey()` and `primaryKey()` come from `drizzle-orm/sqlite-core` now. `defaultRandom()` and `defaultNow()` have no SQLite equivalent — supply them in the vocabulary as `$defaultFn(() => crypto.randomUUID())` and `$defaultFn(() => new Date().toISOString())` so the call sites keep their shape.
 
-- [ ] **Step 12: Regenerate every migration set as one baseline**
+- [ ] **Step 13: Regenerate every migration set as one baseline**
 
 Pre-production: schema changes drop and recreate, so there is no history to keep. For each of the twelve sets:
 
@@ -1885,7 +1912,7 @@ Core's 38 files become one. Then:
 pnpm vitest run scripts/journal-monotonic.test.ts
 ```
 
-- [ ] **Step 13: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
 git commit -s -m "Define every table on SQLite, and regenerate the migrations as one baseline each"
@@ -1893,19 +1920,19 @@ git commit -s -m "Define every table on SQLite, and regenerate the migrations as
 
 ### Step group 5 — the transaction helper, the claim, the errors
 
-- [ ] **Step 14: Point `withTransaction` at the write queue**
+- [ ] **Step 15: Point `withTransaction` at the write queue**
 
 Its signature does not change. Its body takes the write lock, begins, runs the body, commits or rolls back, releases — and still drains the change log after the commit, as P3 established.
 
-- [ ] **Step 15: Remove the PostgreSQL-only SQL from `claimRows`**
+- [ ] **Step 16: Remove the PostgreSQL-only SQL from `claimRows`**
 
 `ctid` and `for update skip locked` go; under the write queue the conditional update is the whole mechanism. P4a's two tests must pass unmodified.
 
-- [ ] **Step 16: Answer `constraintTarget` from SQLite's message**
+- [ ] **Step 17: Answer `constraintTarget` from SQLite's message**
 
 `UNIQUE constraint failed: people.email` — the table and columns, parsed. `node:sqlite` reports the kind of constraint only as a number, so map them: 2067 unique, 1555 primary key, 1299 not null. P10's three tests must pass unmodified.
 
-- [ ] **Step 17: Run all three packages' tests, then commit**
+- [ ] **Step 18: Run all three packages' tests, then commit**
 
 ```bash
 pnpm --filter @waitron/db test:coverage
@@ -1914,7 +1941,7 @@ git commit -s -m "Run transactions, job claims and error matching on SQLite"
 
 ### Step group 6 — append-only, and the archive
 
-- [ ] **Step 18: Write the failing test for the append-only trigger**
+- [ ] **Step 19: Write the failing test for the append-only trigger**
 
 ```ts
 it("refuses an update to a ledger table", async () => {
@@ -1928,19 +1955,19 @@ it("refuses a delete from a ledger table", async () => {
 });
 ```
 
-- [ ] **Step 19: Install `RAISE(ABORT)` triggers on every `ledger` table**
+- [ ] **Step 20: Install `RAISE(ABORT)` triggers on every `ledger` table**
 
 Driven from the classification lists, not a hand-written list — a new ledger table must get its triggers without anyone remembering. Add a guard asserting every `ledger` table carries them, and prove it by deleting one trigger.
 
-- [ ] **Step 20: Replace the `pg_dump` path with `VACUUM INTO`**
+- [ ] **Step 21: Replace the `pg_dump` path with `VACUUM INTO`**
 
 `apps/server/src/pg-restore.ts` goes. The archive path must work in this same pull request, or `main` lands with no way to copy a venue. A test takes an archive, opens it, and reads a row from it.
 
-- [ ] **Step 21: Delete `scripts/append-only-enable-always.test.ts`**
+- [ ] **Step 22: Delete `scripts/append-only-enable-always.test.ts`**
 
 Its subject is PostgreSQL's replication apply worker skipping ordinary triggers, which no longer exists. Note the deletion and the reason in the commit.
 
-- [ ] **Step 22: Commit**
+- [ ] **Step 23: Commit**
 
 ```bash
 git commit -s -m "Keep ledger tables append-only, and archive with the engine's own copy statement"
@@ -1948,11 +1975,11 @@ git commit -s -m "Keep ledger tables append-only, and archive with the engine's 
 
 ### Step group 7 — the tests
 
-- [ ] **Step 23: Switch the test helper's body**
+- [ ] **Step 24: Switch the test helper's body**
 
 `packages/db/src/testing/venue-db.ts` opens a real temporary file, not an in-memory database, so write-ahead behaviour, file locking and the two-file split are the real ones. Its three tests from P2 must pass unmodified.
 
-- [ ] **Step 24: Work through the 66 PostgreSQL-only tests, one at a time**
+- [ ] **Step 25: Work through the 66 PostgreSQL-only tests, one at a time**
 
 ```bash
 find packages apps -name "*.pg.test.ts" -not -path "*/node_modules/*" | sort
@@ -1966,15 +1993,15 @@ For each, decide and record in a table in the pull request description: **conver
 
 Nothing is deleted silently, and nothing is kept in a form that passes without asserting anything.
 
-- [ ] **Step 25: Make `asAppUser` a no-op**
+- [ ] **Step 26: Make `asAppUser` a no-op**
 
 Not deleted — reduced to a function that does nothing, so the flip does not also edit 266 files. T1 deletes the call sites afterwards. Leave a comment saying it is inert and which task removes it.
 
-- [ ] **Step 26: Delete the PostgreSQL test harness**
+- [ ] **Step 27: Delete the PostgreSQL test harness**
 
 `packages/db/src/testing/postgres.ts`, `shared-container.ts`, `two-node.ts`, `two-node-wireguard.ts`, `networked-postgres.ts`, and `describeEachTarget` in `harness.ts`.
 
-- [ ] **Step 27: Commit**
+- [ ] **Step 28: Commit**
 
 ```bash
 git commit -s -m "Run every test against SQLite, and account for every PostgreSQL-only test"
@@ -1982,7 +2009,7 @@ git commit -s -m "Run every test against SQLite, and account for every PostgreSQ
 
 ### Step group 8 — finish
 
-- [ ] **Step 28: Run the whole workspace once**
+- [ ] **Step 29: Run the whole workspace once**
 
 This is the one place in this plan a whole-workspace run is justified: the engine changed under everything.
 
@@ -1990,11 +2017,11 @@ This is the one place in this plan a whole-workspace run is justified: the engin
 pnpm -r typecheck && pnpm -r test:coverage
 ```
 
-- [ ] **Step 29: Do not lower a coverage threshold to make this pass**
+- [ ] **Step 30: Do not lower a coverage threshold to make this pass**
 
 If a bar is missed, either the deletions moved it — which T3 handles afterwards, with the reason recorded — or coverage genuinely dropped. Establish which. `scripts/coverage-thresholds.test.ts` pins the bars the owner set.
 
-- [ ] **Step 30: Open the pull request — do not land it**
+- [ ] **Step 31: Open the pull request — do not land it**
 
 The description carries: the 66-test disposition table, the list of what the vocabulary could not hide, and the `VACUUM INTO` archive check. Leave it open for the owner.
 
@@ -2091,10 +2118,10 @@ _Filled in by task P1a, step 8. Until then this section is empty by design._
 
 ## Self-review
 
-**Spec coverage.** Every section of the spec maps to a task: §3.1 the driver → F1 group 1; §3.2 two files → P7 and F1 group 3; §3.3 settings → F1 step 8, including the checkpointing correction; §4 the transaction helper → F1 group 2 and step 14; §5.1 the vocabulary → P1, F1 step 10; §5.2 migrations → F1 step 12; §5.3 the fiscal check → P5 steps 1–5; §6.1 the change feed → P3; §6.2 job claiming → P4a and P4b; §6.3 grants → P9 and F1 group 6; §6.4 driver errors → P10 and F1 step 16; §6.5 archiving → F1 step 20; §7.1 one target → F1 step 23; §7.2 the role call → F1 step 25 and T1; §7.3 the 66 tests → F1 step 24; §7.4 coverage → F1 step 29 and T3; §8 deletions → P8, F1 groups 6–7, T2.
+**Spec coverage.** Every section of the spec maps to a task: §3.1 the driver → F1 group 1; §3.2 two files → P7 and F1 group 3; §3.3 settings → F1 step 8, including the checkpointing correction; §4 the transaction helper → F1 group 2 and step 15; §5.1 the vocabulary → P1, F1 step 11; §5.2 migrations → F1 step 13; §5.3 the fiscal check → P5 steps 1–5; §6.1 the change feed → P3; §6.2 job claiming → P4a and P4b; §6.3 grants → P9 and F1 group 6; §6.4 driver errors → P10 and F1 step 17; §6.5 archiving → F1 step 21; §7.1 one target → F1 step 24; §7.2 the role call → F1 step 26 and T1; §7.3 the 66 tests → F1 step 25; §7.4 coverage → F1 step 30 and T3; §8 deletions → P8, F1 groups 6–7, T2. The new-package wiring the root guards need is F1 steps 9–10 and a Global Constraint.
 
 **Two things this plan adds that the spec did not spell out.** The change feed's replacement is a table the trigger writes and the transaction drains after committing, rather than write paths publishing their own events — that keeps the existing payload contract and lands green on PostgreSQL. And `claimRows` knowingly carries `ctid` and `for update skip locked` inside one function through the prepare phase, so the PostgreSQL-only SQL sits in one place instead of four until F1 removes it.
 
 **Type consistency.** `useVenueDb`/`VenueDb` (P2) are used in P3, P4a and P10. `claimRows`/`ClaimSpec` (P4a) are used in P4b and F1. `constraintTarget` (P10) is used in F1. `money`/`quantity`/`rate` (P1) are changed by P5 and P6 and again by F1. `adaptNodeSqlite`, `createWriteQueue` and `openVenueStore` are defined and used only within F1.
 
-**The one place this plan cannot be followed blindly.** F1 step 24 asks for a disposition per test across 66 files. That work cannot be pre-written here without reading each one; what is pre-written is the rule for deciding, and the requirement that every deletion appear with its reason.
+**The one place this plan cannot be followed blindly.** F1 step 25 asks for a disposition per test across 66 files. That work cannot be pre-written here without reading each one; what is pre-written is the rule for deciding, and the requirement that every deletion appear with its reason.
