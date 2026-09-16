@@ -88,8 +88,8 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       const id = unitId(c);
       return c.json(
         await gated(sessionId, async (tx) => {
-          await getUnit(tx, deps.cfg.tenantId, id); // 404 for an unknown or foreign unit
-          return productsUsingUnit(tx, deps.cfg.tenantId, id);
+          await getUnit(tx, id); // 404 for an unknown unit
+          return productsUsingUnit(tx, id);
         }),
       );
     }),

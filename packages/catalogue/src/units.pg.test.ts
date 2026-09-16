@@ -329,69 +329,54 @@ it("does not deadlock when two bulk reassignments list the same products in oppo
 });
 
 it("reassigning to null clears the products' unit (they become Each)", async () => {
-  const tenantId = await seedTenant(suite.admin);
-  const p1 = await product(tenantId);
-  const p2 = await product(tenantId);
-  const sourceUnit = await app(suite.admin, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+  await seedTenant(suite.admin);
+  const p1 = await product();
+  const p2 = await product();
+  const sourceUnit = await app(suite.admin, (tx) =>
+    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
-  await app(suite.admin, tenantId, async (tx) => {
-    await assignProductUnit(tx, tenantId, p1, sourceUnit.id);
-    await assignProductUnit(tx, tenantId, p2, sourceUnit.id);
+  await app(suite.admin, async (tx) => {
+    await assignProductUnit(tx, p1, sourceUnit.id);
+    await assignProductUnit(tx, p2, sourceUnit.id);
   });
 
-  await app(suite.admin, tenantId, (tx) =>
-    reassignProductsToUnit(tx, tenantId, sourceUnit.id, [p1, p2], null),
-  );
+  await app(suite.admin, (tx) => reassignProductsToUnit(tx, sourceUnit.id, [p1, p2], null));
 
-  expect(
-    await app(suite.admin, tenantId, (tx) => productsUsingUnit(tx, tenantId, sourceUnit.id)),
-  ).toHaveLength(0);
-  expect(await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, p1))).toBeNull();
+  expect(await app(suite.admin, (tx) => productsUsingUnit(tx, sourceUnit.id))).toHaveLength(0);
+  expect(await app(suite.admin, (tx) => readProductUnitId(tx, p1))).toBeNull();
 });
 
 it("reassigning to null returns the products to each-priced and leaves products on other units alone", async () => {
-  const tenantId = await seedTenant(suite.admin);
-  const onSource = await product(tenantId);
-  const onOther = await product(tenantId);
-  const sourceUnit = await app(suite.admin, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+  await seedTenant(suite.admin);
+  const onSource = await product();
+  const onOther = await product();
+  const sourceUnit = await app(suite.admin, (tx) =>
+    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
-  const otherUnit = await app(suite.admin, tenantId, (tx) =>
-    createUnit(
-      tx,
-      tenantId,
-      { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } },
-      "en",
-    ),
+  const otherUnit = await app(suite.admin, (tx) =>
+    createUnit(tx, { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } }, "en"),
   );
   // Put both products in the real "sold by weight" state: a unit row plus pricing_unit = 'weight'.
-  await app(suite.admin, tenantId, async (tx) => {
-    await assignProductUnit(tx, tenantId, onSource, sourceUnit.id);
-    await assignProductUnit(tx, tenantId, onOther, otherUnit.id);
+  await app(suite.admin, async (tx) => {
+    await assignProductUnit(tx, onSource, sourceUnit.id);
+    await assignProductUnit(tx, onOther, otherUnit.id);
   });
   await suite.admin.execute(sql`
-    update products set pricing_unit = 'weight'
-    where tenant_id = ${tenantId} and id in (${onSource}, ${onOther})`);
+    update products set pricing_unit = 'weight' where id in (${onSource}, ${onOther})`);
 
   // onOther is in the list but on a different unit, so it stands in for a product already moved
   // elsewhere: scoped by the source unit, it must be skipped by both the delete and the update.
-  await app(suite.admin, tenantId, (tx) =>
-    reassignProductsToUnit(tx, tenantId, sourceUnit.id, [onSource, onOther], null),
+  await app(suite.admin, (tx) =>
+    reassignProductsToUnit(tx, sourceUnit.id, [onSource, onOther], null),
   );
 
   const pricing = await suite.admin.execute<{ id: string; pricing_unit: string }>(sql`
-    select id, pricing_unit from products
-    where tenant_id = ${tenantId} and id in (${onSource}, ${onOther})`);
+    select id, pricing_unit from products where id in (${onSource}, ${onOther})`);
   const pricingById = Object.fromEntries(pricing.rows.map((r) => [r.id, r.pricing_unit]));
   // The reassigned product loses its unit row AND returns to each-priced (the no-unit ⟺ each invariant).
-  expect(
-    await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, onSource)),
-  ).toBeNull();
+  expect(await app(suite.admin, (tx) => readProductUnitId(tx, onSource))).toBeNull();
   expect(pricingById[onSource]).toBe("each");
   // The product on another unit keeps both its unit row and its weight pricing.
-  expect(await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, onOther))).toBe(
-    otherUnit.id,
-  );
+  expect(await app(suite.admin, (tx) => readProductUnitId(tx, onOther))).toBe(otherUnit.id);
   expect(pricingById[onOther]).toBe("weight");
 });

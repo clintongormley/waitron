@@ -60,17 +60,13 @@ beforeEach(async () => {
 });
 
 it("reads a product with no unit as unitId null", async () => {
-  const saved = await withTenant(fx.db, tenantId, (tx) =>
-    saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
+  const saved = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, input, "en"),
   );
-  await withTenant(fx.db, tenantId, (tx) =>
-    tx.execute(
-      sql`delete from product_units where tenant_id = ${tenantId} and product_id = ${saved.id}`,
-    ),
+  await withTransaction(fx.db, (tx) =>
+    tx.execute(sql`delete from product_units where product_id = ${saved.id}`),
   );
-  const value = await withTenant(fx.db, tenantId, (tx) =>
-    readProductEditor(tx, tenantId, saved.id),
-  );
+  const value = await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id));
   expect(value.unitId).toBeNull();
 });
 

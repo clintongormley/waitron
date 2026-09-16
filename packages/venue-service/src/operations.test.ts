@@ -517,34 +517,34 @@ describe("venue service routing", () => {
     // The sentinel Each id must survive the working_line_contexts.unit_id write, which is `uuid NOT
     // NULL`. This proves the cross-package sentinel decision: an empty-string id would be rejected by
     // the uuid column on the first sale of a no-unit product.
-    const { tenantId } = await seedUnitTenant();
+    await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Venue', array['en-GB'], 'Hospitality') returning id`);
     const locationId = brandLocationId(location.rows[0]!.id);
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Deli counter') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${locationId}, 'Deli counter') returning id`);
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Deli till') returning id`);
-    const nodeId = await seedNode(db, tenantId, locationId);
+      insert into tills (location_id, name)
+      values (${locationId}, 'Deli till') returning id`);
+    const nodeId = await seedNode(db, locationId);
 
-    await scoped(tenantId, async (tx) => {
+    await scoped(async (tx) => {
       const department = await createDepartment(
         tx,
-        { tenantId, locationId },
+        { locationId },
         { name: "Deli", defaultServiceMode: "prepay" },
       );
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         { zoneId: zone.rows[0]!.id, departmentId: department.id },
       );
-      const menu = await createCatalogue(tx, tenantId, { name: "Deli takeaway" });
+      const menu = await createCatalogue(tx, { name: "Deli takeaway" });
       // A product with NO stored unit: create it, then delete its product_units row so the offer read
       // resolves it to the synthetic Each unit (the sentinel-id path).
-      const sweets = await createProduct(tx, tenantId, {
+      const sweets = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
         name: "Loose sweets",
@@ -552,35 +552,32 @@ describe("venue service routing", () => {
         unitPrice: "0.00",
         vatClass: "general",
       });
-      await tx.execute(
-        sql`delete from product_units where tenant_id = ${tenantId} and product_id = ${sweets.id}`,
-      );
-      const section = await createMenuSection(tx, tenantId, {
+      await tx.execute(sql`delete from product_units where product_id = ${sweets.id}`);
+      const section = await createMenuSection(tx, {
         menuId: menu.id,
         name: { en: "Counter" },
       });
-      const offer = await createMenuItem(tx, tenantId, {
+      const offer = await createMenuItem(tx, {
         menuId: menu.id,
         productId: sweets.id,
         sectionId: section.id,
         grossPrice: "1.20",
       });
-      await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id, {
+      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id, {
         makeDefault: true,
       });
       await tx.execute(sql`
         update zone_service_policies set is_counter_default = true
-        where tenant_id = ${tenantId} and zone_id = ${zone.rows[0]!.id}`);
+        where zone_id = ${zone.rows[0]!.id}`);
 
       const orderId = "00000000-0000-4000-8000-000000000101";
       const workingLineId = "00000000-0000-4000-8000-000000000102";
       await tx.execute(sql`
-        insert into working_orders (id, tenant_id, till_id, node_id, order_number)
-        values (${orderId}, ${tenantId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
-      await recordOrderServiceContext(tx, { tenantId, locationId }, orderId, zone.rows[0]!.id);
+        insert into working_orders (id, till_id, node_id, order_number)
+        values (${orderId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
+      await recordOrderServiceContext(tx, { locationId }, orderId, zone.rows[0]!.id);
       await tx.insert(workingOrderLines).values({
         id: workingLineId,
-        tenantId,
         workingOrderId: orderId,
         lineNo: 1,
         productId: sweets.id,
@@ -595,14 +592,14 @@ describe("venue service routing", () => {
       });
 
       await expect(
-        recordWorkingLineContexts(tx, { tenantId, locationId }, orderId, [
+        recordWorkingLineContexts(tx, { locationId }, orderId, [
           { workingOrderLineId: workingLineId, menuItemId: offer.id },
         ]),
       ).resolves.not.toThrow();
 
       const ctx = await tx.execute<{ unit_id: string }>(sql`
         select unit_id from working_line_contexts
-        where tenant_id = ${tenantId} and working_order_line_id = ${workingLineId}`);
+        where working_order_line_id = ${workingLineId}`);
       // The sentinel, not "" (which the uuid column rejects).
       expect(ctx.rows[0]!.unit_id).toBe("00000000-0000-0000-0000-000000000001");
     });

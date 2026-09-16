@@ -448,7 +448,7 @@ now reads as a price per gram. Units get their own dashboard page, and a new ven
 five weight-and-volume units above (grams, milligrams, kilograms, millilitres, litres); Each is the
 implicit default for a product with no unit, not a seeded unit, so a product may have no unit at all —
 it simply shows as Each and is never stored. Editing or deleting a seeded unit survives provisioning
-running again, because a durable per-tenant marker records that seeding already happened. Deleting a unit is refused while any product
+running again, because a durable marker records that seeding already happened. Deleting a unit is refused while any product
 uses it, including products that are switched off, and the refusal names the products. Renaming a unit
 or changing its precision is allowed while it is in use: new quantities follow the new rule and
 quantities already recorded keep the unit name and precision they were sold under, frozen onto the

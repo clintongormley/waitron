@@ -34,9 +34,7 @@ export async function readProductModifiers(
 ): Promise<Map<string, Modifier[]>> {
   const result = new Map<string, Modifier[]>();
   if (productIds.length === 0) return result;
-  const definitions = new Map(
-    (await listModifiers(tx)).map((modifier) => [modifier.id, modifier]),
-  );
+  const definitions = new Map((await listModifiers(tx)).map((modifier) => [modifier.id, modifier]));
   const attachments = await tx
     .select({ productId: productOptionGroups.productId, modifierId: productOptionGroups.groupId })
     .from(productOptionGroups)
@@ -58,9 +56,7 @@ export async function readMenuModifiers(
 ): Promise<Map<string, Modifier[]>> {
   const result = new Map<string, Modifier[]>();
   if (menuItemIds.length === 0) return result;
-  const definitions = new Map(
-    (await listModifiers(tx)).map((modifier) => [modifier.id, modifier]),
-  );
+  const definitions = new Map((await listModifiers(tx)).map((modifier) => [modifier.id, modifier]));
   const publications = await tx
     .select({
       menuItemId: menuItemOptionGroups.menuItemId,

@@ -204,16 +204,16 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const p1 = await withTenant(suite.db, tenantId, async (tx) => {
+    const p1 = await withTransaction(suite.db, async (tx) => {
       const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+        insert into catalogues (name) values ('Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
-        insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
+        insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
         returning id`);
       await tx.execute(sql`
-        insert into product_units (tenant_id, product_id, unit_id)
-        values (${tenantId}, ${product.rows[0]!.id}, ${unit.id})`);
+        insert into product_units (product_id, unit_id)
+        values (${product.rows[0]!.id}, ${unit.id})`);
       return product.rows[0]!.id;
     });
 
@@ -248,16 +248,16 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const p1 = await withTenant(suite.db, tenantId, async (tx) => {
+    const p1 = await withTransaction(suite.db, async (tx) => {
       const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+        insert into catalogues (name) values ('Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
-        insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
+        insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
         returning id`);
       await tx.execute(sql`
-        insert into product_units (tenant_id, product_id, unit_id)
-        values (${tenantId}, ${product.rows[0]!.id}, ${unit.id})`);
+        insert into product_units (product_id, unit_id)
+        values (${product.rows[0]!.id}, ${unit.id})`);
       return product.rows[0]!.id;
     });
 
