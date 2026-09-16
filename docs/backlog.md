@@ -1676,13 +1676,14 @@ image constraints under *Detail → Box image*.
   now runs in a group of its own, and — since two `main` runs can now overlap and a registry tag is
   last-write-wins — the publish job asks `scripts/main-tag-guard.sh` whether a newer commit already
   holds `:main` before moving it. **What is still open:**
-  - **The publish path has never executed this code.** Nothing on a pull request runs the publish
-    job, and #384's own merge is machinery-only (`code=false`), so the job skipped there too. The
-    first real execution is the next code merge to `main`. **Next action:** on that merge, read the
-    `publish` job's "Work out the tags to publish" step, which prints either the tag list or the line
-    explaining why it left `:main` alone. The guard script itself was run end to end against the live
-    registry and API before landing (PR #384's comment has the output), so what is unproven is the
-    wiring, not the script.
+  - **The publish path has now executed this code, once, and worked** (2026-09-16). #385's merge
+    (`6e4c3af3`) was the first code merge after #384 landed: run 35109454675's publish job took the
+    registry read and the comparison in 1.3s, answered `move`, published
+    `ghcr.io/clintongormley/waitron:sha-6e4c3af,…:main`, and the live `:main` reads back
+    `WAITRON_BUILD_ID=6e4c3af3…`. So the wiring is proven for the `move` answer. **What no run has
+    exercised yet is `hold`** — an older run publishing after a newer one — which needs two merges
+    close enough together to overlap and is not worth forcing; the script's own `hold` path was run
+    against the live registry before landing (PR #384's comment has the output).
   - **Two states stop publishing until a person intervenes:** a `:main` carrying no
     `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
     image built outside CI, or a rewritten history). Both wedge every later publish identically; the
