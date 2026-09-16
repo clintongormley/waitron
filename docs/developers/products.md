@@ -40,9 +40,9 @@ The three resolvers, one per audience:
   row with nothing else on it does not have to invent four empty fields.
 - `customerPresentationText` — applies the blank-falls-back-to-Name rule to the customer-facing
   maps, and hands back the product's map and the variant's map still separate.
-- `kitchenPresentationName` — the kitchen name with its fallback, joined. It takes a `locale`
-  argument only to match the shape of its siblings; a kitchen name carries no per-language text, so
-  it never reads it.
+- `kitchenPresentationName` — the kitchen name with its fallback, joined. Like
+  `staffPresentationName` it takes no locale: a kitchen name carries no per-language text, so there
+  is nothing to resolve against.
 
 Joining two already-resolved customer maps into one is `joinCustomerPresentationText`, which is
 separate because its callers are rendering something already *sold* — see below.

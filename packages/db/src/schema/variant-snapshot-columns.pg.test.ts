@@ -1,5 +1,5 @@
-// Real Postgres, not PGlite: this proves the B1 snapshot-column migrations (0028) and the custom
-// variant-locales trigger (0029) actually APPLY and behave on the deployment target. The trigger is a
+// Real Postgres, not PGlite: this proves the B1 snapshot-column migration (0030) and the custom
+// variant-locales trigger (0031) actually APPLY and behave on the deployment target. The trigger is a
 // plain data-validation BEFORE trigger — it does not turn on the connecting role — so PGlite would
 // suffice for firing (as the sibling descriptions check in orders.test.ts uses), but the brief scopes
 // this unit's proof to real PG, and cloning the shared `core` template is ~26ms.
