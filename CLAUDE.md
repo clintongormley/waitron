@@ -177,6 +177,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Compare saved selections by values, not JSON key or selection order.** Guard:
   `apps/server/src/modifier-selection.test.ts`; price-change receipt in
   [conventions-ui.md](docs/developers/conventions-ui.md).
+- **A screen puts a refusal beside a field by what the error CARRIES, checked where it is thrown.**
+  `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE, and one
+  product save submits several translated values. Cost: the product editor mapped `params.field`
+  alone, so the one refusal its own translated inputs produce stayed folded away with focus on Save.
+  See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A successful write followed by a failed refresh is a load failure, not a failed save.** Close the
   editor after the write succeeds, then refresh separately — a retained create form invites a
   duplicate submission.

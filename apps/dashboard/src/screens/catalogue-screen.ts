@@ -23,7 +23,11 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
 import { ProductChildCreate, type ProductChildKind } from "../state/product-child-create.js";
-import { productEditorField, type ProductEditor } from "../widgets/product-editor.js";
+import {
+  productEditorField,
+  productEditorTranslationField,
+  type ProductEditor,
+} from "../widgets/product-editor.js";
 import "../widgets/category-form.js";
 import "../widgets/content-languages.js";
 import "../widgets/modifier-form.js";
@@ -241,7 +245,7 @@ export class CatalogueScreen extends LitElement {
       this.#closeEditor();
       await this.#reloadProducts();
     } catch (error) {
-      const fieldErrors = this.#rejectedField(error);
+      const fieldErrors = this.#rejectedField(error, event.detail.value);
       this.editorFieldErrors = fieldErrors;
       // A refusal that names a field is reported INSIDE the editor, beside that field — which is
       // also what opens the section the field is folded into. Only a refusal with nothing to point
@@ -252,12 +256,26 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
-  /** The editor field a rejected product write names, as a `fieldErrors` entry. */
-  #rejectedField(error: unknown): Record<string, string> {
-    const field = (error as { params?: { field?: unknown } }).params?.field;
-    if (typeof field !== "string") return {};
-    const name = productEditorField(field, this.contentLanguages?.defaultLanguage ?? "");
-    return name === null ? {} : { [name]: t("editor.field_rejected") };
+  /**
+   * The editor field a rejected product write belongs to, as a `fieldErrors` entry. A refusal
+   * carries one of two things the editor has somewhere to put: the FIELD it is about, or — for the
+   * content languages — the LANGUAGE whose text is missing, which is the shape this editor's own
+   * translated inputs produce. Which refusals carry which is pinned by
+   * `packages/catalogue/src/product-editor.test.ts`; a nutrition refusal carries neither, so it
+   * reaches the screen's banner like any other refusal with nothing to point at.
+   */
+  #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {
+    const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
+    if (typeof params.field === "string") {
+      const name = productEditorField(params.field, this.contentLanguages?.defaultLanguage ?? "");
+      return name === null ? {} : { [name]: t("editor.field_rejected") };
+    }
+    const code = codeOf(error);
+    if (code === "content.translation_required" && typeof params.language === "string") {
+      const name = productEditorTranslationField(submitted, params.language);
+      return name === null ? {} : { [name]: codeMessage(code) };
+    }
+    return {};
   }
 
   async #refreshRelated(kind: ProductChildKind): Promise<void> {

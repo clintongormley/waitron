@@ -102,6 +102,31 @@ export function productEditorField(field: string, defaultLanguage: string): stri
   return mapped.endsWith("-") ? `${mapped}${defaultLanguage}` : mapped;
 }
 
+/**
+ * The editor field a refused TRANSLATION belongs to. `content.translation_required` names the
+ * language whose text is missing and never the value that lacks it
+ * (`packages/catalogue/src/content-languages.ts`; the shape is pinned by
+ * `packages/catalogue/src/product-editor.test.ts`), and one save carries several translated values:
+ * the product's customer name and one per variant. Each of them missing that language is a fault the
+ * save has to clear, so this points at the first and the next save reports whatever is still missing.
+ *
+ * Focus goes to the input for the language the SERVER named, not the first one on screen: that is
+ * the only input whose emptiness refused the save. A variant's names are edited in its own window,
+ * so a variant's problem belongs to its ROW.
+ */
+export function productEditorTranslationField(
+  value: {
+    customerName: LocalizedText | null;
+    variants: readonly { customerName: LocalizedText | null }[];
+  },
+  language: string,
+): string | null {
+  const missing = (text: LocalizedText | null) => text !== null && !(text[language] ?? "").trim();
+  if (missing(value.customerName)) return `customer-name-${language}`;
+  const index = value.variants.findIndex((variant) => missing(variant.customerName));
+  return index === -1 ? null : `variant-${index}-name`;
+}
+
 function emptyDraft(): ProductEditorDraft {
   return {
     name: "",
@@ -345,12 +370,25 @@ export class ProductEditor extends LitElement {
   private async focusField(name: string): Promise<void> {
     await this.updateComplete;
     const field = this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`);
-    if (!field) return;
+    if (!field) {
+      await this.focusVariantRow(name);
+      return;
+    }
     const section = field.closest<HTMLElement & { updateComplete?: Promise<unknown> }>(
       "wt-disclosure",
     );
     await section?.updateComplete;
     field.focus();
+  }
+
+  /** A variant has no input of its own in this form — its fields live in the window the row's Edit
+   * action opens — so that action is where a problem reported against a variant puts focus. */
+  private async focusVariantRow(name: string): Promise<void> {
+    const row = /^variant-(\d+)-/.exec(name);
+    const table = this.shadowRoot?.querySelector("dashboard-variant-table");
+    if (!row || !table) return;
+    await table.updateComplete;
+    table.focusRow(Number(row[1]));
   }
 
   get currentValue(): ProductEditorDraft {

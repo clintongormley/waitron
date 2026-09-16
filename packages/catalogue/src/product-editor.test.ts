@@ -274,3 +274,49 @@ it.each([
     await withTenant(fx.db, tenantId, (tx) => listProducts(tx, tenantId, catalogueId)),
   ).toEqual([]);
 });
+
+/**
+ * The refusals reachable from the product editor that name something OTHER than a field. The
+ * dashboard puts a refusal's message beside the input it belongs to, and it can only do that from
+ * what the refusal actually carries — so these shapes are pinned here, at the end that produces
+ * them, rather than assumed at the end that reads them.
+ */
+async function refusal(value: unknown): Promise<{ code: string; params: unknown }> {
+  const error = await withTenant(fx.db, tenantId, (tx) =>
+    saveProductEditor(tx, tenantId, null, catalogueId, value, "en").then(
+      () => null,
+      (error: unknown) => error as { code: string; params: unknown },
+    ),
+  );
+  if (error === null) throw new Error("the save was accepted");
+  return { code: error.code, params: error.params };
+}
+
+it("names the missing language, and nothing else, when a customer name skips the default", async () => {
+  expect(await refusal({ ...input, customerName: { es: "Café" } })).toEqual({
+    code: "content.translation_required",
+    params: { language: "en" },
+  });
+  // A VARIANT's customer name is checked the same way, and its refusal is indistinguishable from the
+  // product's: the language is all either one carries.
+  expect(
+    await refusal({
+      ...input,
+      variants: input.variants.map((variant, index) =>
+        index === 1 ? { ...variant, customerName: { es: "Grande" } } : variant,
+      ),
+    }),
+  ).toEqual({ code: "content.translation_required", params: { language: "en" } });
+});
+
+it.each([
+  [{ allergens: { peanut: { presence: "contains" } } }, "allergen.invalid_code"],
+  [{ allergens: { milk: { presence: "traces" } } }, "allergen.invalid_presence"],
+  [{ dietaryDeclarations: ["carnivore"] }, "diet.declaration_invalid"],
+])("refuses nutrition input without naming any field (%#)", async (patch, code) => {
+  const { code: thrown, params } = await refusal({ ...input, ...patch });
+  expect(thrown).toBe(code);
+  // Nothing here says "allergens" or "dietary", so a refusal of either cannot reach a field on the
+  // editor's Nutrition section.
+  expect(Object.keys(params as Record<string, unknown>)).not.toContain("field");
+});

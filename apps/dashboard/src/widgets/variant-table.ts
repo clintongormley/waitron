@@ -110,6 +110,13 @@ export class VariantTable extends LitElement {
     },
   } satisfies ReorderModel);
 
+  /** Puts focus on a row's actions trigger — the way into the window where that variant's own
+   * fields are edited, and the only control on the row that is not itself an edit. The Edit button
+   * behind it cannot take focus while the menu is closed. */
+  focusRow(index: number): void {
+    this.shadowRoot?.querySelector<HTMLElement>(`[data-test="actions-${index}"]`)?.focus();
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("variants")) return;
     // Keys follow the variant OBJECT, so the array coming back from a host that applied a reorder
@@ -169,7 +176,10 @@ export class VariantTable extends LitElement {
         ></wt-switch>
       </td>
       <td>
-        <wt-row-actions align="end" label=${`${t("editor.variant_actions")}: ${label}`}
+        <wt-row-actions
+          align="end"
+          data-test=${`actions-${index}`}
+          label=${`${t("editor.variant_actions")}: ${label}`}
           ><wt-button
             variant="secondary"
             data-test=${`edit-${index}`}
