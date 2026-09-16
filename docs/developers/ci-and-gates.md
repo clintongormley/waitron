@@ -97,25 +97,58 @@ about the workspace. Design: `docs/superpowers/specs/2026-07-31-scoped-ci-design
 ### Two pushes to `main` must never share a concurrency group
 
 A run that is still WAITING for its group is not protected by `cancel-in-progress: false`. GitHub's
-own words, from its Actions concurrency page: _"When you limit concurrency, by default only one run
-can be pending in a concurrency group—any additional pending runs cancel the previous one."_ So the
-newer arrival evicts the one already in line, and `cancel-in-progress` never comes into it — that
-setting governs a run that has already started.
+own words, on its Actions concurrency page (read 2026-09-16,
+<https://docs.github.com/en/actions/concepts/workflows-and-actions/concurrency>): _"When you limit
+concurrency, by default only one run can be pending in a concurrency group—any additional pending
+runs cancel the previous one."_ The newer arrival evicts the one already in line, and
+`cancel-in-progress` never comes into it — that setting governs a run that has already started.
 
-Cost, on 2026-09-16. PR #381 merged at 13:46:04 and its run took eight minutes. PR #380 merged at
-13:49:38 and, sharing the group, went pending behind it. The `docs(backlog)` commit that follows
-every merge was pushed at 13:50:31, and 13:50:33 the pending run was cancelled. Evidence it never
-started: `gh api repos/:owner/:repo/actions/runs/35104425392/jobs` returns an empty job list, and
-the backlog commit's own jobs start at 13:54:09, three seconds after #381's run ends — the group
-was serialising them. The backlog commit's run then completed green, but it is documentation, so
-`changes.code` was false and both `image` and `publish` were skipped. `:main` stayed on
-`sha-d0e0923`, the #381 merge, and the printer work in #380 was in no image. The §2 unfiltered main
-suite for #380 never ran either. Eight `main` pushes had been discarded this way by that date, most
-of them hidden because the next code merge republished.
+Cost, on 2026-09-16, in timestamps that are GitHub's own. PR #381 merged at 13:46:01 and its run
+took eight minutes. PR #380 merged at 13:49:35 and, sharing the group, went pending behind it. The
+`docs(backlog)` commit that follows every merge was pushed at 13:50:31, and at 13:50:33 the pending
+run was cancelled. Evidence it never started:
 
-The fix is separation, not a cancellation policy: the group carries `github.sha` on a push, so each
-push is alone in its group, and a pull request keeps the ref so a force-push still supersedes the
-run it made stale. Guard: `scripts/ci-workflow.test.mjs`, which reads the block as text.
+```
+$ gh api repos/:owner/:repo/actions/runs/35104425392/attempts/1/jobs --jq .total_count
+0
+```
+
+The attempt is part of that command: the run was later re-run by hand, so the unqualified
+`…/runs/35104425392/jobs` now answers for attempt 2 and shows a full job list. The other half of the
+evidence is that the backlog commit's own jobs started at 13:54:09, three seconds after #381's run
+ended at 13:54:06 — the group was serialising them.
+
+The backlog commit's run then completed green, but it is documentation, so `changes.code` was false
+and both `image` and `publish` were skipped. `:main` stayed on `sha-d0e0923`, the #381 merge, and
+the printer work in #380 was in no image at all. The §2 unfiltered main suite for #380 never ran
+either. This had been happening for weeks, mostly hidden because the next code merge republished
+`:main` within the hour; the discarded runs are what this lists:
+
+```
+gh run list --workflow CI --branch main --limit 60 \
+  --json conclusion,displayTitle,headSha,createdAt \
+  -q '.[] | select(.conclusion=="cancelled")'
+```
+
+The fix is separation, not a cancellation policy: on a push the group carries `github.run_id`, so a
+push is never grouped with anything, and a pull request keeps the ref so a force-push still
+supersedes the run it made stale. Guard: `scripts/ci-workflow.test.mjs`, which reads the block as
+text — it pins how the expression is written, not what GitHub evaluates it to.
+
+### Separated pushes overlap, so `:main` is not allowed to move backwards
+
+Two `main` runs now build at the same time, and the one that finishes LAST is not always the one
+carrying the newest commit. A registry tag is last-write-wins, so the older run's publish would
+retag `:main` and pull every box following that tag back onto an older image — a race the old
+shared group hid, because a queue publishes in arrival order.
+
+So the publish job asks `scripts/main-tag-guard.sh` before adding `:main`: it reads
+`WAITRON_BUILD_ID` out of the image the tag currently points at, asks GitHub's compare endpoint
+where that commit sits relative to this one, and answers `move` or `hold`. A `hold` still publishes
+this commit's immutable `sha-` tag; it declines only to move `:main`. The script fails rather than
+guessing when it cannot reach an answer, because a publish that stops is repaired by the next merge
+while a `:main` moved the wrong way is noticed by nobody. Its suite,
+`scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
 
 ### A cheap job can still be the critical path
 

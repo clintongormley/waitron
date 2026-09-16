@@ -40,7 +40,9 @@ import {
 // AGAINST one instead of trusted: on 2026-08-01 the three extractions were run side by side with
 // PyYAML's `safe_load` over the same file, and the job list, `ci`'s `needs` and the `changes` job's
 // `outputs` came out element-for-element identical. Redo that comparison rather than reasoning
-// about the regexes if this file ever starts disagreeing with the workflow.
+// about the regexes if this file ever starts disagreeing with the workflow. The `concurrency`
+// extraction added on 2026-09-16 was checked the same way: `yaml.safe_load`'s `concurrency`
+// mapping and this file's two values came out equal, group and cancel-in-progress alike.
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
@@ -89,6 +91,28 @@ const jobs = (() => {
     id,
     body: lines.slice(at + 1, starts[index + 1]?.at ?? lines.length),
   }));
+})();
+
+/**
+ * The workflow-level `concurrency:` block, as two strings: the group expression and the
+ * cancel-in-progress expression. Missing block, or a missing key, throws — an extraction that
+ * silently found nothing would make every case below pass against an empty string. A key that is
+ * PRESENT but empty still yields "", which is what the first case checks for.
+ */
+const concurrency = (() => {
+  const at = lines.indexOf("concurrency:");
+  if (at === -1) throw new Error("ci.yml has no top-level `concurrency:` key");
+
+  const body = [];
+  for (let i = at + 1; i < lines.length && /^(\s|$)/.test(lines[i]); i++) body.push(lines[i]);
+
+  const valueOf = (key) => {
+    const line = body.find((entry) => entry.trimStart().startsWith(`${key}:`));
+    if (line === undefined) throw new Error(`ci.yml's concurrency block has no \`${key}:\``);
+    return line.slice(line.indexOf(":") + 1).trim();
+  };
+
+  return { group: valueOf("group"), cancelInProgress: valueOf("cancel-in-progress") };
 })();
 
 /** One job by id, throwing rather than returning undefined for a caller to read as "no needs". */
@@ -385,27 +409,6 @@ function browserPackages() {
 // assertions — otherwise deleting the `timeout` or a throw leaves the suite green (CLAUDE.md §4,
 // "prove a guard by deletion"). A fake `run` exercises each branch deterministically; one real case
 // proves spawnSync's `timeout` genuinely kills a hung child.
-/**
- * The workflow-level `concurrency:` block, as two strings: the group expression and the
- * cancel-in-progress expression. Throws rather than returning blanks, because an extraction that
- * silently found nothing would make the cases below pass against an empty string.
- */
-const concurrency = (() => {
-  const at = lines.indexOf("concurrency:");
-  if (at === -1) throw new Error("ci.yml has no top-level `concurrency:` key");
-
-  const body = [];
-  for (let i = at + 1; i < lines.length && /^(\s|$)/.test(lines[i]); i++) body.push(lines[i]);
-
-  const valueOf = (key) => {
-    const line = body.find((entry) => entry.trimStart().startsWith(`${key}:`));
-    if (line === undefined) throw new Error(`ci.yml's concurrency block has no \`${key}:\``);
-    return line.slice(line.indexOf(":") + 1).trim();
-  };
-
-  return { group: valueOf("group"), cancelInProgress: valueOf("cancel-in-progress") };
-})();
-
 describe("pnpmLs (the subprocess guard)", () => {
   it("returns parsed stdout on a clean exit", () => {
     const ok = () => ({
@@ -458,33 +461,41 @@ describe("pnpmLs (the subprocess guard)", () => {
 
 describe("the workflow's concurrency group", () => {
   it("was parsed at all", () => {
-    // The guard the two cases below lean on: a block that stopped being found would throw above
-    // rather than leave them asserting on nothing.
-    expect(concurrency.group).not.toBe("");
+    expect(concurrency.group).toContain("github.workflow");
     expect(concurrency.cancelInProgress).not.toBe("");
   });
 
-  // The property: two pushes to `main` must never share a concurrency group.
+  // The property: no push may cost another push its run. GitHub allows only one PENDING run per
+  // group and a newer arrival cancels the one already waiting, which `cancel-in-progress` does not
+  // reach — it governs a run that has already started. So a push is given a group of its own.
+  // Receipt, including what it cost: `docs/developers/ci-and-gates.md`.
   //
-  // GitHub allows only ONE run per group to be PENDING — "any additional pending runs cancel the
-  // previous one" (GitHub docs, Actions / Concurrency). So keeping `cancel-in-progress` false on
-  // `main` did not protect a main push at all: it protects a run that is already RUNNING, and the
-  // run that gets lost is the one still waiting its turn. Cost: the push that merged #380 queued
-  // behind #381's run, was evicted 53 seconds later by the docs commit that followed it, and never
-  // ran — so no image was published for it and the unfiltered main suite CLAUDE.md §2 relies on
-  // never ran either. Eight main pushes had been thrown away this way by 2026-09-16.
-  //
-  // This guard reads TEXT: it pins how the expression is SPELLED, not what GitHub evaluates it to.
-  it("gives every push its own group, so one push to `main` cannot displace another", () => {
-    expect(concurrency.group).toContain("github.sha");
-    expect(concurrency.group).toMatch(/github\.event_name\s*==\s*'push'/);
+  // The operand ORDER is pinned, not just the names: `push && github.ref || github.run_id` reads
+  // plausibly, mentions both, and puts every push back into one group per branch.
+  it("gives every push a group of its own, so one push cannot displace another", () => {
+    expect(concurrency.group).toMatch(
+      /github\.event_name\s*==\s*'push'\s*&&\s*github\.run_id\s*\|\|\s*github\.ref/,
+    );
   });
 
   // The other half, kept: a pull request's runs DO share a group, so a force-push supersedes the
-  // run it made stale instead of paying for both.
+  // run it made stale. Anchored at both ends, so an appended `|| true` — which would cancel pushes
+  // again — fails here.
   it("still lets a pull request's newer run supersede its own older one", () => {
-    expect(concurrency.group).toContain("github.ref");
-    expect(concurrency.cancelInProgress).toMatch(/github\.event_name\s*!=\s*'push'/);
+    expect(concurrency.cancelInProgress).toMatch(
+      /^\$\{\{\s*github\.event_name\s*!=\s*'push'\s*\}\}$/,
+    );
+  });
+
+  // What the separation costs, and the answer to it. Two pushes to `main` now build at the same
+  // time, and a registry tag is last-write-wins, so the publish job asks whether a newer commit
+  // already holds `:main` before moving it. That script's own behaviour is
+  // `scripts/main-tag-guard.test.mjs`; what this case pins is that the job still ASKS.
+  it("has the publish job ask before it moves the `:main` tag", () => {
+    const body = job("publish").body.join("\n");
+    expect(body).toContain("scripts/main-tag-guard.sh");
+    expect(body).toMatch(/decision=\$\(scripts\/main-tag-guard\.sh[^)]*\)/);
+    expect(body).toMatch(/\[ "\$decision" = "move" \]/);
   });
 });
 
