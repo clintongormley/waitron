@@ -2054,7 +2054,6 @@ export async function startServer(
     app,
     {
       db,
-      cfg: { nodeId: till.nodeId },
       // The venue the product editor routes a product's station/course against.
       venueCfg: till,
       contentTranslationGaps: async (tx, language) => {

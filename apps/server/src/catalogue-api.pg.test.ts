@@ -104,20 +104,10 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** One Hono app per venue — `mountCatalogueApi` binds ONE node via `cfg.nodeId`, so each venue's
- * routes need their own app (mirrors `management-api.pg.test.ts`). */
+/** A Hono app carrying the catalogue routes over the suite's owner connection. */
 function mountApp(): Hono {
   const app = new Hono();
-  mountCatalogueApi(
-    app,
-    {
-      db: suite.admin,
-      // These suites assert the gate and the option-group FKs, never the captured origin; any valid node id
-      // satisfies the (now required) cfg.nodeId. Origin attribution is proven in sync-origin.test.ts.
-      cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
-    },
-    noopLog,
-  );
+  mountCatalogueApi(app, { db: suite.admin }, noopLog);
   return app;
 }
 

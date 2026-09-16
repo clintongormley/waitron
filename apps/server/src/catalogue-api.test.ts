@@ -94,11 +94,8 @@ function mountApp(venueLocale = "es-ES"): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
-    // cfg.nodeId is required but this in-process suite asserts route mechanics, not the captured
-    // origin (that is sync-origin.test.ts's job); any valid node id satisfies the type.
     {
       db: suite.db,
-      cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
       venueCfg: venueCfg(),
       venueLocale,
     },

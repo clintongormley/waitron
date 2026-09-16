@@ -85,14 +85,11 @@ export interface CatalogueApiDeps {
     language: string,
   ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
-  /** `nodeId` is this node's id, carried on the uniform write-path `cfg` shape every mounted API
-   * takes; it no longer stamps a capture origin — the application outbox and its capture triggers
-   * were removed (native replication ships every row). */
-  cfg: { nodeId: string };
   /**
    * The venue whose kitchen stations and courses the product editor may route a product to. OPTIONAL
-   * because `setProductStation`/`setProductCourse` check the id against `cfg.locationId`, which the
-   * node-only `cfg` above does not carry; `boot.ts` always supplies it for a real venue server.
+   * because a suite asserting only the permission gate can mount without it; `boot.ts` always
+   * supplies it for a real venue server, and `requireVenueCfg` throws on a routing request that
+   * arrives without one.
    */
   venueCfg?: TillConfig;
   venueLocale?: string;
