@@ -62,6 +62,16 @@ export class VariantForm extends LitElement {
   @state() private image: string | null = null;
   /** The saved variant's id, or undefined for one that has never been stored. */
   #variantId: string | undefined;
+  /** The field a refused submit puts focus in, applied in `updated` so the message beside it is on
+   * screen by the time the keyboard lands there. */
+  #focusField: string | null = null;
+
+  override updated(): void {
+    const name = this.#focusField;
+    if (name === null) return;
+    this.#focusField = null;
+    this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`)?.focus();
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (!(changed.has("open") && this.open) && !changed.has("value")) return;
@@ -74,6 +84,7 @@ export class VariantForm extends LitElement {
     this.customerName = { ...value?.customerName };
     this.image = value?.image ?? null;
     this.errors = {};
+    this.#focusField = null;
   }
 
   #fields(): FieldContext {
@@ -98,8 +109,13 @@ export class VariantForm extends LitElement {
     if (!isProductPrice(this.unitPrice)) errors.unitPrice = t("editor.price_invalid");
     this.errors = errors;
     // A refused submit leaves every field as it was, so one bad value is corrected on its own rather
-    // than retyped with the rest.
-    if (Object.keys(errors).length) return;
+    // than retyped with the rest — and focus MOVES to the first one reported, in render order,
+    // because a refusal that leaves the keyboard on Save says nothing a keyboard user can act on.
+    const [first] = Object.keys(errors);
+    if (first !== undefined) {
+      this.#focusField = first;
+      return;
+    }
     const customerName = nonBlankNames(this.customerName);
     const value: ProductEditorVariant = {
       ...(this.#variantId === undefined ? {} : { id: this.#variantId }),

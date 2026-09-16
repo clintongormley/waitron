@@ -267,6 +267,18 @@ it("reseeds its fields when it is reopened for a different variant", async () =>
   expect(field(el, "available").checked).toBe(true);
 });
 
+it("puts focus in the first field a refused submit reported", async () => {
+  const el = await mountForm({ value: null });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await click(el, "variant-save");
+  expect(submit).not.toHaveBeenCalled();
+  expect(field(el, "name").error).toBe(t("editor.variant_name_required"));
+  // Leaving focus on Save gives a keyboard user nothing to act on: the message is beside a field
+  // they would have to go looking for.
+  await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("name");
+});
+
 /** Focuses the name field, where a keyboard user lands first. */
 async function focusName(el: VariantForm) {
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
