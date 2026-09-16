@@ -218,6 +218,17 @@ configuration transfer carry them the same way they carry any other module's tab
 [plan and review evidence](superpowers/plans/2026-09-12-image-library.md),
 [operator guide](content-and-images.md).
 
+Three faults were found on the way and fixed here, none of them part of the rework. A working order's
+lines could be read and priced without checking which tenant they belonged to, on the path that files
+a sale — a two-tenant probe had another tenant receive a priced basket for an order it did not own,
+and it had been that way since August. A photo used only by a variant was counted as unused by the
+image library, so the list and the detail view disagreed about whether it could be deleted. And *Add
+product to menu* on the venue screen published another product's variants, or none: the offer was
+created for the product read from the page at save time while the variants came from state seeded off
+an unfiltered list against a filtered dropdown. The server refused the mismatched write, so nothing
+corrupt was ever stored — but the offer was created empty, the refusal reached only the browser
+console, and the product could not then be sold.
+
 What it left open:
 
 - **A new picture consumer has to add a real database reference, not just store a filename.** Products
@@ -695,10 +706,7 @@ What it left open:
   mechanical copy, because a product declaring "may contain" is a real statement in a way a modifier
   choice's was not.
 
-**The product editor reworked — written on branch `feat/product-editor-rework`, not yet on `main`
-(2026-09-15).** Every other entry in this section names the pull request that landed it. This one
-cannot yet, because the branch is unmerged. **Next action:** when it merges, rewrite this heading as
-`LANDED #<pr> (<date>)`, in the follow-up `Backlog:` commit this repository always makes.
+**The product editor reworked — LANDED #379 (2026-09-16).**
 
 A product's **Name** is no longer translated. It is plain staff-facing text, and it is what the
 dashboard, the till's buttons and basket, an open table's line list and the sales reports show. Two
@@ -742,6 +750,67 @@ What it left open:
   that column — but that is application-level protection only, and any delete path that skips
   `deleteImage` is not stopped by the database. **Next action:** decide whether the variant column
   should get the same foreign key the product column has.
+
+- **This branch added tenant predicates that `feat/drop-tenant-id` deletes.** It scoped three by-id
+  reads and writes — `readLockedLines` and `readTabLines` in `apps/server/src/working-order.ts`, and
+  `setProductStation`/`setProductCourse` in `apps/server/src/kitchen.ts` — one of which was leaking a
+  priced basket for another tenant's order on the path that files a sale, demonstrated by a
+  two-tenant probe. The tenant-id removal takes that whole mechanism away. **Next action:** whoever
+  lands second reconciles it; worth choosing the order deliberately rather than meeting it as a
+  rebase conflict.
+
+- **A manager can still clear another tenant's category routing.** `apps/server/src/kitchen.ts`
+  updates `categories` by id alone, unlike the two product setters beside it, and the HTTP
+  registration does not resolve ownership first. A run-it review reproduced it: tenant A's real
+  manager session cleared tenant B's station and the request returned 204. It predates this work
+  (`d76706ebb`, 2026-08-22) and was deliberately left unfixed, because the tenant-id removal deletes
+  the mechanism a predicate would use. **Next action:** confirm the tenant-id removal closes it; if
+  that work changes shape, this needs the predicate its siblings have.
+
+- **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
+  and only the editor's own parser refuses a blank; `createProduct` writes what it is given.
+  `option_groups.name` and `option_group_items.name` share the pattern. **Next action:** decide
+  whether the columns want a check constraint and the write paths a domain refusal.
+
+- **The legacy product-id order path loses the configured kitchen name.** `AvailableProduct` carries
+  no kitchen name, so a line added by product id freezes `kitchen_name` as null; `resolveHttpOrderZone`
+  sends all three line-carrying routes down that branch when a venue has no service zones. The
+  supported menu-offer path is unaffected, and the developer guide now says so rather than claiming
+  the name appears everywhere. Pre-existing. **Next action:** either carry the field on that path or
+  leave the narrowed claim standing.
+
+- **A refused customer name cannot say which value it refused.** `content.translation_required`
+  carries only the language, so the editor resolves the offending field by reading the body it just
+  submitted — exact for one missing value, the first of several otherwise, so two bad variants take
+  two saves to clear. Adding an optional field to that error would fix it but changes a shipped
+  error's contract for consumers that do not need it. **Next action:** an owner call if it ever
+  bites.
+
+- **The dashboard and till mirror server response shapes by hand.** Four defects on this branch
+  reached review through that gap — a name rendering blank, a raw id, a single character, and a
+  `TypeError` inside render — and three more appeared after a rebase in files that merged with no
+  conflict, because nothing type-checks a hand-written mirror against the wire body it mirrors. A
+  schema-sharing rewrite is not proportionate: it is large, cross-cutting, and lands in the two apps
+  most sensitive to bundle size. **Next action:** a few contract tests that hit a real route and
+  assert the response's keys against the client interface's keys, for the hottest shapes —
+  `Product`, `ProductPatch` and the product-editor pair.
+
+- **Saving a product reads the same tenant configuration once per variant.** `setProductVariants`
+  calls `validateContentTranslations` inside its loop and `saveProductEditor` calls it again for the
+  product, each doing two round trips for a value that changes once per transaction. Pre-existing —
+  only the field name changed here. **Next action:** hoist one read to the top of the save and thread
+  the resolved config down.
+
+- **Smaller things this work surfaced and did not take.** The kitchen screens show a kitchen-resolved
+  dish name above modifier text resolved in the device's own locale, because a modifier has only one
+  name in the data model. A joined customer-facing line can mix languages when a locale exists on one
+  half only. `wt-price-input` was built from scratch rather than on `wt-input`'s existing end slot,
+  which is why it had to be given `disabled` separately. `modifier-limits.ts` now holds a product
+  rule as well as modifier ones and is named for half its contents. And five pre-existing interface
+  faults were seen while walking the app: the products list heads its Name column "Description", the
+  wordmark is near-invisible in the dark theme, "Top sellers" is rendered twice on the overview, the
+  login screen shows an error before anything is submitted, and the recipe screen is not routed from
+  anywhere so it cannot be opened at all.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
