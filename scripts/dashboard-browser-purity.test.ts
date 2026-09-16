@@ -152,31 +152,44 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     expect(forbiddenImports(probe)).toEqual(["@waitron/db"]);
   });
 
-  describe("the catalogue product-types leaf stays type-only (no runtime edge)", () => {
+  describe("the catalogue product-types leaf stays type-only (emits no runtime)", () => {
     // `packages/catalogue/src/product-types.ts` holds the product wire shapes the dashboard imports
-    // DIRECTLY (`@waitron/catalogue/src/product-types.js`). It is a PURE type module: every one of its
-    // imports and exports is type-only, so it compiles to an empty runtime module and contributes NO
-    // code — and no runtime dependency — to any browser bundle. That is a STRONGER, more precise
-    // guarantee than the reachable-specifier scan above: a transitive text scan here would false-positive
-    // on a harmless `import type` edge (the leaves it draws types from reach `errors.ts`, whose own
-    // `import type { ProductUsingUnit } from "./units.js"` is erased at build time but text-visible), so
-    // the check is on THIS file's own edges instead. A runtime edge — a side-effect `import "./x.js"` or
-    // a value `import {…}`/`export {…} from "./x.js"` — is the only way this file could pull server code
-    // (e.g. `@waitron/db` via `./operations.js`) into the bundle. Prove-by-deletion: add
-    // `import "./operations.js"` to product-types.ts and the assertion goes red.
+    // DIRECTLY (`@waitron/catalogue/src/product-types.js`). It is a PURE type module: every import is
+    // `import type`, every export is a type/interface, and it declares no value — so it compiles to an
+    // empty runtime module and contributes NO code, and no runtime dependency, to any browser bundle.
+    // That is a STRONGER, more precise guarantee than the reachable-specifier scan above, which here
+    // would false-positive on a harmless `import type` edge (the leaves it draws types from reach
+    // `errors.ts`, whose own `import type { ProductUsingUnit } from "./units.js"` is erased at build
+    // time but text-visible); the check is on THIS file's own statements instead.
+    //
+    // HEDGE (it reads TEXT, not the compiler): it flags the runtime forms that actually occur — an
+    // `import` that is not `import type` (a side-effect `import "x"` or a value import, RELATIVE OR NOT,
+    // so a direct `import "@waitron/db"` is caught), an `export` that is not `export type`/`export
+    // interface` (`export const`, `export {value}`, `export default`), and a bare top-level value
+    // declaration (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch an exotic
+    // top-level expression statement (`sideEffect();`) — which no type file writes; the transpile check
+    // (typescript is not a root dependency) is left to the `bundle-smoke` backstop. Prove-by-deletion:
+    // add `import "@waitron/db";` or `export const x = 1;` to product-types.ts and it goes red.
     const text = readFileSync(join(REPO, "packages/catalogue/src/product-types.ts"), "utf8");
 
-    /** Every RELATIVE import/export edge that survives to runtime (a bundler would follow): a
-     * side-effect `import "./x"`, or a value (non-`type`) `import …`/`export … from "./x"`. A
-     * `import type`/`export type` edge is erased and excluded. */
-    function runtimeRelativeEdges(src: string): string[] {
+    /** Every top-level statement in `src` that would emit runtime JS: an `import` that is not
+     * `import type`, an `export` that is not `export type`/`export interface`, or a bare value
+     * declaration. Comments are stripped first so prose mentioning `import`/`export` is not misread as
+     * code. A file with none of these transpiles to empty — it contributes nothing to a bundle. */
+    function runtimeStatements(src: string): string[] {
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
       const out: string[] = [];
-      for (const m of src.matchAll(/import\s+["'](\.[^"']*)["']/g)) out.push(m[1]!);
-      for (const re of [
-        /import\s+(?!type[\s{])[\s\S]*?from\s*["'](\.[^"']*)["']/g,
-        /export\s+(?!type[\s{])[\s\S]*?from\s*["'](\.[^"']*)["']/g,
-      ]) {
-        for (const m of src.matchAll(re)) out.push(m[1]!);
+      // Anchored at column 0 (no leading whitespace): a module's import/export/value statements sit at
+      // the top level, while an interface's members are always indented — so a wire field NAMED
+      // `import`, `export`, `class`, `enum`, `const`, … is not mistaken for a runtime statement.
+      for (const m of code.matchAll(/^import\b[^\n]*/gm)) {
+        if (!/^import\s+type\b/.test(m[0])) out.push(m[0].trim());
+      }
+      for (const m of code.matchAll(/^export\b[^\n]*/gm)) {
+        if (!/^export\s+(?:type|interface)\b/.test(m[0])) out.push(m[0].trim());
+      }
+      for (const m of code.matchAll(/^(?:const|let|var|function|class|enum)\b[^\n]*/gm)) {
+        out.push(m[0].trim());
       }
       return out;
     }
@@ -185,17 +198,32 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       expect(/import\s+type\s/.test(text)).toBe(true);
     });
 
-    it("has no runtime import or export edge", () => {
-      expect(runtimeRelativeEdges(text)).toEqual([]);
+    it("is type-only: no runtime import, export, or declaration", () => {
+      expect(runtimeStatements(text)).toEqual([]);
     });
 
-    it("recognises a planted runtime edge (negative control)", () => {
-      expect(runtimeRelativeEdges('import "./operations.js";')).toEqual(["./operations.js"]);
-      expect(runtimeRelativeEdges('import { readProductEditor } from "./operations.js";')).toEqual([
-        "./operations.js",
+    it("flags planted runtime constructs, ignores type-only ones (control)", () => {
+      // A relative side-effect import, a NON-relative server-package import, a value import, a value
+      // export and a bare declaration are each caught — the leaks the bundle guarantee is about.
+      expect(runtimeStatements('import "./operations.js";')).toEqual(['import "./operations.js";']);
+      expect(runtimeStatements('import "@waitron/db";')).toEqual(['import "@waitron/db";']);
+      expect(runtimeStatements('import { readProductEditor } from "./operations.js";')).toEqual([
+        'import { readProductEditor } from "./operations.js";',
       ]);
-      // A type-only edge is correctly NOT a runtime edge — it never reaches the bundle.
-      expect(runtimeRelativeEdges('import type { Product } from "./operations.js";')).toEqual([]);
+      expect(runtimeStatements("export const reviewRuntime = 1;")).toEqual([
+        "export const reviewRuntime = 1;",
+      ]);
+      expect(runtimeStatements("const x = 1;")).toEqual(["const x = 1;"]);
+      // Type-only statements are correctly NOT runtime — they never reach the bundle.
+      expect(runtimeStatements('import type { Product } from "./operations.js";')).toEqual([]);
+      expect(runtimeStatements('export type { Product } from "./operations.js";')).toEqual([]);
+      expect(runtimeStatements("export interface Foo { a: string }")).toEqual([]);
+      // An INDENTED interface member whose name happens to be a keyword is not a top-level statement,
+      // so the column-0 anchoring must leave it alone (it would otherwise false-positive a legitimate
+      // type-only field named `class`, `import`, `export`, …).
+      expect(
+        runtimeStatements("export interface Foo {\n  class: string;\n  import: number;\n}"),
+      ).toEqual([]);
     });
   });
 
