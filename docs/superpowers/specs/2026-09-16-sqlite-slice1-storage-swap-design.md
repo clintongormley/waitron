@@ -309,7 +309,16 @@ into `tenants`. SQLite has no roles, so that refusal disappears at the moment of
 
 Two things replace it:
 
-- **Append-only tables keep a trigger that refuses changes**, as `RAISE(ABORT)` — the topology design's
+- **Append-only tables keep a trigger that refuses changes**, as `RAISE(ABORT)` — **and the store must
+  set `PRAGMA recursive_triggers = ON`, or the triggers have a hole.** SQLite's `INSERT OR REPLACE`
+  deletes the conflicting row internally, and with the default `recursive_triggers = OFF` that
+  internal delete does not fire a `BEFORE DELETE` trigger. Measured on 2026-09-16 against a ledger
+  table carrying both triggers, with the control in the other direction: with the pragma off,
+  `insert or replace` SUCCEEDED and rewrote the row's payload **and its huella**; with it on, the same
+  statement was refused. Plain `UPDATE`, plain `DELETE` and `ON CONFLICT … DO UPDATE` are refused
+  either way, and `INSERT … ON CONFLICT DO NOTHING` keeps working either way. This is the difference
+  between a fiscal record that cannot be rewritten and one that can be rewritten by a statement
+  nobody thinks of as an update — the topology design's
   §8.2, and the defence CLAUDE.md §5 relies on for `registros_facturacion`. A guard asserts every
   `ledger` table carries them.
 - **Everything else becomes a guard that reads the source** and fails when a write path touches a table

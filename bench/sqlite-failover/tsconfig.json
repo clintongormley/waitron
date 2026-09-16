@@ -1,9 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // `node src/scenarios.ts` executes this TypeScript directly, so the typechecker has to accept
+    // exactly the specifiers Node resolves and refuse the ones it does not. `nodenext` is what makes
+    // the two agree; the base config's inherited `bundler` does not. Verified on 2026-09-16 with
+    // TypeScript 5.9.3 on a two-file `"type": "module"` package importing `"./store"`:
+    // under `nodenext`, `error TS2835: Relative import paths need explicit file extensions…`;
+    // under `bundler`, tsc passes — while Node gives `ERR_MODULE_NOT_FOUND` for that same import.
+    // Every file here currently writes the `.ts` extension, so both settings pass on the tree as it
+    // stands: the override guards the case that is not in the tree yet, which is why removing it
+    // looked safe and was not.
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "noEmit": true,
+    // Needed under `nodenext`, which otherwise rejects the `.ts` extension the imports carry:
+    // setting this false fails `src/scenarios.ts` and `src/scenarios/s_smoke.ts` with TS5097.
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },

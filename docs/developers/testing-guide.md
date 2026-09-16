@@ -110,7 +110,8 @@ stalled operation before assigning its cause to resource contention.
 PGlite `beforeAll`s and the `freePort` race, while an isolated re-run passes and proves nothing.
 Run `pnpm reap` before local database testing when needed. The command
 (`scripts/reap-testcontainers.mjs`) removes containers labelled
-`com.waitron.reapable` (stamped by `startPostgresContainer`, pinned by test) AND older than 2 h —
+`com.waitron.reapable` (stamped by `startPostgresContainer` in packages/db, which a test pins, and by
+`startStore` in bench/sqlite-failover, which nothing pins) AND older than 2 h —
 so another repo's or a live watch-mode container survives — with their anon volumes. It never
 touches images and there is no blanket `docker volume prune` (it would reach other projects and the
 named dev volumes). `docker volume inspect` before any manual `rm`. Once a leaked container is gone

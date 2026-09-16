@@ -22,6 +22,15 @@ pnpm --filter @waitron/bench-sqlite-failover typecheck
 
 Docker must be running: each scenario starts its own MinIO container via Testcontainers.
 
+`TESTCONTAINERS_RYUK_DISABLED=true` is required locally (`CLAUDE.md` §4), and it turns off the reaper
+that would otherwise clean up after an interrupted run. Scenarios run one at a time and each stops its
+own store in a `finally`, so an interrupt strands the container of the scenario in flight, not one per
+scenario. `pnpm reap` is the fallback: `startStore()` stamps every container `com.waitron.reapable`,
+which `scripts/reap-testcontainers.mjs` selects on — **and it removes only labelled containers older
+than two hours**, so a reap run immediately after an interrupt reports nothing removed and the
+stranded container is still there. Stop it by hand, or reap later. Never a blanket
+`docker volume prune`.
+
 ## A scenario's verdict is a measurement, and the exit code says so
 
 `scenarios` prints one Markdown table — id, title, verdict, detail — and exits **non-zero only when a
@@ -54,36 +63,49 @@ which plan Task 10 writes (spec §5).
 
 ## Why it can't join `pnpm -r test`
 
-Three independent reasons, each checked in this worktree rather than inherited from the pglite bench's
-README:
+Three independent reasons. The first was run in this worktree; the second and third were read off the
+package and the root config, and are marked as such — they are not measurements:
 
 1. The package defines no `test` script — only `scenarios` and `typecheck`. Root `pnpm test` ends in
    `pnpm -r test`, which skips a workspace member that has no such script instead of failing on it:
    `pnpm -r --filter @waitron/bench-sqlite-failover test` prints nothing and exits 0.
-2. It contains no `*.test.ts` file, so even if a `test` script were added by reflex later, Vitest's
-   default include pattern would match nothing here.
-3. Root `pnpm test` also runs `vitest run` at the repository root first, and that project cannot reach
-   here: its `include` is `["scripts/**/*.test.mjs", "scripts/**/*.test.ts"]` (root
-   `vitest.config.ts`), which does not reach `bench/`.
+2. Read, not run: the package contains no `*.test.ts` file, so a `test` script added by reflex later
+   would find nothing for Vitest's default include pattern to match.
+3. Read, not run: root `pnpm test` also runs `vitest run` at the repository root first, whose
+   `include` is `["scripts/**/*.test.mjs", "scripts/**/*.test.ts"]` (root `vitest.config.ts`) and
+   does not reach `bench/`.
 
 What those three keep out is the rig's **scenarios** — no CI job and no pre-push hook run a MinIO
 container. They do not keep the PACKAGE out of anything: it is a workspace member, so CI's shard
 filters and the root guards see it by name, and it has to be wired for that. It is listed in
 `PACKAGES_WITHOUT_TESTS` and placed in `LIGHT_B_PACKAGES` (`scripts/changed-scope.mjs`), and
 subtracted from `test-light-a`'s selection in `.github/workflows/ci.yml` — exactly how
-`@waitron/bench-pglite` is wired. Without that wiring three root guards fail; measured in this
-worktree before it was added, `Test Files 3 failed (3)`: `scripts/changed-scope.test.mjs` (a member
-declaring no `test:coverage` and not on the list is a mistake), `scripts/ci-workflow.test.mjs` (the
-shards must select every member exactly once, and an unlisted one lands in both light bins) and
-`scripts/coverage-thresholds.test.ts` (`ENOENT` opening a `vitest.config.ts` this package does not
-have). All three live in the root Vitest project, which CI's ungated `lint` job runs
-(`.github/workflows/ci.yml`, `pnpm vitest run --coverage`) and `.husky/pre-push` runs on every
-non-documentation push.
+`@waitron/bench-pglite` is wired. Three root guards go red without that wiring —
+`scripts/changed-scope.test.mjs`, `scripts/ci-workflow.test.mjs` and
+`scripts/coverage-thresholds.test.ts`, the last by crashing rather than asserting. They live in the root Vitest project, which CI's ungated
+`lint` job and `.husky/pre-push` both run. The general rule, for whoever adds the next workspace
+member, is in [ci-and-gates.md](../../docs/developers/ci-and-gates.md).
 
 The package's gate is `typecheck` + `pnpm format:check` + `pnpm lint`, plus those three root guards —
 `pnpm vitest run` at the root is part of this package's gate precisely because it reads the wiring
 above; the evidence that it works
 will be the recorded run in its results note, not a green CI job.
+
+## What the model enforces, not just labels
+
+`records` is the rig's stand-in for `registros_facturacion`, and it is append-only in the way the real
+table is rather than only in its comments. Two parts, and **both are needed**: `BEFORE UPDATE` and
+`BEFORE DELETE` triggers that `RAISE(ABORT)`, plus `PRAGMA recursive_triggers = ON` in `openNode`.
+Without the pragma, `INSERT OR REPLACE` deletes the conflicting row internally, that internal delete
+does not fire `BEFORE DELETE`, and the row's payload and huella are rewritten — while plain `UPDATE`,
+plain `DELETE` and `ON CONFLICT … DO UPDATE` are all refused either way, so a check covering only
+those three passes with the hole open.
+
+The `smoke` scenario is what runs them: it asserts all four refusals and reads the row back to confirm
+its huella and payload survived. Flipping the pragma off makes that scenario fail.
+
+That matters beyond this rig — the slice-1 spec commits to the same mechanism for the real ledger once
+PostgreSQL's row-level trigger is gone, and it carries the pragma for this reason.
 
 ## Several files, not one
 

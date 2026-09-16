@@ -17,6 +17,14 @@ CREATE TABLE IF NOT EXISTS records (
   huella TEXT NOT NULL, huella_anterior TEXT, payload TEXT NOT NULL,
   PRIMARY KEY (node_id, secuencia)
 );
+-- The model of the ledger's defence: the real table is REVOKE ALL plus an append-only trigger
+-- (CLAUDE.md §5), and SQLite's equivalent of that trigger is RAISE(ABORT). The rig's own writes
+-- never reach them: applyTail re-inserts with ON CONFLICT DO NOTHING, which fires neither trigger.
+-- The s_smoke scenario is what runs them, over every path SQLite offers for changing a row.
+CREATE TRIGGER IF NOT EXISTS records_reject_update BEFORE UPDATE ON records
+BEGIN SELECT RAISE(ABORT, 'records is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS records_reject_delete BEFORE DELETE ON records
+BEGIN SELECT RAISE(ABORT, 'records is append-only'); END;
 -- MODEL of cadenas (packages/fiscal-verifactu/src/schema/cadenas.ts:44). Per-node chain tip,
 -- updated in place by the owner.
 CREATE TABLE IF NOT EXISTS chain_head (
@@ -120,6 +128,13 @@ export type NodeDb = {
     sql: string,
     ...params: SQLInputValue[]
   ): Row | undefined;
+  /**
+   * Release the SQLite handle. Every node a scenario opens is closed, a `:memory:` one included:
+   * the handle is unusable afterwards (`ERR_INVALID_STATE`), so the close belongs in a `finally`
+   * after the scenario's last read. A node opened on a real file path is closed before anything
+   * replaces that file.
+   */
+  close(): void;
 };
 
 /**
@@ -136,6 +151,12 @@ export function toyHuella(prev: string | null, payload: string): string {
 export function openNode(nodeId: string, path?: string): NodeDb {
   const handle = new DatabaseSync(path ?? ":memory:");
   handle.exec("PRAGMA foreign_keys = ON");
+  // This pragma is what closes the INSERT OR REPLACE path past the append-only triggers below:
+  // that statement deletes the conflicting row INTERNALLY, and at SQLite's default OFF an internal
+  // delete fires no BEFORE DELETE trigger. Measured on node v26.7.0 against this schema, one ledger
+  // row, the same statement: OFF -> not refused, the row's huella and payload were rewritten;
+  // ON -> refused, "records is append-only". `s_smoke` asserts all four refusals.
+  handle.exec("PRAGMA recursive_triggers = ON");
   handle.exec(SCHEMA);
   return {
     nodeId,
@@ -143,6 +164,7 @@ export function openNode(nodeId: string, path?: string): NodeDb {
     exec: (sql) => handle.exec(sql),
     get: <Row>(sql: string, ...params: SQLInputValue[]) =>
       handle.prepare(sql).get(...params) as Row | undefined,
+    close: () => handle.close(),
   };
 }
 
@@ -314,6 +336,16 @@ export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
  *     `skippedClashes` — it is dropped without a word, which is exactly what S5 exists to change.
  */
 export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatch): ApplyResult {
+  // The only writer of a node's OWN chain is `recordSale`, appending 1, 2, 3, … (see `diffTail`).
+  // A tail claiming to come from the receiver itself is refused before any of it is written, and
+  // what that prevents is a chain FORK rather than a hole: the record inserts below are ON CONFLICT
+  // DO NOTHING, so such a batch fills gaps instead of appending past them, but the chain_head
+  // upsert at the end of this function would then move THIS node's own tip onto a huella it never
+  // computed — and `recordSale` reads that tip as the next record's huella_anterior.
+  if (senderNodeId === receiver.nodeId) {
+    throw new Error(`applyTail: node ${receiver.nodeId} was handed a tail from its own chain`);
+  }
+
   return withTx(receiver.handle, () => {
     let applied = 0;
     let refusedForeign = 0;

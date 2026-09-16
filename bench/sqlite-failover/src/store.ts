@@ -15,6 +15,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { GenericContainer, Wait } from "testcontainers";
+import type { StartedTestContainer } from "testcontainers";
 
 /**
  * Tag AND digest in the one reference the container is actually started from, so the pull resolves
@@ -61,10 +62,25 @@ export async function startStore(): Promise<Store> {
   const container = await new GenericContainer(MINIO_IMAGE)
     .withCommand(["server", "/data"])
     .withEnvironment({ MINIO_ROOT_USER: ROOT_USER, MINIO_ROOT_PASSWORD: ROOT_PASSWORD })
+    // The label scripts/reap-testcontainers.mjs filters on, and the only one it filters on.
+    .withLabels({ "com.waitron.reapable": "true" })
     .withExposedPorts(9000)
     .withWaitStrategy(Wait.forHttp("/minio/health/live", 9000))
     .start();
 
+  // Everything after `.start()` runs under this guard: a failure there hands the caller an
+  // exception instead of a `stop()`, so the container is nobody's to stop afterwards.
+  try {
+    return await connect(container);
+  } catch (error) {
+    // The stop's own failure is swallowed: it would otherwise replace the bucket-creation error the
+    // caller needs with a Docker one, which names neither the failure nor the leak.
+    await container.stop().catch(() => {});
+    throw error;
+  }
+}
+
+async function connect(container: StartedTestContainer): Promise<Store> {
   const endpoint = `http://${container.getHost()}:${container.getMappedPort(9000)}`;
   const client = new S3Client({
     endpoint,
@@ -75,7 +91,12 @@ export async function startStore(): Promise<Store> {
     forcePathStyle: true,
     credentials: { accessKeyId: ROOT_USER, secretAccessKey: ROOT_PASSWORD },
   });
-  await client.send(new CreateBucketCommand({ Bucket: BUCKET }));
+  try {
+    await client.send(new CreateBucketCommand({ Bucket: BUCKET }));
+  } catch (error) {
+    client.destroy();
+    throw error;
+  }
 
   return {
     endpoint,

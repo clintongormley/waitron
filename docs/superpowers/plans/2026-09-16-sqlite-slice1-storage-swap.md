@@ -1955,7 +1955,21 @@ it("refuses a delete from a ledger table", async () => {
 });
 ```
 
-- [ ] **Step 20: Install `RAISE(ABORT)` triggers on every `ledger` table**
+- [ ] **Step 20: Install `RAISE(ABORT)` triggers on every `ledger` table — and turn on recursive triggers**
+
+`PRAGMA recursive_triggers = ON` goes in `packages/store` beside `foreign_keys = ON`, and it is not
+optional. Measured on 2026-09-16 against a ledger table carrying both triggers, with a control:
+
+```
+recursive_triggers = OFF (SQLite's default)  INSERT OR REPLACE: SUCCEEDED, row's payload AND huella rewritten
+recursive_triggers = ON                      INSERT OR REPLACE: refused (records is append-only)
+```
+
+`INSERT OR REPLACE` deletes the conflicting row internally, and with the default that internal delete
+does not fire `BEFORE DELETE`. Plain `UPDATE`, plain `DELETE` and `ON CONFLICT … DO UPDATE` are
+refused either way; `INSERT … ON CONFLICT DO NOTHING` works either way. Write the test for the
+`INSERT OR REPLACE` case specifically — the other three pass without the pragma, so a test that omits
+it passes while the hole is open.
 
 Driven from the classification lists, not a hand-written list — a new ledger table must get its triggers without anyone remembering. Add a guard asserting every `ledger` table carries them, and prove it by deleting one trigger.
 
