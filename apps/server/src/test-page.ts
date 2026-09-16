@@ -1,4 +1,5 @@
 import { esc, withQuietZone, wrapText } from "@waitron/printing";
+import { TEST_CHARSET_SAMPLES } from "@waitron/printing/src/test-page-samples.js";
 import type { SupportedLocale } from "@waitron/shared";
 import { qrModules } from "./qr-matrix.js";
 
@@ -38,7 +39,6 @@ const CAPTIONS: Readonly<Record<SupportedLocale, Captions>> = {
 const CAPTION_COLUMNS = 30;
 /** Fixed sample content, not a tax-agency link, so scanning a sample submits nothing. */
 const SAMPLE_QR_TEXT = "Waitron 30-40 mm";
-const SAMPLE_LINE = "Café jamón Ñ ¿¡ ç ü 5 €";
 
 /** `label`, a space, dashes, and `|` as the last of exactly `length` characters. */
 function widthLine(label: string, length: number): string {
@@ -73,9 +73,9 @@ export function formatTestPage({ locale }: { locale: SupportedLocale }): Uint8Ar
   b.line();
 
   caption(c.charsetQuestion);
-  b.charset("wpc1252").line(`1: ${SAMPLE_LINE}`);
-  b.charset("pc858").line(`2: ${SAMPLE_LINE}`);
-  b.charset("plain").line(`3: ${SAMPLE_LINE}`);
+  for (const { value, characterSet, text } of TEST_CHARSET_SAMPLES) {
+    b.charset(characterSet).line(`${value}: ${text}`);
+  }
 
   return b.feedAndCut().bytes();
 }

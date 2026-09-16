@@ -22,6 +22,7 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { t } from "../i18n/t.js";
+import { TEST_CHARSET_SAMPLES } from "@waitron/printing/src/test-page-samples.js";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
@@ -79,11 +80,9 @@ const LINE_FITS: Readonly<
   D: { paperWidth: "80mm", resolution: "203dpi" },
 };
 /** "Which is the first line that reads correctly?" — line 1 is table 16, line 2 table 19, line 3 plain. */
-const LINE_READS: Readonly<Record<string, PrintCharacterSet>> = {
-  "1": "wpc1252",
-  "2": "pc858",
-  "3": "plain",
-};
+const LINE_READS: Readonly<Record<string, PrintCharacterSet>> = Object.fromEntries(
+  TEST_CHARSET_SAMPLES.map(({ value, characterSet }) => [value, characterSet]),
+);
 
 /** Hardware registration and print-job history; routing policy lives on Printing rules.
  * The server enforces printer.manage for configuration and print.resend for document resends. */
@@ -951,7 +950,7 @@ export class PrintersScreen extends LitElement {
                 this.testAnswers = { ...answers, [name]: value };
               }}
             />
-            ${name === "reads" ? `${value}: ${value === "3" ? "Cafe jamon N ?! c u 5 EUR" : "Café jamón Ñ ¿¡ ç ü 5 €"}` : value}
+            ${name === "reads" ? `${value}: ${TEST_CHARSET_SAMPLES.find((sample) => sample.value === value)!.text}` : value}
           </label>`,
       );
     return html`<wt-modal
@@ -972,7 +971,10 @@ export class PrintersScreen extends LitElement {
         <p data-test="test-qr-help">${t("printers.test_qr_help")}</p>
         <fieldset>
           <legend>${t("printers.test_line_reads")}</legend>
-          ${choices("reads", ["1", "2", "3"])}
+          ${choices(
+            "reads",
+            TEST_CHARSET_SAMPLES.map(({ value }) => value),
+          )}
         </fieldset>
         ${answers.reads === "3" ? html`<p class="hint">${t("printers.test_plain_hint")}</p>` : nothing}
         <wt-button
@@ -1212,7 +1214,6 @@ export class PrintersScreen extends LitElement {
   #renderAgentModal(): TemplateResult | typeof nothing {
     if (!this.addingAgent) return nothing;
     return html`<wt-modal
-      class="add-hardware"
       data-test="new-agent-modal"
       heading=${t("printers.add_agent")}
       .open=${true}
@@ -1861,7 +1862,6 @@ export class PrintersScreen extends LitElement {
       },
     ];
     return html`<wt-modal
-      class="add-hardware"
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}

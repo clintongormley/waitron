@@ -18,6 +18,7 @@
     "@waitron/dashboard-kit": "workspace:*",
     "@waitron/dashboard-modules": "workspace:*",
     "@waitron/diagnostics": "workspace:*",
+    "@waitron/printing": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
     "lit": "^3.2.0",

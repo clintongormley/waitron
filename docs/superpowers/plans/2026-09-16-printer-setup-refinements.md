@@ -33,7 +33,7 @@
 Physical NT-806 output remains unverified. The design records the confirmed duplicate name answers
 and their disappearance after the laptop server stopped; individual historical browser destinations
 were not captured.
-CI and whole-branch review belong to `finish-branch`, which has not been invoked.
+The implementation checks above precede the `finish-branch` review and CI.
 
 
 ## Rebase and follow-up verification
@@ -57,3 +57,25 @@ After the rebase:
 - Before the language fix, four route cases printed the venue language instead of the expected
   user/browser language, and the QR-caption assertion failed. These failures were observed both
   before and after adapting to main's schema, then all passed after implementation.
+
+
+## Finish-branch review
+
+The isolated Claude run-it review completed in 239 seconds, with no blockers. Accepted follow-ups:
+
+- Move the character samples and their answer-to-charset mapping into the browser-safe
+  `packages/printing/src/test-page-samples.ts`, consumed by the printed page and dashboard. Keep the
+  existing literal output assertions and add rendered label assertions.
+- Extend the successful-add regression through a later discovery poll. Removing
+  `#registeredDevices.add(...)` now fails because the Add button reappears; restoring it passes.
+- Remove the unused test-print translation and obsolete modal classes.
+
+The follow-up browser and accessibility suites passed (146 tests); charset tests passed (14), and
+printed-page tests passed (5). The dashboard production build also passed. A probe using the actual
+request primitive and the session-error callback extracted from `main.ts` confirmed that a fetch
+rejection has no HTTP status and emits no session-invalid event; its expired-session 401 control
+retains the status and emits the event. No change was needed for that review question.
+
+Review artifacts: `/tmp/waitron-printers-review-xycqpvw0/` holds the brief, report, timing, usage,
+triage and session probe. Physical NT-806 behavior is still unverified. The reviewer did not repeat
+the historical LAN probes; their original readings are recorded in the design.

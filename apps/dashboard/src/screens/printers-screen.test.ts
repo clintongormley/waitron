@@ -1970,24 +1970,37 @@ it("closing Add printer while its discovery window opens starts no reads", async
 });
 
 it("keeps a successfully added printer registered when refreshing discovery fails", async () => {
-  const api = stubApi({
-    listDiscoveredPrinters: vi
-      .fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(discoveredNetwork)
-      .mockRejectedValue({ code: "server.internal" }),
-  });
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-  await flush(el);
-  await openDiscovery(el);
-  await addDiscovered(el, q(el, '[data-test="register-10.0.0.77:9100"]')!);
-  await flush(el);
-  expect(api.createPrinter).toHaveBeenCalledOnce();
-  expect(q(el, '[data-test="name-printer-modal"]')).toBeNull();
-  expect(text(el, '[data-test="printer-added"]')).toContain(discoveredNetwork[0]!.name);
-  expect(text(el, '[data-test="printer-refresh-error"]')).toContain(t("printers.refresh_failed"));
-  expect(q(el, '[data-test="register-10.0.0.77:9100"]')).toBeNull();
-  expect(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')).toBeNull();
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const api = stubApi({
+      listDiscoveredPrinters: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(discoveredNetwork)
+        .mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    await addDiscovered(el, q(el, '[data-test="register-10.0.0.77:9100"]')!);
+    await flush(el);
+    expect(api.createPrinter).toHaveBeenCalledOnce();
+    expect(q(el, '[data-test="name-printer-modal"]')).toBeNull();
+    expect(text(el, '[data-test="printer-added"]')).toContain(discoveredNetwork[0]!.name);
+    expect(text(el, '[data-test="printer-refresh-error"]')).toContain(t("printers.refresh_failed"));
+    expect(q(el, '[data-test="register-10.0.0.77:9100"]')).toBeNull();
+    expect(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')).toBeNull();
+    vi.mocked(api.listDiscoveredPrinters).mockResolvedValue(discoveredNetwork);
+    vi.mocked(api.listDiscoveredPrinters).mockClear();
+    await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+    await flush(el);
+    expect(api.listDiscoveredPrinters).toHaveBeenCalledOnce();
+    expect(q(el, '[data-test="register-10.0.0.77:9100"]')).toBeNull();
+    expect(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')).toBeNull();
+    expect(api.createPrinter).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("cancel discards a printer edit and reopening restores saved values", async () => {
@@ -2730,6 +2743,15 @@ describe("printer layout settings", () => {
       q(el, `input[name="${name}"][value="${value}"]`)!.click();
       await flush(el);
     };
+    expect(
+      [...el.shadowRoot!.querySelectorAll('input[name="printer-test-line-reads"]')].map((input) =>
+        input.closest("label")!.textContent!.trim(),
+      ),
+    ).toEqual([
+      "1: Café jamón Ñ ¿¡ ç ü 5 €",
+      "2: Café jamón Ñ ¿¡ ç ü 5 €",
+      "3: Cafe jamon N ?! c u 5 EUR",
+    ]);
     expect(q(el, 'input[name="printer-test-line-fits"]:checked')).toBeNull();
     await answer("printer-test-line-fits", "B");
     await answer("printer-test-line-reads", "3");
