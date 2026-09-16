@@ -384,10 +384,18 @@ though no money is misfiled.
 
 **The MVP contract, short of the shelved conflict-merge work:**
 
-1. **Promotion asserts the other side is gone.** Across a partition a node cannot be *proven* dead —
-   unreachable is indistinguishable from switched-off — so promoting the cloud while the box may be
-   alive is the operator taking that risk, and the promotion surface must say so plainly. Not creating
-   the split brain is the real defence.
+1. **Promotion asserts that *every* other node that could take over is gone — enumerated, not
+   generic** (owner, 2026-09-16). Across a partition a node cannot be *proven* dead — unreachable is
+   indistinguishable from switched-off — so promotion is the operator taking that risk, and the
+   promotion surface must say so plainly. But "is the box gone?" is not enough when the venue runs more
+   than one on-prem node: a two-box venue's mirror can promote itself on-site (§4.4, box A dies → box B
+   promotes), so promoting the cloud while box B is alive is the same split brain. The cloud knows the
+   venue's node set — `nodes` and `node_seats` travel in the stream, and their roles are in the cloud's
+   membership view from adopt — so the promotion surface **lists every peer that could be promoted (the
+   primary box AND the mirror box) and requires the operator to assert each is offline and will not be
+   promoted**, one line per node, with whatever freshness evidence the cloud holds (the last stream or
+   copy-up time) shown beside it. Not creating the split brain is the real defence; enumerating the
+   nodes is what makes the assertion honest rather than a single vague "the box is gone".
 2. **If the assertion is wrong, fiscal is safe and completed sales ship back; in-flight service is
    lost** — the same family as the already-accepted "box-down and internet-down together is no
    failover" (`docs/backlog.md` → MVP for go-live).
