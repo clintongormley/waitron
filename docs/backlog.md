@@ -1137,18 +1137,28 @@ confirmed during investigation. Configured text initialization now cancels
 Kanji mode before sending single-byte text, as documented by the NT-806 manual.
 [Design and incident evidence](superpowers/specs/2026-09-16-printer-setup-refinements.md).
 
-**Printer calibration follow-up — IN PROGRESS (2026-09-16).** A physical NT-806 byte-grid print
+**Printer calibration follow-up — LANDED #388 (2026-09-16).** A physical NT-806 byte-grid print
 identified Windows-1252 at table 6, CP866 at table 16 and CP737 at table 19, contradicting that
 unit's supplied table list. Encoding and `ESC t` table number are now independent printer settings.
 The normal test covers common pairs; a sixteen-table batched finder handles other printer firmware.
 Calibration uses one measured QR, and the editor can print a clearly simulated sample receipt with
-its unsaved settings. The Add-printer layout also collapses the known-address form, places Scan at
-the trailing edge, orders unsupported results last, and hides a redundant status filter for an
-all-active or all-disabled list.
+its unsaved settings. Which sample characters get printed now follows the site's language rather
+than a fixed Western-European assumption. The Add-printer layout also collapses the known-address
+form, places Scan at the trailing edge, orders unsupported results last, and hides a redundant
+status filter for an all-active or all-disabled list.
 [Physical evidence and updated decisions](superpowers/specs/2026-09-16-printer-setup-refinements.md#owner-follow-up-and-physical-character-table-probe-2026-09-16).
 
 - **NT-806 profile established on paper:** Windows-1252 bytes with `ESC t 6`. The earlier Kanji-mode
   correction did not make the manual's table 16 or 19 assignments true on this firmware.
+- **Every printer saved before this change must be recalibrated** through the printer editor's test
+  flow. Rows still carrying the old `pc858` setting were deliberately not converted: this repository
+  forbids data-migration code until Waitron is in production, so a stale row prints the wrong accented
+  characters until someone runs the test page against that printer and saves the answers.
+- **Adding a language to the venue also means adding its printer calibration entry.** The character
+  set list is derived from the database enum, and the calibration samples, finder candidates and
+  setting labels are exhaustive over the locale list, so a new locale fails to compile until its entry
+  exists. English and Spanish deliberately share one profile today; a language needing Cyrillic (the
+  worked example was Ukrainian) has to add and test its own encoding path rather than inherit one.
 - **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
   whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
   QR size is meant to count the code's blank border or only its dark squares.
