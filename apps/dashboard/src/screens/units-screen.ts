@@ -226,8 +226,8 @@ export class UnitsScreen extends LitElement {
     void this.#deleteUnit(unit.id);
   }
 
-  /** Clicking a unit row opens the same products modal a refused delete does — here to view and
-   * reassign, not because a delete failed. Fetches the products, then reuses `#openInUse`. */
+  /** Clicking a unit row opens the delete screen with the products that must be moved first.
+   * Fetches the products, then reuses the state populated by a refused delete. */
   async #openUnitProducts(unit: Unit): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -410,7 +410,12 @@ export class UnitsScreen extends LitElement {
         : this.inUseProducts.filter((product) =>
             product.name.toLocaleLowerCase().includes(productNeedle),
           );
-    const otherUnits = this.units.filter((unit) => unit.id !== this.inUseUnitId);
+    const unitNameCollator = new Intl.Collator(currentLocale(), { sensitivity: "base" });
+    const otherUnits = this.units
+      .filter((unit) => unit.id !== this.inUseUnitId)
+      .sort((left, right) =>
+        unitNameCollator.compare(localizedName(left.name), localizedName(right.name)),
+      );
     return html`
       <div class="heading">
         <h1>${t("units.title")}</h1>
@@ -444,7 +449,7 @@ export class UnitsScreen extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(unit: Unit) => unit.id}
         .rowClick=${(unit: Unit) => void this.#openUnitProducts(unit)}
-        .rowClickLabel=${(unit: Unit) => `${t("units.view_products")}: ${localizedName(unit.name)}`}
+        .rowClickLabel=${(unit: Unit) => `${t("units.delete_unit")}: ${localizedName(unit.name)}`}
         .loading=${this.loading}
         emptyMessage=${t("units.empty")}
       ></wt-data-table>
@@ -463,10 +468,14 @@ export class UnitsScreen extends LitElement {
       <wt-modal
         data-test="in-use-dialog"
         .open=${this.inUseUnitId !== null}
-        heading=${this.inUseProducts.length === 0 ? t("units.delete_unit") : t("units.in_use_title")}
+        heading=${t("units.delete_unit")}
         @wt-close=${this.#closeInUse}
       >
-        <p>${this.inUseProducts.length === 0 ? t("units.in_use_empty") : t("units.in_use_body")}</p>
+        ${
+          this.inUseProducts.length === 0
+            ? html`<p>${t("units.in_use_empty")}</p>`
+            : html`<p class="error" data-test="in-use-warning">${t("units.in_use_body")}</p>`
+        }
         ${
           this.inUseProducts.length > 0
             ? html`
@@ -492,11 +501,23 @@ export class UnitsScreen extends LitElement {
                         this.reassignTarget = (event.target as HTMLSelectElement).value;
                       }}
                     >
-                      <option value="">${t("units.change_unit_placeholder")}</option>
-                      <option value=${REASSIGN_EACH}>${t("units.change_unit_each")}</option>
+                      <option value="" .selected=${this.reassignTarget === ""}>
+                        ${t("units.change_unit_placeholder")}
+                      </option>
+                      <option
+                        value=${REASSIGN_EACH}
+                        .selected=${this.reassignTarget === REASSIGN_EACH}
+                      >
+                        ${t("units.change_unit_each")}
+                      </option>
                       ${otherUnits.map(
                         (unit) =>
-                          html`<option value=${unit.id}>${localizedName(unit.name)}</option>`,
+                          html`<option
+                            value=${unit.id}
+                            .selected=${this.reassignTarget === unit.id}
+                          >
+                            ${localizedName(unit.name)}
+                          </option>`,
                       )}
                     </select>
                     <wt-button
