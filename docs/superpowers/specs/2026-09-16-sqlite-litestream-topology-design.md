@@ -449,6 +449,29 @@ to every configured `StorageBackend` — is kept with `VACUUM INTO` in place of 
 also carries `node.db`'s sealed secrets, as `stateDir` secrets are carried today. **Waitron Cloud is
 the premier, default backup; the archive is the self-host / extra-copy path.**
 
+**The stream and the archive are two independent recovery ladders, not one that refines the other**
+(owner question, 2026-09-16). What Litestream brings up to date is a *replica* — a store holding one of
+its snapshots plus the change files (LTX) since — which it restores to the latest point and can advance
+further as more change files arrive. It does **not** advance a loose database file. So an archive
+snapshot recovers to **the moment it was taken**, full stop; the stream's change files cannot
+fast-forward it. Two reasons, either sufficient: `VACUUM INTO` repacks the pages, so its layout matches
+the source at no point in the lineage and page-level LTX cannot apply to it; and Litestream advances
+from its own replica by transaction id, never from an external base. This costs nothing, because the two
+ladders are used in the alternative, never together: if the stream survived you restore from it (~1 s
+behind) and ignore the archive; the archive matters only when the stream and its store are gone, and
+then there are no change files to apply anyway. There is no case where you hold last night's archive and
+the live change files but no restorable stream — the change files *are* the stream.
+
+The reason the archive is a `VACUUM INTO` file rather than a copy of the stream is decision 5's
+recovery-key encryption (§7.4): the offsite archive must be ciphertext under the operator's recovery
+key so a lost USB stick leaks nothing and it survives the box's own key, and Litestream 0.5 cannot
+encrypt — so a stream copy cannot be the recovery-key archive, while a `VACUUM INTO` file can. **If an
+owner wants a fine-grained second copy** they replicate the stream to two places instead — copying the
+Litestream *replica* (snapshot + change files) to the second destination, the same mechanism §4.4 uses
+for the mirror box's copy-up. That is ~1-second-granular and stays current, but it is encrypted by the
+destination (server-side), not under the recovery key. So the trade is explicit: recovery-key-encrypted
+but coarse (`VACUUM INTO`), or fine-grained but not recovery-key-encrypted (a replica copy).
+
 ### 7.3 Where the stream goes, by tier
 
 | Venue | Stream destination |
@@ -486,7 +509,11 @@ is weakened knowingly: the records the stream holds are, once submitted, already
 
    Exactly one path runs per restore, chosen by the artifact — never both, or one event would mint two
    installation numbers. Either way going live again is never blocked — the standing priority (memory
-   `cold-recovery-no-hot-failover-posture`) — and either way the chain is fresh, never resumed.
+   `cold-recovery-no-hot-failover-posture`) — and either way the chain is fresh, never resumed. **The
+   two artifacts differ in how much they lose** (§7.2): a store restore reaches ~1 second before the
+   loss; an archive restore reaches the last `VACUUM INTO` snapshot and no further, since the stream
+   cannot fast-forward it. Prefer the store when it survived; the archive is the fallback for when it
+   did not.
 3. **Point-in-time** (an operator mistake) — restore to a **side** file and inspect. **Never over a
    live ledger**: rolling the ledger back would re-issue invoice numbers. Going back for real is a cold
    restore with a fresh chain, by design.
@@ -707,3 +734,5 @@ From the discussion note §7, plus what the design added:
 | Density cost of logical replication per subscription | PostgreSQL behaviour, **not measured** | §12 gate 1 is the measurement |
 | Fiscal soundness of seats, tail shipper, money conversion, offline promotion | fresh-context Fable read, 2026-09-16 | nine findings folded in; the load-bearing code claims (strict-term guard `node-membership.ts:97`, node-filterless `claimBatch` in `drain.ts`, `cuota_total`/`importe_total` already `text`, the non-money `numeric` columns) verified against the tree before folding |
 | Split brain loses the loser's in-flight service; conditional-write mechanism of the tie-break | owner, 2026-09-16 | owner raised the live-service loss; `working_orders`/`working_order_lines`/`dining_tables`/`kitchen_courses`/`print_jobs` confirmed `state` in `packages/db/src/classification.ts` |
+| Promotion enumerates every promotable peer, not just the primary | owner, 2026-09-16 | `nodes`/`node_seats` are streamed `state`, so the cloud holds the node set |
+| The archive is a standalone coarse recovery tool; the stream cannot fast-forward a `VACUUM INTO` file | owner question, 2026-09-16 | Litestream advances a replica (snapshot + LTX) by TXID, not a loose file; `VACUUM INTO` repacks pages — from the Litestream docs read for the discussion note §3 |
