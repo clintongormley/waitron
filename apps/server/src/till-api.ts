@@ -924,9 +924,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         });
         return {
           issuer:
-            taxpayer === undefined
-              ? undefined
-              : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+            taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
           receiptPrintMode: loc?.receiptPrintMode,

@@ -13,8 +13,8 @@ import { withTransaction } from "./tenancy.js";
 describe("readTenant", () => {
   const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
-  it("returns undefined on a database with no taxpayer row yet", async () => {
-    expect(await withTransaction(pg.db, readTenant)).toBeUndefined();
+  it("returns null on a database with no taxpayer row yet", async () => {
+    expect(await withTransaction(pg.db, readTenant)).toBeNull();
   });
 
   it("returns the taxpayer's country, tax id and legal name", async () => {

@@ -194,7 +194,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         // The obligado identity is the database's one taxpayer row.
         const issuer = await readTenant(tx);
         /* v8 ignore start */
-        if (issuer === undefined) {
+        if (issuer === null) {
           // A missing taxpayer row is a server configuration error.
           throw new Error("report-api: no taxpayer row");
         }

@@ -19,13 +19,16 @@ export interface Tenant {
  * different rule again — `.limit(1)` with no id predicate. None of those four would follow a change
  * made here.
  *
- * Returns `undefined` rather than throwing when the row is absent, because callers do genuinely
+ * Returns `null` rather than throwing when the row is absent, because callers do genuinely
  * different things with that: the receipt and payment-slip printers degrade to printing nothing (a
  * throw inside the sale transaction would roll a filed sale back), the venue-locale reader falls
  * back to its default, and the report and dashboard routes treat it as a configuration fault and
- * throw. Deciding here would take that choice away from all of them.
+ * throw. Deciding here would take that choice away from all of them. `null` rather than
+ * `undefined` because that is what every other exported reader in this package signals absence with
+ * (`readDeploymentEnvironment`, `readFenceLsn`, `readBreakGlassVerifier`, `readMirrorConfig`,
+ * `readNodeMembership`, `readNodeEndorsement`).
  */
-export async function readTenant(tx: Transaction): Promise<Tenant | undefined> {
+export async function readTenant(tx: Transaction): Promise<Tenant | null> {
   const [row] = await tx
     .select({
       country: tenants.country,
@@ -34,5 +37,5 @@ export async function readTenant(tx: Transaction): Promise<Tenant | undefined> {
     })
     .from(tenants)
     .where(eq(tenants.id, 1));
-  return row;
+  return row ?? null;
 }

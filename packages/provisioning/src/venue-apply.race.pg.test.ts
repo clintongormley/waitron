@@ -101,7 +101,7 @@ function taxpayerKeyFailures(settled: PromiseSettledResult<unknown>[]): unknown[
     .filter((f) => f.constraint?.startsWith("tenants_") === true);
 }
 
-describe("applyVenue: two concurrent first provisions", () => {
+describe("applyVenue: two plans racing for the same database", () => {
   let pg: RealPostgres;
   let admin: Database;
 

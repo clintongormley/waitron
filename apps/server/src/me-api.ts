@@ -367,7 +367,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
    * transaction as its caller. A missing row means the boot configuration names no tenant. */
   const readVenueName = async (tx: Transaction): Promise<string> => {
     const venue = await readTenant(tx);
-    if (venue === undefined) throw new Error("Configured tenant does not exist");
+    if (venue === null) throw new Error("Configured tenant does not exist");
     return venue.legalName;
   };
 

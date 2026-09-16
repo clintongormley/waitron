@@ -48,7 +48,7 @@ export async function printSalePaymentSlip(
     if (printer === undefined) return;
     const taxpayer = await readTenant(tx);
     /* v8 ignore next -- the taxpayer row is the database's one row; presentation still degrades */
-    if (taxpayer === undefined) return;
+    if (taxpayer === null) return;
     const card: CardDetails | null =
       payment.scheme === null || payment.last4 === null || payment.entryMode === null
         ? null

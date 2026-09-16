@@ -206,18 +206,22 @@ declare module "@waitron/shared" {
      * names a DIFFERENT country and tax id. The taxpayer is a single row keyed `id = 1`
      * (`packages/db/src/schema/tenants.ts`), so the alternative to refusing is not "two taxpayers":
      * it is a primary-key violation reported as a driver error nobody can act on. Refused by name
-     * instead, at the write boundary, so an operator who mistypes a NIF on a re-provision is told
-     * what happened. The write itself is `insert … on conflict do nothing` followed by a read,
-     * so two plans racing to be the first are decided by the row rather than by a lock — the loser
-     * reads the winner's identity and lands here or on the idempotent path, never on a raw `23505`.
-     * Comparison is on the canonical values — both sides trimmed and upper-cased,
-     * the same normalisation `planVenue` applies — so a casing or surrounding-space difference is
-     * the SAME identity and proceeds as an idempotent re-run.
+     * instead, at the write boundary.
      *
-     * This is the last line rather than the first: `assertNoForeignTenant`
-     * (`packages/provisioning/src/tenant-guard.ts`) already refuses a foreign identity with
-     * `provisioning.foreign_tenant` at every caller that reads the existing identities first. This
-     * catches the caller that does not.
+     * NOT the refusal an operator meets after mistyping a NIF. That is
+     * `provisioning.foreign_tenant`, raised by `assertNoForeignTenant`
+     * (`packages/provisioning/src/tenant-guard.ts`) BEFORE `applyVenue` is entered, at every caller
+     * that reads the existing identities first — the `venue` CLI, `provisionVenue` and
+     * `adoptFromPrimary` (`cli.test.ts` pins that the CLI prints it and the apply is never
+     * reached). This code catches what that pre-read cannot see: another run committing a different
+     * taxpayer between the pre-read and this write, and the caller that does no pre-read at all.
+     *
+     * The write itself is `insert … on conflict do nothing` followed by a `for update` read of the
+     * row, so the loser of that race waits for the winner's transaction and then reads the winner's
+     * identity — landing here or on the idempotent path, never on a raw `23505`
+     * (`venue-apply.race.pg.test.ts`). Comparison is on the canonical values — both sides trimmed
+     * and upper-cased, the same normalisation `planVenue` applies — so a casing or
+     * surrounding-space difference is the SAME identity and proceeds as an idempotent re-run.
      *
      * No params, the shape `provisioning.second_venue` above keeps: this is a refusal INSIDE
      * applyVenue's transaction, and the identity the operator supplied is the one they just typed.

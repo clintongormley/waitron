@@ -63,7 +63,7 @@ async function buildReceiptBytes(
 ): Promise<Uint8Array | undefined> {
   const taxpayer = await readTenant(tx);
   /* v8 ignore start */
-  if (taxpayer === undefined) {
+  if (taxpayer === null) {
     // Structurally unreachable: the taxpayer row is the database's one row (provisioning wrote
     // it), so the by-id lookup always returns it. Degrade to NOT printing
     // rather than throwing — a throw in the sale-tx hook would roll the filed sale back (§5). The
