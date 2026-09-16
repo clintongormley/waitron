@@ -130,7 +130,7 @@ it("refuses a save with exactly one variant but allows none or two", async () =>
         "en",
       ),
     ),
-  ).rejects.toMatchObject({ code: "product.variants_min_two" });
+  ).rejects.toMatchObject({ code: "product.variant_count_invalid", params: { minimum: 2 } });
   expect(
     await withTenant(fx.db, tenantId, (tx) => listProducts(tx, tenantId, catalogueId)),
   ).toEqual([]);

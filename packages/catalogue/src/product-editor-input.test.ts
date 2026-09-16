@@ -144,7 +144,7 @@ it("refuses exactly one variant but accepts none or two, and parses each variant
     available: true,
   };
   expect(() => parseProductEditorInput({ ...input, variants: [one] })).toThrow(
-    expect.objectContaining({ code: "product.variants_min_two", params: {} }),
+    expect.objectContaining({ code: "product.variant_count_invalid", params: { minimum: 2 } }),
   );
   expect(parseProductEditorInput({ ...input, variants: [] }).variants).toEqual([]);
   const parsed = parseProductEditorInput({

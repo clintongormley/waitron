@@ -101,7 +101,7 @@ its choices (`option`), each with its own table.
 ## Variants
 
 A product has **no variants, or at least two**. Exactly one is refused with
-`product.variants_min_two`, thrown by `parseProductEditorInput`
+`product.variant_count_invalid` (`minimum: 2`), thrown by `parseProductEditorInput`
 (`packages/catalogue/src/product-editor-input.ts`) — on the server, so an API caller cannot get to a
 state the editor will not let a person reach.
 

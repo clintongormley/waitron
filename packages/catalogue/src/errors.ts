@@ -85,9 +85,12 @@ declare module "@waitron/shared" {
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
-    /** A product carries exactly one variant. A product has NO variants or at least two; refusing one
-     * here stops an API caller bypassing the editor's "Regular" default variant rule. */
-    "product.variants_min_two": Record<string, never>;
+    /** A product's variant COUNT is not allowed: a product has NO variants or at least `minimum` of
+     * them, so exactly one is refused — that stops an API caller bypassing the editor's "Regular"
+     * default variant rule. The bound rides in `minimum` rather than in the code's name, the way
+     * `unit.precision_invalid` and `options.group_invalid` carry theirs, so raising it later renames
+     * nothing. */
+    "product.variant_count_invalid": { minimum: number };
     "menu_section.not_found": { menuId?: string; sectionId: string };
     /**
      * An option group's AUTHORING config violated one of its DB invariants (ordering modifiers, Task

@@ -722,7 +722,8 @@ product**, inside its one transaction, instead of being written the moment you p
 Cancel really cancels, a rejected station rolls the whole product back, and you can route a product
 as you create it. And **a product has no variants or at least two**: the first *Add variant* turns the
 plain price into a variant named "Regular" and opens the window for the second, removing down to one
-folds the price back, and the server refuses exactly one outright with `product.variants_min_two` so
+folds the price back, and the server refuses exactly one outright with
+`product.variant_count_invalid` so
 an API caller cannot reach a state the editor will not allow. Two new shared primitives came out of
 it, `wt-disclosure` and `wt-price-input`. Pre-production, so the columns were dropped and recreated
 rather than migrated (CLAUDE.md §3): `packages/db` migrations `0030`–`0031` and `packages/catalogue`

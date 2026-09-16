@@ -158,6 +158,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "category.color_invalid": 400,
   "menu_item.not_found": 404,
   "product.not_found": 404,
+  // A product editor save carrying exactly one variant: a product has no variants or at least two, so
+  // this is a CLIENT request fault → 400. Listed explicitly as the house style requires; the `?? 400`
+  // default already covers it.
+  "product.variant_count_invalid": 400,
   "menu_section.not_found": 404,
   // The product editor's kitchen routing (`setProductStation`/`setProductCourse`): an id that names no
   // LIVE station or course of this venue. 404 on every other surface that raises them

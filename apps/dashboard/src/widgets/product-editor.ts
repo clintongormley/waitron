@@ -456,7 +456,7 @@ export class ProductEditor extends LitElement {
   /**
    * The draft never holds exactly ONE variant: a lone variant is just the product's own price, so
    * it folds back into `unitPrice` and its row disappears. The server refuses a single variant
-   * outright (`product.variants_min_two`), so this is the invariant, not a convenience. Only the
+   * outright (`product.variant_count_invalid`), so this is the invariant, not a convenience. Only the
    * price folds back — with no variants the product's own Available switch is what governs.
    */
   private setVariants(variants: EditorVariant[]): void {
