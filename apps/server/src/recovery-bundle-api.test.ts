@@ -19,7 +19,7 @@ import { RECOVERY_FILES } from "./state-secrets.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
+// (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 const BUNDLE_PASS = "recovery pass phrase"; // ≥ MIN_PASSPHRASE_LENGTH
 

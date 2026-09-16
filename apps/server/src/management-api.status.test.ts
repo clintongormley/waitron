@@ -15,7 +15,7 @@ import { ALL_MODULES } from "./modules.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL, so each seeded person carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
+// (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 

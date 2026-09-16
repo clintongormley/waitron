@@ -495,8 +495,10 @@ export async function setPassword(
 /** Sets (or replaces) a person's login email — the identifier for dashboard sign-in. Gated on
  * `person.manage`, mirroring `setPassword`: `authorizeManager` runs FIRST, so a caller without the
  * permission is rejected before any write. The email is normalized then screened (malformed →
- * `person.email_invalid`) before the UPDATE; a collision with another person's email in the same
- * tenant (the `persons_tenant_email_uq` index) surfaces as `person.email_taken`. */
+ * `person.email_invalid`) before the UPDATE; a collision with any other person's email surfaces as
+ * `person.email_taken` — `persons_tenant_email_uq` is `UNIQUE (lower(email)) WHERE email IS NOT
+ * NULL`, so one address across the whole database, case-insensitively. (The index NAME still reads
+ * `tenant`; renaming it is its own slice, `docs/backlog.md`.) */
 export async function setEmail(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; email: string },

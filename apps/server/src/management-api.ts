@@ -268,7 +268,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.self_deactivation": 403,
   "person.not_found": 404,
   // The email write boundary: a malformed address is a request-shape
-  // fault (400), a per-tenant `persons_tenant_email_uq` collision is a "already exists" conflict
+  // fault (400), a `persons_tenant_email_uq` collision (one `lower(email)` per database) is a
+  // "already exists" conflict
   // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
   // not the `?? 400` default).
   "person.email_invalid": 400,

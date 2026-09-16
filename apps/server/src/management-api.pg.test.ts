@@ -22,8 +22,10 @@ import { createPasswordThrottle, type PasswordThrottle } from "./password-thrott
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
-// carries a login email. Uniqueness is per-tenant (persons_tenant_email_uq), so the same constants
-// serve every tenant these tests provision.
+// carries a login email. `persons_tenant_email_uq` is unique on `lower(email)` across the WHOLE
+// database, so what makes one pair of constants safe for all 39 `setupTenant()` calls is this
+// suite's per-test reset (`useTemplateDb`'s `resetPerTest` default), which empties `persons`
+// between tests — not any per-tenant scoping.
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 const ACCOUNT_ACTION_CODE_KEY = Buffer.alloc(32, 21);
@@ -736,7 +738,7 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
-    // The seeded manager already holds MANAGER_EMAIL, so a second person in the SAME tenant claiming
+    // The seeded manager already holds MANAGER_EMAIL, so a second person claiming
     // it collides on `persons_tenant_email_uq` → `person.email_taken` (409), before the row lands.
     await setupTenant();
     const app = mountApp();

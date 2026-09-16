@@ -80,7 +80,7 @@ function authVerified(
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's seeded password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (per-tenant unique — persons_tenant_email_uq).
+// (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useTemplateDb({ template: "manifest" });

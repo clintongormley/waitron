@@ -24,8 +24,9 @@ import { mountManagementApi } from "./management-api.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
-// carries a login email. Uniqueness is per-tenant (persons_tenant_email_uq), so these constants are
-// safe across the container's accumulating tenants.
+// carries a login email. `persons_tenant_email_uq` is unique on `lower(email)` across the WHOLE
+// database, so these constants are safe here because `setupTenant()` runs ONCE for the file (this
+// suite sets `resetPerTest: false`) — not because anything scopes them per tenant.
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
