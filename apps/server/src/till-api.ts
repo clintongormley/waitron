@@ -4,7 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { AppError, isAppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
-import { asAppUser, locations, readNodeMembership, tenants, withTransaction } from "@waitron/db";
+import { asAppUser, locations, readNodeMembership, readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -786,9 +786,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // (`readOrderFlow`, `till-config.ts`), so this is a plain field read, no extra query. The till
   // UI needs it BEFORE login to select which pay control to render (Place/Collect for Modes I/T
   // vs the unchanged Pay for Mode P), so it rides on this same unauthenticated boot-info route
-  // rather than a session-guarded one. `venueName`/`nif` still come from the `tenants` row under
-  // `withTransaction` + `asAppUser`: `app_user` holds SELECT on `tenants` and the `eq(id)` filter
-  // selects exactly that row.
+  // rather than a session-guarded one. `venueName`/`nif` still come from the taxpayer row via
+  // `readTenant` (@waitron/db), under `withTransaction` + `asAppUser`: `app_user` holds SELECT on
+  // `tenants`.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
       // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
@@ -811,10 +811,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // secrets, only the receipt trim + canvas, same as `venueName`/`orderFlow` already here.
       const boot = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        const [row] = await tx
-          .select({ venueName: tenants.legalName, nif: tenants.taxId })
-          .from(tenants)
-          .where(eq(tenants.id, 1));
+        const taxpayer = await readTenant(tx);
         // The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — read HERE
         // from the till's own location rather than off `deps.cfg` like `orderFlow`: `orderFlow`
         // rides the config because the SALE PATH dispatches on it, whereas `bump_mode` has no
@@ -926,7 +923,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           return provider === undefined ? [] : [{ id: r.id, name: r.name, provider }];
         });
         return {
-          issuer: row,
+          issuer:
+            taxpayer === undefined
+              ? undefined
+              : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
           receiptPrintMode: loc?.receiptPrintMode,

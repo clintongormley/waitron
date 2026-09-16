@@ -1,8 +1,13 @@
 import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
-import { asAppUser, tenants, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  readTenant,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -361,12 +366,9 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   /** Read the configured tenant's public display identity inside the same app-role
    * transaction as its caller. A missing row means the boot configuration names no tenant. */
   const readVenueName = async (tx: Transaction): Promise<string> => {
-    const [venue] = await tx
-      .select({ venueName: tenants.legalName })
-      .from(tenants)
-      .where(eq(tenants.id, 1));
+    const venue = await readTenant(tx);
     if (venue === undefined) throw new Error("Configured tenant does not exist");
-    return venue.venueName;
+    return venue.legalName;
   };
 
   // No session is required: like GET /api/locales, this exposes only public identity and languages.

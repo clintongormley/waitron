@@ -17,7 +17,7 @@ import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "
 import {
   nodes,
   readDeploymentEnvironment,
-  tenants,
+  readTenant,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -127,15 +127,10 @@ export interface AssembleDeps {
  */
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
-    // `[0]!` is safe on both reads: the taxpayer row is the one row every provisioned database
-    // holds, and `designated.nodeId` is the primary till's provisioned id (`config.till`), whose
-    // node row is minted as its FK parent at provision.
-    const t = (
-      await tx
-        .select({ country: tenants.country, taxId: tenants.taxId })
-        .from(tenants)
-        .where(eq(tenants.id, 1))
-    )[0]!;
+    // The non-null assertions are safe on both reads: the taxpayer row is the one row every
+    // provisioned database holds, and `designated.nodeId` is the primary till's provisioned id
+    // (`config.till`), whose node row is minted as its FK parent at provision.
+    const t = (await readTenant(tx))!;
     const n = (
       await tx
         .select({

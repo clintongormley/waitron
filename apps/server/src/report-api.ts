@@ -5,9 +5,15 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { AppError, nodeId as brandNodeId, type NodeId } from "@waitron/shared";
-import { asAppUser, tenants, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  readTenant,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   computeDailyClose,
   computeOverdueOrders,
@@ -185,11 +191,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
       const record = await gated(sessionId, REPORT_EXPORT_PERMISSION, async (tx) => {
-        // Read the obligado identity from the database's one taxpayer row.
-        const [issuer] = await tx
-          .select({ taxId: tenants.taxId, name: tenants.legalName })
-          .from(tenants)
-          .where(eq(tenants.id, 1));
+        // The obligado identity is the database's one taxpayer row.
+        const issuer = await readTenant(tx);
         /* v8 ignore start */
         if (issuer === undefined) {
           // A missing taxpayer row is a server configuration error.
@@ -205,7 +208,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         // (monthly) can never mismatch the aggregate (spec D4).
         return toDr303Record(modelo, {
           taxId: issuer.taxId,
-          name: issuer.name,
+          name: issuer.legalName,
           year,
           period: token,
           declarationType,

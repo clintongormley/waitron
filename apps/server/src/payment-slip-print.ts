@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, ne } from "drizzle-orm";
-import { asAppUser, sales, tenders, tenants, withTransaction, type Database } from "@waitron/db";
+import { asAppUser, readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
 import { AppError, decimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -46,12 +46,9 @@ export async function printSalePaymentSlip(
     if (payment === undefined) return;
     const printer = await resolveReceiptPrinter(tx, cfg);
     if (printer === undefined) return;
-    const [issuer] = await tx
-      .select({ venueName: tenants.legalName, nif: tenants.taxId })
-      .from(tenants)
-      .where(eq(tenants.id, 1));
-    /* v8 ignore next -- sale tenant foreign key guarantees issuer; presentation still degrades */
-    if (issuer === undefined) return;
+    const taxpayer = await readTenant(tx);
+    /* v8 ignore next -- the taxpayer row is the database's one row; presentation still degrades */
+    if (taxpayer === undefined) return;
     const card: CardDetails | null =
       payment.scheme === null || payment.last4 === null || payment.entryMode === null
         ? null
@@ -64,7 +61,7 @@ export async function printSalePaymentSlip(
     // An associated capture carries its settlement instant; do not invent a payment date if absent.
     if (payment.paidAt === null) return;
     const payload = formatPaymentSlip({
-      issuer,
+      issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
       ...(await readReceiptOrder(tx, cfg, workingOrderId)),
       paidAt: payment.paidAt,
       amount: subtractDecimal(decimal(payment.charged), decimal(payment.tip)),

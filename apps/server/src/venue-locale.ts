@@ -2,7 +2,7 @@
 // country-pack locale resolver), so it is not in the throw graph the sibling route/config files load
 // the registry for.
 import { eq } from "drizzle-orm";
-import { asAppUser, locations, tenants, withTransaction, type Database } from "@waitron/db";
+import { asAppUser, locations, readTenant, withTransaction, type Database } from "@waitron/db";
 import { resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
 
@@ -27,10 +27,7 @@ export async function readVenueLocale(
 ): Promise<SupportedLocale> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const [t] = await tx
-      .select({ country: tenants.country })
-      .from(tenants)
-      .where(eq(tenants.id, 1));
+    const t = await readTenant(tx);
     const [loc] = await tx
       .select({ province: locations.province })
       .from(locations)

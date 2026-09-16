@@ -2,7 +2,7 @@
 // connection. Printer resolution locks an active row through enqueue so deactivation cannot race it.
 // Originals and duplicates are separate actions; a queue resend preserves the original job bytes.
 import { and, eq } from "drizzle-orm";
-import { drawerOpens, locations, printers, tenants, tills } from "@waitron/db";
+import { drawerOpens, locations, printers, readTenant, tills } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
@@ -61,12 +61,9 @@ async function buildReceiptBytes(
   duplicate: boolean,
   printer: ReceiptPrinterSettings,
 ): Promise<Uint8Array | undefined> {
-  const [issuer] = await tx
-    .select({ venueName: tenants.legalName, nif: tenants.taxId })
-    .from(tenants)
-    .where(eq(tenants.id, 1));
+  const taxpayer = await readTenant(tx);
   /* v8 ignore start */
-  if (issuer === undefined) {
+  if (taxpayer === undefined) {
     // Structurally unreachable: the taxpayer row is the database's one row (provisioning wrote
     // it), so the by-id lookup always returns it. Degrade to NOT printing
     // rather than throwing — a throw in the sale-tx hook would roll the filed sale back (§5). The
@@ -77,7 +74,7 @@ async function buildReceiptBytes(
   const receipt = await getReceipt(tx);
   return formatReceipt({
     result: ticket,
-    issuer: ticket.issuer ?? issuer,
+    issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
     invoiceLocale: cfg.locale,
     printer,
