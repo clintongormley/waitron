@@ -729,37 +729,30 @@ folds the price back, and the server refuses exactly one outright with
 `product.variant_count_invalid` so
 an API caller cannot reach a state the editor will not allow. Two new shared primitives came out of
 it, `wt-disclosure` and `wt-price-input`. Pre-production, so the columns were dropped and recreated
-rather than migrated (CLAUDE.md §3): `packages/db` migrations `0030`–`0031` and `packages/catalogue`
-`0014`. [Developer guide](developers/products.md), [operator guide](products.md),
+rather than migrated (CLAUDE.md §3): `packages/db` migrations `0030`–`0031`; the catalogue side was
+folded into that set's regenerated baseline when `feat/drop-tenant-id` rebased onto this work. [Developer guide](developers/products.md), [operator guide](products.md),
 [design](superpowers/specs/2026-09-15-product-editor-rework-design.md),
 [plan](superpowers/plans/2026-09-15-product-editor-rework.md).
 
 What it left open:
 
 - **A variant's image has no foreign key, unlike a product's.** `products.image` carries a real
-  `ON DELETE RESTRICT` reference to `media_images`
-  (`packages/media/drizzle/0001_images_references_grants.sql`); `product_variants.image` is a plain
-  text column (`packages/catalogue/drizzle/0014_variant_names_image.sql`). The image library still
+  `ON DELETE RESTRICT` reference to `media_images` (declared in the media set's baseline,
+  `packages/media/drizzle/0001_media_baseline_sql.sql`); `product_variants.image` is a plain text
+  column (`packages/catalogue/drizzle/0000_catalogue_baseline.sql`). The image library still
   refuses to delete a photo a variant uses, because `listImageUsages` and `deleteImage` both scan
   that column — but that is application-level protection only, and any delete path that skips
   `deleteImage` is not stopped by the database. **Next action:** decide whether the variant column
   should get the same foreign key the product column has.
 
-- **This branch added tenant predicates that `feat/drop-tenant-id` deletes.** It scoped three by-id
-  reads and writes — `readLockedLines` and `readTabLines` in `apps/server/src/working-order.ts`, and
-  `setProductStation`/`setProductCourse` in `apps/server/src/kitchen.ts` — one of which was leaking a
-  priced basket for another tenant's order on the path that files a sale, demonstrated by a
-  two-tenant probe. The tenant-id removal takes that whole mechanism away. **Next action:** whoever
-  lands second reconciles it; worth choosing the order deliberately rather than meeting it as a
-  rebase conflict.
-
-- **A manager can still clear another tenant's category routing.** `apps/server/src/kitchen.ts`
-  updates `categories` by id alone, unlike the two product setters beside it, and the HTTP
-  registration does not resolve ownership first. A run-it review reproduced it: tenant A's real
-  manager session cleared tenant B's station and the request returned 204. It predates this work
-  (`d76706ebb`, 2026-08-22) and was deliberately left unfixed, because the tenant-id removal deletes
-  the mechanism a predicate would use. **Next action:** confirm the tenant-id removal closes it; if
-  that work changes shape, this needs the predicate its siblings have.
+- ~~**This branch added tenant predicates that `feat/drop-tenant-id` deletes.**~~ ~~**A manager can
+  still clear another tenant's category routing.**~~ **Both settled on `feat/drop-tenant-id`, which
+  rebased onto this work.** The tenant predicates this work added to `readLockedLines` and
+  `readTabLines` (`apps/server/src/working-order.ts`) and to `setProductStation`/`setProductCourse`
+  (`apps/server/src/kitchen.ts`) went with the column itself, and so did the probes written against
+  them. There is no second tenant left to clear anything of: `tenants`
+  holds one row, pinned to id 1 by its primary key and by `tenants_singleton_ck`
+  (`packages/db/src/schema/tenants.singleton.pg.test.ts` refuses a second row on real PostgreSQL).
 
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's own parser refuses a blank; `createProduct` writes what it is given.
@@ -1860,7 +1853,7 @@ turns out to need a design moves to its track.
   seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">` plus a `buildDesglose`; needs
   a huella-invariance re-run across all three.
 - ~~Left behind by the RLS drop: `sales_assert_tenders_cover`'s "even though the definer sees every
-  row" clause is false.~~ **Closed 2026-09-14.** `packages/db/drizzle/0032_drop_tenant_id_after_sql.sql`
+  row" clause is false.~~ **Closed 2026-09-14.** `packages/db/drizzle/0034_drop_tenant_id_after_sql.sql`
   replaces the function with `CREATE OR REPLACE`, and the body a database built today actually runs
   carries neither that clause nor the "tenant-consistent FK" one (read back from `pg_proc.prosrc` on
   2026-09-16). The two sentences survive only in `0001_db_baseline_sql.sql`, which is an applied

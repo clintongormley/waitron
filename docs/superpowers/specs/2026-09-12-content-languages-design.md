@@ -1,5 +1,12 @@
 # Content languages
 
+> **2026-09-14 — the tenant column is gone.** The tenant-id removal this document anticipates has
+> landed: every `tenant_id` column, every tenant argument and the `withTenant` helper are gone
+> (`withTransaction` replaces it), one database holds one taxpayer as the single row of `tenants`,
+> and nothing filters by a tenant. Read every tenant-carrying signature, tenant predicate and
+> "a by-id read scopes to the tenant" rule below as the shape at the time of writing. Spec:
+> [drop-tenant-id](2026-09-14-drop-tenant-id-design.md).
+
 ## Implementation status, 2026-09-12
 
 The `image-library` branch now stores content languages in the catalogue module and initializes
