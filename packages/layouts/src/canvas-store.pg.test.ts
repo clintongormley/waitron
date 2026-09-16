@@ -26,8 +26,8 @@ import {
 
 const suite = useTemplateDb({ template: "core_identity" });
 
-/** Run `fn` as the non-owner app role, scoped to `tenantId` — the shape the management routes wrap
- * every store call in (withTransaction + asAppUser). */
+/** Run `fn` as the non-owner app role — the shape the management routes wrap every store call in
+ * (withTransaction + asAppUser). */
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);

@@ -97,7 +97,7 @@ async function insertSale(
 
 async function insertSubstitution(
   db: Database,
-  opts: { tenantId?: string; substitutionSaleId: string; substitutedSaleId: string },
+  opts: { substitutionSaleId: string; substitutedSaleId: string },
 ): Promise<{ id: string }[]> {
   return rows<{ id: string }>(
     db,

@@ -24,7 +24,7 @@ import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
-const ctx = { tx: {} as never, tenantId: "t1" as never, now: NOW };
+const ctx = { tx: {} as never, now: NOW };
 
 function src(status: BackupStatus, outcomes: BackupOutcomeHolder) {
   return backupAlertSource({ listStatus: async () => status, outcomes, now: () => NOW });

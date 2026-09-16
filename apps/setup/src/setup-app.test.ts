@@ -25,10 +25,9 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
     getVenueDefaults: vi
       .fn()
       .mockResolvedValue({ verifactu: { operationDescription: "Venta en establecimiento" } }),
-    provision: vi.fn().mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+    provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
     adopt: vi.fn().mockResolvedValue({
       adopted: true,
-      tenantId: "t-1",
       breakGlassSecret: "bg-default",
       restarting: true,
     }),
@@ -668,7 +667,6 @@ describe("setup-app", () => {
   it("provisions on provision-requested and, on the 200, advances to done", async () => {
     const provision = vi.fn().mockResolvedValue({
       provisioned: true,
-      tenantId: "t-1",
       restarting: true,
     });
     const el = await mountSetupApp(stubApi({ provision }));
@@ -685,9 +683,7 @@ describe("setup-app", () => {
   it("threads demo intent through to the done screen", async () => {
     const el = await mountSetupApp(
       stubApi({
-        provision: vi
-          .fn()
-          .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+        provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
       }),
     );
     patch(el, { mode: "demo" });
@@ -700,9 +696,7 @@ describe("setup-app", () => {
   it("does not treat a live provision as demo mode on the done screen", async () => {
     const el = await mountSetupApp(
       stubApi({
-        provision: vi
-          .fn()
-          .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+        provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
       }),
     );
     patch(el, { mode: "live" });
@@ -715,9 +709,7 @@ describe("setup-app", () => {
   it("does not treat a prepared provision as demo mode on the done screen", async () => {
     const el = await mountSetupApp(
       stubApi({
-        provision: vi
-          .fn()
-          .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true }),
+        provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
       }),
     );
     patch(el, { mode: "prepare" });
@@ -743,7 +735,7 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=provision]")!.hasAttribute("disabled")).toBe(
       true,
     );
-    resolveProvision({ provisioned: true, tenantId: "t-1", restarting: true });
+    resolveProvision({ provisioned: true, restarting: true });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
@@ -1028,7 +1020,7 @@ describe("setup-app", () => {
     const provision = vi
       .fn()
       .mockRejectedValueOnce({ code: "setup.provision_failed", params: {} })
-      .mockResolvedValue({ provisioned: true, tenantId: "t-1", restarting: true });
+      .mockResolvedValue({ provisioned: true, restarting: true });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
@@ -1044,7 +1036,6 @@ describe("setup-app", () => {
   it("never posts a stale AEAT cert on a demo provision reached by reverting from live", async () => {
     const provision = vi.fn().mockResolvedValue({
       provisioned: true,
-      tenantId: "t-1",
       restarting: true,
     });
     const el = await mountSetupApp(stubApi({ provision }));
@@ -1076,7 +1067,7 @@ describe("setup-app", () => {
   });
 
   it("adopts on adopt-requested and, on the 200, advances to done — forwarding the body verbatim", async () => {
-    const adopt = vi.fn().mockResolvedValue({ adopted: true, tenantId: "t-1", restarting: true });
+    const adopt = vi.fn().mockResolvedValue({ adopted: true, restarting: true });
     const el = await mountSetupApp(stubApi({ adopt }));
     adoptRequest(el);
     await flush(el);
@@ -1094,7 +1085,6 @@ describe("setup-app", () => {
     const secret = "bg-secret-once-9f3a";
     const adopt = vi.fn().mockResolvedValue({
       adopted: true,
-      tenantId: "t-1",
       breakGlassSecret: secret,
       restarting: true,
     });
@@ -1124,7 +1114,7 @@ describe("setup-app", () => {
     adoptRequest(el);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull();
-    resolveAdopt({ adopted: true, tenantId: "t-1", restarting: true });
+    resolveAdopt({ adopted: true, restarting: true });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
@@ -1213,7 +1203,7 @@ describe("setup-app", () => {
     const adopt = vi
       .fn()
       .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {} })
-      .mockResolvedValue({ adopted: true, tenantId: "t-1", restarting: true });
+      .mockResolvedValue({ adopted: true, restarting: true });
     const el = await mountSetupApp(stubApi({ adopt }));
     adoptRequest(el);
     await flush(el);

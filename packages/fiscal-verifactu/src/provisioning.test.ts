@@ -10,10 +10,6 @@ import { ID_SISTEMA_MAX_LENGTH, currentSif, registerSif } from "./registro-sif.j
 
 let db: Awaited<ReturnType<typeof createPgliteDb>>;
 
-// `ProvisionedNode` (`@waitron/module`) still declares a `tenantId` and nothing in this package
-// reads one; it goes when `packages/provisioning`, its last supplier, is converted. This fixed
-// value stands in until then.
-
 const NODE: ProvisionedNode = {
   locationId: brandLocationId(TENANT_A.locationId),
   nodeId: TENANT_A.nodeId,

@@ -13,10 +13,6 @@ import { altaFor, seedSale, seedTill } from "./testing/seed.js";
 const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 
-// `ProvisionedNode` (`@waitron/module`) still declares a `tenantId` and nothing in this package
-// reads one; it goes when `packages/provisioning`, its last supplier, is converted. This fixed
-// value stands in until then.
-
 describe("restoreFiscal", () => {
   it("re-registers a sold node onto a fresh, floored SIF with an empty chain head", async () => {
     const till = await seedTill(suite.db);

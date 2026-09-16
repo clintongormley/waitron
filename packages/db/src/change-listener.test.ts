@@ -55,8 +55,8 @@ it("ignores malformed notifications and accepts collection identities without ex
   client.emit("notification", {
     channel: "waitron_changes",
     payload: JSON.stringify({
-      // The SQL trigger still puts a `tenantId` in the payload (its column is dropped in Phase B);
-      // the parser now ignores it and never copies it onto the change.
+      // The parser copies only the fields it knows; anything else the payload carries — `secret`
+      // here — is dropped rather than passed through onto the change.
       resources: [{ type: "printers", secret: "hidden" }],
     }),
   });

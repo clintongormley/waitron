@@ -120,7 +120,6 @@ export interface ProvisionBody {
  */
 export interface ProvisionResult {
   provisioned: true;
-  tenantId: string;
   restarting: true;
 }
 
@@ -147,7 +146,6 @@ export interface AdoptBody {
  */
 export interface AdoptOutcome {
   adopted: true;
-  tenantId: string;
   /**
    * The freshly minted break-glass secret — the offline promote fallback (spec §4.2). Returned in
    * this response ONCE and never again (the server never logs it and never re-issues it), so the

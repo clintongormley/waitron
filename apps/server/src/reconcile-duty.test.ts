@@ -23,8 +23,6 @@ const PERIOD: RunPeriod = {
   to: new Date("2026-07-25T00:00:00Z"),
 };
 const NOW = new Date("2026-07-25T04:00:00Z");
-// Branded, never a bare `as TenantId`: the brand is what stops a raw string reaching a
-// tenant-scoped call site, and casting past it in a test teaches the wrong pattern.
 
 function reconcilerReturning(result: PaymentReconcileResult): PaymentReconciler {
   return { provider: "stripe", reconcile: () => Promise.resolve(result) };

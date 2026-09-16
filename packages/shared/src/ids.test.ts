@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
-import type { SaleId, TenantId } from "./ids.js";
+import type { LocationId, SaleId } from "./ids.js";
 import {
   fiscalRecordId,
   isUuid,
@@ -9,7 +9,6 @@ import {
   saleId,
   saleLineId,
   seriesId,
-  tenantId,
   tenderId,
   tillId,
   workingOrderId,
@@ -22,13 +21,12 @@ const UUID_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 // Every id kind gets its own constructor, and each one is its own function — brandId is shared
 // machinery, but the wrapper that names the kind is not, and an untested wrapper is a real gap:
 // a typo in one kind's literal string (e.g. "TillId" pasted under fiscalRecordId) would not be
-// caught by exercising only tenantId/tillId/saleId/seriesId, which is all the constructor tests
+// caught by exercising only locationId/tillId/saleId/seriesId, which is all the constructor tests
 // above this block do. `label` is the exported function's own name (for the describe title);
 // `kind` is the PascalCase brand string that function passes to brandId and that a rejection
 // reports back in its params — the two are deliberately not the same casing, so this table
 // keeps them as two separate columns rather than deriving one from the other.
 const ALL_ID_CONSTRUCTORS: ReadonlyArray<[string, string, (value: string) => string]> = [
-  ["tenantId", "TenantId", tenantId],
   ["locationId", "LocationId", locationId],
   ["tillId", "TillId", tillId],
   ["nodeId", "NodeId", nodeId],
@@ -46,7 +44,7 @@ describe("id constructors", () => {
     // The brand is compile-time only. It must survive being handed straight to Drizzle as a
     // bind parameter, so the runtime value has to be the plain uuid with nothing wrapped
     // around it.
-    expect(tenantId(UUID_A)).toBe(UUID_A);
+    expect(locationId(UUID_A)).toBe(UUID_A);
   });
 
   it("accepts an upper-case uuid and preserves its case", () => {
@@ -72,21 +70,21 @@ describe("id constructors", () => {
   });
 
   it("rejects the empty string", () => {
-    expect(() => tenantId("")).toThrowError(AppError);
+    expect(() => locationId("")).toThrowError(AppError);
   });
 
   it("rejects a uuid with trailing content", () => {
     // Anchoring the pattern is what makes this fail. An unanchored regex accepts it, and the
     // extra content then travels into a query as part of the bind value.
-    expect(() => tenantId(`${UUID_A} OR 1=1`)).toThrowError(AppError);
+    expect(() => locationId(`${UUID_A} OR 1=1`)).toThrowError(AppError);
   });
 
   it("rejects a uuid with leading whitespace", () => {
-    expect(() => tenantId(` ${UUID_A}`)).toThrowError(AppError);
+    expect(() => locationId(` ${UUID_A}`)).toThrowError(AppError);
   });
 
   it("distinguishes two different ids of the same kind", () => {
-    expect(tenantId(UUID_A)).not.toBe(tenantId(UUID_B));
+    expect(locationId(UUID_A)).not.toBe(locationId(UUID_B));
   });
 });
 
@@ -117,16 +115,16 @@ describe("brand assignability", () => {
     expect(typeof wrongKind).toBe("string");
   });
 
-  it("refuses a bare string where a TenantId is required", () => {
-    // @ts-expect-error an unvalidated string is not a TenantId
-    const unvalidated: TenantId = UUID_A;
+  it("refuses a bare string where a LocationId is required", () => {
+    // @ts-expect-error an unvalidated string is not a LocationId
+    const unvalidated: LocationId = UUID_A;
     expect(typeof unvalidated).toBe("string");
   });
 
   it("allows a branded id where a plain string is required", () => {
-    // One-way assignability is the point: a TenantId is still a string, so it goes into a query
-    // with no unwrapping step, while a string does not go into a TenantId slot without one.
-    const asPlain: string = tenantId(UUID_A);
+    // One-way assignability is the point: a LocationId is still a string, so it goes into a query
+    // with no unwrapping step, while a string does not go into a LocationId slot without one.
+    const asPlain: string = locationId(UUID_A);
     expect(asPlain).toBe(UUID_A);
   });
 });

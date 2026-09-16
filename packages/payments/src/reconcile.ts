@@ -50,12 +50,10 @@ export interface SettlementRecord {
  * never names any vendor concept.
  *
  * An implementer MUST return only the settlements belonging to this taxpayer's settlement identity.
- * The tenant is an ARGUMENT rather than something the source binds at construction because a
- * `ReconcileDeps` is built once and swept across many tenants, while a processor account may well be
- * shared between them (provisioning is not decided yet). A source that could not see the tenant
- * would return the whole account's settlements, and every OTHER tenant's settlement would then fail
- * this tenant's targeted existence check and land in `missingLocal` — filling the sweep's
- * authoritative result with money that is not this tenant's, on every run.
+ * A source over a processor account shared with anyone else has to narrow the fetch itself, using
+ * whatever the vendor offers: every settlement it returns that has no local row fails the sweep's
+ * targeted existence check and lands in `missingLocal`, so a report that is too wide fills the
+ * sweep's authoritative result with money that is not ours, on every run.
  */
 export interface SettlementReportSource {
   fetch(window: ReconcilePeriod): Promise<SettlementRecord[]>;
@@ -66,7 +64,7 @@ export interface SettlementReportSource {
 export type ReversalFn = (paymentRef: string) => Promise<void>;
 
 /**
- * Raise an incident, deduplicated per open `(tenant, till, code, sale)`, reporting whether it
+ * Raise an incident, deduplicated per open `(till, code, sale)`, reporting whether it
  * actually inserted. Typed structurally rather than imported so this package keeps `@waitron/core`
  * a DEV dependency; `recordIncidentOnce` is assignable to it verbatim.
  */
@@ -113,7 +111,7 @@ export interface PaymentReconcileResult {
    * period covers them again, and their incidents stay open regardless of cadence — but a claimed
    * orphan carries a permanent `reconcile_remediated_at` marker unconditionally, whichever sweep
    * stamped it, so a failure dropped here is dropped for good. The `payment.reconcile_remediation_failed`
-   * incident alone cannot carry it — the open-incident dedup keys on `(tenant, till, code, sale_id)`,
+   * incident alone cannot carry it — the open-incident dedup keys on `(till, code, sale_id)`,
    * so a still-open incident from an earlier sweep silently swallows this sweep's new failures.
    */
   remediationFailures: { paymentRef: string; reason: string }[];
@@ -424,7 +422,7 @@ export async function reconcilePayments(
 /** Raises one AGGREGATE incident per (till, class) over the classified rows, returning how many
  * were really inserted (`recordIncidentOnce` reports its own de-duplication, so a re-detected
  * still-open condition is not counted twice). Aggregate rather than one incident per payment: the
- * open-incident dedup index keys on `(tenant, till, code, sale_id)` and these rows frequently share
+ * open-incident dedup index keys on `(till, code, sale_id)` and these rows frequently share
  * a null sale_id, so N same-key incidents would silently collapse into whichever won the race. */
 async function raiseRowIncidents(
   tx: Transaction,

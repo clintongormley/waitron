@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { addDecimal, subtractDecimal } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import {
   seedNodeAndSeries,
   seedPurchaseInvoice,
@@ -30,16 +29,13 @@ beforeEach(async () => {
 
 // Month-only wrapper over `runPeriod` (below): the great majority of suites here file a single month,
 // so this keeps their call sites terse. Only the period construction differs from `runPeriod`.
-function run(opts: { year: number; month: number; tenantId?: TenantId }): Promise<VatReturn> {
+function run(opts: { year: number; month: number }): Promise<VatReturn> {
   return runPeriod({ kind: "month", month: opts.month }, { year: opts.year });
 }
 
 // The period-threaded read the quarterly/annual suites need (`run` being month-only). Defaults to
 // year 2026, the year every period suite below seeds into.
-function runPeriod(
-  period: LiquidationPeriod,
-  opts: { year?: number; tenantId?: TenantId } = {},
-): Promise<VatReturn> {
+function runPeriod(period: LiquidationPeriod, opts: { year?: number } = {}): Promise<VatReturn> {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeVatReturn(tx, { year: opts.year ?? 2026, period });

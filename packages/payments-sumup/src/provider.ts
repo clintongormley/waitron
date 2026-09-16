@@ -267,7 +267,7 @@ export class SumUpCloudProvider implements PaymentProvider {
    * row it can, or a deferred status would be swept forever (spec §3).
    *
    * The incident carries no `saleId` (an attempting row has none), so `recordIncidentOnce` dedups
-   * per open `(tenant, till, code, sale_id=null)`: two unactionable rows on the SAME till in one
+   * per open `(till, code, sale_id=null)`: two unactionable rows on the SAME till in one
    * sweep collapse to ONE incident and `incidentsRaised` undercounts. Accepted — spec §3 only needs
    * a human alerted, and one incident per till satisfies that; the count is a log field, not a
    * per-row guarantee. The till of each row is resolved in ONE batched read at the head of the sweep

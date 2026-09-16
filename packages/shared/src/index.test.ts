@@ -32,7 +32,6 @@ import {
   sumDecimals,
   SUPPORTED_LOCALE_CODES,
   SUPPORTED_LOCALES,
-  tenantId,
   tenderId,
   tillId,
   toScale,
@@ -64,7 +63,6 @@ describe("package public surface (./index.js)", () => {
 
   it("re-exports every id constructor", () => {
     const uuid = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
-    expect(tenantId(uuid)).toBe(uuid);
     expect(locationId(uuid)).toBe(uuid);
     expect(tillId(uuid)).toBe(uuid);
     expect(seriesId(uuid)).toBe(uuid);

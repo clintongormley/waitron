@@ -7,9 +7,6 @@ import { DRAIN_DUTY, RECONCILE_DUTY, runPass, type PassDeps } from "./pass.js";
 const NOW = new Date("2026-07-26T09:00:00Z");
 const SOON = new Date("2026-07-26T09:10:00Z");
 const LATER = new Date("2026-07-26T23:00:00Z");
-// Branded, never a bare `as TenantId`: the brand is what stops a raw string reaching a
-// tenant-scoped call site, and casting past it in a test teaches the wrong pattern (see
-// reconcile-duty.test.ts's identical comment).
 const PERIOD = { from: new Date("2026-07-25T00:00:00Z"), to: new Date("2026-07-26T00:00:00Z") };
 
 function drainResult(over: Partial<DrainResult> = {}): DrainResult {

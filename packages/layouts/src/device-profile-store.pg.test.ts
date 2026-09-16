@@ -28,8 +28,8 @@ import {
 
 const suite = useTemplateDb({ template: "core_identity" });
 
-/** Run `fn` as the non-owner app role, scoped to `tenantId` — the shape the management routes wrap
- * every store call in (withTransaction + asAppUser). */
+/** Run `fn` as the non-owner app role — the shape the management routes wrap every store call in
+ * (withTransaction + asAppUser). */
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
@@ -77,7 +77,7 @@ async function purgeProfiles(): Promise<void> {
   await suite.admin.execute(sql`delete from device_profiles`);
 }
 
-/** Create a real canvas for `tenantId` (as a manager) and return its id — the target the FK check
+/** Create a real canvas (as a manager) and return its id — the target the FK check
  * accepts, and the wrong-tenant target that FK-rejects a cross-tenant reference. */
 async function seedCanvas(session: string, name: string): Promise<string> {
   const { id } = await asApp((tx) =>

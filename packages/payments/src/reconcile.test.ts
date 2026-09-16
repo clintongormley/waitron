@@ -379,17 +379,6 @@ describe("reconcilePayments", () => {
     expect(report.windows[0].from).toEqual(PERIOD.from);
     expect(report.windows[0].to).toEqual(new Date(PERIOD.to.getTime() + DEFAULT_SETTLEMENT_LAG_MS));
   });
-
-  it("scopes the report fetch to the tenant being swept", async () => {
-    // The port takes the tenant as an ARGUMENT, not at construction: one reconciler sweeps many
-    // tenants and the processor account may be shared between them. A source that could not see the
-    // tenant would answer with the whole account's settlements, and every other tenant's would fail
-    // this tenant's existence check and be reported as `missingLocal` — other people's money in the
-    // sweep's authoritative result, every run.
-    const report = new FakeSettlementReport([]);
-    await reconcilePayments(deps(report), PERIOD, NOW);
-    expect(report.tenants).toEqual([]);
-  });
 });
 
 /** Associates a payment with a freshly-seeded sale, so it is not an orphan. */
@@ -649,7 +638,7 @@ describe("orphan remediation", () => {
     expect(result.remediated).toBe(0);
     // Both orphans share a null sale_id and the same till: without aggregation, the second
     // `payment.reconcile_remediation_failed` insert would collide on the open-incident dedup key
-    // (tenant, till, code, sale_id) and be silently dropped.
+    // (till, code, sale_id) and be silently dropped.
     const { rows } = await pg.db.execute<{
       params: { count: number; payments: { paymentRef: string; amount: string; reason: string }[] };
     }>(sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`);
@@ -686,7 +675,7 @@ describe("orphan remediation", () => {
     ]);
 
     // A NEW orphan on the SAME till, while the first sweep's remediation-failed incident is still
-    // open. Its incident collides on the open-incident dedup key (tenant, till, code, sale_id) and
+    // open. Its incident collides on the open-incident dedup key (till, code, sale_id) and
     // is dropped — and unlike the five mismatch classes, this finding is never re-detected, because
     // the marker means no later sweep will ever claim p2 again. The result list is therefore the
     // ONLY record it has, which is exactly why the field exists.
