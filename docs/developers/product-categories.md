@@ -41,14 +41,16 @@ disabled. Previously recorded labels on past orders stay readable
 and are untouched.
 
 Opening a category's name shows its directly assigned products in a modal: a searchable table with a
-Reporting category filter, showing each product's reporting category and other memberships as
-coloured lozenges. Each row's actions are "Edit product categories", which opens the full membership
-picker, and "Remove from this category", which opens the picker with this category already taken out
-(so clearing a reporting category is still a confirmed choice, not an immediate write). A Close
-button dismisses the modal, and is disabled while a save is running. Its "Add products" view uses the
-same columns over products not yet in the category, with a checkbox per row and a header checkbox
-that selects every row the search and filter leave visible. A product stays picked when a later
-search hides it, and "Add N products" sends the whole selection to the bulk-add route in one write.
+Reporting category filter, showing each product's reporting category and up to three other
+memberships as coloured lozenges. Four or more other memberships become a localized count, while
+search still matches every underlying category name. Each row's actions are "Edit product
+categories", which opens the full membership picker, and "Remove from this category", which opens
+the picker with this category already taken out (so clearing a reporting category is still a
+confirmed choice, not an immediate write). A Close button dismisses the modal, and is disabled while
+a save is running. Its "Add products" view uses the same columns over products not yet in the
+category, with a checkbox per row and a header checkbox that selects every row the search and filter
+leave visible. A product stays picked when a later search hides it, and "Add N products" sends the
+whole selection to the bulk-add route in one write.
 Every table on the page remembers its sort and filter choices for the browser tab; none remembers
 typed search text. The category list keeps one remembered view for both modes, so a Parent filter
 chosen in the flat list hides nothing in the tree, which has no Parent column, and applies again in

@@ -373,8 +373,9 @@ What it left open:
 table you can switch between a tree (children nested under their parent, collapsible) and a flat
 list, with a name filter that keeps a match's parents visible. A category can have a colour, picked
 from a palette or chosen freely, shown as a square beside its name and as a coloured tag
-(`wt-lozenge`) on a product's other categories. Each category opens a window listing its products,
-and you can add many products at once from a checkbox list. Two behaviour changes came with it: a
+(`wt-lozenge`) on up to three of a product's other categories; a larger set is shown as a count but
+remains searchable by every category name. Each category opens a window listing its products, and
+you can add many products at once from a checkbox list. Two behaviour changes came with it: a
 product's reporting category is now optional, and deleting a category shows what it will change and
 then goes ahead instead of refusing (both described in the #340 row above, which was updated in the
 same change). What it left open is recorded in the #340 list above — the colour shown nowhere else,

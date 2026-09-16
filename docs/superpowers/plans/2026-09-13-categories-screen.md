@@ -1,5 +1,10 @@
 # Categories Screen Implementation Plan
 
+> **2026-09-16 follow-up:** The live product tables now show coloured lozenges for up to three
+> non-reporting memberships and a localized count for four or more, while retaining every category
+> name in search. The current contract is in
+> [product-categories.md](../../developers/product-categories.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the Categories page a tree/flat table with a name filter, a colour per category shown as lozenges, a products modal, a checkbox add-products form, and a delete that cascades (unassign products, reparent children, drop routes) after showing what it will change.

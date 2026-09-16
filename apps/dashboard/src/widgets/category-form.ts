@@ -14,6 +14,12 @@ import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 import { t, currentLocale } from "../i18n/t.js";
 
+const CATEGORY_PALETTE_GROUP_SIZE = CATEGORY_PALETTE.length / 2;
+const CATEGORY_PALETTE_GROUPS = [
+  CATEGORY_PALETTE.slice(0, CATEGORY_PALETTE_GROUP_SIZE),
+  CATEGORY_PALETTE.slice(CATEGORY_PALETTE_GROUP_SIZE),
+];
+
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
@@ -64,9 +70,23 @@ export class CategoryForm extends LitElement {
         padding: 0;
         font: inherit;
       }
+      .color-options {
+        display: grid;
+        justify-items: start;
+        gap: var(--wt-space-2);
+      }
       .swatches {
+        /* Each half holds four complete hues. They sit together as an 8 × 3 matrix when there is
+           room, then wrap as two 4 × 3 blocks without splitting any hue's three tones. */
         display: flex;
         flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .swatch-group {
+        display: grid;
+        grid-template-rows: repeat(3, var(--wt-space-6));
+        grid-auto-flow: column;
+        grid-auto-columns: var(--wt-space-6);
         gap: var(--wt-space-2);
       }
       .swatch {
@@ -173,6 +193,22 @@ export class CategoryForm extends LitElement {
     }
     return this.categories.filter((category) => !excluded.has(category.id));
   }
+  #colorSwatch(color: string) {
+    return html`<button
+      type="button"
+      class="swatch ${this.color === color ? "on" : ""}"
+      style=${`background:${color}`}
+      role="radio"
+      aria-checked=${this.color === color}
+      aria-label=${color}
+      data-color=${color}
+      .disabled=${this.busy}
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        this.color = color;
+      }}
+    ></button>`;
+  }
   override render() {
     const errors = { ...this.fieldErrors, ...this.validation };
     return html`<wt-modal
@@ -239,7 +275,7 @@ export class CategoryForm extends LitElement {
         ></wt-combobox>
         <fieldset class="color">
           <legend>${t("categories.color")}</legend>
-          <div class="swatches" role="radiogroup" aria-label=${t("categories.color")}>
+          <div class="color-options" role="radiogroup" aria-label=${t("categories.color")}>
             <button
               type="button"
               class="swatch none ${this.color === null ? "on" : ""}"
@@ -254,23 +290,14 @@ export class CategoryForm extends LitElement {
             >
               ${t("categories.color_none")}
             </button>
-            ${CATEGORY_PALETTE.map(
-              (c) =>
-                html`<button
-                  type="button"
-                  class="swatch ${this.color === c ? "on" : ""}"
-                  style=${`background:${c}`}
-                  role="radio"
-                  aria-checked=${this.color === c}
-                  aria-label=${c}
-                  data-color=${c}
-                  .disabled=${this.busy}
-                  @click=${(event: Event) => {
-                    event.stopPropagation();
-                    this.color = c;
-                  }}
-                ></button>`,
-            )}
+            <div class="swatches">
+              ${CATEGORY_PALETTE_GROUPS.map(
+                (group) =>
+                  html`<div class="swatch-group">
+                    ${group.map((color) => this.#colorSwatch(color))}
+                  </div>`,
+              )}
+            </div>
           </div>
           <label class="custom"
             >${t("categories.color_custom")}

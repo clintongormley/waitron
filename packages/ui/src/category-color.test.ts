@@ -20,6 +20,35 @@ test("palette is 24 lower-case six-digit hex values", () => {
   for (const c of CATEGORY_PALETTE) expect(c).toMatch(/^#[0-9a-f]{6}$/);
 });
 
+test("palette keeps eight hues in dark-to-pale blocks", () => {
+  expect(CATEGORY_PALETTE).toEqual([
+    "#b12525",
+    "#dd5f5f",
+    "#edabab",
+    "#b16b25",
+    "#dd9e5f",
+    "#edccab",
+    "#b1b125",
+    "#dddd5f",
+    "#ededab",
+    "#25b125",
+    "#5fdd5f",
+    "#abedab",
+    "#25b19a",
+    "#5fddc8",
+    "#abede2",
+    "#256bb1",
+    "#5f9edd",
+    "#abcced",
+    "#5425b1",
+    "#895fdd",
+    "#c1abed",
+    "#b125b1",
+    "#dd5fdd",
+    "#edabed",
+  ]);
+});
+
 test("every palette colour gets readable text (>= 4.5:1)", () => {
   for (const c of CATEGORY_PALETTE)
     expect(contrast(c, readableTextColor(c))).toBeGreaterThanOrEqual(4.5);

@@ -188,6 +188,33 @@ it("submits the chosen colour", async () => {
   expect((await saved).detail.value.color).toBe("#b12525");
 });
 
+it("lays out every palette hue as a column of three tones", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+  });
+  const swatches = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>('.swatches [data-color]:not([data-color=""])'),
+  ];
+  expect(swatches).toHaveLength(24);
+
+  const boxes = swatches.slice(0, 4).map((swatch) => swatch.getBoundingClientRect());
+  expect(boxes[1]!.left).toBe(boxes[0]!.left);
+  expect(boxes[2]!.left).toBe(boxes[0]!.left);
+  expect(boxes[1]!.top).toBeGreaterThan(boxes[0]!.top);
+  expect(boxes[2]!.top).toBeGreaterThan(boxes[1]!.top);
+  expect(boxes[3]!.left).toBeGreaterThan(boxes[0]!.left);
+  expect(boxes[3]!.top).toBe(boxes[0]!.top);
+  const secondHalf = swatches[12]!.getBoundingClientRect();
+  expect(secondHalf.left).toBeGreaterThan(boxes[3]!.left);
+  expect(secondHalf.top).toBe(boxes[0]!.top);
+
+  const yellow = el.shadowRoot!.querySelector<HTMLElement>('[data-color="#dddd5f"]')!;
+  expect(yellow).not.toBeNull();
+  expect(getComputedStyle(yellow).backgroundColor).toBe("rgb(221, 221, 95)");
+});
+
 it("edits from an existing colour and can clear it", async () => {
   const coloredFood: CategorySummary = { ...food, color: "#256bb1" };
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {

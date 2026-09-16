@@ -567,6 +567,43 @@ it("finds a product by a category it belongs to beyond its reporting one", async
   expect(renderedKeys(el, "category-products")).toEqual(["p"]);
 });
 
+it("summarises many other categories without losing category-name search", async () => {
+  setLocale("en-GB");
+  const fx = apiFixture();
+  const others = Array.from({ length: 8 }, (_, index): CategorySummary => ({
+    id: `other-${index + 1}`,
+    name: { en: index === 7 ? "Seasonal specials" : `Other ${index + 1}` },
+    image: null,
+    color: null,
+    parentId: null,
+  }));
+  fx.api.listCategories.mockResolvedValue([food, ...others]);
+  fx.api.listLibraryProducts.mockResolvedValue([
+    {
+      ...product,
+      categoryIds: [food.id, ...others.map((category) => category.id)],
+      primaryCategoryId: food.id,
+    },
+  ]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(9),
+  );
+  await openProducts(el, "food");
+  const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await table.updateComplete;
+  const row = table.shadowRoot!.querySelector('tr[data-row-key="p"]')!;
+  expect(row.textContent).toContain("8 other categories");
+  expect(row.querySelectorAll("wt-lozenge")).toHaveLength(1);
+
+  await typeInto(el, "category-products", "Seasonal specials");
+  expect(renderedKeys(el, "category-products")).toEqual(["p"]);
+});
+
 // Since the delete cascades rather than being refused, this preview is the ONLY warning a manager
 // gets about what an irreversible delete will do. A failed fetch must therefore never look like
 // "nothing depends on this": it says so, and Delete stays unavailable.
