@@ -355,16 +355,15 @@ What it left open:
   That first sweep missed one instance in the same file — the products modal's "no other categories"
   dash — because the test covering it asked only whether a `.muted` node existed, which was true in the
   wrong shadow root too; the final review found it, and the test now reads the painted colour back.
-- **The Products list has the same styling bug, and nobody has fixed it.** #353's QA saw it on the
-  real page, in code that branch did not touch (`apps/dashboard/src/widgets/product-list.ts`): product
-  thumbnails render at their full natural size and allergen badges as unstyled text. Confirmed on
-  the real page again on 2026-09-16, during #378's run-it verification — the
-  thumbnails came out at the picture's own size (256×256 in the development data) instead of the
-  40×40 the screen's own `.thumb` rule asks for. It predates that branch, which does not touch the
-  file. The fixed sibling `apps/dashboard/src/screens/categories-screen.ts` shows the shape to copy
-  (`part=` attributes), and `CLAUDE.md` §3 already names this exact defect. **Next action:** move
-  those cell styles onto `part=` attributes the way the categories screen now does, with a test that
-  reads a painted size or colour back rather than asking whether a class exists.
+- ~~**The Products list has the same styling bug, and nobody has fixed it.**~~ **Closed by #387
+  (2026-09-16).** #353's QA first saw it on the real page, in code that branch did not touch
+  (`apps/dashboard/src/widgets/product-list.ts`): product thumbnails rendered at the picture's own
+  size (256×256 in the development data) instead of the 40×40 the screen asked for, and allergen
+  badges as unstyled text. #378's run-it verification confirmed it again on 2026-09-16. The rebuilt
+  list styles every piece of markup it puts in a cell through `part=` attributes and
+  `wt-data-table::part(…)` rules, the way `categories-screen.ts` already did, and two of its tests
+  read a painted value back (`getComputedStyle` on the thumbnail frame and on a badge) rather than
+  asking whether a class exists.
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
   screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
@@ -642,6 +641,57 @@ What it left open:
   review and CI and still returned a 500 to the first person who opened it. **Next action:** walk it
   once on a dev stack before treating the overhaul as finished.
 
+**Product catalogue management improved — LANDED #387 (2026-09-16).** The Products page was
+rebuilt around the shared table. It has one search box over product names, categories, modifiers and
+variant names; a product's row shows its thumbnail and staff-facing name, its reporting category and
+its other categories, its price (a range when it has variants), its modifiers, whether it is active,
+and an allergen summary. A product's
+variants nest underneath it and start folded away, so the page opens as one row per product. Each
+row's Actions menu holds Edit and Delete.
+
+Delete does not remove anything. It reads the product back, saves it with `available: false`, and the
+row stays in the list wearing an **Inactive** badge — which is what keeps a product that has already
+been sold readable in history. The confirmation says so in both languages
+(`product.delete_warning`).
+
+The editor was aligned with the patterns the rest of the dashboard already uses: the nutrition
+section now uses the shared `dashboard-allergen-dietary-picker` (see the note under the modifiers
+entry above for what that gained and lost), and a product with variants keeps its unit dropdown in
+the variants table's price heading instead of behind the price field's unit button.
+
+Two shared components changed, so this reaches screens beyond Products:
+
+- `wt-data-table` gained `initiallyCollapsed`. A branch is seeded closed the first time it appears,
+  and only then, so a later row refresh does not fold it back up after somebody opened it. Separately,
+  when a search keeps a parent row only to reveal a matching child, the table now opens that branch
+  and hides its collapse control — the control did nothing in that state — and restores the branch's
+  own state when the search is cleared.
+- `wt-disclosure` was redrawn. Closed, it is a plain heading with a chevron and no box. Open, one
+  rounded border encloses the body with the heading sitting across it like a legend, so a section's
+  title and its fields read as one thing. Both appearances are now written down in
+  [design-system.md](developers/design-system.md).
+
+What it left open:
+
+- **The catalogue picker was deleted and nothing replaced it.** `catalogue-screen.ts` used to show a
+  dropdown when a venue had more than one catalogue. The rebuild dropped it, and
+  `selectedCatalogueId` now simply takes the first catalogue in the list — which is also the one every
+  new product is created in. With one catalogue, which is every case today, this is invisible. With
+  two, the second becomes unreachable from the dashboard, silently. **Next action:** decide whether
+  more than one catalogue is a case Waitron actually supports. If it is, the picker comes back; if it
+  is not, the list-of-catalogues shape should stop pretending otherwise.
+- **Deactivated products cannot be hidden.** They sort to the bottom and carry an Inactive badge, but
+  the Active column has no filter dropdown, so a venue that retires a lot of products ends up
+  scrolling past all of them. **Next action:** add a filter on that column — the table already
+  supports one per column — rather than inventing a separate hide control.
+- **There is still no permanent delete.** Nothing in the dashboard removes a product that was never
+  sold and was only created by mistake. **Next action:** decide whether that is worth a second,
+  differently-worded action, or whether deactivating is simply the answer.
+- **The combined journey through the real routes is still not recorded as walked.** This is the same
+  gap the #345 list above records, and this branch did not close it: the evidence is focused suites
+  and a run-it review, not one pass through the actual page against a real database. **Next action:**
+  as above — walk it once on a dev stack.
+
 **Modifier editing, reworked — LANDED #352 (2026-09-13).** Editing a modifier's choices is
 now a table rather than a stack of expanding panels. Each row shows the choice's name and price and
 carries the two things you change most — whether it is available, and whether it starts already
@@ -743,6 +793,22 @@ What it left open:
   distinction means for a product's own claims and for what the till withholds — it is not a
   mechanical copy, because a product declaring "may contain" is a real statement in a way a modifier
   choice's was not.
+  _Partly done 2026-09-16 (#387):_ the product editor now uses the shared picker. The widget grew a
+  `dietaryOptions` property so products keep their full declaration list while modifier choices keep
+  the four-item default. Ingredients (`option-group-manager.ts`) still use the old
+  `dashboard-allergen-picker`, so that widget is not orphaned. **What is still open** is the question
+  the item above says is not mechanical: a product's stored allergens still carry a `presence` field
+  that can read `may_contain`, and the compact picker cannot show or set it. An allergen a manager
+  adds is written as `contains`; one that already read `may_contain` keeps that value untouched. So
+  the distinction survives in the data and in whatever reads it, with no way left in the dashboard to
+  see or change it. **Next action:** decide whether "may contain" stays a real product claim — if it
+  does, the picker needs a control for it; if it does not, the field and its readers go. Also
+  decide about a smaller loss in the same change: the old editor showed the dietary labels that
+  follow automatically from the ones you picked (vegan implies vegetarian) as greyed "inferred"
+  badges, and the compact picker does not. The derivation itself still runs
+  (`expandDietaryDeclarations` in `packages/catalogue/src/dietary-declarations.ts`, used by
+  `apps/server/src/working-order.ts` and the till), so behaviour is unchanged — only the manager's
+  view of it is gone.
 
 **Modifier tables and nutrition editing refined — LANDED #385 (2026-09-16).** Clicking a modifier's
 row used to open a Products table with a second Menu items table stacked under it when there were
