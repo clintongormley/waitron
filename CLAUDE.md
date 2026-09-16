@@ -21,6 +21,7 @@ to check a claim rather than follow it.
 | [testing-guide.md](docs/developers/testing-guide.md)       | a test — especially real-PostgreSQL, container or browser tests               |
 | [workflow-guide.md](docs/developers/workflow-guide.md)     | starting or landing a branch, or running the dev stack from a worktree        |
 | [design-system.md](docs/developers/design-system.md)       | anything visual — it is the UI contract and it grows as screens land          |
+| [products.md](docs/developers/products.md)                 | a product's three names, what each surface shows, the translation gap report  |
 | [writing-claims.md](docs/developers/writing-claims.md)     | writing a sentence about how something behaves — a comment, a doc, a spec     |
 
 `docs/backlog.md` answers "what should I work on?"; this file answers "how".
@@ -166,6 +167,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   one localized summary; every input has a semantic `name`, never a generated widget id.
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
+- **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
+  fixture gives the three DIFFERENT text**, or the test passes whether the surface reads the right
+  name or the wrong one. Cost: a report grouping sales by the diner's wording; see
+  [products.md](docs/developers/products.md).
 - **A replay reports the original transaction facts; side effects are gated separately.** Cost: cash
   change returned as zero on a retry, because displaying change was treated as dispensing it.
 - **Compare saved selections by values, not JSON key or selection order.** Guard:
