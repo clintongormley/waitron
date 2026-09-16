@@ -181,3 +181,13 @@ it("defaults baseUrl to '' and fetchImpl to the global fetch", async () => {
   expect(out).toEqual({ ok: true });
   expect(spy).toHaveBeenCalledWith("/thing", { method: "GET", credentials: "include" });
 });
+
+it("reports a connection failure without pretending an HTTP response arrived", async () => {
+  const onError = vi.fn();
+  const request = createRequest({
+    fetchImpl: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    onError,
+  });
+  await expect(request("/printers", "GET")).rejects.toEqual({ code: "connection.failed" });
+  expect(onError).toHaveBeenCalledWith("connection.failed");
+});

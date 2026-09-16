@@ -2632,31 +2632,35 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   }, 60_000);
 
   it("under devMode, the x-waitron-dev-device header authenticates AS that device on /api/device/me (no cookie)", async () => {
-    const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "dev",
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
-    try {
-      // The header names device-2; the response is device-2's binding — proof the override reached
-      // `requireDevice` through the reconstructed `{ db, cfg }` (with `devMode` now forwarded), and
-      // that it SELECTED the named device (its own bound `tillId`), not device-1 or a default.
-      const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
-        headers: { [DEV_DEVICE_HEADER]: deviceId2 },
+    await withCapturedStdout(async (lines) => {
+      const port = await freePort();
+      const server = await startServer({
+        ...KEY_ENV,
+        DATABASE_URL: databaseUrl,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_HOST: "0.0.0.0",
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "dev",
+        WAITRON_MIN_TICK_MS: "50",
+        WAITRON_MAX_TICK_MS: "200",
+        WAITRON_SKIP_RETRY_MS: "100",
       });
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as { deviceId: string; tillId: string | null };
-      expect(body.deviceId).toBe(deviceId2);
-      expect(body.tillId).toBe(till2);
-    } finally {
-      await server.close();
-    }
+      try {
+        expect(lines.some((line) => line.includes('"event":"mdns.responding"'))).toBe(false);
+        // The header names device-2; the response is device-2's binding — proof the override reached
+        // `requireDevice` through the reconstructed `{ db, cfg }` (with `devMode` now forwarded), and
+        // that it SELECTED the named device (its own bound `tillId`), not device-1 or a default.
+        const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
+          headers: { [DEV_DEVICE_HEADER]: deviceId2 },
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { deviceId: string; tillId: string | null };
+        expect(body.deviceId).toBe(deviceId2);
+        expect(body.tillId).toBe(till2);
+      } finally {
+        await server.close();
+      }
+    });
   }, 60_000);
 
   it("a boot NOT in devMode ignores the header (401 with no cookie)", async () => {

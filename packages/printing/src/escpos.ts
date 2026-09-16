@@ -71,10 +71,12 @@ export class EscBuilder {
   /** `charset` undefined keeps the Latin-1 builder that selects no table (the drawer kick, legacy jobs). */
   constructor(private current?: CharacterSet) {}
 
-  /** Initialise the printer — `ESC @`, then the current character set's `ESC t` selection, if any. */
+  /** Reset, select the configured table and cancel Kanji mode for single-byte text. */
   init(): this {
     this.parts.push(ESC, 0x40);
-    if (this.current !== undefined) this.parts.push(...CHARSET_SELECT[this.current]);
+    if (this.current !== undefined) {
+      this.parts.push(...CHARSET_SELECT[this.current], 0x1c, 0x2e);
+    }
     return this;
   }
 

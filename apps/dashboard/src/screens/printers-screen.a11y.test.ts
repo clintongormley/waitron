@@ -1,5 +1,5 @@
 import { expect, afterEach, describe, it, vi } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "@vitest/browser/context";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import "./printers-screen.js";
@@ -290,6 +290,75 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await openPrinter(el);
     await expectNoA11yViolations(host);
   });
+  it("renders the test questions and fallback explanation accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    await openPrinter(el);
+    q(el, '[data-test="print-test-page-p1"]')!.click();
+    await flush(el);
+    q(el, 'input[name="printer-test-line-reads"][value="3"]')!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("keeps setup forms inside desktop and phone dialogs", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    try {
+      for (const width of [1280, 390]) {
+        await page.viewport(width, 844);
+        await openDiscovery(el);
+        const address = q(el, '[data-test="probe-host"]')!.getBoundingClientRect();
+        const port = q(el, '[data-test="probe-port"]')!.getBoundingClientRect();
+        const connect = q(el, '[data-test="probe-printer"]')!.getBoundingClientRect();
+        if (width === 1280) {
+          expect(Math.abs(address.bottom - port.bottom)).toBeLessThan(2);
+          expect(Math.abs(port.bottom - connect.bottom)).toBeLessThan(2);
+        }
+        await expectNoA11yViolations(host);
+        q(el, '[data-test="register-SN-1"]')!.click();
+        await flush(el);
+        await expectNoA11yViolations(host);
+        q(el, '[data-test="cancel-printer-name"]')!.click();
+        await flush(el);
+        await vi.waitFor(() => expect(q(el, '[data-test="name-printer-modal"]')).toBeNull());
+        q(el, '[data-test="cancel-new-printer"]')!.click();
+        await flush(el);
+        await openPrinter(el);
+        const fields = ["printer-paper-width", "printer-resolution", "printer-character-set"].map(
+          (name) => q(el, `[name="${name}"]`)!.getBoundingClientRect(),
+        );
+        if (width === 1280)
+          expect(new Set(fields.map((rect) => Math.round(rect.bottom))).size).toBe(1);
+        const dialog = q(el, '[data-test="edit-printer-modal"]')!
+          .shadowRoot!.querySelector("dialog")!
+          .getBoundingClientRect();
+        for (const field of fields) expect(field.right).toBeLessThan(dialog.right);
+        q(el, '[data-test="print-test-page-p1"]')!.click();
+        await flush(el);
+        await expectNoA11yViolations(host);
+        q(el, '[data-test="cancel-printer-test"]')!.click();
+        await flush(el);
+        q(el, '[data-test="cancel-edit-printer"]')!.click();
+        await flush(el);
+        q(el, '[data-test="open-add-agent"]')!.click();
+        await flush(el);
+        q(el, '[data-test="cancel-new-agent"]')!.click();
+        await flush(el);
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
   it("renders agent editing accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",

@@ -12,6 +12,10 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 // English is the source of truth here too, and `apps/*` is exempt from the english-only guard, so the
 // Spanish below is user-facing translation, not schema vocabulary. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "connection.failed": {
+    en: "This browser could not connect to Waitron. Check your connection and try again.",
+    es: "Este navegador no pudo conectar con Waitron. Comprueba tu conexión e inténtalo de nuevo.",
+  },
   "category.not_found": {
     en: "This category no longer exists. Refresh the list.",
     es: "Esta categoría ya no existe. Actualiza la lista.",

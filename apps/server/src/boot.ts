@@ -659,7 +659,7 @@ export function startLandingListener(
  * provisioning owner; adoption-pending and trading: app + replication; trading's backup read pool
  * is closed by `stopWork` instead). A pool that fails to close rejects `close()` only after every
  * pool in `closePools` has been attempted, and `server.stopped` is then not logged. `mdns` is the
- * shared mDNS responder every mode starts in the prefix; `close()` stops it FIRST — the box is
+ * mDNS responder (inactive for development and loopback listeners); `close()` stops it FIRST — the box is
  * going down, so it must stop advertising `waitron.local` before anything else.
  */
 function makeStartedServer(
@@ -1272,14 +1272,12 @@ export async function startServer(
         );
         const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
         const server = startListening({ ...config, tls }, app, now, log);
-        // Advertise waitron.local over mDNS LAST — after every throwing setup step above AND once
-        // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket
-        // (an earlier throw simply never started it, which is why the catches below no longer stop it).
-        // Both modes advertise; the responder is stopped in makeStartedServer's close() below. mDNS is
-        // non-load-bearing (the box stays reachable by IP); a bind / no-multicast-route failure logs and
-        // is swallowed inside the responder.
+        // Start discovery after the throwing setup steps so a failed boot cannot leak its socket.
+        // The responder skips development and loopback listeners; close() owns its teardown.
         const mdns = startMdnsResponder({
           hostname: BOX_HOSTNAME,
+          devMode: config.devMode,
+          httpHost: config.httpHost,
           getAddresses: boxAddresses,
           log,
         });
@@ -1410,7 +1408,13 @@ export async function startServer(
     // shared fallback (see `startTradingListener`) — without it this bind spoke plain HTTP and every
     // already-trusting phone/till hit a TLS handshake error after setup.
     const server = startTradingListener(config, app, now, log);
-    const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
+    const mdns = startMdnsResponder({
+      hostname: BOX_HOSTNAME,
+      devMode: config.devMode,
+      httpHost: config.httpHost,
+      getAddresses: boxAddresses,
+      log,
+    });
     return makeStartedServer(
       server,
       health,
@@ -2670,10 +2674,14 @@ export async function startServer(
   // the loop, swallow a worker's settle-by-rejection so it can never skip the guaranteed pool
   // teardown) are unchanged.
   //
-  // Advertise waitron.local over mDNS LAST — after every throwing setup step in this branch AND once
-  // `startListening` has bound the socket — so no boot-failure path can leak the UDP :5353 socket (an
-  // earlier throw never started it). Both modes advertise; stopped in makeStartedServer's close() below.
-  const mdns = startMdnsResponder({ hostname: BOX_HOSTNAME, getAddresses: boxAddresses, log });
+  // Start discovery after the throwing setup steps; the responder skips development and loopback.
+  const mdns = startMdnsResponder({
+    hostname: BOX_HOSTNAME,
+    devMode: config.devMode,
+    httpHost: config.httpHost,
+    getAddresses: boxAddresses,
+    log,
+  });
   return makeStartedServer(
     server,
     health,

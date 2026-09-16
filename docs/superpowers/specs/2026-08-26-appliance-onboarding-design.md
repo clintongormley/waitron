@@ -593,3 +593,8 @@ scrutiny as code and are **flagged to verify**, not stated as settled:
   wiring the existing `fiscal.aeat` vault purpose into the flow.
 - **Surfaces new build gaps** not previously scoped: serving the built PWAs from the box (§5),
   backup/recovery + break-glass (§12), the appliance OS image + VM variant (§15).
+
+
+**2026-09-16 follow-up:** Development and loopback-only listeners now skip mDNS advertisement to
+avoid competing with a real box for `waitron.local`.
+[Incident and fix](../specs/2026-09-16-printer-setup-refinements.md).
