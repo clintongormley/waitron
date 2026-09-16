@@ -177,7 +177,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
-| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options }`, which draws a dropdown whether or not the table is `searchable`), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
+| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options }`, which draws a dropdown whether or not the table is `searchable`), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
@@ -221,7 +221,9 @@ level rather than disappearing. Each row that has children gets its own expand/c
 component, not the caller. The table renders `role="treegrid"` with `aria-level`/`aria-expanded` on
 each row, and a sortable column sorts each level of siblings independently rather than flattening the
 whole tree into one sort. Leave `rowParent` unset for the ordinary flat table — the two modes share
-every other property.
+every other property. Set `initiallyCollapsed` when parent rows are summaries and children are
+on-demand detail; a branch is seeded closed once, so a later row refresh does not close it again
+after the person expands it.
 
 ### Remembered, searchable, filterable tables
 
@@ -510,6 +512,10 @@ the section — the person is left looking at the field they just corrected.
 second piece of per-person state to get wrong, and it makes two people describing the same screen
 disagree about what is on it.
 
+A collapsed disclosure is a borderless heading with a chevron, not a select-like boxed control.
+When it opens, one rounded border encloses the body and the heading sits across that border like a
+legend, so the fields and their title read as one section.
+
 The body is a plain default slot, so the section's content is ordinary form markup and every rule
 under "Forms" above still applies inside it — including the error summary, which stays at the top of
 the whole form and lists problems from folded sections too.
@@ -520,8 +526,9 @@ Two notes on the primitives this pattern uses, both in the table above:
   attributes, so a host can style or query the state from outside.
 - `wt-price-input` is the money field a priced form wants: an amount joined to a trailing unit
   button. The button's visible text is its accessible name, so `unit` must never be empty. It emits
-  `wt-change` on input and `wt-unit-click` when the button is pressed — the product editor swaps
-  that button for the unit dropdown on `wt-unit-click` and back again once a unit is chosen.
+  `wt-change` on input and `wt-unit-click` when the button is pressed. A plain product's editor swaps
+  that button for the unit dropdown on `wt-unit-click`; a product with variants keeps the unit
+  dropdown in the variants table's price heading instead.
 
 ### Dashboard banner
 

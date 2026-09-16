@@ -66,6 +66,16 @@ test("summary paints from the muted-text token", async () => {
   expect(getComputedStyle(s).color).toBe("rgb(9, 9, 9)");
 });
 
+test("an open disclosure draws one rounded section border with its title on that border", async () => {
+  const el = await mount('<wt-disclosure heading="Kitchen" open><p>body</p></wt-disclosure>');
+  const section = el.shadowRoot!.querySelector<HTMLElement>(".section")!;
+  const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
+  expect(parseFloat(getComputedStyle(section).borderTopWidth)).toBeGreaterThan(0);
+  expect(getComputedStyle(section).borderRadius).not.toBe("0px");
+  expect(getComputedStyle(header).position).toBe("relative");
+  expect(parseFloat(getComputedStyle(header).top)).toBeLessThan(0);
+});
+
 test("focusing the host delegates focus to the header button", async () => {
   // Without delegation the host itself becomes the active element and nothing inside the shadow
   // root is focused, which is the state every other interactive primitive here avoids.

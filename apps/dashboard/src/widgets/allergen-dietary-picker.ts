@@ -4,24 +4,25 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { ALLERGEN_CODES, allergenName } from "../i18n/domain.js";
-import { DIETARY_SUITABILITY, type DietarySuitability } from "../api/client.js";
+import { DIETARY_SUITABILITY, type DietaryLabel } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 /**
- * What a caller (a modifier choice today, a product editor later) has said an option is: the
- * allergens it CONTAINS, and the dietary preferences it is SUITABLE FOR. Both are plain code lists.
+ * What a caller has said an option is: the allergens it CONTAINS, and the dietary preferences it is
+ * SUITABLE FOR. Both are plain code lists.
  */
 export interface AllergenDietaryValue {
   allergens: string[];
-  dietary: DietarySuitability[];
+  dietary: DietaryLabel[];
 }
 
 const EMPTY: AllergenDietaryValue = { allergens: [], dietary: [] };
 
 /**
- * One allergen multi-select plus a four-item dietary checklist over the shared vocabularies. It is
- * domain-blind: it knows nothing about modifiers or products, only that a thing contains allergens
- * and is suitable for dietary preferences. Consumers bind `.value` and listen for `wt-change`.
+ * One allergen multi-select plus a caller-configured dietary checklist over the shared vocabularies.
+ * It is domain-blind: it knows nothing about modifiers or products, only that a thing contains
+ * allergens and is suitable for dietary preferences. Consumers bind `.value` and listen for
+ * `wt-change`.
  */
 @customElement("dashboard-allergen-dietary-picker")
 export class AllergenDietaryPicker extends LitElement {
@@ -54,6 +55,8 @@ export class AllergenDietaryPicker extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) value: AllergenDietaryValue = EMPTY;
   @state() private editing: "allergens" | "dietary" | null = null;
+  /** Products offer the full declaration set; modifier choices keep the four-item default. */
+  @property({ attribute: false }) dietaryOptions: readonly DietaryLabel[] = DIETARY_SUITABILITY;
 
   #emit(next: AllergenDietaryValue): void {
     this.value = next;
@@ -67,7 +70,7 @@ export class AllergenDietaryPicker extends LitElement {
   }
 
   #dietaryOptions() {
-    return DIETARY_SUITABILITY.map((value) => ({
+    return this.dietaryOptions.map((value) => ({
       value,
       label: t(`editor.diet.${value}`),
     }));
@@ -101,7 +104,7 @@ export class AllergenDietaryPicker extends LitElement {
     const chosen = new Set(event.detail.values);
     this.#emit({
       ...this.value,
-      dietary: DIETARY_SUITABILITY.filter((label) => chosen.has(label)),
+      dietary: this.dietaryOptions.filter((label) => chosen.has(label)),
     });
   }
 

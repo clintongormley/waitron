@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { allergenStateName, vatClassName } from "../i18n/domain.js";
+import { allergenStateName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import { ProductList } from "./product-list.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -71,27 +72,165 @@ describe("product-list", () => {
     expect(row.textContent).not.toContain(products[0]!.id);
   });
 
-  // The row's Edit button is the only place a screen reader hears which product it is acting on.
-  it("names the product in the edit button's accessible label", async () => {
+  it("uses a named kebab menu containing Edit and Delete", async () => {
     const products = [product({ id: "p7", name: "Tarta de queso" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const edit = (await tableRoot(el)).querySelector('[data-test="edit-p7"]')!;
-    expect(edit.getAttribute("aria-label")).toContain("Tarta de queso");
+    const actions = (await tableRoot(el)).querySelector<HTMLElement>('[data-test="actions-p7"]')!;
+    expect(actions.tagName).toBe("WT-ROW-ACTIONS");
+    expect(actions.getAttribute("label")).toContain("Tarta de queso");
+    expect(actions.querySelector('[data-test="edit-p7"]')?.textContent).toContain(t("action.edit"));
+    expect(actions.querySelector('[data-test="delete-p7"]')?.textContent).toContain(
+      t("action.delete"),
+    );
   });
 
-  it("does not present the legacy product price as a selling price", async () => {
-    const products = [product({ unitPrice: "12.00", pricingUnit: "weight" })];
+  it("shows a product price, or the range across its variants", async () => {
+    const products = [
+      product({ id: "plain", unitPrice: "12.00", pricingUnit: "weight" }),
+      product({
+        id: "sized",
+        variants: [
+          {
+            id: "small",
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "4.00",
+            available: true,
+          },
+          {
+            id: "large",
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "7.50",
+            available: true,
+          },
+        ],
+      }),
+    ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
-    expect(text).not.toContain("12.00");
+    const rows = [...(await tableRoot(el)).querySelectorAll("tbody tr")];
+    expect(rows[0]!.textContent).toContain("12.00");
+    expect(rows[1]!.textContent).toContain("4.00–7.50");
   });
 
-  it("shows the localised vatClass name, not the raw token", async () => {
-    const products = [product({ vatClass: "super_reduced" })];
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
-    expect(text).toContain(vatClassName("super_reduced", "es-ES"));
-    expect(text).not.toContain("super_reduced");
+  it("shows reporting and other categories, modifier names, and no VAT column", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          primaryCategoryId: "reporting",
+          categoryIds: ["reporting", "seasonal", "terrace"],
+          modifierIds: ["sauce", "note"],
+        }),
+      ],
+      categories: [
+        { id: "reporting", name: { es: "Comida" }, image: null, color: null, parentId: null },
+        { id: "seasonal", name: { es: "Temporada" }, image: null, color: null, parentId: null },
+        { id: "terrace", name: { es: "Terraza" }, image: null, color: null, parentId: null },
+      ],
+      modifiers: [
+        { id: "sauce", type: "text", name: { es: "Salsa" }, available: true },
+        { id: "note", type: "text", name: { es: "Nota" }, available: true },
+      ],
+    });
+    const root = await tableRoot(el);
+    const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
+    expect(headers.some((header) => header.startsWith(t("product.name")))).toBe(true);
+    expect(headers).toContain(t("product.reporting_category"));
+    expect(headers).toContain(t("product.other_categories"));
+    expect(headers).toContain(t("editor.modifiers"));
+    expect(headers).not.toContain(t("product.vat"));
+    const text = root.querySelector("tbody tr")!.textContent!;
+    expect(text).toContain("Comida");
+    expect(text).toContain("Temporada, Terraza");
+    expect(text).toContain("Salsa, Nota");
+  });
+
+  it("is searchable and expands a parent product to its variant rows", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "coffee",
+          name: "Coffee",
+          variants: [
+            {
+              id: "small",
+              name: "Small",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: "2.00",
+              available: true,
+            },
+            {
+              id: "large",
+              name: "Large",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: "3.00",
+              available: true,
+            },
+          ],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.searchable).toBe(true);
+    expect(table.rowParent).toBeDefined();
+    const root = await tableRoot(el);
+    expect(root.querySelectorAll("tbody tr")).toHaveLength(1);
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    const rows = [...root.querySelectorAll("tbody tr")];
+    expect(rows).toHaveLength(3);
+    expect(rows.slice(1).map((row) => row.textContent)).toEqual(
+      expect.arrayContaining([expect.stringContaining("Small"), expect.stringContaining("Large")]),
+    );
+  });
+
+  it("shows a matching variant and its product while branches are initially collapsed", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "coffee",
+          name: "Coffee",
+          variants: [
+            {
+              id: "small",
+              name: "Small",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: "2.00",
+              available: true,
+            },
+            {
+              id: "large",
+              name: "Large",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: "3.00",
+              available: true,
+            },
+          ],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
+    search.value = "Small";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await table.updateComplete;
+    const rows = [...root.querySelectorAll("tbody tr")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.textContent).toContain("Coffee");
+    expect(rows[1]!.textContent).toContain("Small");
   });
 
   it("shows an active/inactive badge carrying text, not colour alone", async () => {
@@ -220,6 +359,17 @@ describe("product-list", () => {
       el.addEventListener("edit-product", (e) => resolve((e as CustomEvent).detail)),
     );
     (await tableRoot(el)).querySelector<HTMLElement>("[data-test=edit-prod-42]")!.click();
+    expect((await detail).productId).toBe("prod-42");
+  });
+
+  it("emits delete-product with the product id when Delete is clicked", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "prod-42" })],
+    });
+    const detail = new Promise<{ productId: string }>((resolve) =>
+      el.addEventListener("delete-product", (e) => resolve((e as CustomEvent).detail)),
+    );
+    (await tableRoot(el)).querySelector<HTMLElement>("[data-test=delete-prod-42]")!.click();
     expect((await detail).productId).toBe("prod-42");
   });
 

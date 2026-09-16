@@ -1,8 +1,10 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
-import { baseStyles, selectStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
+import { baseStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   CatalogueSummary,
@@ -39,7 +41,6 @@ import "../widgets/unit-form.js";
 export class CatalogueScreen extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -61,10 +62,6 @@ export class CatalogueScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      label {
-        display: grid;
-        gap: var(--wt-space-2);
-      }
     `,
   ];
 
@@ -83,6 +80,8 @@ export class CatalogueScreen extends LitElement {
   @state() private busy = false;
   @state() private errorKey: string | null = null;
   @state() private languageSettingsOpen = false;
+  @state() private deletingProduct: Product | null = null;
+  @state() private deleteErrorKey: string | null = null;
   /** The modifier the nested form is EDITING, or null when it is creating one. The product editor
    * opens the same form for both, and this is what decides which write its Save performs. */
   @state() private editingModifier: Modifier | null = null;
@@ -223,6 +222,41 @@ export class CatalogueScreen extends LitElement {
     await this.#openProduct(id);
   }
 
+  #openDelete(productId: string): void {
+    this.deletingProduct = this.products.find(({ id }) => id === productId) ?? null;
+    this.deleteErrorKey = null;
+    this.errorKey = null;
+  }
+
+  #closeDelete(): void {
+    this.deletingProduct = null;
+    this.deleteErrorKey = null;
+  }
+
+  async #deleteProduct(): Promise<void> {
+    const product = this.deletingProduct;
+    if (!product || this.busy) return;
+    this.busy = true;
+    this.errorKey = null;
+    this.deleteErrorKey = null;
+    try {
+      const value = await this.api.getProductEditor(product.id);
+      await this.api.updateProductEditor(product.id, { ...value, available: false });
+    } catch (error) {
+      this.deleteErrorKey = codeOf(error);
+      this.busy = false;
+      return;
+    }
+    this.#closeDelete();
+    try {
+      await this.#reloadProducts();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   #closeEditor(writeUrl = true): void {
     this.#editorGeneration++;
     this.#resetEditorState();
@@ -350,34 +384,18 @@ export class CatalogueScreen extends LitElement {
         </div>
       </div>
       ${
-        this.catalogues.length > 1
-          ? html`<label
-              >${t("catalogue.title")}<select
-                name="product-catalogue"
-                @change=${(event: Event) => {
-                  this.selectedCatalogueId = (event.target as HTMLSelectElement).value;
-                }}
-              >
-                ${this.catalogues.map(
-                  (catalogue) =>
-                    html`<option
-                      value=${catalogue.id}
-                      .selected=${catalogue.id === this.selectedCatalogueId}
-                    >
-                      ${catalogue.name}
-                    </option>`,
-                )}
-              </select></label
-            >`
-          : nothing
-      }
-      ${
         this.catalogues.length
           ? html`<dashboard-product-list
               .products=${this.products}
+              .categories=${this.categories}
+              .modifiers=${this.modifiers}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId);
+              }}
+              @delete-product=${(event: CustomEvent<{ productId: string }>) => {
+                event.stopPropagation();
+                this.#openDelete(event.detail.productId);
               }}
             ></dashboard-product-list>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
@@ -407,6 +425,37 @@ export class CatalogueScreen extends LitElement {
         }}
         @wt-edit-related=${this.#editRelated}
       ></dashboard-product-editor>
+      <wt-modal
+        data-test="delete-dialog"
+        .open=${this.deletingProduct !== null}
+        heading=${t("product.delete_named").replace("{name}", this.deletingProduct?.name ?? "")}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (!this.busy) this.#closeDelete();
+        }}
+      >
+        <p>${t("product.delete_warning")}</p>
+        ${
+          this.deleteErrorKey
+            ? html`<p class="error" role="alert">${codeMessage(this.deleteErrorKey)}</p>`
+            : nothing
+        }
+        <wt-form-actions slot="footer"
+          ><wt-button
+            slot="cancel"
+            variant="secondary"
+            .disabled=${this.busy}
+            @click=${this.#closeDelete}
+            >${t("action.cancel")}</wt-button
+          ><wt-button
+            data-test="confirm-delete"
+            variant="danger"
+            .loading=${this.busy}
+            @click=${() => void this.#deleteProduct()}
+            >${t("action.delete")}</wt-button
+          ></wt-form-actions
+        >
+      </wt-modal>
       <dashboard-unit-form
         .open=${this.#child.kind === "unit"}
         .busy=${this.#child.busy}

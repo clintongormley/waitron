@@ -239,6 +239,18 @@ test("tree mode nests children under parents in order", async () => {
   expect(keys).toEqual(["food", "break", "eggs", "drinks"]);
 });
 
+test("tree mode can start every branch collapsed and still lets each one expand", async () => {
+  const el = await treeTable({ initiallyCollapsed: true });
+  const keys = () =>
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => row.getAttribute("data-row-key"));
+  expect(keys()).toEqual(["food", "drinks"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tbody tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(keys()).toEqual(["food", "break", "drinks"]);
+});
+
 test("tree mode sets treegrid semantics and aria-level", async () => {
   const el = await treeTable();
   expect(el.shadowRoot!.querySelector("table")!.getAttribute("role")).toBe("treegrid");

@@ -30,7 +30,17 @@ const variants: ProductEditorVariant[] = [
 async function mount(busy: boolean, theme: "light" | "dark") {
   return mountWidget<VariantTable>(
     "dashboard-variant-table",
-    { variants, unitLabel: "kg", busy },
+    {
+      variants,
+      unitLabel: "kg",
+      unitId: "kg",
+      unitOptions: [
+        { value: null, label: "Each" },
+        { value: "kg", label: "kg" },
+      ],
+      addUnitLabel: "Add unit",
+      busy,
+    },
     theme,
   );
 }

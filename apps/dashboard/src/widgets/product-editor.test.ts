@@ -140,6 +140,84 @@ it("labels a unit option as its name alone when it has no abbreviation", async (
   expect(option.textContent!.trim()).toBe("Portion");
 });
 
+it('renders a short unit as "per unit" on the price control', async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, unitId: "litre" },
+    locales: ["en"],
+    units: [{ id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+    taxChoices: reduced,
+  });
+  expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("unit")).toBe(
+    t("editor.per_unit").replace("{unit}", "l"),
+  );
+});
+
+it("uses the shared compact nutritional picker without a reviewed switch", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, allergens: {}, dietaryDeclarations: ["no_meat"] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  expect(picker).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("dashboard-allergen-picker")).toBeNull();
+  expect(picker.shadowRoot!.querySelector('[data-test="reviewed"]')).toBeNull();
+  expect(picker.shadowRoot!.querySelector('[data-test="dietary-summary"]')!.textContent).toContain(
+    t("editor.diet.no_meat"),
+  );
+});
+
+it("puts the variant pricing unit chooser in the table header, not below the table", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit, { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+    taxChoices: reduced,
+  });
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  expect(table.shadowRoot!.querySelector('select[name="pricing-unit"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
+});
+
+it("shows each modifier's choices beside its name when attaching and when attached", async () => {
+  const modifiers = [
+    {
+      id: "sauce",
+      type: "options" as const,
+      name: { en: "Sauce" },
+      available: true,
+      defaultChoiceId: null,
+      choices: [
+        { id: "red", name: { en: "Red" }, available: true },
+        { id: "green", name: { en: "Green" }, available: true },
+      ],
+    },
+  ];
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, modifierIds: ["sauce"] },
+    locales: ["en"],
+    units: [unit],
+    modifiers,
+    taxChoices: reduced,
+  });
+  expect(el.shadowRoot!.querySelector('[data-test="attached-modifier"]')!.textContent).toContain(
+    "Sauce · Red, Green",
+  );
+  el.value = { ...product, modifierIds: [] };
+  await el.updateComplete;
+  const combobox = el.shadowRoot!.querySelector<HTMLElement & { options: { label: string }[] }>(
+    '[data-test="add-modifier"]',
+  )!;
+  expect(combobox.options.map(({ label }) => label)).toContain("Sauce · Red, Green");
+});
+
 it("renders the sections in the designed order, with the VAT rate above the price", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -166,6 +244,10 @@ it("renders the sections in the designed order, with the VAT rate above the pric
   const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
   // DOCUMENT_POSITION_FOLLOWING: the price field comes after the VAT select, never before it.
   expect(tax.compareDocumentPosition(price) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const pricing = section(el, "price");
+  expect(pricing.tagName).toBe("FIELDSET");
+  expect(pricing.querySelector("legend")?.textContent).toBe(t("editor.pricing"));
+  expect(parseFloat(getComputedStyle(pricing).borderTopWidth)).toBeGreaterThan(0);
 });
 
 it("opens the three optional sections collapsed", async () => {
@@ -305,7 +387,7 @@ it("opens the section holding a reported error, puts focus in the field and leav
   expect(section(el, "descriptors").open).toBe(false);
 });
 
-it("does not submit from the allergen search and retains review state across an unrelated edit", async () => {
+it("retains a compact-picker allergen selection across an unrelated edit", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, allergens: {} },
@@ -313,27 +395,18 @@ it("does not submit from the allergen search and retains review state across an 
     units: [unit],
     taxChoices: reduced,
   });
-  const submit = vi.fn();
-  el.addEventListener("wt-submit", submit);
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-picker")!;
-  await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>("[data-test=add-allergen]")!.click();
-  await picker.updateComplete;
-  await el.updateComplete;
-  const search = picker.shadowRoot!.querySelector<
-    HTMLElement & { updateComplete: Promise<unknown> }
-  >("[data-test=allergen-search]")!;
-  await search.updateComplete;
-  search
-    .shadowRoot!.querySelector("input")!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
-  expect(submit).not.toHaveBeenCalled();
-  picker.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-milk]")!.click();
-  await picker.updateComplete;
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: { allergens: ["milk"], dietary: [] } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   await el.updateComplete;
   await input(el, "name", "New coffee");
-  expect(picker.value).toEqual({ milk: { presence: "contains" } });
+  expect(el.currentValue.allergens).toEqual({ milk: { presence: "contains" } });
 });
 
 it("shows only attached modifiers, attaches from the combobox, reorders and removes", async () => {
@@ -480,18 +553,23 @@ it("flags a reporting category that is not one of the chosen categories", async 
   );
 });
 
-it("shows inferred dietary badges without saving them as declarations", async () => {
+it("offers all six product dietary declarations without changing the saved set", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, dietaryDeclarations: ["vegan", "halal"] },
     locales: ["en"],
   });
   await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-dietary"]')!.click();
+  await picker.updateComplete;
+  const dietary = picker.shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>(
+    "[data-test=dietary]",
+  )!;
   expect(
-    [...el.shadowRoot!.querySelectorAll("[data-test=derived-diet]")].map((node) =>
-      node.getAttribute("data-label"),
-    ),
-  ).toEqual(["vegetarian", "no_meat", "no_fish"]);
+    dietary.options.map((option) => option.value),
+  ).toEqual(["vegan", "vegetarian", "halal", "kosher", "no_meat", "no_fish"]);
   expect(el.currentValue.dietaryDeclarations).toEqual(["vegan", "halal"]);
 });
 
@@ -854,27 +932,6 @@ it("keeps a variant's mark on that variant when the rows are reordered", async (
   expect(variantTable(el)!.errors).toEqual({ 0: t("editor.price_invalid") });
 });
 
-it("opens the unit dropdown from the button beside Add variant", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, variants: [small, large] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
-  // With variants there is no price field, so its unit button is gone too — without this control
-  // the product's unit could never be changed again.
-  expect(el.shadowRoot!.querySelector("[name=unit]")).toBeNull();
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-unit]")!.click();
-  await el.updateComplete;
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[name=unit]")!;
-  expect(select.value).toBe(unit.id);
-  select.value = "";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
-  await el.updateComplete;
-  expect(el.currentValue.unitId).toBeNull();
-});
-
 it("locks the plain price field while a save is in flight, like every other field on the form", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -929,7 +986,7 @@ it("defaults a new product to Each (no unit)", async () => {
   // Each is a chosen unit like any other, so the price field's button names it rather than asking
   // the person to choose — which is the only thing on screen until they open the chooser.
   expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("unit")).toBe(
-    t("editor.unit_each"),
+    t("editor.per_unit").replace("{unit}", t("editor.unit_each")),
   );
   await openUnits(el);
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;

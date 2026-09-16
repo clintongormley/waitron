@@ -29,20 +29,39 @@ export class WtDisclosure extends LitElement {
         display: block;
       }
 
+      .section {
+        border: 1px solid transparent;
+        border-radius: var(--wt-radius-md);
+      }
+
+      :host([open]) .section {
+        margin-top: calc(var(--wt-tap-min) / 2);
+        border-color: var(--wt-color-border);
+      }
+
       .header {
+        position: relative;
         display: flex;
         align-items: center;
         gap: var(--wt-space-3);
         width: 100%;
         min-height: var(--wt-tap-min);
-        padding: var(--wt-space-3) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
+        padding: var(--wt-space-2) 0;
+        border: 0;
+        background: transparent;
         color: var(--wt-color-text);
         font: inherit;
         text-align: start;
         cursor: pointer;
+      }
+
+      :host([open]) .header {
+        top: calc(var(--wt-tap-min) / -2);
+        width: auto;
+        max-width: calc(100% - var(--wt-space-6));
+        margin-inline: var(--wt-space-3);
+        padding-inline: var(--wt-space-2);
+        background: var(--wt-color-surface);
       }
 
       /* No collapse is possible while an error is showing, so the header stops presenting itself as
@@ -73,7 +92,8 @@ export class WtDisclosure extends LitElement {
       }
 
       .body {
-        padding: var(--wt-space-4);
+        margin-top: calc(var(--wt-tap-min) / -2);
+        padding: 0 var(--wt-space-4) var(--wt-space-4);
       }
     `,
   ];
@@ -107,19 +127,21 @@ export class WtDisclosure extends LitElement {
 
   override render() {
     return html`
-      <button
-        type="button"
-        class="header"
-        aria-expanded=${this.open ? "true" : "false"}
-        aria-controls=${this.bodyId}
-        @click=${this.onToggle}
-      >
-        <span class="heading">${this.heading}</span>
-        ${this.summary ? html`<span class="summary">${this.summary}</span>` : nothing}
-        <wt-icon class="chevron" name="chevron-down"></wt-icon>
-      </button>
-      <div id=${this.bodyId} class="body" ?hidden=${!this.open}>
-        <slot></slot>
+      <div class="section">
+        <button
+          type="button"
+          class="header"
+          aria-expanded=${this.open ? "true" : "false"}
+          aria-controls=${this.bodyId}
+          @click=${this.onToggle}
+        >
+          <span class="heading">${this.heading}</span>
+          ${this.summary ? html`<span class="summary">${this.summary}</span>` : nothing}
+          <wt-icon class="chevron" name="chevron-down"></wt-icon>
+        </button>
+        <div id=${this.bodyId} class="body" ?hidden=${!this.open}>
+          <slot></slot>
+        </div>
       </div>
     `;
   }
