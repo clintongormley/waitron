@@ -53,7 +53,9 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
 
   // beforeEach, not beforeAll: the helper empties every table after each test.
   beforeEach(async () => {
-    // The core parents still carry their own tenant column, so they are seeded with one.
+    // The core parents a booking reaches: a location, and the dining table `bookings.table_id`
+    // points at. `tenants` is the one-row taxpayer record a provisioned database carries; nothing
+    // seeded here references it, and neither `locations` nor `dining_tables` has a tenant column.
     await suite.admin
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });

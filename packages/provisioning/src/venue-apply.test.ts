@@ -15,7 +15,8 @@ import { applyVenue } from "./venue-apply.js";
 //
 // The full manifest is migrated (identity before fiscal; sync before fiscal, which fiscal's SP-3a
 // 0014 capture migration needs): applyVenue
-// now seeds an admin `persons` row, and persons carries a foreign key onto `tenants`.
+// now seeds an admin `persons` row, so identity's set has to be migrated here too. (`persons` no
+// longer has a foreign key onto `tenants` — the column it used to carry is gone.)
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
 });
@@ -370,12 +371,19 @@ describe("applyVenue", () => {
 
   it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error, §5)", async () => {
     // The fiscal footgun: es/ES (or a taxId differing only in letter case or leading/trailing
-    // whitespace) for the SAME business must never mint two permanent, unmergeable tenants (§5).
-    // Internal whitespace is NOT normalized (a distinct identity). planVenue canonicalizes, so both runs
-    // carry the SAME derived id AND the SAME (country, tax_id) unique-index row → the second run's
-    // `on conflict (country, tax_id) do nothing` fires. Proven by DELETION: strip planVenue's
-    // normalization and the second run inserts a distinct row (different id AND different unique-index
-    // key) → the equality reads false and the count reads 2.
+    // whitespace) for the SAME business must never be treated as two different taxpayers (§5).
+    // Internal whitespace is NOT normalized (a distinct identity).
+    //
+    // The count can no longer go above 1 whatever this test does — `tenants.id` is pinned to 1, so
+    // the second run's insert is absorbed and the row it reads back is the first run's. What the
+    // case still detects is the IDENTITY COMPARISON in `venue-apply.ts`'s ensure-tenant deciding
+    // that `es`/`ES` are different taxpayers and refusing the re-run.
+    //
+    // Proven by DELETION on 2026-09-16, and it takes BOTH of the two places that fold case, because
+    // either one alone still folds it: drop `planVenue`'s `.trim().toUpperCase()` on `taxId` AND the
+    // same fold in `venue-apply.ts`'s comparison, and this case fails with
+    // `provisioning.tenant_identity_mismatch` thrown at the second run (1 failed, 25 passed).
+    // Dropping either one on its own leaves all 26 green.
     await applyVenue(planVenue(request("B88888888"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -388,7 +396,7 @@ describe("applyVenue", () => {
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenants
       where upper(country) = 'ES' and upper(tax_id) = 'B88888888'`);
-    expect(tenants.rows[0]?.n).toBe(1); // exactly one tenant across both casings, not two
+    expect(tenants.rows[0]?.n).toBe(1); // the one taxpayer row, unchanged by the second run
   });
 
   it("seeds the admin only once across same-venue re-runs", async () => {

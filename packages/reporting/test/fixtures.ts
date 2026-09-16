@@ -80,7 +80,6 @@ export async function seedTill(
   locationId: string,
   name = `Till ${++tillSeq}`,
 ): Promise<TillId> {
-  // apps/server and the sibling suites still pass the tenant; the parameter goes when they do.
   const till = await db.execute<{ id: string }>(
     sql`insert into tills (location_id, name) values (${locationId}, ${name}) returning id`,
   );

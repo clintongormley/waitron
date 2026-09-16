@@ -1,5 +1,19 @@
 # Design brief — the payments webhook HTTP endpoint
 
+> **2026-09-14 — the webhook URL has no tenant segment any more.** The tenant column was dropped
+> from every table: one database holds one taxpayer, as the single row of `tenants`, so a path
+> segment naming a tenant selects nothing. The route built from this brief was
+> `POST /webhooks/stripe/:tenantId`; today it is `POST /webhooks/stripe`
+> (`apps/server/src/webhook.ts`), and the old shape is not accepted under a second spelling — it
+> returns Hono's 404, pinned by `apps/server/src/webhook.test.ts` ("answers 404 for the old
+> per-taxpayer path"). Everything below about resolving a tenant from the path, `withTenant`,
+> per-tenant secrets and the `payment.webhook_tenant_mismatch` refusal it proposes is the shape at
+> the time of writing; the
+> signing secret is now keyed by purpose alone. **Whoever administers the Stripe account has to edit
+> the endpoint URL by hand** — nothing in this repository can do it for them. The rest of this
+> document is left as it was written. Spec:
+> [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
+
 **Status:** research/design only. No code written. Every "required / only / cannot" below carries a
 `file:line` receipt or is explicitly flagged as an assumption (per `CLAUDE.md` §1). Claims about
 Stripe's own behaviour are marked ASSUMPTION because I could not exercise a live Stripe from here.

@@ -106,7 +106,10 @@ export interface ReaderStatus {
 export interface CardProviderBuildDeps {
   db: Database;
   ring: KeyRing;
-  /** Stamped on the incidents a provider raises (the `incidents` table still carries a tenant). */
+  /** The node this provider is built for. Both card adapters take it at construction
+   * (`packages/payments-stripe/src/card-provider.ts`, `packages/payments-sumup/src/card-provider.ts`)
+   * and hold it on their own options. It names a node, never a taxpayer — `incidents` carries no
+   * tenant column. */
   nodeId: string;
   environment: "preproduction" | "production";
   /** Where a provider raises `payment.pending_outcome_unactionable` (SumUp's resolvePending). */

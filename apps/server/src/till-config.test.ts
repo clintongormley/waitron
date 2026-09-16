@@ -195,7 +195,7 @@ describe("tryLoadTillConfig", () => {
     });
   });
 
-  it("names the FIRST missing variable (in WAITRON_TILL_{TENANT,TILL,NODE,SERIES,LOCATION}_ID order) when several are absent", () => {
+  it("names the FIRST missing variable (in WAITRON_TILL_{TILL,NODE,SERIES,LOCATION}_ID order) when several are absent", () => {
     // NODE and SERIES both absent → NODE is named (it comes first in the list), so an operator fixes
     // them top-down rather than one error at a time from an arbitrary one.
     const error = captureThrow(() =>

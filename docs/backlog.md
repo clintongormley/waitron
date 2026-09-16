@@ -357,10 +357,14 @@ What it left open:
   wrong shadow root too; the final review found it, and the test now reads the painted colour back.
 - **The Products list has the same styling bug, and nobody has fixed it.** #353's QA saw it on the
   real page, in code that branch did not touch (`apps/dashboard/src/widgets/product-list.ts`): product
-  thumbnails render at their full natural size and allergen badges as unstyled text. It was reported,
-  not re-checked, when this row was written. **Next action:** open the Products list in both themes,
-  confirm it, and move those cell styles onto `part=` attributes the way the categories screen now
-  does, with a test that reads a painted size or colour back rather than asking whether a class exists.
+  thumbnails render at their full natural size and allergen badges as unstyled text. Confirmed on
+  the real page again on 2026-09-16, during `feat/drop-tenant-id`'s run-it verification — the
+  thumbnails came out at the picture's own size (256×256 in the development data) instead of the
+  40×40 the screen's own `.thumb` rule asks for. It predates that branch, which does not touch the
+  file. The fixed sibling `apps/dashboard/src/screens/categories-screen.ts` shows the shape to copy
+  (`part=` attributes), and `CLAUDE.md` §3 already names this exact defect. **Next action:** move
+  those cell styles onto `part=` attributes the way the categories screen now does, with a test that
+  reads a painted size or colour back rather than asking whether a class exists.
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
   screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
@@ -1523,6 +1527,16 @@ image constraints under *Detail → Box image*.
   neither plan dies on a `tenants_*` key. **Next action:** decide where the lock belongs — a
   database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
   concurrent provisions against a real database, not with the row-level check alone.
+- **A venue plan giving `dayCutover` as `HH:MM` would make an idempotent re-provision fail**
+  (found 2026-09-16 during `feat/drop-tenant-id`'s run-it verification; it predates that branch,
+  which touches neither line). `packages/provisioning/src/venue-plan.ts` documents the field as
+  `"HH:MM" or "HH:MM:SS"`, but on a re-run `packages/provisioning/src/venue-apply.ts` compares the
+  stored value — read back from a `time` column, so always `HH:MM:SS` — against the plan's string
+  with `===`. A plan carrying `"06:00"` would therefore look like a different venue and be refused
+  with `provisioning.second_venue`. Latent, not live: every fixture and every caller uses the long
+  form, and the short form is not reachable through `dev:setup`, so nothing covers it either.
+  **Next action:** either normalise the value where the plan is built, or narrow the documented type
+  to `HH:MM:SS` — and add the failing case first.
 - **A database ahead of the box's image gets a raw driver error, not the classified one**
   (2026-09-14). `assertNotAhead` (`provisioning.database_ahead`) runs AFTER `ensureInstance`
   migrates (`apps/server/src/node-entry.ts:483-505`), so an ahead database meets the migration first
@@ -1628,6 +1642,28 @@ image constraints under *Detail → Box image*.
     does not say which link to cut. Optional: print one cycle path alongside the group.
 - **A hung real-PG suite leaks its cluster containers** and `pnpm reap` only removes labelled ones
   older than two hours — inspect creation times and ownership, remove only your own.
+- **Nothing notices if the outstanding-sales query stops linking its settlement check to the sale**
+  (found 2026-09-14 while removing the tenant filters; the gap predates that branch). A sale is
+  excluded by `not exists (select 1 from sale_settlements ss where ss.sale_id = s.id)`
+  (`packages/core/src/list-outstanding-sales.ts`). Deleting the `ss.sale_id = s.id` link — which
+  would hide every outstanding sale as soon as any other sale was settled — left
+  `packages/core/src/list-outstanding-sales.test.ts` green when that mutation was run. The query is
+  correct; the test is what cannot tell. **Next action:** add a case holding one settled sale beside
+  one unsettled one, and confirm it goes red with the link removed.
+- **A throwaway script found six comments that described code that was no longer there, and it is
+  not a guard yet** (written 2026-09-14 during the tenant-column removal). It flags a comment whose
+  subject has gone from the lines beneath it; on that branch it found six real ones that a green
+  suite and two review passes had all read past. It is not usable as it stands: 13 of its 19 hits
+  were the legitimate shape where a block comment heads a group of members rather than describing
+  the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
+  header-then-member shape, and its own tests, rather than re-running a scratch script.
+- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
+  The case boots a mirror on an empty database and checks it serves a status surface. Its receipt
+  used to be a foreign key from `persons` to `tenants` — remove the guard and the boot would die on
+  it — and `feat/drop-tenant-id` removed every foreign key to that table, so nothing now says what
+  would break if the guard went. The test's own comment says this plainly and claims nothing more.
+  **Next action:** find a failure the empty database still causes without the guard, and name it;
+  if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
 
@@ -1713,10 +1749,24 @@ turns out to need a design moves to its track.
 
 **Dashboard, till and setup:**
 
-- **The Waitron wordmark is nearly invisible on the dashboard banner in the dark theme** (seen
-  2026-09-14 on the dashboard alerts branch). The banner shows `packages/ui/brand/waitron-lockup.svg`
-  as an image, which last changed in #284; I believe this predates that branch, but it was not
-  checked on `main`.
+- **The Waitron wordmark is invisible on the dashboard banner in the dark theme** (seen 2026-09-14
+  on the dashboard alerts branch; confirmed 2026-09-16 during `feat/drop-tenant-id`'s run-it
+  verification, which also settled that it predates both branches — `packages/ui/brand/waitron-lockup.svg`
+  last changed in #284, on `main`, and neither branch touches it). One file is served to both
+  themes, as an `<img>`, so it cannot follow the theme: the wordmark's letters are painted
+  `#16181d`, and the dark theme's page background is `#101216` — a contrast ratio of 1.06 to 1,
+  where 4.5 is the readable minimum. **Next action:** give the lockup a light and a dark variant, or
+  paint the wordmark with a token by inlining the SVG instead of loading it as an image.
+- **The Sales and takings screen reads zero between midnight and the venue's business-day cutover,
+  while Overview shows the day's sales** (found 2026-09-16 during `feat/drop-tenant-id`'s run-it
+  verification; it predates that branch, which does not touch either screen). The screen seeds its
+  date range from `today()` (`apps/dashboard/src/date-utils.ts`), which is the UTC calendar day, and
+  hands that date straight to the daily close's `businessDay` parameter. But a sale rung at 01:00
+  still belongs to the PREVIOUS business day until the venue's cutover, and Overview asks the server
+  for the business day it computes itself (`currentBusinessDay`, `apps/server/src/report-api.ts`).
+  So the two screens disagree for those few hours every night. `today()`'s own comment already flags the UTC choice and
+  defers the fix. **Next action:** seed the range from the venue's business day, the same value
+  Overview renders, rather than from a UTC date.
 - **An imported configuration no longer carries "already offered a passkey"** (fixed 2026-09-14).
   A configuration transfer no longer lets `passkey_offered_at` travel: it is stripped on export and
   the import refuses a bundle that still carries it, alongside the other person columns the transfer
@@ -1733,7 +1783,10 @@ turns out to need a design moves to its track.
   returns any `code` it finds, so a browser error's old numeric `code` (9 for `NotSupportedError`)
   wins over the fallback and, matching no registered message, shows the generic sentence. The
   passkey button's `catch` (`:672-674`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
-  `codeOf` accepts only a string code (check its other callers first).
+  `codeOf` accepts only a string code (check its other callers first). Seen again on 2026-09-16
+  while running `feat/drop-tenant-id` for real: the red banner is there on a clean first load of the
+  login page, before anyone types anything. It predates that branch — the swallow list it comes from
+  is on `main`.
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled

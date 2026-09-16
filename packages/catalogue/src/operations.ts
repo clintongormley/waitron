@@ -57,8 +57,7 @@ import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declar
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
  * assignment, and the read the till sells from (`listAvailableProducts`).
  *
- * Every operation shares the caller's transaction. The functions that write a core table still
- * take a tenant argument, which nothing reads; it goes with its last caller (apps/server).
+ * Every operation shares the caller's transaction.
  *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
  * snapshots, and the app role holds no DELETE grant (`products: "SIU"` in
