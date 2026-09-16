@@ -185,6 +185,31 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
   expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
 });
 
+it("applies variant-table unit changes and forwards its add-unit action", async () => {
+  const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit, litre],
+    taxChoices: reduced,
+  });
+  const table = variantTable(el)!;
+  const create = vi.fn();
+  el.addEventListener("wt-create-related", create);
+  table.dispatchEvent(
+    new CustomEvent("wt-unit-change", {
+      detail: { unitId: litre.id },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.unitId).toBe(litre.id);
+  table.dispatchEvent(new CustomEvent("wt-add-unit", { bubbles: true, composed: true }));
+  expect(create.mock.calls[0]![0].detail).toEqual({ kind: "unit" });
+});
+
 it("shows each modifier's choices beside its name when attaching and when attached", async () => {
   const modifiers = [
     {
@@ -409,6 +434,30 @@ it("retains a compact-picker allergen selection across an unrelated edit", async
   expect(el.currentValue.allergens).toEqual({ milk: { presence: "contains" } });
 });
 
+it("restores an existing allergen's presence and source when it is removed then re-added", async () => {
+  const milk = { presence: "may_contain" as const, source: "shared fryer" };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, allergens: { milk } },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  for (const allergens of [[], ["milk"]]) {
+    picker.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: { allergens, dietary: [] } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+  }
+  expect(el.currentValue.allergens).toEqual({ milk });
+});
+
 it("shows only attached modifiers, attaches from the combobox, reorders and removes", async () => {
   const choices = [
     { id: "milk", name: { en: "Milk" } },
@@ -567,9 +616,14 @@ it("offers all six product dietary declarations without changing the saved set",
   const dietary = picker.shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>(
     "[data-test=dietary]",
   )!;
-  expect(
-    dietary.options.map((option) => option.value),
-  ).toEqual(["vegan", "vegetarian", "halal", "kosher", "no_meat", "no_fish"]);
+  expect(dietary.options.map((option) => option.value)).toEqual([
+    "vegan",
+    "vegetarian",
+    "halal",
+    "kosher",
+    "no_meat",
+    "no_fish",
+  ]);
   expect(el.currentValue.dietaryDeclarations).toEqual(["vegan", "halal"]);
 });
 

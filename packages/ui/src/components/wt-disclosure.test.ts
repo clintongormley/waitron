@@ -68,9 +68,11 @@ test("summary paints from the muted-text token", async () => {
 
 test("an open disclosure draws one rounded section border with its title on that border", async () => {
   const el = await mount('<wt-disclosure heading="Kitchen" open><p>body</p></wt-disclosure>');
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
   const section = el.shadowRoot!.querySelector<HTMLElement>(".section")!;
   const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
   expect(parseFloat(getComputedStyle(section).borderTopWidth)).toBeGreaterThan(0);
+  expect(getComputedStyle(section).borderTopColor).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(section).borderRadius).not.toBe("0px");
   expect(getComputedStyle(header).position).toBe("relative");
   expect(parseFloat(getComputedStyle(header).top)).toBeLessThan(0);

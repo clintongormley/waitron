@@ -86,15 +86,15 @@ describe("product-list", () => {
 
   it("shows a product price, or the range across its variants", async () => {
     const products = [
-      product({ id: "plain", unitPrice: "12.00", pricingUnit: "weight" }),
+      product({ id: "plain", unitPrice: "12.5", pricingUnit: "weight" }),
       product({
         id: "sized",
         variants: [
           {
             id: "small",
             name: "Small",
-            customerName: null,
-            kitchenName: null,
+            customerName: { es: "Taza pequeña" },
+            kitchenName: "SM",
             image: null,
             unitPrice: "4.00",
             available: true,
@@ -102,8 +102,8 @@ describe("product-list", () => {
           {
             id: "large",
             name: "Large",
-            customerName: null,
-            kitchenName: null,
+            customerName: { es: "Taza grande" },
+            kitchenName: "LG",
             image: null,
             unitPrice: "7.50",
             available: true,
@@ -113,7 +113,7 @@ describe("product-list", () => {
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const rows = [...(await tableRoot(el)).querySelectorAll("tbody tr")];
-    expect(rows[0]!.textContent).toContain("12.00");
+    expect(rows[0]!.textContent).toContain("12.50");
     expect(rows[1]!.textContent).toContain("4.00–7.50");
   });
 
@@ -149,6 +149,22 @@ describe("product-list", () => {
     expect(text).toContain("Salsa, Nota");
   });
 
+  it("shows a visible placeholder instead of blank cells for unresolved category and modifier ids", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          primaryCategoryId: "missing-category",
+          categoryIds: ["missing-category", "missing-secondary"],
+          modifierIds: ["missing-modifier"],
+        }),
+      ],
+      categories: [],
+      modifiers: [],
+    });
+    const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
+    expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(3);
+  });
+
   it("is searchable and expands a parent product to its variant rows", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -159,8 +175,8 @@ describe("product-list", () => {
             {
               id: "small",
               name: "Small",
-              customerName: null,
-              kitchenName: null,
+              customerName: { es: "Taza pequeña" },
+              kitchenName: "SM",
               image: null,
               unitPrice: "2.00",
               available: true,
@@ -168,8 +184,8 @@ describe("product-list", () => {
             {
               id: "large",
               name: "Large",
-              customerName: null,
-              kitchenName: null,
+              customerName: { es: "Taza grande" },
+              kitchenName: "LG",
               image: null,
               unitPrice: "3.00",
               available: true,
@@ -190,6 +206,8 @@ describe("product-list", () => {
     expect(rows.slice(1).map((row) => row.textContent)).toEqual(
       expect.arrayContaining([expect.stringContaining("Small"), expect.stringContaining("Large")]),
     );
+    expect(rows.map((row) => row.textContent).join(" ")).not.toContain("Taza pequeña");
+    expect(rows.map((row) => row.textContent).join(" ")).not.toContain("SM");
   });
 
   it("shows a matching variant and its product while branches are initially collapsed", async () => {
@@ -202,8 +220,8 @@ describe("product-list", () => {
             {
               id: "small",
               name: "Small",
-              customerName: null,
-              kitchenName: null,
+              customerName: { es: "Taza pequeña" },
+              kitchenName: "SM",
               image: null,
               unitPrice: "2.00",
               available: true,
@@ -211,8 +229,8 @@ describe("product-list", () => {
             {
               id: "large",
               name: "Large",
-              customerName: null,
-              kitchenName: null,
+              customerName: { es: "Taza grande" },
+              kitchenName: "LG",
               image: null,
               unitPrice: "3.00",
               available: true,
@@ -231,6 +249,8 @@ describe("product-list", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]!.textContent).toContain("Coffee");
     expect(rows[1]!.textContent).toContain("Small");
+    expect(rows[1]!.textContent).not.toContain("Taza pequeña");
+    expect(rows[1]!.textContent).not.toContain("SM");
   });
 
   it("shows an active/inactive badge carrying text, not colour alone", async () => {

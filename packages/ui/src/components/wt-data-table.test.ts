@@ -364,6 +364,7 @@ test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only"
     rows: treeRows,
     rowKey: (r: TreeRow) => r.id,
     rowParent: (r: TreeRow) => r.parent,
+    initiallyCollapsed: true,
     searchable: true,
     columns: [
       {
@@ -387,6 +388,10 @@ test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only"
   expect(seen.eggs).toBe(false);
   expect(seen.food).toBe(true);
   expect(seen.break).toBe(true);
+  // Search controls visibility while these otherwise-collapsed ancestors hold a match's place. Do
+  // not offer a collapse button whose clicks cannot hide the required matching descendant.
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')).toBeNull();
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
 });
 
 test("searchable renders a search box that narrows rows", async () => {

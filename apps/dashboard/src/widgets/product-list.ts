@@ -90,7 +90,7 @@ export class ProductList extends LitElement {
     const category = this.categories.find((candidate) => candidate.id === id);
     return category
       ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
-      : "";
+      : t("editor.missing_choice");
   }
 
   #otherCategories(product: Product): string {
@@ -106,14 +106,16 @@ export class ProductList extends LitElement {
     return product.modifierIds
       .map((id) => this.modifiers.find((modifier) => modifier.id === id))
       .map((modifier) =>
-        modifier ? resolveContentText(modifier.name, currentLocale(), language) : "",
+        modifier
+          ? resolveContentText(modifier.name, currentLocale(), language)
+          : t("editor.missing_choice"),
       )
       .filter(Boolean)
       .join(", ");
   }
 
   #price(product: Product): string {
-    if (product.variants.length === 0) return product.unitPrice;
+    if (product.variants.length === 0) return Number(product.unitPrice).toFixed(2);
     const prices = product.variants.map(({ unitPrice }) => Number(unitPrice));
     const low = Math.min(...prices).toFixed(2);
     const high = Math.max(...prices).toFixed(2);

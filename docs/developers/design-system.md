@@ -223,7 +223,9 @@ each row, and a sortable column sorts each level of siblings independently rathe
 whole tree into one sort. Leave `rowParent` unset for the ordinary flat table — the two modes share
 every other property. Set `initiallyCollapsed` when parent rows are summaries and children are
 on-demand detail; a branch is seeded closed once, so a later row refresh does not close it again
-after the person expands it.
+after the person expands it. When search keeps an ancestor solely to reveal a matching descendant,
+the table opens that branch without showing an ineffective collapse control; clearing search restores
+the branch's own collapsed state.
 
 ### Remembered, searchable, filterable tables
 

@@ -848,7 +848,8 @@ export class ProductEditor extends LitElement {
           const allergens = Object.fromEntries(
             event.detail.value.allergens.map((code) => [
               code,
-              this.draft.allergens?.[code] ?? { presence: "contains" as const },
+              this.draft.allergens?.[code] ??
+                this.value?.allergens?.[code] ?? { presence: "contains" as const },
             ]),
           );
           this.draft = {

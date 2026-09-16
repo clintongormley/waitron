@@ -816,7 +816,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                               style=${`padding-inline-start: calc(${depth} * var(--wt-space-4))`}
                             >
                               ${
-                                hasChildren
+                                hasChildren && !cellContext.ancestorOnly
                                   ? html`<button
                                       class="tree-toggle"
                                       aria-label=${expanded ? this.collapseLabel : this.expandLabel}
