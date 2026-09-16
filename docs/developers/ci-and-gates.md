@@ -94,6 +94,29 @@ run verifies the narrowing, and a root-only or docs-only merge does not get one.
 `changes` job's `code`, `scope` and `packages` outputs before treating a green PR as evidence
 about the workspace. Design: `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
 
+### Two pushes to `main` must never share a concurrency group
+
+A run that is still WAITING for its group is not protected by `cancel-in-progress: false`. GitHub's
+own words, from its Actions concurrency page: _"When you limit concurrency, by default only one run
+can be pending in a concurrency group—any additional pending runs cancel the previous one."_ So the
+newer arrival evicts the one already in line, and `cancel-in-progress` never comes into it — that
+setting governs a run that has already started.
+
+Cost, on 2026-09-16. PR #381 merged at 13:46:04 and its run took eight minutes. PR #380 merged at
+13:49:38 and, sharing the group, went pending behind it. The `docs(backlog)` commit that follows
+every merge was pushed at 13:50:31, and 13:50:33 the pending run was cancelled. Evidence it never
+started: `gh api repos/:owner/:repo/actions/runs/35104425392/jobs` returns an empty job list, and
+the backlog commit's own jobs start at 13:54:09, three seconds after #381's run ends — the group
+was serialising them. The backlog commit's run then completed green, but it is documentation, so
+`changes.code` was false and both `image` and `publish` were skipped. `:main` stayed on
+`sha-d0e0923`, the #381 merge, and the printer work in #380 was in no image. The §2 unfiltered main
+suite for #380 never ran either. Eight `main` pushes had been discarded this way by that date, most
+of them hidden because the next code merge republished.
+
+The fix is separation, not a cancellation policy: the group carries `github.sha` on a push, so each
+push is alone in its group, and a pull request keeps the ref so a force-push still supersedes the
+run it made stale. Guard: `scripts/ci-workflow.test.mjs`, which reads the block as text.
+
 ### A cheap job can still be the critical path
 
 `mutation-verifactu` was ungated because a mutant is cheap; on run 30650089655 it was 3m26s of a

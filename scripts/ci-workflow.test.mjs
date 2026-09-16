@@ -385,6 +385,27 @@ function browserPackages() {
 // assertions — otherwise deleting the `timeout` or a throw leaves the suite green (CLAUDE.md §4,
 // "prove a guard by deletion"). A fake `run` exercises each branch deterministically; one real case
 // proves spawnSync's `timeout` genuinely kills a hung child.
+/**
+ * The workflow-level `concurrency:` block, as two strings: the group expression and the
+ * cancel-in-progress expression. Throws rather than returning blanks, because an extraction that
+ * silently found nothing would make the cases below pass against an empty string.
+ */
+const concurrency = (() => {
+  const at = lines.indexOf("concurrency:");
+  if (at === -1) throw new Error("ci.yml has no top-level `concurrency:` key");
+
+  const body = [];
+  for (let i = at + 1; i < lines.length && /^(\s|$)/.test(lines[i]); i++) body.push(lines[i]);
+
+  const valueOf = (key) => {
+    const line = body.find((entry) => entry.trimStart().startsWith(`${key}:`));
+    if (line === undefined) throw new Error(`ci.yml's concurrency block has no \`${key}:\``);
+    return line.slice(line.indexOf(":") + 1).trim();
+  };
+
+  return { group: valueOf("group"), cancelInProgress: valueOf("cancel-in-progress") };
+})();
+
 describe("pnpmLs (the subprocess guard)", () => {
   it("returns parsed stdout on a clean exit", () => {
     const ok = () => ({
@@ -432,6 +453,38 @@ describe("pnpmLs (the subprocess guard)", () => {
     const hang = () =>
       spawnSync("node", ["-e", "setTimeout(() => {}, 60000)"], { encoding: "utf8", timeout: 500 });
     expect(() => pnpmLs(["ls"], hang)).toThrow(/failed to run/);
+  });
+});
+
+describe("the workflow's concurrency group", () => {
+  it("was parsed at all", () => {
+    // The guard the two cases below lean on: a block that stopped being found would throw above
+    // rather than leave them asserting on nothing.
+    expect(concurrency.group).not.toBe("");
+    expect(concurrency.cancelInProgress).not.toBe("");
+  });
+
+  // The property: two pushes to `main` must never share a concurrency group.
+  //
+  // GitHub allows only ONE run per group to be PENDING — "any additional pending runs cancel the
+  // previous one" (GitHub docs, Actions / Concurrency). So keeping `cancel-in-progress` false on
+  // `main` did not protect a main push at all: it protects a run that is already RUNNING, and the
+  // run that gets lost is the one still waiting its turn. Cost: the push that merged #380 queued
+  // behind #381's run, was evicted 53 seconds later by the docs commit that followed it, and never
+  // ran — so no image was published for it and the unfiltered main suite CLAUDE.md §2 relies on
+  // never ran either. Eight main pushes had been thrown away this way by 2026-09-16.
+  //
+  // This guard reads TEXT: it pins how the expression is SPELLED, not what GitHub evaluates it to.
+  it("gives every push its own group, so one push to `main` cannot displace another", () => {
+    expect(concurrency.group).toContain("github.sha");
+    expect(concurrency.group).toMatch(/github\.event_name\s*==\s*'push'/);
+  });
+
+  // The other half, kept: a pull request's runs DO share a group, so a force-push supersedes the
+  // run it made stale instead of paying for both.
+  it("still lets a pull request's newer run supersede its own older one", () => {
+    expect(concurrency.group).toContain("github.ref");
+    expect(concurrency.cancelInProgress).toMatch(/github\.event_name\s*!=\s*'push'/);
   });
 });
 

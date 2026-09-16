@@ -40,18 +40,21 @@ on:
   pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Cancel superseded runs on feature branches / PRs (a force-push should supersede its own old run,
-  # saving CI minutes) but NEVER on `main`. The push-to-`main` run is the UNFILTERED full-suite
-  # verification CLAUDE.md §2 relies on to catch what a scoped PR run missed (a cross-package guard, a
-  # package outside the PR's scope). Our workflow lands a `docs(backlog)` commit directly to `main`
-  # within ~3min of every code merge, and the parallel feature track pushes too; with unconditional
-  # `cancel-in-progress: true` that next `main` push cancelled the code merge's run mid-`test-light`
-  # every time (verified: #123's `6b97612` run was cancelled 3m30s in, test-light/test-heavy never
-  # finished; the superseding docs commit's own run skips the shards), so §2's safety net never
-  # actually completed. Keeping `main` runs alive costs at most two concurrent full runs when two
-  # `main` pushes land close together — cheap next to a verification that never runs.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  # ONE GROUP PER COMMIT on a push; one per ref on a pull request.
+  #
+  # Every push to `main` must get its own run, because that run is both the unfiltered full-suite
+  # verification CLAUDE.md §2 relies on and the only thing that publishes the box image. Two pushes
+  # sharing a group cannot give that, whatever `cancel-in-progress` says: GitHub allows only one
+  # PENDING run per group, and a newer arrival cancels the one already waiting. `cancel-in-progress`
+  # governs a run that has already STARTED, so it does not reach that case at all — the merge that
+  # queues behind the previous merge is thrown away by the docs commit that lands a minute later, and
+  # nothing about it is red. Keeping the pushes in separate groups is what actually prevents it, and
+  # it costs at most a few concurrent full runs when pushes land together.
+  #
+  # A pull request still collapses onto its ref, so a force-push supersedes the run it made stale.
+  # Guard: `scripts/ci-workflow.test.mjs`, which reads this block as TEXT.
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
