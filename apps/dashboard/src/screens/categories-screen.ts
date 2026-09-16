@@ -29,6 +29,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
 
 const MODE_KEY = "waitron.categories.mode";
+const OTHER_CATEGORIES_PREVIEW_LIMIT = 3;
 type ViewMode = "tree" | "flat";
 
 @customElement("dashboard-categories-screen")
@@ -478,9 +479,10 @@ export class CategoriesScreen extends LitElement {
   }
   #otherCategoriesCell(product: Product) {
     const others = this.#otherCategories(product);
-    return others.length
-      ? others.map((category) => this.#lozenge(category))
-      : html`<span part="muted" aria-hidden="true">—</span>`;
+    if (others.length === 0) return html`<span part="muted" aria-hidden="true">—</span>`;
+    if (others.length > OTHER_CATEGORIES_PREVIEW_LIMIT)
+      return t("categories.other_categories_count").replace("{count}", String(others.length));
+    return others.map((category) => this.#lozenge(category));
   }
   #nameSortValue(product: Product): string {
     return product.name;
