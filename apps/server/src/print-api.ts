@@ -4,7 +4,7 @@ import { createPrinterProbes } from "./printer-probes.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, resolveActiveLocale } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import {
   asAppUser,
@@ -40,7 +40,7 @@ import {
   type CreatePrinterInput,
   type UpdatePrinterInput,
 } from "@waitron/printing";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { authorizeManager, resolveManagementSession, type Permission } from "@waitron/identity";
 import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import {
@@ -60,6 +60,7 @@ import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
+import { resolveLoginLocale } from "./login-locale.js";
 
 /**
  * The deployment holds one taxpayer per database. Everything `mountPrintApi` needs. `cfg` is the FULL
@@ -87,7 +88,7 @@ export interface PrintApiDeps {
    * HTTP status, not the code string, so there is no per-surface throttle code to mint.
    */
   enrolRateLimiter?: EnrolRateLimiter;
-  /** The venue's default language (`readVenueLocale`, resolved once at boot): the test page's captions. */
+  /** Fallback language for test instructions when neither the user nor the browser has a preference. */
   venueLocale: SupportedLocale;
 }
 
@@ -814,14 +815,16 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      // A dashboard DIAGNOSTIC (design §6): enqueue the setup test page (`test-page.ts`) on this printer
-      // via the same never-block outbox path a fire/sale uses — the agent runtime delivers it
-      // asynchronously, so a broken/offline printer can never make this request hang (CLAUDE.md §5).
-      // `enqueuePrintJob`'s own DB-only pre-check 404s an absent id as `printer.not_found`; no new code
-      // lives here.
-      const result = await gated(sessionId, (tx) =>
-        enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale: deps.venueLocale })),
-      );
+      // Use the dashboard's language resolution for the operator's instructions. Delivery stays
+      // asynchronous through the print outbox, independently of the printer's connection.
+      const result = await gated(sessionId, async (tx) => {
+        const session = await resolveManagementSession(tx, sessionId, { touch: false });
+        const locale = resolveActiveLocale(
+          session.locale,
+          resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+        );
+        return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
+      });
       // 202 Accepted: the job is QUEUED for asynchronous delivery, not printed within the request.
       return c.json(result, 202);
     }),

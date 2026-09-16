@@ -379,3 +379,13 @@ text, except where marked.
 | No status or ID command returns the paper width              | Epson ESC/POS Command Reference, `GS I` and `DLE EOT` pages (via the Wayback Machine)                       | research agent's reading; not re-checked by me                                                               |
 | The QR must be 30–40 mm at error-correction level M          | Orden HAC/1177/2024 art. 21.1, quoted in `docs/compliance/verifactu-findings.md`                             | "deberá tener un tamaño entre 30x30 y 40x40 milímetros … se empleará el nivel M (medio)"                     |
 | Unicode mapping files exist at the cited addresses           | unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/CP850.TXT and …/WINDOWS/CP1252.TXT                             | both returned HTTP 200 on 2026-09-14                                                                         |
+
+## Follow-up, 2026-09-16
+
+The [printer setup refinements](2026-09-16-printer-setup-refinements.md) replace the inline test
+questions with a separate dialog, add a naming step, remove the row's test action, and explicitly
+cancel Kanji mode for configured single-byte text. The original design above records the earlier UI.
+
+Printed test instructions now follow the requesting user's dashboard language (saved preference,
+then browser, then venue), rather than always using the venue default. The QR caption explains
+which square to measure and that scanning is unnecessary. See the 2026-09-16 follow-up above.

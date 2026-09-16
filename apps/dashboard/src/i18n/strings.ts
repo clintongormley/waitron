@@ -203,8 +203,8 @@ export const en = {
   "printers.probe_host_invalid": "Enter an IPv4 or IPv6 address without a URL, port or zone suffix",
   "printers.probe_hint":
     "If your printer is on another network, enter its IP address. The usual port is 9100. Your print agents must be able to reach that network.",
-  "printers.probe_action": "Check address",
-  "printers.probe_waiting": "Waiting for a print agent to reach this address…",
+  "printers.probe_action": "Connect",
+  "printers.probe_waiting": "Connecting to printer",
   "printers.probe_found":
     "Address reachable. Choose Add below, then send a test print to check the printer.",
   "printers.probe_missing":
@@ -636,7 +636,7 @@ export const en = {
   "printers.disable": "Disable",
   "printers.scan_agents": "Scan for print agents",
   "printers.agent_setup_hint":
-    "The primary box registers its print agent automatically. Use this dialog for a separate print agent, such as one running on a tablet. Automatic registration on mirror nodes is not available yet.",
+    "Use a separate print agent to reach printers connected to another computer. The primary box adds its own agent automatically.",
   "printers.title": "Printer configuration",
   "printers.agents_title": "Print Agents",
   "printers.no_agents": "No print agents registered yet",
@@ -683,10 +683,26 @@ export const en = {
   "printers.character_set_pc858": "Multilingual with euro (PC858)",
   "printers.character_set_plain": "Plain letters, no accents",
   "printers.test_page": "Print test page",
-  "printers.test_page_hint": "Not sure? Print the test page and answer the questions below.",
+  "printers.test_page_hint": "Not sure? Print a test page to check these settings.",
   "printers.test_line_fits": "Which is the longest line whose | is on the same row?",
   "printers.test_line_reads": "Which is the first line that reads correctly?",
   "printers.test_answer_choose": "Choose an answer",
+  "printers.test_dialog_title": "Check the printed page",
+  "printers.test_dialog_hint":
+    "Collect the test page from the printer, then answer these questions. Apply your answers and save the printer to keep the settings.",
+  "printers.test_apply": "Apply answers",
+  "printers.added": "Added {name}.",
+  "printers.refresh_failed": "Could not refresh the printer information.",
+  "printers.refresh_lists": "Refresh lists",
+  "printers.test_qr_help":
+    "Use a ruler to measure the black square of the QR code marked “For A or C” or “For B or D”, matching your answer above. Exclude the white border. It should be 30–40 mm wide. You do not need to scan it. If it is outside that range, change the print resolution in the printer settings: too small means 203 dpi; too large means 180 dpi.",
+  "printers.test_plain_hint":
+    "Plain letters is a fallback. If neither accented line matches, keep the test page to check the printer’s character mode and supported tables.",
+  "printers.agent_step_open":
+    "On the computer connected to your printer, open the print agent’s setup page at http://localhost:9110.",
+  "printers.agent_step_address": "Enter this Waitron server address on that page:",
+  "printers.agent_step_match":
+    "When the agent appears below, choose {action} and match the number shown on its setup page.",
   "printers.add_printer": "Add a printer",
   "printers.scan": "Scan for printers",
   "printers.scan_loading": "Scanning…",
@@ -697,7 +713,6 @@ export const en = {
   "printers.seen_at": "Seen on {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Pair a Bluetooth printer first on the box's setup page (port 9110); it then appears below.",
-  "printers.test_print": "Test print",
   "printers.jobs_title": "Print Queue",
   "printers.no_jobs": "No print jobs recorded yet",
   "printers.job_attempts": "Failed attempts",
@@ -1474,8 +1489,8 @@ export const es: Record<StringKey, string> = {
     "Introduce una dirección IPv4 o IPv6 sin URL, puerto ni sufijo de zona",
   "printers.probe_hint":
     "Si tu impresora está en otra red, introduce su dirección IP. El puerto habitual es 9100. Tus agentes de impresión deben poder acceder a esa red.",
-  "printers.probe_action": "Comprobar dirección",
-  "printers.probe_waiting": "Esperando a que un agente de impresión acceda a esta dirección…",
+  "printers.probe_action": "Conectar",
+  "printers.probe_waiting": "Conectando con la impresora",
   "printers.probe_found":
     "Dirección accesible. Elige Añadir abajo y envía una impresión de prueba para comprobar la impresora.",
   "printers.probe_missing":
@@ -1880,7 +1895,7 @@ export const es: Record<StringKey, string> = {
   "printers.disable": "Desactivar",
   "printers.scan_agents": "Buscar agentes de impresión",
   "printers.agent_setup_hint":
-    "El equipo principal registra su agente de impresión automáticamente. Usa este diálogo para un agente independiente, como el de una tableta. El registro automático en nodos espejo aún no está disponible.",
+    "Usa otro agente de impresión para acceder a las impresoras conectadas a otro ordenador. El equipo principal añade su propio agente automáticamente.",
   "printers.title": "Configuración de impresoras",
   "printers.agents_title": "Agentes de impresión",
   "printers.no_agents": "Aún no hay agentes de impresión registrados",
@@ -1928,10 +1943,26 @@ export const es: Record<StringKey, string> = {
   "printers.character_set_plain": "Letras sin acentos",
   "printers.test_page": "Imprimir página de prueba",
   "printers.test_page_hint":
-    "¿No está seguro? Imprima la página de prueba y responda a las preguntas de abajo.",
+    "¿No estás seguro? Imprime una página de prueba para comprobar estos ajustes.",
   "printers.test_line_fits": "¿Cuál es la línea más larga cuyo | queda en la misma fila?",
   "printers.test_line_reads": "¿Cuál es la primera línea que se lee correctamente?",
   "printers.test_answer_choose": "Elija una respuesta",
+  "printers.test_dialog_title": "Comprueba la página impresa",
+  "printers.test_dialog_hint":
+    "Recoge la página de prueba y responde a estas preguntas. Aplica tus respuestas y guarda la impresora para conservar los ajustes.",
+  "printers.test_apply": "Aplicar respuestas",
+  "printers.added": "Se ha añadido {name}.",
+  "printers.refresh_failed": "No se pudo actualizar la información de las impresoras.",
+  "printers.refresh_lists": "Actualizar listas",
+  "printers.test_qr_help":
+    "Mide con una regla el cuadrado negro del código QR marcado «Para A o C» o «Para B o D», según tu respuesta anterior. No incluyas el borde blanco. Debe medir entre 30 y 40 mm de ancho. No necesitas escanearlo. Si queda fuera de ese intervalo, cambia la resolución en los ajustes de la impresora: demasiado pequeño indica 203 ppp; demasiado grande indica 180 ppp.",
+  "printers.test_plain_hint":
+    "Las letras sin acentos son una alternativa. Si ninguna línea con acentos coincide, conserva la página para comprobar el modo de caracteres y las tablas compatibles.",
+  "printers.agent_step_open":
+    "En el ordenador conectado a la impresora, abre la página de configuración del agente en http://localhost:9110.",
+  "printers.agent_step_address": "Introduce esta dirección del servidor Waitron en esa página:",
+  "printers.agent_step_match":
+    "Cuando aparezca el agente abajo, elige {action} y selecciona el número que muestra su página de configuración.",
   "printers.add_printer": "Añadir impresora",
   "printers.scan": "Buscar impresoras",
   "printers.scan_loading": "Buscando…",
@@ -1943,7 +1974,6 @@ export const es: Record<StringKey, string> = {
   "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Empareja primero una impresora Bluetooth en la página de configuración del equipo (puerto 9110); después aparecerá abajo.",
-  "printers.test_print": "Imprimir prueba",
   "printers.jobs_title": "Cola de impresión",
   "printers.no_jobs": "Aún no hay trabajos de impresión",
   "printers.job_attempts": "Intentos fallidos",

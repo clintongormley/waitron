@@ -60,7 +60,13 @@ export function createRequest(
       headers.set("x-waitron-live", "1");
       init.headers = headers;
     }
-    const res = await fetchImpl(baseUrl + path, init);
+    let res: Response;
+    try {
+      res = await fetchImpl(baseUrl + path, init);
+    } catch {
+      opts.onError?.("connection.failed");
+      throw { code: "connection.failed" };
+    }
     if (!res.ok) {
       // The body is untrusted: a route that is gone answers Hono's own `404 Not Found` as
       // `text/plain`, on which `res.json()` throws; and the literal `null` is valid JSON, so a bare

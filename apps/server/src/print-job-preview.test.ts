@@ -252,3 +252,9 @@ describe("character sets", () => {
     });
   });
 });
+
+it("consumes single-byte mode selection without hiding the following accented text", () => {
+  const result = previewPrintJob(Uint8Array.of(0x1b, 0x74, 16, 0x1c, 0x2e, 0xe9));
+  expect(result.text).toBe("é");
+  expect(result.unsupported).toBe(false);
+});

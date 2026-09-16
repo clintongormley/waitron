@@ -78,6 +78,15 @@ Historical docs record what was true when written. Add a dated pointer rather th
 
 ## The development stack from a worktree
 
+Use localhost for laptop development. Development servers (`WAITRON_ENV=dev`) and loopback-only
+HTTP listeners do not advertise the appliance's `waitron.local` name. On 2026-09-16,
+`dns-sd -G v4 waitron.local` returned both the laptop (`192.168.10.101`) and box (`192.168.10.10`)
+while the dashboard reported refused connections. After the laptop server stopped, the same probe
+returned only the box. `apps/server/src/mdns.test.ts` covers the advertisement guard, and
+`apps/server/src/boot.test.ts` checks a development HTTP listener still serves requests without
+logging `mdns.responding`. Full probe record:
+[printer setup incident](../superpowers/specs/2026-09-16-printer-setup-refinements.md).
+
 **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`** (`~/workspace/tools`),
 never with a bare `pnpm dev*`. The dev Postgres is ONE compose service shared by every checkout, and

@@ -1,5 +1,6 @@
 import multicastDns from "multicast-dns";
 import type { Logger } from "./logger.js";
+import { isLoopbackHost } from "./primary-url.js";
 
 /**
  * A thin mDNS responder so a freshly-installed box answers to `waitron.local` on the LAN without a
@@ -41,6 +42,8 @@ export interface MdnsResponder {
 }
 
 export interface MdnsDeps {
+  devMode: boolean;
+  httpHost: string;
   /** The name to answer for, e.g. "waitron.local". */
   hostname: string;
   /** Current box IPv4s, read per query (not cached) so a DHCP change is reflected. */
@@ -59,12 +62,17 @@ export function buildMdnsAnswers(hostname: string, addresses: string[]): MdnsAns
 }
 
 /**
- * Start answering mDNS A queries for `hostname`. On each `"query"`, if any question asks for our
+ * Outside development, answer mDNS A queries for a non-loopback HTTP listener. On each `"query"`, if any question asks for our
  * hostname by an A or ANY record AND we currently have at least one address, respond with one A
  * record per address; otherwise stay silent (an empty answer set is never sent — mDNS treats a
  * responder that answers with nothing as noise). `stop()` destroys the socket once and is idempotent.
  */
 export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
+  // Development must not compete with a real box for its LAN name. A loopback-only listener
+  // cannot serve the LAN addresses advertised here either.
+  if (deps.devMode || isLoopbackHost(deps.httpHost)) {
+    return { stop: () => Promise.resolve() };
+  }
   const { hostname, getAddresses, log } = deps;
   // Only ever runs on the real-`multicast-dns` default path — every unit test injects `makeSocket` —
   // so it is left to the `apps/server` coverage aggregate rather than pinned by a real-socket unit
@@ -82,14 +90,7 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
     socket.respond({ answers });
   });
 
-  // mDNS advertisement is NON-load-bearing — a device still reaches the box by its LAN IP whether or
-  // not `waitron.local` resolves — so a socket failure must never crash boot. The real
-  // `multicast-dns` instance emits `'error'` only on a BIND failure (EADDRINUSE/EACCES), and an
-  // unhandled `'error'` on an EventEmitter is rethrown by Node and takes the process down, so this
-  // handler logs and swallows it. A no-multicast-route `addMembership` failure (the common case in a
-  // container, seen in some CI) emits `'warning'` instead, which has no listener here — it is harmless
-  // and never throws. Log it and swallow it: the box keeps trading, just without name-based discovery
-  // on that host.
+  // A failed discovery socket must not stop the HTTP server from serving its IP address.
   socket.on("error", (err) => {
     log("warn", "mdns.socket_error", { message: err.message });
   });

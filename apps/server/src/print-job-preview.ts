@@ -158,6 +158,10 @@ export function previewPrintJob(
       offset += 2;
       continue;
     }
+    if (byte === 0x1c && command === 0x2e) {
+      offset += 2;
+      continue;
+    }
     if (byte === 0x1b && command === 0x74) {
       if (!available(3)) break;
       const table = payload[offset + 2];

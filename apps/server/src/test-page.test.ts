@@ -62,13 +62,19 @@ describe("formatTestPage", () => {
     expect(lines).toContain("3: Cafe jamon N ?! c u 5 EUR");
   });
 
-  it("prints its captions in the venue language, as ASCII", () => {
+  it("prints its captions in the requested language, as ASCII", () => {
     const es = printedLines(formatTestPage({ locale: "es-ES" })).join(" ");
     const en = printedLines(formatTestPage({ locale: "en-GB" })).join(" ");
     expect(es).toContain("Cual es la linea mas larga");
     expect(es).not.toContain("Which");
     expect(en).toContain("Which is the longest line");
     expect(en).not.toContain("Cual");
+    expect(en).toContain("Measure the black square");
+    expect(en).toContain("Ignore the white border");
+    expect(en).toContain("No need to scan");
+    expect(es).toContain("Mida el cuadrado negro");
+    expect(es).toContain("Ignore el borde blanco");
+    expect(es).toContain("No hace falta escanear");
     const bytes = formatTestPage({ locale: "es-ES" });
     const beforeFirstImage = bytes.subarray(0, bytes.indexOf(0x1d));
     expect([...beforeFirstImage].every((b) => b < 0x80)).toBe(true);

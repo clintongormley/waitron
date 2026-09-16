@@ -537,6 +537,9 @@ before treating an implementation as a rule violation.
 - **Before a PR, run focused behavior checks, then `/finish-branch`.** Let the normal hook run
   the §2 local checks once and CI run mandatory package tests and coverage. Verify the current-head
   CI scope and results; no whole-workspace local run is required solely to finish the branch.
+- **Development and loopback-only servers must not advertise the appliance's LAN name.** A laptop
+  and box both answered `waitron.local`, sending some lookups to the laptop. Guard:
+  `apps/server/src/mdns.test.ts`; receipt in [workflow-guide.md](docs/developers/workflow-guide.md).
 - **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
   directory, so an unqualified `docker compose up` starts a SECOND `db` on the same port.

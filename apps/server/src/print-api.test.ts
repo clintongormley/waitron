@@ -1303,6 +1303,54 @@ describe("mountPrintApi — management: printers CRUD", () => {
 });
 
 describe("mountPrintApi — management: test-print", () => {
+  it.each([
+    { personLocale: "en-GB", browserLocale: "es", venueLocale: "es-ES", expected: "en-GB" },
+    { personLocale: "es-ES", browserLocale: "en", venueLocale: "en-GB", expected: "es-ES" },
+    {
+      personLocale: null,
+      browserLocale: "en-US,en;q=0.9",
+      venueLocale: "es-ES",
+      expected: "en-GB",
+    },
+    {
+      personLocale: null,
+      browserLocale: "es-MX,es;q=0.9",
+      venueLocale: "en-GB",
+      expected: "es-ES",
+    },
+  ] as const)(
+    "prints instructions in the user's language: $expected ($personLocale / $browserLocale)",
+    async ({ personLocale, browserLocale, venueLocale, expected }) => {
+      const app = mountApp({ venueLocale });
+      const printerId = await createNetworkPrinter(app, "10.0.0.42", 9100, "Language test");
+      const sessionId = managerCookie.split("=")[1]!;
+      const setLocale = (locale: string | null) =>
+        suite.db.execute(sql`
+      update persons set locale = ${locale}
+      where id = (
+        select person_id from management_sessions where id = ${sessionId}
+      )`);
+      await setLocale(personLocale);
+      try {
+        const res = await app.request(`/management-api/printers/${printerId}/test-print`, {
+          method: "POST",
+          headers: { cookie: managerCookie, "accept-language": browserLocale },
+        });
+        expect(res.status).toBe(202);
+        const { jobId } = (await res.json()) as { jobId: string };
+        const [job] = await suite.db
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(eq(printJobs.id, jobId));
+        expect([...new Uint8Array(job!.payload)]).toEqual([
+          ...formatTestPage({ locale: expected }),
+        ]);
+      } finally {
+        await setLocale(null);
+      }
+    },
+  );
+
   it("enqueues a known test payload for the printer and returns { jobId } (202)", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
@@ -1340,7 +1388,7 @@ describe("mountPrintApi — management: test-print", () => {
   });
 
   it.each(["es-ES", "en-GB"] as const)(
-    "queues the setup test page in the venue language (%s)",
+    "falls back to the venue language when user and browser have no preference (%s)",
     async (venueLocale) => {
       const app = mountApp({ venueLocale });
       const printerId = await createNetworkPrinter(app, "10.0.0.41", 9100, `Prueba ${venueLocale}`);

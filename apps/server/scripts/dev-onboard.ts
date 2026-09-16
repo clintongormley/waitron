@@ -154,7 +154,7 @@ async function main(): Promise<void> {
     "setup boot mints a self-signed CA + leaf into WAITRON_STATE_DIR (default apps/server/src/state,",
   );
   console.log(
-    "gitignored) and serves HTTPS from it, advertising `waitron.local` over mDNS. Verify manually with:",
+    "gitignored) and serves HTTPS from it. Development does not advertise `waitron.local`. Verify with:",
   );
   console.log("");
   console.log("  curl -sk https://127.0.0.1:8080/setup-api/status");
@@ -167,9 +167,6 @@ async function main(): Promise<void> {
   );
   console.log(
     '  curl -sk -o /dev/null -w "%{http_code}\\n" https://127.0.0.1:8080/setup/trust   # 200 (trust page)',
-  );
-  console.log(
-    "  # mDNS (macOS): dns-sd -q waitron.local   |   (Linux) avahi-resolve -n waitron.local",
   );
 }
 

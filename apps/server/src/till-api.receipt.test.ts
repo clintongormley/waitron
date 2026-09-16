@@ -978,7 +978,8 @@ describe("payment slip persisted capture facts", () => {
     expect(res.status).toBe(200);
     const [job] = await printJobsFor(cfg);
     const payload = new Uint8Array(job!.payload);
-    expect([...payload.subarray(0, 3)]).toEqual([0x1b, 0x40, 0x4a]); // ESC @, then "J": no table selection
+    // Reset and single-byte mode, then "J": plain text still selects no character table.
+    expect([...payload.subarray(0, 5)]).toEqual([0x1b, 0x40, 0x1c, 0x2e, 0x4a]);
     const lines = printedLines(payload);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
     expect(lines.join("\n")).toContain("EUR");

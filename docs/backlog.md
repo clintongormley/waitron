@@ -960,10 +960,18 @@ The Edit-printer dialog now asks for a printer's paper width (58mm or 80mm), pri
 and correction slip all format to the column count and dot pitch those settings imply, instead of
 the old fixed 42-column, 203dpi assumption. The fiscal QR on the receipt is now a raster image whose
 dot size is chosen per receipt to land as close as possible to the legal 30-40mm printed size,
-rather than the printer's own built-in QR command. A Test print button on the printer row sends a
-page exercising all three settings, so an operator can check a real printout before trusting a
-printer. [Design](superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md) ·
+rather than the printer's own built-in QR command. Print test page in the printer editor sends a
+page exercising all three settings and opens a dialog for its answers. [Design](superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md) ·
 [Plan](superpowers/plans/2026-09-14-printer-paper-resolution-and-character-set.md).
+
+**Setup refinements (2026-09-16, branch `printers`).** Add opens a prefilled naming dialog;
+identifiers are read-only; test answers use radio buttons with QR measuring instructions. Successful
+addition and refresh failures have separate feedback. Printed test instructions use the user's
+language. Development servers no longer advertise `waitron.local`; a laptop/box name collision was
+confirmed during investigation. Configured text initialization now cancels
+Kanji mode before sending single-byte text, as documented by the NT-806 manual. **The NT-806 needs
+another physical test page** before attributing its earlier garbled accents to that mode.
+[Design and incident evidence](superpowers/specs/2026-09-16-printer-setup-refinements.md).
 
 - **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
   whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm

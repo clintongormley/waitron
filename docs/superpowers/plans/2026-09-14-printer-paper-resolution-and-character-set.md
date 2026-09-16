@@ -3865,3 +3865,9 @@ Files run: `charset.test.ts` (12), `layout.test.ts` (23), `escpos.test.ts` exist
 Mutation checks run (each made the named tests fail, then was reverted): the earlier `wrapText`/`labelAmountLines` draft (12 layout failures); `<=` in the tie rule; removing the character-set fallback line; swapping two code page 858 entries; level L in `qrModules`; transposed `qrModules`; no 0x80–0x9F widening, no `ESC @` reset, and accepting table 0 in the decoder; resolution ignored, amount measured before preparing, no item indent, and a fixed 42 columns in `formatReceipt`; the slip keeping `Intl`'s no-break space; the original kitchen formatter; captions at 42 columns, line 2 through table 16, Spanish-only captions and a 4-square B/D border on the test page.
 
 Not run while revising (they need PostgreSQL, the dashboard's browser mode, or the real routes): Tasks 7–9, the database parts of 12–17, and 18–21.
+
+
+**2026-09-16 follow-up:** Printed test instructions now follow the requesting user's dashboard
+language (saved preference, then browser, then venue). The test dialog and setup forms were also
+refined. [Design](../specs/2026-09-16-printer-setup-refinements.md) ·
+[Implementation and verification](2026-09-16-printer-setup-refinements.md).

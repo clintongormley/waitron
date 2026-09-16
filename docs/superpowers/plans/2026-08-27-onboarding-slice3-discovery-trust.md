@@ -527,3 +527,8 @@ Make the discovery surface exercisable in the local onboarding flow and record s
 **4. Collision check (slice 2b is live in a sibling worktree):** this slice never edits `setup-api.ts`. Its only shared-file edits are in `boot.ts`: the shared-prefix mDNS start (new lines, away from 2b's setup-branch route work), the `makeStartedServer` signature + both call sites (a shared helper 2b does not touch, plus one added arg at each call), and one `mountDiscovery(...)` line before `mountSetup` in the setup branch (adjacent to 2b's new POST routes). Expect small, mechanical conflicts at the setup-branch `mountDiscovery` line and the setup-branch `makeStartedServer` call; whoever lands second re-adds one argument and one mount line. `package.json`/`pnpm-lock.yaml` also both change — resolve by re-running `pnpm install`.
 
 **Risk note carried into the fix/review loop:** Task 4 edits the fiscal server's boot. The regression guards are the trading-mode full-boot test (unchanged `/api/*`, `/health`, SPAs; new `/setup-api/discovery` → 404) and the mDNS-stopped-on-close assertion. The whole-branch (finish-branch) review must confirm the trading path is byte-for-byte as before apart from the mDNS start/stop, and that `multicast-dns`/`qrcode` moving into runtime deps does not perturb the bundle (`bundle-smoke` is CI-only — watch it).
+
+
+**2026-09-16 follow-up:** Development and loopback-only listeners now skip mDNS advertisement to
+avoid competing with a real box for `waitron.local`.
+[Incident and fix](../specs/2026-09-16-printer-setup-refinements.md).

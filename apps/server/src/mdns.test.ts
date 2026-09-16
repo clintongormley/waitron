@@ -41,10 +41,38 @@ describe("mdns", () => {
     ]);
   });
 
+  it.each([
+    { devMode: true, httpHost: "0.0.0.0" },
+    { devMode: true, httpHost: "192.168.10.101" },
+    { devMode: false, httpHost: "127.0.0.1" },
+    { devMode: false, httpHost: "127.255.255.254" },
+    { devMode: false, httpHost: "::1" },
+    { devMode: false, httpHost: "localhost" },
+  ])("does not advertise the box name for $httpHost with devMode=$devMode", async (config) => {
+    const f = fakeSocket();
+    const makeSocket = vi.fn(() => f.socket);
+    const log = vi.fn();
+    const responder = startMdnsResponder({
+      ...config,
+      hostname: "waitron.local",
+      getAddresses: () => ["192.168.10.101"],
+      log,
+      makeSocket,
+    });
+    f.query({ questions: [{ name: "waitron.local", type: "A" }] });
+    await responder.stop();
+    await responder.stop();
+    expect(makeSocket).not.toHaveBeenCalled();
+    expect(f.respond).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalledWith("info", "mdns.responding", expect.anything());
+  });
+
   it("answers an A query for its hostname with the current addresses", () => {
     const f = fakeSocket();
     startMdnsResponder({
       hostname: "waitron.local",
+      devMode: false,
+      httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
       log: () => {},
       makeSocket: () => f.socket,
@@ -59,6 +87,8 @@ describe("mdns", () => {
     const f = fakeSocket();
     startMdnsResponder({
       hostname: "waitron.local",
+      devMode: false,
+      httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
       log: () => {},
       makeSocket: () => f.socket,
@@ -73,6 +103,8 @@ describe("mdns", () => {
     const f = fakeSocket();
     startMdnsResponder({
       hostname: "waitron.local",
+      devMode: false,
+      httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
       log: () => {},
       makeSocket: () => f.socket,
@@ -85,6 +117,8 @@ describe("mdns", () => {
     const f = fakeSocket();
     startMdnsResponder({
       hostname: "waitron.local",
+      devMode: false,
+      httpHost: "0.0.0.0",
       getAddresses: () => [],
       log: () => {},
       makeSocket: () => f.socket,
@@ -97,6 +131,8 @@ describe("mdns", () => {
     const f = fakeSocket();
     const r = startMdnsResponder({
       hostname: "waitron.local",
+      devMode: false,
+      httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
       log: () => {},
       makeSocket: () => f.socket,
@@ -106,7 +142,7 @@ describe("mdns", () => {
     expect(f.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it("logs a socket 'error' and does NOT throw (mDNS is non-load-bearing — a host with no multicast route must still boot)", () => {
+  it("logs a socket error without throwing", () => {
     // A real `multicast-dns` instance surfaces a bind/membership failure (EADDRINUSE/EACCES on a host
     // with no multicast route — some CI/containers) as an ASYNC `'error'` event; with no listener,
     // Node throws it and kills the box. The box stays reachable by IP whether or not mDNS advertises,
@@ -116,6 +152,8 @@ describe("mdns", () => {
     const logged: Array<{ level: string; event: string; fields?: Record<string, unknown> }> = [];
     startMdnsResponder({
       hostname: "waitron.local",
+      devMode: false,
+      httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
       log: (level, event, fields) => logged.push({ level, event, fields }),
       makeSocket: () => f.socket,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TEST_CHARSET_SAMPLES } from "./test-page-samples.js";
 import {
   CHARSET_SELECT,
   PC858_TO_UNICODE,
@@ -85,9 +86,14 @@ describe("prepareText / encodeText", () => {
     expect(prepareText("·", "plain")).toBe("-");
   });
 
-  it("round-trips the test page sample through each real set", () => {
-    for (const cs of ["wpc1252", "pc858"] as const) {
-      const sample = "1: Café jamón Ñ ¿¡ ç ü 5 €";
+  it("round-trips the numbered test-page samples through their character sets", () => {
+    expect(TEST_CHARSET_SAMPLES).toEqual([
+      { value: "1", characterSet: "wpc1252", text: "Café jamón Ñ ¿¡ ç ü 5 €" },
+      { value: "2", characterSet: "pc858", text: "Café jamón Ñ ¿¡ ç ü 5 €" },
+      { value: "3", characterSet: "plain", text: "Cafe jamon N ?! c u 5 EUR" },
+    ]);
+    for (const { value, characterSet: cs, text } of TEST_CHARSET_SAMPLES) {
+      const sample = `${value}: ${text}`;
       expect(prepareText(sample, cs)).toBe(sample);
       expect(decodeBytes(encodeText(sample, cs), cs)).toBe(sample);
     }

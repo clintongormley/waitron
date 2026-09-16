@@ -27,6 +27,6 @@ describe("package barrel", () => {
     expect(labelAmountLines("A", "B", 10)).toEqual(["A        B"]);
     expect(wrapText("a b", 1)).toEqual(["a", "b"]);
     expect(withQuietZone([[true]], 1)[1]).toEqual([false, true, false]);
-    expect([...esc("pc858").init().bytes()]).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
+    expect([...esc("pc858").init().bytes()]).toEqual([0x1b, 0x40, 0x1b, 0x74, 19, 0x1c, 0x2e]);
   });
 });

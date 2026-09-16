@@ -62,6 +62,9 @@ importers:
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
+      '@waitron/printing':
+        specifier: workspace:*
+        version: link:../../packages/printing
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
