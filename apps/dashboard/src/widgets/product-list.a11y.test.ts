@@ -101,4 +101,16 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     const { host } = await mountWidget<ProductList>("dashboard-product-list", { products }, theme);
     await expectNoA11yViolations(host);
   });
+
+  it("renders accessibly with the row action menu open", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector("wt-row-actions")!.show();
+    await expectNoA11yViolations(host);
+  });
 });

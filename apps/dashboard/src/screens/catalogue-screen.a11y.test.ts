@@ -13,8 +13,8 @@ import type {
 
 /**
  * The catalogue screen scanned by axe in both themes, in its two shapes: with catalogues loaded (the
- * selector, the add-product control, the product list, the category manager, the option-group manager
- * (Task 12) and the new-catalogue field) and with NONE (the create-a-catalogue prompt). Mounted by
+ * add-product control, the product list, the category manager, the option-group manager (Task 12) and
+ * the new-catalogue field) and with NONE (the create-a-catalogue prompt). Mounted by
  * ASSIGNING the `api` stub as a property — the screen loads on connect, so the stub must resolve EVERY
  * method `#load` calls (`listCourses`/`listOptionGroups` included) or a stray rejection puts the screen
  * into its error-banner state instead of the loaded one this test means to scan (a rejection is itself
@@ -125,6 +125,24 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the product delete confirmation accessibly", async () => {
+    const { el, host } = await mountWidget<CatalogueScreen>(
+      "dashboard-catalogue-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("dashboard-product-list")!.dispatchEvent(
+      new CustomEvent("delete-product", {
+        detail: { productId: "p1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

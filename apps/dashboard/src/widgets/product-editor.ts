@@ -4,10 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, currentContentLanguages, selectStyles, submitOnEnter } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
-import {
-  DIETARY_LABELS,
-  expandDietaryDeclarations,
-} from "@waitron/catalogue/src/dietary-declarations.js";
+import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { VAT_CLASSES, resolveVatRate } from "@waitron/catalogue/src/pricing.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -22,7 +19,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import "./allergen-picker.js";
+import "./allergen-dietary-picker.js";
 import "./category-membership-picker.js";
 import "./image-upload.js";
 import "./variant-form.js";
@@ -38,7 +35,7 @@ import {
 } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
-import type { CategorySummary, DashboardApi, ProductCategories } from "../api/client.js";
+import type { CategorySummary, DashboardApi, Modifier, ProductCategories } from "../api/client.js";
 import type {
   EditorChoice,
   EditorVariant,
@@ -184,6 +181,20 @@ export class ProductEditor extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
       }
+      .bordered-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        margin: 0;
+        padding: var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .bordered-group legend {
+        padding-inline: var(--wt-space-1);
+        color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
       label {
         display: flex;
         flex-direction: column;
@@ -288,7 +299,7 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) modifiers: EditorChoice[] = [];
+  @property({ attribute: false }) modifiers: (Modifier | EditorChoice)[] = [];
   @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
   @property({ attribute: false }) taxChoices?: {
@@ -301,8 +312,6 @@ export class ProductEditor extends LitElement {
   @state() private draft: ProductEditorDraft = emptyDraft();
   @state() private errors: Record<string, string> = {};
   @state() private imageOpen = false;
-  @state() private dietaryPickerOpen = false;
-  @state() private dietarySearch = "";
   @state() private unitPickerOpen = false;
   /** The memberships the categories modal opened with. Non-null exactly while it is open, and a
    * stable object so the picker's own draft is not reseeded by an unrelated re-render. */
@@ -310,7 +319,6 @@ export class ProductEditor extends LitElement {
   @state() private variantOpen = false;
   /** Which variant the variant window is editing, or null while it is adding a new one. */
   @state() private variantIndex: number | null = null;
-  @state() private allergenOpen = false;
   private submitted = false;
   private generation = 0;
   /** The field to put focus in once the update that reported an error has rendered. */
@@ -337,12 +345,9 @@ export class ProductEditor extends LitElement {
     if (changed.has("value") || (changed.has("open") && this.open)) {
       this.draft = this.value ? structuredClone(this.value) : emptyDraft();
       this.generation++;
-      this.allergenOpen = false;
       this.imageOpen = false;
       this.errors = {};
       this.submitted = false;
-      this.dietaryPickerOpen = false;
-      this.dietarySearch = "";
       this.unitPickerOpen = false;
       this.categoriesValue = null;
       this.variantOpen = false;
@@ -399,8 +404,6 @@ export class ProductEditor extends LitElement {
       this.busy ||
       this.childOpen ||
       this.imageOpen ||
-      this.allergenOpen ||
-      this.dietaryPickerOpen ||
       this.variantOpen ||
       this.categoriesValue !== null
     );
@@ -462,8 +465,17 @@ export class ProductEditor extends LitElement {
   private text(value: LocalizedText) {
     return resolveContentText(value, this.language, this.language);
   }
-  private label(choice: EditorChoice) {
+  private label(choice: { name: LocalizedText }) {
     return this.text(choice.name);
+  }
+  private modifierLabel(modifier: Modifier | EditorChoice): string {
+    const choices =
+      !("type" in modifier) || modifier.type === "text"
+        ? []
+        : modifier.choices.map((choice) => this.label(choice));
+    return choices.length
+      ? `${this.label(modifier)}${SUMMARY_SEPARATOR}${choices.join(", ")}`
+      : this.label(modifier);
   }
   private unitLabel(unit: UnitChoice) {
     const name = this.text(unit.name);
@@ -820,109 +832,40 @@ export class ProductEditor extends LitElement {
       summary=${summary}
       ?has-error=${this.sectionHasError("nutrition")}
     >
-      <div class="group">
-        <dashboard-allergen-picker
-          .declaration=${this.value?.allergens ?? null}
-          @wt-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-            event.stopPropagation();
-            this.allergenOpen = event.detail.open;
-          }}
-          @wt-allergens-change=${(
-            event: CustomEvent<{ value: ProductEditorDraft["allergens"] }>,
-          ) => {
-            event.stopPropagation();
-            this.change("allergens", event.detail.value);
-          }}
-        ></dashboard-allergen-picker>
-        ${this.renderDietary()}
-      </div>
-    </wt-disclosure>`;
-  }
-
-  private renderDietary() {
-    return html`<div class="group">
-      <span class="group-label">${t("editor.dietary")}</span>
-      ${this.draft.dietaryDeclarations.map(
-        (label) =>
-          html`<div class="row">
-            <span>${t(`editor.diet.${label}`)}</span
-            ><wt-button
-              variant="secondary"
-              aria-label=${`${t("action.remove")}: ${t(`editor.diet.${label}`)}`}
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                this.change(
-                  "dietaryDeclarations",
-                  this.draft.dietaryDeclarations.filter((value) => value !== label),
-                );
-              }}
-              >${t("action.remove")}</wt-button
-            >
-          </div>`,
-      )}
-      <div class="row">
-        ${expandDietaryDeclarations(this.draft.dietaryDeclarations)
-          .filter((label) => !this.draft.dietaryDeclarations.includes(label))
-          .map(
-            (label) =>
-              html`<span class="badge" data-test="derived-diet" data-label=${label}
-                >${t(`editor.diet.${label}`)} · ${t("editor.inferred")}</span
-              >`,
-          )}
-      </div>
-      <wt-button
-        variant="secondary"
-        ?disabled=${this.suspended && !this.dietaryPickerOpen}
-        @click=${(event: Event) => {
-          event.stopPropagation();
-          this.dietaryPickerOpen = !this.dietaryPickerOpen;
-          this.dietarySearch = "";
+      <dashboard-allergen-dietary-picker
+        .busy=${this.suspended}
+        .dietaryOptions=${dietaryLabels}
+        .value=${{
+          allergens: Object.keys(this.draft.allergens ?? {}),
+          dietary: this.draft.dietaryDeclarations,
         }}
-        >${this.dietaryPickerOpen ? t("action.cancel") : t("editor.add_diet")}</wt-button
-      >
-      ${
-        this.dietaryPickerOpen
-          ? html`${textField(
-              this.fields(),
-              "diet-search",
-              t("editor.search_diets"),
-              this.dietarySearch,
-              (value) => {
-                this.dietarySearch = value;
-              },
-            )}
-            ${dietaryLabels
-              .filter(
-                (label) =>
-                  !this.draft.dietaryDeclarations.includes(label) &&
-                  t(`editor.diet.${label}`)
-                    .toLocaleLowerCase()
-                    .includes(this.dietarySearch.toLocaleLowerCase()),
-              )
-              .map(
-                (label) =>
-                  html`<wt-button
-                    variant="secondary"
-                    @click=${(event: Event) => {
-                      event.stopPropagation();
-                      this.change("dietaryDeclarations", [
-                        ...this.draft.dietaryDeclarations,
-                        label,
-                      ]);
-                      this.dietaryPickerOpen = false;
-                    }}
-                    >${t(`editor.diet.${label}`)}</wt-button
-                  >`,
-              )}`
-          : nothing
-      }
-    </div>`;
+        @wt-change=${(
+          event: CustomEvent<{
+            value: { allergens: string[]; dietary: ProductEditorDraft["dietaryDeclarations"] };
+          }>,
+        ) => {
+          event.stopPropagation();
+          const allergens = Object.fromEntries(
+            event.detail.value.allergens.map((code) => [
+              code,
+              this.draft.allergens?.[code] ??
+                this.value?.allergens?.[code] ?? { presence: "contains" as const },
+            ]),
+          );
+          this.draft = {
+            ...this.draft,
+            allergens,
+            dietaryDeclarations: event.detail.value.dietary,
+          };
+        }}
+      ></dashboard-allergen-dietary-picker>
+    </wt-disclosure>`;
   }
 
   private renderPrice() {
     const unitLabel = this.unitShortLabel;
-    return html`<div class="group" data-section="price">
-      <span class="group-label">${t("product.price")}</span>
+    return html`<fieldset class="bordered-group" data-section="price">
+      <legend>${t("editor.pricing")}</legend>
       <label
         >${t("product.vat")} *<select
           name="tax"
@@ -946,7 +889,7 @@ export class ProductEditor extends LitElement {
           ? html`<wt-price-input
               name="unit-price"
               label=${priceLabel(unitLabel)}
-              unit=${unitLabel}
+              unit=${t("editor.per_unit").replace("{unit}", unitLabel)}
               required
               ?disabled=${this.suspended}
               .value=${this.draft.unitPrice}
@@ -963,8 +906,22 @@ export class ProductEditor extends LitElement {
           : html`<dashboard-variant-table
               .variants=${this.draft.variants}
               unitLabel=${unitLabel}
+              .unitId=${this.draft.unitId}
+              .unitOptions=${[
+                { value: null, label: t("editor.unit_each") },
+                ...this.units.map((unit) => ({
+                  value: unit.id,
+                  label: this.text(unit.abbreviation) || this.text(unit.name),
+                })),
+              ]}
+              addUnitLabel=${t("editor.add_unit")}
               .busy=${this.suspended}
               .errors=${this.variantErrors}
+              @wt-unit-change=${(event: CustomEvent<{ unitId: string | null }>) => {
+                event.stopPropagation();
+                this.change("unitId", event.detail.unitId);
+              }}
+              @wt-add-unit=${(event: Event) => this.related(event, "unit")}
               @wt-reorder=${(event: CustomEvent<{ from: number; to: number }>) => {
                 event.stopPropagation();
                 // The table has ALREADY moved the row on screen, so a host that does not apply the
@@ -1001,7 +958,7 @@ export class ProductEditor extends LitElement {
             ></dashboard-variant-table>`
       }
       ${
-        this.unitOpen
+        this.draft.variants.length === 0 && this.unitOpen
           ? html`<label
                 >${t("product.unit")}<select
                   name="unit"
@@ -1037,29 +994,14 @@ export class ProductEditor extends LitElement {
           ?disabled=${this.suspended}
           @click=${this.addVariant}
           >${t("editor.add_variant")}</wt-button
-        >${
-          // With variants the price field — and so its unit button — is gone, and the table's
-          // header only NAMES the unit. This is the one way left to change it.
-          this.draft.variants.length && !this.unitOpen
-            ? html`<wt-button
-                variant="secondary"
-                data-test="choose-unit"
-                ?disabled=${this.suspended}
-                @click=${(event: Event) => {
-                  event.stopPropagation();
-                  this.unitPickerOpen = true;
-                }}
-                >${t("product.unit")}: ${unitLabel}</wt-button
-              >`
-            : nothing
-        }
+        >
       </div>
-    </div>`;
+    </fieldset>`;
   }
 
   private renderModifierRow(id: string) {
     const choice = this.modifiers.find((modifier) => modifier.id === id);
-    const label = choice ? this.label(choice) : t("editor.missing_choice");
+    const label = choice ? this.modifierLabel(choice) : t("editor.missing_choice");
     return html`<tr data-test="attached-modifier" data-modifier=${id}>
       <td>${this.#reorder.handle(id)}</td>
       <td>${label}</td>
@@ -1106,7 +1048,7 @@ export class ProductEditor extends LitElement {
       { value: CREATE_MODIFIER, label: t("editor.create_modifier") },
       ...this.modifiers
         .filter((modifier) => !attached.includes(modifier.id))
-        .map((modifier) => ({ value: modifier.id, label: this.label(modifier) })),
+        .map((modifier) => ({ value: modifier.id, label: this.modifierLabel(modifier) })),
     ];
     return html`<div class="group" data-section="modifiers">
       <span class="group-label">${t("editor.modifiers")}</span>

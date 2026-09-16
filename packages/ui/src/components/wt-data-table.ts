@@ -244,6 +244,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() errorMessage = "";
   @property() collapseLabel = "Collapse";
   @property() expandLabel = "Expand";
+  /** In tree mode, seed each branch as collapsed the first time that branch appears. A person can
+   * still expand it normally, and later row refreshes do not collapse it again. */
+  @property({ type: Boolean }) initiallyCollapsed = false;
   @property({ attribute: "aria-label" }) override ariaLabel = "";
   /** When set, a leading column of checkboxes (plus a select-all header box) lets the caller pick
    * rows. Selection is controlled: the caller passes `selected` and updates it on wt-selection-change.
@@ -273,9 +276,27 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * removes one its column's options no longer include. */
   @state() private filterSelections: Record<string, string> = {};
   @state() private collapsed = new Set<string>();
+  private readonly seededBranches = new Set<string>();
   #restored = false;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (
+      this.initiallyCollapsed &&
+      this.rowParent &&
+      (changed.has("rows") || changed.has("rowParent") || changed.has("initiallyCollapsed"))
+    ) {
+      const keys = new Set(this.rows.map((row, index) => this.rowKey(row, index)));
+      const next = new Set(this.collapsed);
+      let seeded = false;
+      for (const row of this.rows) {
+        const parent = this.rowParent(row);
+        if (parent === null || !keys.has(parent) || this.seededBranches.has(parent)) continue;
+        this.seededBranches.add(parent);
+        next.add(parent);
+        seeded = true;
+      }
+      if (seeded) this.collapsed = next;
+    }
     if (changed.has("viewKey")) this.#restored = false;
     if (!changed.has("viewKey") && !changed.has("columns")) return;
     this.#restoreView();
@@ -516,6 +537,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #treeRows(
     rows: readonly Row[],
+    forcedOpen: ReadonlySet<string> = new Set(),
   ): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
     const keyOf = (row: Row, i: number) => this.rowKey(row, i);
     const parentOf = this.rowParent!;
@@ -537,7 +559,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         const key = keyOf(row, indexOf.get(row)!);
         const hasChildren = (childrenByParent.get(key) ?? []).length > 0;
         out.push({ row, key, depth, hasChildren });
-        if (hasChildren && !this.collapsed.has(key)) walk(key, depth + 1);
+        if (hasChildren && (!this.collapsed.has(key) || forcedOpen.has(key))) walk(key, depth + 1);
       }
     };
     walk("", 0);
@@ -766,7 +788,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
 
     const { rows: treeRows, ancestorOnly } = treeVisible!;
-    const entries = this.#treeRows(treeRows);
+    const entries = this.#treeRows(treeRows, ancestorOnly);
     const visibleKeys = entries.map((e) => e.key);
     return html`
       ${this.#renderToolbar()}
@@ -775,7 +797,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
           ${this.#renderHead(visibleKeys)}
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
-              const expanded = !this.collapsed.has(key);
+              const expanded = !this.collapsed.has(key) || ancestorOnly.has(key);
               const cellContext = { ancestorOnly: ancestorOnly.has(key) };
               return html`<tr
                 data-row-key=${key}
@@ -794,7 +816,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                               style=${`padding-inline-start: calc(${depth} * var(--wt-space-4))`}
                             >
                               ${
-                                hasChildren
+                                hasChildren && !cellContext.ancestorOnly
                                   ? html`<button
                                       class="tree-toggle"
                                       aria-label=${expanded ? this.collapseLabel : this.expandLabel}

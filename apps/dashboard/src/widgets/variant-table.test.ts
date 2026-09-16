@@ -75,15 +75,44 @@ async function click(el: VariantTable, id: string) {
   await el.updateComplete;
 }
 
-it("lists one row per variant with its staff name and price, and names the unit once in the header", async () => {
+it("lists one row per variant with its staff name and price, and changes the unit from the header", async () => {
   const el = await mountTable();
   expect(rows(el)).toHaveLength(3);
   expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble"]);
   expect(cells(el, 2)).toEqual(["6.50", "12.00", "20.00"]);
-  const headers = [...el.shadowRoot!.querySelectorAll("th")].map((th) => th.textContent!.trim());
-  expect(headers).toContain(priceLabel("kg"));
+  el.unitId = "kg";
+  el.unitOptions = [
+    { value: null, label: "Each" },
+    { value: "kg", label: "kg" },
+    { value: "l", label: "l" },
+  ];
+  await el.updateComplete;
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
+  expect(select.value).toBe("kg");
+  expect(select.selectedOptions[0]!.textContent!.trim()).toBe(priceLabel("kg"));
+  const changed = listen(el, "wt-unit-change");
+  select.value = "l";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  expect(changed.mock.calls[0]![0].detail).toEqual({ unitId: "l" });
   // The table is a staff screen: the customer-facing name belongs to the receipt, not here.
   expect(el.shadowRoot!.textContent).not.toContain("Media ración");
+});
+
+it("returns the unit chooser to its saved value after Add unit is chosen", async () => {
+  const el = await mountTable({
+    unitId: "kg",
+    unitOptions: [
+      { value: null, label: "Each" },
+      { value: "kg", label: "kg" },
+    ],
+    addUnitLabel: "Add unit",
+  });
+  const added = listen(el, "wt-add-unit");
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
+  select.value = "__add__";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  expect(added).toHaveBeenCalledOnce();
+  expect(select.value).toBe("kg");
 });
 
 it("caps the name cell with the shared sizing token, not a literal width", async () => {

@@ -239,6 +239,18 @@ test("tree mode nests children under parents in order", async () => {
   expect(keys).toEqual(["food", "break", "eggs", "drinks"]);
 });
 
+test("tree mode can start every branch collapsed and still lets each one expand", async () => {
+  const el = await treeTable({ initiallyCollapsed: true });
+  const keys = () =>
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => row.getAttribute("data-row-key"));
+  expect(keys()).toEqual(["food", "drinks"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tbody tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(keys()).toEqual(["food", "break", "drinks"]);
+});
+
 test("tree mode sets treegrid semantics and aria-level", async () => {
   const el = await treeTable();
   expect(el.shadowRoot!.querySelector("table")!.getAttribute("role")).toBe("treegrid");
@@ -352,6 +364,7 @@ test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only"
     rows: treeRows,
     rowKey: (r: TreeRow) => r.id,
     rowParent: (r: TreeRow) => r.parent,
+    initiallyCollapsed: true,
     searchable: true,
     columns: [
       {
@@ -375,6 +388,10 @@ test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only"
   expect(seen.eggs).toBe(false);
   expect(seen.food).toBe(true);
   expect(seen.break).toBe(true);
+  // Search controls visibility while these otherwise-collapsed ancestors hold a match's place. Do
+  // not offer a collapse button whose clicks cannot hide the required matching descendant.
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')).toBeNull();
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
 });
 
 test("searchable renders a search box that narrows rows", async () => {

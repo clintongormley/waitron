@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
+import { selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -33,6 +34,7 @@ interface VariantRow {
 @customElement("dashboard-variant-table")
 export class VariantTable extends LitElement {
   static override styles = [
+    selectStyles,
     ReorderController.styles,
     css`
       :host {
@@ -92,6 +94,9 @@ export class VariantTable extends LitElement {
   @property({ attribute: false }) variants: ProductEditorVariant[] = [];
   /** The product's pricing unit, named once in the price column's header. */
   @property() unitLabel = "";
+  @property({ attribute: false }) unitId: string | null = null;
+  @property({ attribute: false }) unitOptions: { value: string | null; label: string }[] = [];
+  @property() addUnitLabel = "";
   @property({ type: Boolean }) busy = false;
   /** A problem with one row, keyed by that row's index in `variants`. The host validates; this
    * only shows what it reports, beside the row it belongs to. */
@@ -218,7 +223,37 @@ export class VariantTable extends LitElement {
                 <span class="visually-hidden">${t("editor.reorder_variant")}</span>
               </th>
               <th scope="col">${t("editor.name")}</th>
-              <th scope="col">${priceLabel(this.unitLabel)}</th>
+              <th scope="col">
+                <select
+                  name="pricing-unit"
+                  aria-label=${t("product.unit")}
+                  .disabled=${this.busy}
+                  @change=${(event: Event) => {
+                    event.stopPropagation();
+                    const select = event.target as HTMLSelectElement;
+                    const value = select.value;
+                    if (value === "__add__") {
+                      select.value = this.unitId ?? "";
+                      this.#emit("wt-add-unit", {});
+                    } else this.#emit("wt-unit-change", { unitId: value || null });
+                  }}
+                >
+                  ${this.unitOptions.map(
+                    (option) =>
+                      html`<option
+                        value=${option.value ?? ""}
+                        .selected=${option.value === this.unitId}
+                      >
+                        ${priceLabel(option.label)}
+                      </option>`,
+                  )}
+                  ${
+                    this.addUnitLabel
+                      ? html`<option value="__add__">${this.addUnitLabel}</option>`
+                      : nothing
+                  }
+                </select>
+              </th>
               <th scope="col">${t("editor.available")}</th>
               <th scope="col">
                 <span class="visually-hidden">${t("editor.variant_actions")}</span>

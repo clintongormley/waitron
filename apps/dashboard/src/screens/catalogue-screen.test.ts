@@ -140,6 +140,37 @@ describe("catalogue-screen", () => {
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector("dashboard-category-manager")).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-option-group-manager")).toBeNull();
+    expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
+  });
+
+  it("confirms Delete and marks the product unavailable without deleting its history", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "delete-product", { productId: "p1" });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await flush(el);
+    expect(api.getProductEditor).toHaveBeenCalledWith("p1");
+    expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, available: false });
+  });
+
+  it("keeps the Delete confirmation open and reports a refused deactivation inside it", async () => {
+    const api = stubApi({
+      updateProductEditor: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "delete-product", { productId: "p1" });
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
+    expect(dialog.getAttribute("open")).not.toBeNull();
+    expect(dialog.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("server.internal"),
+    );
   });
 
   it("creates the complete aggregate once, closes, then refreshes the list", async () => {
