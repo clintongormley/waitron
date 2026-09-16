@@ -2,9 +2,11 @@
  * The object store every scenario runs against: one MinIO container per store, with an S3 client
  * pointed at it.
  *
- * MinIO stands in for the production store, which is not chosen yet (spec §5). What S6 establishes
- * about conditional writes is therefore a fact about MinIO on the pin below, and the results note
- * carries the standing obligation to re-run it against whatever store Waitron Cloud picks.
+ * MinIO stands in for the production store, which is not chosen yet (spec §5). What S6 will
+ * establish about conditional writes is therefore a fact about MinIO on the pin below; the standing
+ * obligation to re-run it against whatever store Waitron Cloud picks belongs in the results note
+ * this rig's last task writes, `docs/research/2026-09-16-sqlite-failover-prototype.md` (plan Task
+ * 10). Neither that note nor the S6 measurement exists yet.
  */
 import {
   CreateBucketCommand,
@@ -15,16 +17,28 @@ import {
 import { GenericContainer, Wait } from "testcontainers";
 
 /**
- * Pinned by tag AND digest so a re-run measures the same MinIO.
- * Digest: sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e.
+ * Tag AND digest in the one reference the container is actually started from, so the pull resolves
+ * the digest while a reader still sees which release it is. Testcontainers accepts that combined
+ * form: `pnpm --filter @waitron/bench-sqlite-failover scenarios` starts a container from this exact
+ * string and the smoke scenario passes.
  *
- * quay.io rather than Docker Hub because Docker Hub refuses the image anonymously:
- * `docker pull minio/minio:RELEASE.2025-04-22T22-12-26Z` →
- * "pull access denied for minio/minio, repository does not exist or may require 'docker login'".
+ * quay.io rather than Docker Hub because Docker Hub refuses this image anonymously:
+ * `docker pull minio/minio:RELEASE.2025-09-07T16-13-09Z` →
+ * "Error response from daemon: pull access denied for minio/minio, repository does not exist or may
+ * require 'docker login'".
  */
-const MINIO_IMAGE = "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z";
+const MINIO_IMAGE =
+  "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
 
-/** MinIO refuses to start with a root password shorter than 8 characters. */
+/**
+ * The credentials are length-constrained, and MinIO refuses to START rather than refusing a request.
+ * `docker run --rm -e MINIO_ROOT_USER=short -e MINIO_ROOT_PASSWORD=short
+ * quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data` →
+ * "FATAL Unable to validate credentials inherited from the shell environment: Invalid credentials",
+ * hinting "MINIO_ROOT_USER length should be at least 3, and MINIO_ROOT_PASSWORD length at least 8
+ * characters". That run exercised the PASSWORD rule only — `short` is five characters, which already
+ * satisfies the ≥3 user rule; the user rule is MinIO's own hint text, not something this run showed.
+ */
 const ROOT_USER = "waitronbench";
 const ROOT_PASSWORD = "waitronbench";
 const BUCKET = "waitron-failover";

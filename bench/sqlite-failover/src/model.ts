@@ -12,18 +12,18 @@ import type { SQLInputValue, SQLOutputValue } from "node:sqlite";
 const SCHEMA = `
 -- MODEL of registros_facturacion (packages/fiscal-verifactu/src/schema/registros.ts:35,148).
 -- Append-only, hash-chained, keyed (node_id, secuencia). NOT the real ledger.
-CREATE TABLE records (
+CREATE TABLE IF NOT EXISTS records (
   node_id TEXT NOT NULL, secuencia INTEGER NOT NULL,
   huella TEXT NOT NULL, huella_anterior TEXT, payload TEXT NOT NULL,
   PRIMARY KEY (node_id, secuencia)
 );
 -- MODEL of cadenas (packages/fiscal-verifactu/src/schema/cadenas.ts:44). Per-node chain tip,
 -- updated in place by the owner.
-CREATE TABLE chain_head (
+CREATE TABLE IF NOT EXISTS chain_head (
   node_id TEXT PRIMARY KEY, last_secuencia INTEGER NOT NULL, last_huella TEXT NOT NULL
 );
 -- MODEL of envios (+ acks folded to \`acked\`). Submission state; child of records.
-CREATE TABLE envios (
+CREATE TABLE IF NOT EXISTS envios (
   node_id TEXT NOT NULL, secuencia INTEGER NOT NULL,
   estado TEXT NOT NULL CHECK (estado IN ('pendiente','enviando','enviado')),
   acked INTEGER NOT NULL DEFAULT 0,
@@ -31,13 +31,13 @@ CREATE TABLE envios (
   FOREIGN KEY (node_id, secuencia) REFERENCES records(node_id, secuencia)
 );
 -- MODEL of a non-fiscal ledger: parent carries node_id, child hangs off the parent.
-CREATE TABLE sales (id TEXT PRIMARY KEY, node_id TEXT NOT NULL, total_cents INTEGER NOT NULL);
-CREATE TABLE sale_lines (
+CREATE TABLE IF NOT EXISTS sales (id TEXT PRIMARY KEY, node_id TEXT NOT NULL, total_cents INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sale_lines (
   id TEXT PRIMARY KEY, sale_id TEXT NOT NULL REFERENCES sales(id),
   description TEXT NOT NULL, amount_cents INTEGER NOT NULL
 );
 -- MODEL of the one residual natural-key clash (outbox-swap design §4.2): a supplier invoice number.
-CREATE TABLE supplier_invoices (
+CREATE TABLE IF NOT EXISTS supplier_invoices (
   id TEXT PRIMARY KEY, node_id TEXT NOT NULL,
   supplier TEXT NOT NULL, invoice_number TEXT NOT NULL,
   UNIQUE (supplier, invoice_number)
@@ -79,8 +79,17 @@ export type SupplierInvoiceRow = {
 
 /** What a receiver already holds, as the sender needs to see it to compute a tail. */
 export type HeldSummary = {
-  /** Per node, the highest `secuencia` the receiver holds for that node's chain. */
-  maxSecuencia: Record<string, number>;
+  /**
+   * Per node, the highest `secuencia` held with NO gap below it, counting up from 1 (a chain's
+   * first record is secuencia 1). A receiver holding 1, 2, 5 reports 2, not 5: `MAX(secuencia)`
+   * would report 5 and 3 and 4 would never be shipped again, and nothing downstream looks for a
+   * hole. Re-shipping 5 is the price, and it costs nothing because `applyTail` is idempotent.
+   *
+   * Sparse, not one entry per node: `summarise` only creates a key for a `node_id` that appears in
+   * `records`, so a chain the receiver holds nothing for is `undefined` here, which `diffTail` reads
+   * as 0 — ship the chain from its first record.
+   */
+  contiguousTo: Record<string, number>;
   saleIds: string[];
   supplierInvoiceIds: string[];
 };
@@ -159,8 +168,9 @@ function changed(result: { changes: number | bigint }): number {
  * transaction: a chain tip read that is not in the same transaction as the append it decides is the
  * chain fork the whole rig exists to look for.
  *
- * The sale gets exactly ONE line. `sale_lines` is here only so `applyTail` has a child row whose
- * parent must be inserted first; no scenario creates a second line.
+ * `recordSale` writes exactly ONE line per sale: `sale_lines` is here only so `applyTail` has a
+ * child row whose parent must be inserted first. A scenario needing more than one line per sale has
+ * to widen this function.
  */
 export function recordSale(
   db: NodeDb,
@@ -210,11 +220,18 @@ export function recordSale(
 
 /** What this node holds right now, for every chain — not only its own. */
 export function summarise(db: NodeDb): HeldSummary {
-  const heads = db.handle
-    .prepare(`SELECT node_id, MAX(secuencia) AS max_secuencia FROM records GROUP BY node_id`)
-    .all() as unknown as { node_id: string; max_secuencia: number }[];
-  const maxSecuencia: Record<string, number> = {};
-  for (const row of heads) maxSecuencia[String(row.node_id)] = Number(row.max_secuencia);
+  // The contiguous run is walked in JavaScript over one ordered read rather than asked of SQL: the
+  // whole model ledger is a scenario's worth of rows, so scanning it costs nothing and the loop
+  // says what it means where a recursive CTE would not. A node holding no secuencia 1 reports 0.
+  const held = db.handle
+    .prepare(`SELECT node_id, secuencia FROM records ORDER BY node_id, secuencia`)
+    .all() as unknown as { node_id: string; secuencia: number }[];
+  const contiguousTo: Record<string, number> = {};
+  for (const row of held) {
+    const nodeId = String(row.node_id);
+    contiguousTo[nodeId] ??= 0;
+    if (Number(row.secuencia) === contiguousTo[nodeId] + 1) contiguousTo[nodeId] += 1;
+  }
 
   const saleIds = (
     db.handle.prepare(`SELECT id FROM sales`).all() as unknown as { id: string }[]
@@ -223,19 +240,26 @@ export function summarise(db: NodeDb): HeldSummary {
     db.handle.prepare(`SELECT id FROM supplier_invoices`).all() as unknown as { id: string }[]
   ).map((row) => String(row.id));
 
-  return { maxSecuencia, saleIds, supplierInvoiceIds };
+  return { contiguousTo, saleIds, supplierInvoiceIds };
 }
 
 /**
  * The rows the SENDER owns that the receiver lacks.
  *
- * Records are selected by a high-water mark rather than row by row: `recordSale` is the only writer
- * of `records` and it appends 1, 2, 3, … per node, so the rows above the receiver's highest
- * `secuencia` for this chain are exactly the ones it is missing. Sales and supplier invoices carry no
- * order, so those are diffed by id.
+ * Records are selected by a high-water mark rather than row by row, and the mark is the receiver's
+ * highest CONTIGUOUS `secuencia` for this chain, so everything at or below it is certainly held and
+ * everything above it is shipped. A row above the mark that the receiver already holds is shipped
+ * again, which changes nothing: `applyTail` is idempotent.
+ *
+ * The narrow claim the design rests on is about the SENDER'S OWN chain, not about `records` as a
+ * whole: the only writer of a node's own chain is `recordSale`, appending 1, 2, 3, …. `applyTail`
+ * also writes `records`, but only for the FOREIGN `senderNodeId` it was handed — it refuses a row
+ * whose `node_id` is not that one — and this diff reads only `sender.nodeId`'s rows.
+ *
+ * Sales and supplier invoices carry no order, so those are diffed by id.
  */
 export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
-  const watermark = Number(receiverHeld.maxSecuencia[sender.nodeId] ?? 0);
+  const watermark = Number(receiverHeld.contiguousTo[sender.nodeId] ?? 0);
   const heldSales = new Set(receiverHeld.saleIds);
   const heldSupplierInvoices = new Set(receiverHeld.supplierInvoiceIds);
 
@@ -335,16 +359,18 @@ export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatc
       applied += changed(insertSale.run(row.id, row.node_id, row.total_cents));
     }
 
-    // A sale line carries no node of its own: its owner is its parent sale's node. The parent is
-    // either in this batch or already on the receiver, so both are consulted.
+    // A sale line carries no node of its own: its owner is its parent sale's node. Ownership is
+    // read back from the RECEIVER's own `sales` rows, after the parent inserts above have run in
+    // this transaction — never from the batch's claim. A batch claiming a sale id the receiver
+    // already holds under a DIFFERENT node inserts nothing (the insert conflicts), so trusting the
+    // claim would hang the batch's line off that other node's sale.
     const senderSaleIds = new Set(
-      tail.sales.filter((sale) => sale.node_id === senderNodeId).map((sale) => String(sale.id)),
+      (
+        receiver.handle
+          .prepare(`SELECT id FROM sales WHERE node_id = ?`)
+          .all(senderNodeId) as unknown as { id: string }[]
+      ).map((row) => String(row.id)),
     );
-    for (const row of receiver.handle
-      .prepare(`SELECT id FROM sales WHERE node_id = ?`)
-      .all(senderNodeId) as unknown as { id: string }[]) {
-      senderSaleIds.add(String(row.id));
-    }
     const insertSaleLine = receiver.handle.prepare(
       `INSERT INTO sale_lines (id, sale_id, description, amount_cents) VALUES (?, ?, ?, ?)
        ON CONFLICT DO NOTHING`,
@@ -396,15 +422,21 @@ export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatc
 }
 
 /**
- * One drain pass over every pending submission this node holds, mirroring the two behaviours of the
- * real drain the failover loop depends on and no others:
+ * One drain pass over every pending submission this node holds. Two SHAPES are borrowed from the
+ * real drain; what triggers the second is the model's own stand-in, not a mirror:
  *
  *  1. It claims across EVERY chain with no node filter — the real `claimBatch` takes no node
  *    argument (packages/fiscal-verifactu/src/drain.ts:542), which is why a record shipped from
  *    another node can be submitted by the receiver before the ship is confirmed.
- *  2. A per-pass in-memory blocked-chain set: a chain whose submit throws is skipped for the rest of
- *    this pass, and re-examined on the next one (`blockedSifIds`, drain.ts:304,547 — the real key is
- *    `sif_id`; the model's chain key is `node_id`).
+ *  2. A per-pass in-memory blocked-chain set, skipping the rest of a blocked chain and re-examining
+ *    it next pass (`blockedSifIds`, drain.ts:304 and 583 — the real key is `sif_id`, the model's is
+ *    `node_id`).
+ *
+ * The real set is added to in exactly one place, drain.ts:583: the claim-time environment guard,
+ * when a row's `entorno` is NULL or disagrees with `WAITRON_ENV`. The model has no `entorno`, so it
+ * blocks a chain on a `submit` throw instead. The real drain's answer to a `submit` throw is a
+ * different thing the model does not have: drain.ts:359-370 backs the claimed batch off (rows to
+ * `pendiente`, an incidencia, a later `proximo_intento_en`) and ends the pass for EVERY chain.
  *
  * `submit` stands in for the AEAT call. A throw returns the row to `pendiente`, so the pass records
  * a refusal rather than losing the row.

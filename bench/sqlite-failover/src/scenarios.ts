@@ -44,14 +44,17 @@ async function main(): Promise<void> {
   const results: ScenarioResult[] = [];
 
   for (const file of discover()) {
-    const module = (await import(pathToFileURL(join(scenarioDir, file)).href)) as {
-      default: Scenario;
-    };
     try {
+      // The import is INSIDE the try: a module that throws while loading would otherwise abort the
+      // whole run — no table, and every later scenario unrun.
+      const module = (await import(pathToFileURL(join(scenarioDir, file)).href)) as {
+        default: Scenario;
+      };
       results.push(await module.default(context));
     } catch (error) {
-      // A thrown scenario never said what it would have claimed, so the runner cannot know whether
-      // its subject was critical — it is treated as critical so a broken harness is never quiet.
+      // A scenario that threw never said what it would have claimed, so the runner cannot know
+      // whether its subject was critical — it is treated as critical so a broken harness is never
+      // quiet.
       results.push({
         id: file.replace(/\.ts$/, ""),
         title: "threw",

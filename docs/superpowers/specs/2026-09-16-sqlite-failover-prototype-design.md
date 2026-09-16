@@ -248,9 +248,11 @@ throwaway rig that must not enter CI's test shards":
 
 - **`bench/sqlite-failover`** — a private workspace package (`"private": true`, `type: module`), with
   scripts `scenarios` (runs S0–S6, prints a per-scenario PASS/FAIL/MEASURED table, exits non-zero only
-  on a **critical** failure — §7) and `typecheck`. **No `test` script and no `*.test.ts`**, so root
-  `pnpm -r test`, the CI shards and the pre-push hook never run it (the pglite bench's README explains
-  why this keeps it out; the same reasoning applies).
+  on a **critical** failure — §7) and `typecheck`. **No `test` script and no `*.test.ts`**, so no CI
+  job and no pre-push step ever runs a SCENARIO. That is not the same as CI never seeing the package:
+  it stays a workspace member the shard filters and the root guard suite read by name, which is why it
+  is listed in `PACKAGES_WITHOUT_TESTS` and `LIGHT_B_PACKAGES` (`scripts/changed-scope.mjs`) and
+  subtracted from `test-light-a`'s selection in `.github/workflows/ci.yml`.
 - **`docs/research/2026-09-16-sqlite-failover-prototype.md`** — the results note: the method, each
   scenario's criterion and its recorded output (including the controls that reproduce the failure in
   the other direction — `CLAUDE.md` §1: a measurement taken where both answers look alike measures
@@ -258,9 +260,10 @@ throwaway rig that must not enter CI's test shards":
   note is the actual product of the gate; the package is its reproducer.
 
 Landing is the normal PR flow (`finish-branch` → `land-branch`). The gate for the package is
-`typecheck` + `format:check` + `lint` (there is no test suite to run in CI, by design); the *evidence
-it works* is the recorded run in the results note, exactly as the pglite bench's evidence lives in its
-`docs/research` note, not in CI.
+`typecheck` + `format:check` + `lint` plus the root Vitest guard suite, which reads this package's
+wiring by name (there is no scenario to run in CI, by design); the *evidence it works* is the recorded
+run in the results note, exactly as the pglite bench's evidence lives in its `docs/research` note, not
+in CI.
 
 ---
 

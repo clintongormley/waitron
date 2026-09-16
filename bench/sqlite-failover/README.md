@@ -35,19 +35,22 @@ harness that broke mid-scenario never got as far as saying what it was measuring
 
 ## The pins, and why the results only hold on them
 
-- **MinIO:** `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`, digest
-  `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
-  The registry is quay.io because Docker Hub refuses the image anonymously:
-  `docker pull minio/minio:RELEASE.2025-04-22T22-12-26Z` →
-  `pull access denied for minio/minio, repository does not exist or may require 'docker login'`.
+- **MinIO:** `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`
+  — tag and digest together in the one reference `src/store.ts` starts the container from, so the
+  pull resolves the digest and a reader still sees which release it is.
+  The registry is quay.io because Docker Hub refuses this image anonymously:
+  `docker pull minio/minio:RELEASE.2025-09-07T16-13-09Z` →
+  `Error response from daemon: pull access denied for minio/minio, repository does not exist or may require 'docker login'`.
 - **Litestream:** `v0.5.17` (arrives with this rig's later tasks).
 
 The rig **establishes** external behaviour by observing it rather than asserting it: what MinIO's
-conditional write does, and how Litestream lays out and restores a replica, are measured on these
-exact versions. A different version is a different measurement, so a version bump re-runs the
-scenarios rather than inheriting their verdicts. MinIO is also not the store the product will run —
-Waitron Cloud has not chosen one — so the conditional-write result is a fact about the mechanism, and
-re-running it against the real store is a standing obligation recorded in the results note (spec §5).
+conditional write does (S6, plan Task 2) and how Litestream lays out and restores a replica (plan
+Task 6) will be measured on these exact versions. Neither measurement has been made yet. A different
+version is a different measurement, so a version bump will re-run the scenarios rather than inherit
+their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
+— so the conditional-write result will be a fact about the mechanism, and re-running it against the
+real store is a standing obligation for the results note, `docs/research/2026-09-16-sqlite-failover-prototype.md`,
+which plan Task 10 writes (spec §5).
 
 ## Why it can't join `pnpm -r test`
 
@@ -63,9 +66,24 @@ README:
    here: its `include` is `["scripts/**/*.test.mjs", "scripts/**/*.test.ts"]` (root
    `vitest.config.ts`), which does not reach `bench/`.
 
-That keeps a Docker-dependent rig out of CI's test shards and the pre-push hook permanently. The
-package's gate is `typecheck` + `pnpm format:check` + `pnpm lint`; the evidence that it works is the
-recorded run in its results note, not a green CI job.
+What those three keep out is the rig's **scenarios** — no CI job and no pre-push hook run a MinIO
+container. They do not keep the PACKAGE out of anything: it is a workspace member, so CI's shard
+filters and the root guards see it by name, and it has to be wired for that. It is listed in
+`PACKAGES_WITHOUT_TESTS` and placed in `LIGHT_B_PACKAGES` (`scripts/changed-scope.mjs`), and
+subtracted from `test-light-a`'s selection in `.github/workflows/ci.yml` — exactly how
+`@waitron/bench-pglite` is wired. Without that wiring three root guards fail; measured in this
+worktree before it was added, `Test Files 3 failed (3)`: `scripts/changed-scope.test.mjs` (a member
+declaring no `test:coverage` and not on the list is a mistake), `scripts/ci-workflow.test.mjs` (the
+shards must select every member exactly once, and an unlisted one lands in both light bins) and
+`scripts/coverage-thresholds.test.ts` (`ENOENT` opening a `vitest.config.ts` this package does not
+have). All three live in the root Vitest project, which CI's ungated `lint` job runs
+(`.github/workflows/ci.yml`, `pnpm vitest run --coverage`) and `.husky/pre-push` runs on every
+non-documentation push.
+
+The package's gate is `typecheck` + `pnpm format:check` + `pnpm lint`, plus those three root guards —
+`pnpm vitest run` at the root is part of this package's gate precisely because it reads the wiring
+above; the evidence that it works
+will be the recorded run in its results note, not a green CI job.
 
 ## Several files, not one
 
