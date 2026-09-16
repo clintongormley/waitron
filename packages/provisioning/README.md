@@ -249,10 +249,15 @@ opened. Before `planVenue` runs, the command reaches the fiscal regime's own ven
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and either series code outside AEAT's character set or longer than
 the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
-races a conflicting row is caught as `provisioning.venue_conflict`. A re-run against a database whose
-taxpayer row names a different country or tax id is refused with
-`provisioning.tenant_identity_mismatch`; a difference of letter case or surrounding space is the same
-taxpayer, so that re-run is the no-op a re-provision should be.
+races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
+taxpayer row names a different country or tax id is refused with `provisioning.foreign_tenant`, and
+refused BEFORE the plan is applied: `venue` reads the stored identity and calls the shared
+`assertNoForeignTenant` first (`cli.test.ts` pins that the apply is never reached). `planVenue`
+trims and upper-cases both values before that comparison, so a difference of letter case or
+surrounding space is the SAME taxpayer and the re-run is the no-op a re-provision should be.
+`provisioning.tenant_identity_mismatch` is a second, narrower refusal INSIDE `applyVenue`'s own
+transaction, for the case that pre-read cannot see: another run committing a different taxpayer
+between this run's read and its write.
 
 A worked invocation with the full option set is in
 [`apps/server/README.md`](../../apps/server/README.md#provisioning-a-venue).

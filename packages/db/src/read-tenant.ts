@@ -12,8 +12,12 @@ export interface Tenant {
 }
 
 /**
- * Reads the database's one taxpayer row — the single place the `id = 1` convention is spelled out,
- * so a change to how the taxpayer is read has one home rather than one per caller.
+ * Reads the database's one taxpayer row, so `apps/server`'s seven readers of it share one query
+ * instead of seven copies. NOT the only place the row is reached: `apps/server/src/provision.ts`
+ * and `packages/provisioning/src/venue-apply.ts` spell `where id = 1` themselves, and
+ * `packages/fiscal-verifactu`'s `provisioning.ts` and `backend.ts` reach the same row by a
+ * different rule again — `.limit(1)` with no id predicate. None of those four would follow a change
+ * made here.
  *
  * Returns `undefined` rather than throwing when the row is absent, because callers do genuinely
  * different things with that: the receipt and payment-slip printers degrade to printing nothing (a

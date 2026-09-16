@@ -72,11 +72,11 @@ import { DEV_DEVICE_HEADER } from "./device-session.js";
  * route to a real endpoint is AEAT's actual preproduction host — reachable from this sandbox, but
  * not something an automated suite should be dialling on every run. Module-mocking `undici`'s
  * `fetch` keeps the resulting SOAP POST from ever leaving this process; `Agent` is spread through
- * untouched, so `mtlsFetch` (aeat-transport.ts, unmodified) still constructs a genuine per-tenant
- * TLS connection pool for that test's `Agent.prototype.close` spy to observe. Confirmed this does
+ * untouched, so `mtlsFetch` (aeat-transport.ts, unmodified) still constructs a genuine TLS
+ * connection pool for that test's `Agent.prototype.close` spy to observe. Confirmed this does
  * not affect any OTHER test in this file: none of them seed a usable `fiscal.aeat` credential
- * (boot.ts's own comment on its `drain` closure), so `resolveClient` never reaches `mtlsFetch` for
- * any tenant but this one, and the plain global `fetch(...)` calls this file uses against its own
+ * (boot.ts's own comment on its `drain` closure), so `resolveClient` never reaches `mtlsFetch` in
+ * any of them, and the plain global `fetch(...)` calls this file uses against its own
  * local `/health` server resolve through Node's OWN built-in fetch, a separate module identity
  * from the `"undici"` npm package specifier this mock intercepts.
  */
@@ -2398,9 +2398,9 @@ describe("startServer, against a real container as the deployment role", () => {
   // F4 (2026-07-27 fix wave): `boot.ts`'s `drain` closure builds a fresh `aeatClientResolver`
   // every pass and releases it via `finally { await resolver.closeAll() }` — the fix this whole
   // branch exists to land, and the one line of it with no test at all before this one. Every OTHER
-  // test in this describe block either enrols no tenant for `fiscal.drain`, or (the test just
-  // above) enrols one with due work but NO usable `fiscal.aeat` credential — in both cases
-  // `resolveClient` never reaches `mtlsFetch`, so no real per-tenant `Agent` is ever built for
+  // test in this describe block either seeds no due `fiscal.drain` work at all, or (the test just
+  // above) seeds due work with NO usable `fiscal.aeat` credential — in both cases
+  // `resolveClient` never reaches `mtlsFetch`, so no real `Agent` is ever built for
   // `closeAll` to release. This seeds BOTH: due `envios` work (`seedPendingEnvios`, as above) AND
   // a usable credential, reusing `aeat-transport.test.ts`'s own TLS/PKCS#12 fixture
   // (`mintMtlsMaterial`) rather than inventing a new one — so `resolveClient` succeeds and a
@@ -2449,11 +2449,11 @@ describe("startServer, against a real container as the deployment role", () => {
         // `"preproduction"`, the seeded row's `entorno` disagrees, and `claimBatch`'s
         // deployment-environment guard refuses it before `resolveClient` (and hence `mtlsFetch`)
         // is ever reached FOR THAT ROW. This test's assertion happened to still pass either way —
-        // `resolveClient` is called once per tenant with ANY due work, ahead of and regardless of
-        // that per-row check (`drain`'s own top-level loop) — but a passing assertion for the
+        // `resolveClient` is called once per PASS that has any due work at all, ahead of and
+        // regardless of that per-row check (`drain.ts:181-187`) — but a passing assertion for the
         // wrong reason is not what this test claims to cover. Set explicitly so the scenario
         // actually exercised is "a real submission attempt", not "a refused row that happens to
-        // share a tenant with a resolved transport".
+        // share a pass with a resolved transport".
         WAITRON_ENV: "production",
       });
       try {

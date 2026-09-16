@@ -71,8 +71,10 @@ export const drawerOpenPolicy = pgEnum("drawer_open_policy", ["gated", "open"]);
 export const tenants = pgTable(
   "tenants",
   {
-    // One row per database. id pinned to 1 (the deployment/mirror_config/node_membership precedent,
-    // default included): a second insert violates the PK and the check.
+    // One row per database. id pinned to 1 and defaulted to it, the way `mirror_config` and
+    // `node_membership` do it; `deployment` pins its id the same way but carries NO default, so it
+    // is a precedent for the pin and not for the default. A second insert violates the PK and the
+    // check.
     id: integer("id").primaryKey().default(1),
     country: text("country").notNull(),
     taxId: text("tax_id").notNull(),

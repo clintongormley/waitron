@@ -219,9 +219,12 @@ target database as the **owner-admin** (the role that created the tables when it
 `WAITRON_ADMIN_DATABASE_URL`, the same admin connection string `instance` reads; there is no separate
 role and no grant to widen: `applyVenue` inserts as the table owner in one transaction. A database
 already holds one taxpayer, so a run naming a different country or tax id is refused with
-`provisioning.tenant_identity_mismatch` — which is what an operator who mistyped a NIF on a re-run
-sees. A difference of letter case or surrounding space is the same taxpayer, and that re-run is a
-no-op.
+**`provisioning.foreign_tenant`** — that is the code an operator who mistyped a NIF on a re-run
+sees, and the refusal happens before anything is applied. The country and tax id are trimmed and
+upper-cased before that check, so a difference of letter case or surrounding space is the same
+taxpayer and the re-run is a no-op. (`provisioning.tenant_identity_mismatch` is a different,
+narrower refusal, raised inside the apply transaction only when another run commits a different
+taxpayer between this one's read and its write. A mistyped NIF is `foreign_tenant`, not this.)
 
 ```bash
 pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js and copies the migrations

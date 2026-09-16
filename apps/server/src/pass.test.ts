@@ -193,7 +193,8 @@ describe("runPass", () => {
     expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.ok).toBe(true);
     expect(d.awaitingCert.current).toBe(true);
     expect(d.lines.some((line) => line.startsWith("warn fiscal.awaiting_certificate"))).toBe(true);
-    // The per-pass per-tenant skip trace still fires — the awaiting-cert flag is in ADDITION to it.
+    // The per-pass skip trace still fires — the awaiting-cert flag is in ADDITION to it. (The log
+    // line's own name, `drain.tenant_skipped`, is a shipped name and is not the claim here.)
     expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
     // It counts toward the duty's skipped total, so /health sees the unmet obligation.
     expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.skipped).toBe(1);

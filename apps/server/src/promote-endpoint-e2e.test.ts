@@ -532,8 +532,8 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
       });
       expect(awaiting.awaitingFiscalCertificate).toBe(true);
 
-      // The envío was never submitted — still pendiente, never attempted (a missing cert is a per-tenant
-      // skip BEFORE the claim, so intentos stays 0).
+      // The envío was never submitted — still pendiente, never attempted (a missing cert skips the
+      // whole pass BEFORE the claim, so intentos stays 0).
       expect(await readEnvios(mainSuite.admin)).toEqual([
         { estado: "pendiente", intentos: 0, incidencia: false },
       ]);

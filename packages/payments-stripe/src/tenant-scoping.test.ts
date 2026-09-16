@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
  * to describe. (The file is still named for the tenant scoping this guard was first written for; the
  * tenant column it scoped to is gone, the guard is not.)
  *
- * Adapters use `withTransaction` for their transaction boundaries and node origin attribution.
- * The source scan rejects bare `.transaction(` calls in production sources.
+ * Adapters use `withTransaction` for their transaction boundaries. The source scan rejects bare
+ * `.transaction(` calls in production sources.
  *
  * The local `ImportMeta.glob` declaration mirrors that file's, and for its reason: this package
  * carries no `vite` dependency, and adding one for a type reference would be a dependency bought
