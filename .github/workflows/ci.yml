@@ -40,18 +40,26 @@ on:
   pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Cancel superseded runs on feature branches / PRs (a force-push should supersede its own old run,
-  # saving CI minutes) but NEVER on `main`. The push-to-`main` run is the UNFILTERED full-suite
-  # verification CLAUDE.md §2 relies on to catch what a scoped PR run missed (a cross-package guard, a
-  # package outside the PR's scope). Our workflow lands a `docs(backlog)` commit directly to `main`
-  # within ~3min of every code merge, and the parallel feature track pushes too; with unconditional
-  # `cancel-in-progress: true` that next `main` push cancelled the code merge's run mid-`test-light`
-  # every time (verified: #123's `6b97612` run was cancelled 3m30s in, test-light/test-heavy never
-  # finished; the superseding docs commit's own run skips the shards), so §2's safety net never
-  # actually completed. Keeping `main` runs alive costs at most two concurrent full runs when two
-  # `main` pushes land close together — cheap next to a verification that never runs.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  # A PUSH IS NEVER GROUPED: its group is unique to the run, so no push can cancel or delay another.
+  #
+  # A push to `main` that changes code is the only thing that runs the unfiltered suite over the
+  # merged tree, and — until a `v*` tag is pushed at the same commit — the only thing that publishes
+  # an image for it. Grouping pushes
+  # together cannot leave that alone, whatever `cancel-in-progress` says: GitHub allows only one
+  # PENDING run per group and a newer arrival cancels the one already waiting, while
+  # `cancel-in-progress` governs a run that has already STARTED and so never reaches that case. The
+  # merge that queued behind the previous merge was thrown away by the docs commit a minute later,
+  # and nothing was red. Receipt: `docs/developers/ci-and-gates.md`.
+  #
+  # What the separation costs: two `main` runs now overlap, and a registry tag is last-write-wins,
+  # so the publish job asks `scripts/main-tag-guard.sh` whether a newer commit already holds `:main`
+  # before it moves that tag. A pull request still groups by ref, so a force-push supersedes the run
+  # it made stale.
+  #
+  # Guard: `scripts/ci-workflow.test.mjs`, which reads this block as TEXT — it pins how the
+  # expression is written, not what GitHub evaluates it to.
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
@@ -1597,8 +1605,8 @@ jobs:
     steps:
       # `skipped` must PASS: scoping works by skipping, and a skipped job means "this change could
       # not affect that check", not "that check did not run". `cancelled` must FAIL: ci.yml sets
-      # cancel-in-progress, and a superseded run reporting green would let a stale result satisfy
-      # branch protection. Getting that pair backwards turns this job into a rubber stamp.
+      # cancel-in-progress on pull requests, and a superseded run reporting green would let a stale
+      # result satisfy branch protection. Getting that pair backwards turns this job into a rubber stamp.
       #
       # These expressions only evaluate on GitHub, so there is no local way to check them. Both
       # directions were therefore run against the real workflow, on PR #25:
@@ -1608,7 +1616,8 @@ jobs:
       #
       # `cancelled` is the untested half of the pair: it is the second `contains(...)` in the same
       # `if` below and has never been observed firing, because provoking it means racing a
-      # superseding push.
+      # superseding push to a PULL REQUEST's branch — a push is no longer superseded at all (the
+      # concurrency block at the top of this file).
       - name: Fail if any needed job did not succeed
         if: >-
           contains(needs.*.result, 'failure') ||
@@ -1650,12 +1659,20 @@ jobs:
       # export below.
       - uses: docker/setup-buildx-action@v3
 
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Work out the tags to publish
         id: tags
         env:
           OWNER: ${{ github.repository_owner }}
           REF: ${{ github.ref }}
           SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           # GHCR refuses an uppercase path, and github.repository_owner keeps the account's casing.
@@ -1668,7 +1685,26 @@ jobs:
           agent_tags="$agent_repo:$short"
           case "$REF" in
             # What deploy/compose.yml defaults to: `docker compose pull` on a box follows main.
-            refs/heads/main) tags="$tags,$repo:main"; agent_tags="$agent_tags,$agent_repo:main" ;;
+            # Two pushes to `main` build at the same time (the concurrency block at the top of this
+            # file), and a tag is last-write-wins, so ask whether a NEWER commit already holds it.
+            # `hold` still publishes this commit's immutable `sha-` tag; it only declines to move
+            # `:main` backwards. Guard: `scripts/main-tag-guard.sh` and its suite.
+            refs/heads/main)
+              # Assigned on its own line, deliberately: `errexit` is SUSPENDED for a command inside
+              # an `if` condition, so a failing guard would read there as "do not move the tag" and
+              # turn an error into a silently skipped tag move. As an assignment it fails the step.
+              decision=$(scripts/main-tag-guard.sh "$repo:main" "$REPOSITORY" "$SHA")
+              case "$decision" in
+                move)
+                  tags="$tags,$repo:main"
+                  agent_tags="$agent_tags,$agent_repo:main"
+                  ;;
+                hold) echo "leaving :main alone - it is already built from a newer commit than $SHA" ;;
+                # Neither answer means the guard changed under this step. Refusing here is what
+                # stops an unreadable answer from being read as `hold` for ever after.
+                *) echo "main-tag-guard.sh answered '$decision', which is neither move nor hold" >&2; exit 1 ;;
+              esac
+              ;;
             # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
             # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
             refs/tags/v*) tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}" ;;
@@ -1676,12 +1712,6 @@ jobs:
           echo "$tags"; echo "$agent_tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Single platform: amd64 is what every box runs. A second one costs twice over — the runner is
       # x86, so it is built under QEMU, and `mode=max` then exports its layers into a cache at the

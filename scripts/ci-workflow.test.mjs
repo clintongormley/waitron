@@ -40,7 +40,9 @@ import {
 // AGAINST one instead of trusted: on 2026-08-01 the three extractions were run side by side with
 // PyYAML's `safe_load` over the same file, and the job list, `ci`'s `needs` and the `changes` job's
 // `outputs` came out element-for-element identical. Redo that comparison rather than reasoning
-// about the regexes if this file ever starts disagreeing with the workflow.
+// about the regexes if this file ever starts disagreeing with the workflow. The `concurrency`
+// extraction added on 2026-09-16 was checked the same way: `yaml.safe_load`'s `concurrency`
+// mapping and this file's two values came out equal, group and cancel-in-progress alike.
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
@@ -89,6 +91,29 @@ const jobs = (() => {
     id,
     body: lines.slice(at + 1, starts[index + 1]?.at ?? lines.length),
   }));
+})();
+
+/**
+ * The workflow-level `concurrency:` block, as two strings: the group expression and the
+ * cancel-in-progress expression. Missing block, or a missing key, throws — an extraction that
+ * silently found nothing would make every case below pass against an empty string. A key that is
+ * PRESENT but empty yields "" instead, which is why the cases assert on CONTENT rather than on
+ * having found a line.
+ */
+const concurrency = (() => {
+  const at = lines.indexOf("concurrency:");
+  if (at === -1) throw new Error("ci.yml has no top-level `concurrency:` key");
+
+  const body = [];
+  for (let i = at + 1; i < lines.length && /^(\s|$)/.test(lines[i]); i++) body.push(lines[i]);
+
+  const valueOf = (key) => {
+    const line = body.find((entry) => entry.trimStart().startsWith(`${key}:`));
+    if (line === undefined) throw new Error(`ci.yml's concurrency block has no \`${key}:\``);
+    return line.slice(line.indexOf(":") + 1).trim();
+  };
+
+  return { group: valueOf("group"), cancelInProgress: valueOf("cancel-in-progress") };
 })();
 
 /** One job by id, throwing rather than returning undefined for a caller to read as "no needs". */
@@ -432,6 +457,63 @@ describe("pnpmLs (the subprocess guard)", () => {
     const hang = () =>
       spawnSync("node", ["-e", "setTimeout(() => {}, 60000)"], { encoding: "utf8", timeout: 500 });
     expect(() => pnpmLs(["ls"], hang)).toThrow(/failed to run/);
+  });
+});
+
+describe("the workflow's concurrency group", () => {
+  it("was parsed at all", () => {
+    expect(concurrency.group).toContain("github.workflow");
+    expect(concurrency.cancelInProgress).not.toBe("");
+  });
+
+  // The property: no push may cost another push its run. GitHub allows only one PENDING run per
+  // group and a newer arrival cancels the one already waiting, which `cancel-in-progress` does not
+  // reach — it governs a run that has already started. So a push is given a group of its own.
+  // Receipt, including what it cost: `docs/developers/ci-and-gates.md`.
+  //
+  // The operand ORDER is pinned, not just the names: `push && github.ref || github.run_id` reads
+  // plausibly, mentions both, and puts every push back into one group per branch.
+  it("gives every push a group of its own, so one push cannot displace another", () => {
+    expect(concurrency.group).toMatch(
+      /github\.event_name\s*==\s*'push'\s*&&\s*github\.run_id\s*\|\|\s*github\.ref/,
+    );
+  });
+
+  // The other half, kept: a pull request's runs DO share a group, so a force-push supersedes the
+  // run it made stale. Anchored at both ends, so an appended `|| true` — which would cancel pushes
+  // again — fails here.
+  it("still lets a pull request's newer run supersede its own older one", () => {
+    expect(concurrency.cancelInProgress).toMatch(
+      /^\$\{\{\s*github\.event_name\s*!=\s*'push'\s*\}\}$/,
+    );
+  });
+
+  // What the separation costs, and the answer to it. Two pushes to `main` now build at the same
+  // time, and a registry tag is last-write-wins, so the publish job asks whether a newer commit
+  // already holds `:main` before moving it. That script's own behaviour is
+  // `scripts/main-tag-guard.test.mjs`; what this case pins is that the job still ASKS.
+  it("has the publish job ask before it moves the `:main` tag, and obey the answer", () => {
+    const body = job("publish").body;
+    const text = body.join("\n");
+    expect(text).toMatch(/decision=\$\(scripts\/main-tag-guard\.sh[^)]*\)/);
+
+    // Asking is not obeying: a `tags=` line that added `:main` unconditionally would leave the call
+    // above in place and still publish the backwards tag. So every line that puts `:main` into a tag
+    // list must sit under the `move` arm — which here means after it and before the arm ends.
+    const moveArm = body.findIndex((line) => /^\s*move\)\s*$/.test(line));
+    const armEnd = body.findIndex((line, index) => index > moveArm && /^\s*;;\s*$/.test(line));
+    expect(moveArm).toBeGreaterThan(-1);
+    expect(armEnd).toBeGreaterThan(moveArm);
+
+    // Any assignment to a tag list that carries `:main` — however it is spelled — must sit under
+    // the `move` arm. Matching the VARIABLE and the tag, rather than one exact line, is what makes
+    // this catch a `:main` appended somewhere else in the step.
+    const setsMainTag = (line) => /[a-z_]*tags="[^"]*repo:main"/.test(line);
+    const setters = body
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => setsMainTag(line));
+    expect(setters.length).toBeGreaterThanOrEqual(2);
+    expect(setters.filter(({ index }) => index < moveArm || index > armEnd)).toEqual([]);
   });
 });
 

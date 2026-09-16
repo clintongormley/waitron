@@ -114,6 +114,13 @@ hook, or how tests are scheduled:
   There is no single `test` job. Vitest `--shard` splits by FILE COUNT, so `N` must never exceed a package's test-file count.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
+- **Two pushes to `main` must never share a CI concurrency group.** GitHub keeps only one PENDING
+  run per group and a newer push cancels the waiting one, which `cancel-in-progress` never reaches.
+  Cost: a code merge that got NO run at all — no image published, no unfiltered main suite, and
+  nothing red anywhere, so check after a merge that its own run exists. The pushes now overlap, so
+  publishing asks `scripts/main-tag-guard.sh` before moving `:main`. Guards:
+  `scripts/ci-workflow.test.mjs` (reads ci.yml as TEXT, and sees no other workflow) and
+  `scripts/main-tag-guard.test.mjs`.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
 - **The GHA cache is a shared per-repository budget and this repo sits AT it.** Name the entries a new
