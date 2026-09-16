@@ -3855,30 +3855,6 @@ export interface QueueModifier {
   suitableFor?: string[] | null;
 }
 
-/**
- * The kitchen label for one queued line, shared by the station queue and the pass so the two screens
- * and the printed ticket cannot drift apart. Takes the line's four frozen names and hands them to
- * `kitchenPresentationName` (`@waitron/catalogue`), the one home for the kitchen fallback and the
- * middot join — the same call `kitchenTicketName` (`apps/server/src/kitchen-print.ts`) makes. That
- * resolver reads no customer-facing text, so both customer fields are `null` here rather than
- * selected from the line.
- */
-function queueKitchenName(
-  frozen: {
-    name: string;
-    kitchenName: string | null;
-    variantName: string | null;
-    variantKitchenName: string | null;
-  },
-  locale: string,
-): string {
-  return kitchenPresentationName(
-    { ...frozen, customerName: null, variantCustomerName: null },
-    locale,
-    locale,
-  );
-}
-
 export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
@@ -4217,7 +4193,7 @@ export async function listStationQueue(
       state: row.state,
       // One label per queue item: the line's frozen kitchen names, each falling back to its staff
       // name, joined — the same resolver the printed kitchen ticket uses.
-      name: queueKitchenName(row, cfg.locale),
+      name: kitchenPresentationName(row),
       modifierSnapshots: row.modifierSnapshots,
       quantity: row.quantity,
       unitName: row.unitName,
@@ -4264,7 +4240,7 @@ export async function listStationQueue(
  *  `qty` (the same fields `StationQueueItem` serialises, never a live catalogue lookup), the resolved
  *  STATION name (the cross-station join `listStationQueue` deliberately omits — the pass sees the grill
  *  lagging the cold station), the kitchen `state`, and the `fired`/`away` lifecycle stamps. `name` is
- *  resolved server-side by {@link queueKitchenName}, the same call `StationQueueItem.name` uses — a
+ *  resolved server-side by `kitchenPresentationName`, the same call `StationQueueItem.name` uses — a
  *  pre-flattened string, not a locale map. */
 export interface ExpoItem {
   modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
@@ -4574,7 +4550,7 @@ export async function listExpoQueue(
       id: row.itemId,
       // One label per pass item: the line's frozen kitchen names, resolved exactly as the station
       // queue and the printed ticket resolve them.
-      name: queueKitchenName(row, cfg.locale),
+      name: kitchenPresentationName(row),
       modifierSnapshots: row.modifierSnapshots,
       qty: row.quantity,
       unitName: row.unitName,

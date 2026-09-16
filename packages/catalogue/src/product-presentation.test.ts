@@ -78,11 +78,11 @@ describe("joinCustomerPresentationText", () => {
 
 describe("kitchenPresentationName", () => {
   test("uses kitchen names, joined", () => {
-    expect(kitchenPresentationName(full, "en", "en")).toBe("COF · LG");
+    expect(kitchenPresentationName(full)).toBe("COF · LG");
   });
   test("falls back to staff names when kitchen names are blank", () => {
-    expect(
-      kitchenPresentationName({ ...full, kitchenName: null, variantKitchenName: null }, "en", "en"),
-    ).toBe("Coffee · Large");
+    expect(kitchenPresentationName({ ...full, kitchenName: null, variantKitchenName: null })).toBe(
+      "Coffee · Large",
+    );
   });
 });
