@@ -5,6 +5,7 @@ import { validateContentTranslations } from "./content-languages.js";
 import { menuItems, menuSections } from "./schema/menu.js";
 import { menuItemVariants, productVariants } from "./schema/variants.js";
 import { isProductPrice } from "./modifier-limits.js";
+import type { ProductPresentation } from "./product-presentation.js";
 import "./errors.js";
 
 export interface ProductVariant {
@@ -277,18 +278,11 @@ export async function setMenuVariants(
   return listMenuVariants(tx, tenantId, menuItemId);
 }
 
-// The six name pieces mirror {@link ProductPresentation} (product-presentation.ts) exactly, plus the
-// selection metadata: a resolved selection is passed straight to that module's staff/customer/kitchen
-// resolvers, so the " · " join and the customerName→name fallback live in ONE place and are never
-// re-implemented here.
-export interface SelectedVariant {
+// Extends ProductPresentation so the compiler keeps the six name pieces in step: a resolved
+// selection goes straight to that module's staff/customer/kitchen resolvers, and the " · " join and
+// the customerName-to-name fallback stay in ONE place.
+export interface SelectedVariant extends ProductPresentation {
   variantId: string | null;
-  name: string; // product staff name
-  customerName: Record<string, string> | null; // product customer-facing name
-  kitchenName: string | null;
-  variantName: string | null; // variant staff name
-  variantCustomerName: Record<string, string> | null;
-  variantKitchenName: string | null;
   unitPrice: string;
 }
 
