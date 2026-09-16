@@ -187,8 +187,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    [checkpoint](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
    [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md) and
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md).
-3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319 and
-   #327 reworked these recently, so read them against the rules before changing anything.
+3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319,
+   #327 and #380 reworked these recently, so read them against the rules before changing anything.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
@@ -964,15 +964,19 @@ rather than the printer's own built-in QR command. Print test page in the printe
 page exercising all three settings and opens a dialog for its answers. [Design](superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md) ·
 [Plan](superpowers/plans/2026-09-14-printer-paper-resolution-and-character-set.md).
 
-**Setup refinements (2026-09-16, branch `printers`).** Add opens a prefilled naming dialog;
+**Setup refinements — LANDED #380 (2026-09-16).** Add opens a prefilled naming dialog;
 identifiers are read-only; test answers use radio buttons with QR measuring instructions. Successful
 addition and refresh failures have separate feedback. Printed test instructions use the user's
 language. Development servers no longer advertise `waitron.local`; a laptop/box name collision was
 confirmed during investigation. Configured text initialization now cancels
-Kanji mode before sending single-byte text, as documented by the NT-806 manual. **The NT-806 needs
-another physical test page** before attributing its earlier garbled accents to that mode.
+Kanji mode before sending single-byte text, as documented by the NT-806 manual.
 [Design and incident evidence](superpowers/specs/2026-09-16-printer-setup-refinements.md).
 
+- **The NT-806 needs another physical test page**, and nobody has printed one since the change.
+  Until someone does, we cannot say the Kanji-mode cancel is what fixed the garbled accents that
+  printer produced earlier — the change matches what its manual documents, which is not the same as
+  having watched it work. Next action: print a test page from the printer editor to the NT-806 and
+  read the accented characters on the paper.
 - **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
   whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
   QR size is meant to count the code's blank border or only its dark squares.
