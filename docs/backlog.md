@@ -397,6 +397,34 @@ reuse the table's search and filters as they stand.
 [Design](superpowers/specs/2026-09-14-category-overhaul-design.md),
 [plan](superpowers/plans/2026-09-14-category-overhaul.md).
 
+**Category colour and membership layout — LANDED #383 (2026-09-16).** Two presentation fixes on the
+categories screen and its form. The colour picker used to lay its twenty-four swatches out as one
+wrapping row, which broke a hue's three tones across a line break whenever the dialog was narrow.
+The swatches now sit in two blocks of four hues, each hue a column of its three tones: one 8 x 3
+matrix when there is room, two 4 x 3 blocks when there is not, and no hue ever split. That layout
+reads meaning into the palette's order, so the order is now pinned by a test
+(`packages/ui/src/category-color.test.ts`) that lists all twenty-four values; the palette itself was
+not changed, only guarded. In the products table, a product's other memberships used to render one
+coloured tag each, so a product in many categories produced a row of tags wide enough to crowd out
+the rest of the row. Four or more now collapse to a localized count
+(`categories.other_categories_count`); three or fewer still show as tags. Searching that column is
+unaffected, because its `searchValue` reads every other-category name straight off the product and
+never looks at what the cell drew. The count sentence is plural in both languages and cannot hit the
+plural-for-one fault recorded in the #340 list above: it is only ever reached above three.
+
+What it left open:
+
+- **Three is a hardcoded number with nothing behind it.**
+  `OTHER_CATEGORIES_PREVIEW_LIMIT` in `apps/dashboard/src/screens/categories-screen.ts` was chosen to
+  look right at the column's current width, not measured against it, and the same table on a phone
+  has far less room than the number assumes. **Next action:** if the column looks crowded or empty on
+  a real screen, measure before changing it, and consider deriving the limit from the available width
+  rather than pinning another guess.
+- **The collapsed count tells you how many, not which.** A manager who wants to see a product's full
+  membership list has to open the product's category editor; the table offers no hover, tooltip or
+  expansion. That is a deliberate omission rather than an oversight, but nobody has watched anyone use
+  it. **Next action:** leave it until someone using the screen asks for the names back.
+
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as
 many products as you like, instead of being retyped per product. There are four kinds: free text (a
 note the kitchen sees), extras (priced additions), options (pick from a list) and a plain yes/no.
