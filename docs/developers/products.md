@@ -85,10 +85,20 @@ Where each one surfaces:
 
 Two of those rows are worth reading twice.
 
-A cook sees the same name whether the order arrives on paper or on a screen. The ticket, the station
-queue and the pass all resolve through `kitchenPresentationName`, so a venue that types a short
-kitchen name gets it everywhere a cook looks, and one that leaves it blank gets the staff name
-everywhere.
+A cook sees the same name whether the order arrives on paper or on a screen: the ticket, the station
+queue and the pass all resolve through `kitchenPresentationName`. What that resolver is *given*,
+though, depends on how the line was added. A line added from a menu offer carries the product's and
+the variant's kitchen names, so a venue that types a short kitchen name sees it on all three
+surfaces, and one that leaves it blank sees the staff name.
+
+**A line added by bare `productId` carries neither.** That is the shape the till's three
+line-carrying routes — `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders` — fall back
+to when the venue has no service zones configured (`resolveHttpOrderZone`,
+`apps/server/src/till-api.ts`), and it resolves against the plain catalogue projection:
+`AvailableProduct` (`packages/catalogue/src/operations.ts`) has no kitchen-name field at all. So
+`apps/server/src/working-order.ts` freezes `kitchen_name` and `variant_kitchen_name` as `null`, and
+the kitchen sees the staff name however the product is configured. The paragraph above is about
+menu-offer lines; it does not hold for these, and nothing on this path closes the gap today.
 
 The top-sellers report groups on the staff names — `sale_lines.name` and `sale_lines.variant_name` —
 and returns them through `staffPresentationName`. It is a staff-facing report, so it shows the name
