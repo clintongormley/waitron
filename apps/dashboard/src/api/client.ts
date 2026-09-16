@@ -2694,7 +2694,7 @@ export class DashboardApi {
    * profile (device.manage-gated): `deviceProfileId` a tenant device profile's id, or `null` to fall back
    * to the form-factor default. Answers an empty 204; an unknown device rejects
    * `{ code: "device.not_found" }`. A UUID-shaped id that names no device profile of this tenant (unknown
-   * or foreign) reaches the composite FK and rejects `{ code: "device.binding_invalid" }`; a MALFORMED
+   * or foreign) reaches the FK and rejects `{ code: "device.binding_invalid" }`; a MALFORMED
    * (non-UUID) id is screened earlier and rejects `{ code: "management.request_invalid" }`. The dashboard
    * only ever sends a real device-profile id or `null`, so those two rejects are defense-in-depth. */
   reassignDeviceProfile(id: string, deviceProfileId: string | null): Promise<void> {

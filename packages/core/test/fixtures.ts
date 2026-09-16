@@ -98,8 +98,8 @@ export async function seedRectificativeSeries(
 /**
  * Inserts one `sales` row directly through the fixture connection.
  * For tests that need an ORIGINAL sale to correct without
- * routing it through `recordSale` (so it has NO backend fiscal record, or so a cross-tenant
- * original can be planted under another tenant). Written on the current schema: `total` is the
+ * routing it through `recordSale` (so it has NO backend fiscal record, or so an original can be
+ * planted under another node or series). Written on the current schema: `total` is the
  * only money column. `correctsSaleId` defaults to NULL for an ordinary original; pass it to seed a
  * rectificativa instead (its negative/positive total is what `sales_total_ck` permits once it is set).
  */

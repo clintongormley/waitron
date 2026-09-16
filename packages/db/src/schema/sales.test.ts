@@ -307,7 +307,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
-    // The composite FK guarantees referential existence: a node id with no `nodes` row is refused.
+    // The FK guarantees referential existence: a node id with no `nodes` row is refused.
     const error = await captureError(() =>
       db.insert(sales).values(
         saleValues({
@@ -810,7 +810,7 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
     );
   }
 
-  it("links a child line to its parent line within the tenant", async () => {
+  it("links a child line to its parent line", async () => {
     const [parent] = await db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
     const [child] = await insertLine({ saleId, lineNo: 2, parentLineId: parent.id });
     const [row] = await rows<{ parent_line_id: string }>(

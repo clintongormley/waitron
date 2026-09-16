@@ -3,7 +3,7 @@ import { nodes } from "./nodes.js";
 
 /**
  * Keyed by (node_id), no surrogate id: there is exactly one counter per node and the
- * key is the identity. The composite (node_id) → nodes FK below keeps it
+ * key is the identity. The (node_id) → nodes FK below keeps it
  * referential, mirroring `working_orders_node_fk`/`sales_node_fk`.
  */
 export const workingOrderCounters = pgTable(

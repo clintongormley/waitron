@@ -24,7 +24,7 @@ import "./errors.js";
 // Real Postgres (a manifest template clone), NOT PGlite — mandatory for THIS surface (CLAUDE.md §4).
 // These routes read and write as `app_user` (the credential vault put/delete, the card_readers +
 // device_card_readers writes, the payments.manage gate proven by DELETION), and the properties this
-// suite is FOR — the table grants, the by-id tenant isolation, the gate — are exactly what PGlite's
+// suite is FOR — the table grants and the gate — are exactly what PGlite's
 // all-superuser connection false-passes.
 const noopLog: Logger = () => {};
 

@@ -926,7 +926,7 @@ export async function createOpenOrder(
     deliveryTableId,
   });
 
-  // The parent order was inserted just above, so the composite FK and the
+  // The parent order was inserted just above, so the FK and the
   // `require_open_parent`/`check_locales` triggers all resolve it. Guarded: an EMPTY tab (openTab with
   // no initial round) has no lines to insert, and `tx.insert(...).values([])` errors. Existing callers
   // always pass ≥1 line (they guard empty baskets before calling), so this never changes their path.
@@ -4365,7 +4365,7 @@ export interface TableState {
   id: string;
   label: string;
   /** The `floor_zones` row this table sits in (FP-1), or null — the successor to the former free-text
-   *  `zone` string (a composite FK to `floor_zones`, not an arbitrary label). */
+   *  `zone` string (a FK to `floor_zones`, not an arbitrary label). */
   zoneId: string | null;
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";

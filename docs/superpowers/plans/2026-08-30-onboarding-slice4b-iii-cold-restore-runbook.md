@@ -1,5 +1,12 @@
 # Cold-restore runbook — rebuild a single box after total loss (onboarding slice 4b-iii)
 
+> **2026-09-14 — the tenant column is gone.** Every `tenant_id` column, every tenant argument and
+> the `WAITRON_TILL_TENANT_ID` environment variable were removed: one database holds one taxpayer,
+> as the single row of `tenants`, and nothing filters by a tenant. The text below is left as the
+> record of what was built at the time; anywhere it names a tenant id, a tenant predicate or that
+> variable, read it as history. Spec:
+> [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
+
 > **2026-09-06 (SP-3d):** This is the historical manual procedure. For an encrypted `.backup.enc`
 > archive, use `waitron-restore restore <artifact-path>` into a fresh database before booting; it
 > restores the database and media, migrates, opens a fresh chain and disjoint series for a node that

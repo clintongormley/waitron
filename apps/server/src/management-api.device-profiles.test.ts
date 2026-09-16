@@ -490,7 +490,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
     const app = mountApp();
     // Create a profile, then bind a device to it as the owner (fixture setup), reusing the
-    // venue's provisioned location. The composite FK devices_device_profile_fk is ON DELETE RESTRICT, so
+    // venue's provisioned location. The FK devices_device_profile_fk is ON DELETE RESTRICT, so
     // the DELETE trips a 23001 the store translates to device_profile.in_use → the house 409.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",

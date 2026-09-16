@@ -15,10 +15,10 @@ import { locations } from "./tenants.js";
  * floor renders tables under; the successor to the free-text `dining_tables.zone` string this task
  * drops, so a zone is now an authorable ROW (rename once, reorder, deactivate) rather than a value
  * re-typed onto every table. `dining_tables.zone_id` points at one of these (a single nullable
- * composite FK, added in the paired --custom migration).
+ * FK, added in the paired --custom migration).
  *
  * Location-scoped, unlike the venue-wide `table_service_statuses`: a floor plan belongs to one
- * venue, so the composite (location_id) → locations(id) FK ties a zone to its
+ * venue, so the (location_id) → locations(id) FK ties a zone to its
  * venue, and `floor_zones_name_key` makes a name unique within that venue.
  */
 export const floorZones = pgTable(

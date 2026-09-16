@@ -139,7 +139,7 @@ export interface DeviceBinding {
 
 // The device→profile join and the binding projection, defined once and reused by both `tryReadDevice`
 // selects (and the device-api list read): `devices ⨝ device_profiles ON device_profile_id`.
-// The join always matches — `device_profile_id` is NOT NULL with a RESTRICT composite FK — so the
+// The join always matches — `device_profile_id` is NOT NULL with a RESTRICT FK — so the
 // binding always carries the profile's `formFactor` and `capabilities`.
 const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
 const deviceBindingColumns = {

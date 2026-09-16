@@ -814,9 +814,11 @@ Tomorrow's plug-in checklist, once 0–1's curl run has answered the standalone 
    cat > ~/.sumup-experiments/credential.json <<'EOF'
    {"apiKey":"…","merchantCode":"…","affiliateAppId":"…","affiliateKey":"…"}
    EOF
-   pnpm --filter @waitron/credentials build && node packages/credentials/dist/bin.js set --tenant <tenant uuid from apps/server/.env> --purpose payments.sumup --file ~/.sumup-experiments/credential.json
+   pnpm --filter @waitron/credentials build && node packages/credentials/dist/bin.js set --purpose payments.sumup --file ~/.sumup-experiments/credential.json
    ```
-   (`-` for both affiliate fields if 0.2 produced no affiliate key.)
+   (`-` for both affiliate fields if 0.2 produced no affiliate key.) The command took a `--tenant
+   <uuid>` before 2026-09-14; the CLI now REFUSES that flag with its usage line, rather than
+   ignoring it.
 3. In the worktree's `apps/server/.env`: `WAITRON_TILL_CARD_PROVIDER=sumup_cloud`,
    `WAITRON_TILL_SUMUP_READER_ID=<reader id from 0.4>`. Restart the stack. Boot fails loudly if the
    credential is missing or unusable.

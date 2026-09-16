@@ -64,7 +64,7 @@ function insertCloseSql(opts: {
 
 class RollbackSignal extends Error {}
 
-describe("frozen daily close schema (append-only triggers, columns, composite FK)", () => {
+describe("frozen daily close schema (append-only triggers, columns, FK)", () => {
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {

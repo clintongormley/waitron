@@ -81,7 +81,7 @@ function toRow(row: {
 const FOREIGN_KEY_VIOLATION = "23503";
 const RESTRICT_VIOLATION = "23001";
 
-/** The composite FK a device holds on a profile, ON DELETE RESTRICT (Task 5's
+/** The FK a device holds on a profile, ON DELETE RESTRICT (Task 5's
  * `devices_device_profile_fk`). A delete that trips it is a "still in use" conflict; matched on the
  * constraint NAME so an unrelated RESTRICT can never be mislabelled `device_profile.in_use`. `devices`
  * is the ONLY table that references a profile. */
@@ -249,7 +249,7 @@ export async function updateDeviceProfile(
  * Delete a device profile. Manager/admin only (`layout.configure`). An absent id throws
  * `device_profile.not_found`, read back via `.returning({ id })` — the same
  * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
- * a silent success. A device still referencing the profile (the composite FK, ON DELETE RESTRICT)
+ * a silent success. A device still referencing the profile (the FK, ON DELETE RESTRICT)
  * trips a 23001 restrict_violation, which `translateWriteError`
  * turns into `device_profile.in_use` (a clean 409) rather than letting the raw DB error propagate to a
  * 500 — the twin of `deleteCanvas`.

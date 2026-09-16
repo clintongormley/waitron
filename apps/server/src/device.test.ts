@@ -13,8 +13,8 @@ describe("bindingFkField", () => {
   const fk = (constraint: string): Error =>
     Object.assign(new Error("fk"), { code: "23503", constraint });
 
-  it("maps the device binding composite FKs' constraint names to their input fields", () => {
-    // The device-binding composite FKs on the `devices` table: `devices_device_profile_fk` (a reassign
+  it("maps the device binding FKs' constraint names to their input fields", () => {
+    // The device-binding FKs on the `devices` table: `devices_device_profile_fk` (a reassign
     // to a profile that names no row of this tenant → `deviceProfileId`, the assign-device-profile route)
     // and `devices_receipt_printer_fk` (a hardware PATCH naming a printer of no such tenant row →
     // `receiptPrinterId`). Only `devices` carries a binding FK, so these are the only two.

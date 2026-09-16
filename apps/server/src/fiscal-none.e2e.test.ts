@@ -174,7 +174,7 @@ async function setupGbVenue(): Promise<GbVenue> {
   };
 }
 
-/** Run `fn` as the non-superuser app role, tenant-scoped — the exact subject the trading write path
+/** Run `fn` as the non-superuser app role — the exact subject the trading write path
  *  runs under (bound by `app_user`'s grants, no superuser bypass). Opens and closes its own connection. */
 async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);

@@ -878,7 +878,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           }
           // The `?.definition` (getCanvas's return is optional) then `??` is belt-and-braces: a
           // NON-null `canvasId` that resolves to NO canvas is UNREACHABLE by construction, so it
-          // is intentionally untested. The composite FK `device_profiles(canvas_id) →
+          // is intentionally untested. The FK `device_profiles(canvas_id) →
           // canvases(id)` is ON DELETE RESTRICT (device_profiles migration), enforced even on
           // PGlite: a profile can neither reference a non-existent canvas id (FK violation at insert) nor
           // keep a reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??`
@@ -1790,7 +1790,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       requireCapacity(body.capacity);
       // Screen a present `zoneId` as a UUID BEFORE the DB touch — the twin of the `:id` screen on the
       // sibling routes, one field over. A well-formed-but-missing zoneId already surfaces
-      // `zone.not_found` (the composite FK's 23503, `isZoneFkViolation`); a MALFORMED one un-screened
+      // `zone.not_found` (the FK's 23503, `isZoneFkViolation`); a MALFORMED one un-screened
       // reaches the `zone_id` uuid column and raises `22P02` → an opaque `server.internal` 500, so it
       // gets the SAME domain `zone.not_found`. An ABSENT zoneId (`undefined`) is a legitimate unassigned
       // table and is left alone.

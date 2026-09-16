@@ -2,7 +2,7 @@
 // `apps/server/.env`, so `pnpm dev` boots the server UNPROVISIONED and the slice-1b setup surface
 // (`/setup-api/status` + the placeholder page) is exercisable on a laptop. A trimmed `dev-setup.ts`
 // that STOPS after migrating — it never provisions a venue, so it mints no fiscal chain and writes
-// none of the five `WAITRON_TILL_*_ID`. Setup boot creates and loads its own key ring from the
+// none of the four `WAITRON_TILL_*_ID`. Setup boot creates and loads its own key ring from the
 // persistent state directory so it can stage configuration and seal the first venue's credentials.
 //
 // FISCAL NOTE (CLAUDE.md §5): a venue-bearing database is NOT a setup-mode target — provisioning a

@@ -525,7 +525,7 @@ describe("working_order_lines — modifier links", () => {
     return item.id;
   }
 
-  it("links a child modifier line to its parent dish line within the tenant", async () => {
+  it("links a child modifier line to its parent dish line", async () => {
     const orderId = await openOrder(db);
     const [parent] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
     // A child modifier line: no product of its own, linked to the parent dish line.

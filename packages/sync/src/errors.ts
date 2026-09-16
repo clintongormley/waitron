@@ -14,7 +14,7 @@ import "@waitron/shared";
  * S5). Codes are never renamed or deleted once shipped (CLAUDE.md §3); they stay registered (and
  * `errors.test.ts` keeps constructing each) though nothing throws them any more.
  *
- * NO PARAM HERE CARRIES ROW CONTENT. A sync payload is another tenant's business data; these codes
+ * NO PARAM HERE CARRIES ROW CONTENT. A sync payload is the venue's own business data; these codes
  * name schema identifiers, environment names and counts only — nothing that reaches a log line or a
  * test name should carry a captured row's bytes.
  */

@@ -212,7 +212,7 @@ describe("table CRUD", () => {
 
   it("createTable rethrows a NON-unique DB error raw, not as table.label_taken", async () => {
     const cfg = await setupVenue();
-    // A location id that names no row: the composite (location_id) FK
+    // A location id that names no row: the (location_id) FK
     // `dining_tables_location_fk` rejects the insert with a 23503 foreign-key violation — NOT the
     // 23505 label unique NOR the `dining_tables_zone_fk` the zone check matches on. So both
     // `isUniqueViolation` and `isZoneFkViolation` are false and `createTable` must rethrow the raw

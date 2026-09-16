@@ -286,23 +286,24 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   is rarely reached. Read the ACL back rather than trusting the exit code; `has_*` functions also
   count privileges held only through group membership, which a provisioner must not accept.
   Role-membership grants are different: they always ERROR.
-- **Multi-table writes share ONE transaction, and `withTenant` IS that transaction.** Write-path
+- **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.** Write-path
   functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
-  `withTenant` per request. This is a convention, not a compiler guarantee — `Database` is assignable
+  `withTransaction` per request. This is a convention, not a compiler guarantee — `Database` is assignable
   to `Transaction`. **Splitting one logical change across transactions is a commented decision, never
   a default.** **Queries on one transaction are awaited in turn, never `Promise.all`** — pg 9 removes
   the queueing that makes it work; no guard enforces it (receipt in
   [conventions-data.md](docs/developers/conventions-data.md)).
-- **A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is
-  NOT the query's isolation boundary.** Since RLS was dropped, `withTenant` no longer isolates
-  SELECTs, so every read scopes to the tenant itself, a by-id read as much as a list read, never
-  trusting a globally-unique UUID or the deployment invariant. Cost: a by-id read on `working_orders.id` alone let tenant A read
-  AND abandon tenant B's order. Four reading review layers called it safe; only the seat that RAN a
-  two-tenant probe caught it.
-- **A configuration route checks the TENANT returned by `authorizeManager`, as well as scoping its
-  queries.** The permission check returns the session's tenant; it does not compare it with the
-  configured one. Printer routes enforce the same check. Cost: a two-tenant route probe returned 200
-  for the other tenant's manager until the caller compared them.
+- **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
+  query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
+  [2026-09-14-drop-tenant-id-design.md](docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md).)
+  This retired two rules a reader may still meet in older text — that a by-id read needs its own
+  tenant clause, and that a configuration route compares `authorizeManager`'s tenant with the
+  configured one; both are marked superseded in
+  [conventions-data.md](docs/developers/conventions-data.md). Guard:
+  `scripts/no-tenant-column.test.ts`, which is weaker than its name in three ways it states in its
+  own header — it matches the column's SPELLINGS, so a column reintroduced under an unrelated name
+  passes; it does not read test files; and it exempts, whole, each of the core migration files that
+  historically carried the column, so a column re-added inside one of those is seen by nothing.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — the
   replication apply worker skips ordinary triggers. No policies, no RLS: one tenant per database.
@@ -321,8 +322,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `fiscal-verifactu` run append-only `reject_mutation()` triggers, and that function is owned by
   `core` (harmless: both declare `requires.core`). Guard: `scripts/module-graph-honesty.test.ts`,
   which reads text (and says so) for any cross-module `EXECUTE FUNCTION`, not one named function.
-- **No new table enters the core migration set without a stated reason in the commit.** A
-  `tenant_id`-bearing domain table belongs to its module's own set, where its grants travel with it.
+- **No new table enters the core migration set without a stated reason in the commit.** A domain
+  table a module owns belongs to that module's own set, where its grants travel with it.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
   RUNNING the grant assertions and `inmutabilidad`.

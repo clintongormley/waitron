@@ -77,8 +77,8 @@ async function purgeProfiles(): Promise<void> {
   await suite.admin.execute(sql`delete from device_profiles`);
 }
 
-/** Create a real canvas (as a manager) and return its id — the target the FK check
- * accepts, and the wrong-tenant target that FK-rejects a cross-tenant reference. */
+/** Create a real canvas (as a manager) and return its id — the target the FK check accepts. A
+ * canvas id naming no row is what the FK rejects; there is no cross-tenant case to write. */
 async function seedCanvas(session: string, name: string): Promise<string> {
   const { id } = await asApp((tx) =>
     createCanvas(tx, {
@@ -182,7 +182,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     expect(kds.inactivityTimeoutSeconds).toBeNull();
   });
 
-  it("stores and returns a canvas reference that satisfies the composite FK", async () => {
+  it("stores and returns a canvas reference that satisfies the FK", async () => {
     await seedTenant(suite.admin);
     const session = await seedSession("manager");
     const canvasId = await seedCanvas(session, "The canvas");

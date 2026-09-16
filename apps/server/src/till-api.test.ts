@@ -117,7 +117,7 @@ const suite = usePgliteDb({
       insert into tills (location_id, name)
       values (${loc.rows[0]!.id}, 'Till 1') returning id`);
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
-    // (its composite FK `(node_id) → nodes(id)` requires a real row), and
+    // (its FK `(node_id) → nodes(id)` requires a real row), and
     // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
     const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
     // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
@@ -2543,7 +2543,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       where zone_id = ${zoneId}`);
 
     // Create a table IN that zone through the till route, so `createTable`'s zoneId assignment (and its
-    // composite zone FK) is exercised — not a raw insert.
+    // zone FK) is exercised — not a raw insert.
     const tableRes = await app.request("/api/tables", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },

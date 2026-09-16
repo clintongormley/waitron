@@ -48,7 +48,7 @@ const suite = usePgliteDb({
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (location_id, name)
       values (${loc.rows[0]!.id}, 'Till 1') returning id`);
-    // A node the tab lives on: `openTab` writes `working_orders.node_id` (its composite FK
+    // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
     const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
     // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.

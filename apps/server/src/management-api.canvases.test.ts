@@ -247,7 +247,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   it("DELETE a canvas a device profile still references → 409 canvas.in_use, canvas survives", async () => {
     const app = mountApp();
     // Create a canvas, then bind a device profile to it as the owner (fixture setup). The
-    // composite FK device_profiles_canvas_fk is ON DELETE RESTRICT, so the DELETE trips a 23001 the
+    // FK device_profiles_canvas_fk is ON DELETE RESTRICT, so the DELETE trips a 23001 the
     // store translates to canvas.in_use → the house 409.
     const created = await app.request("/management-api/canvases", {
       method: "POST",

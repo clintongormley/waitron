@@ -44,8 +44,8 @@ export const printCharacterSet = pgEnum("print_character_set", ["wpc1252", "pc85
  * `printers_transport_fields_ck` CHECK hand-written in the paired --custom migration (usb/bluetooth
  * need local_key; network_tcp needs host; cloud_poll needs poll_id). The partial UNIQUE
  * `printers_local_key_key` on (location_id, local_key) WHERE local_key IS NOT NULL — one
- * registered printer per physical USB/BT device per venue — and the (id) composite UNIQUE
- * that print_jobs.printer_id targets are likewise hand-written there.
+ * registered printer per physical USB/BT device per venue — is likewise hand-written there, as is
+ * `print_jobs_printer_fk`, which targets this table's primary key.
  */
 export const printers = pgTable("printers", {
   id: uuid("id").primaryKey().defaultRandom(),

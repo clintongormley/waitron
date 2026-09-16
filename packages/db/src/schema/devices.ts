@@ -18,7 +18,7 @@ import { locations } from "./tenants.js";
  * the `kitchen_stations` shape, granted in the paired --custom migration.
  *
  * `station_id` is a BARE uuid: the (station_id) → kitchen_stations
- * (id) composite FK is hand-written in the --custom migration (the KDS-1 idiom — a
+ * (id) FK is hand-written in the --custom migration (the KDS-1 idiom — a
  * `kitchen_stations` table, so its FK cannot be a one-arg `.references()`), exactly as
  * `ticket_items.station_id` is. NULLABLE so a non-kds device carries no station; MATCH
  * SIMPLE (the FK default) skips the check on a NULL station_id.
@@ -27,7 +27,7 @@ export const devices = pgTable("devices", {
   id: uuid("id").primaryKey().defaultRandom(),
   // The venue the device lives in — a required scope. A DIRECT location_id →
   // locations.id FK with onDelete restrict, mirroring `shifts` (shifts_location_fk), the precedent
-  // the spec cites (§2a "the shifts shape") — NOT the composite (location_id) FK
+  // the spec cites (§2a "the shifts shape") — NOT the hand-written (location_id) FK
   // kitchen_stations uses. The station binding narrows it further to one display.
   locationId: uuid("location_id")
     .notNull()
@@ -41,18 +41,18 @@ export const devices = pgTable("devices", {
   stationId: uuid("station_id"),
   // The `tills` row this sale-capable device rings against (SP-A.2 §16.4). Populated for a
   // non-kds (register-bound) form factor, NULL for a kds device. Bare uuid: the
-  // (till_id) → tills(id) composite FK is hand-written in the --custom migration
+  // (till_id) → tills(id) FK is hand-written in the --custom migration
   // (a bare column carries no FK), the `station_id` idiom. MATCH SIMPLE skips the check on a NULL.
   tillId: uuid("till_id"),
   // The assigned reusable DEVICE PROFILE (device-profile design 2026-09-05 §5.1) — the binding bundle
   // (name + canvas reference + capabilities) this device resolves against, and the row's FORM FACTOR:
   // a device is now DEFINED by its profile, so this is NOT NULL. Bare uuid: the
-  // (device_profile_id) → device_profiles(id) composite FK is hand-written in
+  // (device_profile_id) → device_profiles(id) FK is hand-written in
   // the --custom migration, the `station_id` idiom.
   deviceProfileId: uuid("device_profile_id").notNull(),
   // Static hardware binding (SP-A.2 §16.3) — the per-device receipt printer (and its cash-drawer kick).
   // Bare uuid, NULLABLE: the (receipt_printer_id) → printers(id)
-  // composite FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
+  // FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
   receiptPrinterId: uuid("receipt_printer_id"),
   // Static hardware binding (SP-A.2 §16.3): whether this device has a cash drawer. DEFAULT false so an
   // existing device carries no drawer until configured.

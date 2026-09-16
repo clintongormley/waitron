@@ -40,7 +40,7 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   });
 }
 
-// Verify under the app role with an explicit tenant id — the shape a caller (Task 5's demo) uses, which also
+// Verify under the app role for one node — the shape a caller (Task 5's demo) uses, which also
 // proves app_user's SELECT grant is enough to re-walk the chain.
 function verify() {
   return withTransaction(suite.db, async (tx) => {

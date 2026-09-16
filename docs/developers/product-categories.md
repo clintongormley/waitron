@@ -60,7 +60,9 @@ and applies again if that category is offered later.
 
 ## API and Products integration
 
-All routes require a manager session belonging to the configured tenant. Reads return arrays
+All routes require a manager session holding the catalogue write permission
+(`CATALOGUE_WRITE_PERMISSION` in `apps/server/src/catalogue-api.ts`, `person.manage` today). Reads
+return arrays
 directly, following the existing catalogue client convention. Create returns status 201; update
 returns the canonical saved object; delete returns an empty 204.
 
@@ -74,7 +76,7 @@ returns the canonical saved object; delete returns an empty 204.
 | `GET /management-api/categories/:id/dependants` | What the delete would touch → `CategoryDependants` |
 | `GET /management-api/categories/:id/products` | Direct products with their staff name, active state and full membership |
 | `POST /management-api/categories/:id/products` | `{ productIds }` adds them all in one write → 204 |
-| `GET /management-api/products` | All tenant products, including inactive products, each once |
+| `GET /management-api/products` | Every product, including inactive products, each once |
 | `GET /management-api/products/:id/categories` | `{ categoryIds, primaryCategoryId }` |
 | `PUT /management-api/products/:id/categories` | Complete `{ categoryIds, primaryCategoryId? }` → saved membership |
 
@@ -167,7 +169,8 @@ Configuration transfer places media rows before category image references and pr
 and primary choice. Category parent references target existing core identities, so metadata rows can
 be restored in any order after those identities.
 
-The migrations are core `0020_category_names`, and the catalogue and media baselines
+The migrations are core `0020_category_names` (whose `categories_tenant_id_key` unique went with
+the tenant column, 2026-09-14), and the catalogue and media baselines
 (`0000_catalogue_baseline`, `0001_catalogue_baseline_sql`, `0001_media_baseline_sql`). The core migration drops and recreates
 the name column; it does not translate or backfill existing text. Follow the existing preproduction
 reset workflow for a populated database. Do not apply it to a populated shared development database

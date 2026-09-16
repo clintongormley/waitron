@@ -36,7 +36,7 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
  *
  * `payload` is OPAQUE bytes (`bytea`): Slice B fills it with ESC/POS, and this subsystem never
  * inspects them — it only moves bytes. `printer_id` is a BARE uuid whose
- * (printer_id) → printers (id) composite FK is hand-written in the paired
+ * (printer_id) → printers (id) FK is hand-written in the paired
  * --custom migration (a bare column carries no FK), exactly as `devices.station_id`.
  */
 export const printJobs = pgTable(
@@ -48,10 +48,10 @@ export const printJobs = pgTable(
       /* v8 ignore next */
       .references(() => locations.id, { onDelete: "restrict" }),
     // The target printer. Bare column: the (printer_id) → printers
-    // composite FK is hand-written in the --custom migration.
+    // FK is hand-written in the --custom migration.
     printerId: uuid("printer_id").notNull(),
     // The agent currently holding this job (set on claim, overwritten by a lease reclaim). Bare
-    // column: the (claimed_by) → print_agents composite FK is hand-written
+    // column: the (claimed_by) → print_agents FK is hand-written
     // in the --custom migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the
     // claimer reports its own job (runtime.ts). NULL while queued and after the job leaves `printing`.
     claimedBy: uuid("claimed_by"),

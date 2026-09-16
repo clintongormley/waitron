@@ -66,7 +66,7 @@ export interface BackupSupervisorDeps {
   environment: DeploymentEnvironment;
   stateDir: string;
   jitterSeed: string;
-  /** The venue's tenant-scoped wall clock (tz + business-day cutover). */
+  /** The venue's wall clock (tz + business-day cutover). */
   readClock: () => Promise<ScheduleClock>;
   /** In-memory per-destination outcome holder the backups alert source reads. Passed straight to the
    * sweep so each destination's tick result is recorded; optional so tests that ignore alerts omit it. */

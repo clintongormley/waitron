@@ -1698,9 +1698,9 @@ describe("catalogue operations", () => {
     });
   });
 
-  // The trust-boundary guard the location-menu write routes use: is this catalogue VISIBLE to the
-  // current tenant? A same-tenant id is true; an absent id is false.
-  it("catalogueExists is true for a tenant catalogue and false for an absent id", async () => {
+  // The trust-boundary guard the location-menu write routes use: does this catalogue exist at all?
+  // A real id is true; an absent id is false.
+  it("catalogueExists is true for an existing catalogue and false for an absent id", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Casa" });
       expect(await catalogueExists(tx, cat.id)).toBe(true);

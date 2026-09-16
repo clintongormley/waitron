@@ -21,7 +21,7 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: rows[0]!.id };
 }
 
-/** Run `fn` as the real deployment role — a tenant-scoped tx that switches to `app_user` first, then
+/** Run `fn` as the real deployment role — one tx that switches to `app_user` first, then
  * COMMITS when it returns. Each call is its own committed transaction, so a claim in one call is visible
  * and UNLOCKED to the next — the "claimed, committed, then the agent died" state the lease reclaims. */
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {

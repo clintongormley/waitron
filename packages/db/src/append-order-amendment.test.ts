@@ -22,7 +22,8 @@ import { locations, tenants, tills } from "./schema/tenants.js";
 // test therefore seeds its OWN working order and scopes its per-chain reads to that order's id
 // rather than reading a table-wide total that would drift as earlier tests accumulate rows.
 //
-// A second tenant is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps in.
+// A second LOCATION is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps
+// in. There is one taxpayer row: a second `tenants` row cannot be inserted.
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
@@ -60,8 +61,9 @@ describe("order_amendments append helper", () => {
   // `suite.pg.connect()`, which one serialised PGlite backend cannot give.
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
-  // As the connection owner — pure setup: two tenants, each with a location, a till and a node
-  // (tenant B exists only to mint `nodeB`, the foreign node id the hash-tamper case swaps in).
+  // As the connection owner — pure setup: the one taxpayer row, then two locations, each with a
+  // till and a node (location B exists only to mint `nodeB`, the foreign node id the hash-tamper
+  // case swaps in).
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.admin;

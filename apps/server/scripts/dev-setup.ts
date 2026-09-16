@@ -208,7 +208,7 @@ export interface DevSetupResult {
   env: DevEnv;
 }
 
-/** The five fiscal ids `provisionVenue` returns, in the shape `buildDevEnv` maps to the env contract. */
+/** The four fiscal ids `provisionVenue` returns, in the shape `buildDevEnv` maps to the env contract. */
 export interface DevVenueIds {
   tillId: string;
   nodeId: string;
@@ -322,7 +322,7 @@ export async function inspectVenues(
 
 /** Provision one preproduction venue + SIF, then seed the full demo restaurant (three menus, floor,
  * staff, media, and `salesDays` of back-dated preproduction sales) via `seedDemoRestaurant`. Returns
- * the five fiscal ids the server boots against. The bare `seedLocale` drives every seeded string; the
+ * the four fiscal ids the server boots against. The bare `seedLocale` drives every seeded string; the
  * full tag it maps to (`SEED_INVOICE_LOCALE`) drives the location's `invoiceLocales`; `salesDays` is
  * the historical-sales horizon (0 skips sales). */
 async function provisionVenue(

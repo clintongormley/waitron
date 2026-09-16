@@ -1009,7 +1009,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // `requireUuidParam`-screened (`shared.invalid_id`, 400) before any query; a present `printerId` must
   // be UUID-shaped (else a `22P02` → 500) via `requireBodyUuid`. A named printer is validated to be an
   // ACTIVE printer in the till's OWN location (the picker's source) — absent/inactive/foreign/other-location
-  // → `printer.not_found` (404, reused from Slice A), which also keeps the composite FK from 23503-ing an
+  // → `printer.not_found` (404, reused from Slice A), which also keeps the FK from 23503-ing an
   // opaque 500. An unknown till, and a body missing `printerId` entirely, are `management.request_invalid`
   // (400) — there is no `till.*` code (retired at the node-id rekey, errors.ts), and naming a
   // non-existent till in a config PATCH is a request-shape fault, the generic code these routes already use.

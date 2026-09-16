@@ -34,7 +34,7 @@ async function rollBackAfter(
   });
 }
 
-describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, composite FKs)", () => {
+describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, FKs)", () => {
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
@@ -129,11 +129,10 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     expect(pgErrorCode(e)).toBe("23514"); // check_violation on drawer_opens_reason_ck
   });
 
-  it("the sale binding is enforced (composite FK to sales)", async () => {
+  it("the sale binding is enforced (FK to sales)", async () => {
     // Proves the (sale_id) → sales FK exists and bites: a sale_id naming no row →
-    // foreign_key_violation. A real till isolates the sale FK. A full
-    // cross-tenant sale fixture is disproportionate for a schema task (a sale needs a series + node +
-    // ~15 columns); a non-existent id proves the composite FK is wired all the same, and NULL (the
+    // foreign_key_violation. A full sale fixture is disproportionate for a schema task (a sale
+    // needs a series + node + ~15 columns); a non-existent id proves the FK is wired all the same, and NULL (the
     // manual case) is proven to skip it by the positive control above.
     const missingSale = "dddddddd-0000-4000-8000-0000000000ff";
     const e = await captureError(() =>
@@ -146,7 +145,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (sale_id)
   });
 
-  it("the app role can set and read tills.receipt_printer_id (new column, composite FK to printers)", async () => {
+  it("the app role can set and read tills.receipt_printer_id (new column, FK to printers)", async () => {
     // The new bare column on tills, visible + writable under the app role (app_user holds UPDATE on
     // tills), and its hand-written (receipt_printer_id) → printers FK accepts a
     // printer of the same tenant. Rolled back so the shared template clone is untouched.

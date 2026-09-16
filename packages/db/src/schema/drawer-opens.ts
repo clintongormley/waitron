@@ -13,7 +13,7 @@ export type DrawerOpenReason = "cash_sale" | "manual";
  * `till_id` and `sale_id` are BARE uuids: their FKs —
  * (till_id) → tills(id) and (sale_id) → sales(id) — are
  * hand-written in the --custom migration (a bare column carries no FK), exactly as `sale_voids`'s
- * composite `sale_id` FK is. `sale_id` is NULLABLE (a manual open has no sale; a cash-sale open
+ * own `sale_id` FK is. `sale_id` is NULLABLE (a manual open has no sale; a cash-sale open
  * references it) — MATCH SIMPLE skips the FK check on a NULL. `person_id` is a plain uuid with NO
  * FK: the person/identity schema is a separate slice, so this audit row records the acting operator
  * as a raw id and stays independent of it — the `daily_closes.closed_by` / `order_amendments.actor_id`
@@ -29,7 +29,7 @@ export const drawerOpens = pgTable(
   "drawer_opens",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // Bare column: the (till_id) → tills(id) composite FK is
+    // Bare column: the (till_id) → tills(id) FK is
     // hand-written in the --custom migration.
     tillId: uuid("till_id").notNull(),
     // The acting operator (identity person id). Plain uuid, no FK: the person schema is a separate
@@ -45,7 +45,7 @@ export const drawerOpens = pgTable(
     // on locations is a pgEnum instead, matching order_flow — a per-venue CONFIG mode, a different family.)
     reason: text("reason").$type<DrawerOpenReason>().notNull(),
     // NULLABLE bare column: a manual open has no sale; a cash-sale open references it. The
-    // (sale_id) → sales(id) composite FK is hand-written in the
+    // (sale_id) → sales(id) FK is hand-written in the
     // --custom migration; MATCH SIMPLE skips it on a NULL sale_id.
     saleId: uuid("sale_id"),
     // Who authorized this open under a 'gated' drawer_open_policy (cash-drawer-authorization slice §2).

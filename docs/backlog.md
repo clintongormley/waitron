@@ -232,8 +232,9 @@ console, and the product could not then be sold.
 What it left open:
 
 - **A new picture consumer has to add a real database reference, not just store a filename.** Products
-  point at the image table through a foreign key that also checks the tenant matches, which is what
-  makes "you cannot delete a picture something is using" true. Any future screen that shows a library
+  point at the image table through a foreign key on the picture's filename
+  (`products_media_image_fk`, `ON DELETE RESTRICT`), which is what makes "you cannot delete a picture
+  something is using" true. Any future screen that shows a library
   picture has to add the same kind of reference and a sentence naming the use, or that check will not
   see it. Next action: whoever adds the second consumer writes the reference and the usage text in
   the same change.
@@ -310,8 +311,9 @@ What it left open:
   (`apps/server/src/dev-migration-hint.ts`, `WAITRON_ENV=dev` only); the mechanism and the limits of
   what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
   trap is unchanged: **a populated development database still has to be reset by hand.**
-- **Category authoring serialises per tenant, and nobody has measured what that costs.** Hierarchy
-  edits, membership replacement and category deletion all take the same one lock per tenant, which is
+- **Category authoring serialises across the whole database, and nobody has measured what that
+  costs.** Hierarchy edits, membership replacement and category deletion all take the same single
+  advisory lock, keyed on the constant `"categories"` (`packages/catalogue/src/categories.ts`), which is
   the design's deliberate choice and is what makes the races safe. The review confirmed the specific
   races are handled but reported no throughput measurement, so there is no evidence either way about
   how this behaves with several managers editing the catalogue at once. **Next action:** measure it
@@ -1258,7 +1260,7 @@ ongoing overhaul listed at the top of Track A.
   its server permission, hide unavailable items and empty groups, same rule for direct URLs and the
   landing screen.
 - **Dashboard-wide location context** — one persistent location dropdown in the banner; classify
-  every screen and API as tenant-wide or location-scoped first.
+  every screen and API as venue-wide (the whole database) or location-scoped first.
 - **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
   profile.
 - **Typed values are only partly checked — a generic phone-format screen landed, a country-specific
@@ -1475,8 +1477,11 @@ image constraints under *Detail → Box image*.
 
 ### B7. Provisioning and build debt
 
-- **The `tenant` command is unplanned**; its idempotency check should attempt the insert and catch
-  the unique violation, and with one tenant per database the guard is really `assertNoForeignTenant`.
+- ~~**The `tenant` command is unplanned.**~~ **Closed 2026-09-14.** There is no `tenant`
+  command — `waitron-provision` offers `keyring`, `instance`, `status` and `venue`
+  (`packages/provisioning/src/cli.ts`) — and the guard the item asked for exists as
+  `assertNoForeignTenant` (`packages/provisioning/src/tenant-guard.ts`), shared by all three
+  taxpayer-creating paths.
 - **Every credential reader checks the fields it uses — decided 2026-09-15, code waits for
   `feat/drop-tenant-id`.** Reading a credential (`getCredential`/`tryGetCredential`,
   `packages/credentials/src/store.ts`) does not re-check it against `PURPOSES`, and stays that way:
@@ -1488,9 +1493,9 @@ image constraints under *Detail → Box image*.
   and are the work: `apps/server/src/email-delivery.ts` passes `url`/`from` on with `!`, and
   `apps/server/src/node-identity.ts`'s `readNodeIdentityKey` casts a missing `privateKey`
   `as string`. Both should raise `server.credential_unusable` naming the field, as
-  `apps/server/src/stripe-account.ts` does, each with a failing test first. Wait for
-  `feat/drop-tenant-id`, which rewrites both functions and that code's parameters. Unchanged by
-  this decision: `rotate` re-checks every secret against the current list, so an out-of-date one
+  `apps/server/src/stripe-account.ts` does, each with a failing test first. The rewrite it was
+  waiting for is done: `feat/drop-tenant-id` took the tenant parameter out of both functions
+  (2026-09-14), so this is unblocked. Unchanged by this decision: `rotate` re-checks every secret against the current list, so an out-of-date one
   still stops a key rotation until it is re-entered (commented above `rotateCredentials`).
 - **The same hand-built SQL array appears in several packages** — `sql.join` of each value inside
   `array[...]::text[]`, in `packages/catalogue/src/provisioning.ts`,
@@ -1507,9 +1512,25 @@ image constraints under *Detail → Box image*.
   pools left open. Trading mode's version awaits the live change listener's startup and its close
   without catching a failure. From reading the code these are believed not to reject today; that has
   not been tested.
-- **Hardening from onboarding 2b:** a DB-level advisory lock on `tenantId` spanning
-  guard→stamp→`applyVenue`; a wizard-only box runs its trading life on the owner role rather than
+- **Hardening from onboarding 2b:** a DB-level advisory lock spanning guard→stamp→`applyVenue`
+  (see the next item); a wizard-only box runs its trading life on the owner role rather than
   `app_user` until the role-split retrofit.
+- **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
+  pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
+  says in as many words that callers must serialise provisioning, and nothing enforces it — the
+  setup route's latch is process-local. `feat/drop-tenant-id` closed only the taxpayer row's part of
+  it (the second insert now loses to the singleton primary key), and its test claims only that
+  neither plan dies on a `tenants_*` key. **Next action:** decide where the lock belongs — a
+  database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
+  concurrent provisions against a real database, not with the row-level check alone.
+- **A database ahead of the box's image gets a raw driver error, not the classified one**
+  (2026-09-14). `assertNotAhead` (`provisioning.database_ahead`) runs AFTER `ensureInstance`
+  migrates (`apps/server/src/node-entry.ts:483-505`), so an ahead database meets the migration first
+  and surfaces something like a `42710` from the driver. `feat/drop-tenant-id` regenerated eleven
+  module baselines, so more existing databases are now ahead of an older image than before. A box
+  operator has no terminal — the recovery page is their only window — so a raw driver error leaves
+  them nothing to act on. **Next action:** run the ahead check before `ensureInstance` migrates, or
+  classify what the migration throws when the journal is ahead.
 
 ### B8. Module framework follow-ons
 
@@ -1619,13 +1640,10 @@ turns out to need a design moves to its track.
 
 **Correctness:**
 
-1. **Two order verbs still read `working_orders` by id alone** (found 2026-09-14 while scoping
-   `placeOrder`/`sendToPrep`, which now check the tenant). `cancelPlacedOrder` locks and updates by id
-   (`apps/server/src/working-order.ts` `:3514`, `:3523`); `markCollected` reads and updates by id
-   (`:3600`, `:3624`) and reads `ticket_items` by order id (`:3614`). `readLockedLines` (`:682`) takes
-   no `cfg`; its one caller, `priceStoredOrder` (`:729`), is called from `till-sale.ts`, and those
-   calls were not checked. Same class as the by-id rule in `CLAUDE.md`
-   §3: write the two-tenant probe first, record what it does, then scope.
+1. ~~**Two order verbs still read `working_orders` by id alone.**~~ **Superseded 2026-09-14.**
+   The rule it cited is retired: there is no tenant column, so a by-id read has no tenant clause to
+   be missing (`CLAUDE.md` §3). The LOCATION half of the worry is real and unaffected — it is item 3
+   below, and that is where a by-id verb still wants scoping.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
 3. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
@@ -1637,6 +1655,26 @@ turns out to need a design moves to its track.
    `packages/*/src` on 2026-09-14, after `computeDailyClose` was made sequential, found no remaining
    `Promise.all` over one transaction: the rest read or delete files, call HTTP or storage
    services, close pools, or query through a pool.
+
+**Names left behind by the tenant-column removal (2026-09-14):**
+
+- **Twelve index and key names still read `tenant`, and the columns they name are gone.** Eight in
+  core and Veri\*Factu — `canvases_tenant_name_key`, `device_profiles_tenant_name_key`,
+  `print_agents_tenant_node_key`, `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
+  `table_service_statuses_tenant_label_key`, `working_orders_tenant_status_idx` and
+  `registros_tenant_node_secuencia_uq` — plus four in identity: `persons_tenant_email_uq`,
+  `persons_tenant_live_display_name_uq`, `persons_tenant_google_subject_uq` and
+  `persons_tenant_pending_email_uq`. (The `tenants*`, `tenant_themes*`, `tenant_receipts*` and
+  `tenant_credentials*` names are correct — those tables really are about the taxpayer — and stay.)
+  This is its own slice, not a tidy-up: two of the four `persons_*` names are matched BY NAME in
+  production error translation (`packages/identity/src/staff.ts`, `account-action.ts`), so renaming
+  them changes behaviour and wants its own failing tests first.
+- **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** One database
+  files for one taxpayer (`packages/fiscal/src/backend.ts`), and the field reaches `apps/server`'s
+  awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off `> 0`) and `fiscal-none`. A
+  rename would want to keep that "did this pass attempt work?" meaning rather than flatten it to a
+  boolean, since the flag deliberately distinguishes a no-work pass from a pass that exercised the
+  certificate and skipped.
 
 **The development stack:**
 
@@ -1753,8 +1791,7 @@ turns out to need a design moves to its track.
   gate.
 - `tenant.not_found` has no production thrower — keep or remove is an owner call; `mirror-bundle.ts`'s
   `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH` when either package is next
-  touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT; `readStandardSeriesIdTx`
-  filters by tenant while `readNodeEndorsement` documents the opposite; the SP-3d restore overlapping
+  touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT; the SP-3d restore overlapping
   a live SIF registration deadlocks (`40P01`) — revisit locking before the hook runs live.
 - Two stale lock-order claims in `apps/server/src/working-order.ts` (`unjoinTable`'s "MATCHES"
   docstring; `mergeTabs`'s "seq-scans" claim, which `EXPLAIN` contradicts). Thin on next touch.
@@ -1860,9 +1897,13 @@ check.
 From the 2026-09-05 whole-project design review and since. They supersede older spec text where they
 conflict.
 
-- **One tenant per database everywhere, the cloud included.** A tenant is one taxpayer
-  (`country` + `tax_id`; `packages/provisioning/src/tenant-id.ts` derives its id) holding all of its
-  locations. The cloud is a dedicated instance per tenant, hosted in Spain. Density comes from many
+- **One tenant per database everywhere, the cloud included, and the schema carries no tenant
+  column** (2026-09-14). A tenant is one taxpayer (`country` + `tax_id`), held as the single row of
+  `tenants` with its `id` pinned to 1, owning all of its locations. Nothing filters a query by a
+  tenant; a query that wants "this tenant's rows" reads the table. Spec:
+  [drop-tenant-id](superpowers/specs/2026-09-14-drop-tenant-id-design.md); guard
+  `scripts/no-tenant-column.test.ts` (text-matching, and blind to test files and to the historical
+  core migrations it exempts). The cloud is a dedicated instance per tenant, hosted in Spain. Density comes from many
   isolated instances per host. The only multi-tenant pieces are a small control plane and the
   preproduction trial demo.
 - **Warm standby plus human promotion; active-active is shelved.** Nothing was deleted for it: branch
@@ -1891,7 +1932,7 @@ partial scope; the detail for a live thread is in its track.
 | # | Sub-project | State | Remaining |
 | --- | --- | --- | --- |
 | 1 | Design system | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333) | `wt-select` (A7) |
-| 2 | Sales spine | Immutable hash-chained sales, per-tenant series, catalogue, tenant model | — |
+| 2 | Sales spine | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
 | 5 | Identity | persons/sessions, PIN (+ per-device throttle), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
@@ -2037,8 +2078,8 @@ module contract names a permission group instead. Pick one before writing schema
 identity's are one list, and whatever replaces the union keeps an equivalent tie. Then: who may edit
 a role (`person.admin` plus nobody mints or widens beyond what they hold, and a venue is never left
 with nobody who can administer roles); a role in use (deleting or narrowing one changes live
-sessions on their next request); storage (a table in identity's own migration set with `tenant_id`
-and a classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
+sessions on their next request); storage (a table in identity's own migration set with a
+classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
 `roleName`, `apps/dashboard/src/i18n/domain.ts:180`, custom ones will not be).
 
 ### Incidents are written by several things and displayed by nothing (A5)
@@ -2063,7 +2104,7 @@ already waiting.
 [plan](superpowers/plans/2026-08-31-logging-diagnostics-foundation.md). Eventual vendor destination
 is GitHub issues; for now a bundle only needs to be copy-pastable.
 
-- **Slice 2 — one-touch bug report.** A `bug_reports` table (tenant-scoped, `local`, grants in its
+- **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
   module's set), a capture endpoint that FREEZES a self-contained bundle (client trail `snapshot()` +
   `LogReader.byRequestIds()` + environment), a `wt-report-dialog` and "Report a problem" trigger in
   the till and dashboard chrome, and a GitHub-ready markdown serialiser.

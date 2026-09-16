@@ -1070,7 +1070,7 @@ describe("drain — the deployment-environment guard", () => {
     // Seeding lives INSIDE the try (I3's own fix-round-2 correction): a throw partway through
     // seeding — `seedPendingEnvios` succeeding but `appendPendingAlta` failing, say — would
     // otherwise leave a permanently-`pendiente` row in this shared `pg.db` with no `finally` covering
-    // it at all, the exact hazard I3 was raised to close in the first place. Only the tenant id
+    // it at all, the exact hazard I3 was raised to close in the first place. Only the node id
     // (not the whole `seeded` object) escapes into `finally` — TypeScript does not narrow a `let`
     // across the closures `withTransaction`'s own callbacks below create, so keeping `seeded` itself
     // `const` and scoped to the try body sidesteps that rather than sprinkling `!` assertions.

@@ -35,7 +35,7 @@ export interface StationPrinter {
  *
  * - the STATION must exist and be `active` — else `station.not_found`. Deactivated / absent both
  * fold into the one code, the shape kitchen.ts's `requireLiveStation` uses. Not scoped by location:
- * the composite FK (station_printers_station_fk) is the integrity backstop.
+ * the FK (station_printers_station_fk) is the integrity backstop.
  * - the PRINTER must exist and be `active` — else
  * `printer.not_found` (param `{ id }`, the printing package's own code). "Live" is determined
  * EXACTLY as `enqueuePrintJob` does it (`active = true`): a deactivated printer is not an enqueue

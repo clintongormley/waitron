@@ -785,7 +785,7 @@ async function readOutstandingSaleForOrder(
  *
  *  - P1 (tx A). Lock/resolve the order, decide the price, and — for a WALK-UP — create it `open` and
  *    COMMIT, so the `working_orders` row exists before P2: the provider's `insertAttempting` carries a
- *    composite FK to `working_orders` (`payments_working_order_fk`, `packages/payments`), which an
+ *    FK to `working_orders` (`payments_working_order_fk`, `packages/payments`), which an
  *    uncommitted row would violate. An already-`settled` order REPLAYS its ticket here (files nothing);
  *    an `abandoned` (or any other non-`open`/`placed`) order is refused `working_order.not_open`; an
  *    empty WALK-UP basket is refused `sale.empty_basket`. A retrieved/placed order files its STORED

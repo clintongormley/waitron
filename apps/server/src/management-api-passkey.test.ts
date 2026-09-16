@@ -205,8 +205,8 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Read every `webauthn_credentials` row for the tenant as the app role — the proof a genuine
- * tenant-scoped credential landed, not merely that a route returned 200. */
+/** Read every `webauthn_credentials` row as the app role — the proof a real credential row
+ * landed, not merely that a route returned 200. */
 async function readCredentials(): Promise<
   { credential_id: string; person_id: string; counter: string; name: string | null }[]
 > {
@@ -273,7 +273,7 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     expect(body.options.challenge).toBeTruthy();
   });
 
-  it("register/verify (gated) persists a tenant-scoped credential", async () => {
+  it("register/verify (gated) persists a credential row", async () => {
     const { managerId } = await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
@@ -296,8 +296,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     expect(verify.status).toBe(200);
     expect((await verify.json()) as { credentialId: string }).toEqual({ credentialId: "cred-abc" });
 
-    // Re-read as the app role: exactly one credential landed, owned by the manager, under
-    // this tenant — a genuine tenant-scoped write, not merely a 200.
+    // Re-read as the app role: exactly one credential landed, owned by the manager — a real
+    // write, not merely a 200.
     const creds = await readCredentials();
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({

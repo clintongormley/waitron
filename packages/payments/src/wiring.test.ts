@@ -126,7 +126,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     expect(paid.settledAt).not.toBeNull();
 
     // 2. The sale and the associate-back happen in ONE transaction, so the linkage is atomic with
-    //    the sale it points at (the composite FK `payments_sale_fk` is satisfied within the tx
+    //    the sale it points at (the FK `payments_sale_fk` is satisfied within the tx
     //    because the sale row already exists there).
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));

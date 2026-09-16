@@ -11,13 +11,13 @@ const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";
 const PROFILE_A = "11111111-0000-4000-8000-0000000000a4";
 const TOKEN_HASH = "scrypt$00$00";
 
-// The device composite FKs (till / receipt_printer / device_profile) are the subject here. Every seed
+// The device FKs (till / receipt_printer / device_profile) are the subject here. Every seed
 // device points at a `till` device profile and names a till — a device is DEFINED by its profile
 // (device_profile_id is NOT NULL) and the binding rule (device_binding_rule_insert / _update, tested in
 // devices.trigger.pg.test.ts) requires a register and no station for a non-kds form factor — so the
 // ONLY constraint each case leaves violated is the FK under test. `devices` is the only table that
 // carries a device binding FK, so it is the only one with cases here.
-describe("devices composite FKs (till / receipt_printer / device_profile)", () => {
+describe("devices FKs (till / receipt_printer / device_profile)", () => {
   const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
@@ -50,15 +50,15 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
     await suite.db.execute(sql`delete from device_profiles where id <> ${PROFILE_A}`);
   });
 
-  it("accepts same-tenant bindings; a NULL printer is unconstrained (MATCH SIMPLE) and the defaults apply", async () => {
+  it("accepts real bindings; a NULL printer is unconstrained (MATCH SIMPLE) and the defaults apply", async () => {
     const bound = await admin.execute<{ id: string }>(
       sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id, receipt_printer_id, has_cash_drawer) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Bound till', ${TOKEN_HASH},
                   ${TILL_A}, ${PRINTER_A}, true) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 
-    // A same-tenant till (required by the binding rule) with a NULL receipt_printer_id — the composite
-    // printer FK skips the check on the NULL column, and the hardware default applies (has_cash_drawer
+    // A real till (required by the binding rule) with a NULL receipt_printer_id — MATCH SIMPLE skips
+    // the printer FK check on a NULL, and the hardware default applies (has_cash_drawer
     // false).
     const [row] = (
       await admin.execute<{ has_cash_drawer: boolean }>(
@@ -78,7 +78,7 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
     expect(rows).toEqual([]);
   });
 
-  it("accepts a same-tenant device_profile_id", async () => {
+  it("accepts a real device_profile_id", async () => {
     const bound = await admin.execute<{ id: string }>(
       sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Profile-bound', ${TOKEN_HASH}, ${TILL_A}) returning id`,
     );

@@ -20,7 +20,7 @@ let ctx: { nodeId: string; personId: string; locationId: string };
 // Reseed PER TEST, not once: `useTemplateDb` defaults `resetPerTest: true`, so the shared reset
 // TRUNCATEs every data table (cascade) after each `it`, wiping the tenant/node/person these rows
 // reference. A one-shot `beforeAll` fixture would leave `ctx` pointing at rows that no longer exist,
-// so the second test's `insertTimeEntry` would fail the composite FK (23503) before ever reaching
+// so the second test's `insertTimeEntry` would fail the FK (23503) before ever reaching
 // the privilege/trigger floor it asserts. Reseeding after each reset keeps every test against a
 // database holding exactly its own tenant's row. Each `seedTenant` mints a fresh NIF, so the
 // reseeds never collide on `tenants_country_tax_id_key`.

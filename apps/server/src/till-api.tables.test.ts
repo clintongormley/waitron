@@ -31,7 +31,7 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these routes are wiring — session guard + isUuid screen + STATUS mapping
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
-// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the composite FKs)
+// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the FKs)
 // live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
 // re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
 // into core, so the shared ordered set is the fixture.
@@ -41,7 +41,7 @@ let ana: { id: string };
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
 // key match the location's `es-ES` locale).
 let productId: string;
-// A real `floor_zones` row in the counter location — a table's `zoneId` is now a composite FK to
+// A real `floor_zones` row in the counter location — a table's `zoneId` is now a FK to
 // `floor_zones`, not a free-text string, so the create/patch table tests point at THIS id. (The zone
 // CRUD verbs have no HTTP route yet — that is a later FP-1 task — so it is seeded directly here.)
 let seededZoneId: string;
@@ -67,7 +67,7 @@ const suite = usePgliteDb({
       insert into tills (location_id, name)
       values (${loc.rows[0]!.id}, 'Till 1') returning id`);
     // A node the tab's working-order write needs: `openTab`/`addTabRound` create an `open`
-    // working_orders row whose composite FK `(node_id) → nodes(id)` requires a
+    // working_orders row whose FK `(node_id) → nodes(id)` requires a
     // real row; `cfg.nodeId` names THIS one.
     const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
     // Ana logs in with PIN "5555"; the session cookie the routes require names her shift.
@@ -212,7 +212,7 @@ describe("table + tab routes", () => {
 
   it("POST /api/tables with an unknown zoneId → 404 zone.not_found", async () => {
     // The table create route now forwards `zoneId` to `createTable`; one naming no `floor_zones` row
-    // trips the composite `dining_tables_zone_fk` (23503), surfaced as the domain `zone.not_found`
+    // trips `dining_tables_zone_fk` (23503), surfaced as the domain `zone.not_found`
     // (404 via the STATUS map) rather than an opaque 500. A real zoneId is proven by the create test
     // above; this is its negative counterpart.
     const res = await request("/api/tables", {

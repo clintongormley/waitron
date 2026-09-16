@@ -15,9 +15,7 @@ import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-
 // then read back the three fields), never a privilege as the deployment role — so the lighter target
 // applies (CLAUDE.md §4). Nothing here needs a taxpayer row: `tenant_credentials` is keyed by
 // `purpose` alone and references no other table, and `withTransaction` only opens a transaction —
-// it sets no session variable (`packages/db/src/tenancy.test.ts` asserts that). `sealAeatSecret`
-// still TAKES a tenant id because the slot seat it fills does; it reads it nowhere, so the constant
-// below is a placeholder, not a row.
+// it sets no session variable (`packages/db/src/tenancy.test.ts` asserts that).
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],

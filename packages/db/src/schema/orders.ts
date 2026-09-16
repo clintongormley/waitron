@@ -83,7 +83,7 @@ export const workingOrders = pgTable(
     // `createOpenOrder` (apps/server/src/working-order.ts) always sets it to the till's node on every
     // parked AND walk-up order, so in practice a working order carries one. It stays nullable for
     // MATCH SIMPLE, not because nothing writes it (design §5): MATCH SIMPLE (the default) means a NULL
-    // node_id skips the composite FK check below, leaving room for a future non-till writer to omit
+    // node_id skips the FK check below, leaving room for a future non-till writer to omit
     // it. Bare column: the FK is the (node_id) →
     // nodes(id) declared in extraConfig below (mirroring `working_order_lines_order_fk`),
     // `.references()` here, so nothing for v8 to track.

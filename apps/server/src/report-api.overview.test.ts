@@ -70,7 +70,7 @@ async function seedTodaySale(db: Database): Promise<void> {
  * + FREE (tab_id null), and one INACTIVE (active = false) that ALSO carries an open tab → the route's
  * openTables must be {open:1, total:2} because `countOpenTables`'s `and dt.active = true` predicate
  * excludes the inactive table from BOTH the total and the open count. The open tables need real
- * working_orders rows because dining_tables.tab_id carries a composite FK (0046_tab_link_fks).
+ * working_orders rows because dining_tables.tab_id carries a FK (0046_tab_link_fks).
  *
  * Proven by deletion: removing `and dt.active = true` from `countOpenTables` makes the inactive table
  * count, so openTables becomes {open:2, total:3} and the route test's {open:1, total:2} assertion

@@ -8,7 +8,7 @@ import { asAppUser } from "../testing/roles.js";
 import { withTransaction } from "../tenancy.js";
 import { tenants } from "./tenants.js";
 
-describe("table_service_statuses schema (the dining_tables.status_id composite FK)", () => {
+describe("table_service_statuses schema (the dining_tables.status_id FK)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {

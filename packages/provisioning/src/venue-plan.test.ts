@@ -310,15 +310,16 @@ describe("planVenue", () => {
     }
   });
 
-  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES cannot mint two tenants (§5)", () => {
+  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES reads as the SAME taxpayer (§5)", () => {
     // The setup API currently emits the pack's canonical country and normalized tax ID, while the CLI
     // accepts operator-entered casing and surrounding space. Both paths go through planVenue, so canonicalizing
-    // HERE — once, at the top, via `.trim().toUpperCase()` — makes the derived id AND the stored
-    // (country, tax_id) unique-index row canonical for both. Without it, a re-run of the SAME business
-    // differing only in case or surrounding whitespace mints a second, permanent, unmergeable tenant
-    // (§5). (Internal whitespace is deliberately NOT normalized; see the tenant-id primitive's test.)
-    // Proven by deletion: strip planVenue's normalization and the id-equality / stored-value
-    // assertions below go red.
+    // HERE — once, at the top, via `.trim().toUpperCase()` — makes the stored
+    // `tenants (country, tax_id)` row canonical for both. Without it, a re-run of the SAME business
+    // differing only in case or surrounding whitespace reads as a DIFFERENT taxpayer and is refused
+    // (`provisioning.tenant_identity_mismatch`) instead of being the no-op it should be (§5).
+    // Internal whitespace is deliberately NOT normalized.
+    // Proven by deletion: strip planVenue's normalization and the stored-value assertions below go
+    // red.
     const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );
@@ -333,9 +334,9 @@ describe("planVenue", () => {
 
   it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
     // The check is case-insensitive on the country-prefixed convention, so a lowercase country still
-    // matches its territory prefix. This never mints two tenants (planVenue canonicalizes country
-    // before deriving the id and storing the row — see the casing test above), but planVenue must not
-    // refuse the coherent combination on case alone.
+    // matches its territory prefix. The stored row is canonical either way (planVenue canonicalizes
+    // country before storing it — see the casing test above), so a lowercase re-run is still read as
+    // the same taxpayer; planVenue must not refuse the coherent combination on case alone.
     const actions = planVenue(
       request({ country: "es", location: { ...request().location, fiscalTerritory: "ES-common" } }),
       MODULES,

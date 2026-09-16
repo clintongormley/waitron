@@ -19,7 +19,7 @@ const base = {
 
 /** The env-var name each id is sourced from — the same list `loadTillConfig` walks. Table-driven so
  * every id, including the later-folded-in `locationId` (WAITRON_TILL_LOCATION_ID), gets the missing
- * and invalid cases without five copies of each. */
+ * and invalid cases without a copy of each per variable. */
 const ID_VARS = [
   "WAITRON_TILL_TILL_ID",
   "WAITRON_TILL_NODE_ID",
@@ -160,14 +160,14 @@ describe("tryLoadTillConfig", () => {
     expect(tryLoadTillConfig({})).toBeUndefined();
   });
 
-  it("treats all five present-but-empty (VAR=) as none set → undefined", () => {
+  it("treats all four present-but-empty (VAR=) as none set → undefined", () => {
     // `isUnset` is absent-OR-empty, so an env file writing every WAITRON_TILL_*_ID= blank is still
     // "none set" (setup mode) — the same VAR=-means-unset rule the ids' own `required` applies.
     const allEmpty = Object.fromEntries(ID_VARS.map((v) => [v, ""]));
     expect(tryLoadTillConfig(allEmpty)).toBeUndefined();
   });
 
-  it("loads the full config when ALL five are set (the same shape loadTillConfig returns)", () => {
+  it("loads the full config when ALL four are set (the same shape loadTillConfig returns)", () => {
     // Spot-checks nothing: `toEqual` the whole object, so a wrapper that dropped or reshaped a field
     // relative to `loadTillConfig` (the delegate) would fail here, not slip through on one field.
     expect(tryLoadTillConfig(base)).toEqual({

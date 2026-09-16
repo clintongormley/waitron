@@ -33,9 +33,6 @@ function nextSecuencia(): number {
   return secuenciaSeq;
 }
 
-// `seedNode` (`@waitron/db`) still takes a tenant id and ignores it; it goes when `apps/server`,
-// its last supplier, is converted.
-
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 /** A fresh node under TENANT_A's seeded location. */

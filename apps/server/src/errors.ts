@@ -93,8 +93,9 @@ declare module "@waitron/shared" {
      * a package ever needs to throw them.
      *
      * It has NO production thrower today: the last one was `provisionNode`'s own tenant read, which
-     * SP-3c moved into the fiscal module's seed (that seed reads `tenants.tax_id` and throws a plain
-     * Error for an absent row, since the node's FK makes it unreachable). It stays because this
+     * SP-3c moved into the fiscal module's seed (`packages/fiscal-verifactu/src/provisioning.ts`
+     * reads `tenants.tax_id` and throws a plain `Error` for an absent row — an empty `tenants` is a
+     * half-provisioned database, not a domain state). It stays because this
      * file's other codes cite the note above as their naming rule, and because the error-boundary
      * and till-api suites use it as their sample code.
      */
@@ -1087,7 +1088,7 @@ declare module "@waitron/shared" {
      * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the CONSTRAINT NAME
      * (`devices_device_profile_fk` / `devices_receipt_printer_fk`) — the `isZoneFkViolation` idiom
      * (`tables.ts`) — or raised directly by the accept path's explicit register read, which sees the
-     * venue a composite FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
+     * venue a FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
      * never reaches this, and a 23503 on any OTHER constraint is rethrown raw rather than mislabelled.
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,

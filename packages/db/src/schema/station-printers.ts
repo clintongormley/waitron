@@ -15,9 +15,9 @@ export const stationPrinters = pgTable(
   "station_printers",
   {
     // Bare column: the (station_id) → kitchen_stations(id)
-    // composite FK is hand-written in the --custom migration.
+    // FK is hand-written in the --custom migration.
     stationId: uuid("station_id").notNull(),
-    // Bare column: the (printer_id) → printers(id) composite FK
+    // Bare column: the (printer_id) → printers(id) FK
     // is hand-written in the --custom migration.
     printerId: uuid("printer_id").notNull(),
   },

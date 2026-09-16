@@ -122,7 +122,7 @@ declare module "@waitron/shared" {
     // from the driver's 23505 so a duplicate returns a clean 409, never a raw 500. No params: the
     // offending name is never echoed (§1). Mirrors `canvas.name_taken`.
     "device_profile.name_taken": Record<string, never>;
-    // A device-profile DELETE was refused because a device still references it (the composite FK
+    // A device-profile DELETE was refused because a device still references it (the FK
     // `devices_device_profile_fk`, ON DELETE RESTRICT). `device-profile-store.ts` translates the
     // driver's 23001 restrict_violation into this so a still-referenced profile returns a clean 409,
     // never a raw 500. No params: the FACT of the reference is the whole message — never echo WHICH

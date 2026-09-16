@@ -22,7 +22,7 @@ export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready
  *
  * `node_id` mirrors `order_prep`'s node scoping (the queue is node-scoped). `working_order_id` is a
  * denormalised grouping key (the per-station display groups a station's items by order) and carries
- * NO FK of its own — the composite FK on `working_order_line_id` gives the real integrity, cascading a
+ * NO FK of its own — the FK on `working_order_line_id` gives the real integrity, cascading a
  * cancelled/abandoned line's item away with the line (the analogue of `order_prep`'s order FK).
  * `UNIQUE (working_order_line_id)` is one ticket item per line — also the guard that makes a
  * concurrent double-fire collide rather than duplicate.

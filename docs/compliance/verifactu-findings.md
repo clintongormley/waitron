@@ -263,6 +263,15 @@ table regardless of what any one session's policy would let it read.
 tenant's own session can never `SELECT` the conflicting row. This is the property that actually
 makes never-reuse hold, not a convention the application is trusted to keep.
 
+> **The setup that experiment ran against is gone, and the conclusion is unaffected** (note added
+> 2026-09-16). Row-level security was dropped in #255 and the tenant column in every table on
+> 2026-09-14, so neither the `FORCE ROW LEVEL SECURITY` premise nor the two-tenant database the
+> probe used can be reproduced today. What the paragraphs above are really about — that uniqueness
+> must be enforced by an index over the whole table rather than by anything that filters what a
+> session can see — is untouched by either change, and both indexes still exist:
+> `registro_sif_instalacion_uq` (`packages/fiscal-verifactu/drizzle/0000_fiscal_baseline.sql`) and
+> the counter table `contadores_instalacion`, still keyed by NIF.
+
 The identical reasoning governs the counter that mints these numbers
 (`contadores_instalacion`, same file): it carries no `tenant_id` and no RLS at all, keyed by NIF —
 the obligado tributario for this purpose — because a single writer cannot guarantee uniqueness

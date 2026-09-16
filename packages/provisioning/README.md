@@ -40,8 +40,8 @@ absent and lets `@waitron/migrations` resolve each set from `packages/migrations
 | `status`   | the same admin connection; reads only                                 | any time            |
 | `venue`    | the migrator connection (role option) to a stamped, migrated database | once per venue      |
 
-`venue` creates a tenant, a location, a till, a node and its standard and rectificative invoice
-series, then runs each composed module's provisioning seed (the fiscal module's registers the node as
+`venue` creates the taxpayer row, a location, a till, a node and its standard and rectificative
+invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the node as
 a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql` (removed
 2026-08-04, spec [`2026-08-04-locations-provisioning-design.md`](../../docs/superpowers/specs/2026-08-04-locations-provisioning-design.md)).
 `register-till` (`apps/server`) remains the standalone path for an EXISTING node: it runs the same
@@ -201,8 +201,8 @@ It is also the tool to reach for after a failed `instance`: it names which roles
 
 ### `venue`
 
-Stands a sellable venue up in one transaction: a tenant, an **admin person**, a location, a till, a
-node, a standard plus a rectificative invoice series, and then every composed module's provisioning
+Stands a sellable venue up in one transaction: the taxpayer row (`tenants` holds exactly one), an
+**admin person**, a location, a till, a node, a standard plus a rectificative invoice series, and then every composed module's provisioning
 seed — the fiscal module's registers the node as a Veri\*Factu SIF and starts its chain. It replaced
 the retired `apps/server/sql/bootstrap-tenant.sql`.
 
@@ -235,7 +235,7 @@ authenticates that admin **by id** via `loginManagerById`, because it is a serve
 carrying the id rather than the dashboard form.
 
 It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
-confirmation (`--yes` skips it), applies, then prints the new `tenant` and `node` ids and one
+confirmation (`--yes` skips it), applies, then prints the new `node` id and one
 `seeded:` line per module seed that ran (the fiscal module's names its SIF id and installation
 number). The SIF's `id_sistema_informatico` is **not** an option — it is the `WAITRON_ID_SISTEMA`
 product constant (`W1`, owned by `packages/fiscal-verifactu`), which identifies Waitron's software,

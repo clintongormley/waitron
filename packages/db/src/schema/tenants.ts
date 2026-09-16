@@ -202,7 +202,7 @@ export const tills = pgTable("tills", {
   // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
   // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).
   // BARE uuid, NULLABLE (a till with no printer just doesn't print): the
-  // (receipt_printer_id) → printers(id) composite FK is hand-written in the
+  // (receipt_printer_id) → printers(id) FK is hand-written in the
   // paired --custom migration, exactly as `printers.agent_id` → print_agents is. MATCH SIMPLE skips
   // the FK check on a NULL.
   receiptPrinterId: uuid("receipt_printer_id"),

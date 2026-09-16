@@ -504,7 +504,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
-        // The device must exist (by id) — an unknown device id is `device.not_found`, which also keeps the composite device FK from 23503-ing an opaque 500.
+        // The device must exist (by id) — an unknown device id is `device.not_found`, which also keeps the device FK from 23503-ing an opaque 500.
         const [device] = await tx
           .select({ id: devices.id })
           .from(devices)
@@ -516,7 +516,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           return;
         }
         // A named reader must exist AND be active — an unknown or disabled reader is `reader.not_found`,
-        // never assignable (keeps the composite reader FK from a 500).
+        // never assignable (keeps the reader FK from a 500).
         const [reader] = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)

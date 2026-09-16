@@ -1361,7 +1361,7 @@ describe("mountPrintApi — management: test-print", () => {
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
-  it("returns a tenant-scoped preview only to printer managers", async () => {
+  it("returns a job preview only to printer managers", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused");
     const jobId = await enqueue(

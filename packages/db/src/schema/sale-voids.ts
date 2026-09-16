@@ -17,7 +17,7 @@ export const saleVoids = pgTable(
   "sale_voids",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // No single-column `.references()` here — see the composite
+    // No inline `.references()` here — see the hand-written
     // `sale_voids_sale_fk` below, mirroring `./sales.ts`'s own
     // `sale_lines_sale_fk`/`tenders_sale_fk`: a child row must not point at a
     // a property a bare `sale_id -> sales.id` reference cannot express.

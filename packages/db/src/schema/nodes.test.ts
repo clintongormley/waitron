@@ -89,13 +89,12 @@ describe("nodes schema", () => {
   });
 
   it("rejects a node whose location does not exist with a foreign-key violation", async () => {
-    // The brief frames this as "a location_id belonging to another tenant", but
-    // `nodes` carries no FK to `locations` beyond the plain `location_id` one
-    // (none is in scope — mirroring `tills`), so another tenant's location is a
-    // perfectly valid FK target and would NOT be rejected. What the plain
-    // `location_id -> locations.id` FK actually guarantees is referential
-    // existence, so that is what is asserted: a location that does not exist is
-    // rejected with 23503 (foreign_key_violation).
+    // The brief framed this as "a location_id belonging to another tenant" — a
+    // framing the schema never had and no longer could, since there is one
+    // taxpayer per database. What the plain `location_id -> locations.id` FK
+    // actually guarantees is referential existence, so that is what is asserted:
+    // a location that does not exist is rejected with 23503
+    // (foreign_key_violation).
     const error = await captureError(() =>
       db.insert(nodes).values({ locationId: LOCATION_MISSING, name: "Orphan" }),
     );

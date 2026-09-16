@@ -283,7 +283,7 @@ export interface ModuleBackupContribution {
   readonly restore?: RestoreHook;
 }
 
-/** One tenant-scoped table whose rows may cross from preparation into a fresh production database. */
+/** One table whose rows may cross from preparation into a fresh production database. */
 export interface ConfigurationTransferTable {
   readonly name: string;
   /** Insert these rows before the named tables when a module adds a reference to its data. */

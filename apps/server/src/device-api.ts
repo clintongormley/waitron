@@ -2,7 +2,7 @@
 // `device.pairing_closed` (the shut-window refusal on the knock), `device.unauthorized` (the join-status
 // cookie screen and the station route's no-station fold), `device.forbidden_station` and
 // `device.not_found` (the route-owned faults), `device.binding_invalid` (the assign-device-profile
-// route's composite-FK translation for a bad `deviceProfileId`), `management.request_invalid` (the
+// route's FK translation for a bad `deviceProfileId`), `management.request_invalid` (the
 // body/id screens) and `ticket.invalid_transition` (the malformed-item-id screen). The join-request and
 // device-auth codes reach here through the value imports of the verbs/guard that throw them
 // (`join-requests.js`, `device-session.js`, `working-order.js`); `device.join_rate_limited` reaches here
@@ -110,7 +110,7 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    `device.station_required`, `device.register_required`, `station.not_found`, `device.join_mismatch`
  *    (a wrong number, 400) and `join_request.not_found` (404).
  *    `device.binding_invalid` is the exception: this surface throws it too, from the
- *    assign-device-profile and hardware routes' composite-FK 23503 translation. The accept route
+ *    assign-device-profile and hardware routes' FK 23503 translation. The accept route
  *    raises it as well, through `requireLiveRegister` (`device.ts`), which is why it is the one code
  *    of this group both surfaces answer.
  *    `device.till_required` is not thrown here either (it is the SALE-path guard, device-session.ts) but

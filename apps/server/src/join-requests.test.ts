@@ -51,7 +51,7 @@ async function seedProfile(
   return rows[0]!.id;
 }
 
-// One tenant-scoped transaction run as the real `app_user` role — the shape every verb here is
+// One transaction run as the real `app_user` role — the shape every verb here is
 // exercised through, so the `join_requests`/`print_agents` grants (not superuser) are what answers.
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;

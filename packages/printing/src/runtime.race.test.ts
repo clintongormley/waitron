@@ -29,7 +29,7 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: rows[0]!.id };
 }
 
-/** Run `fn` as the real deployment role — a tenant-scoped tx that switches to `app_user` first, the
+/** Run `fn` as the real deployment role — one tx that switches to `app_user` first, the
  * shape the Task-6 route wraps every runtime call in. */
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {

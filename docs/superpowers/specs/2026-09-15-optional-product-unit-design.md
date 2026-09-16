@@ -1,5 +1,12 @@
 # Optional product unit, and click-a-unit-to-see-its-products
 
+> **2026-09-14 — the tenant column is gone.** The tenant-id removal this document anticipates has
+> landed: every `tenant_id` column, every tenant argument and the `withTenant` helper are gone
+> (`withTransaction` replaces it), one database holds one taxpayer as the single row of `tenants`,
+> and nothing filters by a tenant. Read every tenant-carrying signature, tenant predicate and
+> "a by-id read scopes to the tenant" rule below as the shape at the time of writing. Spec:
+> [drop-tenant-id](2026-09-14-drop-tenant-id-design.md).
+
 Date: 2026-09-15
 Status: draft (awaiting owner review)
 Area: catalogue (units), dashboard (units screen + product form), server (units API)

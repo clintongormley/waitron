@@ -296,7 +296,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // default already covers the two 400s, but they are listed explicitly as the house style requires.
   "canvas.not_found": 404,
   "canvas.name_taken": 409,
-  // A DELETE of a canvas a device profile still references (the composite FK `device_profiles_canvas_fk`,
+  // A DELETE of a canvas a device profile still references (the FK `device_profiles_canvas_fk`,
   // ON DELETE RESTRICT) → 409, translated from the driver's 23001 by `canvas-store.ts`. The house
   // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
   "canvas.in_use": 409,
@@ -314,7 +314,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // at the PATCH/DELETE routes) names no row → 404 (`zone.not_found` / `table.not_found`); a duplicate
   // name/label collides on the `(tenant, location, …)` unique → 409 (`zone.name_taken` /
   // `table.label_taken`), the same conflict shape a taken status label has. `zone.not_found` is ALSO
-  // surfaced by the table routes when a `zoneId` names no `floor_zones` row (the composite FK, mapped in
+  // surfaced by the table routes when a `zoneId` names no `floor_zones` row (the FK, mapped in
   // the verb). The code's own semantics already imply these statuses, but they are listed explicitly as
   // the house style requires (see this map's doc) — an unmapped code would default to 400, the wrong 4xx.
   "zone.not_found": 404,
@@ -350,12 +350,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // (`device_profile.not_found`); a duplicate profile name collides on the `(tenant, name)` unique,
   // translated from 23505 by `device-profile-store.ts` → 409 (`device_profile.name_taken`), the same
   // conflict shape a taken canvas name has. An unknown capability flag (fail-closed `validateCapabilities`)
-  // OR a `canvasId` naming no canvas (the composite FK 23503) is refused → 400 (`device_profile.invalid`,
+  // OR a `canvasId` naming no canvas (the FK 23503) is refused → 400 (`device_profile.invalid`,
   // params `{ reason: "bad_capabilities" | "bad_canvas_ref" }`), the same 400 family as `canvas.invalid`.
   // The `?? 400` default already covers the 400, but it is listed explicitly as the house style requires.
   "device_profile.not_found": 404,
   "device_profile.name_taken": 409,
-  // A DELETE of a profile a device still references (the composite FK `devices_device_profile_fk`, ON
+  // A DELETE of a profile a device still references (the FK `devices_device_profile_fk`, ON
   // DELETE RESTRICT) → 409, translated from the driver's 23001 by `device-profile-store.ts`. The house
   // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
   // Mirrors `canvas.in_use`.
@@ -1904,7 +1904,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           throw new AppError("management.request_invalid", { field: "zoneId" });
         // A string-typed but MALFORMED zoneId passes the `typeof` screen above, then un-screened reaches
         // the `zone_id` uuid column → `22P02` → opaque 500. Screen it as a UUID and give it the SAME
-        // `zone.not_found` a well-formed-but-missing zoneId gets (the composite FK's 23503, mapped in the
+        // `zone.not_found` a well-formed-but-missing zoneId gets (the FK's 23503, mapped in the
         // verb) — the till surface's create/patch routes screen it identically.
         if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         zoneId = body.zoneId;

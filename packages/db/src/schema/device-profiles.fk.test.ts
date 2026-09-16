@@ -27,13 +27,13 @@ describe("device_profiles canvas FK (canvas_id) → canvases", () => {
     await suite.db.execute(sql`delete from canvases where id <> ${CANVAS_A}`);
   });
 
-  it("accepts a same-tenant canvas_id; a NULL canvas_id is unconstrained (MATCH SIMPLE)", async () => {
+  it("accepts a real canvas_id; a NULL canvas_id is unconstrained (MATCH SIMPLE)", async () => {
     const bound = await admin.execute<{ id: string }>(
       sql`insert into device_profiles (name, form_factor, canvas_id) values ('Bound profile', 'till', ${CANVAS_A}) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 
-    // NULL canvas_id — the composite FK skips the check on any NULL column, and the capabilities
+    // NULL canvas_id — MATCH SIMPLE skips the FK check on a NULL, and the capabilities
     // default applies ('[]').
     const [row] = (
       await admin.execute<{ canvas_id: string | null; capabilities: unknown }>(

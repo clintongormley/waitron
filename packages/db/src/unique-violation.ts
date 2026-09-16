@@ -13,7 +13,7 @@ const UNIQUE_VIOLATION = "23505";
  * `pgErrorCode`/`pgErrorMessage` (which exist to make a TEST's assertion readable), this function
  * is meant to be called from a write path deciding whether to translate a driver error into a
  * domain `AppError`. `isUniqueViolation` below is the `23505` specialisation; `@waitron/printing`'s
- * `printers.ts` uses it for the `23503` composite FK and the `23514` transport CHECK. It is therefore
+ * `printers.ts` uses it for the `23503` FK and the `23514` transport CHECK. It is therefore
  * exported from this package's own public surface (`./index.ts`), not from `./testing/`.
  *
  * `packages/fiscal-verifactu/src/chain.ts` carries its own, independently-written copy of this

@@ -2599,9 +2599,9 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   beforeAll(async () => {
     const cfg: TillConfig = { ...loadTillConfig(TILL_ENV), orderFlow: "prepay" };
-    // Two `tills` rows in this till's own tenant/location, inserted as the container superuser
-    // (exactly as the tenant/location seed above). The (till_id) composite FK on
-    // `devices` (MATCH SIMPLE, both columns non-null here) requires a real row per bound device.
+    // Two `tills` rows in this till's own location, inserted as the container superuser
+    // (exactly as the location seed above). The (till_id) FK on
+    // `devices` requires a real row per bound device.
     const insertTill = async (name: string): Promise<string> => {
       const res = await suite.admin.execute<{ id: string }>(sql`
         insert into tills (location_id, name)

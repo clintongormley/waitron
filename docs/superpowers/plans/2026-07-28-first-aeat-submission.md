@@ -1,5 +1,13 @@
 # First real AEAT submission — Implementation Plan
 
+> **2026-09-14 — `waitron-credentials` no longer takes `--tenant`, and REFUSES it.** The tenant
+> column was dropped from every table: one database holds one taxpayer, as the single row of
+> `tenants`, and a credential is keyed by its purpose alone. Every command below of the shape
+> `… set --tenant <uuid> --purpose <name>` is run today as `… set --purpose <name>` — the flag is
+> not ignored, it fails with the CLI's usage line (`packages/credentials/src/cli.test.ts`, "rejects
+> a --tenant flag with usage"). The rest of this document is left as it was written. Spec:
+> [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **2026-07-29 note:** `WAITRON_AEAT_ENV` was replaced by `WAITRON_ENV` — see the

@@ -59,7 +59,7 @@ async function session(role: "manager" | "staff") {
   return { Cookie: `${MANAGEMENT_COOKIE}=${session.id}` };
 }
 async function fixture() {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const headers = await session("manager");
   const app = new Hono();
   MEDIA_ROUTES.mount(
@@ -86,7 +86,7 @@ async function fixture() {
   });
   expect(created.status).toBe(201);
   const { image } = (await created.json()) as { image: { id: string; filename: string } };
-  return { app, headers, tenantId, image };
+  return { app, headers, image };
 }
 
 it("allows its own manager to upload, read, edit and delete using non-superuser app_user", async () => {

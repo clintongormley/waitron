@@ -221,7 +221,7 @@ describe("devSetup against real Postgres", () => {
     // auto-creates when it enrols (seedDemoDevices). The handheld shares "Mostrador" and adds none.
     expect(await tillsCount()).toBe(2);
 
-    // The five fiscal ids are real uuids and the file on disk matches the returned env.
+    // The four fiscal ids are real uuids and the file on disk matches the returned env.
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
     for (const key of [

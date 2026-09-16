@@ -27,7 +27,7 @@ async function rollBackAfter(
   });
 }
 
-describe("table↔tab link columns (mutual composite FKs)", () => {
+describe("table↔tab link columns (mutual FKs)", () => {
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   let nodeA = "";

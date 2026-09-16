@@ -11,9 +11,6 @@ import { fiscalSubmissionSource } from "./submission-alerts.js";
 // `registros_facturacion` and `envios`) rather than the fixture owner's wider privileges.
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
-// `AlertSource.read` (`@waitron/module`) still takes a tenant id and this source ignores it; it goes
-// when `apps/server`, its last supplier, is converted.
-
 const NOW = new Date("2026-09-15T12:00:00Z");
 const hoursAgo = (h: number): Date => new Date(NOW.getTime() - h * 3_600_000);
 

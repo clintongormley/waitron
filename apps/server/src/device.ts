@@ -53,7 +53,7 @@ const BINDING_FK_FIELD: Record<string, "deviceProfileId" | "receiptPrinterId"> =
 };
 
 /**
- * If `error` (or anything it wraps) is a 23503 on one of the device binding composite FKs, the input
+ * If `error` (or anything it wraps) is a 23503 on one of the device binding FKs, the input
  * FIELD it guards (`deviceProfileId`/`receiptPrinterId`); otherwise `undefined`. Reuses `@waitron/db`'s
  * `pgErrorConstraint` to walk the cause chain and read the offending constraint name — Drizzle wraps
  * every failed query in a `DrizzleQueryError` whose own `.code` is undefined, so the real SQLSTATE and
@@ -107,7 +107,7 @@ async function createRegister(
 
 /**
  * Assert `registerId` names a `tills` row at THIS venue and return it. A by-id read with the
- * `location_id` scope, so a register that is absent or another venue's is rejected here rather than trusted or left to the `devices` composite FK (which
+ * `location_id` scope, so a register that is absent or another venue's is rejected here rather than trusted or left to the `devices` FK (which
  * sees neither location). No such row → `device.binding_invalid` naming the `tillId` FIELD (never the
  * id), the code the domain already uses for "named a binding id that matches no row of this tenant".
  */

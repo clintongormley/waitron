@@ -13,7 +13,7 @@ import { tenants } from "./tenants.js";
 // cases retain the role switch so the reads and writes still exercise app_user grants.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
-describe("floor_zones schema (columns and the dining_tables.zone_id composite FK)", () => {
+describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => {
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {

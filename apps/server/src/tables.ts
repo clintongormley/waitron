@@ -78,7 +78,7 @@ export interface DiningTable {
   id: string;
   label: string;
   /** The `floor_zones` row this table sits in (FP-1), or null. The successor to the former free-text
-   *  `zone` string — a composite FK (`dining_tables_zone_fk`), not an arbitrary label. */
+   *  `zone` string — a FK (`dining_tables_zone_fk`), not an arbitrary label. */
   zoneId: string | null;
   capacity: number | null;
   active: boolean;

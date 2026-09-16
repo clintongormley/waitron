@@ -9,7 +9,7 @@ export type OnboardingIntent = "demo" | "prepare" | "live";
 
 /**
  * The provisioned identity of a single till, written out as the env the supervisor sources on the
- * next boot so the box enters TRADING mode. The five *Id fields become the `WAITRON_TILL_*_ID`
+ * next boot so the box enters TRADING mode. The four *Id fields become the `WAITRON_TILL_*_ID`
  * config the till reads; `databaseUrl`/`migrationsDatabaseUrl` and `environment` are the same
  * connections + `WAITRON_ENV` the running server expects. Since swap step 4 there is no per-mirror
  * sync-pool URL — a mirror applies through a native subscription, not an outbox pull.
@@ -32,7 +32,7 @@ export interface TradingConfig {
 
 /**
  * Atomically write `<stateDir>/trading.env` (`KEY=value\n`, 0600) — the file the supervisor sources
- * on the next boot so the five `WAITRON_TILL_*_ID` + `DATABASE_URL`(+migrations) + `WAITRON_ENV` are
+ * on the next boot so the four `WAITRON_TILL_*_ID` + `DATABASE_URL`(+migrations) + `WAITRON_ENV` are
  * present and the box boots in TRADING mode. Sibling to 2a's secrets.env (left untouched). Returns the
  * path written.
  */

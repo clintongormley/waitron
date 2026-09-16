@@ -223,12 +223,13 @@ declare module "@waitron/shared" {
      * applyVenue's transaction, and the identity the operator supplied is the one they just typed.
      */
     "provisioning.tenant_identity_mismatch": Record<string, never>;
-    /** A mirror-bundle adopt found one of the five DESIGNATED ids for `trading.env` absent from the
+    /** A mirror-bundle adopt found one of the DESIGNATED ids for `trading.env` absent from the
      * inserted rows — a malformed or incomplete bundle. DEPRECATED: its former thrower `adoptVenue`
      * was deleted when the initial copy went native (a native tablesync COPY cannot coexist with
      * pre-inserted rows — swap S5). The code is kept registered per CLAUDE.md §3 (codes are never
      * deleted once shipped). `missing` is the ROLE LABEL of the absent parent
-     * (`tenant`|`location`|`node`|`till`|`series`), never the uuid. */
+     * (`location`|`node`|`till`|`series`; `tenant` was a fifth until the tenant column went on
+     * 2026-09-14), never the uuid. */
     "provisioning.adopt_incomplete": {
       missing: "tenant" | "location" | "node" | "till" | "series";
     };

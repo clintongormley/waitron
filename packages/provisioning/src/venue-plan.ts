@@ -10,7 +10,7 @@ import { resolveFiscalModules } from "./fiscal-modules.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
-/** The five ids that name a mirror's venue for `trading.env` (spec §3 Part 1b) — the shape a mirror
+/** The four ids that name a mirror's venue for `trading.env` (spec §3 Part 1b) — the shape a mirror
  * bundle designates. Once the row inserts (`adoptVenue`) were dropped for a native initial copy, this
  * type is all that survives that seam: `assembleMirrorBundle` fills it and the mirror's boot-time
  * finish step reads it. */

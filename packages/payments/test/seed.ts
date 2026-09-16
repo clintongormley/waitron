@@ -63,7 +63,7 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  * `invoice_locales`, `issued_offset_minutes` is within range, and this is the series' first (and
  * only) sale, so `invoice_number = 1` never collides with `sales_series_invoice_number_key`. The
  * sale and its covering tender are wrapped in one `db.transaction` for atomic setup — not for the
- * composite FK (which a committed `sales` row satisfies across separate transactions too), but so a
+ * FK (which a committed `sales` row satisfies across separate transactions too), but so a
  * partial failure can never leave a sale without its covering tender. Uses the fixture connection
  * directly, like `seedWorkingOrder`.
  */
