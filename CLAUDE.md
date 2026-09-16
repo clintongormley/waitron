@@ -169,7 +169,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
   fixture gives the three DIFFERENT text**, or the test passes whether the surface reads the right
-  name or the wrong one. Cost: a report grouping sales by the diner's wording; see
+  name or the wrong one. Cost: a report reading the diner's wording, recorded above the fixtures in
+  `packages/reporting/src/top-sellers.test.ts`. Which surface reads which:
   [products.md](docs/developers/products.md).
 - **A replay reports the original transaction facts; side effects are gated separately.** Cost: cash
   change returned as zero on a retry, because displaying change was treated as dispensing it.
