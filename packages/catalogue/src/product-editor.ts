@@ -11,18 +11,14 @@ import {
   updateProduct,
 } from "./operations.js";
 import { readProductUnitId } from "./units.js";
-import { listProductVariants, setProductVariants, type ProductVariant } from "./variants.js";
-import { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
+import { listProductVariants, setProductVariants } from "./variants.js";
+import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
+import type { ProductEditorValue } from "./product-types.js";
+export type { ProductEditorValue } from "./product-types.js";
 import type { VatClass } from "./pricing.js";
 import "./errors.js";
 
-export type ProductEditorValue = Omit<ProductEditorInput, "variants"> & {
-  id: string;
-  variants: ProductVariant[];
-  stationId: string | null;
-  courseId: string | null;
-};
 const columns = {
   id: products.id,
   name: products.name,

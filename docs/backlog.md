@@ -773,14 +773,26 @@ What it left open:
   error's contract for consumers that do not need it. **Next action:** an owner call if it ever
   bites.
 
-- **The dashboard and till mirror server response shapes by hand.** Four defects on this branch
-  reached review through that gap — a name rendering blank, a raw id, a single character, and a
-  `TypeError` inside render — and three more appeared after a rebase in files that merged with no
-  conflict, because nothing type-checks a hand-written mirror against the wire body it mirrors. A
-  schema-sharing rewrite is not proportionate: it is large, cross-cutting, and lands in the two apps
-  most sensitive to bundle size. **Next action:** a few contract tests that hit a real route and
-  assert the response's keys against the client interface's keys, for the hottest shapes —
-  `Product`, `ProductPatch` and the product-editor pair.
+- **The till still mirrors server response shapes by hand** (the dashboard's product half is done).
+  The dashboard now imports the product wire shapes from a shared browser-safe leaf,
+  `packages/catalogue/src/product-types.ts` — `Product`, the product-editor input/value/body and the
+  variant shapes are the one authoritative copy, checked by the compiler and guarded as a leaf by
+  `scripts/dashboard-browser-purity.test.ts`; the drift that let seven defects through is gone for
+  those shapes, and the dead `createProduct`/`updateProduct` client methods (with `ProductInput`/
+  `ProductPatch`) went with it. **Still hand-written:** the TILL's `TillProduct` and `TillMenuOffer`
+  in `apps/till/src/api/client.ts`, which mirror catalogue's `AvailableProduct`/`MenuOffer` (the
+  sell-side read, a different shape from the editor's). **Next action:** give the till the same
+  treatment — a browser-safe leaf for the sell-side product shapes it can import instead of copying,
+  or, if a full move is not wanted, a contract test that hits a real route and asserts the response's
+  keys against the till interface's keys.
+
+- **`operations.ts` throws an error code whose registry it does not import.** `createProduct`/
+  `updateProduct` throw `management.request_invalid`, but that code's registry lives in
+  `@waitron/server-kit`'s `errors.ts`, which `@waitron/catalogue` does not depend on;
+  `packages/catalogue/src/operations.ts` compiles only because another file in the package loads a
+  registry. This breaks CLAUDE.md §3 ("every file that throws a code imports its registry") and is
+  pre-existing (it predates the product-wire-types work, which only surfaced it). **Next action:**
+  give `management.*` a home the catalogue can import, or move these throws to a catalogue-owned code.
 
 - **Saving a product reads the same tenant configuration once per variant.** `setProductVariants`
   calls `validateContentTranslations` inside its loop and `saveProductEditor` calls it again for the

@@ -152,6 +152,53 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     expect(forbiddenImports(probe)).toEqual(["@waitron/db"]);
   });
 
+  describe("the catalogue product-types leaf stays type-only (no runtime edge)", () => {
+    // `packages/catalogue/src/product-types.ts` holds the product wire shapes the dashboard imports
+    // DIRECTLY (`@waitron/catalogue/src/product-types.js`). It is a PURE type module: every one of its
+    // imports and exports is type-only, so it compiles to an empty runtime module and contributes NO
+    // code — and no runtime dependency — to any browser bundle. That is a STRONGER, more precise
+    // guarantee than the reachable-specifier scan above: a transitive text scan here would false-positive
+    // on a harmless `import type` edge (the leaves it draws types from reach `errors.ts`, whose own
+    // `import type { ProductUsingUnit } from "./units.js"` is erased at build time but text-visible), so
+    // the check is on THIS file's own edges instead. A runtime edge — a side-effect `import "./x.js"` or
+    // a value `import {…}`/`export {…} from "./x.js"` — is the only way this file could pull server code
+    // (e.g. `@waitron/db` via `./operations.js`) into the bundle. Prove-by-deletion: add
+    // `import "./operations.js"` to product-types.ts and the assertion goes red.
+    const text = readFileSync(join(REPO, "packages/catalogue/src/product-types.ts"), "utf8");
+
+    /** Every RELATIVE import/export edge that survives to runtime (a bundler would follow): a
+     * side-effect `import "./x"`, or a value (non-`type`) `import …`/`export … from "./x"`. A
+     * `import type`/`export type` edge is erased and excluded. */
+    function runtimeRelativeEdges(src: string): string[] {
+      const out: string[] = [];
+      for (const m of src.matchAll(/import\s+["'](\.[^"']*)["']/g)) out.push(m[1]!);
+      for (const re of [
+        /import\s+(?!type[\s{])[\s\S]*?from\s*["'](\.[^"']*)["']/g,
+        /export\s+(?!type[\s{])[\s\S]*?from\s*["'](\.[^"']*)["']/g,
+      ]) {
+        for (const m of src.matchAll(re)) out.push(m[1]!);
+      }
+      return out;
+    }
+
+    it("imports at least one type (not vacuous)", () => {
+      expect(/import\s+type\s/.test(text)).toBe(true);
+    });
+
+    it("has no runtime import or export edge", () => {
+      expect(runtimeRelativeEdges(text)).toEqual([]);
+    });
+
+    it("recognises a planted runtime edge (negative control)", () => {
+      expect(runtimeRelativeEdges('import "./operations.js";')).toEqual(["./operations.js"]);
+      expect(runtimeRelativeEdges('import { readProductEditor } from "./operations.js";')).toEqual([
+        "./operations.js",
+      ]);
+      // A type-only edge is correctly NOT a runtime edge — it never reaches the bundle.
+      expect(runtimeRelativeEdges('import type { Product } from "./operations.js";')).toEqual([]);
+    });
+  });
+
   describe("reachability follows a relative import out of src/dashboard (regression)", () => {
     // The bypass a run-it reviewer FALSIFIED: a `src/dashboard` file importing a sibling OUTSIDE
     // `src/dashboard` that imports a forbidden specifier passed a DIRECT-only scan. The fixture below

@@ -66,6 +66,7 @@ import {
   type UpdateOptionGroupInput,
   type UpdateOptionGroupItemInput,
   type ProductEditorValue,
+  type ProductRouting,
   type UpdateProductInput,
   type VatClass,
 } from "@waitron/catalogue";
@@ -1373,12 +1374,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.body(null, 204);
     }),
   );
-}
-
-/** A product editor body's optional kitchen routing: absent leaves it alone, `null` clears it. */
-interface ProductRouting {
-  stationId?: string | null;
-  courseId?: string | null;
 }
 
 /**

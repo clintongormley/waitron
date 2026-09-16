@@ -49,9 +49,10 @@ import {
   getSeededUnit,
   getSellableUnit,
   type SellableUnit,
-  type Unit,
 } from "./units.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
+import type { Product } from "./product-types.js";
+export type { Product } from "./product-types.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
@@ -129,42 +130,6 @@ export interface MenuOfferOption {
   vatClass: VatClass | null;
   addAllergens: ProductAllergens | null;
   suitableFor?: string[] | null;
-}
-
-export interface Product {
-  id: string;
-  modifierIds: string[];
-  catalogueId: string;
-  categoryId: string | null;
-  categoryIds: string[];
-  primaryCategoryId: string | null;
-  name: string;
-  customerName: Record<string, string> | null;
-  unitId: string;
-  unit: Unit;
-  description: Record<string, string> | null;
-  kitchenName: string | null;
-  dietaryDeclarations: DietaryLabel[];
-  pricingUnit: PricingUnit;
-  /** GROSS (VAT-inclusive): per selected unit. */
-  unitPrice: string;
-  vatClass: VatClass;
-  active: boolean;
-  /** EU 1169/2011 Annex II declaration, or null when not yet reviewed (a compliance gap). This is the
-   * PUBLISHED union: the manual overlay merged with any recipe-derived floor (`republish`). */
-  allergens: ProductAllergens | null;
-  /** The staff-authored overlay ALONE, before the recipe floor is unioned in — null when unreviewed.
-   * Exposed distinctly from `allergens` so an editor seeds its picker from the manual value without
-   * double-counting recipe-derived allergens. */
-  manualAllergens: ProductAllergens | null;
-  /** The staff diet override (`products.diet_override`) ALONE, or null when none — the diet twin of
-   * `manualAllergens`. Exposed distinctly from the published `diet` union so the dashboard's diet-override
-   * editor seeds its tri-state controls from the manual value without double-counting the recipe-derived
-   * profile on the next save. */
-  dietOverride: DietOverride | null;
-  /** Content-addressed photo filename served at `/media/<image>`, or null when there is no picture. */
-  image: string | null;
-  variants: ProductVariant[];
 }
 
 export interface CreateProductInput {

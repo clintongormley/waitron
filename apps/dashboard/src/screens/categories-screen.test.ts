@@ -38,11 +38,18 @@ const product: Product = {
   dietOverride: null,
   image: null,
   id: "p",
+  modifierIds: [],
   name: "Toast",
   customerName: { en: "Buttered toast" },
+  unitId: "u1",
+  unit: { id: "u1", name: { en: "Each" }, precision: 0, abbreviation: { en: "ea" } },
+  description: null,
+  kitchenName: null,
+  dietaryDeclarations: [],
   categoryIds: ["food", "drink"],
   primaryCategoryId: "food",
   active: true,
+  variants: [],
 };
 function apiFixture() {
   const api = {
