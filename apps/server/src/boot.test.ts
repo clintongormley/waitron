@@ -2450,7 +2450,7 @@ describe("startServer, against a real container as the deployment role", () => {
         // deployment-environment guard refuses it before `resolveClient` (and hence `mtlsFetch`)
         // is ever reached FOR THAT ROW. This test's assertion happened to still pass either way —
         // `resolveClient` is called once per PASS that has any due work at all, ahead of and
-        // regardless of that per-row check (`drain.ts:181-187`) — but a passing assertion for the
+        // regardless of that per-row check (`packages/fiscal-verifactu/src/drain.ts:181-187`) — but a passing assertion for the
         // wrong reason is not what this test claims to cover. Set explicitly so the scenario
         // actually exercised is "a real submission attempt", not "a refused row that happens to
         // share a pass with a resolved transport".

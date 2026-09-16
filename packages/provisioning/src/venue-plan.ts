@@ -134,8 +134,9 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   // Keeping canonicalization at this generic boundary prevents a future caller from bypassing that
   // normalization. Storing a raw (country, tax_id) row would let `es`/`ES` (or a taxId that differs
   // only in letter case or in leading/trailing whitespace) read as a DIFFERENT business from the
-  // one already stored, so a same-venue retry would be refused
-  // (`provisioning.tenant_identity_mismatch`) instead of being the no-op it is.
+  // one already stored, so a same-venue retry would be refused as a foreign taxpayer
+  // (`provisioning.foreign_tenant`, thrown by `assertNoForeignTenant` before the apply is reached)
+  // instead of being the no-op it is.
   // `.trim().toUpperCase()` collapses exactly those two differences; INTERNAL whitespace is
   // deliberately left alone (a taxId's inner content is not ours to alter), so `"B123 45678"` stays
   // a distinct identity. ISO-3166 alpha-2 is upper-case by convention.

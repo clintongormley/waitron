@@ -316,7 +316,8 @@ describe("planVenue", () => {
     // HERE — once, at the top, via `.trim().toUpperCase()` — makes the stored
     // `tenants (country, tax_id)` row canonical for both. Without it, a re-run of the SAME business
     // differing only in case or surrounding whitespace reads as a DIFFERENT taxpayer and is refused
-    // (`provisioning.tenant_identity_mismatch`) instead of being the no-op it should be (§5).
+    // as a foreign one (`provisioning.foreign_tenant`, thrown by `assertNoForeignTenant` before the
+    // apply is reached) instead of being the no-op it should be (§5).
     // Internal whitespace is deliberately NOT normalized.
     // Proven by deletion: strip planVenue's normalization and the stored-value assertions below go
     // red.
@@ -326,8 +327,8 @@ describe("planVenue", () => {
     const messyTenant = planVenue(request({ country: "es", taxId: " b12345678 " }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );
-    // The stored row is canonical, so applyVenue reads a messy re-run as the SAME taxpayer and the
-    // re-run is the no-op it should be, not `provisioning.tenant_identity_mismatch`.
+    // The stored row is canonical, so a messy re-run compares equal to it and is the no-op it
+    // should be, not a refusal as a foreign taxpayer (`provisioning.foreign_tenant`).
     expect(messyTenant).toMatchObject({ kind: "ensure-tenant", country: "ES", taxId: "B12345678" });
     expect(messyTenant).toEqual(canonicalTenant);
   });

@@ -1,5 +1,5 @@
--- BEFORE the generated tenant_id drop: the same before/after pair every module set used for its own
--- drop (a hand-written migration each side of the generated one).
+-- BEFORE the generated tenant_id drop: a hand-written migration sits either side of the generated
+-- `0033_drop_tenant_id.sql` — this file and `0034_drop_tenant_id_after_sql.sql`.
 --
 -- Every object below is HAND-WRITTEN in an earlier custom migration, so it is absent from
 -- drizzle/meta/*.json and `drizzle-kit generate` emits no DROP for it. Each one names `tenant_id`,

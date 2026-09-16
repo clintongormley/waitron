@@ -22,8 +22,8 @@ const LOCALES = ["es", "ca"] as const;
 
 describe("B1 snapshot columns and the variant-descriptions locales trigger (real PG)", () => {
   // The venue, catalogue and order below are seeded ONCE in `beforeAll`, so the per-test truncation
-  // `useTemplateDb` runs by default would empty them after the first case. The four cases write
-  // distinct `line_no` values and read back only their own row, so they do not need the reset.
+  // `useTemplateDb` runs by default would empty them after the first case. Each case that writes a
+  // line uses its own `line_no` and reads back only its own row, so they do not need the reset.
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
   let db: Database;
   let productId = "";

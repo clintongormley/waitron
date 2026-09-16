@@ -119,11 +119,11 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh tenant + location + till + node and a catalogue with two products, all keyed to
- * `LOCALE` so the `working_order_lines_check_locales` trigger (descriptions must hold EXACTLY the
- * location's `invoice_locales`) is satisfied. Each test gets its OWN tenant + node, so the order
- * number `allocateOrderNumber` issues is that test's own — always 1 on the first park — and the suite
- * is order-independent (CLAUDE.md §4).
+ * Stand up the one taxpayer row + a location + till + node and a catalogue with two products, all
+ * keyed to `LOCALE` so the `working_order_lines_check_locales` trigger (descriptions must hold
+ * EXACTLY the location's `invoice_locales`) is satisfied. Each test gets its OWN node, and
+ * `allocateOrderNumber` counts per node, so the order number is that test's own — always 1 on the
+ * first park — and the suite is order-independent (CLAUDE.md §4).
  */
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   await seedTenant(db);
