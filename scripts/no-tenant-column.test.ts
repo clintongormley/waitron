@@ -9,8 +9,16 @@ import { describe, expect, it } from "vitest";
  * on every read — which is how a by-id read on `working_orders.id` once let one taxpayer abandon
  * another's order (root `CLAUDE.md`, the by-id-read receipt).
  *
- * Reads TEXT, not code: a column reintroduced under a name that avoids the
- * strings "tenant_id"/"tenantId" would pass. That is the known gap.
+ * Reads TEXT, not code: it matches SPELLINGS of the column, so a column reintroduced under a name
+ * containing neither `tenant_id` nor `tenantId` — `owner_ref`, say — passes. That is the known gap,
+ * and it is what a guard costs that needs no database and no type information to run.
+ *
+ * What the spellings DO reach, because a hedge vaguer than the code is its own defect: a prefix and
+ * a plural as well as the bare name, so `sourceTenantId`, `tenantIds`, `source_tenant_id` and
+ * `tenant_ids` are all caught, and `tenantID` alongside `tenantId`. Pinned in both directions by
+ * `negative controls` below — the earlier patterns anchored the FRONT of the name and missed every
+ * prefixed and plural spelling, `sourceTenantId` included, which is a spelling this repository
+ * carried until the branch that added this guard.
  *
  * Three more gaps, stated here because a failing test can never restore a missing hedge:
  *
@@ -18,30 +26,44 @@ import { describe, expect, it } from "vitest";
  *    local variable, without anything shipping. A tenant column reintroduced for real has to be
  *    declared in non-test source to reach a database, so the column itself is still covered — but a
  *    stale claim written in a test is not.
- * 2. **The schema check reads drizzle's own snapshot of the schema, not a live database.** It
- *    catches a column added through a drizzle table definition, because that regenerates a snapshot.
- *    A column added ONLY by hand-written SQL never reaches a snapshot; the migration-SQL check is
- *    what covers that path, and it covers it by FILE NAME (see `HISTORICAL_TENANT_SQL`).
- * 3. **`HISTORICAL_TENANT_SQL` is a hand-written list.** It names the core migrations that created
- *    the column and later dropped it. Those files are append-only and are never edited, so the list
- *    only ever shrinks (a regeneration deletes a baseline); a name that has gone is tolerated rather
- *    than reported, which means a stale entry sits there silently.
+ * 2. **The schema check reads drizzle's own snapshot of the schema, not a live database.** It sees a
+ *    column added through a drizzle table definition, because that regenerates a snapshot; it cannot
+ *    see one added by hand-written SQL. Two other checks cover that path: migration `.sql` files, and
+ *    the COLUMN spelling tested against non-test TypeScript as well as the identifier — so an
+ *    `alter table … add column "tenant_id"` written inside a `sql` template is read too. What none of
+ *    the three sees is SQL assembled from pieces that never spell the column out.
+ * 3. **`HISTORICAL_TENANT_SQL` is a hand-written list of whole FILES.** It names the core migrations
+ *    that created the column and later dropped it, and it exempts each one entirely — so a column
+ *    re-added INSIDE one of those files is seen by nothing here. The mitigation is a convention
+ *    rather than a check: drizzle migrations are append-only and are never edited, which is also why
+ *    the list can only go stale in the safe direction (a regeneration deletes a baseline, and a name
+ *    that has gone is tolerated rather than reported).
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 const ROOTS = ["packages", "apps"];
 
-/** The snake_case column, as it appears in SQL and in a drizzle snapshot. */
-const SQL_COLUMN = /\btenant_id\b/;
+/**
+ * The snake_case column, as it appears in SQL, in a drizzle snapshot, and inside a `sql` template in
+ * TypeScript. Anchored only at the END, so a prefixed column (`source_tenant_id`) and a plural
+ * (`tenant_ids`) are caught as well as the bare name.
+ */
+const SQL_COLUMN = /tenant_ids?\b/;
 
 /**
- * The camelCase field and the brand that used to type it, each matched as a WHOLE word so the
- * taxpayer-identity guard's own names survive: `TenantIdentity` and `readTenantIdentities`
- * (`packages/provisioning/src/tenant-guard.ts`) are the `(country, taxId)` pair on the taxpayer row,
- * which is a different thing from a tenant column and stays. A word-boundary match is what separates
- * them, so `negative controls` below pins it in both directions.
+ * The camelCase field and the brand that used to type it. Anchored only at the END, so a prefixed
+ * field (`sourceTenantId`) and a plural (`tenantIds`) are caught as well as the bare name, and
+ * either casing of `Id` covers `tenantID` alongside `tenantId`. The snake_case column is deliberately
+ * NOT this pattern's job — `SQL_COLUMN` is, and the check over TypeScript tests both, so the two
+ * spellings stay separable and each control below pins one thing.
+ *
+ * The trailing boundary is what keeps the taxpayer identity's own names out: `TenantIdentity` and
+ * `readTenantIdentities` (`packages/provisioning/src/tenant-guard.ts`) are the `(country, taxId)`
+ * pair on the taxpayer row, a different thing from a tenant column, and they stay. `negative
+ * controls` below pins that in both directions, because widening this pattern until it swallows them
+ * is what would force an allowlist — and an allowlist is the thing that goes stale.
  */
-const TS_IDENTIFIER = /\b[tT]enantId\b/;
+const TS_IDENTIFIER = /[tT]enant[Ii][Dd]s?\b/;
 
 /**
  * The core migrations that name `tenant_id`: the baselines that created it, the later migrations
@@ -107,15 +129,18 @@ function migrationSets(): string[] {
   return sets.sort();
 }
 
-/** Every `.sql` file in a migration set, as repo-relative paths. */
+/**
+ * Every `.sql` file in a migration set, as repo-relative paths. Walks the whole set rather than its
+ * top level: no set nests its migrations today, and nothing stops one starting to.
+ */
 function migrationSql(set: string): string[] {
-  const dir = join(repoRoot, set);
-  return readdirSync(dir)
-    .filter((entry) => entry.endsWith(".sql"))
-    .map((entry) => join(dir, entry))
-    .filter((entry) => statSync(entry).isFile())
-    .map((entry) => relative(repoRoot, entry))
-    .sort();
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) return walk(full);
+      return statSync(full).isFile() && full.endsWith(".sql") ? [relative(repoRoot, full)] : [];
+    });
+  return walk(join(repoRoot, set)).sort();
 }
 
 /**
@@ -149,6 +174,7 @@ describe("no tenant column", () => {
     // path. They are lower bounds, not counts: a number is a receipt that goes stale.
     expect(nonTestSources().length).toBeGreaterThan(500);
     expect(migrationSets().length).toBeGreaterThan(5);
+    expect(migrationSets().flatMap((set) => migrationSql(set)).length).toBeGreaterThan(20);
   });
 
   it("declares no tenant column in any migration set's head schema", () => {
@@ -182,11 +208,15 @@ describe("no tenant column", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("carries no tenantId identifier in non-test TypeScript", () => {
-    // No allowlist, deliberately: nothing under `packages/` or `apps/` has a reason to name one.
-    const offenders = nonTestSources().filter((file) =>
-      TS_IDENTIFIER.test(readFileSync(join(repoRoot, file), "utf8")),
-    );
+  it("carries no tenant field, and no tenant column in raw SQL, in non-test TypeScript", () => {
+    // BOTH spellings, not just the identifier. This package writes schema SQL as text — a
+    // `sql` template naming the column reaches a database without ever spelling the field, and the
+    // typechecker cannot see into it either. No allowlist, deliberately: nothing under `packages/`
+    // or `apps/` has a reason to name one.
+    const offenders = nonTestSources().filter((file) => {
+      const source = readFileSync(join(repoRoot, file), "utf8");
+      return TS_IDENTIFIER.test(source) || SQL_COLUMN.test(source);
+    });
 
     expect(offenders).toEqual([]);
   });
@@ -202,6 +232,26 @@ describe("negative controls", () => {
     expect(TS_IDENTIFIER.test("function f(cfg: { tenantId: TenantId }) {}")).toBe(true);
   });
 
+  it("catches a prefixed or plural spelling — the patterns are not anchored at the front", () => {
+    // Every one of these passed an earlier version of this guard, which anchored the front of the
+    // name as well as the back. `sourceTenantId` is not hypothetical: it is a spelling this
+    // repository carried, so a guard blind to it would not have stopped it coming back.
+    expect(TS_IDENTIFIER.test("sourceTenantId: string;")).toBe(true);
+    expect(TS_IDENTIFIER.test("readonly tenantIds: string[];")).toBe(true);
+    expect(TS_IDENTIFIER.test("tenantID: string;")).toBe(true);
+    expect(SQL_COLUMN.test('"source_tenant_id" uuid')).toBe(true);
+    expect(SQL_COLUMN.test("tenant_ids uuid[]")).toBe(true);
+  });
+
+  it("catches a tenant column written as raw SQL inside TypeScript", () => {
+    // The check over non-test sources tests BOTH patterns for this reason. Only `SQL_COLUMN` fires
+    // here — nothing in the statement spells the camelCase field — so testing the identifier alone
+    // would read straight past a column on its way into a database.
+    const raw = 'await tx.execute(sql`alter table "products" add column "tenant_id" uuid`);';
+    expect(TS_IDENTIFIER.test(raw)).toBe(false);
+    expect(SQL_COLUMN.test(raw)).toBe(true);
+  });
+
   it("leaves the taxpayer identity's own names alone — the patterns are not too wide", () => {
     // `TenantIdentity` and `readTenantIdentities` are the `(country, taxId)` pair on the taxpayer
     // row and they stay. Matching them would make this guard unfixable without an allowlist, which
@@ -209,5 +259,6 @@ describe("negative controls", () => {
     expect(TS_IDENTIFIER.test("export interface TenantIdentity { country: string }")).toBe(false);
     expect(TS_IDENTIFIER.test("await readTenantIdentities(db)")).toBe(false);
     expect(SQL_COLUMN.test("select country, tax_id from tenants")).toBe(false);
+    expect(SQL_COLUMN.test("insert into tenants (country, tax_id) values ($1, $2)")).toBe(false);
   });
 });
