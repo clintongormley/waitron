@@ -832,17 +832,17 @@ swept there — fixing one of 37 makes the rot look addressed, and CLAUDE.md §1
 rather than sweep. One pass, whenever somebody has the file open anyway.
 
 The same shape, from a different deletion: the outbox removal (#280) deleted
-`apps/server/src/sync-origin.test.ts`, and six comments still describe the capture-origin machinery
-it proved. Three name the deleted file outright as where the proof lives —
-`apps/server/src/recipe-api.ts:40`, `apps/server/src/me-api.test.ts:80` and
-`packages/payments/src/reconcile.test.ts:50` — and `recipe-api.ts` also cites
-`packages/sync/drizzle/0000_sync_baseline.sql`, which the same PR deleted. The other three describe a
-"sync-origin node id" threaded so that enrolled writes capture a real origin, which no trigger does
-any more: `packages/payments-stripe/src/provider.test.ts:25`,
-`packages/payments-stripe/src/device-provider.test.ts:19` and
-`packages/payments-stripe/src/device.test.ts:24`. All six are on `main` today, so they predate
-`feat/drop-tenant-id`; found while reviewing that branch. Same treatment as above — one pass, not a
-sweep.
+`apps/server/src/sync-origin.test.ts`, and comments across the tree still describe the capture-origin
+machinery it proved. Some name the deleted file outright as where the proof lives (`recipe-api.ts`
+also cites `packages/sync/drizzle/0000_sync_baseline.sql`, which the same PR deleted); the rest
+describe a "sync-origin node id" threaded so that enrolled writes capture a real origin, which no
+trigger does any more. The scope is every comment that still treats a captured origin as something
+the application records. Neither obvious grep bounds it on its own: some comments cite the deleted
+suite obliquely rather than by filename, so searching for `sync-origin.test.ts` finds only part of
+them, while searching for "sync origin" also returns the MIRROR's sync origin — the primary's node id
+a replica pulls from — which is a live concept and must not be swept. All of them are on `main`
+today, so they predate `feat/drop-tenant-id`; found while reviewing that branch. Same treatment as
+above — one pass, not a sweep.
 
 ### A1a. A foreign business customer needs an identifier-type decision
 
