@@ -72,3 +72,27 @@ All three server boot paths called the mDNS responder unconditionally. The respo
 `WAITRON_ENV=dev` and loopback-only HTTP listeners, so local development does not publish the
 box's name. Non-development LAN listeners retain discovery. The fake-socket regression first
 failed because all six disabled configurations created a socket; all passed after the guard.
+
+## Owner follow-up and physical character-table probe, 2026-09-16
+
+Later owner feedback supersedes two setup choices above. Hide the status filter whenever every
+registration has the same status, including an all-disabled list. Keep disabled registrations rather
+than deleting them: `print_jobs.printer_id` and the till and station routing tables still reference
+printer ids (`packages/db/drizzle/0034_drop_tenant_id_after_sql.sql`). Put unsupported office-printer
+scan results after receipt-printer results, move Scan to the trailing edge, and collapse the known-
+address form in a bordered panel.
+
+One QR sample is sufficient. Its 53-module code at six dots per module measures 39.8 mm at 203 dpi
+and 44.9 mm at 180 dpi, excluding its quiet zone. Ask whether its black square is 30–40 mm: Yes means
+203 dpi; wider than 40 mm means 180 dpi. The paper-width lines decide only 58 mm versus 80 mm.
+
+The owner supplied an NT-806 test page on which the configured table-16 and table-19 lines were
+garbled. A direct 1,469-byte raw-print probe to `192.168.10.81:9100` then printed bytes `0x80–0xFF`
+under `ESC t` tables 0, 6, 16 and 19. The photographed output identifies table 0 as PC437, table 6 as
+Windows-1252 (including `€` at `0x80`), table 16 as CP866 Cyrillic, and table 19 as CP737 Greek. Thus
+this unit changes tables correctly, but its firmware's numeric assignments contradict the supplied
+manual. Waitron must store the text encoding separately from the printer's numeric table. Its normal
+test page covers the common pairs; a batched finder prints Windows-1252 and PC858 samples for sixteen
+consecutive table numbers so a different printer can be identified from paper without trusting its
+manual. A sample-receipt action then prints a clearly marked simulated receipt with the editor's
+current unsaved settings.

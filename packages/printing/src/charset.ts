@@ -1,7 +1,7 @@
 /**
- * The three character sets a receipt printer can be set to (design 2026-09-14, "Character set").
- * A printer reads every byte through its selected code table, so the builder selects the table with
- * `ESC t n` and encodes text with the same table.
+ * The three encodings Waitron can use for receipt text. The printer's numeric `ESC t n` table is a
+ * separate setting: physical testing found the same Windows-1252 glyph map at table 6 on an NT-806
+ * while other ESC/POS manuals assign it to table 16.
  *
  * Source of the tables: the 0x80-0xFF halves below were generated with Python 3's `cp1252` codec
  * (which CPython generates from the Unicode Consortium file MAPPINGS/VENDORS/MICSFT/WINDOWS/CP1252.TXT)
@@ -11,12 +11,20 @@
  */
 export type CharacterSet = "wpc1252" | "pc858" | "plain";
 
-/** `ESC t n` — select character code table. `plain` sends nothing: ASCII reads the same in every table. */
-export const CHARSET_SELECT: Readonly<Record<CharacterSet, readonly number[]>> = {
-  wpc1252: [0x1b, 0x74, 16],
-  pc858: [0x1b, 0x74, 19],
-  plain: [],
+/** Legacy/common defaults used only when a caller has no printer profile. */
+export const DEFAULT_CHARACTER_TABLE: Readonly<Record<CharacterSet, number | undefined>> = {
+  wpc1252: 16,
+  pc858: 19,
+  plain: undefined,
 };
+
+/** `ESC t n` — select the printer's numeric character table. */
+export function selectCharacterTable(table: number): number[] {
+  if (!Number.isInteger(table) || table < 0 || table > 0xff) {
+    throw new RangeError(`character table must be an integer in [0, 255], got ${table}`);
+  }
+  return [0x1b, 0x74, table];
+}
 
 // prettier-ignore
 const WPC1252_HIGH: readonly number[] = [

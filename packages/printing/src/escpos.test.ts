@@ -354,9 +354,9 @@ describe("esc() ESC/POS builder", () => {
   });
 
   describe("charset-aware builder", () => {
-    it("emits ESC @ then ESC t 16 on init for wpc1252, and encodes the euro as 0x80", () => {
-      expect([...esc("wpc1252").init().line("€").bytes()]).toEqual([
-        0x1b, 0x40, 0x1b, 0x74, 16, 0x1c, 0x2e, 0x80, 0x0a,
+    it("selects a printer-specific table independently from the text encoding", () => {
+      expect([...esc("wpc1252", 6).init().line("€").bytes()]).toEqual([
+        0x1b, 0x40, 0x1b, 0x74, 6, 0x1c, 0x2e, 0x80, 0x0a,
       ]);
     });
     it("emits ESC t 19 and encodes the euro as 0xD5 for pc858", () => {
@@ -370,8 +370,8 @@ describe("esc() ESC/POS builder", () => {
       ]);
     });
     it("switches character set mid-payload", () => {
-      expect([...esc("plain").init().charset("pc858").text("é").bytes()]).toEqual([
-        0x1b, 0x40, 0x1c, 0x2e, 0x1b, 0x74, 19, 0x82,
+      expect([...esc("plain").init().charset("pc858", 5).text("é").bytes()]).toEqual([
+        0x1b, 0x40, 0x1c, 0x2e, 0x1b, 0x74, 5, 0x82,
       ]);
     });
     it("keeps Latin-1 and selects no table when no charset is given", () => {

@@ -53,6 +53,7 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     characterSet: "wpc1252",
+    characterTable: 16,
     pendingJobs: 0,
     lastPrintAt: null,
     active: true,
@@ -69,6 +70,7 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     characterSet: "wpc1252",
+    characterTable: 16,
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -85,6 +87,7 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     characterSet: "wpc1252",
+    characterTable: 16,
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -228,6 +231,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
+    sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
+    testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
     listTills: vi.fn().mockResolvedValue(tills),
@@ -847,6 +852,10 @@ describe("printers-screen", () => {
     });
     await flush(el);
     q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    const probePanel = q(el, "[data-test=probe-panel]") as HTMLDetailsElement;
+    expect(probePanel.open).toBe(false);
+    q(el, "[data-test=probe-panel] summary")!.click();
     await flush(el);
     const control = q(el, "[data-test=probe-host]") as import("@waitron/ui").WtInput;
     await control.updateComplete;
@@ -1503,6 +1512,11 @@ describe("printers-screen", () => {
     expect(muted).not.toBe(
       getComputedStyle(q(el, "[data-test='discovered-row-10.0.0.77:9100']")!).color,
     );
+    const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
+    expect((table.rows as DiscoveredPrinter[]).map((row) => row.host)).toEqual([
+      "10.0.0.77",
+      "10.0.0.56",
+    ]);
   });
 
   it("hides active registered USB devices and shows their seen-status on the printer", async () => {
@@ -1672,6 +1686,7 @@ describe("printers-screen", () => {
       paperWidth: "80mm",
       resolution: "180dpi",
       characterSet: "wpc1252",
+      characterTable: 16,
       pendingJobs: 0,
       lastPrintAt: null,
       active: true,
@@ -1711,6 +1726,7 @@ describe("printers-screen", () => {
       paperWidth: "80mm",
       resolution: "180dpi",
       characterSet: "wpc1252",
+      characterTable: 16,
       pendingJobs: 0,
       lastPrintAt: null,
       active: true,
@@ -2306,6 +2322,17 @@ it("defaults to active printers and filters disabled and all registrations", asy
     expect(q(el, `[data-test="printer-row-${id}"]`)).not.toBeNull();
 });
 
+it("shows a sole disabled printer without a redundant status filter", async () => {
+  const onlyDisabled = [{ ...printers[1]!, active: false }];
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listPrinters: vi.fn().mockResolvedValue(onlyDisabled) }),
+  });
+  await flush(el);
+  await selectTab(el, "printers");
+  expect(q(el, '[name="printer-status-filter"]')).toBeNull();
+  expect(q(el, "[data-test=printer-row-p2]")).not.toBeNull();
+});
+
 it.each(["usb", "bluetooth", "network_tcp"] as const)(
   "adds a disabled %s printer again by restoring its existing registration",
   async (transport) => {
@@ -2714,6 +2741,7 @@ describe("printer layout settings", () => {
     await chooseOption(el, "printer-paper-width", "58mm");
     await chooseOption(el, "printer-resolution", "203dpi");
     await chooseOption(el, "printer-character-set", "pc858");
+    typeField(el, 'wt-input[name="printer-character-table"]', "19");
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
@@ -2724,10 +2752,11 @@ describe("printer layout settings", () => {
       paperWidth: "58mm",
       resolution: "203dpi",
       characterSet: "pc858",
+      characterTable: 19,
     });
   });
 
-  it("prints the test page and turns the two answers into settings", async () => {
+  it("prints the test page, turns the three answers into settings, and prints a sample receipt", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -2738,7 +2767,13 @@ describe("printer layout settings", () => {
     q(el, "[data-test=print-test-page-p1]")!.click();
     await flush(el);
     expect(api.testPrint).toHaveBeenCalledWith("p1");
-    const value = (name: string) => (q(el, `select[name="${name}"]`) as HTMLSelectElement).value;
+    const value = (name: string) =>
+      (
+        q(
+          el,
+          `select[name="${name}"], input[name="${name}"], wt-input[name="${name}"]`,
+        ) as HTMLInputElement
+      ).value;
     const answer = async (name: string, value: string) => {
       q(el, `input[name="${name}"][value="${value}"]`)!.click();
       await flush(el);
@@ -2750,18 +2785,36 @@ describe("printer layout settings", () => {
     ).toEqual([
       "1: Café jamón Ñ ¿¡ ç ü 5 €",
       "2: Café jamón Ñ ¿¡ ç ü 5 €",
-      "3: Cafe jamon N ?! c u 5 EUR",
+      "3: Café jamón Ñ ¿¡ ç ü 5 €",
+      "4: Cafe jamon N ?! c u 5 EUR",
     ]);
     expect(q(el, 'input[name="printer-test-line-fits"]:checked')).toBeNull();
     await answer("printer-test-line-fits", "B");
-    await answer("printer-test-line-reads", "3");
+    expect(q(el, "[data-test=test-qr-help] legend")?.textContent?.trim()).toBe(
+      t("printers.test_qr_help"),
+    );
+    await answer("printer-test-qr-fits", "no");
+    await answer("printer-test-line-reads", "4");
     q(el, '[data-test="apply-printer-test"]')!.click();
     await flush(el);
-    expect([value("printer-paper-width"), value("printer-resolution")]).toEqual(["58mm", "203dpi"]);
+    expect([value("printer-paper-width"), value("printer-resolution")]).toEqual(["58mm", "180dpi"]);
     expect(value("printer-character-set")).toBe("plain");
+    expect(value("printer-character-table")).toBe("0");
+    q(el, "[data-test=print-sample-receipt-p1]")!.click();
+    await flush(el);
+    expect(api.sampleReceipt).toHaveBeenCalledWith("p1", {
+      paperWidth: "58mm",
+      resolution: "180dpi",
+      characterSet: "plain",
+      characterTable: 0,
+    });
+    q(el, "[data-test=print-character-tables-p1]")!.click();
+    await flush(el);
+    expect(api.testCharacterTables).toHaveBeenCalledWith("p1", 0);
     q(el, '[data-test="print-test-page-p1"]')!.click();
     await flush(el);
     await answer("printer-test-line-fits", "D");
+    await answer("printer-test-qr-fits", "yes");
     q(el, '[data-test="apply-printer-test"]')!.click();
     await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
@@ -2773,6 +2826,7 @@ describe("printer layout settings", () => {
       active: true,
       resolution: "203dpi",
       characterSet: "plain",
+      characterTable: 0,
     });
   });
 });

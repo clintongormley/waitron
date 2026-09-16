@@ -71,6 +71,7 @@ export interface CreatePrinterInput {
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   characterSet?: CharacterSet;
+  characterTable?: number;
 }
 
 /**
@@ -132,6 +133,7 @@ export async function createPrinter(
         paperWidth: input.paperWidth,
         resolution: input.resolution,
         characterSet: input.characterSet,
+        characterTable: input.characterTable,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
@@ -163,6 +165,7 @@ export interface UpdatePrinterInput {
   paperWidth?: PaperWidth;
   resolution?: Resolution;
   characterSet?: CharacterSet;
+  characterTable?: number;
   active?: boolean;
 }
 
@@ -179,6 +182,7 @@ export interface PrinterRow {
   paperWidth: PaperWidth;
   resolution: Resolution;
   characterSet: CharacterSet;
+  characterTable: number;
   active: boolean;
 }
 
@@ -276,6 +280,7 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
       characterSet: printers.characterSet,
+      characterTable: printers.characterTable,
       active: printers.active,
     })
     .from(printers)

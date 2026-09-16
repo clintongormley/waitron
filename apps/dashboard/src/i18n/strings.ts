@@ -218,12 +218,12 @@ export const en = {
   "printers.probe_action": "Connect",
   "printers.probe_waiting": "Connecting to printer",
   "printers.probe_found":
-    "Address reachable. Choose Add below, then send a test print to check the printer.",
+    "Printer reachable. Choose Add below, then send a test print to check the printer.",
   "printers.probe_missing":
     "No print agent reported this address. Check the address, port, printer power and network connection, and make sure a print agent is online. Then try again.",
-  "printers.probe_registered": "Address reachable. This printer is already added.",
+  "printers.probe_registered": "Printer reachable. This printer is already added.",
   "printers.probe_page_printer":
-    "Address reachable, but this is an office printer. Office printers are not supported for receipts, so it can't be added.",
+    "Printer reachable, but this is an office printer. Office printers are not supported for receipts, so it can't be added.",
   "printers.port_invalid": "Enter a whole port number from 1 to 65535",
   "printers.device_required": "Enter the device ID",
   "printers.poll_required": "Enter the cloud polling ID",
@@ -689,11 +689,17 @@ export const en = {
   "printers.resolution": "Print resolution",
   "printers.resolution_180": "180 dpi",
   "printers.resolution_203": "203 dpi",
-  "printers.character_set": "Character set",
-  "printers.character_set_wpc1252": "Windows Latin (WPC1252)",
-  "printers.character_set_pc858": "Multilingual with euro (PC858)",
+  "printers.character_set": "Text encoding",
+  "printers.character_set_wpc1252": "Western Latin with Spanish and € (WPC1252)",
+  "printers.character_set_pc858": "Multilingual with Spanish and € (PC858)",
   "printers.character_set_plain": "Plain letters, no accents",
+  "printers.character_table": "Printer table number",
+  "printers.character_table_hint":
+    "Enter the first number to test. If a Tnnn W line is correct, choose Western Latin and enter nnn. If Tnnn 8 is correct, choose PC858. If none is correct, start with the next 16.",
+  "printers.character_table_test": "Test 16 tables starting here",
+  "printers.character_table_invalid": "Enter a whole table number from 0 to 255",
   "printers.test_page": "Print test page",
+  "printers.sample_receipt": "Print sample receipt",
   "printers.test_page_hint": "Not sure? Print a test page to check these settings.",
   "printers.test_line_fits": "Which is the longest line whose | is on the same row?",
   "printers.test_line_reads": "Which is the first line that reads correctly?",
@@ -706,9 +712,11 @@ export const en = {
   "printers.refresh_failed": "Could not refresh the printer information.",
   "printers.refresh_lists": "Refresh lists",
   "printers.test_qr_help":
-    "Use a ruler to measure the black square of the QR code marked “For A or C” or “For B or D”, matching your answer above. Exclude the white border. It should be 30–40 mm wide. You do not need to scan it. If it is outside that range, change the print resolution in the printer settings: too small means 203 dpi; too large means 180 dpi.",
+    "Measure the QR code’s black square with a ruler, excluding the white border. Is it 30–40 mm wide? You do not need to scan it.",
+  "printers.test_qr_yes": "Yes, it is 30–40 mm wide",
+  "printers.test_qr_no": "No, it is wider than 40 mm",
   "printers.test_plain_hint":
-    "Plain letters is a fallback. If neither accented line matches, keep the test page to check the printer’s character mode and supported tables.",
+    "Choose the first line that prints Spanish letters and € correctly. Plain letters is the final fallback.",
   "printers.agent_step_open":
     "On the computer connected to your printer, open the print agent’s setup page at http://localhost:9110.",
   "printers.agent_step_address": "Enter this Waitron server address on that page:",
@@ -1521,12 +1529,12 @@ export const es: Record<StringKey, string> = {
   "printers.probe_action": "Conectar",
   "printers.probe_waiting": "Conectando con la impresora",
   "printers.probe_found":
-    "Dirección accesible. Elige Añadir abajo y envía una impresión de prueba para comprobar la impresora.",
+    "Impresora accesible. Elige Añadir abajo y envía una impresión de prueba para comprobarla.",
   "printers.probe_missing":
     "Ningún agente de impresión ha comunicado esta dirección. Revisa la dirección, el puerto, la alimentación y la conexión de la impresora, y comprueba que haya un agente conectado. Después, inténtalo de nuevo.",
-  "printers.probe_registered": "Dirección accesible. Esta impresora ya está añadida.",
+  "printers.probe_registered": "Impresora accesible. Esta impresora ya está añadida.",
   "printers.probe_page_printer":
-    "Dirección accesible, pero es una impresora de oficina. Las impresoras de oficina no sirven para imprimir recibos, así que no se puede añadir.",
+    "Impresora accesible, pero es una impresora de oficina. Las impresoras de oficina no sirven para imprimir recibos, así que no se puede añadir.",
   "printers.port_invalid": "Introduce un número entero de puerto entre 1 y 65535",
   "printers.device_required": "Introduce el ID del dispositivo",
   "printers.poll_required": "Introduce el ID de consulta en la nube",
@@ -1965,11 +1973,17 @@ export const es: Record<StringKey, string> = {
   "printers.resolution": "Resolución de impresión",
   "printers.resolution_180": "180 ppp",
   "printers.resolution_203": "203 ppp",
-  "printers.character_set": "Juego de caracteres",
-  "printers.character_set_wpc1252": "Windows latino (WPC1252)",
-  "printers.character_set_pc858": "Multilingüe con euro (PC858)",
+  "printers.character_set": "Codificación del texto",
+  "printers.character_set_wpc1252": "Latino occidental con español y € (WPC1252)",
+  "printers.character_set_pc858": "Multilingüe con español y € (PC858)",
   "printers.character_set_plain": "Letras sin acentos",
+  "printers.character_table": "Número de tabla de la impresora",
+  "printers.character_table_hint":
+    "Introduce el primer número que quieras probar. Si una línea Tnnn W es correcta, elige Latino occidental e introduce nnn. Si Tnnn 8 es correcta, elige PC858. Si ninguna es correcta, continúa con las 16 siguientes.",
+  "printers.character_table_test": "Probar 16 tablas desde este número",
+  "printers.character_table_invalid": "Introduce un número de tabla entero entre 0 y 255",
   "printers.test_page": "Imprimir página de prueba",
+  "printers.sample_receipt": "Imprimir recibo de muestra",
   "printers.test_page_hint":
     "¿No estás seguro? Imprime una página de prueba para comprobar estos ajustes.",
   "printers.test_line_fits": "¿Cuál es la línea más larga cuyo | queda en la misma fila?",
@@ -1983,9 +1997,11 @@ export const es: Record<StringKey, string> = {
   "printers.refresh_failed": "No se pudo actualizar la información de las impresoras.",
   "printers.refresh_lists": "Actualizar listas",
   "printers.test_qr_help":
-    "Mide con una regla el cuadrado negro del código QR marcado «Para A o C» o «Para B o D», según tu respuesta anterior. No incluyas el borde blanco. Debe medir entre 30 y 40 mm de ancho. No necesitas escanearlo. Si queda fuera de ese intervalo, cambia la resolución en los ajustes de la impresora: demasiado pequeño indica 203 ppp; demasiado grande indica 180 ppp.",
+    "Mide con una regla el cuadrado negro del código QR, sin incluir el borde blanco. ¿Mide entre 30 y 40 mm? No necesitas escanearlo.",
+  "printers.test_qr_yes": "Sí, mide entre 30 y 40 mm",
+  "printers.test_qr_no": "No, mide más de 40 mm",
   "printers.test_plain_hint":
-    "Las letras sin acentos son una alternativa. Si ninguna línea con acentos coincide, conserva la página para comprobar el modo de caracteres y las tablas compatibles.",
+    "Elige la primera línea que imprima bien las letras españolas y el símbolo €. Las letras sin acentos son la última alternativa.",
   "printers.agent_step_open":
     "En el ordenador conectado a la impresora, abre la página de configuración del agente en http://localhost:9110.",
   "printers.agent_step_address": "Introduce esta dirección del servidor Waitron en esa página:",

@@ -122,6 +122,7 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     characterSet: "wpc1252",
+    characterTable: 16,
     active: true,
   },
 ];

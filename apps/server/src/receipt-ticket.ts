@@ -90,6 +90,7 @@ export interface ReceiptPrinterSettings {
   paperWidth: PaperWidth;
   resolution: Resolution;
   characterSet: CharacterSet;
+  characterTable: number;
 }
 
 /** Everything {@link formatReceipt} needs to render one filed sale onto paper. */
@@ -204,7 +205,7 @@ export function formatReceipt({
   const locale = invoiceLocale;
   const columns = columnsFor(printer.paperWidth);
   const p = (s: string): string => prepareText(s, printer.characterSet);
-  const b = esc(printer.characterSet).init();
+  const b = esc(printer.characterSet, printer.characterTable).init();
   const text = (s: string, indent = 0): void => {
     for (const line of wrapText(p(s), columns, indent)) b.line(line);
   };

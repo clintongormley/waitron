@@ -30,7 +30,10 @@ const MAX_OUTPUT_CHARACTERS = 65_536;
  */
 export function previewPrintJob(
   payload: Uint8Array,
-  printer: { columns: number; dpi: number } = { columns: 42, dpi: 180 },
+  printer: { columns: number; dpi: number; characterSet?: CharacterSet } = {
+    columns: 42,
+    dpi: 180,
+  },
 ): PrintJobPreview {
   const result: PrintJobPreview = {
     columns: printer.columns,
@@ -52,7 +55,7 @@ export function previewPrintJob(
   let feedLines = 0;
   // The table text is read through: `ESC t 16`/`ESC t 19` select one, `ESC @` returns to the starting
   // table, which is read as Latin-1 (the builder's encoding when it selects no table).
-  let charset: CharacterSet = "plain";
+  let charset: CharacterSet = printer.characterSet ?? "plain";
   const appendBlock = (block: PrintPreviewBlock): boolean => {
     if (result.blocks.length >= 2048) {
       result.truncated = true;
@@ -151,7 +154,7 @@ export function previewPrintJob(
     if (!available(2)) break;
     const command = payload[offset + 1];
     if (byte === 0x1b && command === 0x40) {
-      charset = "plain";
+      charset = printer.characterSet ?? "plain";
       storedQr = "";
       qrSize = 3;
       qrLevel = "L";
@@ -165,7 +168,8 @@ export function previewPrintJob(
     if (byte === 0x1b && command === 0x74) {
       if (!available(3)) break;
       const table = payload[offset + 2];
-      if (table === 16) charset = "wpc1252";
+      if (printer.characterSet !== undefined) charset = printer.characterSet;
+      else if (table === 6 || table === 16) charset = "wpc1252";
       else if (table === 19) charset = "pc858";
       else {
         result.unsupported = true;

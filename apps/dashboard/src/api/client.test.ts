@@ -2497,6 +2497,36 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
+  it("sampleReceipt POSTs the draft printer settings", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "j10" }, true, 202));
+    const api = new DashboardApi("", fetchImpl);
+    const settings = {
+      paperWidth: "58mm" as const,
+      resolution: "203dpi" as const,
+      characterSet: "wpc1252" as const,
+      characterTable: 6,
+    };
+    expect(await api.sampleReceipt("p1", settings)).toEqual({ jobId: "j10" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/sample-receipt", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  });
+
+  it("testCharacterTables POSTs the first table in the diagnostic batch", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "j11" }, true, 202));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.testCharacterTables("p1", 32)).toEqual({ jobId: "j11" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/character-table-test", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ startTable: 32 }),
+    });
+  });
+
   it("testPrint rejects with { code } on a non-2xx (printer not found)", async () => {
     const fetchImpl = vi
       .fn()

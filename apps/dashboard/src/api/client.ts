@@ -1076,6 +1076,7 @@ export interface Printer {
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   characterSet: PrintCharacterSet;
+  characterTable: number;
   active: boolean;
 }
 
@@ -1095,6 +1096,7 @@ export interface PrinterInput {
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   characterSet?: PrintCharacterSet;
+  characterTable?: number;
 }
 
 export interface PrinterAddressProbe {
@@ -1149,6 +1151,7 @@ export interface PrinterPatch {
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   characterSet?: PrintCharacterSet;
+  characterTable?: number;
   active?: boolean;
 }
 
@@ -2703,6 +2706,32 @@ export class DashboardApi {
     return this.#request<{ jobId: string }>(
       `/management-api/printers/${printerId}/test-print`,
       "POST",
+    );
+  }
+
+  /** Print a realistic, clearly simulated receipt with the editor's current unsaved settings. */
+  sampleReceipt(
+    printerId: string,
+    settings: {
+      paperWidth: PrintPaperWidth;
+      resolution: PrintResolution;
+      characterSet: PrintCharacterSet;
+      characterTable: number;
+    },
+  ): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/management-api/printers/${printerId}/sample-receipt`,
+      "POST",
+      settings,
+    );
+  }
+
+  /** Print two readable encoding candidates for sixteen consecutive printer table numbers. */
+  testCharacterTables(printerId: string, startTable: number): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/management-api/printers/${printerId}/character-table-test`,
+      "POST",
+      { startTable },
     );
   }
 

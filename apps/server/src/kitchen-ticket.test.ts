@@ -13,8 +13,8 @@ import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 const CUT_BYTES = [0x1d, 0x56, 0x00];
 /** ESC d n — the shared feed before every cut, so the tear-off clears the print head. */
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
-const KITCHEN_80: KitchenLayout = { columns: 42, charset: "wpc1252" };
-const KITCHEN_58: KitchenLayout = { columns: 30, charset: "pc858" };
+const KITCHEN_80: KitchenLayout = { columns: 42, charset: "wpc1252", characterTable: 16 };
+const KITCHEN_58: KitchenLayout = { columns: 30, charset: "pc858", characterTable: 19 };
 
 describe("formatKitchenTicket", () => {
   describe("station scope", () => {

@@ -22,7 +22,7 @@ export interface PaymentSlipInput {
   card: CardDetails | null;
   invoiceLocale: string;
   /** The receipt printer's layout settings. A slip carries no QR, so resolution does not apply. */
-  printer: { paperWidth: PaperWidth; characterSet: CharacterSet };
+  printer: { paperWidth: PaperWidth; characterSet: CharacterSet; characterTable: number };
 }
 
 const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
@@ -34,7 +34,7 @@ const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
 export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   const columns = columnsFor(input.printer.paperWidth);
   const p = (s: string): string => prepareText(s, input.printer.characterSet);
-  const b = esc(input.printer.characterSet).init();
+  const b = esc(input.printer.characterSet, input.printer.characterTable).init();
   const text = (s: string): void => {
     for (const line of wrapText(p(s), columns)) b.line(line);
   };
