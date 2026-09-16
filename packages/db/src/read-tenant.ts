@@ -13,11 +13,11 @@ export interface Tenant {
 
 /**
  * Reads the database's one taxpayer row by `where id = 1`, so its readers share one query instead of
- * a copy each. Two provisioning sites deliberately do not come through here and would not follow a
- * change made here: `packages/provisioning/src/venue-apply.ts` needs `for update` on the row to put
- * a concurrent second provision behind the first, and `readTenantIdentities`
- * (`packages/provisioning/src/tenant-guard.ts`) asks a different question — which fiscal identities
- * the table holds at all, before one is written.
+ * a copy each. It is NOT the only way the row is reached, so a change made here does not reach every
+ * reader: provisioning, module seeds and the configuration export each query `tenants` directly —
+ * one of them for `for update`, some with no `id` predicate at all, and at least one through a
+ * `cross join` rather than a `from`. That last spelling is why no single grep finds them all, and
+ * why this comment names no sites — search for the ones you need rather than trusting a list here.
  *
  * Returns `null` rather than throwing when the row is absent, because callers do genuinely
  * different things with that: the receipt and payment-slip printers degrade to printing nothing (a
