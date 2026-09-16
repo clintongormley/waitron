@@ -1,7 +1,9 @@
 # SQLite instead of PostgreSQL — a discussion, not an approved design
 
-**Date:** 2026-09-16. **Status:** discussion. Nothing here is decided. It records what three reads
-established, so the question can be decided on receipts rather than recollection.
+**Date:** 2026-09-16. **Status:** superseded as a live question — the owner decided on 2026-09-16 to
+make the switch, on the strength of the infrastructure simplification alone (§6 below). This note
+stays as the record of what three reads established. Its §9 gate is half retired; see §9 and the
+design's §12.1.
 
 **The question (owner, 2026-09-16).** The cloud will host many venues per PostgreSQL server to keep
 cost down. Would SQLite on the box, streamed to the cloud with Litestream, be a better fit? A
@@ -206,19 +208,31 @@ it fails the same test SQLite does (no replication) without SQLite's compensatio
 mature single-writer story, decades of production use). It is a test tool here, not a production
 candidate.
 
-## 9. If this is pursued — the gate
+## 9. The gate — one half retired (2026-09-16)
 
-Two measurements, before any design work:
+This section asked for two measurements before any design work. The design was written the same day
+and the owner then took the decision, so both halves have moved:
 
-1. **Cost the current design at density.** Stand up one PostgreSQL server with N venue databases each
-   replicating to a standby, drive restaurant-shaped write load, and measure CPU per venue at N = 10,
-   50, 200. That decides whether §2's concern is real at the densities Waitron Cloud will run.
-2. **Prove the SQLite failover loop end to end**, as a throwaway prototype: box (SQLite + Litestream)
-   → cloud following → promote to a new path → box returns with an un-shipped tail → tail shipped →
-   box rejoins by restore. With the two natural-key clash shapes from the swap design's §4.2 injected.
+1. **Cost the current design at density — RETIRED by the owner, 2026-09-16.** It read: stand up one
+   PostgreSQL server with N venue databases each replicating to a standby, and measure CPU per venue at
+   N = 10, 50, 200; if density was fine, this note was closed. The owner's reason for retiring it is
+   that the infrastructure simplification is by itself sufficient to warrant the switch, so the number
+   could no longer change the answer. Two further reasons it could not have decided anything as
+   written — it tests a shared cluster while the standing decision is a dedicated instance per tenant,
+   and §2's whole-cluster decoding cost therefore does not arise — are recorded in the design's §12.1,
+   with what stays unmeasured as a result.
+2. **Prove the SQLite failover loop end to end — STANDS.** A throwaway prototype: box (SQLite +
+   Litestream) → cloud following → promote to a new path → box returns with an un-shipped tail → tail
+   shipped → box rejoins by restore, with the two natural-key clash shapes from the swap design's §4.2
+   injected. The design's §12.2 carries the fuller list the Fable review added, and is the version to
+   work from.
 
-If (1) says PostgreSQL density is fine, this note is closed. If (1) says it is not and (2) passes, the
-next document is a design, and it starts from §4's table.
+**A correction to this note's own opening premise.** The question as put was "the cloud will host many
+venues per PostgreSQL server to keep cost down". The standing decision in `docs/backlog.md` is the
+opposite shape — *"The cloud is a dedicated instance per tenant… Density comes from many isolated
+instances per host"* — and §2's analysis of logical-decoding cost was written against the premise, not
+against that decision. §2 is still a correct description of a shared cluster; it is not a description
+of what Waitron Cloud is designed to run.
 
 ---
 

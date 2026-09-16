@@ -1,9 +1,10 @@
 # SQLite + Litestream: storage engine, replication and failover topologies — design
 
-**Date:** 2026-09-16. **Status:** design, awaiting owner review. Not in any track — this is the
-architecture that would replace PostgreSQL if the two gates in §12 pass. **Model note:** brainstormed
-with Fable, written by Opus from the whole brainstorm, then read cold by a fresh-context Fable
-reviewer (owner's model rule, and CLAUDE.md §1 — a fiscal-touching spec gets a second model reading
+**Date:** 2026-09-16. **Status:** design, awaiting owner review. This is the architecture that
+replaces PostgreSQL: the owner decided on 2026-09-16 to make the switch on the strength of the
+infrastructure simplification alone, which retired the density measurement that used to gate it. One
+gate remains (§12.2). **Model note:** brainstormed with Fable, written by Opus from the whole
+brainstorm, then read cold by a fresh-context Fable reviewer (owner's model rule, and CLAUDE.md §1 — a fiscal-touching spec gets a second model reading
 cold). That read produced nine findings, all folded in; the ones that changed the design carry an
 inline "Fable review finding N" marker, and the tail shipper still owes its own Fable read before it
 is built (§5.2, risk 2).
@@ -65,6 +66,14 @@ Each was put to the owner in the brainstorm and answered.
    owner-supplied destination (a LAN NAS, a USB disk, their own bucket) it goes there; with neither,
    Litestream does not run and the scheduled archive is the only backup. The dashboard keeps the
    existing "your box holds the only copy" warning until something offsite exists.
+
+8. **The switch is warranted by the simplification alone; the density measurement is retired**
+   (2026-09-16, after the seven above). The owner's decision: the infrastructure this removes — a
+   database server, a replication link and most of the role-and-grant machinery, replaced by a process
+   and a file per venue (discussion note §6) — is on its own sufficient reason to switch, so a
+   PostgreSQL cost curve could no longer change the answer. §12.1 records what that gate would have
+   measured, why it could not have decided anything as it was written, and what consequently stays
+   unmeasured.
 
 ---
 
@@ -644,8 +653,8 @@ quietly assumes finer granularity than Litestream gives.
 
 Several specs, not one. Each gets its own spec and plan.
 
-0. **The two gates (§12)** — the PostgreSQL density measurement and the throwaway loop prototype —
-   before any rewrite.
+0. **The gate (§12)** — the throwaway failover-loop prototype — before any rewrite. The PostgreSQL
+   density measurement that used to stand beside it was retired by the owner on 2026-09-16 (§0.8).
 1. **Storage swap.** SQLite + the Drizzle SQLite dialect, the type conversions, the two-file split,
    single test target, in-process event feed and job queues. **No replication at all**: a standalone
    venue works end to end. The largest slice by far.
@@ -659,30 +668,56 @@ Pre-production means no data migration: schema drops and recreates (CLAUDE.md §
 
 ---
 
-## 12. Before any plan: the two gates
+## 12. Before any plan: the gate that remains
 
-Both from the discussion note §9; neither is optional.
+### 12.1 Retired: the PostgreSQL density measurement (owner decision, 2026-09-16)
 
-1. **Cost the current design at density.** Stand up one PostgreSQL server with N venue databases each
-   replicating to a standby, drive restaurant-shaped write load, and measure CPU per venue at N = 10,
-   50, 200. Logical replication decoding reads the whole server's WAL per subscription, so per-venue
-   cost grows with everyone's write traffic (discussion note §2 — *my understanding, this is the
-   measurement that confirms it*). **If PostgreSQL density is fine, this whole spec is closed** and the
-   friend's concern does not apply at Waitron's scale.
-2. **Prove the SQLite failover loop end to end**, as a throwaway prototype: box (SQLite + Litestream) →
-   store → promote to a new generation → box returns with an un-shipped tail → tail shipped → box
-   rejoins by restore. It must exercise the shapes the Fable review surfaced (2026-09-16): the two
-   natural-key clashes from the outbox-swap design's §4.2; the offline **double promotion** of
-   §4.2/§4.4 (both nodes reach term *n+1*), confirming the generation naming and `current.json`
-   tie-break keep the stream restorable and fence the loser; a tail ship **retried after the receiver's
-   drain has submitted**, confirming no second AEAT submission (§5.2, finding 3); the
-   copied-replica-equals-direct-stream check from §4.4; and a **multi-day offline write load** with
-   `wal_autocheckpoint = 0`, confirming sale latency and WAL size stay bounded (§10, finding 8). It must
-   also **verify the target object store's conditional-write support** — the atomic
-   version-conditional `current.json` write the whole tie-break rests on (§2.2) — on the actual store
-   Waitron Cloud will use, and on any self-host target the product claims to support.
+This gate read: stand up one PostgreSQL server with N venue databases each replicating to a standby,
+drive restaurant-shaped write load, measure CPU per venue at N = 10, 50, 200, and close this whole
+spec if the answer was "density is fine". The owner retired it on 2026-09-16 (§0.8): the
+simplification is sufficient reason to switch, so a cost curve could no longer change the decision.
 
-Only if (1) says PostgreSQL density is a real problem **and** (2) passes does slice 1 begin.
+Two things found while scoping the measurement are recorded here, because they say why this gate
+could not have decided anything in the shape it was written:
+
+- **It measured a deployment the standing decision does not use.** `docs/backlog.md`, under "Standing
+  decisions", says: *"The cloud is a dedicated instance per tenant, hosted in Spain. Density comes from
+  many isolated instances per host."* The gate's method — many venue databases in one shared cluster —
+  came instead from the premise in the discussion note's opening question ("the cloud will host many
+  venues per PostgreSQL server to keep cost down"), which conflicts with that standing decision. The
+  whole-cluster WAL-decoding cost the gate existed to test (discussion note §2) arises only on a shared
+  cluster, so under instance-per-tenant it does not arise.
+- **Under instance-per-tenant the cost is a per-instance floor, not a decoding curve** — one PostgreSQL
+  process, container and memory reservation per venue, whatever that venue writes. That is the quantity
+  SQLite removes, and it is an infrastructure argument rather than a throughput one.
+
+**What consequently stays unmeasured, stated so nobody later assumes otherwise:** no number in this
+repository says what PostgreSQL costs per venue at any density, or what SQLite costs instead. The
+switch rests on the simplification, not on a measured saving, and no sentence anywhere may claim a
+cost reduction as established. If a cost claim is ever needed — for pricing, or to answer the friend
+who raised this — it is a new measurement, and it must be taken against instance-per-tenant.
+
+### 12.2 The gate that stands: prove the failover loop end to end
+
+Unchanged, and not optional. Retiring §12.1 was a decision about cost; this one is about whether the
+mechanism works at all. Five of §13's risks name it as their check: 2 (the tail shipper's
+double-submit), 6 (promotion discipline and generation naming), 8 (copy-up propagating deletions),
+9 (an offline stretch with `wal_autocheckpoint = 0`) and 11 (the store's conditional write).
+
+**Prove the SQLite failover loop end to end**, as a throwaway prototype: box (SQLite + Litestream) →
+store → promote to a new generation → box returns with an un-shipped tail → tail shipped → box rejoins
+by restore. It must exercise the shapes the Fable review surfaced (2026-09-16): the two natural-key
+clashes from the outbox-swap design's §4.2; the offline **double promotion** of §4.2/§4.4 (both nodes
+reach term *n+1*), confirming the generation naming and `current.json` tie-break keep the stream
+restorable and fence the loser; a tail ship **retried after the receiver's drain has submitted**,
+confirming no second AEAT submission (§5.2, finding 3); the copied-replica-equals-direct-stream check
+from §4.4; and a **multi-day offline write load** with `wal_autocheckpoint = 0`, confirming sale
+latency and WAL size stay bounded (§10, finding 8). It must also **verify the target object store's
+conditional-write support** — the atomic version-conditional `current.json` write the whole tie-break
+rests on (§2.2) — on the actual store Waitron Cloud will use, and on any self-host target the product
+claims to support.
+
+Slice 1 begins when this passes.
 
 ---
 
@@ -724,6 +759,7 @@ From the discussion note §7, plus what the design added:
 | Claim | Source | How established |
 | --- | --- | --- |
 | Owner decisions §0.1–§0.7 | brainstorm with the owner, 2026-09-16 | this session |
+| Owner decision §0.8 — switch on the simplification, retire the density gate | owner, 2026-09-16 | stated directly while gate 1 was being scoped; the two supporting reads are in §12.1 (`docs/backlog.md` standing decisions, and the discussion note's opening premise) |
 | Regulation names no DB privilege; hash chain + AEAT copy is the mechanism | RD 1007/2023 art. 8, 16 | quoted in the discussion note §1 (BOE text, `curl`, 2026-09-16) |
 | Litestream: full snapshots, follow mode, one writer per path, no encryption in 0.5, granularity | litestream.io docs | quoted in the discussion note §3 (`curl`, 2026-09-16) |
 | `ledger`/`state`/`local` classification; promotion/return shape; tail-clash shapes | `2026-09-05-outbox-to-native-replication-swap-design.md` §2, §4 | read |
@@ -731,7 +767,7 @@ From the discussion note §7, plus what the design added:
 | Cold restore mints a fresh chain, never blocked | `2026-09-06-module-sp3d-fiscal-restore-hook-design.md`; memory `cold-recovery-no-hot-failover-posture` | read |
 | Backup regime decisions 4 and 5; manifest and hooks | `2026-09-04-backup-restore-regime-design.md` §3 | read |
 | Product images live in the DB (`media_image_data.bytes`), so the stream carries them | `packages/media/src/images.ts:223`; `packages/media/drizzle/0000_media_baseline.sql` | read 2026-09-16 |
-| Density cost of logical replication per subscription | PostgreSQL behaviour, **not measured** | §12 gate 1 is the measurement |
+| Density cost of logical replication per subscription | PostgreSQL behaviour, **not measured, and now never will be** | the measurement was retired 2026-09-16 (§12.1); it would also have tested a shared cluster, which the standing instance-per-tenant decision does not use |
 | Fiscal soundness of seats, tail shipper, money conversion, offline promotion | fresh-context Fable read, 2026-09-16 | nine findings folded in; the load-bearing code claims (strict-term guard `node-membership.ts:97`, node-filterless `claimBatch` in `drain.ts`, `cuota_total`/`importe_total` already `text`, the non-money `numeric` columns) verified against the tree before folding |
 | Split brain loses the loser's in-flight service; conditional-write mechanism of the tie-break | owner, 2026-09-16 | owner raised the live-service loss; `working_orders`/`working_order_lines`/`dining_tables`/`kitchen_courses`/`print_jobs` confirmed `state` in `packages/db/src/classification.ts` |
 | Promotion enumerates every promotable peer, not just the primary | owner, 2026-09-16 | `nodes`/`node_seats` are streamed `state`, so the cloud holds the node set |

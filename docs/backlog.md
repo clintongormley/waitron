@@ -2191,10 +2191,15 @@ credentials; this repo only ever *talks to* a provisioned instance. **Do not res
 work until the Waitron↔Waitron-Cloud boundary contract is settled.** The proof to run then: on-prem
 primary → adopt → mirror → human promotion → tills reroute to the promoted cloud → the venue sells
 and files. [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)
-is a discussion, not an approved spec, and so is
+is a discussion, not an approved spec. **SQLite + Litestream replaces PostgreSQL** — owner decision
+2026-09-16, taken on the infrastructure simplification alone, which retired the density measurement
+that used to gate it. The feasibility reads are in
 [SQLite instead of PostgreSQL](superpowers/specs/2026-09-16-sqlite-instead-of-postgres-discussion.md)
-(2026-09-16: the regulation names no database privilege; Litestream covers standby and rejoin but not
-a returned box's ledger tail; decide on a density measurement first); the
+(the regulation names no database privilege; Litestream covers standby and rejoin but not a returned
+box's ledger tail) and the architecture in
+[SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md),
+whose §11 is the build order and whose §12.2 is the one gate still standing — a throwaway failover-loop
+prototype, before any rewrite. Nothing is built yet. The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
 paid offering. Remote-access bot protection (Cloudflare Turnstile on internet-facing login and
 recovery, never in the local-only product) belongs to that offering.
@@ -2243,7 +2248,9 @@ conflict.
   `scripts/no-tenant-column.test.ts` (text-matching, and blind to test files and to the historical
   core migrations it exempts). The cloud is a dedicated instance per tenant, hosted in Spain. Density comes from many
   isolated instances per host. The only multi-tenant pieces are a small control plane and the
-  preproduction trial demo.
+  preproduction trial demo. **What an instance contains changes with the storage switch** (2026-09-16):
+  a server process and a SQLite file streamed to object storage, not a PostgreSQL server — the
+  per-tenant isolation this decision is about is unchanged.
 - **Warm standby plus human promotion; active-active is shelved.** Nothing was deleted for it: branch
   **`shelved/active-active`** (= `main` at `c65d3cbe`, 2026-09-05) is the snapshot to return to.
 - **Modules are core to the product** (opt-in domains, third-party modules later); fiscal is swappable
