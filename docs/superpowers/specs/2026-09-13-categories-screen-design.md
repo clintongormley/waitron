@@ -1,5 +1,10 @@
 # Categories screen: tree view, colours, product modal, cascading delete
 
+> **2026-09-16 follow-up:** The live product tables now show coloured lozenges for up to three
+> non-reporting memberships and a localized count for four or more, while retaining every category
+> name in search. The current contract is in
+> [product-categories.md](../../developers/product-categories.md).
+
 Read [the categories design](2026-09-12-product-categories-design.md) first; this builds on the
 screen and API it landed (#340). The developer guide for the API as it stands today is
 [product-categories.md](../developers/product-categories.md). Where this document changes a rule

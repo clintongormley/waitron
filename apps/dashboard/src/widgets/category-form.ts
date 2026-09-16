@@ -14,6 +14,12 @@ import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 import { t, currentLocale } from "../i18n/t.js";
 
+const CATEGORY_PALETTE_GROUP_SIZE = CATEGORY_PALETTE.length / 2;
+const CATEGORY_PALETTE_GROUPS = [
+  CATEGORY_PALETTE.slice(0, CATEGORY_PALETTE_GROUP_SIZE),
+  CATEGORY_PALETTE.slice(CATEGORY_PALETTE_GROUP_SIZE),
+];
+
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
@@ -285,7 +291,7 @@ export class CategoryForm extends LitElement {
               ${t("categories.color_none")}
             </button>
             <div class="swatches">
-              ${[CATEGORY_PALETTE.slice(0, 12), CATEGORY_PALETTE.slice(12)].map(
+              ${CATEGORY_PALETTE_GROUPS.map(
                 (group) =>
                   html`<div class="swatch-group">
                     ${group.map((color) => this.#colorSwatch(color))}
