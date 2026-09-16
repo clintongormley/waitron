@@ -521,7 +521,7 @@ describe("units-screen", () => {
     expect(menu.shadowRoot!.activeElement).toBe(trigger);
   });
 
-  it("opens the products modal when a unit row is clicked", async () => {
+  it("opens the delete-unit screen when a unit row is clicked", async () => {
     setLocale("es-ES");
     const listUnitProducts = vi
       .fn()
@@ -530,14 +530,57 @@ describe("units-screen", () => {
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     // The whole-row activator lives in the first cell of the units table's shadow root.
-    table.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.click();
+    const rowAction = table.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!;
+    expect(rowAction.getAttribute("aria-label")).toBe(`${t("units.delete_unit")}: kilogramo`);
+    rowAction.click();
     await flush(el);
     expect(listUnitProducts).toHaveBeenCalledTimes(1);
     const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
       "[data-test=in-use-dialog]",
     )!;
     expect(dialog.open).toBe(true);
+    expect(dialog.getAttribute("heading")).toBe(t("units.delete_unit"));
     expect(dialog.querySelector("wt-data-table")!.shadowRoot!.textContent).toContain("Sopa");
+  });
+
+  it("paints the in-use explanation with the danger colour", async () => {
+    const el = await mount(inUseApi());
+    el.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
+    const dialog = await openInUseModal(el);
+    const warning = dialog.querySelector<HTMLElement>("[data-test=in-use-warning]")!;
+    expect(warning.textContent).toContain(t("units.in_use_body"));
+    expect(getComputedStyle(warning).color).toBe("rgb(13, 14, 15)");
+  });
+
+  it("orders reassign targets with Each first and named units alphabetically", async () => {
+    setLocale("en-GB");
+    const list: Unit[] = [
+      units[0]!,
+      units[1]!,
+      { id: "u3", name: { en: "Litre" }, abbreviation: { en: "l" }, precision: 2 },
+      { id: "u4", name: { en: "Gram" }, abbreviation: { en: "g" }, precision: 1 },
+    ];
+    const el = await mount(
+      stubApi({
+        listUnits: vi.fn().mockResolvedValue(list),
+        listUnitProducts: vi.fn().mockResolvedValue(inUseProducts),
+      }),
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="u1"] .row-activate')!
+      .click();
+    await flush(el);
+
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
+    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+      t("units.change_unit_placeholder"),
+      t("units.change_unit_each"),
+      "Gram",
+      "kilogram",
+      "Litre",
+    ]);
   });
 
   it("offers Each (no unit) as a reassign target and reassigns to it", async () => {

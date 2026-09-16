@@ -6,12 +6,46 @@ import "./unit-form.js";
 afterEach(cleanupWidgets);
 
 function change(el: UnitForm, testId: string, value: string): void {
-  el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
+  const field = el.shadowRoot!.querySelector(`[data-test=${testId}]`)!;
+  if (field instanceof HTMLSelectElement) {
+    field.value = value;
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  } else {
+    field.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
 }
 
 describe("unit-form", () => {
+  it("offers precision as exactly 0, 1, 2 or 3", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+    });
+
+    const precision = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=precision]")!;
+    expect(precision).not.toBeNull();
+    expect([...precision.options].map((option) => option.value)).toEqual(["0", "1", "2", "3"]);
+  });
+
+  it("shows an existing unit's precision in the dropdown", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: {
+        id: "u1",
+        name: { en: "kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
+    });
+
+    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=precision]")!.value).toBe(
+      "3",
+    );
+  });
+
   it("returns a canonical input without mutating the supplied unit", async () => {
     const value = {
       id: "u1",
