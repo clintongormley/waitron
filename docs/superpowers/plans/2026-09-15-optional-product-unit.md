@@ -1,10 +1,10 @@
 # Optional product unit + click-a-unit-to-see-products — Implementation Plan
 
-> **2026-09-14 — the tenant column is gone.** The tenant-id removal this document anticipates has
-> landed: every `tenant_id` column, every tenant argument and the `withTenant` helper are gone
-> (`withTransaction` replaces it), one database holds one taxpayer as the single row of `tenants`,
-> and nothing filters by a tenant. Read every tenant-carrying signature, tenant predicate and
-> "a by-id read scopes to the tenant" rule below as the shape at the time of writing. Spec:
+> **2026-09-14 — the tenant column is gone.** Every `tenant_id` column, every tenant argument and
+> the `WAITRON_TILL_TENANT_ID` environment variable were removed: one database holds one taxpayer,
+> as the single row of `tenants`, and nothing filters by a tenant. The text below is left as the
+> record of what was built at the time; anywhere it names a tenant id, a tenant predicate or that
+> variable, read it as history. Spec:
 > [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
