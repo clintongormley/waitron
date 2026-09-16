@@ -315,6 +315,7 @@ describe("venue operations screen", () => {
       createMenu: vi.fn().mockResolvedValue({ id: "m3" }),
       createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
       createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "menus");
@@ -336,6 +337,9 @@ describe("venue operations screen", () => {
       grossPrice: "9.00",
       displayOrder: 0,
     });
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m2", "i2", [
+      { variantId: "v1", unitPrice: "13.00", available: false },
+    ]);
   });
 
   it("requires the configured default for a new section and allows optional translations", async () => {
@@ -580,6 +584,7 @@ describe("venue operations screen", () => {
       updateMenuSection: vi.fn().mockResolvedValue(undefined),
       createMenuSection: vi.fn(),
       createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "menus");
@@ -598,8 +603,176 @@ describe("venue operations screen", () => {
       grossPrice: "5.00",
       displayOrder: 0,
     });
+    // Olives has no variants of its own, so nothing is published — least of all the Negroni variant
+    // the same model carries.
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i2", []);
   });
 
+  // Two products whose staff name, customer-facing name and variant set all differ, so an assertion
+  // can tell which product a saved offer and its published variants belong to. Bravas is already on
+  // menu m1, which is what takes it out of that menu's dropdown.
+  const twoProductModel: VenueServiceView = {
+    ...model,
+    products: [
+      {
+        id: "p-bravas",
+        name: "Bravas",
+        customerName: { en: "Patatas bravas" },
+        pricingUnit: "each",
+        active: true,
+        variants: [
+          {
+            id: "v-half",
+            name: "Half portion",
+            customerName: { en: "Media racion" },
+            unitPrice: "4.00",
+            available: true,
+          },
+          {
+            id: "v-full",
+            name: "Full portion",
+            customerName: { en: "Racion" },
+            unitPrice: "7.00",
+            available: true,
+          },
+        ],
+      },
+      {
+        id: "p-lentils",
+        name: "Stewed lentils",
+        customerName: { en: "Lentejas de la casa" },
+        pricingUnit: "each",
+        active: true,
+        variants: [
+          {
+            id: "v-bowl",
+            name: "Bowl",
+            customerName: { en: "Cuenco" },
+            unitPrice: "6.50",
+            available: false,
+          },
+        ],
+      },
+    ],
+    offers: [
+      {
+        id: "i-bravas",
+        menuId: "m1",
+        productId: "p-bravas",
+        sectionId: "sec1",
+        sectionName: { en: "Tapas" },
+        name: "Bravas",
+        customerName: { en: "Patatas bravas" },
+        grossPrice: "5.00",
+      },
+    ],
+  };
+
+  it("publishes the variants of the product a new offer is saved for, dropdown untouched", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(twoProductModel),
+      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i-lentils" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m1");
+    // Nobody touches the dropdown: the product it shows is the one the fieldset and the save use.
+    expect(field(el, "offer-product-m1").value).toBe("p-lentils");
+    expect(field(el, "offer-product-m1").textContent).not.toContain("Bravas");
+    expect(field(el, "offer-variant-price-v-bowl").value).toBe("6.50");
+    expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-full"]')).toBeNull();
+    field(el, "offer-section-m1").value = "Guisos";
+    field(el, "offer-price-m1").value = "8.00";
+    await action(el, "save-editor");
+    expect(api.createMenuItem).toHaveBeenCalledWith("m1", {
+      productId: "p-lentils",
+      sectionId: "sec2",
+      grossPrice: "8.00",
+      displayOrder: 0,
+    });
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i-lentils", [
+      { variantId: "v-bowl", unitPrice: "6.50", available: false },
+    ]);
+  });
+
+  it("follows the dropdown to the picked product's variants", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(twoProductModel),
+      createMenuSection: vi.fn().mockResolvedValue({ id: "sec3" }),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i-new" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m2");
+    expect(field(el, "offer-product-m2").value).toBe("p-bravas");
+    expect(field(el, "offer-variant-price-v-half").value).toBe("4.00");
+    const select = field(el, "offer-product-m2") as HTMLSelectElement;
+    select.value = "p-lentils";
+    select.dispatchEvent(new Event("change"));
+    await settle(el);
+    expect(field(el, "offer-variant-price-v-bowl").value).toBe("6.50");
+    expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
+    field(el, "offer-section-m2").value = "Guisos";
+    field(el, "offer-price-m2").value = "8.00";
+    await action(el, "save-editor");
+    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
+      productId: "p-lentils",
+      sectionId: "sec3",
+      grossPrice: "8.00",
+      displayOrder: 0,
+    });
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m2", "i-new", [
+      { variantId: "v-bowl", unitPrice: "6.50", available: false },
+    ]);
+  });
+
+  it("shows a refused variant publication on the form, not only in the console", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(twoProductModel),
+      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i-lentils" }),
+      setMenuVariants: vi
+        .fn()
+        .mockRejectedValue({ code: "product.variant_not_found", status: 400 }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m1");
+    field(el, "offer-section-m1").value = "Guisos";
+    field(el, "offer-price-m1").value = "8.00";
+    await action(el, "save-editor");
+    expect(api.setMenuVariants).toHaveBeenCalledTimes(1);
+    expect(summary(el)).toContain("could not be saved");
+    expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  });
+
+  it("asks for a product when the menu already offers every one of them", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...twoProductModel,
+        products: [twoProductModel.products[0]!],
+      }),
+      createMenuSection: vi.fn(),
+      createMenuItem: vi.fn(),
+      setMenuVariants: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m1");
+    expect(field(el, "offer-product-m1").value).toBe("");
+    expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
+    field(el, "offer-section-m1").value = "Guisos";
+    field(el, "offer-price-m1").value = "8.00";
+    await action(el, "save-editor");
+    expect(api.createMenuItem).not.toHaveBeenCalled();
+    expect(api.setMenuVariants).not.toHaveBeenCalled();
+    expect(summary(el)).toContain("Product");
+    expect(el.shadowRoot!.querySelector('[data-field-error="offer-product-m1"]')).not.toBeNull();
+  });
   it("edits and removes an offer from the shared data table", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),

@@ -241,6 +241,41 @@ describe("product variants", () => {
     ).rejects.toMatchObject({ code: "product.variant_in_use" });
     expect(await run((tx) => listProductVariants(tx, tenantId, productId))).toHaveLength(2);
   });
+
+  it("refuses to publish a variant belonging to another product and publishes nothing", async () => {
+    const [foreign] = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "plate" }, precision: 0, abbreviation: { en: "pl" } },
+        "en",
+      );
+      const other = await createProduct(tx, tenantId, {
+        catalogueId: menuId,
+        categoryId: null,
+        name: "Bravas",
+        unitId: unit.id,
+        unitPrice: "6.00",
+        vatClass: "reduced",
+      });
+      return setProductVariants(tx, tenantId, other.id, [variant("Half portion", "4.00")], "en");
+    });
+    const [own] = await run((tx) =>
+      setProductVariants(tx, tenantId, productId, [variant("Small", "2.00")], "en"),
+    );
+    await expect(
+      run((tx) =>
+        setMenuVariants(tx, tenantId, offerId, [
+          { variantId: own!.id, unitPrice: "4.00", available: true },
+          { variantId: foreign!.id, unitPrice: "5.00", available: true },
+        ]),
+      ),
+    ).rejects.toMatchObject({
+      code: "product.variant_not_found",
+      params: { variantId: foreign!.id },
+    });
+    expect(await run((tx) => listMenuVariants(tx, tenantId, offerId))).toEqual([]);
+  });
 });
 
 it("prices the required published variant instead of the base or product variant price", async () => {
