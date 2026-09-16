@@ -2,6 +2,7 @@ import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitro
 import { validateAllergens, type ProductAllergens } from "./allergens.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
+import { nonBlankTranslations } from "./product-presentation.js";
 import type { ProductVariantInput } from "./variants.js";
 import type { VatClass } from "./pricing.js";
 import "./errors.js";
@@ -73,8 +74,7 @@ function requiredText(value: unknown, field: string): string {
 /** Optional translated text: null/absent or an all-blank map means "no value" (falls back to name). */
 function nullableTranslations(value: unknown, field: string): Record<string, string> | null {
   if (value === null || value === undefined) return null;
-  const map = translations(value, field);
-  return Object.values(map).some((text) => text.trim()) ? map : null;
+  return nonBlankTranslations(translations(value, field));
 }
 
 /** Parse the complete write body before touching storage; reference ownership is checked in the transaction. */
@@ -135,8 +135,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
   return {
     name,
     customerName,
-    description:
-      description && Object.values(description).some((text) => text.trim()) ? description : null,
+    description: nonBlankTranslations(description),
     kitchenName: nullableText(body.kitchenName, "kitchenName"),
     image: nullableText(body.image, "image"),
     unitId,

@@ -1,4 +1,5 @@
 import {
+  nonBlankTranslations,
   createModifier,
   updateModifier,
   deleteModifier,
@@ -1464,9 +1465,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * Screen a product's optional customer-facing name: a language->text object, or `null` for "none".
  * A map with no non-blank entry means the same as `null` — the staff name is what a receipt shows —
  * so it is folded to `null` here and never reaches `validateContentTranslations`, which would
- * otherwise refuse it for lacking the default language. The same fold the product editor's parser
- * makes (`product-editor-input.ts`), so the two write paths agree. The per-LANGUAGE checks stay with
- * `validateContentTranslations`, the authority on them.
+ * otherwise refuse it for lacking the default language. Literally the same fold the product editor's
+ * parser makes — both call `nonBlankTranslations` — so the two write paths cannot disagree. The
+ * per-LANGUAGE checks stay with `validateContentTranslations`, the authority on them.
  */
 function screenCustomerName(value: unknown): Record<string, string> | null {
   if (value === undefined || value === null) return null;
@@ -1477,6 +1478,5 @@ function screenCustomerName(value: unknown): Record<string, string> | null {
   if (entries.some(([, text]) => typeof text !== "string")) {
     throw new AppError("management.request_invalid", { field: "customerName" });
   }
-  const map = Object.fromEntries(entries) as Record<string, string>;
-  return Object.values(map).some((text) => text.trim()) ? map : null;
+  return nonBlankTranslations(Object.fromEntries(entries) as Record<string, string>);
 }

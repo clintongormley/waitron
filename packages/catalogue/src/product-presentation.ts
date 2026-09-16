@@ -55,29 +55,36 @@ export function joinCustomerPresentationText(
   );
 }
 
+/**
+ * A locale->text map that holds no non-blank text anywhere means the same as no map at all — the
+ * staff name is what gets shown — so it folds to `null` here. Every surface that accepts optional
+ * translated text makes this same fold; keeping it in one place is what stops two write paths
+ * disagreeing about whether `{ es: " " }` counts as a value.
+ */
+export function nonBlankTranslations<T extends Record<string, string>>(
+  map: T | null | undefined,
+): T | null {
+  return map && Object.values(map).some((text) => text.trim() !== "") ? map : null;
+}
+
 export function customerPresentationText(
   p: ProductPresentation,
   defaultLanguage: string,
 ): { product: Record<string, string>; variant: Record<string, string> | null } {
-  const nonEmpty = (m: Record<string, string> | null) =>
-    m && Object.values(m).some((t) => t.trim()) ? m : null;
   return {
-    product: nonEmpty(p.customerName) ?? { [defaultLanguage]: p.name },
+    product: nonBlankTranslations(p.customerName) ?? { [defaultLanguage]: p.name },
     variant:
       p.variantName === null
         ? null
-        : (nonEmpty(p.variantCustomerName) ?? { [defaultLanguage]: p.variantName }),
+        : (nonBlankTranslations(p.variantCustomerName) ?? { [defaultLanguage]: p.variantName }),
   };
 }
 
-// `locale`/`fallback` are part of the contract shared with the other resolvers, but the kitchen
-// name carries no per-language text so this resolver never reads them.
+// Takes only the four names it reads, like {@link staffPresentationName}: a kitchen name carries no
+// per-language text, so there is no locale to resolve against and no customer-facing text to fall
+// back to. A caller holding a frozen order line passes the row itself.
 export function kitchenPresentationName(
-  p: ProductPresentation,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- part of the interface, see comment above
-  _locale: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- part of the interface, see comment above
-  _fallback: string,
+  p: Pick<ProductPresentation, "name" | "kitchenName" | "variantName" | "variantKitchenName">,
 ): string {
   const product = p.kitchenName?.trim() || p.name;
   if (p.variantName === null) return product;
