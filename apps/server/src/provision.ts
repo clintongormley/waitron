@@ -158,22 +158,19 @@ export async function provisionVenue(
 
   // One taxpayer per database is the isolation boundary (§5), enforced here, in the `venue` CLI and
   // in the mirror `adoptFromPrimary` — every taxpayer-creation path — through the shared
-  // `assertNoForeignTenant` guard. Read the existing identity ONCE, then decide in order: a FOREIGN
-  // identity is refused first (`provisioning.foreign_tenant`), because the two businesses' rows
-  // would otherwise share one database; only then, if the SAME identity is already present, is it a
-  // re-provision (`setup.already_provisioned`). The applied identity is the plan's `ensure-tenant`
-  // action, canonicalized by planVenue, so it compares like-for-like with the stored row. Both reads
-  // run before stamping or minting another venue.
+  // `assertNoForeignTenant` guard. ONE read of the existing identities answers both questions, in
+  // this order: a FOREIGN identity is refused first (`provisioning.foreign_tenant`), because the two
+  // businesses' rows would otherwise share one database; only then, if any row is present at all, is
+  // it a re-provision (`setup.already_provisioned`) — `tenants_singleton_ck` pins the id to 1, so
+  // the table holds at most one row and a non-empty read IS the taxpayer. The applied identity is the plan's `ensure-tenant` action,
+  // canonicalized by planVenue, so it compares like-for-like with the stored row. Both decisions run
+  // before stamping or minting another venue.
   const ensure = plan.find((a) => a.kind === "ensure-tenant");
   const present = await readTenantIdentities(deps.ownerDb);
   if (ensure !== undefined && ensure.kind === "ensure-tenant") {
     assertNoForeignTenant(present, { country: ensure.country, taxId: ensure.taxId }, deps.database);
   }
-  const alreadyProvisioned = await withTransaction(deps.ownerDb, async (tx) => {
-    const rows = await tx.execute(sql`select 1 from tenants where id = 1`);
-    return rows.rows.length > 0;
-  });
-  if (alreadyProvisioned) {
+  if (present.length > 0) {
     throw new AppError("setup.already_provisioned", {});
   }
 

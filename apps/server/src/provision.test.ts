@@ -290,7 +290,8 @@ describe("provisionVenue", () => {
     //
     // WHICH layer refuses it, and what happens without that layer, measured rather than reasoned:
     // the double-provision guard (`provision.ts`) asks whether the taxpayer row exists at all
-    // (`select 1 from tenants where id = 1`) and throws `setup.already_provisioned`. Delete that
+    // — `present.length > 0` on the identities it has already read — and throws
+    // `setup.already_provisioned`. Delete that
     // guard and this case prints `expected 'provisioning.second_venue' to be
     // 'setup.already_provisioned'` — so applyVenue's own existing-venue check still stops the second
     // chain one layer deeper, and what this case pins is that the operator gets the SETUP code rather
