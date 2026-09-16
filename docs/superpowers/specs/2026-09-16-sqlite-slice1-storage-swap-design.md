@@ -31,7 +31,7 @@ object store, and no second node. Replication arrives in slices 2–5.
    reads the source.** Not a trigger per grant, and not a convention with nothing checking it (§6.3).
 6. **Archiving moves into the flip**, not into slice 2 as the topology design had it. The pull request
    that deletes the `pg_dump` path is the one that must supply its replacement, or `main` lands with
-   no way to take a copy of a venue at all (§6.4).
+   no way to take a copy of a venue at all (§6.5).
 
 ---
 
@@ -92,22 +92,49 @@ A new package opens the database and hands out connections. Nothing else in the 
 compiled C++ add-on off the box image, and it is the same engine the gate-2 prototype rig already
 drives (`docs/superpowers/plans/2026-09-16-sqlite-failover-prototype.md`, "Tech Stack").
 
-Two things were established by running them, on 2026-09-16, on Node v26.7.0 with `drizzle-orm@0.45.2`:
+Established by running them, on 2026-09-16, on Node v26.7.0 with `drizzle-orm@0.45.2`:
 
 - **Drizzle ships no driver for `node:sqlite`.** Listing the package's export map — for the installed
   0.45.2 and for the newest published version, which is also 0.45.2 — returns `better-sqlite3`,
   `libsql`, `bun-sqlite`, `expo-sqlite`, `op-sqlite`, `d1`, `durable-sqlite`, `sqlite-proxy` and
   `prisma/sqlite`. There is no `node-sqlite` entry.
-- **A ~20-line adapter makes `node:sqlite` work behind Drizzle's `better-sqlite3` driver.** The
-  differences are confined to statement handling: Drizzle toggles a raw-array mode through `raw()`,
-  which maps onto `node:sqlite`'s `setReturnArrays`. With that adapter a `select()`, a `get()` and an
-  `insert()` returned correct rows.
+- **A ~25-line adapter makes `node:sqlite` work behind Drizzle's `better-sqlite3` driver.** Exercised:
+  `select`, `get`, `insert`, blob columns, Drizzle's `json` and `bigint` column modes, explicit
+  `BEGIN`/`COMMIT` around Drizzle statements (the shape §4's queue uses), and **Drizzle's migration
+  runner**, which created `__drizzle_migrations`, applied a migration and was a no-op on a second run.
+  The adapter needs two things beyond the obvious: Drizzle's raw-array mode maps onto
+  `setReturnArrays`, and the migrator calls a `transaction(fn)` method on the client, which the
+  adapter supplies as explicit `BEGIN`/`COMMIT`/`ROLLBACK`.
+- **`node:sqlite` is stable on Node 26**, not experimental: importing it on v26.7.0 emits no warning.
+- **Both drivers bundle the same SQLite**, 3.53.4.
 
-  **What that experiment did not exercise, stated so nobody assumes it did:** transactions, blob
-  columns, prepared-statement reuse across calls, and Drizzle's migration runner. **The plan's first
-  storage task re-runs the adapter against all four before any other work depends on it**, and falls
-  back to `better-sqlite3` — which Drizzle supports directly, at the cost of a native module in the
-  box image — if any of them cannot be adapted.
+**Performance is not what decides this.** Through Drizzle — which is how all of this code runs — median
+of three runs on 2026-09-16:
+
+| | `node:sqlite` | `better-sqlite3` | |
+| --- | --- | --- | --- |
+| insert 10k rows in one transaction | 80 ms | 97 ms | `node:sqlite` 18% faster |
+| 20k reads by primary key | 265 ms | 293 ms | `node:sqlite` 9% faster |
+| 200 scans returning 1k rows each | 62 ms | 52 ms | `node:sqlite` 20% slower |
+
+At the driver level, below Drizzle, `better-sqlite3` is genuinely faster at turning rows into objects
+(2.4× on the scan case, narrowing to 1.45× when rows come back as arrays) and `node:sqlite` is
+substantially faster at preparing statements (16 ms against 41 ms for 20,000 preparations). Through
+Drizzle those two effects largely cancel, because Drizzle re-prepares on every call and adds roughly
+three times the driver's own cost on a point read. **So the driver choice is a question of features and
+dependencies, not speed**, and the scan case is the only one where it costs anything.
+
+**Feature differences that matter here.** `node:sqlite` has no `.backup()`, no `.pragma()` helper and
+no `.transaction()` helper; none is needed — archiving uses `VACUUM INTO` (§6.4), pragmas are plain
+statements, and slice 1 writes its own transaction handling anyway (§4). Raw driver access returns a
+blob as a `Uint8Array` rather than a `Buffer`, but a Drizzle-mapped blob column returns a `Buffer` on
+both, so this only reaches code that bypasses Drizzle. `node:sqlite` additionally carries SQLite's
+session and changeset extension, which `better-sqlite3` does not; slices 2–5 use Litestream and do not
+need it, and it is noted here only so nobody rediscovers it as an argument later.
+
+**The one remaining reason to switch to `better-sqlite3`** is if the adapter turns out to be a
+maintenance burden in practice. Nothing found so far suggests it; the fallback costs a native module
+in the box image and nothing else.
 
 ### 3.2 Two files, and why they need two Drizzle instances
 
@@ -287,7 +314,43 @@ Two things replace it:
 what the database actually refuses today; written after the flip, it would be written from memory with
 the evidence already deleted.
 
-### 6.4 Archiving
+### 6.4 Driver errors, and the constraint name that no longer exists
+
+This is the largest piece of work in slice 1 that neither the topology design nor the phase plan had
+noticed, and it is independent of which driver is chosen.
+
+Waitron's write paths translate a database refusal into a domain error, and several of them key on the
+**name** of the violated constraint so they translate only their own and re-throw everything else —
+`uniqueViolationConstraint` in `packages/db/src/unique-violation.ts`, with
+`packages/identity`'s `asEmailTaken` as its first caller. PostgreSQL reports the constraint name on
+the error. **SQLite does not report a constraint name at all.** Run on 2026-09-16 against a table
+whose unique constraint was explicitly named `people_email_key`, both drivers reported:
+
+```
+message:    UNIQUE constraint failed: people.email
+constraint: (not reported)
+```
+
+The name is gone; what SQLite gives instead is the **table and column list**. So every caller that
+keys on a constraint name must key on columns, and the mapping helpers must parse them out of the
+message.
+
+The two drivers also disagree on how they report *which kind* of constraint failed: `better-sqlite3`
+raises a `SqliteError` whose `code` reads `SQLITE_CONSTRAINT_UNIQUE`, while `node:sqlite` raises a
+plain `Error` with `code` `ERR_SQLITE_ERROR` and the specific reason only in a numeric `errcode`
+(2067 unique, 1555 primary key, 1299 not null). Either is workable; `node:sqlite` needs a small
+number-to-meaning map.
+
+**Scale:** the four helpers have 92 call sites across 23 non-test source files, including two fiscal
+ones — `packages/fiscal-verifactu/src/chain.ts` and `packages/workforce/src/chain.ts` both use this to
+decide whether a chain-append race is worth retrying. A misread error there does not corrupt a chain,
+but it does turn a retryable race into a failed sale.
+
+**This work starts before the flip**, as item P10 in §9: introduce the "which columns" question as the
+thing callers ask, answered on PostgreSQL today from what it already reports, and answered from the
+message after the flip. That keeps 23 files of churn out of the flip and keeps each step green.
+
+### 6.5 Archiving
 
 The flip deletes `apps/server/src/pg-restore.ts` and the `pg_dump` path, so **the same pull request supplies
 `VACUUM INTO` in their place**. The topology design put archiving in slice 2; moving it forward is
@@ -373,6 +436,7 @@ land non-fiscal work by itself and leaves anything touching the unrepairable fis
 | P7 | Untangle foreign keys that would cross `venue.db` / `node.db` | — | autonomous |
 | P8 | Delete `packages/sync` and the PostgreSQL-shaped failover routes | — | autonomous |
 | P9 | The write-path guard, **while grants still exist to check it against** | — | autonomous |
+| P10 | Re-key driver-error translation on columns rather than constraint names (§6.4) | — | owner review |
 
 P1 and P2 are large but mechanical, and both split per package into several pull requests.
 
@@ -403,10 +467,11 @@ PostgreSQL-only tests converted or deleted. Depends on every prepare item. **Own
    parallel, and P1 touches 72 files while P2 touches 211. Each prepare item rebases immediately
    before it lands, and the plan sequences P1 and P2 per package so a conflict is confined to one
    package.
-3. **The `node:sqlite` adapter is proven for three operations only** (§3.1). If transactions, blobs,
-   statement reuse or the migration runner cannot be adapted, the driver becomes `better-sqlite3` and
-   the box image gains a native module. Decided by the plan's first storage task, before anything
-   depends on it.
+3. **The `node:sqlite` adapter is a piece of this repository's own code sitting under Drizzle.** It is
+   now proven across reads, writes, blobs, Drizzle's column modes, explicit transactions and the
+   migration runner (§3.1), so the risk is no longer whether it works but whether it stays working
+   across Drizzle versions. The fallback is `better-sqlite3`, which costs a native module in the box
+   image and nothing else, and the adapter is small enough to abandon cheaply.
 4. **Single-writer throughput is unmeasured.** Nothing in this repository says what a venue's write
    load costs under one serialised writer. No sentence here claims it is sufficient; the gate-2
    prototype measures sale latency under an offline write load, and that measurement — not this design
@@ -424,7 +489,8 @@ PostgreSQL-only tests converted or deleted. Depends on every prepare item. **Own
 - **Which transaction bodies wait on something other than the database** (§4.2) — a survey of the 274
   non-test transaction sites, not the two-file spot check done here.
 - **What the vocabulary cannot hide** (§5.1) — reported from one converted module before the rollout.
-- **The `node:sqlite` adapter's four unexercised areas** (§3.1).
+- **How the columns come out of each driver's message** (§6.4) — the exact parse, and what a
+  multi-column unique constraint reports.
 - **The cross-file foreign-key list** (§3.2) — enumerated from the foreign-key graph, with each edge's
   resolution named, before P7 writes any code.
 - **The disposition of each of the 66 PostgreSQL-only tests** (§7.3).
@@ -439,7 +505,12 @@ Node v26.7.0 and `drizzle-orm@0.45.2`.
 | Claim | How it was established |
 | --- | --- |
 | No Drizzle driver for `node:sqlite` | Listed the export map of the installed 0.45.2 and of `drizzle-orm@latest` (also 0.45.2) |
-| `node:sqlite` works behind Drizzle with an adapter | Ran a `select`, a `get` and an `insert` through a ~20-line shim; no other operation exercised |
+| `node:sqlite` works behind Drizzle with an adapter | Ran reads, writes, blob and JSON column modes, explicit transactions, and Drizzle's migration runner through a ~25-line shim |
+| Driver performance through Drizzle | Median of 3 runs each: inserts, point reads, scans — see §3.1 |
+| `node:sqlite` is stable on Node 26 | Imported it on v26.7.0; no experimental warning |
+| Both drivers bundle SQLite 3.53.4 | `select sqlite_version()` on each |
+| SQLite reports no constraint name | Violated an explicitly named unique constraint on both drivers; both reported the table and column only |
+| 92 error-helper call sites in 23 non-test files | grep for the four helpers in `packages/db/src/unique-violation.ts` |
 | A Drizzle table cannot name an attached file's table | Read the emitted SQL: `select "id", "token" from "node.sessions"` |
 | Overlapping async transactions on one connection lose writes | Ran both the failing case and the serialised control; they print different results |
 | 106 tables, 35 enum types, 795 column definitions, 72 files | grep over the non-test files containing `pgTable(` |
