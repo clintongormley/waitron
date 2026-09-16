@@ -21,6 +21,15 @@ export interface Unit {
   abbreviation: Record<string, string>;
 }
 
+/** A {@link Unit} plus the scale integration the till reads: `hardwareUnit` names the mass unit a
+ * connected scale weighs in (`kg`/`g`/`mg`), or null for a counted (each) unit. The sell-side reads
+ * ({@link ./menu-types.js#AvailableProduct}, {@link ./menu-types.js#MenuOffer}) carry it so the till
+ * decides whether to weigh from the unit itself, not from the legacy `pricingUnit` flag. `units.ts`
+ * owns the code that builds it and re-exports this type. */
+export interface SellableUnit extends Unit {
+  hardwareUnit: "kg" | "g" | "mg" | null;
+}
+
 /**
  * One product variant as the editor sends and receives it. The three names fall back INDEPENDENTLY:
  * `name` is the plain staff-facing text, `customerName` the translated text a guest reads, and

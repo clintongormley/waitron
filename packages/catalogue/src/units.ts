@@ -10,18 +10,14 @@ export {
   validateUnitPrecision,
 } from "./unit-validation.js";
 import "./errors.js";
-import type { Unit } from "./product-types.js";
-export type { Unit } from "./product-types.js";
+import type { Unit, SellableUnit } from "./product-types.js";
+export type { Unit, SellableUnit } from "./product-types.js";
 
 /** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
 export interface ProductUsingUnit {
   id: string;
   name: string;
   available: boolean;
-}
-
-export interface SellableUnit extends Unit {
-  hardwareUnit: "kg" | "g" | "mg" | null;
 }
 
 /** The unit a product reads as when it has NO stored unit. It is NEVER written to the units table or a
