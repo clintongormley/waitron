@@ -2029,7 +2029,6 @@ export async function readTabLines(
   cfg: TillConfig,
   tabId: string,
 ): Promise<TabLine[]> {
-  // `assertTabOpen` refuses a tab that is not open before the read below runs.
   await assertTabOpen(tx, cfg, tabId);
   // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` AND `state` (coursing
   // corrections, C1) — one item per line at most (`ticket_items` is UNIQUE on
