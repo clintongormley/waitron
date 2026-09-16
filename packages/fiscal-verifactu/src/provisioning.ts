@@ -1,4 +1,4 @@
-import { tenants, type Transaction } from "@waitron/db";
+import { readTenant, type Transaction } from "@waitron/db";
 import type { ModuleProvisioning, StandbyReservation } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 // Side-effect only: registers this package's `sif.*` codes on the shared registry. See ./errors.ts.
@@ -26,8 +26,8 @@ export const WAITRON_ID_SISTEMA = "W1";
  * naming that state, not a domain code, for the same reason `readStandardSeriesIdTx`
  * (`@waitron/db`) uses one. */
 async function obligadoNif(tx: Transaction): Promise<string> {
-  const [row] = await tx.select({ taxId: tenants.taxId }).from(tenants).limit(1);
-  if (row === undefined) {
+  const row = await readTenant(tx);
+  if (row === null) {
     throw new Error("fiscal seed: tenants is empty, so there is no taxpayer to file under");
   }
   return row.taxId;

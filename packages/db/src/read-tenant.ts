@@ -12,12 +12,12 @@ export interface Tenant {
 }
 
 /**
- * Reads the database's one taxpayer row, so `apps/server`'s seven readers of it share one query
- * instead of seven copies. NOT the only place the row is reached: `apps/server/src/provision.ts`
- * and `packages/provisioning/src/venue-apply.ts` spell `where id = 1` themselves, and
- * `packages/fiscal-verifactu`'s `provisioning.ts` and `backend.ts` reach the same row by a
- * different rule again — `.limit(1)` with no id predicate. None of those four would follow a change
- * made here.
+ * Reads the database's one taxpayer row by `where id = 1`, so its readers share one query instead of
+ * a copy each. Two provisioning sites deliberately do not come through here and would not follow a
+ * change made here: `packages/provisioning/src/venue-apply.ts` needs `for update` on the row to put
+ * a concurrent second provision behind the first, and `readTenantIdentities`
+ * (`packages/provisioning/src/tenant-guard.ts`) asks a different question — which fiscal identities
+ * the table holds at all, before one is written.
  *
  * Returns `null` rather than throwing when the row is absent, because callers do genuinely
  * different things with that: the receipt and payment-slip printers degrade to printing nothing (a

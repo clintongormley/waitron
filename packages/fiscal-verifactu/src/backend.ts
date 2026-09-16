@@ -4,7 +4,7 @@
 // here, is `@waitron/fiscal`'s and arrives with its types.
 import "./errors.js";
 import { sql } from "drizzle-orm";
-import { tenants, withTransaction } from "@waitron/db";
+import { readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, decimal, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId, TillId } from "@waitron/shared";
@@ -830,8 +830,8 @@ export class VerifactuBackend implements FiscalBackend {
    * name is unrepairable (CLAUDE.md §5).
    */
   private async taxpayer(tx: Transaction): Promise<{ legalName: string }> {
-    const [row] = await tx.select({ legalName: tenants.legalName }).from(tenants).limit(1);
-    if (row === undefined) {
+    const row = await readTenant(tx);
+    if (row === null) {
       throw new Error("tenants is empty: a venue cannot file a record with no taxpayer to file as");
     }
     return row;
