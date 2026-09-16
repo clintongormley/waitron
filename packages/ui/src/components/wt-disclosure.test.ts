@@ -65,3 +65,11 @@ test("summary paints from the muted-text token", async () => {
   const s = el.shadowRoot!.querySelector(".summary")!;
   expect(getComputedStyle(s).color).toBe("rgb(9, 9, 9)");
 });
+
+test("focusing the host delegates focus to the header button", async () => {
+  // The editor moves focus to the section holding a reported error; without delegation the host
+  // takes focus and the header button never becomes the active element.
+  const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
+  el.focus();
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("button.header"));
+});

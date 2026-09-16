@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
-import { uniqueId } from "../interactive.js";
+import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
 /**
@@ -16,6 +16,10 @@ import "./wt-icon.js";
  */
 @customElement("wt-disclosure")
 export class WtDisclosure extends LitElement {
+  // Delegates .focus() on the host to the header button — the product editor focuses the section
+  // that holds a reported error.
+  static override shadowRootOptions = delegatesFocusShadowRootOptions;
+
   static override styles = [
     baseStyles,
     css`
