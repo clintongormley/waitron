@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check } from "drizzle-orm/pg-core";
+import { count, label, money, table, tsString } from "@waitron/db";
 
 /**
  * The venue's offline-acceptance policy — at most one row, `id` pinned to 1 (the `deployment` /
@@ -9,18 +10,18 @@ import { check, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/p
  * inferred from connectivity. The ABSENCE of the row is fail-safe: no row means no offline acceptance
  * at all (see `resolveOfflineDecision`). Mutable config, so no append-only trigger.
  */
-export const paymentPolicy = pgTable(
+export const paymentPolicy = table(
   "payment_policy",
   {
-    id: integer("id").primaryKey().notNull().default(1),
-    offlineMode: text("offline_mode").notNull(),
-    offlineAmountCap: numeric("offline_amount_cap", { precision: 12, scale: 2 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    id: count("id").primaryKey().notNull().default(1),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair:
+    // that pair narrows the column's TypeScript type to the union of its values, which is a
+    // caller-facing change the schema probe cannot see. See enumText in
+    // packages/db/src/schema/columns.ts.
+    offlineMode: label("offline_mode").notNull(),
+    offlineAmountCap: money("offline_amount_cap").notNull(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
+    updatedAt: tsString("updated_at").notNull().defaultNow(),
   },
   (t) => [
     check("payment_policy_singleton_ck", sql`${t.id} = 1`),

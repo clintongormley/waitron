@@ -2332,9 +2332,21 @@ things it did not absorb, both written up in the plan. One text column keeps its
 narrows what a caller may write — measured with the typechecker, and invisible to the schema probe.
 And one column is an array, which the vocabulary has no helper for at all; there are five such
 columns in the tree — three more in `packages/db` and one in `packages/media` — and the flip has to
-convert every one of them whatever the vocabulary does. What is
-left of P1b is the remaining packages, one pull request each, starting at `payments`, and then the
-guard.
+convert every one of them whatever the vocabulary does.
+
+**`packages/payments` is converted too, in the fifth pull request** — its five table files, 41
+columns, with no schema change. Its two carve-outs are the two the rollout keeps meeting: the
+database enums, which `enumText` cannot stand in for because it emits `text`; and two text columns
+that keep their hand-written `check()` constraints — `payments.card_entry_mode` because its values
+are written without the spacing `enumCheck` emits, so substituting would change the schema, and
+`payment_policy.offline_mode` because the pair narrows what a caller may write. This package met no
+shape the earlier ones had not. It is worth recording that the pull request first claimed otherwise
+— that `enumCheck` was structurally unable to express a nullable column's constraint — and that
+both reviewers falsified it by composing the thing and running it, one of them against PGlite. The
+durable half is now a test rather than a paragraph: `packages/db/src/schema/columns.test.ts` pins
+that a null arm composed around `enumCheck` keeps its values inline, and goes red if
+`.inlineParams()` is removed. What is left of P1b is the remaining packages, one pull request
+each, starting at `fiscal-verifactu`, and then the guard.
 **And the house rule is still not written down, on purpose**: the one-line `CLAUDE.md` §3 entry naming
 `packages/db/src/schema/columns.ts` as the only place the engine's column types are named, with its
 receipt in `docs/developers/conventions-data.md`, lands in P1b's FINAL pull request together with

@@ -127,6 +127,17 @@ describe("enumCheck derives the check constraint from the column's own values", 
     expect(() => enumCheck(probe.name)).toThrow(/enumText/);
   });
 
+  it("keeps its values inline when a caller composes a null arm around it", () => {
+    // A nullable checked column is written `<col> is null or <col> in (...)`, and enumCheck emits
+    // only the second half — so the null arm is composed AROUND it. The risk that makes this worth
+    // a case: `.inlineParams()` is set on the inner fragment, and if it did not survive being
+    // nested the values would render as bind placeholders and change the generated DDL. Prove it by
+    // deleting `.inlineParams()` from enumCheck: this case goes red on the placeholders.
+    expect(render(sql`${probe.kind} is null or ${enumCheck(probe.kind)}`)).toBe(
+      '"probe"."kind" is null or "probe"."kind" in (\'cash_sale\', \'manual\')',
+    );
+  });
+
   it("renders the values as SQL literals, never as bind placeholders", () => {
     // A check constraint is DDL: a placeholder here would be written into the generated migration
     // as `in ($1, $2)` and change the schema. Measured 2026-09-17: without `.inlineParams()` that

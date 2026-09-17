@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  numeric,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgEnum } from "drizzle-orm/pg-core";
+import { id, label, money, table, tsString } from "@waitron/db";
 import { payments } from "./payments.js";
 
 /** One refund movement's outcome. 4a: `succeeded` (money returned) or `failed`. */
@@ -20,21 +11,19 @@ export const paymentRefundState = pgEnum("payment_refund_state", ["succeeded", "
  * mutation of it. The aggregate (has the whole capture been returned, or only part?) is reflected
  * on `payments.state` (`refunded` / `partially_refunded`); this table is the itemised trail.
  */
-export const paymentRefunds = pgTable(
+export const paymentRefunds = table(
   "payment_refunds",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    paymentId: uuid("payment_id").notNull(),
-    provider: text("provider").notNull(),
-    paymentRef: text("payment_ref").notNull(),
-    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    paymentId: id("payment_id").notNull(),
+    provider: label("provider").notNull(),
+    paymentRef: label("payment_ref").notNull(),
+    amount: money("amount").notNull(),
     state: paymentRefundState("state").notNull(),
     /** The person who authorised this refund at the till (#7), NULL for automated (reconcile/manual)
      * refunds. Plain uuid, no FK — the sale_voids.voided_by precedent. */
-    authorizedBy: uuid("authorized_by"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    authorizedBy: id("authorized_by"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     foreignKey({
