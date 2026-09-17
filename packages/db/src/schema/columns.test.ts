@@ -247,8 +247,11 @@ describe("the migrated database reports the types the vocabulary declared", () =
 });
 
 /**
- * No migration declares `day`, `timeOfDay`, `smallCount`, `bigCount` or `binary` yet, so
- * `drawer_opens` cannot settle them the way it settles the helpers before them. The probe table at
+ * `drawer_opens`, the one migrated table this file interrogates, carries no `day`, `timeOfDay`,
+ * `smallCount`, `bigCount` or `binary` column, so it cannot settle those five the way it settles
+ * the helpers before them. (Other migrated tables do declare them — `daily_closes.business_day`,
+ * `tenants.day_cutover`, `dining_tables.pos_x`, `catalogue.version`, `print_jobs.payload` — so a
+ * future version of this file could interrogate one of those instead.) The probe table at
  * the top of this file can: create it in the same database from the DDL drizzle-kit generates for
  * that very table object — the statement it would write into a migration, not one typed here — and
  * then ask the server what it made.
@@ -299,9 +302,11 @@ describe("the same database reports the types the newest helpers declared", () =
     // through when `fromDriver` is absent. Measured 2026-09-17: with BOTH `toDriver` and
     // `fromDriver` deleted from the `bytea` custom type, this case still passed and the only red
     // one in the file was "binary binds a Buffer and reads back a plain Uint8Array" in the describe
-    // below — which is where that mapping is pinned. `printing.test.ts` gets the opposite answer
-    // for its own bytea column because it runs on real PostgreSQL, where the node-postgres DRIVER
-    // hands back a `Buffer`; that difference is the driver's, not any helper's.
+    // below — which is where that mapping is pinned. `printing.test.ts:247` asserts
+    // `Buffer.isBuffer(row.payload)` is false on a REAL PostgreSQL read, where node-postgres hands
+    // back a `Buffer` for `fromDriver` to convert — so a missing `fromDriver` would turn that file
+    // red where it cannot turn this one red. The difference between the two files is the driver's,
+    // not any helper's.
     await pg.db.insert(probe).values({ bytes: new Uint8Array([1, 2, 3]) });
     const [row] = await pg.db.select({ bytes: probe.bytes }).from(probe);
     expect(row?.bytes).toEqual(new Uint8Array([1, 2, 3]));

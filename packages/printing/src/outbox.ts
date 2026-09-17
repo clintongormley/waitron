@@ -45,14 +45,15 @@ export async function enqueuePrintJob(
     .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
-  // The single write: a `queued` outbox row carrying the OPAQUE payload bytes verbatim. `Buffer.from`
-  // copies the Uint8Array into the Buffer the bytea customType binds (schema/print-jobs.ts).
+  // The single write: a `queued` outbox row carrying the OPAQUE payload bytes verbatim. The column
+  // is `@waitron/db`'s shared `binary` helper, which takes a Uint8Array and binds the Buffer the
+  // driver wants, so nothing is converted here.
   const [job] = await tx
     .insert(printJobs)
     .values({
       locationId: cfg.locationId,
       printerId,
-      payload: Buffer.from(payload),
+      payload,
       kind,
     })
     .returning({ id: printJobs.id });

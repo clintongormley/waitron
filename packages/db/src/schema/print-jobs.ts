@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, customType, index, pgEnum } from "drizzle-orm/pg-core";
-import { count, id, label, table, tsString } from "./columns.js";
+import { check, index, pgEnum } from "drizzle-orm/pg-core";
+import { binary, count, id, label, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -9,14 +9,6 @@ import { locations } from "./tenants.js";
  * successful push, or `failed` (retried with bounded backoff). A pgEnum, matching the repo precedent.
  */
 export const printJobStatus = pgEnum("print_job_status", ["queued", "printing", "done", "failed"]);
-
-/** `bytea` as a Node `Buffer` in both directions. drizzle-orm 0.45 ships no first-class bytea type
- * (the `packages/credentials` schema defines the same local helper for the same reason). The payload
- * is OPAQUE ESC/POS bytes — a text column holding base64 would put a second encoding between the
- * caller and the row for no benefit. */
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType: () => "bytea",
-});
 
 /**
  * The print OUTBOX (§2c) — delivery decoupled from creation so a fire or a sale is NEVER blocked by a
@@ -46,8 +38,12 @@ export const printJobs = table(
     // in the --custom migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the
     // claimer reports its own job (runtime.ts). NULL while queued and after the job leaves `printing`.
     claimedBy: id("claimed_by"),
-    // OPAQUE ESC/POS bytes (Slice B fills them; the subsystem never inspects them).
-    payload: bytea("payload").notNull(),
+    // OPAQUE ESC/POS bytes (Slice B fills them; the subsystem never inspects them). Bytes rather
+    // than base64 text, so nothing sits between the caller and the row. A read THROUGH this column
+    // hands back a `Uint8Array`, which is what `enqueuePrintJob` already passes in. The agent pull
+    // (`claimPrintJobs` in packages/printing/src/runtime.ts) reads the same row with raw SQL, where
+    // no column mapping runs at all and the driver's own value arrives instead.
+    payload: binary("payload").notNull(),
     // Drawer pulses share transport delivery but cannot be repeated through document resend.
     kind: label("kind").$type<"document" | "drawer">().notNull().default("document"),
     status: printJobStatus("status").notNull().default("queued"),

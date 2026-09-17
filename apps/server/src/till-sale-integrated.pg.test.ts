@@ -275,8 +275,8 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
   });
 }
 
-/** The receipt payloads enqueued to `printerId` (bytea → Buffer via the customType). */
-async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Buffer[]> {
+/** The receipt payloads enqueued to `printerId`, as the shared `binary` column hands them back. */
+async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uint8Array[]> {
   void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);

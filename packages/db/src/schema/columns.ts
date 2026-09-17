@@ -193,10 +193,10 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
 /**
  * Opaque bytes (`bytea`), handed to callers as a `Uint8Array` and bound as a node `Buffer`.
  *
- * `Uint8Array` is the caller-facing type because the callers already hold one and convert only
- * because the column demands a `Buffer`: `enqueuePrintJob` in `packages/printing/src/outbox.ts`
- * takes a `Uint8Array` and calls `Buffer.from` on the insert. Converting that column DELETES that
- * `Buffer.from`.
+ * A custom type because drizzle-orm 0.45 ships no first-class `bytea`.
+ *
+ * `Uint8Array` is the caller-facing type because that is what the callers hold: `enqueuePrintJob`
+ * in `packages/printing/src/outbox.ts` takes a `Uint8Array` and passes it straight to the insert.
  *
  * `runAgentOnce` in `packages/printing/src/runtime.ts` also copies a read-back payload into a
  * `Uint8Array`, and that copy STAYS, because the row it copies was never read through a column:
@@ -208,10 +208,12 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
  * `BUILDER: Uint8Array isBuffer=false | RAW: Buffer isBuffer=true`, with both reads carrying the
  * same bytes, so the difference is the mapping and not the data.
  *
- * `packages/db/src/schema/print-jobs.ts` and `packages/credentials/src/schema/tenant-credentials.ts`
- * declare their own `bytea` typed as `Buffer` in both directions, so converting those two columns
- * changes what their call sites receive — the SQL type is the same either way, so nothing in the
- * schema will report it.
+ * The hand-rolled `bytea` blocks still in the tree are not the same block.
+ * `packages/media/src/schema/images.ts` declares this same `Uint8Array`-facing shape, body for
+ * body, so converting it changes nothing a caller sees.
+ * `packages/credentials/src/schema/tenant-credentials.ts` declares `Buffer` in both directions, so
+ * converting that one changes what its call sites receive — the SQL type is the same either way,
+ * so nothing in the schema will report it.
  *
  * The custom type itself stays private: drizzle's overloads on it also accept no name at all and a
  * config object, so exporting it directly would make `binary()` compile where every sibling helper

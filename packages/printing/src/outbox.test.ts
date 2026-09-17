@@ -30,12 +30,14 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: rows[0]!.id };
 }
 
-/** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model so `payload`
- * decodes through the bytea customType to a Buffer. */
+/** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model, so `payload`
+ * is typed by the shared `binary` column: a Uint8Array. This suite runs on PGlite, which returns
+ * one from a bytea column regardless, so it cannot tell the column's mapping from the driver's
+ * (measured in @waitron/db's columns.test.ts, with both mapping functions deleted). */
 async function jobRow(
   tx: Transaction,
   jobId: string,
-): Promise<{ status: string; payload: Buffer }> {
+): Promise<{ status: string; payload: Uint8Array }> {
   const [row] = await tx
     .select({ status: printJobs.status, payload: printJobs.payload })
     .from(printJobs)

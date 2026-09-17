@@ -111,10 +111,12 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** Read the print-job outbox; the bytea custom type decodes payload into a Buffer. */
+/** Read the print-job outbox. `payload` is typed by the shared `binary` column, which declares a
+ * Uint8Array; this suite runs on PGlite, whose own bytea parser returns one anyway, so the target
+ * cannot tell the column's mapping from the driver's (measured in packages/db columns.test.ts). */
 async function printJobsFor(
   tx: Transaction,
-): Promise<{ id: string; printerId: string; status: string; payload: Buffer }[]> {
+): Promise<{ id: string; printerId: string; status: string; payload: Uint8Array }[]> {
   return tx
     .select({
       id: printJobs.id,
@@ -525,7 +527,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const payloadOf = (printerId: string): Buffer => {
       const own = ids.jobs.filter((job) => job.printerId === printerId);
       expect(own).toHaveLength(1);
-      // PGlite decodes bytea to a Uint8Array; wrap it so `.equals` (a Node Buffer method) is available.
+      // The payload arrives as a Uint8Array; wrap it so `.equals` (a Node Buffer method) works.
       return Buffer.from(own[0]!.payload);
     };
     expect(payloadOf(ids.wideTwin).equals(payloadOf(ids.wide))).toBe(true);
@@ -584,7 +586,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const slipFor = (printerId: string): Buffer => {
       const own = result.slips.filter((job) => job.printerId === printerId);
       expect(own).toHaveLength(1);
-      // PGlite decodes bytea to a Uint8Array; wrap it so `.equals` (a Node Buffer method) is available.
+      // The payload arrives as a Uint8Array; wrap it so `.equals` (a Node Buffer method) works.
       return Buffer.from(own[0]!.payload);
     };
     expect(slipFor(result.narrow).equals(slipFor(result.wide))).toBe(false);
