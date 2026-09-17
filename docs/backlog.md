@@ -2324,7 +2324,7 @@ printing package's enqueue path, rewrote the two assertions named above, and ret
 hand-written reader signatures from `Buffer` to `Uint8Array`. It left the copy in that package's
 agent runtime alone, as planned: that path reads its row with raw SQL and so never passes through a
 column mapping at all — re-measured by the reviewer against real PostgreSQL, the probe output being
-the line the plan records. **`packages/catalogue` is converted too, in the fourth pull request** —
+the line the plan records. **`packages/catalogue` is converted too, in the fourth pull request (#397)** —
 its four table files, 52 columns, with no schema change: every column builder those files used
 (`uuid`, `text`, `jsonb`, `integer`, `boolean` and the two-decimal `numeric`) has a helper. Two
 things it did not absorb, both written up in the plan. One text column keeps its hand-written
@@ -2340,7 +2340,11 @@ guard.
 receipt in `docs/developers/conventions-data.md`, lands in P1b's FINAL pull request together with
 the guard that enforces it. Until the rollout reaches the other packages every one of them is a
 standing violation of that rule, and a written rule with standing violations needs a guard rather
-than another paragraph.
+than another paragraph. One thing for whoever writes that final pull request, found during #397's
+review and deliberately not fixed there: `packages/db/src/index.ts` already cites "(CLAUDE.md §3)"
+beside the vocabulary re-export, and §3 carries no such rule yet. The pointer came in with #393 and
+becomes true the moment the rule lands, so it was left rather than widening #397's diff — but it is
+a claim standing in the tree until then.
 
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
