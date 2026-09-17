@@ -1,13 +1,13 @@
-import { categories, products } from "@waitron/db";
-import { foreignKey, index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index, primaryKey } from "drizzle-orm/pg-core";
+import { categories, id, label, products, table } from "@waitron/db";
 
-export const categoryDetails = pgTable(
+export const categoryDetails = table(
   "category_details",
   {
-    categoryId: uuid("category_id").notNull(),
-    parentId: uuid("parent_id"),
-    image: text("image"),
-    color: text("color"),
+    categoryId: id("category_id").notNull(),
+    parentId: id("parent_id"),
+    image: label("image"),
+    color: label("color"),
   },
   (t) => [
     primaryKey({ columns: [t.categoryId] }),
@@ -25,11 +25,11 @@ export const categoryDetails = pgTable(
   ],
 );
 
-export const productCategories = pgTable(
+export const productCategories = table(
   "product_categories",
   {
-    productId: uuid("product_id").notNull(),
-    categoryId: uuid("category_id").notNull(),
+    productId: id("product_id").notNull(),
+    categoryId: id("category_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.productId, t.categoryId] }),

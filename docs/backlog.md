@@ -2324,8 +2324,17 @@ printing package's enqueue path, rewrote the two assertions named above, and ret
 hand-written reader signatures from `Buffer` to `Uint8Array`. It left the copy in that package's
 agent runtime alone, as planned: that path reads its row with raw SQL and so never passes through a
 column mapping at all — re-measured by the reviewer against real PostgreSQL, the probe output being
-the line the plan records. What is left of P1b is the remaining packages, one pull request each,
-starting at `catalogue`, and then the guard.
+the line the plan records. **`packages/catalogue` is converted too, in the fourth pull request** —
+its four table files, 52 columns, with no schema change: every column builder those files used
+(`uuid`, `text`, `jsonb`, `integer`, `boolean` and the two-decimal `numeric`) has a helper. Two
+things it did not absorb, both written up in the plan. One text column keeps its hand-written
+`check()` constraint rather than moving to the `enumText`/`enumCheck` pair, because that pair
+narrows what a caller may write — measured with the typechecker, and invisible to the schema probe.
+And one column is an array, which the vocabulary has no helper for at all; there are five such
+columns in the tree — three more in `packages/db` and one in `packages/media` — and the flip has to
+convert every one of them whatever the vocabulary does. What is
+left of P1b is the remaining packages, one pull request each, starting at `payments`, and then the
+guard.
 **And the house rule is still not written down, on purpose**: the one-line `CLAUDE.md` §3 entry naming
 `packages/db/src/schema/columns.ts` as the only place the engine's column types are named, with its
 receipt in `docs/developers/conventions-data.md`, lands in P1b's FINAL pull request together with

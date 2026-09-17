@@ -1,27 +1,20 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  integer,
-  jsonb,
-  pgTable,
-  primaryKey,
-  text,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { products } from "@waitron/db";
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
+import { count, id, json, label, products, table } from "@waitron/db";
 
-export const units = pgTable(
+export const units = table(
   "units",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    seedKey: text("seed_key"),
-    name: jsonb("name").$type<Record<string, string>>().notNull(),
-    abbreviation: jsonb("abbreviation").$type<Record<string, string>>().notNull(),
-    precision: integer("precision").notNull(),
-    hardwareUnit: text("hardware_unit"),
+    id: id("id").primaryKey().defaultRandom(),
+    seedKey: label("seed_key"),
+    name: json<Record<string, string>>("name").notNull(),
+    abbreviation: json<Record<string, string>>("abbreviation").notNull(),
+    precision: count("precision").notNull(),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck
+    // pair: that pair narrows the column's TypeScript type to the union of its values, which
+    // is a caller-facing change the schema probe cannot see. See enumText in
+    // packages/db/src/schema/columns.ts.
+    hardwareUnit: label("hardware_unit"),
   },
   (t) => [
     unique("units_seed_key_key").on(t.seedKey),
@@ -32,20 +25,20 @@ export const units = pgTable(
 
 /** A durable marker: once present, intentionally deleted seed units are never recreated. At most one
  * row, `id` pinned to 1 (the `@waitron/db` singleton shape). */
-export const unitSeedStates = pgTable(
+export const unitSeedStates = table(
   "unit_seed_states",
   {
-    id: integer("id").primaryKey().notNull().default(1),
+    id: count("id").primaryKey().notNull().default(1),
   },
   (t) => [check("unit_seed_states_singleton_ck", sql`${t.id} = 1`)],
 );
 
 /** Catalogue-owned assignment avoids a core migration depending on the catalogue migration set. */
-export const productUnits = pgTable(
+export const productUnits = table(
   "product_units",
   {
-    productId: uuid("product_id").notNull(),
-    unitId: uuid("unit_id").notNull(),
+    productId: id("product_id").notNull(),
+    unitId: id("unit_id").notNull(),
   },
   (t) => [
     // A PRIMARY KEY, not a bare UNIQUE: this table publishes for replication, and Postgres refuses to

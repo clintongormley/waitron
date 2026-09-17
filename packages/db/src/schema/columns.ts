@@ -96,16 +96,19 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * copying either shape, rather than looking for a rule here.
  *
  * This pair is for a NEW column. Every existing text column that already carried a hand-written
- * `check()` stayed as `label()` beside its untouched constraint when this package was converted,
- * and the reason is NOT one reason for all eight of them.
+ * `check()` stays as `label()` beside its untouched constraint as the rollout reaches its package,
+ * and the reason is NOT one reason for all of them. The two reasons below are the ones met so far;
+ * the list of columns each covers grows with the rollout, so read it as a property and not as a
+ * roll-call.
  *
- * For three of them it is measured. `enumCheck` joins its values with `", "`, so on a constraint
- * written without those spaces the substitution changes the DDL: made on `option_groups.type` on
+ * For three columns in THIS package it is measured. `enumCheck` joins its values with `", "`, so on
+ * a constraint written without those spaces the substitution changes the DDL: made on
+ * `option_groups.type` on
  * 2026-09-17, the schema probe produced a migration dropping and re-adding `option_groups_type_ck`
  * with `in ('text', 'extras', 'options')` for `in ('text','extras','options')`, and nothing else.
  * `products.pricing_unit` and `products.vat_class` are written the same way.
  *
- * For the other five — `deployment.mode`, `deployment.singleton_role`, `incidents.severity`,
+ * For five others here — `deployment.mode`, `deployment.singleton_role`, `incidents.severity`,
  * `print_jobs.kind` and `invoice_series.purpose` — that reason does not apply at all: their
  * constraints already carry the spacing `enumCheck` emits, which `columns.test.ts` renders
  * byte-for-byte for `invoice_series_purpose_ck`'s body. Substituting there would be schema-silent.
@@ -113,6 +116,21 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * scope decision, not a measurement. `incidents.severity` has a reason of its own on top: it
  * brands its type as the exported `IncidentSeverity`, and `enumText` would replace that with a
  * union derived from the values array.
+ *
+ * The second group is open, and it keeps growing as the rollout reaches new packages: checked text
+ * columns written with `enumCheck`'s spacing exist outside this package too, among them
+ * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17) and, still unconverted on
+ * that date, `packages/fiscal-verifactu/src/schema/registros.ts` and
+ * `packages/identity/src/schema/google-oidc-states.ts`. So take the two reasons as the property and
+ * the names as a dated reading.
+ *
+ * `units.hardware_unit` carries a reason worth stating in general: substituting there is schema-silent, but `enumText` NARROWS what a
+ * caller may write. Measured 2026-09-17 with `tsc --noEmit` over two probe tables in the catalogue
+ * package, one column declared each way — the `enumText` one refused a `string | null | undefined`
+ * with `Type 'string' is not assignable to type '"g" | "kg" | "mg" | null | undefined'`, while the
+ * `label()` control on the line above it compiled. So this pair is not a free substitution on an
+ * existing column even when the DDL is identical: it is a caller-facing change the schema probe
+ * cannot see.
  */
 export const enumText = <T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });

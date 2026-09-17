@@ -1,29 +1,28 @@
 import { sql } from "drizzle-orm";
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
 import {
-  boolean,
-  check,
-  foreignKey,
-  index,
-  integer,
-  jsonb,
-  numeric,
-  pgTable,
-  primaryKey,
-  text,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { catalogues, optionGroupItems, optionGroups, products } from "@waitron/db";
+  catalogues,
+  count,
+  flag,
+  id,
+  json,
+  label,
+  money,
+  optionGroupItems,
+  optionGroups,
+  products,
+  table,
+} from "@waitron/db";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,
  * `id` pinned to 1 (the `deployment` / `mirror_config` / `node_membership` singleton shape in
  * `@waitron/db`). */
-export const contentLanguages = pgTable(
+export const contentLanguages = table(
   "content_languages",
   {
-    id: integer("id").primaryKey().notNull().default(1),
-    defaultLanguage: text("default_language").notNull(),
-    languages: text("languages").array().notNull(),
+    id: count("id").primaryKey().notNull().default(1),
+    defaultLanguage: label("default_language").notNull(),
+    languages: label("languages").array().notNull(),
   },
   (t) => [
     check("content_languages_singleton_ck", sql`${t.id} = 1`),
@@ -36,14 +35,14 @@ export const contentLanguages = pgTable(
 );
 
 /** A presentation heading within one menu. Product categories remain the reporting taxonomy. */
-export const menuSections = pgTable(
+export const menuSections = table(
   "menu_sections",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    menuId: uuid("menu_id").notNull(),
-    name: jsonb("name").$type<Record<string, string>>().notNull(),
-    displayOrder: integer("display_order").notNull().default(0),
-    active: boolean("active").notNull().default(true),
+    id: id("id").primaryKey().defaultRandom(),
+    menuId: id("menu_id").notNull(),
+    name: json<Record<string, string>>("name").notNull(),
+    displayOrder: count("display_order").notNull().default(0),
+    active: flag("active").notNull().default(true),
   },
   (t) => [
     // The target of menu_items_section_fk: an offer's section belongs to the offer's own menu.
@@ -58,16 +57,16 @@ export const menuSections = pgTable(
 );
 
 /** A product offered on one menu. This row owns the selling price and presentation order. */
-export const menuItems = pgTable(
+export const menuItems = table(
   "menu_items",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    menuId: uuid("menu_id").notNull(),
-    productId: uuid("product_id").notNull(),
-    sectionId: uuid("section_id").notNull(),
-    grossPrice: numeric("gross_price", { precision: 12, scale: 2 }).notNull(),
-    displayOrder: integer("display_order").notNull().default(0),
-    active: boolean("active").notNull().default(true),
+    id: id("id").primaryKey().defaultRandom(),
+    menuId: id("menu_id").notNull(),
+    productId: id("product_id").notNull(),
+    sectionId: id("section_id").notNull(),
+    grossPrice: money("gross_price").notNull(),
+    displayOrder: count("display_order").notNull().default(0),
+    active: flag("active").notNull().default(true),
   },
   (t) => [
     // The target of menu_item_variants_offer_fk: a published variant belongs to the offer's product.
@@ -94,12 +93,12 @@ export const menuItems = pgTable(
 );
 
 /** An option group published for one menu item; product attachment is checked by the authoring op. */
-export const menuItemOptionGroups = pgTable(
+export const menuItemOptionGroups = table(
   "menu_item_option_groups",
   {
-    menuItemId: uuid("menu_item_id").notNull(),
-    groupId: uuid("group_id").notNull(),
-    displayOrder: integer("display_order").notNull().default(0),
+    menuItemId: id("menu_item_id").notNull(),
+    groupId: id("group_id").notNull(),
+    displayOrder: count("display_order").notNull().default(0),
   },
   (t) => [
     primaryKey({
@@ -120,13 +119,13 @@ export const menuItemOptionGroups = pgTable(
 );
 
 /** A choice made available and priced for one offered group. */
-export const menuItemOptions = pgTable(
+export const menuItemOptions = table(
   "menu_item_options",
   {
-    menuItemId: uuid("menu_item_id").notNull(),
-    groupId: uuid("group_id").notNull(),
-    optionId: uuid("option_id").notNull(),
-    priceDelta: numeric("price_delta", { precision: 12, scale: 2 }).notNull().default("0"),
+    menuItemId: id("menu_item_id").notNull(),
+    groupId: id("group_id").notNull(),
+    optionId: id("option_id").notNull(),
+    priceDelta: money("price_delta").notNull().default("0"),
   },
   (t) => [
     primaryKey({
