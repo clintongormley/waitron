@@ -1,5 +1,6 @@
-import { check, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { check } from "drizzle-orm/pg-core";
+import { count, label, table, ts } from "./columns.js";
 
 /**
  * One row, id pinned to 1 — see 0001_db_baseline_sql.sql for why a second row must be impossible.
@@ -15,32 +16,32 @@ import { sql } from "drizzle-orm";
  * `deployment` and its accessors are still exported from the package's own public barrel
  * (`../index.ts`) — that surface is unaffected by this.
  */
-export const deployment = pgTable(
+export const deployment = table(
   "deployment",
   {
-    id: integer("id").primaryKey(),
-    environment: text("environment").notNull(),
+    id: count("id").primaryKey(),
+    environment: label("environment").notNull(),
     // Which role this database plays in the cloud-mirror topology (C2a design §3): a `primary`
     // writes and originates; a `mirror` pulls + applies and serves read-only. Read at runtime so a
     // later promotion needs no restart. Default 'primary' so every existing deployment is unchanged.
-    mode: text("mode").notNull().default("primary"),
+    mode: label("mode").notNull().default("primary"),
     // The singleton-ownership axis (promotion runbook design §2), orthogonal to `mode`: `primary` holds
     // the venue's singleton duties (AEAT submitter + reconciler), `secondary` is sell-only. Default
     // 'primary' so an existing single-node deployment stays a singleton-holder. Read at runtime so a
     // later promotion needs no restart.
-    singletonRole: text("singleton_role").notNull().default("primary"),
+    singletonRole: label("singleton_role").notNull().default("primary"),
     // A scrypt verifier of the offline break-glass secret, set at promotion time by the owner.
     // Nullable: a node minted before this column, and the primary (which is never promoted), both
     // hold `null`. Never the secret itself — only a verifier — and, like `mode`/`singleton_role`,
     // added by a hand-written ALTER (this table is not in the drizzle schema barrel; see the header).
-    breakGlassVerifier: text("break_glass_verifier"),
+    breakGlassVerifier: label("break_glass_verifier"),
     // The fence-LSN watermark (swap S4, Ruling C2): the WAL position recorded when this node entered
     // its read-only fence. The column's DB type is `pg_lsn` (0001_db_baseline_sql.sql's ALTER); it is
     // read/written as text here (drizzle has no pg_lsn type), which is safe because this table is not
     // in the schema barrel so no snapshot diff is derived from this declaration. Nullable — a node
     // that never fenced holds NULL. Owner-write only, like mode/singleton_role/break_glass_verifier.
-    fenceLsn: text("fence_lsn"),
-    stampedAt: timestamp("stamped_at", { withTimezone: true }).notNull().defaultNow(),
+    fenceLsn: label("fence_lsn"),
+    stampedAt: ts("stamped_at").notNull().defaultNow(),
   },
   (t) => [
     check("deployment_singleton_ck", sql`${t.id} = 1`),

@@ -1,5 +1,6 @@
-import { bigint, check, integer, jsonb, pgTable, timestamp } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { check } from "drizzle-orm/pg-core";
+import { bigCount, count, json, table, ts } from "./columns.js";
 import type { SignedMembershipDocument } from "@waitron/membership";
 
 /**
@@ -24,15 +25,16 @@ import type { SignedMembershipDocument } from "@waitron/membership";
  * plain `drizzle-kit generate`. The accessors are exported from the package barrel (`../index.ts`,
  * via `../node-membership.ts`); that surface is unaffected.
  */
-export const nodeMembership = pgTable(
+export const nodeMembership = table(
   "node_membership",
   {
-    id: integer("id").primaryKey().notNull().default(1),
-    // JS `number` (mode) reconciles the Slice-1 document's `number` term with the bigint column; the
-    // ≤3-node topology increments `term` by one per edit, so it never approaches 2^53.
-    term: bigint("term", { mode: "number" }).notNull(),
-    document: jsonb("document").$type<SignedMembershipDocument>().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    id: count("id").primaryKey().notNull().default(1),
+    // The Slice-1 document's `term`, held as a bigint column and read back as a JS `number`
+    // (`bigCount`); the ≤3-node topology increments `term` by one per edit, so it never
+    // approaches 2^53.
+    term: bigCount("term").notNull(),
+    document: json<SignedMembershipDocument>("document").notNull(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [check("node_membership_singleton_ck", sql`${t.id} = 1`)],
 );

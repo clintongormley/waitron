@@ -1,14 +1,15 @@
-import { pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
+import { primaryKey } from "drizzle-orm/pg-core";
+import { id, table } from "./columns.js";
 
-export const locationCatalogues = pgTable(
+export const locationCatalogues = table(
   "location_catalogues",
   {
     // Bare column: the (location_id) → locations(id)
     // FK is hand-written in the --custom migration.
-    locationId: uuid("location_id").notNull(),
+    locationId: id("location_id").notNull(),
     // Bare column: the (catalogue_id) → catalogues(id)
     // FK is hand-written in the --custom migration.
-    catalogueId: uuid("catalogue_id").notNull(),
+    catalogueId: id("catalogue_id").notNull(),
   },
   (t) => [
     primaryKey({

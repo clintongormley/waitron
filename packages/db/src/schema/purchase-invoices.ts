@@ -1,17 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  foreignKey,
-  index,
-  numeric,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
+import { day, id, label, money, rate, table, ts } from "./columns.js";
 
 /**
  * A received supplier invoice — a `factura recibida` — and its per-rate VAT breakdown, the input
@@ -49,33 +38,31 @@ export const purchaseVatKind = pgEnum("purchase_vat_kind", ["ordinary", "capital
  * The received-invoice header (mutable). One row per supplier invoice we have received and entered
  * into the `libro registro de facturas recibidas`.
  */
-export const purchaseInvoices = pgTable(
+export const purchaseInvoices = table(
   "purchase_invoices",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // The supplier's own tax identity (NIF/CIF) and legal name — theirs, not ours; not validated as
     // one of our own identifiers.
-    supplierTaxId: text("supplier_tax_id").notNull(),
-    supplierName: text("supplier_name").notNull(),
+    supplierTaxId: label("supplier_tax_id").notNull(),
+    supplierName: label("supplier_name").notNull(),
     // THE SUPPLIER'S invoice number, never a number from our `invoice_series`.
-    supplierInvoiceNumber: text("supplier_invoice_number").notNull(),
+    supplierInvoiceNumber: label("supplier_invoice_number").notNull(),
     // The supplier's issue date.
-    issuedOn: date("issued_on").notNull(),
+    issuedOn: day("issued_on").notNull(),
     // Our receipt/registration date — this DRIVES the deduction period (spec §D3): input VAT is
     // deductible in the period the invoice is received.
-    receivedOn: date("received_on").notNull(),
+    receivedOn: day("received_on").notNull(),
     // Gross total, in the venue's currency (one currency — no currency column, spec §D7).
-    total: numeric("total", { precision: 12, scale: 2 }).notNull(),
+    total: money("total").notNull(),
     regime: purchaseRegime("regime").notNull().default("general"),
     // The prorrata / partial-deductibility seam (spec §9): the percentage of the input VAT that is
     // deductible, 0–100, default 100 (fully deductible). The RULE that sets it below 100 is
     // asesor-driven and out of scope; this column is only the seam.
-    deductibleProportion: numeric("deductible_proportion", { precision: 5, scale: 2 })
-      .notNull()
-      .default("100.00"),
-    note: text("note"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    deductibleProportion: rate("deductible_proportion").notNull().default("100.00"),
+    note: label("note"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [
     // Composite target for the FK from `purchase_invoice_vat` (mirrors
@@ -103,17 +90,17 @@ export const purchaseInvoices = pgTable(
  * of truth and may round per line differently, so we file what they charged — the same "sum the filed
  * VAT amounts, never re-round" exactness rule the sales/output side follows.
  */
-export const purchaseInvoiceVat = pgTable(
+export const purchaseInvoiceVat = table(
   "purchase_invoice_vat",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    purchaseInvoiceId: uuid("purchase_invoice_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    purchaseInvoiceId: id("purchase_invoice_id").notNull(),
     // The VAT percentage as stored, e.g. "21.00".
-    rate: numeric("rate", { precision: 5, scale: 2 }).notNull(),
+    rate: rate("rate").notNull(),
     // Taxable base (base imponible).
-    base: numeric("base", { precision: 12, scale: 2 }).notNull(),
+    base: money("base").notNull(),
     // The VAT amount (`cuota` / `IVA soportado`) the supplier charged, filed verbatim.
-    tax: numeric("tax", { precision: 12, scale: 2 }).notNull(),
+    tax: money("tax").notNull(),
     kind: purchaseVatKind("kind").notNull().default("ordinary"),
   },
   (t) => [

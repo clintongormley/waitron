@@ -1,19 +1,7 @@
 import type { ModifierSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  integer,
-  jsonb,
-  numeric,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
+import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
@@ -69,20 +57,20 @@ export const tenderMethod = pgEnum("tender_method", [
  * exemption from immutability anywhere in this table — the app role has no
  * UPDATE on it at all. Submission progress is not here; it is on `envios`.
  */
-export const sales = pgTable(
+export const sales = table(
   "sales",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // See ./series.ts's identical comment: the two-argument `.references()`
     // form (with `onDelete`) is what makes v8 track this thunk as its own
     // never-invoked function — drizzle-kit resolves it in a separate CLI
     // process, never during `vitest run`. `v8 ignore` here keeps the explicit
     // `onDelete` rather than dropping it for coverage's sake.
-    tillId: uuid("till_id")
+    tillId: id("till_id")
       .notNull()
       /* v8 ignore next */
       .references(() => tills.id, { onDelete: "restrict" }),
-    seriesId: uuid("series_id")
+    seriesId: id("series_id")
       .notNull()
       /* v8 ignore next */
       .references(() => invoiceSeries.id, { onDelete: "restrict" }),
@@ -91,23 +79,22 @@ export const sales = pgTable(
     // declared in `extraConfig` below (mirroring `sale_lines_sale_fk`/`tenders_sale_fk`), so this
     // column carries no `.references()` of its own. `till_id` STAYS (where the sale rang); this adds
     // the node beside it, it does not replace it.
-    nodeId: uuid("node_id").notNull(),
-    invoiceNumber: integer("invoice_number").notNull(),
-    // mode: "string" rather than "date" — a JS Date normalises through the host
-    // timezone the moment anything formats it, and nothing formatted is ever
-    // stored. The offset travels in its own column.
-    issuedAt: timestamp("issued_at", { withTimezone: true, mode: "string" }).notNull(),
-    issuedOffsetMinutes: integer("issued_offset_minutes").notNull(),
-    total: numeric("total", { precision: 12, scale: 2 }).notNull(),
+    nodeId: id("node_id").notNull(),
+    invoiceNumber: count("invoice_number").notNull(),
+    // tsString rather than ts — a JS Date takes on the host timezone as soon as
+    // something formats it in local time (`toString()` moves with `TZ`;
+    // `toISOString()` does not), and nothing formatted is ever stored. The
+    // offset travels in its own column.
+    issuedAt: tsString("issued_at").notNull(),
+    issuedOffsetMinutes: count("issued_offset_minutes").notNull(),
+    total: money("total").notNull(),
     // The filed per-rate VAT breakdown ({rate, base, tax}[]) — the SAME breakdown written into the
     // hash-chained record, stored here queryably for reporting. Written once at INSERT (sales is
     // immutable); NOT a recompute. Reporting reads this for an exact VAT summary (spec 8a).
-    vatBreakdown: jsonb("vat_breakdown")
-      .$type<{ rate: string; base: string; tax: string }[]>()
-      .notNull(),
-    locale: text("locale").notNull(),
-    invoiceLocales: text("invoice_locales").array().notNull(),
-    fiscalBackend: text("fiscal_backend").notNull(),
+    vatBreakdown: json<{ rate: string; base: string; tax: string }[]>("vat_breakdown").notNull(),
+    locale: label("locale").notNull(),
+    invoiceLocales: label("invoice_locales").array().notNull(),
+    fiscalBackend: label("fiscal_backend").notNull(),
     fiscalState: fiscalState("fiscal_state").notNull(),
     // The generic-layer projection of "this sale corrects that one" — set on a
     // corrective invoice, NULL on an ordinary sale. Justified exactly as `sale_voids`
@@ -118,7 +105,7 @@ export const sales = pgTable(
     // `sale_lines_sale_fk`/`tenders_sale_fk`; NULLABLE with no backfill
     // (pre-production, no deployed data), and immutable table-wide like every
     // other column here.
-    correctsSaleId: uuid("corrects_sale_id"),
+    correctsSaleId: id("corrects_sale_id"),
     // The recipient (`destinatario`) of a full invoice — set on any sale that names one: an F3
     // canje today, and an F1 full invoice from any caller that supplies a counterparty. NULL on an
     // ordinary F2 sale. Stored on the generic sales row, not only in the fiscal
@@ -129,20 +116,20 @@ export const sales = pgTable(
     // and this package is scanned by the english-only guard; they mirror the module's
     // `Counterparty` shape (packages/fiscal/src/backend.ts). All NULLABLE with no backfill
     // (pre-production, no deployed data), and immutable table-wide like every other column here.
-    counterpartyTaxId: text("counterparty_tax_id"),
-    counterpartyLegalName: text("counterparty_legal_name"),
-    counterpartyCountryCode: text("counterparty_country_code"),
+    counterpartyTaxId: label("counterparty_tax_id"),
+    counterpartyLegalName: label("counterparty_legal_name"),
+    counterpartyCountryCode: label("counterparty_country_code"),
     // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
     // ordinary sale. Set by recordCorrection (sale.rectify) at insert (Task 10). Plain uuid, no FK —
     // the same shape as sale_voids.voided_by — NULLABLE with no backfill (pre-production, no deployed
     // data), and immutable/write-once at insert like every other column here (the app role has no
     // UPDATE on this table at all).
-    authorizedBy: uuid("authorized_by"),
+    authorizedBy: id("authorized_by"),
     // The operator who rang this sale (attribution), from their open session — set by recordSale at
     // insert (Task 11), NULL until the till (#7) supplies it. Plain uuid, no FK; NULLABLE with no
     // backfill (pre-production), write-once at insert and immutable table-wide like every other
     // column here.
-    operatorId: uuid("operator_id"),
+    operatorId: id("operator_id"),
     // The parked working order this sale was FILED from (park & retrieve, sub-project 7b), or NULL
     // for a walk-up sale rung with no draft. This is the SALE-IDEMPOTENCY KEY: `sales_working_order_id_key`
     // below makes (working_order_id) unique, so a retrieved order that is submitted twice
@@ -151,7 +138,7 @@ export const sales = pgTable(
     // the FK for a NULL, and NULLs are distinct under the UNIQUE, so any number of walk-up sales
     // coexist. The FK is in extraConfig below, so this bare column
     // carries no single-column `.references()`. Write-once and immutable table-wide like the rest.
-    workingOrderId: uuid("working_order_id"),
+    workingOrderId: id("working_order_id"),
   },
   (t) => [
     unique("sales_series_invoice_number_key").on(t.seriesId, t.invoiceNumber),
@@ -202,43 +189,40 @@ export const sales = pgTable(
 );
 
 /** Snapshotted values, never catalogue references (architecture §6). */
-export const saleLines = pgTable(
+export const saleLines = table(
   "sale_lines",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    saleId: uuid("sale_id").notNull(),
-    lineNo: integer("line_no").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    saleId: id("sale_id").notNull(),
+    lineNo: count("line_no").notNull(),
     // Frozen staff-facing product name (products.name at sale time) — snapshotted, never read live.
-    name: text("name").notNull(),
-    descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
-    variantId: uuid("variant_id"),
+    name: label("name").notNull(),
+    descriptions: json<Record<string, string>>("descriptions").notNull(),
+    variantId: id("variant_id"),
     // Frozen variant staff name — plain text; null when the line names no variant.
-    variantName: text("variant_name"),
+    variantName: label("variant_name"),
     // Variant customer text, snapshotted under the venue's invoice locales like `descriptions`. No
     // locales trigger guards it HERE, and nothing else in the database does either: the check lives
     // on `working_order_lines` only (`packages/db/drizzle/0031_variant_descriptions_locales_sql.sql`,
     // which carries the probe). The till reaches a sale through a persisted working order, so its
     // lines were checked there before `recordSale` copied them across; a caller that builds its own
     // lines instead keeps the invoice locales right by itself.
-    variantDescriptions: jsonb("variant_descriptions").$type<Record<string, string>>(),
+    variantDescriptions: json<Record<string, string>>("variant_descriptions"),
     // Frozen variant kitchen name.
-    variantKitchenName: text("variant_kitchen_name"),
-    kitchenName: text("kitchen_name"),
-    modifierSnapshots: jsonb("modifier_snapshots")
-      .$type<ModifierSnapshot[]>()
-      .notNull()
-      .default([]),
+    variantKitchenName: label("variant_kitchen_name"),
+    kitchenName: label("kitchen_name"),
+    modifierSnapshots: json<ModifierSnapshot[]>("modifier_snapshots").notNull().default([]),
     // Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.
-    unitName: jsonb("unit_name").$type<Record<string, string>>(),
-    unitPrecision: integer("unit_precision"),
-    quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
-    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
-    vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
-    lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
+    unitName: json<Record<string, string>>("unit_name"),
+    unitPrecision: count("unit_precision"),
+    quantity: quantity("quantity").notNull(),
+    unitPrice: money("unit_price").notNull(),
+    vatRate: rate("vat_rate").notNull(),
+    lineTotal: money("line_total").notNull(),
     // Snapshotted analytics label (architecture §6), NOT a category_id or a catalogue FK — the
     // value is frozen onto the line at sale time so a roll-up sums one canonical bucket and a later
     // taxonomy edit can never reach back into a completed record.
-    category: text("category"),
+    category: label("category"),
     // The parent line this line modifies (ordering modifiers, Task 2) — a filed MODIFIER child line
     // points at the dish line it belongs to; a top-level line leaves it NULL. Presentation/reporting
     // metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`, never from
@@ -248,7 +232,7 @@ export const saleLines = pgTable(
     // means a NULL parent satisfies it. NO option/catalogue reference is added here: filed records
     // stay decoupled from the mutable catalogue (option_group_item_id lives on working_order_lines
     // only). Write-once at sale time and immutable table-wide like every other column here.
-    parentLineId: uuid("parent_line_id"),
+    parentLineId: id("parent_line_id"),
   },
   (t) => [
     foreignKey({
@@ -280,17 +264,17 @@ export const saleLines = pgTable(
  * the tip is a part of it, never on top (`tip_amount <= amount`), because the
  * terminal is sent one final figure (design §4).
  */
-export const tenders = pgTable(
+export const tenders = table(
   "tenders",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    saleId: uuid("sale_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    saleId: id("sale_id").notNull(),
     method: tenderMethod("method").notNull(),
-    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    amount: money("amount").notNull(),
     /** Cash handed over before change; amount remains the settled charge, including any tip. */
-    cashTendered: numeric("cash_tendered", { precision: 12, scale: 2 }),
-    tipAmount: numeric("tip_amount", { precision: 12, scale: 2 }).notNull().default("0.00"),
-    settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }).notNull(),
+    cashTendered: money("cash_tendered"),
+    tipAmount: money("tip_amount").notNull().default("0.00"),
+    settledAt: tsString("settled_at").notNull(),
   },
   (t) => [
     foreignKey({
@@ -318,12 +302,12 @@ export const tenders = pgTable(
  * invoice-first an unsettled sale is a legitimate steady state, not an anomaly
  * (design §3).
  */
-export const saleSettlements = pgTable(
+export const saleSettlements = table(
   "sale_settlements",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    saleId: uuid("sale_id").notNull(),
-    settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }).notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    saleId: id("sale_id").notNull(),
+    settledAt: tsString("settled_at").notNull(),
   },
   (t) => [
     foreignKey({
@@ -348,14 +332,14 @@ export const saleSettlements = pgTable(
  * would appear in two canje invoices. There is deliberately NO unique on `substitution_sale_id` —
  * one F3 substitutes MANY tickets (N rows, the fan-out).
  */
-export const saleSubstitutions = pgTable(
+export const saleSubstitutions = table(
   "sale_substitutions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // The F3 canje sale — the substitute.
-    substitutionSaleId: uuid("substitution_sale_id").notNull(),
+    substitutionSaleId: id("substitution_sale_id").notNull(),
     // One substituted simplified ticket. N of these per F3.
-    substitutedSaleId: uuid("substituted_sale_id").notNull(),
+    substitutedSaleId: id("substituted_sale_id").notNull(),
   },
   (t) => [
     foreignKey({

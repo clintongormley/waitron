@@ -1,17 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  check,
-  foreignKey,
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
+import { count, flag, id, label, table, tsString } from "./columns.js";
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { tills } from "./tenants.js";
@@ -40,34 +29,34 @@ export const orderAmendmentKind = pgEnum("order_amendment_kind", [
  * the hashed `sequence_no` (#52). Local wall-clock (`event_at` + `event_offset_minutes`,
  * whole-second-truncated) reprints in venue time (#52).
  */
-export const orderAmendments = pgTable(
+export const orderAmendments = table(
   "order_amendments",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    workingOrderId: uuid("working_order_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    workingOrderId: id("working_order_id").notNull(),
     // 1-based position within THIS order's amendment chain; ours and contiguous, hashed.
-    sequenceNo: integer("sequence_no").notNull(),
+    sequenceNo: count("sequence_no").notNull(),
     kind: orderAmendmentKind("kind").notNull(),
     // The accountable actor (the operator uuid from the open session) — hashed (#52). Plain uuid,
     // no FK (the sale_voids.voided_by / sales.operator_id shape).
-    actorId: uuid("actor_id").notNull(),
+    actorId: id("actor_id").notNull(),
     // The contestable reason (art. 29.2.j). NULL on the genesis `order_placed` (a placement has no
     // contest reason); required by the app for `order_cancelled`. Hashed as empty when null,
     // exactly as chain-hash.ts hashes a null correctionReason.
-    reason: text("reason"),
+    reason: label("reason"),
     // Capture provenance — the capturing till and node, both hashed so neither can be re-pointed
     // undetected (the chain-hash.ts capturedByTillId precedent).
-    capturedByTillId: uuid("captured_by_till_id").notNull(),
-    capturedByNodeId: uuid("captured_by_node_id").notNull(),
+    capturedByTillId: id("captured_by_till_id").notNull(),
+    capturedByNodeId: id("captured_by_node_id").notNull(),
     // The event instant + its wall offset (the sales.issued_at/issued_offset_minutes pattern),
     // truncated to whole seconds so the hashed instant and the read-back agree (time_entries
     // precedent).
-    eventAt: timestamp("event_at", { withTimezone: true, mode: "string" }).notNull(),
-    eventOffsetMinutes: integer("event_offset_minutes").notNull(),
+    eventAt: tsString("event_at").notNull(),
+    eventOffsetMinutes: count("event_offset_minutes").notNull(),
     // The chain fields (computeAmendmentHash): this entry's hash, the predecessor's, the genesis flag.
-    entryHash: text("entry_hash").notNull(),
-    prevEntryHash: text("prev_entry_hash"),
-    isFirstEntry: boolean("is_first_entry").notNull(),
+    entryHash: label("entry_hash").notNull(),
+    prevEntryHash: label("prev_entry_hash"),
+    isFirstEntry: flag("is_first_entry").notNull(),
   },
   (t) => [
     foreignKey({

@@ -112,10 +112,11 @@ export async function openIncidents(tx: Transaction, tillId: TillId): Promise<In
     saleId: row.saleId as SaleId | null,
     code: row.code,
     params: row.params,
-    // incidents.detected_at is mode: "string" (packages/db/src/schema/incidents.ts) — a JS Date
-    // normalises through the host timezone the moment anything formats it, so the column stores
-    // the literal and this is the one place it becomes a Date again, for the caller's own sort/
-    // display use.
+    // incidents.detected_at is tsString (packages/db/src/schema/incidents.ts), so a read hands back
+    // the string the driver rendered rather than a Date — a JS Date takes on the host timezone as
+    // soon as something formats it in local time (`toString()` moves with `TZ`; `toISOString()`
+    // does not), and nothing formatted is ever written. This is the one place the value becomes a
+    // Date again, for the caller's own sort and display use.
     severity: row.severity as IncidentSeverity,
     detectedAt: new Date(row.detectedAt),
   }));

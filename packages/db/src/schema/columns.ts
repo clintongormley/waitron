@@ -85,14 +85,34 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  *
  * There is no house rule choosing between this shape and a `pgEnum`, and no two-family split to
  * apply: the repository carries both, declares more `pgEnum` types than checked text columns (a
- * `pgEnum` declaration looks like `packages/db/src/schema/tenants.ts:52`), and the checked text
- * columns it does carry were each taken for their own stated reason. Two of those reasons, and they
- * are different reasons: `packages/db/src/schema/series.ts:58-61`, because the permitted set depends
- * on an unverified question to the accountant, so widening must cost one line of migration rather
- * than an `ALTER TYPE`; `packages/payments/src/schema/payments.ts:72-74`, because adding a value
- * later must not hit the one-transaction `ALTER TYPE` trap (its check is at `payments.ts:132-133`).
- * So: read the sibling column's own comment before copying either shape, rather than looking for a
- * rule here.
+ * `pgEnum` declaration looks like `receiptPrintMode` in `packages/db/src/schema/tenants.ts`), and
+ * the checked text columns it does carry were each taken for their own stated reason. Two of those
+ * reasons, and they are different reasons: `invoiceSeries.purpose` in
+ * `packages/db/src/schema/series.ts`, because the permitted set depends on an unverified question
+ * to the accountant, so widening must cost one line of migration rather than an `ALTER TYPE`;
+ * `payments.cardEntryMode` in `packages/payments/src/schema/payments.ts`, because adding a value
+ * later must not hit the one-transaction `ALTER TYPE` trap (its constraint is
+ * `payments_card_entry_mode_ck` in the same file). So: read the sibling column's own comment before
+ * copying either shape, rather than looking for a rule here.
+ *
+ * This pair is for a NEW column. Every existing text column that already carried a hand-written
+ * `check()` stayed as `label()` beside its untouched constraint when this package was converted,
+ * and the reason is NOT one reason for all eight of them.
+ *
+ * For three of them it is measured. `enumCheck` joins its values with `", "`, so on a constraint
+ * written without those spaces the substitution changes the DDL: made on `option_groups.type` on
+ * 2026-09-17, the schema probe produced a migration dropping and re-adding `option_groups_type_ck`
+ * with `in ('text', 'extras', 'options')` for `in ('text','extras','options')`, and nothing else.
+ * `products.pricing_unit` and `products.vat_class` are written the same way.
+ *
+ * For the other five — `deployment.mode`, `deployment.singleton_role`, `incidents.severity`,
+ * `print_jobs.kind` and `invoice_series.purpose` — that reason does not apply at all: their
+ * constraints already carry the spacing `enumCheck` emits, which `columns.test.ts` renders
+ * byte-for-byte for `invoice_series_purpose_ck`'s body. Substituting there would be schema-silent.
+ * They were left alone because rewriting a constraint was out of that conversion's scope — a
+ * scope decision, not a measurement. `incidents.severity` has a reason of its own on top: it
+ * brands its type as the exported `IncidentSeverity`, and `enumText` would replace that with a
+ * union derived from the values array.
  */
 export const enumText = <T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
@@ -174,11 +194,19 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
  * Opaque bytes (`bytea`), handed to callers as a `Uint8Array` and bound as a node `Buffer`.
  *
  * `Uint8Array` is the caller-facing type because the callers already hold one and convert only
- * because the column demands a `Buffer`: `packages/printing/src/outbox.ts:26` takes a `Uint8Array`
- * and calls `Buffer.from` at line 55, and `packages/printing/src/runtime.ts:288-291` copies a
- * read-back payload back into a `Uint8Array`. No table uses this helper yet, so those two hand
- * conversions are still the live ones; converting their columns to it will DELETE them rather than
- * add a third.
+ * because the column demands a `Buffer`: `enqueuePrintJob` in `packages/printing/src/outbox.ts`
+ * takes a `Uint8Array` and calls `Buffer.from` on the insert. Converting that column DELETES that
+ * `Buffer.from`.
+ *
+ * `runAgentOnce` in `packages/printing/src/runtime.ts` also copies a read-back payload into a
+ * `Uint8Array`, and that copy STAYS, because the row it copies was never read through a column:
+ * `claimPrintJobs` in the same file reads it with raw SQL through `tx.execute`, and its
+ * `ClaimedJob.payload` is hand-declared `Buffer`. Drizzle's `execute` hands back the driver's own
+ * row values — no column's `fromDriver` runs over them. Measured 2026-09-17 against real
+ * PostgreSQL, one physical row read twice — through
+ * `.select({ payload: <a binary column> })` and through `tx.execute` — printed
+ * `BUILDER: Uint8Array isBuffer=false | RAW: Buffer isBuffer=true`, with both reads carrying the
+ * same bytes, so the difference is the mapping and not the data.
  *
  * `packages/db/src/schema/print-jobs.ts` and `packages/credentials/src/schema/tenant-credentials.ts`
  * declare their own `bytea` typed as `Buffer` in both directions, so converting those two columns

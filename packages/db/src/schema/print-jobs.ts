@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  customType,
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, customType, index, pgEnum } from "drizzle-orm/pg-core";
+import { count, id, label, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -39,34 +30,32 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
  * (printer_id) → printers (id) FK is hand-written in the paired
  * --custom migration (a bare column carries no FK), exactly as `devices.station_id`.
  */
-export const printJobs = pgTable(
+export const printJobs = table(
   "print_jobs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    locationId: uuid("location_id")
+    id: id("id").primaryKey().defaultRandom(),
+    locationId: id("location_id")
       .notNull()
       /* v8 ignore next */
       .references(() => locations.id, { onDelete: "restrict" }),
     // The target printer. Bare column: the (printer_id) → printers
     // FK is hand-written in the --custom migration.
-    printerId: uuid("printer_id").notNull(),
+    printerId: id("printer_id").notNull(),
     // The agent currently holding this job (set on claim, overwritten by a lease reclaim). Bare
     // column: the (claimed_by) → print_agents FK is hand-written
     // in the --custom migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the
     // claimer reports its own job (runtime.ts). NULL while queued and after the job leaves `printing`.
-    claimedBy: uuid("claimed_by"),
+    claimedBy: id("claimed_by"),
     // OPAQUE ESC/POS bytes (Slice B fills them; the subsystem never inspects them).
     payload: bytea("payload").notNull(),
     // Drawer pulses share transport delivery but cannot be repeated through document resend.
-    kind: text("kind").$type<"document" | "drawer">().notNull().default("document"),
+    kind: label("kind").$type<"document" | "drawer">().notNull().default("document"),
     status: printJobStatus("status").notNull().default("queued"),
     // Delivery attempt count, bumped by the agent's report path; drives bounded backoff.
-    attempts: integer("attempts").notNull().default(0),
+    attempts: count("attempts").notNull().default(0),
     // The last delivery failure message, for the dashboard's failing-printer surface. NULL until a failure.
-    lastError: text("last_error"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    lastError: label("last_error"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
     // The claim LEASE anchor (failover-printing design §5, Gap 1). Stamped `now()` each time the agent
     // pull claims the row (queued/failed/lease-expired-printing → printing); NULL until first claimed
     // and while `queued`. The pull re-selects a `printing` row whose `claimed_at` is older than
@@ -76,9 +65,9 @@ export const printJobs = pgTable(
     // live claim): defense-in-depth so the lease's own guarantee cannot be defeated by a NULL comparison
     // being UNKNOWN. At-least-once by design (§5): a reclaim may reprint a job that printed but lost its
     // `done`.
-    claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "string" }),
+    claimedAt: tsString("claimed_at"),
     // Set when the job reaches `done`. NULL while queued/printing/failed.
-    deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "string" }),
+    deliveredAt: tsString("delivered_at"),
   },
   (t) => [
     index("print_jobs_pull_idx").on(t.printerId, t.status),

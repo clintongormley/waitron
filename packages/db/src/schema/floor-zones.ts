@@ -1,13 +1,5 @@
-import {
-  boolean,
-  foreignKey,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { foreignKey, unique } from "drizzle-orm/pg-core";
+import { count, flag, id, label, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -21,21 +13,19 @@ import { locations } from "./tenants.js";
  * venue, so the (location_id) → locations(id) FK ties a zone to its
  * venue, and `floor_zones_name_key` makes a name unique within that venue.
  */
-export const floorZones = pgTable(
+export const floorZones = table(
   "floor_zones",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // Bare column: the FK is the (location_id) →
     // locations(id) declared below (mirroring dining_tables_location_fk).
-    locationId: uuid("location_id").notNull(),
+    locationId: id("location_id").notNull(),
     // The human label the floor plan groups tables under ("Comedor", "Terraza"). Unique within a venue.
-    name: text("name").notNull(),
+    name: label("name").notNull(),
     // Author-controlled ordering in the editor + the floor-plan layout.
-    displayOrder: integer("display_order").notNull().default(0),
-    active: boolean("active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    displayOrder: count("display_order").notNull().default(0),
+    active: flag("active").notNull().default(true),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // No two zones share a name within a venue.

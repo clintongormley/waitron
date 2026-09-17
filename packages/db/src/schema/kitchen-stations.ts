@@ -1,13 +1,5 @@
-import {
-  boolean,
-  foreignKey,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { foreignKey, unique } from "drizzle-orm/pg-core";
+import { count, flag, id, label, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -26,31 +18,29 @@ import { locations } from "./tenants.js";
  * is_default` — which drizzle-kit does not model, so it is hand-written in the --custom migration
  * alongside the app_user grants.
  */
-export const kitchenStations = pgTable(
+export const kitchenStations = table(
   "kitchen_stations",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // Bare column: the FK is the (location_id) →
     // locations(id) declared below (mirroring floor_zones_location_fk).
-    locationId: uuid("location_id").notNull(),
+    locationId: id("location_id").notNull(),
     // The human label ("Cocina", "Plancha", "Barra"). Unique within a venue.
-    name: text("name").notNull(),
+    name: label("name").notNull(),
     // Author-controlled ordering in the config editor + the station picker.
-    displayOrder: integer("display_order").notNull().default(0),
+    displayOrder: count("display_order").notNull().default(0),
     // Per-station order-age bands (minutes) for the KDS timing alerts (KDS order-timing-alerts): a
     // fired order goes WARM after `warm_after_minutes`, OVERDUE after `overdue_after_minutes`, and
     // FORGOTTEN after `forgotten_after_minutes`. The hand-written --custom migration adds the
     // kitchen_stations_thresholds_ordered CHECK (warm < overdue < forgotten) drizzle-kit cannot model.
-    warmAfterMinutes: integer("warm_after_minutes").notNull().default(5),
-    overdueAfterMinutes: integer("overdue_after_minutes").notNull().default(10),
-    forgottenAfterMinutes: integer("forgotten_after_minutes").notNull().default(15),
+    warmAfterMinutes: count("warm_after_minutes").notNull().default(5),
+    overdueAfterMinutes: count("overdue_after_minutes").notNull().default(10),
+    forgottenAfterMinutes: count("forgotten_after_minutes").notNull().default(15),
     // The counter/pass fallback station a fired line lands on when neither its product nor its
     // category names one. At most one per location — the partial unique (hand-written) enforces it.
-    isDefault: boolean("is_default").notNull().default(false),
-    active: boolean("active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    isDefault: flag("is_default").notNull().default(false),
+    active: flag("active").notNull().default(true),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // No two stations share a name within a venue.

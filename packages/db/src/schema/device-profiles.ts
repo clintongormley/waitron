@@ -1,13 +1,5 @@
-import {
-  integer,
-  jsonb,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { pgEnum, unique } from "drizzle-orm/pg-core";
+import { count, id, json, label, table, tsString } from "./columns.js";
 
 /**
  * The device form factor a profile targets — the sizing guardrail a canvas is authored against. The
@@ -32,29 +24,26 @@ export const deviceFormFactorEnum = pgEnum("device_form_factor", [
  * hand-written --custom (0107), the devices.station_id idiom. NULL ⇒ the resolver falls back to the
  * form-factor default canvas (design §5.3). MATCH SIMPLE skips the FK check on NULL.
  *
- * `capabilities` is PLAIN jsonb (a CapabilityFlag[]), NOT `.$type<>()`-annotated — @waitron/layouts
- * depends on @waitron/db, so importing its type here is circular; the store validates on write. Same
- * rationale as canvases.definition. DEFAULT '[]' so a profile carries no capability until configured.
+ * `capabilities` is PLAIN jsonb (a CapabilityFlag[]) carrying no @waitron/layouts type —
+ * @waitron/layouts depends on @waitron/db, so importing its type here is circular; the store
+ * validates on write. Same rationale as canvases.definition. DEFAULT '[]' so a profile carries no
+ * capability until configured.
  */
-export const deviceProfiles = pgTable(
+export const deviceProfiles = table(
   "device_profiles",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    name: text("name").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    name: label("name").notNull(),
     formFactor: deviceFormFactorEnum("form_factor").notNull(),
-    canvasId: uuid("canvas_id"),
-    capabilities: jsonb("capabilities").notNull().default([]),
+    canvasId: id("canvas_id"),
+    capabilities: json("capabilities").notNull().default([]),
     // Auto-logout idle timeout in seconds; NULL = never (KDS is always NULL — it is a display, not a
     // logged-in operator). Nullable because most profiles opt out; @waitron/layouts validates it on
     // write. Added --custom (snapshot-less) so `db:generate` never proposes dropping the module-owned
     // `bookings` table it still carries in the core snapshot chain.
-    inactivityTimeoutSeconds: integer("inactivity_timeout_seconds"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
+    updatedAt: tsString("updated_at").notNull().defaultNow(),
   },
   (t) => [unique("device_profiles_tenant_name_key").on(t.name)],
 );

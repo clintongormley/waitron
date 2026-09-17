@@ -1,4 +1,5 @@
-import { foreignKey, integer, pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { count, id, table } from "./columns.js";
 import { nodes } from "./nodes.js";
 
 /**
@@ -6,11 +7,11 @@ import { nodes } from "./nodes.js";
  * key is the identity. The (node_id) → nodes FK below keeps it
  * referential, mirroring `working_orders_node_fk`/`sales_node_fk`.
  */
-export const workingOrderCounters = pgTable(
+export const workingOrderCounters = table(
   "working_order_counters",
   {
-    nodeId: uuid("node_id").notNull(),
-    nextNumber: integer("next_number").notNull().default(1),
+    nodeId: id("node_id").notNull(),
+    nextNumber: count("next_number").notNull().default(1),
   },
   (t) => [
     primaryKey({ columns: [t.nodeId], name: "working_order_counters_pk" }),

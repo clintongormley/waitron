@@ -1,4 +1,5 @@
-import { foreignKey, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, unique } from "drizzle-orm/pg-core";
+import { id, label, table, tsString } from "./columns.js";
 import { sales } from "./sales.js";
 
 /**
@@ -13,27 +14,28 @@ import { sales } from "./sales.js";
  * what lets a Z-report answer "which sales were voided" without a
  * cross-boundary join per row.
  */
-export const saleVoids = pgTable(
+export const saleVoids = table(
   "sale_voids",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // No inline `.references()` here — see the hand-written
     // `sale_voids_sale_fk` below, mirroring `./sales.ts`'s own
     // `sale_lines_sale_fk`/`tenders_sale_fk`: a child row must not point at a
     // a property a bare `sale_id -> sales.id` reference cannot express.
-    saleId: uuid("sale_id").notNull(),
-    reason: text("reason").notNull(),
-    // mode: "string", matching `sales.issuedAt`/`tenders.settledAt`: a JS Date
-    // normalises through the host timezone the moment anything formats it, and
-    // this column is populated by the application (never `defaultNow()`), so
-    // the same "nothing formatted is ever stored" discipline applies here too.
-    voidedAt: timestamp("voided_at", { withTimezone: true, mode: "string" }).notNull(),
+    saleId: id("sale_id").notNull(),
+    reason: label("reason").notNull(),
+    // tsString, matching `sales.issuedAt`/`tenders.settledAt`: a JS Date takes
+    // on the host timezone as soon as something formats it in local time
+    // (`toString()` moves with `TZ`; `toISOString()` does not), and this column
+    // is populated by the application (never `defaultNow()`), so the same
+    // "nothing formatted is ever stored" discipline applies here too.
+    voidedAt: tsString("voided_at").notNull(),
     /** The person who authorised the void. Sub-project 5 has landed
      * (2026-08-05): `recordVoid` now sets this at INSERT from the `authorize()`
      * result (append-only table — supplied on the insert `recordVoid` already
      * makes, never a later UPDATE). Nullable, no FK, per the house seam pattern;
      * pre-production means no backfill. */
-    voidedBy: uuid("voided_by"),
+    voidedBy: id("voided_by"),
   },
   (t) => [
     // The database is what makes double-voiding impossible. A SELECT-then-INSERT

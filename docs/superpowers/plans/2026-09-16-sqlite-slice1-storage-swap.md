@@ -487,8 +487,9 @@ String mode is not the minority case. Counted on 2026-09-17 across `packages` an
 `node_modules` and test files: about 90 timestamp columns in about 45 files carry `mode: "string"`,
 against about 19 carrying `mode: "date"` — roughly five to one the other way from what the plan
 assumed. The two modes are not even split cleanly by package:
-`packages/db/src/schema/daily-closes.ts:66` is date mode and `packages/db/src/schema/sale-voids.ts:30`
-is string mode, in the same package. Those numbers are a dated measurement, not the finding; the
+`dailyCloses.closedAt` in `packages/db/src/schema/daily-closes.ts` is date mode and
+`saleVoids.voidedAt` in `packages/db/src/schema/sale-voids.ts` is string mode, in the same
+package. Those numbers are a dated measurement, not the finding; the
 finding is that the mode is per column and the probe is blind to it.
 
 So the vocabulary carries two timestamp helpers rather than one: `ts` for date mode, and the
@@ -525,6 +526,15 @@ it emits and why it is named that way is in P1b step 1 — that is where the det
 has NOT happened is the conversion: no table file changed on that branch, so every site listed in
 the table above is still spelled the old way.
 
+_Updated 2026-09-17: that is no longer true of `packages/db`._ P1b's second pull request converted
+all 33 of its table files, so every `packages/db` row of the table above — `day`, `timeOfDay`,
+`smallCount` and `bigCount` — is now in live use. Every `packages/db` line number in this findings
+section went with it: the table's rows, and the `print-jobs.ts:26` pointer the `bytea` paragraphs
+below use, all name lines those 33 rewrites moved. The claims they carry are still true; the
+numbers are not. `binary` is the one helper still unused by any column. The other
+packages' rows are untouched. The table itself stays as written, because a findings section records
+what was true when it was written.
+
 `bytea` needs a decision before it can have a helper, because the three blocks are not the same
 block. `packages/db/src/schema/print-jobs.ts:26` and
 `packages/credentials/src/schema/tenant-credentials.ts:15` both declare
@@ -540,11 +550,11 @@ after it.
 
 _Updated 2026-09-17: the decision has been taken, and it went ONE helper, not two._ The vocabulary's
 `binary` hands callers a `Uint8Array` and binds a node `Buffer` — that is the `packages/media`
-shape, not the `Buffer`-both-ways shape — in the private custom type at
-`packages/db/src/schema/columns.ts:167-171`. Why that side was picked, and which call sites it
+shape, not the `Buffer`-both-ways shape — in the private `bytea` custom type in
+`packages/db/src/schema/columns.ts`. Why that side was picked, and which call sites it
 moves, is in P1b step 1 below; that is where the detail lives now. **The callers on the other side
 have NOT been changed yet.** All three hand-rolled blocks named above are still in the tree —
-`packages/db/src/schema/print-jobs.ts:26` and
+the `bytea` custom type in `packages/db/src/schema/print-jobs.ts` and
 `packages/credentials/src/schema/tenant-credentials.ts:15` still declare
 `customType<{ data: Buffer; driverData: Buffer }>`, and `packages/media/src/schema/images.ts:16`
 still declares its own `customType<{ data: Uint8Array; driverData: Buffer }>`. Read on 2026-09-17
@@ -590,7 +600,8 @@ P1b now opens with a step that adds the export. There is no dependency problem i
 sixteen packages on the rollout list, fifteen already declare `@waitron/db` in their `dependencies`
 (read out of each `package.json` on 2026-09-17). The sixteenth is `packages/db` itself, which does
 not declare a dependency on itself and does not need one — its own files import `./columns.js`
-directly.
+directly. (The list has held fourteen since the owner removed `recipes` and `layouts` from it later
+that day; the conclusion is unchanged, because both of the removed two were among the fifteen.)
 
 _Updated 2026-09-17: the paragraph above is done, and stays as written because a findings section
 records what was true when it was written._ The branch that landed P1b step 1 below is what retired
@@ -669,14 +680,16 @@ returns `42n`. Both pairs emit identical DDL, so the step 4 probe is blind to pi
 
 **The binary decision, and what it will cost the conversion pull requests.** The three hand-rolled
 `bytea` blocks disagree with each other, and step 1 converted none of them — all three are still in
-the tree, checked on 2026-09-17. `packages/db/src/schema/print-jobs.ts:26` and
+the tree, checked on 2026-09-17. The `bytea` custom type in `packages/db/src/schema/print-jobs.ts`
+and
 `packages/credentials/src/schema/tenant-credentials.ts:15` hand callers a node `Buffer`;
 `packages/media/src/schema/images.ts:16` hands them a `Uint8Array`. The vocabulary took the
 `Uint8Array` shape, read off the callers rather than argued: `packages/printing/src/outbox.ts:26`
 already accepts a `Uint8Array` (`payload: Uint8Array,`) and calls `Buffer.from` at line 55 only
 because the column demands a `Buffer`, and `packages/printing/src/runtime.ts:288-291` copies a
-read-back payload straight back into a `Uint8Array`. So the conversions will delete those hand
-conversions rather than add any.
+read-back payload straight back into a `Uint8Array`. So the conversion deletes the `outbox.ts` hand
+conversion; the `runtime.ts` copy STAYS, for the reason the correction under step 2 below gives —
+that row is read with raw SQL and no column mapping runs over it.
 
 **The call sites are not confined to the two packages that own those columns.** Converting
 `print-jobs.ts` changes what its callers are handed from `Buffer` to `Uint8Array`, and the SQL type
@@ -699,10 +712,10 @@ on 2026-09-17:
 - `packages/db/src/schema/printing.test.ts:243-245` — the one that changes meaning rather than just
   type. Line 244 is `expect(Buffer.isBuffer(row!.payload)).toBe(true);`, and that assertion FLIPS to
   `false` the moment the column becomes `binary`, because the helper's `fromDriver` returns
-  `new Uint8Array(value)` — the private `bytea` custom type at
-  `packages/db/src/schema/columns.ts:167-171`, whose `fromDriver` is line 170, opened and read on
-  2026-09-17. (Lines 180-184, which an earlier draft of this bullet cited, are now prose inside the
-  doc comment: the custom type was moved above that comment while step 1 was being written.)
+  `new Uint8Array(value)` — the `fromDriver` of the private `bytea` custom type in
+  `packages/db/src/schema/columns.ts`, read on 2026-09-17. (Two earlier drafts of this bullet cited
+  that custom type by line number and both went stale, once when step 1 moved it and once when
+  step 3 added a line above it. It is named rather than numbered for that reason.)
   Line 245 then calls
   `row!.payload.toString("utf8")`, which a `Uint8Array` does not support in the way a `Buffer` does,
   so it needs rewriting too, not just retyping.
@@ -715,9 +728,71 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package**
+- [ ] **Step 2: Split the work by package** — `packages/db`'s table files done 2026-09-17
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
+
+**`packages/db` takes TWO pull requests, and the second one is the binary column.** The first
+converted all 33 of its table files with no behaviour change of any kind; the `print_jobs.payload`
+column keeps its local `bytea` custom type until the second. The reason is the measured blast
+radius, which is wider than the bullet list further up this step claims: on 2026-09-17,
+`grep -rn "\.payload" packages/printing/src apps/server/src packages/db/src` found the column read
+in `apps/server/src/receipt-print.test.ts` (about twenty sites), `till-api.reprint.test.ts`,
+`till-api.pg.test.ts`, `working-order.test.ts`, `working-order.pg.test.ts` and `print-api.test.ts`
+as well as the five files the bullets name, plus `apps/server/src/till-api.receipt.test.ts` and
+`apps/server/src/kitchen-print.test.ts`, which the first write-up of this list missed. Thirteen
+files read that column, not the five the bullets name. Putting all of that beside a 33-file
+mechanical conversion would bury it. Neither of the two late additions breaks under the conversion
+— `decodeTicket` in `apps/server/src/testing/decode-ticket.ts` accepts either type — so the
+conclusion does not move; the list does.
+
+_Corrected 2026-09-17, and the correction is the more useful half._ The paragraph above first said
+that `receipt-print.test.ts:755-756`, which compares the read-back value against `Buffer.from(...)`
+through `toContainEqual`, is a behaviour assertion that flips. It does not flip, and that was a
+claim made by reading. Run instead:
+
+```
+expect([new Uint8Array(bytes)]).toContainEqual(Buffer.from(bytes));   // passes
+expect([Buffer.from(bytes)]).toContainEqual(Buffer.from(bytes));      // passes — the control
+expect(() => expect([new Uint8Array([1, 2])]).toContainEqual(Buffer.from(bytes))).toThrow();
+```
+
+All three pass, so that matcher does not distinguish the two types while still rejecting different
+bytes. `toEqual` is a different story and worth knowing for the second pull request: measured the
+same day, `expect(new Uint8Array(bytes)).toEqual(Buffer.from(bytes))` DOES throw, with a
+Buffer-against-Buffer control passing. No payload site uses it today.
+
+What DOES change is narrower and worth knowing before the second pull request:
+`Buffer.isBuffer(...)` at `packages/db/src/schema/printing.test.ts:244` flips from true to false —
+a failure, so it cannot be missed — and `.toString("utf8")` on the line below it stops decoding.
+Measured the same day: `Buffer.from("Hello").toString("utf8")` is `"Hello"`, while
+`new Uint8Array(Buffer.from("Hello")).toString("utf8")` is `"72,101,108,108,111"`, because
+`Uint8Array`'s `toString` ignores the argument. That one is a silently wrong answer rather than a
+red test, which is the reason the column is being converted on its own.
+
+**One of those bullets is WRONG, and the correction matters for the second pull request.** The
+bullet says converting the column deletes `new Uint8Array(job.payload)` at
+`packages/printing/src/runtime.ts:291`. It does not. That value never passes through drizzle's
+column mapping: `runtime.ts` reads the row with a raw SQL query through `tx.execute`, and
+`ClaimedJob.payload` is hand-declared as `Buffer` in that file. A raw query is mapped by the
+driver, not by the column, so that path keeps receiving a node `Buffer` whatever the column
+declares, and both the conversion and the three comment lines above it stay.
+
+The decisive premise there is that drizzle's `execute` does not apply a column's `fromDriver`, and
+that is a statement about another part of the system, so it was RUN rather than read. Against real
+PostgreSQL on 2026-09-17, one physical `print_jobs` row was read twice — once through
+`.select({ payload: … })` on a table object declaring `payload` with the vocabulary's `binary`
+helper, and once through `tx.execute` with raw SQL — and the probe printed:
+
+```
+BUILDER: Uint8Array isBuffer=false | RAW: Buffer isBuffer=true
+```
+
+with an assertion that both reads carried the same bytes, which passed. That last part is the
+control: it is what makes the difference a difference of mapping rather than of data. Run against
+the column as it stands today, with its local `bytea` that declares no `fromDriver`, the same probe
+prints `Buffer` on both sides — which is why the experiment has to use a `binary` column to mean
+anything.
 
 - [ ] **Step 3: For each package, convert every table file**
 
@@ -728,6 +803,37 @@ Three things this step is not allowed to do mechanically, each from the P1a find
 vocabulary equivalent waits for the helper rather than borrowing a near-enough one; and
 `registros_facturacion`'s `cuota_total` and `importe_total` stay as they are — they are `text`
 because the fiscal fingerprint hashes the stored bytes, and `label()` is not a synonym for that.
+
+**What the conversion could not hide, reported for `packages/db` as the spec asks.** Three carve-outs
+survived a 33-file conversion, and each one is a thing the vocabulary cannot absorb rather than a
+corner that was skipped:
+
+- **Every `pgEnum` column and declaration** — 23 declarations and 24 columns across this package.
+  `enumText` emits `text`, so pointing it at a database enum is a real schema change; P1a measured
+  that on `ticket_items.state`. The files that declare one keep importing `pgEnum` from
+  `drizzle-orm/pg-core`, which is also why the step 5 guard can never prove "fully converted".
+- **Every existing `check()`-backed text column** — all eight became plain `label()` columns beside
+  their untouched constraints, rather than `enumText` plus `enumCheck`. **Two different reasons, and
+  the first one covers only three of the eight.** `enumCheck` joins its values with `", "`, so on a
+  constraint written without those spaces the substitution changes the DDL: measured 2026-09-17 by
+  making it on `option_groups.type` and running the step 4 probe, which generated a migration
+  dropping and re-adding `option_groups_type_ck` with `in ('text', 'extras', 'options')` for
+  `in ('text','extras','options')` — and nothing else. `products.pricing_unit` and
+  `products.vat_class` are written the same way. The other five — `deployment.mode`,
+  `deployment.singleton_role`, `incidents.severity`, `print_jobs.kind` and `invoice_series.purpose`
+  — already carry the spacing `enumCheck` emits, so substituting there would be schema-silent; they
+  were left alone because rewriting a constraint was outside this conversion's scope, which is a
+  scope decision and not a measurement. `incidents.severity` also brands its type as the exported
+  `IncidentSeverity`, which `enumText` would replace with a union derived from the values array.
+  Consequence: `drawer_opens` is the only table in this package using `enumText`/`enumCheck`, and
+  that pair is for NEW columns. Both reasons are written beside the helper in `columns.ts` so the
+  next package's converter does not re-derive them.
+- **The binary column**, for the reason the two paragraphs above step 3 give.
+
+The one thing a reader should NOT conclude from a silent probe: the probe is blind to a timestamp's
+mode and to a caller-facing type, so it is the typechecker and the package's own suite that carried
+those. Both were run: `pnpm -r typecheck` exited 0 for the whole workspace, and
+`pnpm --filter @waitron/db test:coverage` exited 0 with 615 tests.
 
 - [ ] **Step 4: Prove nothing changed**
 
@@ -760,7 +866,9 @@ fourth package to convert" would be reading the wrong list.
 Four packages on step 2's list have no schema at all — `packages/purchasing`, `packages/recipes`,
 `packages/layouts` and `packages/reporting` each have no `drizzle.config.ts`, no `drizzle/` folder
 and no `pgTable(` anywhere in `src` (checked 2026-09-17). There is nothing for this step to run in
-them and nothing for step 3 to convert; skip them here.
+them and nothing for step 3 to convert; skip them here. Two of the four, `recipes` and `layouts`,
+have since been removed from the list altogether — the decision paragraph below is the one to read,
+and it supersedes their mention here.
 
 Two of the four are picked up later in this plan and two are not. Grepped over this plan file on
 2026-09-17: `@waitron/reporting` and `@waitron/purchasing` both appear in P5's step 8 test list, and
@@ -834,6 +942,14 @@ when writing the guard; if it is left out, say so in the comment beside it.
 the failure a short list produces — silence, not an error.
 
 Note in a comment that this guard reads TEXT, so a builder reached through an alias is invisible to it — the hedge `CLAUDE.md` §7 requires for a guard weaker than its name.
+
+**The house rule goes in `CLAUDE.md` §3 in THIS pull request, with the guard, and not before it.**
+A reviewer asked for the rule as soon as the first package landed, and the answer is no: §7 says a
+written rule with standing violations needs a guard rather than another paragraph, and until the
+rollout finishes every unconverted package is a standing violation of it. So the one-line §3 entry
+naming `packages/db/src/schema/columns.ts` as the only place the engine's column types are named,
+and its receipt in `docs/developers/conventions-data.md`, land in the same change as the guard that
+enforces them.
 
 - [ ] **Step 6: Commit each package separately**
 
@@ -2410,7 +2526,8 @@ can write it:
   than late.** SQLite has a BLOB storage class, so there is somewhere to put the bytes; what is
   undecided is what a caller should be handed on the way out and what the SQLite driver actually
   returns on a read. The PostgreSQL helper hands callers a `Uint8Array` and binds a node `Buffer`
-  (`packages/db/src/schema/columns.ts:167-171`), and by then there will be real call sites depending
+  (the private `bytea` custom type in `packages/db/src/schema/columns.ts`), and by then there will
+  be real call sites depending
   on that — P1b step 3 converts three hand-rolled `bytea` columns onto it. **Do not invent this
   answer while writing the other bodies: settle it against the driver, with a round trip, before F1
   starts.**

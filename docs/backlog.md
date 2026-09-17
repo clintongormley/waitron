@@ -2254,14 +2254,34 @@ with nothing to replace them with, and two fiscal amounts held as text that must
 text helper. **P1b's first step, landed in #393, closes that third gap and opens the vocabulary to the rest of
 the workspace**: `packages/db/src/schema/columns.ts` now has `day`, `timeOfDay`, `smallCount`, `bigCount`
 and `binary`, each pinned by its own generated-type test, and `packages/db/src/index.ts` re-exports
-the vocabulary, which is the only door another package has into it. No table file has been converted
-yet — that is the rest of P1b, one pull request per package. One cost the plan now carries: the
-`binary` helper hands callers a `Uint8Array` where two of the three hand-rolled binary columns hand
-them a `Buffer` today, so converting `print-jobs.ts` changes call sites in `packages/printing` and
-`apps/server`, neither of which is on the rollout list.
-Still open from that task, flagged rather than guessed at: `packages/recipes` and `packages/layouts`
-are on P1b's rollout list but have no database schema at all and are named nowhere else in the plan,
-so somebody has to decide whether they belong there. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
+the vocabulary, which is the only door another package has into it. **P1b's second step converts
+`packages/db` itself**: the 33 table files that still named PostgreSQL's types now name meanings
+instead. No schema change, and the probe is the receipt for exactly that much: it generated the
+package's migrations into a copy of the migration folder, printed `No schema changes, nothing to
+migrate`, exited 0, and the diff of the two folders was silent — with the same probe run before any
+edit, which says the folder was not already out of date. That the probe can SEE a real change is
+P1a's control, where a column's type was deliberately broken and the probe caught it while
+`drizzle-kit check` did not. Behaviour is a separate question the probe cannot answer, because it is
+blind to a timestamp's mode and to a caller-facing type: the workspace typecheck and the package's
+own 615 tests carried that half. The rest of P1b is the remaining packages, one pull request each.
+
+One cost the plan now carries, and one correction to how it was first written down. The `binary`
+helper hands callers a `Uint8Array` where two of the three hand-rolled binary columns hand them a
+`Buffer` today, so converting `print_jobs.payload` changes what its readers receive — which is why
+that one column was held back out of the 33-file conversion and takes a pull request of its own. The
+correction: that change was first described as breaking an assertion in `apps/server`, and it does
+not. Measured on 2026-09-17, a `Uint8Array` satisfies `toContainEqual(Buffer.from(...))` just as a
+`Buffer` does, with a negative control confirming the matcher still rejects different bytes. What it
+does break is narrower and sharper: `Buffer.isBuffer(...)` in
+`packages/db/src/schema/printing.test.ts` flips from true to false, and `.toString("utf8")` on the
+same value stops decoding and starts returning `"72,101,108,108,111"` where it returned `"Hello"` —
+a silently wrong answer rather than a failure. The readers themselves are wider than first counted:
+thirteen files in all, about twenty of the sites in
+`apps/server/src/receipt-print.test.ts` alone.
+
+`packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
+from the rollout list, because the tables they read belong to `packages/db` and its conversion
+already covers them. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
 code** (`c9d80c59`, the parent of the harness merge), so you can still read how something worked while
 everything ran on PostgreSQL. The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the

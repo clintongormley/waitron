@@ -1,4 +1,5 @@
-import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgEnum } from "drizzle-orm/pg-core";
+import { id, label, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /** What an accepted request BECOMES. The two surfaces share one table because they need the same
@@ -17,29 +18,29 @@ export const joinRequestKind = pgEnum("join_request_kind", ["device", "print_age
  * `local`: a standby inherits no pending joins, which is the same fail-closed posture as the in-memory
  * pairing window (design §1.1).
  */
-export const joinRequests = pgTable("join_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const joinRequests = table("join_requests", {
+  id: id("id").primaryKey().defaultRandom(),
   // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked for,
   // so a joiner says nothing about which venue it is joining.
-  locationId: uuid("location_id")
+  locationId: id("location_id")
     .notNull()
     /* v8 ignore next */
     .references(() => locations.id, { onDelete: "restrict" }),
   kind: joinRequestKind("kind").notNull(),
   // The name the joiner asked for. A device accept copies it to `devices.label`, an agent accept to
   // `print_agents.name`.
-  label: text("label").notNull(),
+  label: label("label").notNull(),
   // scrypt of the token minted at join. Copied to the real row at accept, so the joiner's cookie or
   // bearer token survives approval unchanged — only its SELECTOR changes.
-  tokenHash: text("token_hash").notNull(),
+  tokenHash: label("token_hash").notNull(),
   // The two-digit number the joiner displays and the admin matches. NOT a secret and NOT typed: its
   // whole job is to be compared across a room, so two digits, not a Crockford string. What defends a
   // mix-up is the decoy rule plus deny-on-wrong (design §1.2), never this column's entropy.
-  verificationNumber: text("verification_number").notNull(),
+  verificationNumber: label("verification_number").notNull(),
   // The two decoys, minted WITH the number at join and never re-rolled. Re-rolling per challenge
   // would let two calls intersect in exactly one value — the real one — so any client with a
   // management session could derive the answer and never risk a mismatch, which is the check the
   // whole design rests on (design §1.2 rule 2).
-  decoyNumbers: text("decoy_numbers").array().notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  decoyNumbers: label("decoy_numbers").array().notNull(),
+  createdAt: tsString("created_at").notNull().defaultNow(),
 });

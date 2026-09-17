@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index } from "drizzle-orm/pg-core";
+import { id, json, label, table, tsString } from "./columns.js";
 import { sales } from "./sales.js";
 import { tills } from "./tenants.js";
 
@@ -19,26 +20,27 @@ export type IncidentSeverity = "warning" | "error";
  * (`apps/dashboard/src/i18n/alert-messages.ts`). A prose column here would reach a screen
  * untranslatable, which is the constraint spec §9 places on this layer specifically.
  */
-export const incidents = pgTable(
+export const incidents = table(
   "incidents",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tillId: uuid("till_id")
+    id: id("id").primaryKey().defaultRandom(),
+    tillId: id("till_id")
       .notNull()
       .references(() => tills.id),
     /** Nullable: plan 3's drainer raises incidents with no sale attached. */
-    saleId: uuid("sale_id").references(() => sales.id),
-    code: text("code").notNull(),
-    params: jsonb("params").$type<Record<string, unknown>>().notNull().default({}),
-    severity: text("severity").$type<IncidentSeverity>().notNull(),
-    // mode: "string", matching sales.issuedAt/tenders.settledAt/sale_voids.voidedAt: a JS Date
-    // normalises through the host timezone the moment anything formats it, and nothing formatted
-    // is ever stored. Both columns here are populated by the application (recordIncident's own
-    // detectedAt, and markIncidentHandled's acknowledgedAt when a manager marks the alert handled on
-    // the dashboard), never by defaultNow(), so the same discipline applies.
-    detectedAt: timestamp("detected_at", { withTimezone: true, mode: "string" }).notNull(),
-    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true, mode: "string" }),
-    acknowledgedBy: uuid("acknowledged_by"),
+    saleId: id("sale_id").references(() => sales.id),
+    code: label("code").notNull(),
+    params: json<Record<string, unknown>>("params").notNull().default({}),
+    severity: label("severity").$type<IncidentSeverity>().notNull(),
+    // tsString, matching sales.issuedAt/tenders.settledAt/sale_voids.voidedAt: a JS Date takes on
+    // the host timezone as soon as something formats it in local time (`toString()` moves with
+    // `TZ`; `toISOString()` does not), and nothing formatted is ever stored. Both columns here are
+    // populated by the application (recordIncident's own detectedAt, and markIncidentHandled's
+    // acknowledgedAt when a manager marks the alert handled on the dashboard), never by
+    // defaultNow(), so the same discipline applies.
+    detectedAt: tsString("detected_at").notNull(),
+    acknowledgedAt: tsString("acknowledged_at"),
+    acknowledgedBy: id("acknowledged_by"),
   },
   (t) => [
     // `openIncidents` (packages/core): what is open on one till, newest first. Only tests call it;

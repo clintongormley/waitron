@@ -19,8 +19,9 @@ import { validateThemeOverride } from "./theme.js";
  * an invalid `theme` (throws `theme.invalid` before the write); (3) an `INSERT … ON CONFLICT
  * (id) DO UPDATE`. `getTenantTheme` casts the opaque jsonb back to `ThemeOverride` WITHOUT
  * re-validating (the write validated it, the only writer is this service — the same
- * return-a-typed-shape rationale `canvas-store.ts` documents). The `as` cast re-attaches the shape the plain-jsonb column drops (it is not
- * `.$type<>()`-annotated, to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
+ * return-a-typed-shape rationale `canvas-store.ts` documents). The `as` cast re-attaches the shape
+ * the plain-jsonb column drops (it carries no `@waitron/layouts` type, to avoid a
+ * `@waitron/layouts` → `@waitron/db` circular dependency, see
  * `packages/db/src/schema/tenant-themes.ts`).
  */
 
