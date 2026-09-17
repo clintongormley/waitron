@@ -3,6 +3,10 @@ export { createPgliteDb, createPostgresDb } from "./client.js";
 export type { Database, Driver, Schema, Transaction } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
+// The column vocabulary. This barrel is the only door another package has to it: `exports` in
+// package.json is enumerated and "." points here. `schema/columns.test.ts` asserts that every name
+// the module provides arrives here as the same value.
+export * from "./schema/columns.js";
 export * from "./schema/tenants.js";
 export { readTenant } from "./read-tenant.js";
 export type { Tenant } from "./read-tenant.js";

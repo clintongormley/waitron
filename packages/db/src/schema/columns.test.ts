@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
-import { PgDialect, check, getTableConfig } from "drizzle-orm/pg-core";
+import { PgDialect, check, getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 import {
@@ -20,7 +20,15 @@ import {
   flag,
   count,
   label,
+  day,
+  timeOfDay,
+  smallCount,
+  bigCount,
+  binary,
 } from "./columns.js";
+import * as vocabulary from "./columns.js";
+import * as publicSurface from "../index.js";
+import { binary as doorBinary, day as doorDay, table as doorTable } from "../index.js";
 import { drawerOpens } from "./drawer-opens.js";
 
 const probe = table("probe", {
@@ -219,4 +227,78 @@ describe("the migrated database reports the types the vocabulary declared", () =
       expect(liveColumns[column]?.getSQLType()).toBe(reported[column]);
     });
   }
+});
+
+describe("the vocabulary covers the column builders the rollout still needs", () => {
+  const soleColumn = (built: PgTable) => getTableConfig(built).columns[0];
+
+  it("day emits a date column and reads back the driver's string", () => {
+    const c = soleColumn(table("day_probe", { on: day("on") }));
+    expect(c.getSQLType()).toBe("date");
+    // A date column asked for `{ mode: "date" }` emits the same SQL type and returns a `Date`, so
+    // the schema probe cannot separate the two — only the read mapping can, as with ts/tsString.
+    expect(c.columnType).toBe("PgDateString");
+    expect(c.mapFromDriverValue("2026-09-16")).toBe("2026-09-16");
+  });
+
+  it("timeOfDay emits a bare time column, with no time zone", () => {
+    const c = soleColumn(table("time_probe", { at: timeOfDay("at") }));
+    expect(c.getSQLType()).toBe("time");
+    expect(c.mapFromDriverValue("06:00:00")).toBe("06:00:00");
+  });
+
+  it("keeps the three whole-number helpers on three different SQL types", () => {
+    // They are interchangeable at a call site and are not interchangeable in the database, so the
+    // assertion names all three together rather than each alone.
+    const built = table("number_probe", {
+      small: smallCount("small"),
+      plain: count("plain"),
+      big: bigCount("big"),
+    });
+    const c = Object.fromEntries(
+      getTableConfig(built).columns.map((column) => [column.name, column]),
+    );
+    expect(c.small.getSQLType()).toBe("smallint");
+    expect(c.plain.getSQLType()).toBe("integer");
+    expect(c.big.getSQLType()).toBe("bigint");
+  });
+
+  it("gives bigCount the number reading, not the bigint one", () => {
+    // `{ mode: "number" }` and `{ mode: "bigint" }` both emit `bigint`: the ts/tsString trap again.
+    const c = soleColumn(table("big_probe", { n: bigCount("n") }));
+    expect(c.columnType).toBe("PgBigInt53");
+    expect(c.mapFromDriverValue("42")).toBe(42);
+  });
+
+  it("binary emits bytea, binds a Buffer and reads back a plain Uint8Array", () => {
+    const c = soleColumn(table("binary_probe", { bytes: binary("bytes") }));
+    expect(c.getSQLType()).toBe("bytea");
+    // A `Buffer` IS a `Uint8Array`, so `toBeInstanceOf(Uint8Array)` passes for both and cannot tell
+    // the two apart; `Buffer.isBuffer` is what does.
+    expect(Buffer.isBuffer(c.mapToDriverValue(new Uint8Array([1, 2, 3])))).toBe(true);
+    const read = c.mapFromDriverValue(Buffer.from([1, 2, 3]));
+    expect(Buffer.isBuffer(read)).toBe(false);
+    expect(read).toEqual(new Uint8Array([1, 2, 3]));
+  });
+});
+
+describe("the vocabulary is reachable from outside packages/db", () => {
+  it("re-exports every name columns.ts provides, as the same value", () => {
+    // `packages/db`'s exports map is enumerated, so `src/index.ts` is the only door another package
+    // has. Comparing identities keeps a helper added later from being reachable only in here.
+    const door = publicSurface as Record<string, unknown>;
+    const inside = vocabulary as Record<string, unknown>;
+    const names = Object.keys(inside);
+    expect(names.length).toBeGreaterThan(0); // positive control: an empty list checks nothing
+    expect(names.filter((name) => door[name] !== inside[name])).toEqual([]);
+  });
+
+  it("builds a column through that door", () => {
+    const built = doorTable("door_probe", { on: doorDay("on"), bytes: doorBinary("bytes") });
+    const c = Object.fromEntries(
+      getTableConfig(built).columns.map((column) => [column.name, column]),
+    );
+    expect(c.on.getSQLType()).toBe("date");
+    expect(c.bytes.getSQLType()).toBe("bytea");
+  });
 });
