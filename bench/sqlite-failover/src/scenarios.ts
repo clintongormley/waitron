@@ -3,7 +3,8 @@
  * a Markdown table, and exits non-zero only when a CRITICAL scenario failed.
  *
  * A scenario is a measurement, not a build gate (spec §7): a FAIL is a recorded outcome, and only
- * the fiscal-safety and restorability scenarios stop anything.
+ * the critical scenarios — S0, S1, S2, S3 and S6 — stop anything, plus any scenario that THROWS,
+ * whatever its id (see the catch below).
  */
 import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
