@@ -100,9 +100,53 @@ is not the measurement, and it may differ from run to run.
 ## What S2 measures, and what it does not
 
 **S2's verdict is FAIL, and that is a result rather than a broken harness.** The rig found a way the
-loop as modelled here files one sale with the tax agency twice. It is the one mistake this product
-cannot undo, so the scenario records it instead of reporting PASS beside it. What to do about it is
-the owner's decision, and nothing here proposes a fix.
+loop as modelled here submits one sale to the tax agency twice. The scenario records it instead of
+reporting PASS beside it, and nothing here proposes a fix. **How much that costs was revised on owner
+review, 2026-09-17** — the next section. The short form: the model's stand-in for the tax agency
+accepts a repeat, and the real one refuses it; and the model lets a sender keep filing after it has
+started shipping, which the designed order forbids.
+
+### What the FAIL means against the real system (owner review, 2026-09-17)
+
+Two facts from outside the model, both read rather than run, change what a second submission here
+would cost. Neither changes the measurement.
+
+- **The real tax agency refuses a duplicate, and the real drain already reads that answer as
+  "filed".** AEAT answers error 3000 on a record it already holds — per record, not per batch — and
+  says what state the stored record is in (`docs/compliance/verifactu-findings.md` → "Record identity
+  and duplicates", taken from AEAT's documentation; no live resend of an identical record has been
+  observed). `resolveEstadoEfectivo` (`packages/verifactu/src/xml/parse-suministro.ts`) reads 3000
+  plus `Correcta` as `accepted`, so the receiver's copy is marked filed and its chain carries on. The
+  stub here never answers that way: it records the repeat and accepts it. So every second filing S2
+  counts is, against the real endpoint, a submission AEAT refuses and the drain then records as filed
+  — a wasted call, not a record filed twice. That reading compares no content when AEAT says
+  `Correcta`, and it is safe here only because the shipped row is a verbatim copy (same node, same
+  `secuencia`, same `huella`). A DIFFERENT record filed under a reused invoice number is the case
+  `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md` guards with fresh
+  series; S2 does not model it.
+- **The designed order is decommission first, then promote.** The old primary boots fenced —
+  read-only — and only then ships its tail (topology design §5.2; owner, 2026-09-17: the primary is
+  decommissioned before the secondary is promoted, so two nodes never file at once). Parts B and D,
+  and Part E's second half, have the SENDER file after it has started shipping, which a fenced sender
+  cannot do. Part E's second half rests on that entirely: a tail taken while the sender's own drain
+  holds a row `enviando` cannot come from a sender that fenced first — provided fencing waits for the
+  in-flight submission to finish or roll back, which the topology design does not yet state.
+
+What survives both is Part D's shape, in a different costume. The receiver can hold a copy of the
+sender's row with an out-of-date state without any second ship: the Litestream stream carries
+`envios` at whatever state each row had when it was streamed, so a sender that files a record and
+dies before that update streams leaves the promoted receiver holding it `pendiente`. The tail ship
+sends what the receiver LACKS, so it never corrects that row. Against the real endpoint that is one
+refused duplicate submission per such row. This rig does not measure it: S2 models the receiver's
+stale copy as coming from an earlier partial ship, and S0 (plan Task 7) is where the stream is
+driven.
+
+Two things this asks of the rig, neither done on this branch: the stub should answer a repeat the way
+AEAT does, so that a FAIL from S2 means a double filing the real endpoint would NOT refuse (whether
+any part still fails under such a stub has not been run); and the topology design should state
+"fence before ship, and fencing waits for the in-flight submission" as the rule the tail shipper
+relies on. Until the first is done, S2's exit code records the MODEL's double submission and is not
+evidence that the product would file a record twice.
 
 S2 drives the rig's model of the submission state machine — `drainPass`, `applyTail`, `diffTail` and
 the `envios` table in `src/model.ts`. Its result is evidence about that mechanism and about nothing

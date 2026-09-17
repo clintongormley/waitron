@@ -98,7 +98,10 @@ cites the real table or code it stands in for, so a reader can check the model i
   is ever submitted twice. That assertion is the whole point of scenario S2.
   *(2026-09-17: the landed stub has no assertion in it — `drainPass` swallows one — and S2's blocked-set
   assertion turned out to be reachable. What the rig measures instead, and the second-filing path it
-  found, are in `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not".)*
+  found, are in `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not". Owner
+  review the same day: the stub also ACCEPTS a repeat, which AEAT does not — it answers error 3000
+  and the real drain reads that as filed — so a second submission the stub counts is a refused call
+  against the real endpoint. README → "What the FAIL means against the real system".)*
 
 Non-fiscal ledger shapes the loop also touches are modelled just as thinly: a `sales`/`sale_lines` pair
 (parent carries `node_id`, child hangs off `sale_id`) and a `supplier_invoices` table carrying a
@@ -177,9 +180,15 @@ to satisfy it. The scenarios map one-to-one onto topology §12.2's obligations.
   set. A control: with terminal-state-wins removed, the rig reproduces the double submission.
   *(2026-09-17, as landed: all three are measured, the blocked-set one included, and S2's verdict is
   FAIL — a ship recomputed against a refreshed view of the receiver files a record twice.
-  `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not" carries the result.)*
+  `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not" carries the result.
+  Owner review, 2026-09-17, revised what that FAIL costs: the real endpoint refuses a duplicate and
+  the real drain records the refusal as filed, and the designed order fences the old primary before
+  it ships, which removes the sequences Parts B, D and E's second half depend on. README → "What the
+  FAIL means against the real system".)*
 - **Failure means:** the design can double-file to the tax agency — the single most serious possible
-  finding; stop and tell the owner immediately.
+  finding; stop and tell the owner immediately. *(2026-09-17: read with the note above — a FAIL from
+  the stub as landed is a double SUBMISSION, and only a stub that refuses a repeat the way AEAT does
+  can report a double FILING.)*
 
 ### S3 — copied replica equals direct stream (deletions propagate)
 

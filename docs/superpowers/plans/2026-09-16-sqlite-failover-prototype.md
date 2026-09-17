@@ -268,7 +268,13 @@ The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins r
 >    S2 is FAIL as landed, because a ship recomputed against a REFRESHED view of the receiver ships
 >    nothing at all for a record the receiver already holds, so the receiver's drain files a record
 >    its owner has already filed. The README's "What S2 measures" section carries the result and what
->    is open; the design decision is the owner's.
+>    is open; the design decision is the owner's. **Owner review, later the same day:** the cost of
+>    that FAIL was revised down — the real endpoint refuses a duplicate (error 3000) and the real
+>    drain reads that as filed, and the designed order fences the old primary before it ships, so the
+>    sender never files after shipping as Parts B, D and E's second half have it. README → "What the
+>    FAIL means against the real system". Two follow-ups it leaves, neither on this branch: a stub
+>    that answers a repeat the way AEAT does, and the fence-before-ship rule written into the
+>    topology design.
 
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (complete `drainPass` terminal-state handling and `applyTail`'s `envios` terminal-state-wins branch)
@@ -431,7 +437,10 @@ export default async function ({ startStore }) {
 > chain with no node filter. The steps below put records on a cloud that then drains them, so
 > whether the same shape arises here is a question to answer while building this task — S2
 > settles it neither way. `bench/sqlite-failover/README.md` → "What S2 measures, and what it does
-> not" has the measurement.
+> not" has the measurement, and its "What the FAIL means against the real system" section has the
+> owner's revision of what a double here costs. The version of that shape this task CAN put on the
+> cloud, and S2 cannot, is the stream-lag one: the box files a record after streaming it and dies
+> before the `envios` update streams, so the promoted cloud holds it `pendiente`. Measure it here.
 
 **Files:**
 - Create: `bench/sqlite-failover/src/scenarios/s0_happy_loop.ts`
