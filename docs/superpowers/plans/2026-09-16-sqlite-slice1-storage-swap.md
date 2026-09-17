@@ -100,7 +100,7 @@ This task has two halves that land as **two pull requests**: P1a proves the voca
 - Create: `packages/db/src/schema/columns.ts`
 - Create: `packages/db/src/schema/columns.test.ts`
 - Modify (P1a): `packages/db/src/schema/drawer-opens.ts`
-- Modify (P1b): the remaining 71 files that call `pgTable(`
+- Modify (P1b): every remaining file that calls `pgTable(` (71 of them when this was written; 34 after `packages/db` and `packages/catalogue` landed, read on 2026-09-17)
 - Modify (P1b, its first step): `packages/db/src/index.ts` (export the vocabulary)
 
 **Interfaces:**
@@ -736,7 +736,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column)
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -837,7 +837,8 @@ because the fiscal fingerprint hashes the stored bytes, and `label()` is not a s
 
 **What the conversion could not hide, reported for `packages/db` as the spec asks.** Three carve-outs
 survived a 33-file conversion, and each one is a thing the vocabulary cannot absorb rather than a
-corner that was skipped:
+corner that was skipped. _A fourth kind was missed here and found when `packages/catalogue` was
+converted: an ARRAY column, which this package has three of. The catalogue report below carries it._
 
 - **Every `pgEnum` column and declaration** — 23 declarations and 24 columns across this package.
   `enumText` emits `text`, so pointing it at a database enum is a real schema change; P1a measured
@@ -865,6 +866,57 @@ The one thing a reader should NOT conclude from a silent probe: the probe is bli
 mode and to a caller-facing type, so it is the typechecker and the package's own suite that carried
 those. Both were run: `pnpm -r typecheck` exited 0 for the whole workspace, and
 `pnpm --filter @waitron/db test:coverage` exited 0 with 615 tests.
+
+**And the same report for `packages/catalogue`, which is a much shorter one.** Its four table files
+hold 52 columns between them — 6 in `categories.ts`, 22 in `menu.ts`, 9 in `units.ts`, 15 in
+`variants.ts` — and every column BUILDER had a vocabulary equivalent, so none is left coming from
+`drizzle-orm/pg-core`: the files used `uuid`, `text`, `jsonb`, `integer`, `boolean` and
+`numeric(12, 2)` and nothing else. There is no `pgEnum` in the package at all, and no timestamp,
+date, time, smallint, bigint or binary column — which is why the `ts`/`tsString` trap has no surface
+here, read off the diff rather than assumed.
+
+Two things the conversion did NOT absorb, and the second one is the more useful.
+
+The first is the check-constraint carve-out: `units.hardware_unit` became a plain `label()` beside
+its untouched `check(... in ('kg', 'g', 'mg'))`. That constraint is written WITH the `", "` spacing
+`enumCheck` emits, so this is the SECOND of the two reasons `columns.ts` records, not the first —
+substituting would have been schema-silent, which the run-it reviewer established by making the
+substitution and running the step 4 probe over it (`No schema changes, nothing to migrate`, exit 0,
+silent diff). _An earlier draft of this paragraph claimed the opposite — that the spacing was absent
+and the reason therefore measured. It was written without re-reading the constraint, and three
+reviewers caught it; the quoted constraint two lines above it already showed the spacing._ There IS
+a second reason, and it is a measurement rather than a scope decision: `enumText` narrows what a
+caller may WRITE. Measured 2026-09-17 with `tsc --noEmit` over two probe tables declared one each
+way, the `enumText` column refused a `string | null | undefined` with `Type 'string' is not
+assignable to type '"g" | "kg" | "mg" | null | undefined'` while the `label()` control compiled.
+That is caller-facing and the probe is blind to it.
+
+The second is the ARRAY column. `content_languages.languages` is `label("languages").array()`, and
+`.array()` is a drizzle call reached OFF the helper — the vocabulary has no array helper and its
+bodies cannot redirect one. This is not a catalogue peculiarity. `grep -rn "\.array()" packages/*/src`
+on 2026-09-17, skipping tests, returns five columns in all: this one, three in `packages/db`
+(`join-requests.decoy_numbers`, `sales.invoice_locales`, `tenants.invoice_locales`) — whose own
+report above does not mention them either — and one still unconverted in `packages/media`
+(`images.labels`), which the converter of that package will meet. The spec gives arrays their own row in the flip table
+(`2026-09-16-sqlite-slice1-storage-swap-design.md` — array becomes text holding JSON), so F1 has to
+handle them whatever the vocabulary does, and no conversion pull request in this rollout can claim
+to have absorbed them.
+
+Verified three ways on 2026-09-17, each with a control: the step 4 probe ran silent at exit 0 with
+`No schema changes, nothing to migrate`, and pointing `units.precision` at `smallCount` instead made
+the same command write `0002_probe.sql` and add a journal entry, so the silent run means something;
+a column-by-column comparison of every builder call against the file at the BASE commit, mapping each helper
+back to the drizzle call it emits, reported 0 mismatches across all 52 columns and reported exactly
+that one column under the same mutation; and a line-by-line comparison of everything that is NOT a
+column — 235 lines of `check()` bodies, indexes, uniques, foreign keys, primary keys and comments —
+found them identical. _The first run of that comparison reported 38 columns, not 52: it keyed each
+column by name and field alone, so where two tables in one file both declare `menu_id` or
+`display_order`, the later declaration silently replaced the earlier and 14 columns were never
+compared at all. Keying by table as well is what produced the 52. The lesson is the plainer one: a
+checker that reports a total is itself a claim, and a total nobody cross-checked against the probe's
+own per-table counts — which printed 52 all along — is where this one hid._ Behaviour, which no
+probe can reach, was carried by `pnpm -r typecheck` (exit 0 for the whole workspace) and
+`pnpm --filter @waitron/catalogue test:coverage` (exit 0, 29 files, 492 tests, no test edited).
 
 - [ ] **Step 4: Prove nothing changed**
 
