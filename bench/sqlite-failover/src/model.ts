@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS records (
 );
 -- The model of the ledger's defence: the real table is REVOKE ALL plus an append-only trigger
 -- (CLAUDE.md §5), and SQLite's equivalent of that trigger is RAISE(ABORT). The rig's own writes
--- never reach them: applyTail re-inserts with ON CONFLICT DO NOTHING, which fires neither trigger.
+-- never reach them: applyTail re-inserts a RECORDS row with ON CONFLICT DO NOTHING, which fires
+-- neither trigger. Its envios write does update a row already there (see EnvioRule below), and
+-- envios carries no such trigger.
 -- The s_smoke scenario is what runs them, over every path SQLite offers for changing a row.
 CREATE TRIGGER IF NOT EXISTS records_reject_update BEFORE UPDATE ON records
 BEGIN SELECT RAISE(ABORT, 'records is append-only'); END;
@@ -323,19 +325,79 @@ export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
 }
 
 /**
- * Apply a shipped tail to the receiver, in one transaction.
+ * How a shipped `envios` row meets the row the receiver already holds. The rule is a parameter so a
+ * scenario can drive the same ship under each of these and see the difference; only the first is a
+ * rule the design claims, and the other two exist to be the control that reproduces its absence.
  *
- * Task 1 scope. Two branches are deliberately NOT here yet, and a scenario that needs them will fail
- * until they are:
- *   - `envios` terminal-state-wins (Task 4, S2). Today the envio insert is plain: a row the receiver
- *     has already advanced past keeps its state only because the insert conflicts and does nothing,
- *     which is not the same rule as "a terminal row is never regressed" and does not survive the
- *     upsert Task 4 puts here.
- *   - the `supplier_invoices` savepoint-isolated clash branch (Task 5, S5). Today a natural-key
- *     clash is absorbed by `ON CONFLICT DO NOTHING` and lands in neither the table nor
- *     `skippedClashes` — it is dropped without a word, which is exactly what S5 exists to change.
+ *  - `terminal-state-wins` — the rule, and it has two sides. A receiver row that is already
+ *    `enviado` and acked is never walked back by a re-shipped copy taken before it was submitted;
+ *    a receiver row that is not yet terminal ADOPTS the shipped state, terminal included. The first
+ *    side keeps the receiver from filing a record it has itself filed, the second keeps it from
+ *    filing a record the record's OWNER has already filed — neither side implies the other, so S2
+ *    drives both.
+ *    The guard reads the row already in the table and not the one arriving, so a `pendiente`
+ *    arriving over an `enviando` row does overwrite it. That is not a hole in the model, because
+ *    nothing here leaves a row `enviando` across a call: `drainPass` is synchronous, and reading
+ *    `envios` back after a pass on node v26.7.0 gave every row `enviado` when the stub accepted
+ *    all three, `enviado pendiente pendiente` when it threw on the second, and three `pendiente`
+ *    when it threw on all of them — never an `enviando`. A row put into `enviando` by hand does
+ *    stay there, since a pass claims only `pendiente` rows; no function in this file does that.
+ *  - `regressing` — the upsert with no guard on the row already there. S2's control for the first
+ *    side: a receiver row the receiver itself has submitted is walked back to the state the shipped
+ *    copy was in, and the next drain pass files it again.
+ *  - `insert-only` — the shipped state is dropped whenever the receiver already holds the row. S2's
+ *    control for the second side: a row the SENDER has submitted stays `pendiente` on the receiver,
+ *    whose drain then files a record its owner has already filed.
+ */
+type EnvioRule = "terminal-state-wins" | "regressing" | "insert-only";
+
+const ENVIO_UPSERT: Record<EnvioRule, string> = {
+  "terminal-state-wins": `INSERT INTO envios (node_id, secuencia, estado, acked) VALUES (?, ?, ?, ?)
+     ON CONFLICT(node_id, secuencia) DO UPDATE SET estado = excluded.estado, acked = excluded.acked
+     WHERE envios.estado <> 'enviado' AND envios.acked = 0`,
+  regressing: `INSERT INTO envios (node_id, secuencia, estado, acked) VALUES (?, ?, ?, ?)
+     ON CONFLICT(node_id, secuencia) DO UPDATE SET estado = excluded.estado, acked = excluded.acked`,
+  "insert-only": `INSERT INTO envios (node_id, secuencia, estado, acked) VALUES (?, ?, ?, ?)
+     ON CONFLICT DO NOTHING`,
+};
+
+/**
+ * Apply a shipped tail to the receiver, in one transaction. `envios` follows
+ * `terminal-state-wins` — see `EnvioRule` for what that rule is and what it does not cover.
+ *
+ * One branch is deliberately NOT here yet, and a scenario that needs it will fail until it is: the
+ * `supplier_invoices` savepoint-isolated clash branch (Task 5, S5). Today a natural-key clash is
+ * absorbed by `ON CONFLICT DO NOTHING` and lands in neither the table nor `skippedClashes` — it is
+ * dropped without a word, which is exactly what S5 exists to change.
  */
 export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatch): ApplyResult {
+  return applyShippedTail(receiver, senderNodeId, tail, "terminal-state-wins");
+}
+
+/** S2's control for one side of terminal-state-wins — see `EnvioRule`. */
+export function applyTailRegressing(
+  receiver: NodeDb,
+  senderNodeId: string,
+  tail: TailBatch,
+): ApplyResult {
+  return applyShippedTail(receiver, senderNodeId, tail, "regressing");
+}
+
+/** S2's control for the other side of terminal-state-wins — see `EnvioRule`. */
+export function applyTailInsertOnly(
+  receiver: NodeDb,
+  senderNodeId: string,
+  tail: TailBatch,
+): ApplyResult {
+  return applyShippedTail(receiver, senderNodeId, tail, "insert-only");
+}
+
+function applyShippedTail(
+  receiver: NodeDb,
+  senderNodeId: string,
+  tail: TailBatch,
+  envioRule: EnvioRule,
+): ApplyResult {
   // The only writer of a node's OWN chain is `recordSale`, appending 1, 2, 3, … (see `diffTail`).
   // A tail claiming to come from the receiver itself is refused before any of it is written, and
   // what that prevents is a chain FORK rather than a hole: the record inserts below are ON CONFLICT
@@ -368,10 +430,13 @@ export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatc
     }
 
     // Parents before children, or the FK to `records` rejects the envio.
-    const insertEnvio = receiver.handle.prepare(
-      `INSERT INTO envios (node_id, secuencia, estado, acked) VALUES (?, ?, ?, ?)
-       ON CONFLICT DO NOTHING`,
-    );
+    //
+    // `applied` counts rows this apply CHANGED, not rows it was handed, and the upsert reports that
+    // itself: under `terminal-state-wins`, `node v26.7.0` returned `{changes:0}` for an existing
+    // `enviado`/`acked=1` row handed a `pendiente` (read back afterwards: unchanged) and
+    // `{changes:1}` for the same statement over a `pendiente` row — probed against this schema
+    // before the rule was written.
+    const insertEnvio = receiver.handle.prepare(ENVIO_UPSERT[envioRule]);
     for (const row of tail.envios) {
       if (row.node_id !== senderNodeId) {
         refusedForeign += 1;

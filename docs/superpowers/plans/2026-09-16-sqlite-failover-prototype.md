@@ -225,6 +225,31 @@ export default async function ({ startStore }) {
 
 The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins rule and a minimal drain with an idempotency-asserting submit stub.
 
+> **2026-09-17, as landed.** The step-1 snippet below has three defects, and the code is what holds.
+>
+> 1. **The submit stub does not assert, and does not throw.** `drainPass` catches a throwing
+>    `submit`, returns the row to `pendiente` and blocks that chain for the rest of the pass, so an
+>    `assert.ok` inside the stub is swallowed: S2 would pass however many times a record was
+>    submitted, and `try { drainPass(...) } catch { doubled = true }` would never see a throw. The
+>    stub records every `(node_id, secuencia)` it is handed instead, repeats kept, and the
+>    assertions read that list afterwards. There is ONE such ledger for both nodes, because there is
+>    one tax agency.
+> 2. **`const held0 = { records: [] }` crashes** — `diffTail` reads `contiguousTo`, `saleIds` and
+>    `supplierInvoiceIds` off the receiver summary. `summarise(receiver)` is used, which is the
+>    honest way to ask what the receiver holds in any case.
+> 3. **The snippet's sequence was already green before any production change**, so it was not a
+>    failing test: under the `ON CONFLICT DO NOTHING` write it started from, a re-shipped
+>    `pendiente` changed nothing on a row the receiver had marked `enviado`. Terminal-state-wins has
+>    two sides and only the second was red — a terminal row on the SENDER must be ADOPTED by a
+>    receiver still holding it `pendiente`, or the receiver's drain, which claims across every chain
+>    with no node filter, files a record its owner has already filed. S2 therefore has two parts,
+>    one per side, each with its own control (`applyTailRegressing` for the first,
+>    `applyTailInsertOnly` for the second), both controls being thin wrappers over one shared
+>    `applyTail` body with the `envios` rule as its one parameter. A third part covers what the rig
+>    can honestly show about spec §4's blocked-set requirement; what it cannot show is stated in
+>    `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not", not left to look
+>    covered.
+
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (complete `drainPass` terminal-state handling and `applyTail`'s `envios` terminal-state-wins branch)
 - Create: `bench/sqlite-failover/src/scenarios/s2_no_double_submit.ts`

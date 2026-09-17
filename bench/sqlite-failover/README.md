@@ -93,6 +93,73 @@ scenarios`, 2026-09-17:
 `winner=` is the one value there that is a race outcome rather than a property: whichever node wins
 is not the measurement, and it may differ from run to run.
 
+## What S2 measures, and what it does not
+
+S2 drives the rig's model of the submission state machine — `drainPass`, `applyTail` and the
+`envios` table in `src/model.ts`. Its result is evidence about that mechanism and about nothing
+else: `packages/fiscal-verifactu` is not imported here and has its own suites.
+
+**The rule has two sides, and they are separate facts.** A record the RECEIVER has already filed
+must not be walked back to `pendiente` by a re-shipped copy taken before it was filed, or the
+receiver files it twice itself. A record the SENDER has already filed must be adopted as filed by a
+receiver still holding it `pendiente`, or the receiver files a record its owner has already filed.
+Neither side implies the other, and only the second was red before this scenario: with the earlier
+`ON CONFLICT DO NOTHING` write, a re-shipped `pendiente` changed nothing on a row the receiver had
+marked `enviado`, so the first side held by accident of the conflict clause rather than by a rule.
+
+Both sides are measured against ONE ledger of filings, because there is one tax agency: a record
+filed by the node that owns it and filed again by the node it was shipped to has been filed twice,
+whichever database each filing came out of. A ledger per node cannot see that at all.
+
+**Each side has its own control, because a control for one side proves nothing about the other.**
+`applyTailRegressing` drops the guard: the three rows the receiver had filed regress to `pendiente`
+and its next pass files them again. `applyTailInsertOnly` keeps the write as it stood before this
+scenario: the two rows the receiver already held stay `pendiente`, and it files rows its owner had
+already filed. Each control names the exact rows it expects to see filed twice — "a duplicate
+happened somewhere" would also be satisfied by a broken harness. Both are thin wrappers over the
+same `applyTail` body with one parameter changed, the `envios` rule, so a control differs from the
+real path in that rule and in nothing else.
+
+**What it does not measure.** Spec §4's S2 asks for a third thing: "the ship for a chain runs with
+that chain paused in the drain's blocked set". The model's blocked set is a local variable inside
+one `drainPass` call and is gone when that call returns (`src/model.ts`, `drainPass`), so no ship
+can run while a chain sits in it, and nothing in S2 asserts that one does. What Part C measures
+instead is the two things this model can show: a refused submission blocks the rest of that chain
+for the rest of the pass — the chain's second row is due and `pendiente` and is never handed to the
+stub at all — and a tail applied after that pass is drained by the next pass with every row filed
+exactly once, the row that was refused included. A design that needs the pause to OUTLIVE a pass is
+not modelled here; it would need a blocked set kept somewhere a ship can read.
+
+Two narrower boundaries:
+
+- The guard tests the row already in the receiver's table and not the one arriving, so an arriving
+  `pendiente` does overwrite an `enviando` row. Nothing in this model leaves a row in that state
+  across a call, and that was measured rather than argued: reading `envios` back after a pass gave
+  every row `enviado` when the stub accepted all three, `enviado pendiente pendiente` when it threw
+  on the second, and three `pendiente` when it threw on all of them — never an `enviando`. A row put
+  there by hand stays, since a pass claims only `pendiente` rows; no function in `src/model.ts` puts
+  one there.
+- Read off the package, not run: S2 starts no container and opens no store — it is SQLite plus this
+  rig's own two functions. It still runs inside a `scenarios` run that starts MinIO for the others.
+
+S2's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
+@waitron/bench-sqlite-failover scenarios`, 2026-09-17:
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S2 | no second tax-agency submission on a retried tail ship | PASS | filed=13 double=0 (A receiver files 5 once; B receiver files none of the owner's 4; C blocked chain drains 4 next pass after 1 refusal); controls double-file: regressing=3 insert-only=2 |
+```
+
+Its assertions were put to mutation rather than read: eleven small changes to `src/model.ts` (nine
+of a single line; two of a pair, where one rule is spelled out in two statements), each run whole,
+each making one named assertion the one that failed. Three further assertions were
+shown to bite by re-running a mutation with the earlier assertion that had caught it first taken
+out. Seven were not made to fail by any mutation tried — preconditions, and whole-ledger backstops
+that a sharper assertion earlier in the scenario always reached first. The mutations, the message
+each produced, and those seven by name are in this task's pull request, so nothing here reads as
+proved that was not.
+
 ## Why it can't join `pnpm -r test`
 
 Three independent reasons. The first was run in this worktree; the second and third were read off the
