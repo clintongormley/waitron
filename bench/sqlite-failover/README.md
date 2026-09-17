@@ -152,17 +152,19 @@ point above, not something a run establishes.
 
 No run is available because EVERY double this rig finds is the SAME invoice identity filed twice —
 the tail ship and the Litestream stream each carry a record verbatim, same `node_id`, same
-`secuencia` — and a real AEAT refuses a same-identity duplicate. Two shapes, and only these two,
-survive that reasoning, and neither is a double filing a run here could show:
+`secuencia` — and a real AEAT refuses a same-identity duplicate. Two shapes are worth separating
+out, and neither is a double filing a run here could show:
 
-- **The stuck `enviando` row** (Part E's second half), which IS measured above. A drain claims only
-  `pendiente` rows, so it never re-presents a stuck `enviando` row to AEAT at all; AEAT's idempotency
-  is irrelevant to it. What removes it is fencing the old primary and resolving its in-flight
-  submission before the tail ships (topology §5.2, owner decision 2026-09-17) — the row is a fiscal
-  record that silently never files, not a second filing.
-- **A DIFFERENT identity for one economic sale** — an invoice number reissued under re-keying. AEAT
-  does not refuse that, because the identity triple differs, so it is the one genuine double-filing
-  shape. S2 does not model it; fresh-series-on-restore
+- **The stuck `enviando` row** (Part E's second half) is a MODEL GAP, not a real-system filing hole.
+  The rig's minimal drain claims only `pendiente` rows and never recovers a stale claim, so a shipped
+  `enviando` sticks and never files. The real drain does not have this hole: it commits `enviando`
+  before the AEAT call (so a promoted mirror holds the state), and `recoverStaleClaims` resets any
+  `enviando` older than five minutes back to `pendiente` at the top of every pass, re-filing it with
+  AEAT's duplicate check catching the already-filed (`packages/fiscal-verifactu/src/drain.ts`;
+  topology §5.2, owner question 2026-09-17).
+- **A DIFFERENT identity for one economic sale** — an invoice number reissued under re-keying — is
+  the one genuine double-filing shape, and the only real-system concern that survives. AEAT does not
+  refuse it, because the identity triple differs. S2 does not model it; fresh-series-on-restore
   (`docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`) is what guards it,
   and measuring it would be its own scenario, not a change to S2.
 

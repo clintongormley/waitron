@@ -360,14 +360,7 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
    system"). (a) **The operating procedure is decommission-then-promote:** the operator takes the old
    primary down before the secondary is promoted, so the two never file concurrently. §5.3's split
    brain is the case where that assumption is violated — the box alive but unreachable — and it is the
-   *only* case in which a receiver drains a chain while its live owner drains the same chain. (b) **A
-   consequence this prototype surfaces, accepted with the above (owner, 2026-09-17):** fencing must
-   resolve any submission the old
-   primary had IN FLIGHT (`enviando`) — carrying it to a terminal state or returning the row to
-   `pendiente` — *before* the tail is shipped. `applyTail` copies a shipped `enviando` verbatim, and a
-   drain claims only `pendiente` rows, so a shipped `enviando` is never re-presented to AEAT and
-   STICKS on the receiver: not a double filing, but a fiscal row that silently never files. That is
-   why "fence, then ship" is the tail shipper's precondition rather than an afterthought.
+   *only* case in which a receiver drains a chain while its live owner drains the same chain. (b) **The in-flight (`enviando`) row is NOT a real-system stuck row — the drain already recovers it, and the mirror does hold the state (owner question, 2026-09-17).** The real drain commits `estado = 'enviando'` BEFORE the AEAT call (`packages/fiscal-verifactu/src/drain.ts`, the T1/T2 split guarded by `RECUPERACION_ENVIANDO_MS`), so a crash leaves a committed `enviando` row — and Litestream streams committed state, so a promoted mirror DOES hold it. That same drain resets any `enviando` older than five minutes back to `pendiente` at the top of every pass (`recoverStaleClaims`), raising `incidencia`, then re-files it with AEAT's duplicate check (error 3000) resolving the ones already filed. So a promoted mirror self-heals an inherited in-flight row on its first drain pass — the reset-then-dedup the owner asked for, already built. The prototype's Part E shows a row stuck `enviando` only because its MINIMAL drain omits `recoverStaleClaims`: a model gap, not a real-system filing hole. Promotion MAY reset inherited `enviando` rows eagerly rather than wait out the five-minute cutoff — a latency nicety, not a safety requirement.
 
    For the ledger tables the owner updates in place (`payments`, `sales`, `cadenas`, the close chain)
    the sender's version wins for sender-owned rows, since the receiver's copy of them is by construction
