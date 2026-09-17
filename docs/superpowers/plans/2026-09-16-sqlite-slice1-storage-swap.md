@@ -571,7 +571,7 @@ directly.
 
 ### P1b — roll the vocabulary out
 
-- [ ] **Step 1: Export the vocabulary from `packages/db`, first, on its own**
+- [x] **Step 1: Export the vocabulary from `packages/db`, first, on its own** — done 2026-09-17
 
 P1a left `packages/db/src/index.ts` untouched on purpose. Nothing outside `packages/db` can reach
 `columns.ts` until it is re-exported there, because `packages/db`'s `exports` map is enumerated
@@ -584,6 +584,32 @@ Add the missing helpers here too, each with its own generated-type case in
 `packages/db/src/schema/columns.test.ts`, before the first column that needs one is converted:
 `date`, `time`, `smallint`, `bigint` and the binary (`bytea`) type. The P1a findings above list where
 each one is in use. (The string-mode timestamp is not on that list: P1a added `tsString` already.)
+
+**What step 1 actually added, so step 3 does not have to re-derive it.** The five helpers are named
+for what the column means, matching the file's existing `money`/`quantity`/`rate` style rather than
+the SQL type: `day` (`date`, bare), `timeOfDay` (`time`, bare), `smallCount` (`smallint`),
+`bigCount` (`bigint` in number mode) and `binary` (the `bytea` custom type). Each copies exactly what
+the sites it replaces do today, checked by grep on 2026-09-17: all 14 `date` sites, all 4 `time`
+sites and all 5 `smallint` sites use the bare form, and all 3 `bigint` sites pass
+`{ mode: "number" }`.
+
+Two of the five carry the `ts`/`tsString` trap — a second spelling emitting the SAME SQL type — so
+`columns.test.ts` pins each by its read mapping. A bare `date(name)` is drizzle's STRING mode
+(`columnType` `PgDateString`, a read returns `"2026-09-16"`), while `date(name, { mode: "date" })`
+returns a `Date`; `bigint` in number mode is `PgBigInt53` and returns a number, while bigint mode
+returns `42n`. Both pairs emit identical DDL, so the step 4 probe is blind to picking the wrong one.
+
+**The binary decision, and what it costs the conversion PRs.** The three hand-rolled `bytea` blocks
+disagreed: `packages/db/src/schema/print-jobs.ts` and
+`packages/credentials/src/schema/tenant-credentials.ts` hand callers a node `Buffer`;
+`packages/media/src/schema/images.ts` hands them a `Uint8Array`. The vocabulary took the
+`Uint8Array` shape, read off the callers rather than argued: `packages/printing/src/outbox.ts:26`
+already accepts a `Uint8Array` and calls `Buffer.from` at line 55 only because the column demands a
+`Buffer`, and `packages/printing/src/runtime.ts:288-291` copies a read-back payload back into a
+`Uint8Array`. So the conversion deletes those hand conversions rather than adding any. The cost is
+that converting `print-jobs.ts` and `tenant-credentials.ts` changes what their call sites are
+handed, and the SQL type is `bytea` either way — **the step 4 probe will not report it**. Those two
+pull requests carry their call-site changes.
 
 - [ ] **Step 2: Split the work by package**
 
@@ -676,8 +702,17 @@ it("no table file imports a column builder directly from drizzle", async () => {
 
 The list of builder names has to match what the vocabulary covers — every COLUMN builder
 `packages/db/src/schema/columns.ts` imports from `drizzle-orm/pg-core`, and no fewer. Read on
-2026-09-17, that file imports eight names from `drizzle-orm/pg-core`: `boolean`, `integer`, `jsonb`,
-`numeric`, `pgTable`, `text`, `timestamp`, `uuid`. Seven of those eight are in the regex above. The
+2026-09-17 after step 1 landed its five new helpers, that file imports thirteen names from
+`drizzle-orm/pg-core`: `bigint`, `boolean`, `customType`, `date`, `integer`, `jsonb`, `numeric`,
+`pgTable`, `smallint`, `text`, `time`, `timestamp`, `uuid`. Eleven of those are column builders and
+all eleven belong in the regex, which means adding `date`, `time`, `smallint` and `bigint` to the
+seven the draft above lists. The other two are not column builders and are each excluded for their
+own reason: `pgTable` is the table builder and is already what the line above the regex uses to pick
+which files to look at, and `customType` is a builder FACTORY. **`customType` deserves its own
+decision rather than a silent omission** — the three hand-rolled `bytea` blocks step 1 replaced were
+built with it, so a table file calling `customType(` is doing exactly what this guard exists to stop,
+and leaving it out means the guard cannot see the next one. Decide when writing the guard; if it is
+left out, say so in the comment beside it. The
 eighth, `pgTable`, is deliberately not: it is the table builder rather than a column builder, and it
 is already what the line above the regex uses to decide which files to look at. State the rule as
 the seven column builders, so the count in the regex and the sentence beside it agree. `text` was
