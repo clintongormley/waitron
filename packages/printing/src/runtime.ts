@@ -285,7 +285,10 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       devicePath: job.local_key,
     };
     try {
-      // The DB hands `payload` back as a Buffer; copy it into a plain Uint8Array so the transport
+      // `claimPrintJobs` reads this row with raw SQL through `tx.execute`, so no column mapping
+      // runs over it and the DRIVER's own value arrives, not the column's: a `Buffer` under
+      // node-postgres (which is what `ClaimedJob.payload` above is hand-declared as), a
+      // `Uint8Array` under PGlite. Copy it into a plain Uint8Array so the transport
       // interface deals in Uint8Array and the fake sink's capture compares byte-for-byte against an
       // `esc().bytes()` (also a Uint8Array), free of any Buffer-vs-Uint8Array identity mismatch.
       await transport.send(target, new Uint8Array(job.payload));

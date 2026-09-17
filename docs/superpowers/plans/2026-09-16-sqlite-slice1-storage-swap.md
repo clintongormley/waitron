@@ -531,7 +531,8 @@ all 33 of its table files, so every `packages/db` row of the table above — `da
 `smallCount` and `bigCount` — is now in live use. Every `packages/db` line number in this findings
 section went with it: the table's rows, and the `print-jobs.ts:26` pointer the `bytea` paragraphs
 below use, all name lines those 33 rewrites moved. The claims they carry are still true; the
-numbers are not. `binary` is the one helper still unused by any column. The other
+numbers are not. `binary` was the one helper still unused by any column when that was written;
+P1b's THIRD pull request put it to use, on `print_jobs.payload`. The other
 packages' rows are untouched. The table itself stays as written, because a findings section records
 what was true when it was written.
 
@@ -561,6 +562,11 @@ still declares its own `customType<{ data: Uint8Array; driverData: Buffer }>`. R
 with `grep -n customType packages/db/src/schema/print-jobs.ts \
 packages/credentials/src/schema/tenant-credentials.ts packages/media/src/schema/images.ts`, which
 printed all three declarations. Replacing them is step 3's work, not step 1's.
+
+_Corrected 2026-09-17, later the same day: one of the three has gone._ P1b's THIRD pull request
+deleted `print-jobs.ts`'s block, moved `print_jobs.payload` onto the shared `binary` helper and
+changed its callers. `packages/credentials` and `packages/media` still declare theirs, so the
+paragraph above holds for those two and no longer for `packages/db`.
 
 **One `text` column that must never become `label()`.**
 `packages/fiscal-verifactu/src/schema/registros.ts:86-94` stores `cuota_total` and `importe_total` as
@@ -679,8 +685,10 @@ returns a `Date`; `bigint` in number mode is `PgBigInt53` and returns a number, 
 returns `42n`. Both pairs emit identical DDL, so the step 4 probe is blind to picking the wrong one.
 
 **The binary decision, and what it will cost the conversion pull requests.** The three hand-rolled
-`bytea` blocks disagree with each other, and step 1 converted none of them — all three are still in
-the tree, checked on 2026-09-17. The `bytea` custom type in `packages/db/src/schema/print-jobs.ts`
+`bytea` blocks disagree with each other, and step 1 converted none of them — all three were still in
+the tree, checked on 2026-09-17. _Two of the three are left: P1b's third pull request deleted
+`print-jobs.ts`'s block and moved that column onto the shared helper, so the first file named next
+no longer applies._ The `bytea` custom type in `packages/db/src/schema/print-jobs.ts`
 and
 `packages/credentials/src/schema/tenant-credentials.ts:15` hand callers a node `Buffer`;
 `packages/media/src/schema/images.ts:16` hands them a `Uint8Array`. The vocabulary took the
@@ -728,13 +736,13 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db`'s table files done 2026-09-17
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column)
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
-**`packages/db` takes TWO pull requests, and the second one is the binary column.** The first
+**`packages/db` took TWO pull requests, and the second one was the binary column.** The first
 converted all 33 of its table files with no behaviour change of any kind; the `print_jobs.payload`
-column keeps its local `bytea` custom type until the second. The reason is the measured blast
+column kept its local `bytea` custom type until the second. The reason is the measured blast
 radius, which is wider than the bullet list further up this step claims: on 2026-09-17,
 `grep -rn "\.payload" packages/printing/src apps/server/src packages/db/src` found the column read
 in `apps/server/src/receipt-print.test.ts` (about twenty sites), `till-api.reprint.test.ts`,
@@ -770,6 +778,25 @@ Measured the same day: `Buffer.from("Hello").toString("utf8")` is `"Hello"`, whi
 `Uint8Array`'s `toString` ignores the argument. That one is a silently wrong answer rather than a
 red test, which is the reason the column is being converted on its own.
 
+_What the binary pull request actually cost, recorded 2026-09-17 after it was built._ The column
+moved onto the `binary` helper, the local `bytea` block in `print-jobs.ts` went, and the hand
+conversion in `outbox.ts` went with it. The readers cost SIX signature retypes, not thirteen file
+edits: `jobRow` in `packages/printing/src/outbox.test.ts`, `printJobsFor` in
+`apps/server/src/kitchen-print.test.ts`, `receipt-print.test.ts` and `till-api.receipt.test.ts`,
+`printJobPayloads` in `till-sale-integrated.pg.test.ts`, and `jobRows` in `working-order.test.ts`.
+Every other reader either wrapped the value already — in `new Uint8Array(...)`, `Buffer.from(...)`
+or `decodeTicket`, all of which accept either type — or passed it somewhere that takes either, as
+`resendPrintJob` does when it hands `job.payload` back to `enqueuePrintJob`
+(`packages/printing/src/outbox.ts`). That second case was the Codex reviewer's correction to a
+first write-up that said all of them wrapped. `pnpm -r typecheck` is what found the list: it
+exited 2 on the first of them and 0 once all six were done, so the set is measured rather than
+grepped — with the limit that a typecheck sees a SIGNATURE, not a matcher. The matchers were
+measured separately, above: `toContainEqual` cannot tell the two types apart and `toEqual` can, and
+neither is a type error. The two assertions in `packages/db/src/schema/printing.test.ts` were rewritten first, as
+the failing test: `Buffer.isBuffer(...)` now expects `false` (it is the DISCRIMINATING assertion —
+a Buffer IS a Uint8Array, so `instanceof` would hold either way), and the decode moved to
+`TextDecoder`. Watched red (`expected true to be false`) before the column changed.
+
 **One of those bullets is WRONG, and the correction matters for the second pull request.** The
 bullet says converting the column deletes `new Uint8Array(job.payload)` at
 `packages/printing/src/runtime.ts:291`. It does not. That value never passes through drizzle's
@@ -790,9 +817,13 @@ BUILDER: Uint8Array isBuffer=false | RAW: Buffer isBuffer=true
 
 with an assertion that both reads carried the same bytes, which passed. That last part is the
 control: it is what makes the difference a difference of mapping rather than of data. Run against
-the column as it stands today, with its local `bytea` that declares no `fromDriver`, the same probe
+the column as it stood then, with its local `bytea` that declares no `fromDriver`, the same probe
 prints `Buffer` on both sides — which is why the experiment has to use a `binary` column to mean
 anything.
+
+_Dated note, 2026-09-17, later the same day:_ that last sentence describes the local `bytea` P1b's
+THIRD pull request deleted. On today's tree `print_jobs.payload` IS a `binary` column, so the
+builder side of the probe already reads `Uint8Array` and only the raw-SQL side reads `Buffer`.
 
 - [ ] **Step 3: For each package, convert every table file**
 
@@ -932,7 +963,7 @@ Two names in that import block are NOT column builders and are left out for thei
 `pgTable` is the table builder, and it is already what the line above the regex uses to pick which
 files to look at. `customType` is a builder FACTORY, and it **deserves a decision rather than a
 silent omission**: the three hand-rolled `bytea` blocks that step 1's `binary` helper exists to
-replace are each built with `customType`, so a table file calling `customType(` is doing the very
+replace (two of them left, since `print-jobs.ts`'s went) are each built with `customType`, so a table file calling `customType(` is doing the very
 thing this guard exists to stop, and leaving it out means the guard cannot see the next one. Decide
 when writing the guard; if it is left out, say so in the comment beside it.
 
@@ -2528,7 +2559,8 @@ can write it:
   returns on a read. The PostgreSQL helper hands callers a `Uint8Array` and binds a node `Buffer`
   (the private `bytea` custom type in `packages/db/src/schema/columns.ts`), and by then there will
   be real call sites depending
-  on that — P1b step 3 converts three hand-rolled `bytea` columns onto it. **Do not invent this
+  on that — P1b step 3 converts three hand-rolled `bytea` columns onto it, one of which
+  (`print_jobs.payload`) is converted already. **Do not invent this
   answer while writing the other bodies: settle it against the driver, with a round trip, before F1
   starts.**
 

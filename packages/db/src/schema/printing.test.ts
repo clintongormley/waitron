@@ -240,9 +240,12 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(row!.kind).toBe("document");
     expect(row!.attempts).toBe(1);
     expect(row!.deliveredAt).not.toBeNull();
-    // payload round-trips as the exact bytes (bytea → Buffer via the customType).
-    expect(Buffer.isBuffer(row!.payload)).toBe(true);
-    expect(row!.payload.toString("utf8")).toBe("Hello");
+    // payload round-trips as the exact bytes, handed back as a plain Uint8Array by the shared
+    // `binary` column (columns.ts). `Buffer.isBuffer` is the DISCRIMINATING assertion here: a node
+    // Buffer IS a Uint8Array, so `instanceof Uint8Array` would hold either way. The decode below
+    // checks the bytes, not the type — `TextDecoder` reads the same "Hello" out of a Buffer.
+    expect(Buffer.isBuffer(row!.payload)).toBe(false);
+    expect(new TextDecoder().decode(row!.payload)).toBe("Hello");
   });
 
   it("print_jobs: the app role stores a drawer command kind", async () => {
@@ -253,7 +256,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
         .values({
           locationId: LOCATION_A,
           printerId: printer,
-          payload: Buffer.from([27, 112, 0, 25, 250]),
+          payload: new Uint8Array([27, 112, 0, 25, 250]),
           kind: "drawer",
         })
         .returning(),

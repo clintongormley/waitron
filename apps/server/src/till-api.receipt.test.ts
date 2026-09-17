@@ -255,7 +255,7 @@ async function configureReceipt(
 
 async function printJobsFor(
   cfg: TillConfig,
-): Promise<{ printerId: string; status: string; payload: Buffer }[]> {
+): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);

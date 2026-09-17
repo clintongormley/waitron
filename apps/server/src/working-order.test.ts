@@ -3478,7 +3478,9 @@ describe("correction slips on recall & void (A6)", () => {
   }
 
   /** Read print-job ids for the before/after enqueue comparison. */
-  function jobRows(tx: Transaction): Promise<{ id: string; printerId: string; payload: Buffer }[]> {
+  function jobRows(
+    tx: Transaction,
+  ): Promise<{ id: string; printerId: string; payload: Uint8Array }[]> {
     return tx
       .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
       .from(printJobs);

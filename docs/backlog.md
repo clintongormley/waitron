@@ -2266,9 +2266,9 @@ blind to a timestamp's mode and to a caller-facing type: the workspace typecheck
 own 615 tests carried that half. The rest of P1b is the remaining packages, one pull request each.
 
 One cost the plan now carries, and one correction to how it was first written down. The `binary`
-helper hands callers a `Uint8Array` where two of the three hand-rolled binary columns hand them a
-`Buffer` today, so converting `print_jobs.payload` changes what its readers receive — which is why
-that one column was held back out of the 33-file conversion and takes a pull request of its own. The
+helper hands callers a `Uint8Array` where two of the three hand-rolled binary columns handed them a
+`Buffer`, so converting `print_jobs.payload` changed what its readers receive — which is why
+that one column was held back out of the 33-file conversion and took a pull request of its own. The
 correction: that change was first described as breaking an assertion in `apps/server`, and it does
 not. Measured on 2026-09-17, a `Uint8Array` satisfies `toContainEqual(Buffer.from(...))` just as a
 `Buffer` does, with a negative control confirming the matcher still rejects different bytes. What it
@@ -2279,12 +2279,15 @@ a silently wrong answer rather than a failure. The readers themselves are wider 
 thirteen files in all, about twenty of the sites in
 `apps/server/src/receipt-print.test.ts` alone.
 
-Two things #394 deliberately left for later, each with its next action. **The payload column is the
-next pull request in this rollout, before the remaining packages**: convert
-`print_jobs.payload` to the `binary` helper, delete the `Buffer.from` in the printing package's
-enqueue path, and fix the two assertions named above — but NOT the copy in that package's agent
-runtime, which reads its row with raw SQL and so never passes through a column mapping at all.
-**And the house rule is not written down yet, on purpose**: the one-line `CLAUDE.md` §3 entry naming
+Two things #394 deliberately left for later. **The payload column is done** — P1b's third pull
+request converted `print_jobs.payload` to the `binary` helper, deleted the `Buffer.from` in the
+printing package's enqueue path, rewrote the two assertions named above, and retyped six
+hand-written reader signatures from `Buffer` to `Uint8Array`. It left the copy in that package's
+agent runtime alone, as planned: that path reads its row with raw SQL and so never passes through a
+column mapping at all — re-measured by the reviewer against real PostgreSQL, the probe output being
+the line the plan records. What is left of P1b is the remaining packages, one pull request each,
+starting at `catalogue`, and then the guard.
+**And the house rule is still not written down, on purpose**: the one-line `CLAUDE.md` §3 entry naming
 `packages/db/src/schema/columns.ts` as the only place the engine's column types are named, with its
 receipt in `docs/developers/conventions-data.md`, lands in P1b's FINAL pull request together with
 the guard that enforces it. Until the rollout reaches the other packages every one of them is a

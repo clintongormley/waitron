@@ -13,8 +13,8 @@ import { previewPrintJob } from "../print-job-preview.js";
  * harmless for the ASCII and accented-Latin content these tickets carry (both decoders agree there),
  * but it is not a true round-trip of the encoder, so this helper picks the byte-exact form.
  *
- * Accepts either the `Uint8Array` PGlite hands back from a bytea column or a `Buffer`; `Buffer.from`
- * copies either into a fresh Buffer before decoding.
+ * Accepts either the `Uint8Array` the shared `binary` column hands back or the `Buffer` a raw-SQL
+ * read produces; `Buffer.from` copies either into a fresh Buffer before decoding.
  */
 export function decodeTicket(bytes: Uint8Array | Buffer): string {
   return Buffer.from(bytes).toString("latin1");
