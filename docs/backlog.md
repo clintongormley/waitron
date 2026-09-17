@@ -2334,7 +2334,7 @@ And one column is an array, which the vocabulary has no helper for at all; there
 columns in the tree — three more in `packages/db` and one in `packages/media` — and the flip has to
 convert every one of them whatever the vocabulary does.
 
-**`packages/payments` is converted too, in the fifth pull request** — its five table files, 41
+**`packages/payments` is converted too, in the fifth pull request (#398)** — its five table files, 41
 columns, with no schema change. Its two carve-outs are the two the rollout keeps meeting: the
 database enums, which `enumText` cannot stand in for because it emits `text`; and two text columns
 that keep their hand-written `check()` constraints — `payments.card_entry_mode` because its values
