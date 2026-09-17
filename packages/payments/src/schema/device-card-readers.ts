@@ -1,5 +1,5 @@
-import { foreignKey, pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
-import { devices } from "@waitron/db";
+import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { devices, id, table } from "@waitron/db";
 import { cardReaders } from "./card-readers.js";
 
 /**
@@ -9,11 +9,11 @@ import { cardReaders } from "./card-readers.js";
  * idiom in 0001_payments_baseline_sql.sql includes DELETE for that reason, unlike `card_readers`
  * itself.
  */
-export const deviceCardReaders = pgTable(
+export const deviceCardReaders = table(
   "device_card_readers",
   {
-    deviceId: uuid("device_id").notNull(),
-    readerId: uuid("reader_id").notNull(),
+    deviceId: id("device_id").notNull(),
+    readerId: id("reader_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.deviceId] }),

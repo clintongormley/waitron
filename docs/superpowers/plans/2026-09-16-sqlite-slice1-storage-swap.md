@@ -736,7 +736,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -917,6 +917,100 @@ checker that reports a total is itself a claim, and a total nobody cross-checked
 own per-table counts — which printed 52 all along — is where this one hid._ Behaviour, which no
 probe can reach, was carried by `pnpm -r typecheck` (exit 0 for the whole workspace) and
 `pnpm --filter @waitron/catalogue test:coverage` (exit 0, 29 files, 492 tests, no test edited).
+
+**And the same report for `packages/payments`.** Its five table files hold 41 columns — 8 in
+`card-readers.ts`, 2 in `device-card-readers.ts`, 5 in `payment-policy.ts`, 8 in
+`payment-refunds.ts`, 18 in `payments.ts` — and the builders they used were `uuid`, `text`,
+`boolean`, `integer`, the two-decimal `numeric` and `timestamp` in STRING mode, every one of which
+has a helper. All ten timestamp columns in the package are string mode, read off each line being
+replaced: over the five files at the base commit `grep -c 'mode: "string"'` returns 10 (3 + 0 + 2 +
+1 + 4, in the order this paragraph lists the files) and `grep -c 'mode: "date"'` returns 0, and the
+converted files hold exactly 10 `tsString` calls and no `ts` call at all. There is no array column
+(`grep -rn '\.array()' packages/payments/src --include='*.ts'` exits 1), and no `date`, `time`,
+`smallint`, `bigint` or `bytea` column on either side of the diff.
+
+Two things the conversion did not absorb.
+
+The first is the two `pgEnum` columns — `payments.state` (`payment_state`, ten values) and
+`payment_refunds.state` (`payment_refund_state`, two). `enumText` emits `text`, so pointing it at a
+database enum is a real schema change; both files keep importing `pgEnum` from
+`drizzle-orm/pg-core`, which is again why the step 5 guard can never prove a package "fully
+converted".
+
+The second is the check-constraint carve-out. `payment_policy.offline_mode` and
+`payments.card_entry_mode` both became plain `label()` columns beside untouched constraints, and
+both fall under reasons `columns.ts` already records. Not one each: the caller-facing narrowing
+reason applies to BOTH — `packages/payments/src/store.ts:27` and `:320` type `cardEntryMode` as
+`string | null` — and `card_entry_mode` is refused by the DDL-spacing reason on top of it, which is
+the measured, decisive one. `offline_mode` is refused by the narrowing reason alone, its constraint
+already carrying `enumCheck`'s spacing.
+
+- `payment_policy_offline_mode_ck` is `${t.offlineMode} in ('accept_offline', 'cash_only')`, quoted
+  from the file. It carries the `", "` spacing `enumCheck` emits, so substituting there would be
+  schema-silent, and the reason for leaving it is the caller-facing one #397 measured: `enumText`
+  narrows what a caller may WRITE.
+- `payments_card_entry_mode_ck` is
+  `${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
+  also quoted from the file. Its values are written WITHOUT the `", "` spacing, so this is the
+  first of the two reasons — substituting changes the DDL, exactly as measured on
+  `option_groups.type` in #397.
+
+_A claim this report first made and both reviewers falsified, kept because the correction is the
+useful part._ It said `enumCheck` could not express `payments_card_entry_mode_ck` **at all** — that
+its body returns only the `in (…)` fragment, "no null arm, and no way to add one", making this the
+first constraint in the rollout the pair was structurally unable to produce. That is wrong, and it
+was written by reading `enumCheck`'s body rather than by composing it. The null arm is written
+AROUND the helper, and the composition is sound: rendered 2026-09-18 through `PgDialect.sqlToQuery`
+— the call drizzle-kit itself makes on a check constraint — `sql\`${col} is null or
+${enumCheck(col)}\`` produces `"…"."card_entry_mode" is null or "…"."card_entry_mode" in
+('contactless', 'chip', 'swipe', 'unknown')` with `params: []`, the bare helper rendering the same
+fragment without the null arm as the control. The empty parameter list is the part worth keeping:
+`.inlineParams()` survives the nesting, so the values stay literals instead of becoming bind
+parameters. The run-it reviewer went further and executed all three forms against PGlite — original,
+bare and composed — and every one accepted null and the four permitted modes and rejected an invalid
+value with `23514`. **So a nullable column is not a reason the pair cannot be used, and this package
+met no shape the earlier reports had not.**
+
+Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
+(silent, `No schema changes, nothing to migrate`, exit 0) and after (the same, `diff -r` silent),
+and the NEGATIVE CONTROL was taken in the same worktree before converting anything:
+`offline_amount_cap` moved from scale 2 to scale 3 made the same command write `0002_probe.sql` and
+add a journal entry, so the silent runs mean something. A column-by-column comparison against the
+base commit, built on drizzle's own `getTableConfig` rather than on text — comparing SQL type,
+`columnType`, nullability, primary key, defaults, enum values, uniqueness and the read mapping,
+keyed by TABLE as well as column name — reported **41 columns, 0 mismatches**, cross-checked against
+the probe's own per-table counts, which print 8/2/5/8/18 and sum to the same 41.
+
+**That comparison was proved by a mutation the probe is blind to, which is the point of having it.**
+`payments.settled_at` was moved from `tsString` to `ts` — the same SQL type, a different read
+mapping. The comparison reported exactly that column, `PgTimestampString` → `PgTimestamp`, with the
+read mapping going from the driver's string to a `Date`. The probe, run on the same mutated tree,
+printed `No schema changes, nothing to migrate` at exit 0 with a silent `diff -r`. So the
+`ts`/`tsString` trap is invisible to the acceptance check this plan prescribes, measured here rather
+than argued.
+
+A line-by-line comparison then established the property the count above cannot: **every line this
+branch changes in the five files is an import line, a column declaration, or the one `pgTable(` →
+`table(` rename on each file's table-opening line; nothing else differs.** Every `pgEnum`
+declaration, `check()` body, index, unique, foreign key, primary key and comment is identical on
+both sides, with one stated normalisation — `pgTable(` is rewritten to `table(` before comparing,
+that being the one rename the conversion makes outside the column lines.
+
+_Stated as a property rather than as a line count on purpose, and the reason is a defect in the
+first version of this paragraph._ It said "182 lines", and a reviewer counting a different way got
+197. Both numbers were honest; neither was the point. Worse, the filter that produced 182 matched a
+foreign-key block's closing line as though it were a column's continuation —
+`}).onDelete("restrict"),` in six places, and the bare `}),` on the one foreign key declared without
+an `onDelete` — so it removed all seven from BOTH sides and never compared them at all — the same
+shape as #397's duplicate-key defect, a checker whose total quietly hides what it skipped. Re-run
+with a filter that swallows only a column declaration's own continuation lines, the comparison
+covers 189 lines and still reports them identical, and the seven foreign-key lines are now among
+them. `CLAUDE.md` §7 says it directly: a count is a receipt that goes stale, so describe the
+property.
+
+Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace, which is what covers
+the sibling packages that read these tables) and `pnpm --filter @waitron/payments test:coverage`
+(exit 0, 32 files, 414 tests, no test edited, all five schema files 100%).
 
 - [ ] **Step 4: Prove nothing changed**
 

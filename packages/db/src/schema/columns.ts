@@ -119,10 +119,18 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  *
  * The second group is open, and it keeps growing as the rollout reaches new packages: checked text
  * columns written with `enumCheck`'s spacing exist outside this package too, among them
- * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17) and, still unconverted on
- * that date, `packages/fiscal-verifactu/src/schema/registros.ts` and
+ * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17),
+ * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18) and, still
+ * unconverted on that date, `packages/fiscal-verifactu/src/schema/registros.ts` and
  * `packages/identity/src/schema/google-oidc-states.ts`. So take the two reasons as the property and
  * the names as a dated reading.
+ *
+ * One mechanical note, because a converter meeting a NULLABLE checked column will ask: `enumCheck`
+ * returns only the `in (…)` fragment, so a null arm is composed AROUND it rather than emitted by
+ * it, and the values stay inline through that nesting. A nullable column is therefore NOT a reason
+ * the pair cannot be used — `payments.card_entry_mode` stays `label()` for the spacing reason
+ * above, like the other three. Guard: `columns.test.ts`, "keeps its values inline when a caller
+ * composes a null arm around it".
  *
  * `units.hardware_unit` carries a reason worth stating in general: substituting there is schema-silent, but `enumText` NARROWS what a
  * caller may write. Measured 2026-09-17 with `tsc --noEmit` over two probe tables in the catalogue

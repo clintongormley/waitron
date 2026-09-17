@@ -1,17 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  numeric,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { nodes, sales, workingOrders } from "@waitron/db";
+import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
+import { id, label, money, nodes, sales, table, tsString, workingOrders } from "@waitron/db";
 import { cardReaders } from "./card-readers.js";
 
 /**
@@ -49,53 +38,49 @@ export const paymentState = pgEnum("payment_state", [
  * captured payment with a null `sale_id` on a settled/abandoned order is the orphan `reconcile`
  * (a later plan) exists to find. The FK points module→core exactly as `registros_facturacion` does.
  */
-export const payments = pgTable(
+export const payments = table(
   "payments",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    workingOrderId: uuid("working_order_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    workingOrderId: id("working_order_id").notNull(),
     // Nullable: the payment row exists before the sale does (the money moves first). Set to the
     // committed sale in the associate-back step.
-    saleId: uuid("sale_id"),
+    saleId: id("sale_id"),
     // Nullable: no writer sets it yet (design §5). Its FK is declared in extraConfig below.
-    nodeId: uuid("node_id"),
+    nodeId: id("node_id"),
     // Nullable: cash, manual card, and the Stripe phone-as-reader path name no physical reader.
-    readerId: uuid("reader_id"),
-    provider: text("provider").notNull(),
+    readerId: id("reader_id"),
+    provider: label("provider").notNull(),
     /** This provider's opaque reference and the idempotency anchor. */
-    paymentRef: text("payment_ref").notNull(),
+    paymentRef: label("payment_ref").notNull(),
     /** Optional human acquirer reference — e.g. the operation number a merchant keys off a
      * standalone bank card terminal for an unintegrated (manual) tender. Nullable: only manual
      * mode, and some integrated adapters, populate it. A reconciliation hook, never validated. */
-    externalRef: text("external_ref"),
+    externalRef: label("external_ref"),
     /** Card-present facts for the separate payment slip — written once at capture by the
      * provider that supplies them (SumUp), null for cash/manual/offline/failed. Plain text + CHECK,
      * not a pgEnum: adding an entry-mode value later must not hit the one-transaction ALTER TYPE
      * trap (CLAUDE.md §2). */
-    cardScheme: text("card_scheme"),
-    cardLast4: text("card_last4"),
-    cardEntryMode: text("card_entry_mode"),
-    cardAuthCode: text("card_auth_code"),
-    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    cardScheme: label("card_scheme"),
+    cardLast4: label("card_last4"),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair:
+    // that constraint lists its values without the ", " spacing enumCheck emits, so substituting
+    // would change the schema. See enumText in packages/db/src/schema/columns.ts.
+    cardEntryMode: label("card_entry_mode"),
+    cardAuthCode: label("card_auth_code"),
+    amount: money("amount").notNull(),
     state: paymentState("state").notNull(),
     /** Set on `captured` and `accepted_offline` (the acceptance time), null otherwise. Feeds
      * `RecordSaleTender.settledAt`, so an offline-accepted tender chains its sale immediately. */
-    settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
+    settledAt: tsString("settled_at"),
     /** Set by the reconcile sweep when it ATTEMPTS to auto-reverse an orphan (a captured payment
      * with no sale on an abandoned working order), whether or not that reversal then succeeds.
      * Bounds the self-heal to one attempt so a permanently-unrefundable orphan cannot start a
      * retry storm on every sweep — exactly as `envios.reconciled_resubmit_at` bounds the fiscal
      * self-heal. Null means reconcile has not remediated this payment. */
-    reconcileRemediatedAt: timestamp("reconcile_remediated_at", {
-      withTimezone: true,
-      mode: "string",
-    }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    reconcileRemediatedAt: tsString("reconcile_remediated_at"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
+    updatedAt: tsString("updated_at").notNull().defaultNow(),
   },
   (t) => [
     // Idempotency: a retried collect cannot double-insert the same provider reference.
