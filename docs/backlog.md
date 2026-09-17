@@ -2273,6 +2273,13 @@ only what the receiver lacks never corrects it. S2's verdict stays FAIL and the 
 1 on it deliberately; no scenario runs in CI, so the evidence for one is its recorded run in the pull
 request. The unattended runner that was building these tasks stopped itself on that FAIL (its STOP
 file lives outside the repo, in the campaign directory), so tasks 5-10 wait for it to be restarted.
+Three suggestions from S2's review were deliberately not taken, and they belong to whoever picks the
+rig up next: the scenario inlines its node ids where its siblings hoist them to named constants; one
+of its reads reaches past the `NodeDb` helper and casts twice because that helper has no `all`; and
+its verdict string is English prose where every sibling prints a terse `key=value` list. The last one
+is the one with a consequence — Task 10 builds a JSON dump from those strings, so that is where the
+shape should be settled, and changing it earlier would invalidate the recorded run quoted in the
+package README without a fresh measurement.
 **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
 turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.
