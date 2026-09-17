@@ -63,6 +63,36 @@ their verdicts. MinIO is also not the store the product will run — Waitron Clo
 real store is a standing obligation for the results note, `docs/research/2026-09-16-sqlite-failover-prototype.md`,
 which plan Task 10 writes (spec §5).
 
+## What S1's fence is, and what it is not
+
+S1 measures the fence this **rig** uses: one key per term, claimed with a create-only write, under
+the venue prefix `venues/v1/` — topology design §2.2 ("Each venue owns one prefix in the store,
+`venues/<venue-id>/`"), and the prefix plan Tasks 7 and 8 stream a generation into. That shape is
+plan Task 3's.
+
+The **product's** fence is a different primitive: `current.json` written only if its version is
+unchanged (topology §5.1), which is compare-and-swap, and which is what the prototype spec's §4 S1
+describes. S6 records what the pinned store does with each. So S1's result is evidence that a
+refusal by the store stops a double promotion — it is not a measurement of the product's own
+conditional write, and the results note (plan Task 10) should say so in S1's row.
+
+Spec §4 S1 also asks for two things this rig does not model, on top of the fence itself: the loser
+"commits no promotion, activates no seat, and fences" — the rig shows only that it writes nothing —
+and that "the store's history under the venue prefix stays restorable", which needs a Litestream
+generation and so waits for plan Task 6.
+
+S1's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover
+scenarios`, 2026-09-17:
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S1 | double promotion fenced by the store's conditional write | PASS | fenced: winners=1/2 winner=box-a store-keys=3; control: winners=2/2 store-keys=5 |
+```
+
+`winner=` is the one value there that is a race outcome rather than a property: whichever node wins
+is not the measurement, and it may differ from run to run.
+
 ## Why it can't join `pnpm -r test`
 
 Three independent reasons. The first was run in this worktree; the second and third were read off the
