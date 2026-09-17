@@ -2219,8 +2219,8 @@ slice 1**, because all five of the risks it checks live in slice 2 or later and 
 streaming, no store and no promotion (§12.2 carries the risk-to-slice table). Slice 1 has its own
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
-prototype's first task — the `bench/sqlite-failover` harness — is built, and the rest of its plan is
-parked until slice 2. **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
+prototype's first two tasks — the `bench/sqlite-failover` harness and S6, the store's conditional
+write — are built, and the rest of its plan is parked until slice 2. **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
 turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.
 First, the check the plan told us to accept the work on — `drizzle-kit check` — reads nothing about

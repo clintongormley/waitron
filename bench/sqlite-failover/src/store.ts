@@ -2,11 +2,11 @@
  * The object store every scenario runs against: one MinIO container per store, with an S3 client
  * pointed at it.
  *
- * MinIO stands in for the production store, which is not chosen yet (spec §5). What S6 will
- * establish about conditional writes is therefore a fact about MinIO on the pin below; the standing
- * obligation to re-run it against whatever store Waitron Cloud picks belongs in the results note
- * this rig's last task writes, `docs/research/2026-09-16-sqlite-failover-prototype.md` (plan Task
- * 10). Neither that note nor the S6 measurement exists yet.
+ * MinIO stands in for the production store, which is not chosen yet (spec §5), so what S6
+ * (`store-cas.ts`) establishes about conditional writes is a fact about MinIO on the pin below.
+ * Re-running that against whatever store Waitron Cloud picks is an obligation the results note,
+ * `docs/research/2026-09-16-sqlite-failover-prototype.md` (plan Task 10), will record; that note does
+ * not exist yet.
  */
 import {
   CreateBucketCommand,

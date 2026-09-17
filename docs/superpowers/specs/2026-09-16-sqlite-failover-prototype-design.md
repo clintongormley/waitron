@@ -331,4 +331,4 @@ exists to produce.
 | The residual natural-key clash is the supplier invoice; the working-time clash was removed | outbox-swap design §4.2, §4.4 | read 2026-09-16 |
 | Litestream behaviour (snapshots, follow, one-writer-per-path, no 0.5 encryption) | litestream.io docs | quoted in discussion note §3 (`curl`, 2026-09-16); re-confirmed by the rig on the pinned version |
 | The throwaway-that-lands pattern (private `bench/` package + `docs/research` note, no CI test) | `bench/pglite-throughput/{package.json,README.md}` | read 2026-09-16 |
-| MinIO supports `If-Match`/`If-None-Match` conditional writes | to be confirmed by S6 on the pinned MinIO image | the rig establishes it; not asserted here as fact |
+| MinIO supports `If-Match`/`If-None-Match` conditional writes | S6 on the pinned MinIO image, run 2026-09-17 | `create-only=true if-match=refuses-stale race=1/8 unfenced=8/8` |

@@ -36,8 +36,8 @@ stranded container is still there. Stop it by hand, or reap later. Never a blank
 `scenarios` prints one Markdown table — id, title, verdict, detail — and exits **non-zero only when a
 scenario marked `critical` has the verdict `FAIL`**. `MEASURED` and `SKIPPED` never fail the run, and
 neither does a non-critical `FAIL`: a scenario that fails is a recorded outcome, which is the answer
-this gate exists to produce (spec §7). The critical scenarios are the fiscal-safety and restorability
-ones — a failure there means the loop's premise is broken and slice 1 would be building on a hole.
+this gate exists to produce (spec §7). The critical scenarios are S0, S1, S2, S3 and S6 (spec §7) — a
+failure in one of those means slice 2 would be building on a hole.
 
 A scenario that **throws** is recorded as a critical `FAIL` whatever it was going to claim, because a
 harness that broke mid-scenario never got as far as saying what it was measuring.
@@ -54,7 +54,9 @@ harness that broke mid-scenario never got as far as saying what it was measuring
 
 The rig **establishes** external behaviour by observing it rather than asserting it: what MinIO's
 conditional write does (S6, plan Task 2) and how Litestream lays out and restores a replica (plan
-Task 6) will be measured on these exact versions. Neither measurement has been made yet. A different
+Task 6) are each measured on these exact versions. S6's half has been run —
+`pnpm --filter @waitron/bench-sqlite-failover scenarios`, 2026-09-17, →
+`create-only=true if-match=refuses-stale race=1/8 unfenced=8/8`. The Litestream half has not. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
 their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
 — so the conditional-write result will be a fact about the mechanism, and re-running it against the

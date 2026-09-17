@@ -151,6 +151,14 @@ export default async function ({ startStore }) {
 }
 ```
 
+> **Landed 2026-09-17** with `ifMatch: "refuses-stale" | "accepts-stale" | "not-established"` plus an
+> `ifMatchNote`, rather than the boolean above: a store may answer an `If-Match` it does not implement
+> with an error rather than a 412, and a boolean could not tell that apart from a store that accepts
+> stale ETags. `CasReport` also carries `unfencedWinners`, the unconditional control the race is
+> measured against. The fenced race uses `Promise.all` rather than the `Promise.allSettled` of step
+> 3(c): `claimCreateOnly` throws only on a non-precondition failure, which the critical measurement
+> should not survive.
+
 - [ ] **Step 2: Run, watch it fail** — `… scenarios` → FAIL (`store-cas.ts` missing).
 
 - [ ] **Step 3: Implement `store-cas.ts`.** `claimCreateOnly` as above. `probeConditionalWrites`: (a) create-only — put `k1` with `IfNoneMatch:"*"` → expect ok; put `k1` again with `IfNoneMatch:"*"` → expect `412`; set `createOnly` accordingly. (b) if-match — put `k2`, read its `ETag`, put `k2` with `IfMatch:<etag>` → ok, put `k2` with `IfMatch:"\"stale\""` → expect `412`; set `ifMatch` (record, do not require — establishing, not asserting). (c) race — fire N=8 concurrent `claimCreateOnly` on one fresh key via `Promise.allSettled`; `raceWinners` = count of `"won"`.
