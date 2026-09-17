@@ -262,17 +262,29 @@ Keep the existing explanatory comments — thin them where they narrate history,
 
 This is the acceptance check for the whole task, and it must be run, not reasoned about.
 
+**Do not use `drizzle-kit check` for this.** It never reads the schema source — it only checks the
+migration folder against itself — so it answers "everything's fine" whatever the helpers emit.
+Measured on 2026-09-17 in `packages/db` by changing `flag` from `boolean(name)` to `integer(name)`
+and running `pnpm --filter @waitron/db exec drizzle-kit check`: `Everything's fine`, exit 0, with a
+column type already broken.
+
+Generate into a throwaway COPY of the migration folder instead, and diff. Run from the package
+directory; `--out` is resolved relative to it, so an absolute path fails:
+
 ```bash
-git stash && pnpm --filter @waitron/db exec drizzle-kit generate --name probe_before && git stash pop
+cp -R drizzle drizzle-probe-tmp
+pnpm exec drizzle-kit generate --dialect postgresql --schema ./src/schema/index.ts --out ./drizzle-probe-tmp --name probe
+diff -r drizzle drizzle-probe-tmp
+rm -rf drizzle-probe-tmp
 ```
 
-Then regenerate with the change in place and compare. Simpler and less error-prone:
+Expected: `No schema changes, nothing to migrate`, and `diff -r` silent — the schema the vocabulary
+produces is the schema already in the snapshots. The real migration folder is never written to.
 
-```bash
-pnpm --filter @waitron/db exec drizzle-kit check
-```
-
-Expected: no pending changes reported — the schema the vocabulary produces is the schema already in the snapshots. **If `drizzle-kit` reports a difference, the vocabulary is wrong**, not the snapshot; fix the helper rather than regenerating.
+This probe has a control in the other direction, which is why it is trusted: with the broken `flag`
+above, the same commands emitted
+`ALTER TABLE "drawer_opens" ALTER COLUMN "via_override" SET DATA TYPE integer;`. **If it reports a
+difference, the vocabulary is wrong**, not the snapshot; fix the helper rather than regenerating.
 
 - [ ] **Step 7: Run the package suite**
 
@@ -307,6 +319,48 @@ uses them. The report of what the vocabulary could not hide is in the plan."
 
 Then `/finish-branch`.
 
+### P1a findings
+
+What the vocabulary hid, and what it could not. Every line here was measured in
+`packages/db` on 2026-09-17 with the generate-into-a-copy probe described in step 6.
+
+**Hidden cleanly — `drawer_opens` converted with no schema change at all.** `id`, `ts`, `json`,
+`money`, `quantity`, `rate`, `flag`, `count`, `label` and `table` each emit exactly the type they
+replace; `drizzle-kit generate` against a copy of the snapshot folder produced
+`No schema changes, nothing to migrate` and `diff -r` was silent.
+
+**The acceptance check in this plan was wrong, and it is now fixed above.** `drizzle-kit check`
+does not read the schema source. Control: `flag` changed from `boolean(name)` to `integer(name)`,
+`drizzle-kit check` still printed `Everything's fine` and exited 0. The generate-into-a-copy probe
+caught the same break immediately. A pass and a fail looked identical under the old check, so it was
+measuring nothing.
+
+**What `enumText` could NOT hide: the database enum.** There are **35** `pgEnum` declarations across
+**21** files, typing roughly three dozen columns (counted by text scan on 2026-09-17 — treat the
+shape as the finding, not the number). A `pgEnum` is a distinct PostgreSQL type created by
+`CREATE TYPE … AS ENUM`; `enumText` emits `text`. Pointing `enumText` at one is a real schema change,
+measured by converting `ticket_items.state` from `ticketState("state")` to
+`enumText("state", ["queued", "preparing", "ready"] as const)`:
+
+```sql
+ALTER TABLE "ticket_items" ALTER COLUMN "state" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "ticket_items" ALTER COLUMN "state" SET DEFAULT 'queued';
+```
+
+**Consequence for P1b: leave every `pgEnum` column alone.** Convert the columns around it and keep
+importing `pgEnum` from `drizzle-orm/pg-core` in the files that declare one. The rollout cannot carry
+the enums, because doing so breaks the "no schema change" rule that is the whole point of P1.
+
+**Consequence for F1:** SQLite has no enum type, so all 35 have to become text plus a check
+constraint at the flip, and that conversion carries a migration — it is flip work, not prepare work.
+The mechanical part is already proven: `enumText` plus a `check()` is exactly the shape
+`drawer_opens.reason` already uses, and this item converted it.
+
+**One thing the guard in P1b step 4 will not see.** It reads TEXT, so a file that keeps importing
+`pgEnum` (every file declaring one must) still has a `drizzle-orm/pg-core` import line; the guard's
+second half looks for the column-builder names specifically, so an enum-declaring file passes. That
+is correct, but it means the guard proves "no raw column builder", never "fully converted".
+
 ### P1b — roll the vocabulary out
 
 - [ ] **Step 1: Split the work by package**
@@ -319,11 +373,18 @@ Replace `pgTable` with `table`, and each column builder with its vocabulary equi
 
 - [ ] **Step 3: Prove nothing changed**
 
+The generate-into-a-copy probe from P1a step 6 — **not `drizzle-kit check`, which cannot see the
+schema source at all**. Run it from the package directory, with that package's own schema entry
+point:
+
 ```bash
-pnpm --filter <package> exec drizzle-kit check
+cp -R drizzle drizzle-probe-tmp
+pnpm exec drizzle-kit generate --dialect postgresql --schema ./src/schema/index.ts --out ./drizzle-probe-tmp --name probe
+diff -r drizzle drizzle-probe-tmp
+rm -rf drizzle-probe-tmp
 ```
 
-Expected: no pending changes. Then:
+Expected: `No schema changes, nothing to migrate`, and `diff -r` silent. Then:
 
 ```bash
 pnpm --filter <package> test:coverage

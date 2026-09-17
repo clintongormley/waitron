@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check } from "drizzle-orm/pg-core";
+import { enumText, flag, id, table, ts } from "./columns.js";
 
 export type DrawerOpenReason = "cash_sale" | "manual";
 
@@ -22,45 +23,43 @@ export type DrawerOpenReason = "cash_sale" | "manual";
  * `authorized_by` (nullable) and `via_override` (bool, default false) are the authorization AUDIT: who
  * authorized the open under a `gated` `drawer_open_policy` and whether a supervisor override was used.
  * `authorized_by` is a plain uuid with NO FK, the same `person_id` seam — it points at the identity
- * slice's persons without depending on it. Both are drizzle-native (a nullable uuid and a bool with a
- * default), so they land in the generated migration, not the --custom one.
+ * slice's persons without depending on it.
  */
-export const drawerOpens = pgTable(
+export const drawerOpens = table(
   "drawer_opens",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // Bare column: the (till_id) → tills(id) FK is
     // hand-written in the --custom migration.
-    tillId: uuid("till_id").notNull(),
+    tillId: id("till_id").notNull(),
     // The acting operator (identity person id). Plain uuid, no FK: the person schema is a separate
     // slice and this audit row must not depend on it (the daily_closes.closed_by / sale_voids.voided_by
     // shape).
-    personId: uuid("person_id").notNull(),
-    // Server-clock kick time — mode: "date" + defaultNow(), the daily_closes.closedAt shape (a
-    // server-generated timestamp, not an application-supplied one).
-    openedAt: timestamp("opened_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    personId: id("person_id").notNull(),
+    // Server-clock kick time — defaultNow(), the daily_closes.closedAt shape (a server-generated
+    // timestamp, not an application-supplied one).
+    openedAt: ts("opened_at").notNull().defaultNow(),
     // Why the drawer opened: 'cash_sale' (auto kick on a cash sale) or 'manual' (staff open). A text
     // column + CHECK, matching invoice_series.purpose / incidents.severity — a small closed vocabulary
     // an audit table widens with a one-line migration, where a pgEnum needs ALTER TYPE. (receipt_print_mode
     // on locations is a pgEnum instead, matching order_flow — a per-venue CONFIG mode, a different family.)
-    reason: text("reason").$type<DrawerOpenReason>().notNull(),
+    reason: enumText("reason", ["cash_sale", "manual"] as const).notNull(),
     // NULLABLE bare column: a manual open has no sale; a cash-sale open references it. The
     // (sale_id) → sales(id) FK is hand-written in the
     // --custom migration; MATCH SIMPLE skips it on a NULL sale_id.
-    saleId: uuid("sale_id"),
+    saleId: id("sale_id"),
     // Who authorized this open under a 'gated' drawer_open_policy (cash-drawer-authorization slice §2).
     // Plain uuid, NULLABLE, NO FK — the same shape and reason as `person_id` above: the person/identity
     // schema is a separate slice, so this audit row records the authorizer as a raw id and stays
     // independent of it (the daily_closes.closed_by / sale_voids.voided_by house seam). NULLABLE because
     // the automatic `cash_sale` drawer kick (a cash settlement at the till — `receipt-print.ts`) records
     // no authorizer; a MANUAL open always sets it — a gated override to the authorizing supervisor, an
-    // `open`-policy or self-authorized open to the operator (= person_id). Written by the drawer route.
-    authorizedBy: uuid("authorized_by"),
+    // `open`-policy or self-authorized open to the operator (= person_id).
+    authorizedBy: id("authorized_by"),
     // Whether a supervisor OVERRIDE authorized this open (cash-drawer-authorization slice §2): a person
     // holding cash.drawer authorized an open on behalf of an operator who does not. NOT NULL DEFAULT
-    // false — the common case is no override, and the flag records the exception. Written by the drawer
-    // route (a later task); no write logic here.
-    viaOverride: boolean("via_override").notNull().default(false),
+    // false — the common case is no override, and the flag records the exception.
+    viaOverride: flag("via_override").notNull().default(false),
   },
   (t) => [check("drawer_opens_reason_ck", sql`${t.reason} in ('cash_sale', 'manual')`)],
 );
