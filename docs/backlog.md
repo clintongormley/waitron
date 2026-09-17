@@ -2220,7 +2220,19 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype's first task — the `bench/sqlite-failover` harness — is built, and the rest of its plan is
-parked until slice 2. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
+parked until slice 2. **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
+`packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
+turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.
+First, the check the plan told us to accept the work on — `drizzle-kit check` — reads nothing about
+the schema and passes with a column type deliberately broken; the real check generates into a copy of
+the migration folder and diffs it, and all three of `--dialect`, `--schema` and `--out` have to be
+passed or the tool fails silently and the comparison looks like a pass. Second, the vocabulary cannot
+cover everything: the 35 database enum types, the timestamp columns that read back as strings (the
+majority, and the schema check is blind to getting one wrong), five column builders in use with no
+equivalent yet, and two fiscal amounts held as text that must never take the plain text helper.
+Still open from that task, flagged rather than guessed at: `packages/recipes` and `packages/layouts`
+are on P1b's rollout list but have no database schema at all and are named nowhere else in the plan,
+so somebody has to decide whether they belong there. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
 code** (`c9d80c59`, the parent of the harness merge), so you can still read how something worked while
 everything ran on PostgreSQL. The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
