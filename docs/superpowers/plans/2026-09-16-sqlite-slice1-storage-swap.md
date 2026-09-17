@@ -717,7 +717,7 @@ typecheck scoped to the changed package both miss.
 
 - [ ] **Step 2: Split the work by package**
 
-One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `recipes`, `layouts`, `reporting`.
+One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
 - [ ] **Step 3: For each package, convert every table file**
 
@@ -765,13 +765,16 @@ them and nothing for step 3 to convert; skip them here.
 Two of the four are picked up later in this plan and two are not. Grepped over this plan file on
 2026-09-17: `@waitron/reporting` and `@waitron/purchasing` both appear in P5's step 8 test list, and
 `@waitron/purchasing` again in P6, so the money and quantity work does reach them.
-`packages/recipes` and `packages/layouts` appear nowhere in this plan except step 2's list above and
-this paragraph. A case-insensitive `grep -rniE "price|amount|cost|total|quantity|qty|numeric"` over
-`packages/recipes/src` on 2026-09-17 returned nothing at all, so there is nothing for P5 or P6 to
-find there either. **The likeliest explanation is
-that those two are on step 2's list by mistake, and that needs a decision rather than an
-assumption:** either drop them from the list, or say what work in this plan actually touches them.
-Do not treat them as covered.
+
+**Decision (owner, 2026-09-17): `packages/recipes` and `packages/layouts` are removed from step 2's
+list above, and nothing is lost by removing them.** Their tables are not missing — they belong to
+`packages/db`, which is the FIRST pull request in this rollout, so converting it already covers
+them. Measured on 2026-09-17: `pgTable(` appears nowhere in either package's `src`; their only
+drizzle import is `drizzle-orm` itself, for query helpers rather than table declarations; and the
+tables they read live in `packages/db/src/schema/` as `recipes.ts`, `canvases.ts`,
+`device-profiles.ts`, `tenant-themes.ts` and `tenant-receipts.ts`, every one of which the
+`packages/db` pull request converts. So a pull request of their own would have nothing to convert.
+Do not open one for either package, and do not read their absence from the list as a gap.
 
 The same two warnings as in P1a: `--out` is relative to the working directory, so run this from the
 package directory and never give it an absolute path; and the scratch folder is created inside the

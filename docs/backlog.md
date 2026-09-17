@@ -2155,6 +2155,18 @@ turns out to need a design moves to its track.
   rule now, rather than a missing UI path.
 - The duplicate purchase-invoice key `(supplier_tax_id, supplier_invoice_number)` is unique
   forever — per-year versus forever is the asesor's.
+- **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
+  result — leave it, or build the replay?** Checked against the tree on 2026-09-17, not assumed: in
+  `invoice_first` the place path files a deferred invoice through `recordSale`, so replaying would
+  mean reading back the immutable `registros_facturacion` row and rebuilding the invoice number,
+  date and QR. That is fiscal core, and not work to do unattended. Leaving it is a real option — the
+  409 is a defensible state conflict and the till already degrades gracefully, keeping the basket and
+  showing `place.error`. The gain if built is that a re-tap after a lost response returns the invoice
+  already issued instead of an error. Two claims an earlier campaign note made are FALSE and must not
+  be reused: that placing files nothing fiscally, and that the current answer is an opaque 500. The
+  place-path comment in `apps/till/src/till-app.ts` already calls an idempotent `placeOrder` "a
+  recorded backlog follow-up"; until this entry there was no such record, so that claim was false —
+  this is it.
 
 ---
 
