@@ -2280,7 +2280,7 @@ thirteen files in all, about twenty of the sites in
 `apps/server/src/receipt-print.test.ts` alone.
 
 Two things #394 deliberately left for later. **The payload column is done** — P1b's third pull
-request converted `print_jobs.payload` to the `binary` helper, deleted the `Buffer.from` in the
+request (#396) converted `print_jobs.payload` to the `binary` helper, deleted the `Buffer.from` in the
 printing package's enqueue path, rewrote the two assertions named above, and retyped six
 hand-written reader signatures from `Buffer` to `Uint8Array`. It left the copy in that package's
 agent runtime alone, as planned: that path reads its row with raw SQL and so never passes through a
