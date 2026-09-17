@@ -361,7 +361,8 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
    primary down before the secondary is promoted, so the two never file concurrently. §5.3's split
    brain is the case where that assumption is violated — the box alive but unreachable — and it is the
    *only* case in which a receiver drains a chain while its live owner drains the same chain. (b) **A
-   consequence this prototype surfaces, for review:** fencing must resolve any submission the old
+   consequence this prototype surfaces, accepted with the above (owner, 2026-09-17):** fencing must
+   resolve any submission the old
    primary had IN FLIGHT (`enviando`) — carrying it to a terminal state or returning the row to
    `pendiente` — *before* the tail is shipped. `applyTail` copies a shipped `enviando` verbatim, and a
    drain claims only `pendiente` rows, so a shipped `enviando` is never re-presented to AEAT and
