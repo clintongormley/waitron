@@ -2239,8 +2239,8 @@ passed or the tool fails silently and the comparison looks like a pass. Second, 
 cover everything: the 35 database enum types, the timestamp columns that read back as strings (the
 majority, and the schema check is blind to getting one wrong), five column builders that were in use
 with nothing to replace them with, and two fiscal amounts held as text that must never take the plain
-text helper. **P1b's first step closes that third gap and opens the vocabulary to the rest of the
-workspace**: `packages/db/src/schema/columns.ts` now has `day`, `timeOfDay`, `smallCount`, `bigCount`
+text helper. **P1b's first step, landed in #393, closes that third gap and opens the vocabulary to the rest of
+the workspace**: `packages/db/src/schema/columns.ts` now has `day`, `timeOfDay`, `smallCount`, `bigCount`
 and `binary`, each pinned by its own generated-type test, and `packages/db/src/index.ts` re-exports
 the vocabulary, which is the only door another package has into it. No table file has been converted
 yet — that is the rest of P1b, one pull request per package. One cost the plan now carries: the
