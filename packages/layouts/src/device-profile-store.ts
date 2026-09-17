@@ -30,9 +30,10 @@ import { validateCapabilities, validateInactivityTimeout } from "./device-profil
  * `device_profiles_canvas_fk` becomes `device_profile.invalid`
  * {reason: "bad_canvas_ref"} (see `translateWriteError`). `deleteDeviceProfile` authorises but has no
  * capabilities to validate. Reads return `capabilities` as PARSED jsonb (an array) — no `::text[]`
- * cast: it is a jsonb column, not PG `name[]` (CLAUDE.md §4's cast note is about `name[]`). The `as`
- * cast re-attaches the `CapabilityFlag[]` shape the plain-jsonb column drops (it is not
- * `.$type<>()`-annotated, to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
+ * cast: it is a jsonb column, not PG `name[]` (the `name[]` cast note is in
+ * `docs/developers/testing-guide.md`). The `as`
+ * cast re-attaches the `CapabilityFlag[]` shape the plain-jsonb column drops (it carries no
+ * `@waitron/layouts` type, to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
  * `packages/db/src/schema/device-profiles.ts`).
  */
 

@@ -32,11 +32,12 @@ export const incidents = table(
     code: label("code").notNull(),
     params: json<Record<string, unknown>>("params").notNull().default({}),
     severity: label("severity").$type<IncidentSeverity>().notNull(),
-    // tsString, matching sales.issuedAt/tenders.settledAt/sale_voids.voidedAt: a JS Date
-    // normalises through the host timezone the moment anything formats it, and nothing formatted
-    // is ever stored. Both columns here are populated by the application (recordIncident's own
-    // detectedAt, and markIncidentHandled's acknowledgedAt when a manager marks the alert handled on
-    // the dashboard), never by defaultNow(), so the same discipline applies.
+    // tsString, matching sales.issuedAt/tenders.settledAt/sale_voids.voidedAt: a JS Date takes on
+    // the host timezone as soon as something formats it in local time (`toString()` moves with
+    // `TZ`; `toISOString()` does not), and nothing formatted is ever stored. Both columns here are
+    // populated by the application (recordIncident's own detectedAt, and markIncidentHandled's
+    // acknowledgedAt when a manager marks the alert handled on the dashboard), never by
+    // defaultNow(), so the same discipline applies.
     detectedAt: tsString("detected_at").notNull(),
     acknowledgedAt: tsString("acknowledged_at"),
     acknowledgedBy: id("acknowledged_by"),

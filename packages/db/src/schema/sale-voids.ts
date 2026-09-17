@@ -24,10 +24,11 @@ export const saleVoids = table(
     // a property a bare `sale_id -> sales.id` reference cannot express.
     saleId: id("sale_id").notNull(),
     reason: label("reason").notNull(),
-    // mode: "string", matching `sales.issuedAt`/`tenders.settledAt`: a JS Date
-    // normalises through the host timezone the moment anything formats it, and
-    // this column is populated by the application (never `defaultNow()`), so
-    // the same "nothing formatted is ever stored" discipline applies here too.
+    // tsString, matching `sales.issuedAt`/`tenders.settledAt`: a JS Date takes
+    // on the host timezone as soon as something formats it in local time
+    // (`toString()` moves with `TZ`; `toISOString()` does not), and this column
+    // is populated by the application (never `defaultNow()`), so the same
+    // "nothing formatted is ever stored" discipline applies here too.
     voidedAt: tsString("voided_at").notNull(),
     /** The person who authorised the void. Sub-project 5 has landed
      * (2026-08-05): `recordVoid` now sets this at INSERT from the `authorize()`

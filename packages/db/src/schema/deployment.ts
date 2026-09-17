@@ -1,5 +1,5 @@
-import { check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { check } from "drizzle-orm/pg-core";
 import { count, label, table, ts } from "./columns.js";
 
 /**

@@ -81,9 +81,10 @@ export const sales = table(
     // the node beside it, it does not replace it.
     nodeId: id("node_id").notNull(),
     invoiceNumber: count("invoice_number").notNull(),
-    // mode: "string" rather than "date" — a JS Date normalises through the host
-    // timezone the moment anything formats it, and nothing formatted is ever
-    // stored. The offset travels in its own column.
+    // tsString rather than ts — a JS Date takes on the host timezone as soon as
+    // something formats it in local time (`toString()` moves with `TZ`;
+    // `toISOString()` does not), and nothing formatted is ever stored. The
+    // offset travels in its own column.
     issuedAt: tsString("issued_at").notNull(),
     issuedOffsetMinutes: count("issued_offset_minutes").notNull(),
     total: money("total").notNull(),

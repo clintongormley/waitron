@@ -1,6 +1,6 @@
 import { index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { products, type AllergenMap } from "./catalogue.js";
 import { flag, id, json, label, table, ts } from "./columns.js";
+import { products, type AllergenMap } from "./catalogue.js";
 
 /** A single dietary origin per ingredient. NULL = not yet categorised (a diet-PENDING ingredient,
  * contagious up a recipe — the diet analogue of `allergens IS NULL`). Drives BOTH the contains-tags

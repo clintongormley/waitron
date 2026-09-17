@@ -28,9 +28,10 @@ import { validateCanvas } from "./validate-canvas.js";
  * name unique is translated to `canvas.name_taken` (see `translateWriteError`). `deleteCanvas`
  * authorises but has no definition to validate. Reads cast the opaque jsonb back to `CanvasDef`
  * WITHOUT re-running `validateCanvas` — the value was validated on the write that stored it and the
- * only writer is this service (the return-a-typed-shape-without-re-validating rationale). The `as` cast re-attaches the
- * shape the plain-jsonb column drops (it is not `.$type<>()`-annotated, to avoid a
- * `@waitron/layouts` → `@waitron/db` circular dependency, see `packages/db/src/schema/canvases.ts`).
+ * only writer is this service (the return-a-typed-shape-without-re-validating rationale). The `as`
+ * cast re-attaches the shape the plain-jsonb column drops (it carries no `@waitron/layouts` type,
+ * to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
+ * `packages/db/src/schema/canvases.ts`).
  */
 
 /**

@@ -23,7 +23,7 @@ export const tenantReceipts = table(
   {
     id: count("id").primaryKey().notNull().default(1),
     receipt: json("receipt").notNull(),
-    // Timestamp `mode: "string"` follows the tenant_themes / devices precedent (an inert Drizzle
+    // Timestamp: `tsString` follows the tenant_themes / devices precedent (an inert Drizzle
     // read-type choice, not a column-type difference).
     updatedAt: tsString("updated_at").notNull().defaultNow(),
   },

@@ -21,7 +21,7 @@ export const tenantThemes = table(
   {
     id: count("id").primaryKey().notNull().default(1),
     theme: json("theme").notNull(),
-    // Timestamp: `mode: "string"` follows the `devices` precedent (devices.ts) — an inert Drizzle
+    // Timestamp: `tsString` follows the `devices` precedent (devices.ts) — an inert Drizzle
     // read-type choice, not a column-type difference; the "same precedent" note above is about the
     // jsonb decision only, not this column.
     updatedAt: tsString("updated_at").notNull().defaultNow(),

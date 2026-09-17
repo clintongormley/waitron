@@ -1,6 +1,6 @@
+import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/pg-core";
 import { count, id, label, table, ts } from "./columns.js";
-import { sql } from "drizzle-orm";
 
 /**
  * The cloud mirror's connection config (sync cloud-mirror C2b). A whole-database operational

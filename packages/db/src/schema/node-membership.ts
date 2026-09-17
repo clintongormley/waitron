@@ -1,6 +1,6 @@
+import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/pg-core";
 import { bigCount, count, json, table, ts } from "./columns.js";
-import { sql } from "drizzle-orm";
 import type { SignedMembershipDocument } from "@waitron/membership";
 
 /**
@@ -29,8 +29,9 @@ export const nodeMembership = table(
   "node_membership",
   {
     id: count("id").primaryKey().notNull().default(1),
-    // JS `number` (mode) reconciles the Slice-1 document's `number` term with the bigint column; the
-    // ≤3-node topology increments `term` by one per edit, so it never approaches 2^53.
+    // The Slice-1 document's `term`, held as a bigint column and read back as a JS `number`
+    // (`bigCount`); the ≤3-node topology increments `term` by one per edit, so it never
+    // approaches 2^53.
     term: bigCount("term").notNull(),
     document: json<SignedMembershipDocument>("document").notNull(),
     updatedAt: ts("updated_at").notNull().defaultNow(),

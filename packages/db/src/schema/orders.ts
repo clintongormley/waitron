@@ -1,8 +1,8 @@
 import type { ModifierSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { products } from "./catalogue.js";
 import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
+import { products } from "./catalogue.js";
 import { nodes } from "./nodes.js";
 import { tills } from "./tenants.js";
 
