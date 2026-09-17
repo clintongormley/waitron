@@ -2220,7 +2220,9 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype's first task — the `bench/sqlite-failover` harness — is built, and the rest of its plan is
-parked until slice 2. The
+parked until slice 2. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
+code** (`c9d80c59`, the parent of the harness merge), so you can still read how something worked while
+everything ran on PostgreSQL. The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
 paid offering. Remote-access bot protection (Cloudflare Turnstile on internet-facing login and
 recovery, never in the local-only product) belongs to that offering.
