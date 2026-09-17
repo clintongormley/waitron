@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, integer, pgEnum, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { check, pgEnum } from "drizzle-orm/pg-core";
+import { count, flag, id, label, table } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -48,30 +49,30 @@ export const printCharacterSet = pgEnum("print_character_set", ["wpc1252", "pc85
  * registered printer per physical USB/BT device per venue — is likewise hand-written there, as is
  * `print_jobs_printer_fk`, which targets this table's primary key.
  */
-export const printers = pgTable(
+export const printers = table(
   "printers",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    locationId: uuid("location_id")
+    id: id("id").primaryKey().defaultRandom(),
+    locationId: id("location_id")
       .notNull()
       /* v8 ignore next */
       .references(() => locations.id, { onDelete: "restrict" }),
     // The human label ("Impresora Cocina"), shown in the Impresoras management surface.
-    name: text("name").notNull(),
+    name: label("name").notNull(),
     transport: printTransport("transport").notNull(),
     // usb: the device serial; bluetooth: the MAC. The stable device id an agent matches to bind at run
     // time. NULL for network_tcp/cloud_poll. Unique per location when set (partial index).
-    localKey: text("local_key"),
+    localKey: label("local_key"),
     // network_tcp: the printer's local IP/host.
-    host: text("host"),
+    host: label("host"),
     // network_tcp: the ESC/POS port. DEFAULT 9100 (the deli-hardware ReceiptPrinter port); nullable so
     // a usb/bluetooth/cloud_poll printer need not carry it.
-    port: integer("port").default(9100),
+    port: count("port").default(9100),
     // cloud_poll: the printer's poll identifier (the vendor endpoint key).
-    pollId: text("poll_id"),
+    pollId: label("poll_id"),
     // cloud_poll: scrypt hash of the printer's poll token — the firmware authenticates its poll. Never
     // the plaintext.
-    pollTokenHash: text("poll_token_hash"),
+    pollTokenHash: label("poll_token_hash"),
     // What the printer prints (Slice B routing). DEFAULT 'station' so an existing printer stays inert.
     ticketScope: printTicketScope("ticket_scope").notNull().default("station"),
     // Layout settings (design 2026-09-14). Defaults match the TM-T88III: 80mm, 180 dpi, character
@@ -80,9 +81,9 @@ export const printers = pgTable(
     resolution: printResolution("resolution").notNull().default("180dpi"),
     characterSet: printCharacterSet("character_set").notNull().default("wpc1252"),
     // `ESC t n` is model/firmware-specific even when the byte-to-glyph encoding is the same.
-    characterTable: integer("character_table").notNull().default(16),
+    characterTable: count("character_table").notNull().default(16),
     // Deactivate via active := false, never a hard delete (print_jobs reference it).
-    active: boolean("active").notNull().default(true),
+    active: flag("active").notNull().default(true),
   },
-  (table) => [check("printers_character_table_ck", sql`${table.characterTable} between 0 and 255`)],
+  (t) => [check("printers_character_table_ck", sql`${t.characterTable} between 0 and 255`)],
 );

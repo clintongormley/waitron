@@ -1,4 +1,5 @@
-import { boolean, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { unique } from "drizzle-orm/pg-core";
+import { count, flag, id, label, table, tsString } from "./columns.js";
 
 /**
  * A venue-configured MANUAL service status a table may carry (design §2a) — "Bill requested",
@@ -7,21 +8,19 @@ import { boolean, integer, pgTable, text, timestamp, unique, uuid } from "drizzl
  * time via `dining_tables.status_id` (a single nullable FK, design §2b); this table is the
  * authorable SET.
  */
-export const tableServiceStatuses = pgTable(
+export const tableServiceStatuses = table(
   "table_service_statuses",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // The human label the floor plan shows ("Bill requested", "Needs cleaning"). Unique within a venue.
-    label: text("label").notNull(),
+    label: label("label").notNull(),
     // A floor-plan swatch — a hex ("#ef4444") or a short token ("amber"), app-validated on write
     // (validateStatusColor, apps/server/src/tables.ts). Stored as opaque text; no DB CHECK.
-    color: text("color").notNull(),
+    color: label("color").notNull(),
     // Author-controlled ordering in the editor + the floor-plan picker.
-    displayOrder: integer("display_order").notNull().default(0),
-    active: boolean("active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    displayOrder: count("display_order").notNull().default(0),
+    active: flag("active").notNull().default(true),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // No two statuses share a label within a venue (design §2a) — the unique `createStatus`/`updateStatus`

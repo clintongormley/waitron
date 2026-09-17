@@ -1,20 +1,8 @@
 import type { ModifierSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  integer,
-  jsonb,
-  numeric,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
 import { products } from "./catalogue.js";
+import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
 import { nodes } from "./nodes.js";
 import { tills } from "./tenants.js";
 
@@ -71,11 +59,11 @@ export type Doneness = (typeof DONENESS)[number];
  * settled|abandoned, with a Mode-P walk-up going open → settled directly and
  * never entering placed (design §3, §5).
  */
-export const workingOrders = pgTable(
+export const workingOrders = table(
   "working_orders",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tillId: uuid("till_id")
+    id: id("id").primaryKey().defaultRandom(),
+    tillId: id("till_id")
       .notNull()
       /* v8 ignore next */
       .references(() => tills.id, { onDelete: "restrict" }),
@@ -87,26 +75,26 @@ export const workingOrders = pgTable(
     // it. Bare column: the FK is the (node_id) →
     // nodes(id) declared in extraConfig below (mirroring `working_order_lines_order_fk`),
     // `.references()` here, so nothing for v8 to track.
-    nodeId: uuid("node_id"),
+    nodeId: id("node_id"),
     // The human-facing order number the counter parks against (park & retrieve, sub-project 7b):
     // allocated from working_order_counters per node, printed on the ticket, and typed back in to
     // retrieve the order at any register. NOT NULL — every working order gets one at open. No
     // UNIQUE here in this slice: the allocator (a later task) owns issuing distinct numbers per
     // node; this task lays the column the counter feeds.
-    orderNumber: integer("order_number").notNull(),
+    orderNumber: count("order_number").notNull(),
     // Optional operator label before issuance; filing freezes the table grouping here for receipts.
     // Walk-up orders without a label or table keep NULL.
-    label: text("label"),
+    label: label("label"),
     status: workingOrderStatus("status").notNull().default("open"),
-    openedAt: timestamp("opened_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
-    settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
+    openedAt: tsString("opened_at").notNull().defaultNow(),
+    settledAt: tsString("settled_at"),
     // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
     // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
     // tab-membership column — only this delivery link. BARE column: its FK
     // (delivery_table_id) → dining_tables(id) is hand-written in the mutual-FK
     // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
-    deliveryTableId: uuid("delivery_table_id"),
-    collectedAt: timestamp("collected_at", { withTimezone: true, mode: "string" }),
+    deliveryTableId: id("delivery_table_id"),
+    collectedAt: tsString("collected_at"),
   },
   (t) => [
     index("working_orders_tenant_status_idx").on(t.status),
@@ -142,41 +130,38 @@ export const workingOrders = pgTable(
  * `descriptions` is a locale→string map holding EXACTLY the venue's configured
  * locales (spec §9), checked by trigger against locations.invoice_locales.
  */
-export const workingOrderLines = pgTable(
+export const workingOrderLines = table(
   "working_order_lines",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    workingOrderId: uuid("working_order_id").notNull(),
-    lineNo: integer("line_no").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    workingOrderId: id("working_order_id").notNull(),
+    lineNo: count("line_no").notNull(),
     // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.
-    name: text("name").notNull(),
+    name: label("name").notNull(),
     // The priced product this draft line was built from — the pricing input described above.
     // NULLABLE (ordering modifiers, Task 2): a top-level dish line always carries a product, but a
     // CHILD MODIFIER line (parent_line_id set) has none — its price/name are snapshotted onto the
     // line by value, not resolved from a product. The FK is declared in extraConfig below
     // (null-permissive under MATCH SIMPLE, so a NULL product_id skips it and parent rows are
     // unaffected), so this column carries no `.references()` of its own.
-    productId: uuid("product_id"),
-    variantId: uuid("variant_id"),
+    productId: id("product_id"),
+    variantId: id("variant_id"),
     // Frozen variant staff name — plain text; null when the line names no variant.
-    variantName: text("variant_name"),
+    variantName: label("variant_name"),
     // Variant customer text holding EXACTLY the venue's configured invoice locales (spec §9), checked
     // by the working_order_lines_check_variant_locales trigger against locations.invoice_locales,
     // mirroring `descriptions`. Null = the variant has no customer name.
-    variantDescriptions: jsonb("variant_descriptions").$type<Record<string, string>>(),
+    variantDescriptions: json<Record<string, string>>("variant_descriptions"),
     // Frozen variant kitchen name.
-    variantKitchenName: text("variant_kitchen_name"),
-    kitchenName: text("kitchen_name"),
-    descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
-    modifierSnapshots: jsonb("modifier_snapshots")
-      .$type<ModifierSnapshot[]>()
-      .notNull()
-      .default([]),
+    variantKitchenName: label("variant_kitchen_name"),
+    kitchenName: label("kitchen_name"),
+    descriptions: json<Record<string, string>>("descriptions").notNull(),
+    modifierSnapshots: json<ModifierSnapshot[]>("modifier_snapshots").notNull().default([]),
     // Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.
-    unitName: jsonb("unit_name").$type<Record<string, string>>(),
-    unitPrecision: integer("unit_precision"),
-    quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
-    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+    unitName: json<Record<string, string>>("unit_name"),
+    unitPrecision: count("unit_precision"),
+    quantity: quantity("quantity").notNull(),
+    unitPrice: money("unit_price").notNull(),
     // The GROSS (VAT-inclusive) unit price LOCKED at add time (line-add snapshot, 7c). `unit_price`
     // above is the NET unit (informational); this is the GROSS unit the line was priced from — the
     // authoritative input the FILED sale_lines are rebuilt from without a re-price (priceLockedLines,
@@ -185,8 +170,8 @@ export const workingOrderLines = pgTable(
     // 3.33 ÷ 0.333 = 10.00 ≠ 9.99), and a weighed line is priced at weigh = add time (design §2,
     // Decision 1). Keeps the gross/net draft divergence intact: net unit here, gross line total in
     // `line_total`, gross UNIT here.
-    unitPriceGross: numeric("unit_price_gross", { precision: 12, scale: 2 }).notNull(),
-    vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
+    unitPriceGross: money("unit_price_gross").notNull(),
+    vatRate: rate("vat_rate").notNull(),
     // GROSS (VAT-inclusive) line total = unit gross × quantity — the customer-facing number, so the
     // held-orders list `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY
     // DIVERGES from the FILED `sale_lines.line_total` (sales.ts), which is the NET base the fiscal
@@ -195,16 +180,16 @@ export const workingOrderLines = pgTable(
     // from the locked snapshot columns above (`unit_price_gross` × `quantity`) via priceLockedLines,
     // NOT from a re-price — the gross/net divergence stays: gross unit and gross line total here,
     // the net base rebuilt for the filed `sale_lines`.
-    lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
+    lineTotal: money("line_total").notNull(),
     // Snapshotted analytics label (architecture §6), NOT a category_id or a catalogue FK — the
     // value is frozen onto the line so a stale catalogue is a freshness problem, never a
     // correctness one, exactly as `descriptions` above is snapshotted rather than referenced.
-    category: text("category"),
-    servedAt: timestamp("served_at", { withTimezone: true, mode: "string" }),
-    courseId: uuid("course_id"),
-    parentLineId: uuid("parent_line_id"),
-    optionGroupItemId: uuid("option_group_item_id"),
-    note: text("note"),
+    category: label("category"),
+    servedAt: tsString("served_at"),
+    courseId: id("course_id"),
+    parentLineId: id("parent_line_id"),
+    optionGroupItemId: id("option_group_item_id"),
+    note: label("note"),
     doneness: doneness("doneness"),
   },
   (t) => [

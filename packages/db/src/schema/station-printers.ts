@@ -1,4 +1,5 @@
-import { pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
+import { primaryKey } from "drizzle-orm/pg-core";
+import { id, table } from "./columns.js";
 
 /**
  * The KDS station → printer MAPPING (KDS-4 §2a, "Slice B" of kitchen printing). A many-to-many join:
@@ -11,15 +12,15 @@ import { pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
  * PRIMARY KEY (station_id, printer_id), no surrogate id — because a (station, printer) pair
  * is present at most once and attach/detach is add/remove of exactly that row.
  */
-export const stationPrinters = pgTable(
+export const stationPrinters = table(
   "station_printers",
   {
     // Bare column: the (station_id) → kitchen_stations(id)
     // FK is hand-written in the --custom migration.
-    stationId: uuid("station_id").notNull(),
+    stationId: id("station_id").notNull(),
     // Bare column: the (printer_id) → printers(id) FK
     // is hand-written in the --custom migration.
-    printerId: uuid("printer_id").notNull(),
+    printerId: id("printer_id").notNull(),
   },
   (t) => [
     primaryKey({

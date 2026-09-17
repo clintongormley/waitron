@@ -715,9 +715,31 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package**
+- [ ] **Step 2: Split the work by package** — `packages/db`'s table files done 2026-09-17
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
+
+**`packages/db` takes TWO pull requests, and the second one is the binary column.** The first
+converted all 33 of its table files with no behaviour change of any kind; the `print_jobs.payload`
+column keeps its local `bytea` custom type until the second. The reason is the measured blast
+radius, which is wider than the bullet list further up this step claims: on 2026-09-17,
+`grep -rn "\.payload" packages/printing/src apps/server/src packages/db/src` found the column read
+in `apps/server/src/receipt-print.test.ts` (about twenty sites), `till-api.reprint.test.ts`,
+`till-api.pg.test.ts`, `working-order.test.ts`, `working-order.pg.test.ts` and `print-api.test.ts`
+as well as the five files the bullets name — and `receipt-print.test.ts:755-756` compares the
+read-back value against `Buffer.from(...)` through `toContainEqual`, which is a behaviour assertion
+that flips rather than a type that needs widening. Putting that beside a 33-file mechanical
+conversion would bury it.
+
+**One of those bullets is WRONG, and the correction matters for the second pull request.** The
+bullet says converting the column deletes `new Uint8Array(job.payload)` at
+`packages/printing/src/runtime.ts:291`. It does not. That value never passes through drizzle's
+column mapping: `runtime.ts` reads the row with a raw SQL query through `tx.execute`, and
+`ClaimedJob.payload` is hand-declared as `Buffer` in that file. A raw query is mapped by the
+driver, not by the column, so that path keeps receiving a node `Buffer` whatever the column
+declares, and both the conversion and the three comment lines above it stay. Read on 2026-09-17
+with `grep -n "payload\|execute(" packages/printing/src/runtime.ts`, which prints the hand-declared
+type, the raw `select … returning print_jobs.payload`, and the conversion.
 
 - [ ] **Step 3: For each package, convert every table file**
 

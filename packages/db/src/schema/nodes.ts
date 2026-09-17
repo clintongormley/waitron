@@ -1,4 +1,4 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { id, json, label, table, ts } from "./columns.js";
 import type { Endorsement } from "@waitron/membership";
 import { locations } from "./tenants.js";
 
@@ -24,21 +24,21 @@ import { locations } from "./tenants.js";
  * to keep the reshape off every existing bare-node fixture (`seedNode`, `seedNodesForSifContention`,
  * `drain-fixtures`); pre-production, so a later NOT NULL tightening is free.
  */
-export const nodes = pgTable("nodes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  locationId: uuid("location_id")
+export const nodes = table("nodes", {
+  id: id("id").primaryKey().defaultRandom(),
+  locationId: id("location_id")
     .notNull()
     .references(() => locations.id),
-  name: text("name").notNull(),
-  filingModule: text("filing_module"),
-  taxModule: text("tax_module"),
+  name: label("name").notNull(),
+  filingModule: label("filing_module"),
+  taxModule: label("tax_module"),
   // The node's Ed25519 identity PUBLIC key (base64 SPKI DER), the membership trust anchor (design
   // §4). Nullable like filing_module/tax_module above: pre-production, and bare-node fixtures carry
   // none — a keyless node is simply not a trust anchor (readMembershipTrustSet filters nulls). The
   // PRIVATE half is sealed in the vault (apps/server/node-identity.ts), never here. This column rides
   // adoptVenue's verbatim node-row copy, so a mirror inherits the primary's anchor with no bundle
   // change. Set owner-role at provision (setNodePublicKey); app_user holds SELECT only.
-  publicKey: text("public_key"),
+  publicKey: label("public_key"),
   // The primary's ENDORSEMENT of this node's public_key (design §4/§6 R2): a signed
   // (nodeId, publicKey, endorsedBy, signature) vouching that lets other members trust a document
   // this node later signs, chaining back to setup. Public data — the exact sibling of `public_key`
@@ -46,6 +46,6 @@ export const nodes = pgTable("nodes", {
   // hold it). Nullable: only a reserved STANDBY carries one; a fresh primary is self-trusted and has
   // NULL. Set owner-role at adopt (insertReservedNodeTx); app_user holds SELECT only. Read at R3
   // promotion to attach to the minted membership document.
-  endorsement: jsonb("endorsement").$type<Endorsement>(),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  endorsement: json<Endorsement>("endorsement"),
+  createdAt: ts("created_at").notNull().defaultNow(),
 });

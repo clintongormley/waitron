@@ -1,4 +1,5 @@
-import { index, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { index, pgEnum, unique } from "drizzle-orm/pg-core";
+import { id, label, table, tsString } from "./columns.js";
 import { doneness } from "./orders.js";
 
 /**
@@ -27,40 +28,40 @@ export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready
  * `UNIQUE (working_order_line_id)` is one ticket item per line — also the guard that makes a
  * concurrent double-fire collide rather than duplicate.
  */
-export const ticketItems = pgTable(
+export const ticketItems = table(
   "ticket_items",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // The node the prep happens on — node-scoped, as order_prep was. Bare column: the
     // (node_id) → nodes(id) FK is hand-written in the --custom migration.
-    nodeId: uuid("node_id").notNull(),
+    nodeId: id("node_id").notNull(),
     // Denormalised grouping key — the per-station display groups a station's items by order. No FK: the
     // working_order_line_id FK below carries the integrity; this is a read convenience, snapshotted at fire.
-    workingOrderId: uuid("working_order_id").notNull(),
+    workingOrderId: id("working_order_id").notNull(),
     // The line this ticket item was fired from. Bare column: the (
     // working_order_line_id) → working_order_lines(id) FK is hand-written CASCADE in the
     // --custom migration, so a cancelled/abandoned line's item is removed with the line.
-    workingOrderLineId: uuid("working_order_line_id").notNull(),
+    workingOrderLineId: id("working_order_line_id").notNull(),
     // The station this line was ROUTED to, snapshotted at fire time (§2b) — re-pointing the product's
     // station later never moves an already-fired item. Bare column: the (
     // station_id) → kitchen_stations(id) FK is hand-written in the --custom migration.
-    stationId: uuid("station_id").notNull(),
+    stationId: id("station_id").notNull(),
     state: ticketState("state").notNull().default("queued"),
-    queuedAt: timestamp("queued_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
-    preparingAt: timestamp("preparing_at", { withTimezone: true, mode: "string" }),
-    readyAt: timestamp("ready_at", { withTimezone: true, mode: "string" }),
+    queuedAt: tsString("queued_at").notNull().defaultNow(),
+    preparingAt: tsString("preparing_at"),
+    readyAt: tsString("ready_at"),
     // The kitchen COURSE this item was fired to (KDS-2, §2b), SNAPSHOTTED from the line at fire time
     // (like `station_id` above) — re-pointing the product's course later never moves an already-fired
     // item. Bare NULLABLE uuid: the (course_id) → kitchen_courses(
     // id) FK is hand-written in the --custom migration. NULL = no course (fires earliest, spec §2b).
-    courseId: uuid("course_id"),
+    courseId: id("course_id"),
     // HELD vs FIRED (KDS-2, §2b). NULL = HELD: the item shows greyed on the station display and
     // CANNOT advance (`queued → preparing → ready` is gated on `fired_at IS NOT NULL`, §3c). Set =
     // FIRED (workable). The first course of an order auto-fires at fire time (`now()`); later courses
     // are held until `fireCourse` stamps them.
-    firedAt: timestamp("fired_at", { withTimezone: true, mode: "string" }),
-    awayAt: timestamp("away_at", { withTimezone: true, mode: "string" }),
-    note: text("note"),
+    firedAt: tsString("fired_at"),
+    awayAt: tsString("away_at"),
+    note: label("note"),
     doneness: doneness("doneness"),
   },
   (t) => [

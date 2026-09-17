@@ -85,9 +85,10 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  *
  * There is no house rule choosing between this shape and a `pgEnum`, and no two-family split to
  * apply: the repository carries both, declares more `pgEnum` types than checked text columns (a
- * `pgEnum` declaration looks like `packages/db/src/schema/tenants.ts:52`), and the checked text
- * columns it does carry were each taken for their own stated reason. Two of those reasons, and they
- * are different reasons: `packages/db/src/schema/series.ts:58-61`, because the permitted set depends
+ * `pgEnum` declaration looks like `receiptPrintMode` in `packages/db/src/schema/tenants.ts`), and
+ * the checked text columns it does carry were each taken for their own stated reason. Two of those
+ * reasons, and they are different reasons: `invoiceSeries.purpose` in
+ * `packages/db/src/schema/series.ts`, because the permitted set depends
  * on an unverified question to the accountant, so widening must cost one line of migration rather
  * than an `ALTER TYPE`; `packages/payments/src/schema/payments.ts:72-74`, because adding a value
  * later must not hit the one-transaction `ALTER TYPE` trap (its check is at `payments.ts:132-133`).

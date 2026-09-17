@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  time,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { count, id, label, table, timeOfDay, ts } from "./columns.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
@@ -68,18 +59,18 @@ export const drawerOpenPolicy = pgEnum("drawer_open_policy", ["gated", "open"]);
  * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
  * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
  */
-export const tenants = pgTable(
+export const tenants = table(
   "tenants",
   {
     // One row per database. id pinned to 1 and defaulted to it, the way `mirror_config` and
     // `node_membership` do it; `deployment` pins its id the same way but carries NO default, so it
     // is a precedent for the pin and not for the default. A second insert violates the PK and the
     // check.
-    id: integer("id").primaryKey().default(1),
-    country: text("country").notNull(),
-    taxId: text("tax_id").notNull(),
-    legalName: text("legal_name").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    id: count("id").primaryKey().default(1),
+    country: label("country").notNull(),
+    taxId: label("tax_id").notNull(),
+    legalName: label("legal_name").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [
     check("tenants_singleton_ck", sql`${t.id} = 1`),
@@ -117,21 +108,21 @@ export const tenants = pgTable(
  * landed #56). These columns are the source a caller will read them from — the
  * columns land now, that wiring is future.
  */
-export const locations = pgTable(
+export const locations = table(
   "locations",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    name: text("name").notNull(),
-    invoiceLocales: text("invoice_locales").array().notNull(),
-    operationDescription: text("operation_description").notNull(),
-    fiscalTerritory: text("fiscal_territory").notNull().default("ES-common"),
-    addressLine1: text("address_line1"),
-    addressLine2: text("address_line2"),
-    postalCode: text("postal_code"),
-    city: text("city"),
-    province: text("province"),
-    timeZone: text("time_zone").notNull().default(DEFAULT_TIME_ZONE),
-    dayCutover: time("day_cutover").notNull().default("06:00:00"),
+    id: id("id").primaryKey().defaultRandom(),
+    name: label("name").notNull(),
+    invoiceLocales: label("invoice_locales").array().notNull(),
+    operationDescription: label("operation_description").notNull(),
+    fiscalTerritory: label("fiscal_territory").notNull().default("ES-common"),
+    addressLine1: label("address_line1"),
+    addressLine2: label("address_line2"),
+    postalCode: label("postal_code"),
+    city: label("city"),
+    province: label("province"),
+    timeZone: label("time_zone").notNull().default(DEFAULT_TIME_ZONE),
+    dayCutover: timeOfDay("day_cutover").notNull().default("06:00:00"),
     // The per-venue pay-timing / service mode (design §3): WHEN payment happens (order vs collect) ×
     // WHEN the invoice issues (placing vs pay), collapsed to three meaningful modes by a single enum
     // (the degenerate fourth cell is structurally unrepresentable). `prepay` = pay+issue at order,
@@ -170,7 +161,7 @@ export const locations = pgTable(
     // hand-written in a custom migration rather than declared here as `.references()`, which keeps
     // this file from importing `catalogue.ts` and closing an import cycle. `catalogue_id` is
     // nullable, and a MATCH SIMPLE FK skips the check when it is NULL (no default).
-    catalogueId: uuid("catalogue_id"),
+    catalogueId: id("catalogue_id"),
   },
   (t) => [
     // cardinality(), NOT array_length(). array_length('{}', 1) is NULL, a CHECK
@@ -195,18 +186,18 @@ export const locations = pgTable(
  * live SIF identity per regime, so that join is 1:1; a till reaches its SIF
  * through the node that serves it.
  */
-export const tills = pgTable("tills", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  locationId: uuid("location_id")
+export const tills = table("tills", {
+  id: id("id").primaryKey().defaultRandom(),
+  locationId: id("location_id")
     .notNull()
     .references(() => locations.id),
-  name: text("name").notNull(),
+  name: label("name").notNull(),
   // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
   // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).
   // BARE uuid, NULLABLE (a till with no printer just doesn't print): the
   // (receipt_printer_id) → printers(id) FK is hand-written in the
   // paired --custom migration, exactly as `printers.agent_id` → print_agents is. MATCH SIMPLE skips
   // the FK check on a NULL.
-  receiptPrinterId: uuid("receipt_printer_id"),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  receiptPrinterId: id("receipt_printer_id"),
+  createdAt: ts("created_at").notNull().defaultNow(),
 });

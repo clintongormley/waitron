@@ -1,15 +1,5 @@
-import {
-  boolean,
-  foreignKey,
-  integer,
-  pgEnum,
-  pgTable,
-  smallint,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { foreignKey, pgEnum, unique } from "drizzle-orm/pg-core";
+import { count, flag, id, label, smallCount, table, tsString } from "./columns.js";
 import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations } from "./tenants.js";
 
@@ -31,35 +21,33 @@ export const floorTableShape = pgEnum("floor_table_shape", ["round", "square", "
  * hand-written in the mutual-FK migration (Task 2), because the reverse FK
  * (working_orders.delivery_table_id → dining_tables) would otherwise close a load-time import cycle.
  */
-export const diningTables = pgTable(
+export const diningTables = table(
   "dining_tables",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // Bare column: the FK is the (location_id) →
     // locations(id) declared below (mirroring working_orders_node_fk).
-    locationId: uuid("location_id").notNull(),
+    locationId: id("location_id").notNull(),
     // The human id shown on the floor ("12", "Terraza 3"). Unique within a venue (see below).
-    label: text("label").notNull(),
+    label: label("label").notNull(),
     // The floor-plan zone this table sits in (FP-1), or NULL for none. Replaces the former free-text
     // `zone` string with a reference to the authorable `floor_zones` config row. BARE column — its
     // (zone_id) → floor_zones(id) FK is hand-written
     // in the paired --custom migration (the same shape as status_id below), not `.references()` here.
-    zoneId: uuid("zone_id"),
+    zoneId: id("zone_id"),
     // Covers. Nullable.
-    capacity: integer("capacity"),
-    active: boolean("active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    capacity: count("capacity"),
+    active: flag("active").notNull().default(true),
+    createdAt: tsString("created_at").notNull().defaultNow(),
     // The open tab covering this table (design §2b). Nullable back-pointer; a set value points at an
     // `open` working order. BARE column — its (tab_id) → working_orders(id) FK is
     // hand-written in Task 2's custom migration (the mutual-FK cycle note above).
-    tabId: uuid("tab_id"),
-    statusId: uuid("status_id"),
-    posX: smallint("pos_x"),
-    posY: smallint("pos_y"),
+    tabId: id("tab_id"),
+    statusId: id("status_id"),
+    posX: smallCount("pos_x"),
+    posY: smallCount("pos_y"),
     shape: floorTableShape("shape"),
-    rotation: smallint("rotation"),
+    rotation: smallCount("rotation"),
   },
   (t) => [
     // No duplicate labels within a venue.

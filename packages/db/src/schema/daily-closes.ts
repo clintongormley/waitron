@@ -1,15 +1,5 @@
-import {
-  date,
-  foreignKey,
-  integer,
-  jsonb,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { foreignKey, primaryKey, unique } from "drizzle-orm/pg-core";
+import { count, day, id, json, label, table, ts } from "./columns.js";
 import { nodes } from "./nodes.js";
 
 /**
@@ -51,23 +41,23 @@ export interface DailyCloseSnapshot {
   };
 }
 
-export const dailyCloses = pgTable(
+export const dailyCloses = table(
   "daily_closes",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    nodeId: uuid("node_id").notNull(),
-    businessDay: date("business_day").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    nodeId: id("node_id").notNull(),
+    businessDay: day("business_day").notNull(),
     // 1-based per node, monotonic — the chain position.
-    sequenceNo: integer("sequence_no").notNull(),
+    sequenceNo: count("sequence_no").notNull(),
     // The predecessor's entry_hash ("" for the genesis close).
-    prevEntryHash: text("prev_entry_hash").notNull(),
+    prevEntryHash: label("prev_entry_hash").notNull(),
     // SHA-256(canonical(identity ‖ snapshot) ‖ prev_entry_hash), uppercase hex — set in a later task.
-    entryHash: text("entry_hash").notNull(),
-    closedAt: timestamp("closed_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    entryHash: label("entry_hash").notNull(),
+    closedAt: ts("closed_at").notNull().defaultNow(),
     // The counting actor (identity person id). Plain uuid, no FK: the person schema is a later slice
     // (design D3), and the close must not depend on it.
-    closedBy: uuid("closed_by").notNull(),
-    snapshot: jsonb("snapshot").$type<DailyCloseSnapshot>().notNull(),
+    closedBy: id("closed_by").notNull(),
+    snapshot: json<DailyCloseSnapshot>("snapshot").notNull(),
   },
   (t) => [
     // A close names a node that exists, mirroring working_order_counters_node_fk.
@@ -83,12 +73,12 @@ export const dailyCloses = pgTable(
   ],
 );
 
-export const dailyCloseChain = pgTable(
+export const dailyCloseChain = table(
   "daily_close_chain",
   {
-    nodeId: uuid("node_id").notNull(),
-    sequenceNo: integer("sequence_no").notNull().default(0),
-    lastEntryHash: text("last_entry_hash").notNull().default(""),
+    nodeId: id("node_id").notNull(),
+    sequenceNo: count("sequence_no").notNull().default(0),
+    lastEntryHash: label("last_entry_hash").notNull().default(""),
   },
   (t) => [
     primaryKey({ columns: [t.nodeId], name: "daily_close_chain_pk" }),

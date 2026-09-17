@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, integer, jsonb, pgTable, timestamp } from "drizzle-orm/pg-core";
+import { check } from "drizzle-orm/pg-core";
+import { count, json, table, tsString } from "./columns.js";
 
 /**
  * The owner-authored NON-FISCAL receipt trim (SP-B4; design §9). The trim (`headerSubtitle` /
@@ -12,21 +13,19 @@ import { check, integer, jsonb, pgTable, timestamp } from "drizzle-orm/pg-core";
  * DEFAULT_RECEIPT rather than seeding one (no backfill; the database is recreated pre-production,
  * CLAUDE.md §5).
  *
- * `receipt` is PLAIN jsonb, deliberately NOT `.$type<>()`-annotated with the `@waitron/layouts`
- * `ReceiptConfig`: `@waitron/layouts` depends on `@waitron/db`, so importing its types here would be a
- * circular dependency. The service validates the shape on write (`validateReceiptConfig`); the
+ * `receipt` is PLAIN jsonb, deliberately carrying no `@waitron/layouts` `ReceiptConfig` type:
+ * `@waitron/layouts` depends on `@waitron/db`, so importing its types here would be a circular
+ * dependency. The service validates the shape on write (`validateReceiptConfig`); the
  * database stores opaque jsonb. Same rationale — and same precedent — as tenant_themes.
  */
-export const tenantReceipts = pgTable(
+export const tenantReceipts = table(
   "tenant_receipts",
   {
-    id: integer("id").primaryKey().notNull().default(1),
-    receipt: jsonb("receipt").notNull(),
+    id: count("id").primaryKey().notNull().default(1),
+    receipt: json("receipt").notNull(),
     // Timestamp `mode: "string"` follows the tenant_themes / devices precedent (an inert Drizzle
     // read-type choice, not a column-type difference).
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    updatedAt: tsString("updated_at").notNull().defaultNow(),
   },
   (t) => [check("tenant_receipts_singleton_ck", sql`${t.id} = 1`)],
 );

@@ -1,4 +1,5 @@
-import { check, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check } from "drizzle-orm/pg-core";
+import { count, id, label, table, ts } from "./columns.js";
 import { sql } from "drizzle-orm";
 
 /**
@@ -15,20 +16,20 @@ import { sql } from "drizzle-orm";
  * that fails against any database that already ran the baseline. The accessors are exported from
  * the package barrel (`../index.ts`, via `../mirror-config.ts`); that surface is unaffected.
  */
-export const mirrorConfig = pgTable(
+export const mirrorConfig = table(
   "mirror_config",
   {
-    id: integer("id").primaryKey().notNull().default(1),
-    relayUrl: text("relay_url").notNull(),
-    boxHostname: text("box_hostname").notNull(),
-    boxCaPem: text("box_ca_pem").notNull(),
+    id: count("id").primaryKey().notNull().default(1),
+    relayUrl: label("relay_url").notNull(),
+    boxHostname: label("box_hostname").notNull(),
+    boxCaPem: label("box_ca_pem").notNull(),
     // The nodeId of the PRIMARY this mirror pulls from — its sync ORIGIN, distinct from this node's
     // OWN identity (config.till.nodeId). Split out here (membership R3a) so the mirror can run under its
     // own id as SUBSCRIBER while still applying the primary's rows (origin = this value). Written
     // owner-role at adopt = designated.nodeId (the primary's). NOT NULL: every mirror has exactly one
     // origin; the table is empty until adopt, so the ADD COLUMN NOT NULL is safe pre-production.
-    originNodeId: uuid("origin_node_id").notNull(),
-    adoptedAt: timestamp("adopted_at", { withTimezone: true }).notNull().defaultNow(),
+    originNodeId: id("origin_node_id").notNull(),
+    adoptedAt: ts("adopted_at").notNull().defaultNow(),
   },
   (t) => [check("mirror_config_singleton_ck", sql`${t.id} = 1`)],
 );
