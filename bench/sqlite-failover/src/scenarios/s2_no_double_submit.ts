@@ -72,9 +72,10 @@ function submissionKey(nodeId: string, secuencia: number): string {
  *
  * It also ACCEPTS the repeat, which the real endpoint does not: AEAT answers error 3000 on a record
  * it already holds, and `resolveEstadoEfectivo` (`packages/verifactu/src/xml/parse-suministro.ts`)
- * reads that as filed. So a repeat this stub records is a second SUBMISSION; whether it would be a
- * second FILING is what a stub that refuses a repeat would measure — README → "What the FAIL means
- * against the real system".
+ * reads that as filed. So a repeat this stub records is a second SUBMISSION, not a second FILING:
+ * against a real AEAT a same-identity repeat is refused. A stub that instead REFUSED a repeat would
+ * measure nothing here — idempotent by construction, it can only ever print zero. See README →
+ * "What the FAIL means against the real system".
  *
  * `refuseOnce` is the one deliberate throw, used by Part C to put a chain in the drain's blocked
  * set; it fires at most once so the retried submission can succeed.

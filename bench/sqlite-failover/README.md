@@ -132,8 +132,9 @@ would cost. Neither changes the measurement.
   holds a row `enviando` cannot come from a sender that fenced first — provided fencing waits for the
   in-flight submission to finish or roll back, which the topology design does not yet state.
 
-What survives both is Part D's shape, in a different costume. The receiver can hold a copy of the
-sender's row with an out-of-date state without any second ship: the Litestream stream carries
+Part D's shape has a second route the rig does not drive, and it lands in the same benign place. The
+receiver can hold a copy of the sender's row with an out-of-date state without any second ship: the
+Litestream stream carries
 `envios` at whatever state each row had when it was streamed, so a sender that files a record and
 dies before that update streams leaves the promoted receiver holding it `pendiente`. The tail ship
 sends what the receiver LACKS, so it never corrects that row. Against the real endpoint that is one
@@ -141,11 +142,34 @@ refused duplicate submission per such row. This rig does not measure it: S2 mode
 stale copy as coming from an earlier partial ship, and S0 (plan Task 7) is where the stream is
 driven.
 
-Two things this asks of the rig, neither done on this branch: the stub should answer a repeat the way
-AEAT does, so that a FAIL from S2 means a double filing the real endpoint would NOT refuse (whether
-any part still fails under such a stub has not been run); and the topology design should state
-"fence before ship, and fencing waits for the in-flight submission" as the rule the tail shipper
-relies on. Until the first is done, S2's exit code records the MODEL's double submission and is not
+**On the first follow-up this section first named — "make the stub answer a repeat the way AEAT
+does" — a second look on 2026-09-17 found it would measure nothing, and it is dropped.** A stub that
+models error 3000 is idempotent BY CONSTRUCTION: it can never record a second FILING for a repeated
+identity, so running S2 under it prints zero whichever way the loop behaves — a measurement taken
+where both answers look alike (`CLAUDE.md` §1), not a probe. Its only effect would be to reclassify
+Part D's and Part E's doubles from "submitted twice" to "refused duplicate", which is the analytic
+point above, not something a run establishes.
+
+No run is available because EVERY double this rig finds is the SAME invoice identity filed twice —
+the tail ship and the Litestream stream each carry a record verbatim, same `node_id`, same
+`secuencia` — and a real AEAT refuses a same-identity duplicate. Two shapes, and only these two,
+survive that reasoning, and neither is a double filing a run here could show:
+
+- **The stuck `enviando` row** (Part E's second half), which IS measured above. A drain claims only
+  `pendiente` rows, so it never re-presents a stuck `enviando` row to AEAT at all; AEAT's idempotency
+  is irrelevant to it. What removes it is fencing the old primary and resolving its in-flight
+  submission before the tail ships (topology §5.2, owner decision 2026-09-17) — the row is a fiscal
+  record that silently never files, not a second filing.
+- **A DIFFERENT identity for one economic sale** — an invoice number reissued under re-keying. AEAT
+  does not refuse that, because the identity triple differs, so it is the one genuine double-filing
+  shape. S2 does not model it; fresh-series-on-restore
+  (`docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`) is what guards it,
+  and measuring it would be its own scenario, not a change to S2.
+
+The second follow-up is done on this branch: the topology design now states that the old primary is
+decommissioned (fenced) before the secondary is promoted, and that fencing must resolve an in-flight
+submission before the tail is shipped (§5.2). Until that is the operating procedure, S2's exit code
+records the MODEL's same-identity double SUBMISSION — a wasted call against a real AEAT — and is not
 evidence that the product would file a record twice.
 
 S2 drives the rig's model of the submission state machine — `drainPass`, `applyTail`, `diffTail` and

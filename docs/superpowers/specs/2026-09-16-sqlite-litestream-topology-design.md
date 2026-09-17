@@ -351,6 +351,23 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
      paused (the `blockedSifIds` mechanism `claimBatch` already takes). The append-only
      `registros_facturacion`/`cadenas` rows are unaffected — they are insert-only and idempotent.
 
+   **Fence before ship: decommission the old primary, and resolve its in-flight submissions, before
+   the tail moves (owner decision, 2026-09-17).** Terminal-state-wins narrows a *same-identity*
+   double submission to a refused duplicate — a real AEAT answers error 3000 and our drain records
+   that as filed (`packages/verifactu/src/xml/parse-suministro.ts`, `resolveEstadoEfectivo`) — so it
+   is not by itself a double *filing*. It does not remove two shapes the SQLite failover prototype
+   surfaced (scenario S2, `bench/sqlite-failover/README.md` → "What the FAIL means against the real
+   system"). (a) **The operating procedure is decommission-then-promote:** the operator takes the old
+   primary down before the secondary is promoted, so the two never file concurrently. §5.3's split
+   brain is the case where that assumption is violated — the box alive but unreachable — and it is the
+   *only* case in which a receiver drains a chain while its live owner drains the same chain. (b) **A
+   consequence this prototype surfaces, for review:** fencing must resolve any submission the old
+   primary had IN FLIGHT (`enviando`) — carrying it to a terminal state or returning the row to
+   `pendiente` — *before* the tail is shipped. `applyTail` copies a shipped `enviando` verbatim, and a
+   drain claims only `pendiente` rows, so a shipped `enviando` is never re-presented to AEAT and
+   STICKS on the receiver: not a double filing, but a fiscal row that silently never files. That is
+   why "fence, then ship" is the tail shipper's precondition rather than an afterthought.
+
    For the ledger tables the owner updates in place (`payments`, `sales`, `cadenas`, the close chain)
    the sender's version wins for sender-owned rows, since the receiver's copy of them is by construction
    older. The one natural-key clash that can remain — a supplier invoice number typed on both nodes — is

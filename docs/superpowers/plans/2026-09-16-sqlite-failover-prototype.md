@@ -272,9 +272,13 @@ The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins r
 >    that FAIL was revised down — the real endpoint refuses a duplicate (error 3000) and the real
 >    drain reads that as filed, and the designed order fences the old primary before it ships, so the
 >    sender never files after shipping as Parts B, D and E's second half have it. README → "What the
->    FAIL means against the real system". Two follow-ups it leaves, neither on this branch: a stub
->    that answers a repeat the way AEAT does, and the fence-before-ship rule written into the
->    topology design.
+>    FAIL means against the real system". **Refined again the same day:** the first follow-up first
+>    named there — "a stub that answers a repeat the way AEAT does" — was dropped as a measurement
+>    that cannot fail. A stub modelling error 3000 is idempotent by construction, so it can only ever
+>    print zero; every double this rig finds is the SAME invoice identity, which a real AEAT refuses.
+>    The one genuine double-filing shape is a DIFFERENT identity for one sale (re-keying), which S2
+>    does not model and fresh-series-on-restore guards. The second follow-up — fence before ship,
+>    resolving in-flight submissions first — is written into topology design §5.2 on this branch.
 
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (complete `drainPass` terminal-state handling and `applyTail`'s `envios` terminal-state-wins branch)
@@ -438,9 +442,12 @@ export default async function ({ startStore }) {
 > whether the same shape arises here is a question to answer while building this task — S2
 > settles it neither way. `bench/sqlite-failover/README.md` → "What S2 measures, and what it does
 > not" has the measurement, and its "What the FAIL means against the real system" section has the
-> owner's revision of what a double here costs. The version of that shape this task CAN put on the
-> cloud, and S2 cannot, is the stream-lag one: the box files a record after streaming it and dies
-> before the `envios` update streams, so the promoted cloud holds it `pendiente`. Measure it here.
+> owner's revision of what a double here costs. The stream-lag route — the box files a record after
+> streaming it and dies before the `envios` update streams, so the promoted cloud holds it
+> `pendiente` and its drain re-submits — is worth showing here with the REAL stream rather than a
+> modelled ship, but note what it is: the same SAME-IDENTITY duplicate S2 finds, which a real AEAT
+> refuses (error 3000, read as filed). It is a mechanism to demonstrate, not a new danger, and the
+> model's stub would score it as a double it is not.
 
 **Files:**
 - Create: `bench/sqlite-failover/src/scenarios/s0_happy_loop.ts`
