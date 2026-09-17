@@ -2213,8 +2213,14 @@ that used to gate it. The feasibility reads are in
 (the regulation names no database privilege; Litestream covers standby and rejoin but not a returned
 box's ledger tail) and the architecture in
 [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md),
-whose §11 is the build order and whose §12.2 is the one gate still standing — a throwaway failover-loop
-prototype, before any rewrite. Nothing is built yet. The
+whose §11 is the build order and whose §12.2 is the one gate still standing — a throwaway
+failover-loop prototype. **That gate moved on 2026-09-16: it now runs before SLICE 2, not before
+slice 1**, because all five of the risks it checks live in slice 2 or later and slice 1 has no
+streaming, no store and no promotion (§12.2 carries the risk-to-slice table). Slice 1 has its own
+[spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
+[plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
+prototype's first task — the `bench/sqlite-failover` harness — is built, and the rest of its plan is
+parked until slice 2. The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
 paid offering. Remote-access bot protection (Cloudflare Turnstile on internet-facing login and
 recovery, never in the local-only product) belongs to that offering.

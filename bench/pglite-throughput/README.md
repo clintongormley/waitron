@@ -31,12 +31,17 @@ unpinned `npm install`.
 It defines no `test` script (only `bench` and `typecheck`), and it contains no `*.test.ts` file.
 Both are deliberate and independent: root `pnpm test` ends in `pnpm -r test`, which skips workspace
 members without a `test` script rather than failing on them, and even if a `test` script were
-added by reflex later, Vitest's default include pattern would match nothing here. This keeps a
-20-second, Docker-dependent benchmark out of CI's test shards and the pre-push hook permanently.
+added by reflex later, Vitest's default include pattern would match nothing here. That keeps the
+20-second, Docker-dependent BENCHMARK out of CI's test shards and the pre-push hook — not the
+package, which is a workspace member the shard filters and the root guards see by name, and is
+listed in `PACKAGES_WITHOUT_TESTS` and placed in `LIGHT_B_PACKAGES` (`scripts/changed-scope.mjs`) —
+and it is that `LIGHT_B_PACKAGES` membership that subtracts it from `test-light-a`'s selection in
+`.github/workflows/ci.yml`, because `scripts/ci-workflow.test.mjs` asserts `test-light-a`'s
+exclusions are exactly the own-shard packages plus LIGHT_B.
 
 Root `pnpm test` also runs `vitest run` at the repository root first, but that project cannot reach
-here either: its `include` is `["scripts/**/*.test.mjs"]` (see the root `vitest.config.ts`), which
-does not reach `bench/`.
+here either: its `include` is `["scripts/**/*.test.mjs", "scripts/**/*.test.ts"]` (see the root
+`vitest.config.ts`), which does not reach `bench/`.
 
 ## Single-file constraint
 

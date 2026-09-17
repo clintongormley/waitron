@@ -139,6 +139,9 @@ hook, or how tests are scheduled:
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage. Run additional consumer tests locally when they help investigate shared behavior.
+- **Adding a workspace package fails three root guards until it is named in the shard lists**, and
+  one of the three CRASHES rather than asserting, so the message names a missing `vitest.config.ts`
+  and reads like a broken checkout. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
   it.** Grep for tests that pin the list, run those guards, and verify CI selects every affected consumer.
 - **After a rebase + `--force-with-lease`, the hook can scope the WRONG package** (mechanism

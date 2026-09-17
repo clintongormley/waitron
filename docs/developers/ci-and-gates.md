@@ -258,6 +258,31 @@ shared wire body with `toEqual`. SP-2b's `/hello` change passed `test sync-api` 
 broke two boot suites for two tasks. A focused pass proves only the selected cases; CI supplies
 package-wide coverage. Run additional consumer tests locally when useful for investigating shared behavior.
 
+### Adding a workspace package breaks the root guards until it is wired in
+
+Three guards in the root Vitest project read workspace members BY NAME, and the ungated `lint` job and
+`.husky/pre-push` both run that project on every non-documentation push. So a new member that is not
+wired in fails the hook, on a branch that may have nothing else wrong with it.
+
+Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
+taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
+the three named below; wired, the root project is green. The three:
+
+- `scripts/changed-scope.test.mjs` — a member declaring no `test:coverage` script and not named in
+  `PACKAGES_WITHOUT_TESTS` is a mistake, and this fails on it.
+- `scripts/ci-workflow.test.mjs` — the shards must select every member exactly once; an unlisted
+  member lands in both light bins.
+- `scripts/coverage-thresholds.test.ts` — this one does not fail, it CRASHES, with `ENOENT` opening a
+  `vitest.config.ts` the new package does not have. A crash rather than an assertion is worth knowing,
+  because the message names a missing file and reads like a broken checkout rather than a missing
+  registration.
+
+What to wire, for an ordinary package with tests: a `vitest.config.ts` carrying the coverage bar the
+package is assigned (which bar is pinned by `scripts/coverage-thresholds.test.ts`), and the shard lists
+in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`. A package that declares no
+`test:coverage` script at all — today only the two `bench/` members — additionally goes in
+`PACKAGES_WITHOUT_TESTS`.
+
 ### A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides it
 
 Adding a member to `migrations.manifest.json`, `GENERIC_PACKAGES` or `OWN_SHARD_PACKAGES` left

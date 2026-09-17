@@ -1400,6 +1400,7 @@ jobs:
           set -- "$@" --filter "!@waitron/print-agent-app"
           set -- "$@" --filter "!@waitron/verifactu"
           set -- "$@" --filter "!@waitron/bench-pglite"
+          set -- "$@" --filter "!@waitron/bench-sqlite-failover"
           set -- "$@" --filter "!@waitron/diagnostics"
           set -- "$@" --filter "!@waitron/sync-enrolment"
           set -- "$@" --filter "!@waitron/composition"

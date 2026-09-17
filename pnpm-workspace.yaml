@@ -2,8 +2,13 @@ packages:
   - "apps/*"
   - "packages/*"
   # Benchmarks and spikes. Workspace members so they resolve the same pinned
-  # dependency versions the product packages do — a throughput number measured
-  # against a different PGlite build than the one we ship is not evidence about
-  # the thing we ship. They deliberately define no `test` script, so `pnpm -r
-  # test` (and therefore CI's test-heavy/test-light shards) skips them.
+  # dependency versions the product packages do — a number measured against a
+  # different build of a dependency than the one we ship is not evidence about
+  # the thing we ship. Each deliberately defines no `test` script, so `pnpm -r
+  # test` skips it. A shard likewise RUNS nothing for them — the guards key off
+  # `test:coverage`, not `test`, and a selection of only these exits 0 having run
+  # nothing — but that does not drop them from the shards' SELECTION or hide them
+  # from the root guards, which read every member by name. So each is listed in
+  # PACKAGES_WITHOUT_TESTS (scripts/changed-scope.mjs) and subtracted from a
+  # light bin in .github/workflows/ci.yml.
   - "bench/*"

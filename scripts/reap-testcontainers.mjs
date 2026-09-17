@@ -13,8 +13,9 @@ import { execFileSync } from "node:child_process";
 // script is the compensating reaper (the manual `pnpm reap` before local database tests).
 //
 // SAFETY — two guards, because a running orphan and a running IN-USE container look identical:
-//  1. LABEL. It removes only containers carrying `com.waitron.reapable` (stamped by
-//     `startPostgresContainer`, packages/db), never the generic `org.testcontainers` label that every
+//  1. LABEL. It removes only containers carrying `com.waitron.reapable` (stamped by every helper in
+//     this repo that starts a container — `startPostgresContainer` in packages/db, and `startStore`
+//     in bench/sqlite-failover), never the generic `org.testcontainers` label that every
 //     testcontainers container in every project shares. So another repo's containers — and this repo's
 //     compose dev DB, which is not a testcontainer at all — are out of scope.
 //  2. AGE. Of those, it removes only ones older than STALE_CONTAINER_MS. A container younger than that

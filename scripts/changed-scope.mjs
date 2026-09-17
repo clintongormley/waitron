@@ -327,6 +327,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/print-agent-app",
   "@waitron/verifactu",
   "@waitron/bench-pglite",
+  "@waitron/bench-sqlite-failover",
   "@waitron/diagnostics",
   "@waitron/sync-enrolment",
   "@waitron/composition",
@@ -340,14 +341,14 @@ export const LIGHT_B_PACKAGES = [
  * and the guard in scripts/changed-packages.mjs lets a selection of nothing but these pass. A
  * member NOT listed here that declares no such script is a mistake, and that guard fails on it.
  *
- * `@waitron/bench-pglite` is the only one today, and `changed-scope.test.mjs` pins that against the
- * real workspace in both directions rather than leaving it to be remembered:
- * bench/pglite-throughput/README.md records that it defines no `test` script and holds no
- * `*.test.ts`, both deliberate. Measured in this workspace on 2026-08-01:
- * `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the selected packages
- * has a "test:coverage" script` on STDOUT and exits **0**.
+ * Both entries are bench members, and each README records that its package defines no `test`
+ * script and holds no `*.test.ts`, both deliberate. `changed-scope.test.mjs` pins this list against
+ * the real workspace in both directions rather than leaving it to be remembered. What a listed
+ * member does to a scoped run, measured in this workspace — `@waitron/bench-pglite` on 2026-08-01,
+ * `@waitron/bench-sqlite-failover` on 2026-09-16: `pnpm --filter "...<member>" test:coverage`
+ * prints `None of the selected packages has a "test:coverage" script` on STDOUT and exits **0**.
  */
-export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
+export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite", "@waitron/bench-sqlite-failover"];
 
 /** A gate that fires when one named package is in the resolved scope. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);

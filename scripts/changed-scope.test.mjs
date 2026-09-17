@@ -355,10 +355,14 @@ describe("gateOutputs", () => {
   });
 
   // A package with no `test:coverage` script gives its light shard nothing to do — it is subtracted
-  // by pnpm rather than by a filter, but the shard is just as empty. @waitron/bench-pglite is in bin
-  // B, so this also proves the testless one does not switch light_b on by itself. Measured on
-  // 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the selected
-  // packages has a "test:coverage" script` and exits 0.
+  // by pnpm rather than by a filter, but the shard is just as empty. Both members of
+  // PACKAGES_WITHOUT_TESTS — @waitron/bench-pglite and @waitron/bench-sqlite-failover — are in bin B
+  // today, so this also proves they do not switch light_b on by themselves. Nothing enforces that
+  // they stay in bin B, and this test would not notice if one moved to bin A: a testless package
+  // leaves light_a false either way. Measured on 2026-08-01:
+  // `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the selected packages
+  // has a "test:coverage" script` and exits 0; the same on 2026-09-16 for
+  // `pnpm --filter "...@waitron/bench-sqlite-failover" test:coverage`.
   it("does not switch a light gate on when its bin's only in-scope package declares no tests", () => {
     const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS)));
     expect(g.light_a).toBe("false");
@@ -366,8 +370,8 @@ describe("gateOutputs", () => {
   });
 
   it("runs a light gate when a testful package joins a test-less one in the SAME bin", () => {
-    // @waitron/bench-pglite (no tests) and @waitron/identity both live in bin B: the testless one
-    // must not suppress the testful one.
+    // The testless members and @waitron/identity all live in bin B: a testless member must not
+    // suppress a testful one.
     const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/identity")));
     expect(g.light_a).toBe("false");
     expect(g.light_b).toBe("true");
