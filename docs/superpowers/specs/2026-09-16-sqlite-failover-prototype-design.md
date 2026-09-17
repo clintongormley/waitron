@@ -174,9 +174,11 @@ to satisfy it. The scenarios map one-to-one onto topology §12.2's obligations.
   filter, so a shipped record can be submitted before the ship is confirmed; a retry must not resubmit.
 - **Setup:** A ships part of its tail; the receiver's drain runs and "submits" (the stub) some of those
   records and marks their `envios` `enviado`; the ship is then retried in full (a partial/retried ship).
-- **Assert:** no `(node_id, secuencia)` is submitted twice (the idempotency stub never fires); the
-  apply is **terminal-state-wins** for `envios` (an `enviado` row is never regressed to `pendiente` by
-  the re-shipped older version); the ship for a chain runs with that chain paused in the drain's blocked
+- **Assert:** no `(node_id, secuencia)` is submitted twice (the shared filing ledger records no identity twice; the stub as landed records repeats rather than throwing on them); the
+  apply is **terminal-state-wins** for `envios`, in both of its directions — an `enviado` row is never
+  regressed to `pendiente` by the re-shipped older version, and a row the receiver still holds
+  `pendiente` adopts the sender's terminal state (2026-09-17: the first direction was already
+  satisfied before any change; the second is the one S2 shows the risk in); the ship for a chain runs with that chain paused in the drain's blocked
   set. A control: with terminal-state-wins removed, the rig reproduces the double submission.
   *(2026-09-17, as landed: all three are measured, the blocked-set one included, and S2's verdict is
   FAIL — a ship recomputed against a refreshed view of the receiver files a record twice.
@@ -187,8 +189,9 @@ to satisfy it. The scenarios map one-to-one onto topology §12.2's obligations.
   FAIL means against the real system".)*
 - **Failure means:** the design can double-file to the tax agency — the single most serious possible
   finding; stop and tell the owner immediately. *(2026-09-17: read with the note above — a FAIL from
-  the stub as landed is a double SUBMISSION, and only a stub that refuses a repeat the way AEAT does
-  can report a double FILING.)*
+  the stub as landed is a double SUBMISSION. A stub that refused a repeat the way AEAT does could
+  not report a double FILING either, since it would never record the second one; what it would do is
+  reclassify these doubles as refused duplicates, which is an argument rather than a measurement.)*
 
 ### S3 — copied replica equals direct stream (deletions propagate)
 
@@ -295,7 +298,14 @@ exists to produce.
 - **A critical-scenario failure STOPS the campaign.** If S0, S1, S2, S3 or S6 fails (the fiscal-safety
   and restorability scenarios), the loop's premise is broken and continuing slice 1 would build on a
   hole. The runner writes a loud summary to the campaign log and `touch`es the STOP sentinel, leaving
-  the owner a `needs-owner-review` note — it does **not** grind on slice-1 items. This is the
+  the owner a `needs-owner-review` note — it does **not** grind on slice-1 items. *(2026-09-17, after
+  S2 did exactly this: the stop is what the exit code buys, and the note is where the campaign hands
+  over. Whether the premise is actually broken is the owner's reading of the result, not something the
+  exit code carries — for S2 the owner read it as a wasted call against the real endpoint rather than
+  a hole. Two corrections to the sentence above, which predates them: the gate moved on 2026-09-16 to
+  run before SLICE 2, so slice 1 was never what it covered and slice 1's own work carried on for that
+  reason rather than because of this reading; and the campaign's prototype tasks 5-10 are still
+  stopped.)* This is the
   prototype's most important interaction with the rest of the queue.
 - **A non-critical failure (S4 latency/WAL, S5 handled-clash) is a recorded caveat**, and the campaign
   continues. S4 in particular is expected to *produce numbers*, not pass/fail.
@@ -310,7 +320,9 @@ exists to produce.
 - The scenarios **are** the tests — each asserts its invariant and each carries a control that
   reproduces the opposite result (S1 without the CAS, S2 without terminal-state-wins, S3 without
   deletion propagation), so a green scenario is not a measurement taken where both answers look alike
-  (`CLAUDE.md` §1).
+  (`CLAUDE.md` §1). *(2026-09-17: S2 added a third shape. A part whose outcome IS the finding — its
+  Part D and Part E's second half — measures and feeds the verdict instead of asserting, so the
+  verdict is read off the measurement rather than off a passing assertion.)*
 - Run: `pnpm --filter @waitron/bench-sqlite-failover scenarios` (Docker up). Prints the table, writes
   the results note's data, exits non-zero only on a critical failure.
 - Concurrency: the rig runs its own containers (a store, possibly Litestream) and several node

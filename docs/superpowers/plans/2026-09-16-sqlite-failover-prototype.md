@@ -4,7 +4,7 @@
 
 **Goal:** Build the throwaway rig that proves the SQLite + Litestream box→store→promote→return-with-a-tail→ship→rejoin loop holds together fiscally, before slice 1 rewrites the storage layer.
 
-**Architecture:** A private workspace package `bench/sqlite-failover`, modelled on `bench/pglite-throughput` (Docker-dependent, run by hand; no scenario ever runs in CI). Seven scenarios (S0–S6) each assert one invariant from the topology design's gate-2 obligations and each carry a control that reproduces the opposite result. Four scenarios (S1, S2, S5, S6) exercise our own logic over `node:sqlite` and a local MinIO store with no Litestream, so they are deterministic and need no process orchestration; three (S0, S3, S4) drive the real Litestream binary. The rig stands up a **minimal model** of the fiscal ledger — it does not import `packages/fiscal-verifactu` — and each model piece cites the real table it mirrors.
+**Architecture:** A private workspace package `bench/sqlite-failover`, modelled on `bench/pglite-throughput` (Docker-dependent, run by hand; no scenario ever runs in CI). Seven scenarios (S0–S6) each assert one invariant from the topology design's gate-2 obligations and each carry a control that reproduces the opposite result. Four scenarios (S1, S2, S5, S6) exercise our own logic over `node:sqlite` with no Litestream, so they are deterministic and need no process orchestration — three of them against a local MinIO store, while S2 needs no store at all; three (S0, S3, S4) drive the real Litestream binary. The rig stands up a **minimal model** of the fiscal ledger — it does not import `packages/fiscal-verifactu` — and each model piece cites the real table it mirrors.
 
 **Tech Stack:** Node 26 (`node:sqlite` built-in; native `.ts` imports), `@aws-sdk/client-s3`, `testcontainers` (MinIO), the real `litestream` binary pinned to v0.5.17. No test framework — scenarios are plain scripts using `node:assert`, run via `node`, aggregated by a `scenarios` runner, exactly as the pglite bench's `bench` script works.
 
@@ -274,11 +274,15 @@ The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins r
 >    sender never files after shipping as Parts B, D and E's second half have it. README → "What the
 >    FAIL means against the real system". **Refined again the same day:** the first follow-up first
 >    named there — "a stub that answers a repeat the way AEAT does" — was dropped as a measurement
->    that cannot fail. A stub modelling error 3000 is idempotent by construction, so it can only ever
->    print zero; every double this rig finds is the SAME invoice identity, which a real AEAT refuses.
+>    that cannot fail. A stub modelling error 3000 is idempotent by construction, so its double
+>    COUNTER can only ever read zero — the parts that assert still see a change, which the review
+>    seat established by running one; every double this rig finds is the SAME invoice identity, which a real AEAT refuses.
 >    The one genuine double-filing shape is a DIFFERENT identity for one sale (re-keying), which S2
->    does not model and fresh-series-on-restore guards. The second follow-up — fence before ship,
->    resolving in-flight submissions first — is written into topology design §5.2 on this branch.
+>    does not model and fresh-series-on-restore guards. The second follow-up — fence before ship, meaning the old primary is
+>    decommissioned before the tail moves — is written into topology design §5.2 on this branch.
+>    Resolving its in-flight submissions first is explicitly NOT required there: the receiver deals
+>    with such a row — its drain's five-minute reset today, and the boot reset §5.2 requires for the
+>    copy it inherited through the stream, once that is built.
 
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (complete `drainPass` terminal-state handling and `applyTail`'s `envios` terminal-state-wins branch)

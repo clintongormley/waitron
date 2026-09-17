@@ -335,8 +335,9 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
    them rather than borrowing them (Fable review finding 4, 2026-09-16 — the cited app-level sync §5 is
    about applying under `withTenant` with `ON CONFLICT (id) DO NOTHING`; it carries no refuse-by-origin
    rule, so that rule is new here):
-   - **Verbatim, no recompute**, idempotent by primary key — a re-shipped row is a no-op, never a
-     duplicate chain link.
+   - **Verbatim, no recompute.** For the insert-only tables (`registros_facturacion`, `cadenas`) a
+     re-shipped row is a no-op, never a duplicate chain link. For `envios`/`acks`/`envio_flujo` it is
+     deliberately not a no-op: the apply below updates a row the receiver already holds.
    - **Keyed by the sender.** A row is accepted only if it belongs to the sending node — by `node_id`
      on the tables that carry one (`sales`, `payments`, `registros_facturacion`, `cadenas`,
      `registro_sif`, `envios`' parent), and by a join to a sender-owned parent for the child tables that
@@ -346,13 +347,19 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
      node filter, so once a shipped `registros_facturacion` row lands the receiver may submit it to AEAT
      and mark its `envios` row `enviado`. A retried or partial ship must **not** let the sender's older
      `pendiente` version overwrite that terminal state and cause a **double submission**. So for
-     `envios`/`acks`/`envio_flujo` the apply is **terminal-state-wins** (a row already `enviado`/acked
-     on the receiver is never regressed), and the whole ship for a given SIF runs with that SIF's drain
+     `envios`/`acks`/`envio_flujo` the apply is **terminal-state-wins**, which has two sides and needs
+     both: a row already `enviado`/acked on the receiver is never regressed by the sender's older
+     `pendiente` copy, AND a row the receiver still holds `pendiente` ADOPTS the sender's terminal
+     state. The prototype (scenario S2) measured the first side as already satisfied and the second as
+     the one that carries the risk — without adoption the receiver files a record its owner had
+     already filed. And the whole ship for a given SIF runs with that SIF's drain
      paused (the `blockedSifIds` mechanism `claimBatch` already takes). The append-only
      `registros_facturacion`/`cadenas` rows are unaffected — they are insert-only and idempotent.
 
-   **Fence before ship: decommission the old primary, and resolve its in-flight submissions, before
-   the tail moves (owner decision, 2026-09-17).** Terminal-state-wins narrows a *same-identity*
+   **Fence before ship: decommission the old primary before the tail moves (owner decision,
+   2026-09-17).** The old primary does not have to resolve its own in-flight submissions first — the
+   receiver is what covers those: today its drain's five-minute reset, and, for the copy it inherited
+   through the stream, the boot reset this section requires once that is built. Terminal-state-wins narrows a *same-identity*
    double submission to a refused duplicate — a real AEAT answers error 3000 and our drain records
    that as filed (`packages/verifactu/src/xml/parse-suministro.ts`, `resolveEstadoEfectivo`) — so it
    is not by itself a double *filing*. It does not remove two shapes the SQLite failover prototype
@@ -360,7 +367,7 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
    system"). (a) **The operating procedure is decommission-then-promote:** the operator takes the old
    primary down before the secondary is promoted, so the two never file concurrently. §5.3's split
    brain is the case where that assumption is violated — the box alive but unreachable — and it is the
-   *only* case in which a receiver drains a chain while its live owner drains the same chain. (b) **The in-flight (`enviando`) row is NOT a real-system stuck row — the drain already recovers it, and the mirror does hold the state (owner question, 2026-09-17).** The real drain commits `estado = 'enviando'` BEFORE the AEAT call (`packages/fiscal-verifactu/src/drain.ts`, the T1/T2 split guarded by `RECUPERACION_ENVIANDO_MS`), so a crash leaves a committed `enviando` row — and Litestream streams committed state, so a promoted mirror DOES hold it. That same drain resets any `enviando` older than five minutes back to `pendiente` at the top of every pass (`recoverStaleClaims`), raising `incidencia`, then re-files it with AEAT's duplicate check (error 3000) resolving the ones already filed. So a promoted mirror self-heals an inherited in-flight row on its first drain pass — the reset-then-dedup the owner asked for, already built. The prototype's Part E shows a row stuck `enviando` only because its MINIMAL drain omits `recoverStaleClaims`: a model gap, not a real-system filing hole. The unconditional reset belongs on RESTART, not specifically on promotion (owner, 2026-09-17). On boot, before a node starts filing, it has no submission of its OWN in flight — whatever process could have held one is gone — so boot resets EVERY `enviando` row to `pendiente` unconditionally, with no staleness gate, and the duplicate check resolves any that were actually filed. A promotion is followed by a restart, so the boot check covers the promoted node too and nothing promotion-specific is needed. `recoverStaleClaims` already exists and runs at the top of EVERY drain pass (`packages/fiscal-verifactu/src/drain.ts`), resetting any `enviando` older than five minutes; today it is the ONLY recovery, so a crashed node waits out that gate on its first post-boot pass. The boot reset above is what makes recovery immediate after a restart and supersedes that crash-recovery role. What the five-minute rule still uniquely covers is the one case a restart does NOT — a row left `enviando` on a node that stays UP: `persistResponse` defensively skips a response line it cannot match to a claimed row, leaving that row `enviando`, and the same rule catches an abandoned `enviando` a returning node ships into an already-running primary's tail. The normal failures never reach it — a thrown `submit` is backed off to `pendiente` at once, and a response carrying per-line rejections is resolved inline.
+   *only* case in which a receiver drains a chain while its live owner drains the same chain. (b) **The in-flight (`enviando`) row is NOT a real-system stuck row — the drain already recovers it, and the mirror does hold the state (owner question, 2026-09-17).** The real drain commits `estado = 'enviando'` BEFORE the AEAT call (`packages/fiscal-verifactu/src/drain.ts`, the T1/T2 split guarded by `RECUPERACION_ENVIANDO_MS`), so a crash leaves a committed `enviando` row — and Litestream is assumed to stream committed state, so a promoted mirror holds it — an assumption this design rests on and has not run, which plan Task 6 is where the stream is actually driven. That same drain resets any `enviando` older than five minutes back to `pendiente` at the top of every pass (`recoverStaleClaims`), raising `incidencia`, then re-files it with AEAT's duplicate check (error 3000) resolving the ones already filed. The prototype's Part E shows a row stuck `enviando` only because its MINIMAL drain omits `recoverStaleClaims`: a model gap, not a real-system filing hole. The unconditional reset belongs on RESTART, not specifically on promotion (owner, 2026-09-17). On boot, before a node starts filing, it has no submission of its OWN in flight — whatever process could have held one is gone — so **boot must reset EVERY `enviando` row to `pendiente` unconditionally**, with no staleness gate, and the duplicate check resolves any that were actually filed. A promotion is followed by a restart, so the boot check covers the promoted node too and nothing promotion-specific is needed. **This reset is a requirement of this design and is not built**: read on 2026-09-17, `recoverStaleClaims` (`packages/fiscal-verifactu/src/drain.ts:449`, `where estado = 'enviando' and enviado_en < cutoff`) is the only write in non-test `packages/` or `apps/` code that returns a row to `pendiente` without an answer from AEAT, apart from the backoff taken when a submission throws (`drain.ts:717`) and reconcile's `noTrace` remediation (`reconcile.ts:394`); rows leave `enviando` by the response path and by the two chain-halt sweeps as well, but none of those is a recovery, and `apps/server/src/boot.ts` writes nothing to `envios` at all. `recoverStaleClaims` already exists and runs at the top of EVERY drain pass (`packages/fiscal-verifactu/src/drain.ts`), resetting any `enviando` older than five minutes; today it is the ONLY recovery, so a crashed node waits out that gate on its first post-boot pass. The boot reset above is what would make recovery immediate after a restart, superseding that crash-recovery role; until it is built, a restarted node waits out the five-minute gate. What the five-minute rule still uniquely covers is the one case a restart does NOT — a row left `enviando` on a node that stays UP: `persistResponse` defensively skips a response line it cannot match to a claimed row, leaving that row `enviando`, and the same rule catches an abandoned `enviando` a returning node ships into an already-running primary's tail. The normal failures never reach it — a thrown `submit` is backed off to `pendiente` at once, and a response carrying per-line rejections is resolved inline.
 
    For the ledger tables the owner updates in place (`payments`, `sales`, `cadenas`, the close chain)
    the sender's version wins for sender-owned rows, since the receiver's copy of them is by construction
@@ -621,9 +628,14 @@ Proved by deletion (CLAUDE.md §4):
 - two independent promotions do not collide: distinct generation names, and the `current.json`
   compare-and-set decides the term tie (§2.2, finding 1);
 - a copy-up into a generation this node did not open is refused (§4.4, finding 1);
-- the tail receiver refuses a row not keyed by the sender, and a re-shipped batch does **not** regress
-  an `envios` row already `enviado` on the receiver (§5.2, finding 3) — the negative control is a ship
-  retried after the receiver's drain has submitted, asserting no second submission;
+- the tail receiver refuses a row not keyed by the sender; a re-shipped batch does **not** regress an
+  `envios` row already `enviado` on the receiver, AND a row the receiver still holds `pendiente` DOES
+  adopt the sender's terminal state (§5.2, finding 3; the second side was added on 2026-09-17, after
+  scenario S2 found the first outcome already produced by the rig's earlier conflict-do-nothing write
+  and the second the one carrying the risk) — the
+  deletions that prove them are the rig's `applyTailRegressing` and `applyTailInsertOnly` variants,
+  exercised by a ship retried after the RECEIVER's drain has submitted and by one retried after the
+  SENDER's, each asserting no second submission;
 - a restore from box B's **copied** replica equals one from a direct stream (§4.4);
 - money and quantity conversion is exact: the same fixture sale yields **byte-identical**
   `CuotaTotal`/`ImporteTotal` and huella before and after the conversion (finding 5 — this is the test

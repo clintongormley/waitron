@@ -20,15 +20,16 @@ pnpm --filter @waitron/bench-sqlite-failover scenarios
 pnpm --filter @waitron/bench-sqlite-failover typecheck
 ```
 
-Docker must be running: each scenario starts its own MinIO container via Testcontainers.
+Docker must be running: every scenario but S2 starts its own MinIO container via Testcontainers.
+S2 needs no container and no store — it models the hand-over in SQLite alone.
 
 **`scenarios` currently exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is
 FAIL — a recorded result, not a broken harness. See "What S2 measures, and what it does not" below. A
 later task reading its own run's exit code has to account for that.
 
 `TESTCONTAINERS_RYUK_DISABLED=true` is required locally (`CLAUDE.md` §4), and it turns off the reaper
-that would otherwise clean up after an interrupted run. Scenarios run one at a time and each stops its
-own store in a `finally`, so an interrupt strands the container of the scenario in flight, not one per
+that would otherwise clean up after an interrupted run. Scenarios run one at a time and each that opens a store stops it
+in a `finally`, so an interrupt strands the container of the scenario in flight, not one per
 scenario. `pnpm reap` is the fallback: `startStore()` stamps every container `com.waitron.reapable`,
 which `scripts/reap-testcontainers.mjs` selects on — **and it removes only labelled containers older
 than two hours**, so a reap run immediately after an interrupt reports nothing removed and the
@@ -129,8 +130,9 @@ would cost. Neither changes the measurement.
   decommissioned before the secondary is promoted, so two nodes never file at once). Parts B and D,
   and Part E's second half, have the SENDER file after it has started shipping, which a fenced sender
   cannot do. Part E's second half rests on that entirely: a tail taken while the sender's own drain
-  holds a row `enviando` cannot come from a sender that fenced first — provided fencing waits for the
-  in-flight submission to finish or roll back, which the topology design does not yet state.
+  holds a row `enviando` cannot come from a sender that fenced first. The fence does not have to wait
+  for that in-flight submission to resolve: §5.2 puts the recovery on the RECEIVER instead, which the
+  "stuck `enviando` row" bullet below goes into.
 
 Part D's shape has a second route the rig does not drive, and it lands in the same benign place. The
 receiver can hold a copy of the sender's row with an out-of-date state without any second ship: the
@@ -145,8 +147,13 @@ driven.
 **On the first follow-up this section first named — "make the stub answer a repeat the way AEAT
 does" — a second look on 2026-09-17 found it would measure nothing, and it is dropped.** A stub that
 models error 3000 is idempotent BY CONSTRUCTION: it can never record a second FILING for a repeated
-identity, so running S2 under it prints zero whichever way the loop behaves — a measurement taken
-where both answers look alike (`CLAUDE.md` §1), not a probe. Its only effect would be to reclassify
+identity, so **the double counter** under it reads zero whichever way the loop behaves — a
+measurement taken where both answers look alike (`CLAUDE.md` §1), not a probe. That is a statement
+about the counter and not about the whole scenario, and the difference was run, not reasoned: the
+review seat replaced the stub with one that throws on a repeated identity, and S2 still failed —
+on a control assertion outside the `submit` callback, not with a clean zero — because the parts
+that assert do see the changed outcome, even though a throw INSIDE that callback is swallowed
+(`src/model.ts`, `drainPass`). Its only effect would be to reclassify
 Part D's and Part E's doubles from "submitted twice" to "refused duplicate", which is the analytic
 point above, not something a run establishes.
 
@@ -157,15 +164,25 @@ out, and neither is a double filing a run here could show:
 
 - **The stuck `enviando` row** (Part E's second half) is a MODEL GAP, not a real-system filing hole.
   The rig's minimal drain claims only `pendiente` rows and never recovers a stale claim, so a shipped
-  `enviando` sticks and never files. The real drain does not have this hole: it commits `enviando`
-  before the AEAT call (so a promoted mirror holds the state), and it resets an inherited in-flight
-  row and re-files it, with AEAT's duplicate check catching the already-filed
-  (`packages/fiscal-verifactu/src/drain.ts`). On RESTART every inherited `enviando` is reset to
-  `pendiente` unconditionally before the node files — nothing of its own is in flight then — and a
-  promotion is followed by a restart, so that covers a promoted mirror; steady-state
-  `recoverStaleClaims` (every pass, five-minute gate) then only covers a row left `enviando` on a
-  node that stays up — a response AEAT never resolved, or a stray `enviando` shipped to a running
-  primary (topology §5.2, owner 2026-09-17).
+  `enviando` sticks and never files. The real drain does not leave it there for good: it
+  commits `enviando` before the AEAT call (`packages/fiscal-verifactu/src/drain.ts`, the T1/T2
+  split), and `recoverStaleClaims` resets any `enviando` older than five minutes back to `pendiente`
+  at the top of every pass (`drain.ts:449`) and re-files it, with AEAT's duplicate check catching the
+  already-filed. So the real hole is a delay, not a permanent stop.
+
+  Two things about that, both read on 2026-09-17 rather than run, and stated as narrowly as the
+  reading supports. First, no boot-path reset exists. The evidence is an enumeration of every write
+  to `envios` in non-test `packages/` and `apps/` code, not a single grep: `drain.ts` claims a row
+  (601), recovers a stale claim (449), backs a thrown submission off (717), writes what AEAT answered
+  (913) and halts a chain's successors (683, 954); `reconcile.ts` writes a consulta's answer (380), its `noTrace` remediation (393) and a clearing of the resubmit marker (412); `backend.ts` inserts new rows. Of those, 449 and 717 are
+  the only ones that return a row to `pendiente` without an answer from the endpoint, none of them is
+  reached from the boot path, and `apps/server/src/boot.ts` does not mention `envios` at all. Second,
+  the unconditional reset on restart that would make recovery immediate — topology §5.2, owner
+  2026-09-17 — is a requirement of that design and **is not built**. What is there instead is the
+  five-minute gate, counted from when the row was CLAIMED (`enviado_en`) rather than from the
+  restart — so after a promotion the inherited row is usually stale already and the first pass
+  recovers it; a node that claimed a row moments before it died is the case that waits.
+
 - **A DIFFERENT identity for one economic sale** — an invoice number reissued under re-keying — is
   the one genuine double-filing shape, and the only real-system concern that survives. AEAT does not
   refuse it, because the identity triple differs. S2 does not model it; fresh-series-on-restore
@@ -173,10 +190,14 @@ out, and neither is a double filing a run here could show:
   and measuring it would be its own scenario, not a change to S2.
 
 The second follow-up is done on this branch: the topology design now states that the old primary is
-decommissioned (fenced) before the secondary is promoted, and that fencing must resolve an in-flight
-submission before the tail is shipped (§5.2). Until that is the operating procedure, S2's exit code
-records the MODEL's same-identity double SUBMISSION — a wasted call against a real AEAT — and is not
-evidence that the product would file a record twice.
+decommissioned (fenced) before the secondary is promoted (§5.2), and that a row left in flight is the
+RECEIVER's to deal with rather than something the fence must resolve first. Which mechanism deals
+with it depends on how the row got there, and §5.2 is careful about this: a copy the promoted node
+inherited through the stream is what the boot reset would catch once it is built, while a row that
+ARRIVES in a tail after that node is already running is caught only by `recoverStaleClaims`'s
+five-minute reset, because a reset that runs at boot cannot see a row delivered later. S2's exit code
+records the MODEL's same-identity double SUBMISSION, which is a wasted call against a real AEAT, and
+is not evidence that the product would file a record twice.
 
 S2 drives the rig's model of the submission state machine — `drainPass`, `applyTail`, `diffTail` and
 the `envios` table in `src/model.ts`. Its result is evidence about that mechanism and about nothing
@@ -185,11 +206,20 @@ else: `packages/fiscal-verifactu` is not imported here and has its own suites.
 **The safe case and the unsafe one differ by one thing: what the sender knew when it built the
 second batch.**
 
-- **A ship RETRIED IN FULL is safe** (Parts A and B). The sender's confirmation never came back, so
-  it has learned nothing since and re-sends the same range — every row included, whatever state each
-  is in now. A record the receiver has already filed is not walked back to unfiled by the older copy
-  arriving over it, and a record the SENDER has already filed is adopted as filed by a receiver still
-  holding it unfiled. Thirteen filings across the three chains, none of them twice.
+- **A ship RETRIED IN FULL is safe when nothing the batch carries has gone stale** (Parts A and B).
+  The sender's confirmation never came back, so it re-sends the same range whatever state each row is
+  in. The two parts get there differently, and the difference is the whole condition. In Part A the
+  SENDER filed nothing in between — the receiver did — so replaying the identical frozen batch
+  (`tailA`, every row still `pendiente`) is safe: terminal-state-wins refuses to walk the receiver's
+  filed rows back. In Part B the sender filed its own rows in between, and its retry is rebuilt
+  (`retriedTailB`, recomputed against the sender while reusing the OLD summary of the receiver), so
+  it carries them as `enviado` and the receiver adopts that. Put a FROZEN batch in Part B's position
+  — the sender files after the batch was built — and the receiver files the record a second time.
+  That last one is a run, not a reading: the review seat's probe built a tail, applied it, drained
+  the sender, applied the same frozen tail again and drained the receiver, giving
+  `literal-full-batch-retry ["stale-sender:1","stale-sender:1"]`, reproduced independently on
+  2026-09-17. S2 does not measure that variant. Thirteen filings across the three chains,
+  none of them twice.
 - **A ship RECOMPUTED against a REFRESHED view of the receiver files a record twice** (Part D). Here
   the sender asks the receiver what it holds and sends only the difference. `diffTail` picks records
   by a high-water mark over the receiver's `records`, so a record the receiver already holds is not
@@ -252,14 +282,19 @@ Part E measures two things from that seat:
 
 **The verdict is FAIL when ANY measured part records a second filing, and today two of them do** —
 Part D's recomputed ship, and Part E's second half. They have different causes, which matters for
-what would clear them: a ship that carried submission state for rows the receiver already holds would
-clear Part D, and leave Part E's standing. Part E's double comes from the receiver draining a foreign
-chain at the moment its live owner is draining the same chain, so clearing it means changing who may
-file a chain, not what a ship carries.
+what would clear them. A ship carrying submission state for rows the receiver already holds, sent at
+the points S2 already sends one, would clear Part D and leave Part E's second half standing — that
+double comes from the receiver draining a foreign chain at the moment its live owner is draining the
+same chain, so changing who may file a chain would clear it. That is one way and not the only one:
+the review seat cleared Part E's second half without touching who may file, by adding a full
+terminal-state ship at a point S2 does not send one — after the sender's pass and before the
+receiver's — and S2 then reported PASS once Part D was cleared alongside it by the zero-watermark
+mutation, the verdict expression untouched. So what this measures is the sequence, not an exclusive
+remedy.
 
-That is also why no single mutation of `src/model.ts` tried here returns S2 to PASS: Part D's term was
-shown to vary (see the mutation list below), Part E's second half was not observed clear under any of
-them, and clearing both needs a design decision rather than a mutation.
+No SINGLE mutation of `src/model.ts` tried here returns S2 to PASS on its own: Part D's term was shown
+to vary (see the mutation list below), and Part E's second half was not observed clear under any one
+of them.
 
 Two narrower boundaries:
 

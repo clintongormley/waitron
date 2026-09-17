@@ -2244,18 +2244,30 @@ than guessed at: S6 failed once during S1's mutation runs with its message lost,
 consecutive solo runs — if the full run (Task 10) sees it again, capture the whole table and stderr
 rather than re-running to green. **S2 is the gate's first negative result, and reading it against the real
 system made it smaller than it first looked.** The rig models one machine handing its unsent sales to
-another. A batch re-sent in full is safe: a sale the receiver has already filed is not pushed back to
-unfiled by an older copy, and a sale the sender has already filed is taken as filed. A batch
+another. A batch re-sent in full is safe so long as nothing it carries has gone out of
+date: a sale the receiver has already filed is not pushed back to unfiled by an older copy arriving
+over it, and a sale the sender has already filed is taken as filed, provided the sender rebuilt the
+batch after filing it. Replay an unchanged earlier batch after the sender has filed, and it is not
+safe — the review seat ran that variant and the receiver filed the sale a second time. A batch
 recomputed against a refreshed view of what the receiver holds is not: the sender leaves out the
 sales the receiver already has, so the news that the sender has since filed one of them never
 travels, and the receiver files it itself. A batch taken while the sender is part-way through filing
-carries a sale marked as being filed right now, which no filing run on the receiver ever picks up.
+carries a sale marked as being filed right now, which no filing run on the receiver ever picks up —
+in the rig's minimal filing run. The real one is slower rather than stuck: it resets a sale left that
+way for more than five minutes and files it again.
 What that costs against the real tax agency is one wasted call, not a record filed twice: AEAT
 refuses a record it already holds with error 3000, and `resolveEstadoEfectivo` already reads that
 answer as filed — checked by reading the code and the documents, not by running anything. Two things
 came out of it for the work still to come. The fence-before-ship rule is now written into the
 topology design §5.2 — decommission the old primary before promoting the secondary, so the two never
-file at once. And S0 (Task 7) has to check its own shape against the recomputed-batch case, because a
+file at once. Beside it that design now requires something that is **not built**: on restart, before
+a node files anything, it resets every sale it inherited in the "being filed right now" state, with
+no five-minute wait. That covers the copy a promoted node inherited through the stream; a sale that
+arrives later, in a batch handed over after that node is already running, is still the five-minute
+reset's job, because a reset that runs at startup cannot see one delivered afterwards. Today the only reset of a sale left in that state is
+`recoverStaleClaims`'s five-minute one in `packages/fiscal-verifactu/src/drain.ts`, plus the backoff
+that returns a sale whose submission threw — read on 2026-09-17, not run. Building that restart reset is work this backlog now owns, and it belongs with
+whichever slice turns promotion on. And S0 (Task 7) has to check its own shape against the recomputed-batch case, because a
 promoted node can already hold an out-of-date copy of a sale from the Litestream stream, and sending
 only what the receiver lacks never corrects it. S2's verdict stays FAIL and the scenario runner exits
 1 on it deliberately; no scenario runs in CI, so the evidence for one is its recorded run in the pull

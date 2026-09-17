@@ -28,6 +28,9 @@
 //
 // Everything here is the rig's MODEL of the submission state machine (`src/model.ts`) — no result
 // here is a statement about `packages/fiscal-verifactu`.
+//
+// Unlike every sibling scenario this one takes no `ScenarioContext`: the hand-over it models happens
+// between in-memory SQLite databases, so it starts no MinIO container and opens no object store.
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {
@@ -66,15 +69,17 @@ function submissionKey(nodeId: string, secuencia: number): string {
 /**
  * The stub NEVER throws on a repeat, even though a repeat is the whole thing this scenario looks
  * for. `drainPass` catches a throwing `submit`, returns the row to `pendiente` and blocks that
- * chain for the rest of the pass (`src/model.ts:581-587`), so an assertion thrown in here would be
- * swallowed and could never reach the scenario's verdict — it would make S2 pass whatever
- * happened. The repeat is read off `filed` afterwards instead.
+ * chain for the rest of the pass (`src/model.ts:581-587`), so an assertion thrown in here is
+ * swallowed rather than reported as itself. What it CAUSES — the row released and the chain blocked
+ * — is visible to the assertions outside the callback, which is how the review seat's throwing stub
+ * still made S2 fail. The repeat is read off `filed` afterwards instead.
  *
  * It also ACCEPTS the repeat, which the real endpoint does not: AEAT answers error 3000 on a record
  * it already holds, and `resolveEstadoEfectivo` (`packages/verifactu/src/xml/parse-suministro.ts`)
  * reads that as filed. So a repeat this stub records is a second SUBMISSION, not a second FILING:
  * against a real AEAT a same-identity repeat is refused. A stub that instead REFUSED a repeat would
- * measure nothing here — idempotent by construction, it can only ever print zero. See README →
+ * measure nothing HERE: idempotent by construction, its double COUNTER can only ever read zero. The
+ * asserting parts would still see the change — run by the review seat, not argued. See README →
  * "What the FAIL means against the real system".
  *
  * `refuseOnce` is the one deliberate throw, used by Part C to put a chain in the drain's blocked
@@ -305,9 +310,14 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     //
     // Part A's and Part B's retries both re-ship the rows the receiver already holds, because the
     // sender is working from the view of the receiver it had BEFORE the first ship — its
-    // confirmation never came back, so it has learned nothing since. That is what makes them safe:
-    // a re-shipped row carries whatever submission state it has now, and `terminal-state-wins`
-    // adopts it.
+    // confirmation never came back, so it has learned nothing about the receiver since. What makes
+    // them safe is that neither carries a state that has gone stale: Part A replays the frozen
+    // `tailA` and its sender filed nothing in between, so `terminal-state-wins` protects the rows
+    // the RECEIVER filed; Part B's retry is recomputed against the sender, so it carries the rows
+    // the SENDER filed as `enviado` and the receiver adopts them. A frozen batch in Part B's
+    // position would carry neither protection — nothing terminal for the receiver to adopt, and
+    // nothing already filed on the receiver to protect — and the receiver would file a record its
+    // owner already had.
     //
     // A sender that instead ASKS the receiver what it holds and ships the difference is in a
     // different position. `diffTail` (`src/model.ts`) selects records by a high-water mark over the
