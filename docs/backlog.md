@@ -2232,8 +2232,9 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype is no longer parked: since 2026-09-17 it is being built alongside slice 1, one task per
-PR. Three of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
-a conditional write) and S1 (a double promotion fenced by one, #392). S1's caveat, which the results
+PR. Four of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
+a conditional write), S1 (a double promotion fenced by one, #392) and S2 (one sale submitted to the
+tax agency twice, #395). S1's caveat, which the results
 note must carry: the rig's fence is a per-term key claimed create-only, where the product's is
 `current.json` written only if its version is unchanged, so S1 is evidence that a refusal by the
 store stops a double promotion and not a measurement of the product's own conditional write. The
@@ -2241,7 +2242,38 @@ rig's keys now sit under `venues/v1/`, the venue prefix the topology design give
 Litestream tasks (6-8) find their generations where they expect them. Still open, recorded rather
 than guessed at: S6 failed once during S1's mutation runs with its message lost, then passed eight
 consecutive solo runs — if the full run (Task 10) sees it again, capture the whole table and stderr
-rather than re-running to green. **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
+rather than re-running to green. **S2 is the gate's first negative result, and reading it against the real
+system made it smaller than it first looked.** The rig models one machine handing its unsent sales to
+another. A batch re-sent in full is safe so long as nothing it carries has gone out of
+date: a sale the receiver has already filed is not pushed back to unfiled by an older copy arriving
+over it, and a sale the sender has already filed is taken as filed, provided the sender rebuilt the
+batch after filing it. Replay an unchanged earlier batch after the sender has filed, and it is not
+safe — the review seat ran that variant and the receiver filed the sale a second time. A batch
+recomputed against a refreshed view of what the receiver holds is not: the sender leaves out the
+sales the receiver already has, so the news that the sender has since filed one of them never
+travels, and the receiver files it itself. A batch taken while the sender is part-way through filing
+carries a sale marked as being filed right now, which no filing run on the receiver ever picks up —
+in the rig's minimal filing run. The real one is slower rather than stuck: it resets a sale left that
+way for more than five minutes and files it again.
+What that costs against the real tax agency is one wasted call, not a record filed twice: AEAT
+refuses a record it already holds with error 3000, and `resolveEstadoEfectivo` already reads that
+answer as filed — checked by reading the code and the documents, not by running anything. Two things
+came out of it for the work still to come. The fence-before-ship rule is now written into the
+topology design §5.2 — decommission the old primary before promoting the secondary, so the two never
+file at once. Beside it that design now requires something that is **not built**: on restart, before
+a node files anything, it resets every sale it inherited in the "being filed right now" state, with
+no five-minute wait. That covers the copy a promoted node inherited through the stream; a sale that
+arrives later, in a batch handed over after that node is already running, is still the five-minute
+reset's job, because a reset that runs at startup cannot see one delivered afterwards. Today the only reset of a sale left in that state is
+`recoverStaleClaims`'s five-minute one in `packages/fiscal-verifactu/src/drain.ts`, plus the backoff
+that returns a sale whose submission threw — read on 2026-09-17, not run. Building that restart reset is work this backlog now owns, and it belongs with
+whichever slice turns promotion on. And S0 (Task 7) has to check its own shape against the recomputed-batch case, because a
+promoted node can already hold an out-of-date copy of a sale from the Litestream stream, and sending
+only what the receiver lacks never corrects it. S2's verdict stays FAIL and the scenario runner exits
+1 on it deliberately; no scenario runs in CI, so the evidence for one is its recorded run in the pull
+request. The unattended runner that was building these tasks stopped itself on that FAIL (its STOP
+file lives outside the repo, in the campaign directory), so tasks 5-10 wait for it to be restarted.
+**Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
 turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.
 First, the check the plan told us to accept the work on — `drizzle-kit check` — reads nothing about

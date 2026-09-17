@@ -4,7 +4,7 @@
 
 **Goal:** Build the throwaway rig that proves the SQLite + Litestream box→store→promote→return-with-a-tail→ship→rejoin loop holds together fiscally, before slice 1 rewrites the storage layer.
 
-**Architecture:** A private workspace package `bench/sqlite-failover`, modelled on `bench/pglite-throughput` (Docker-dependent, run by hand; no scenario ever runs in CI). Seven scenarios (S0–S6) each assert one invariant from the topology design's gate-2 obligations and each carry a control that reproduces the opposite result. Four scenarios (S1, S2, S5, S6) exercise our own logic over `node:sqlite` and a local MinIO store with no Litestream, so they are deterministic and need no process orchestration; three (S0, S3, S4) drive the real Litestream binary. The rig stands up a **minimal model** of the fiscal ledger — it does not import `packages/fiscal-verifactu` — and each model piece cites the real table it mirrors.
+**Architecture:** A private workspace package `bench/sqlite-failover`, modelled on `bench/pglite-throughput` (Docker-dependent, run by hand; no scenario ever runs in CI). Seven scenarios (S0–S6) each assert one invariant from the topology design's gate-2 obligations and each carry a control that reproduces the opposite result. Four scenarios (S1, S2, S5, S6) exercise our own logic over `node:sqlite` with no Litestream, so they are deterministic and need no process orchestration — three of them against a local MinIO store, while S2 needs no store at all; three (S0, S3, S4) drive the real Litestream binary. The rig stands up a **minimal model** of the fiscal ledger — it does not import `packages/fiscal-verifactu` — and each model piece cites the real table it mirrors.
 
 **Tech Stack:** Node 26 (`node:sqlite` built-in; native `.ts` imports), `@aws-sdk/client-s3`, `testcontainers` (MinIO), the real `litestream` binary pinned to v0.5.17. No test framework — scenarios are plain scripts using `node:assert`, run via `node`, aggregated by a `scenarios` runner, exactly as the pglite bench's `bench` script works.
 
@@ -225,13 +225,72 @@ export default async function ({ startStore }) {
 
 The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins rule and a minimal drain with an idempotency-asserting submit stub.
 
+> **2026-09-17, as landed.** This note covers the WHOLE of Task 4, not only its step-1 snippet: the
+> task's opening line, its **Files** and **Interfaces** lines and step 4's expected detail each
+> describe a design that was not built, and the code is what holds. Five corrections.
+>
+> 1. **The submit stub does not assert, and does not throw.** `drainPass` catches a throwing
+>    `submit`, returns the row to `pendiente` and blocks that chain for the rest of the pass, so an
+>    `assert.ok` inside the stub is swallowed: S2 would pass however many times a record was
+>    submitted, and `try { drainPass(...) } catch { doubled = true }` would never see a throw. The
+>    stub records every `(node_id, secuencia)` it is handed instead, repeats kept, and the
+>    assertions read that list afterwards. There is ONE such ledger for both nodes, because there is
+>    one tax agency.
+> 2. **`const held0 = { records: [] }` crashes** — `diffTail` reads `contiguousTo`, `saleIds` and
+>    `supplierInvoiceIds` off the receiver summary. `summarise(receiver)` is used, which is the
+>    honest way to ask what the receiver holds in any case.
+> 3. **The snippet's sequence was already green before any production change**, so it was not a
+>    failing test: under the `ON CONFLICT DO NOTHING` write it started from, a re-shipped
+>    `pendiente` changed nothing on a row the receiver had marked `enviado`. Terminal-state-wins has
+>    two sides and only the second was red — a terminal row on the SENDER must be ADOPTED by a
+>    receiver still holding it `pendiente`, or the receiver's drain, which claims across every chain
+>    with no node filter, files a record its owner has already filed. S2 therefore has two parts,
+>    one per side, each with its own control (`applyTailRegressing` for the first,
+>    `applyTailInsertOnly` for the second), both controls being thin wrappers over one shared
+>    `applyTail` body with the `envios` rule as its one parameter. A third part covers spec §4's
+>    blocked-set requirement. **Corrected later the same day:** an earlier draft of this item, and of
+>    the README section it points at, said that requirement could not be measured because the blocked
+>    set is a local variable. That was wrong — the set is live for the whole loop and `submit` is
+>    called from inside it, so a ship issued from a later `submit` callback in the same pass runs with
+>    a chain paused. Part E measures it. `bench/sqlite-failover/README.md` → "What S2 measures, and
+>    what it does not" carries what IS and is not measured.
+> 4. **`drainPass` was not changed by this task, and neither was the `submit` stub's contract.** The
+>    opening line above ("a minimal drain with an idempotency-asserting submit stub") and the
+>    **Files** line's "(complete `drainPass` terminal-state handling …)" both describe work the diff
+>    does not contain. `git show ab59b646 -- bench/sqlite-failover/src/model.ts` has three hunks: the
+>    schema comment, the `applyTail` doc comment (now `EnvioRule`) with `ENVIO_UPSERT` and the two
+>    control wrappers, and `applyShippedTail`'s `envios` insert. No changed line is inside
+>    `drainPass`'s body; the one changed line that NAMES it is a comment in the `EnvioRule` block
+>    referring to it. `drainPass` landed whole in Task 1 and this task only read it. The **Interfaces → Produces** line is corrected in place below,
+>    because a later task would otherwise read it as a contract.
+> 5. **Step 4's expected `submitted=5/5` is not what the scenario reports, and PASS is no longer what
+>    it measures.** The detail is a sentence per part, and the verdict is read off the measurement:
+>    S2 is FAIL as landed, because a ship recomputed against a REFRESHED view of the receiver ships
+>    nothing at all for a record the receiver already holds, so the receiver's drain files a record
+>    its owner has already filed. The README's "What S2 measures" section carries the result and what
+>    is open; the design decision is the owner's. **Owner review, later the same day:** the cost of
+>    that FAIL was revised down — the real endpoint refuses a duplicate (error 3000) and the real
+>    drain reads that as filed, and the designed order fences the old primary before it ships, so the
+>    sender never files after shipping as Parts B, D and E's second half have it. README → "What the
+>    FAIL means against the real system". **Refined again the same day:** the first follow-up first
+>    named there — "a stub that answers a repeat the way AEAT does" — was dropped as a measurement
+>    that cannot fail. A stub modelling error 3000 is idempotent by construction, so its double
+>    COUNTER can only ever read zero — the parts that assert still see a change, which the review
+>    seat established by running one; every double this rig finds is the SAME invoice identity, which a real AEAT refuses.
+>    The one genuine double-filing shape is a DIFFERENT identity for one sale (re-keying), which S2
+>    does not model and fresh-series-on-restore guards. The second follow-up — fence before ship, meaning the old primary is
+>    decommissioned before the tail moves — is written into topology design §5.2 on this branch.
+>    Resolving its in-flight submissions first is explicitly NOT required there: the receiver deals
+>    with such a row — its drain's five-minute reset today, and the boot reset §5.2 requires for the
+>    copy it inherited through the stream, once that is built.
+
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (complete `drainPass` terminal-state handling and `applyTail`'s `envios` terminal-state-wins branch)
 - Create: `bench/sqlite-failover/src/scenarios/s2_no_double_submit.ts`
 
 **Interfaces:**
 - Consumes: `openNode`, `recordSale`, `drainPass`, `applyTail`, `diffTail` (Task 1).
-- Produces: an `applyTail` whose `envios` apply is **terminal-state-wins** (a row already `enviado`/`acked` on the receiver is never regressed by a re-shipped `pendiente`); a `drainPass` whose `submit` stub throws if a `(node_id, secuencia)` is submitted twice.
+- Produces: an `applyTail` whose `envios` apply is **terminal-state-wins** (a row already `enviado`/`acked` on the receiver is never regressed by a re-shipped `pendiente`, and a receiver row that is not yet terminal adopts the shipped state). ~~a `drainPass` whose `submit` stub throws if a `(node_id, secuencia)` is submitted twice~~ — corrected 2026-09-17: the stub records every `(node_id, secuencia)` it is handed and never throws on a repeat, and `drainPass` is unchanged by this task; see the note above, item 1 and item 4.
 
 - [ ] **Step 1: Write the failing scenario** `s2_no_double_submit.ts`:
 ```ts
@@ -380,6 +439,19 @@ export default async function ({ startStore }) {
 ---
 
 ### Task 7: S0 — the happy loop end to end
+
+> **2026-09-17, from Task 4.** S2 measured a second tax-agency filing arising whenever a receiver
+> holds a record whose submission state it never learns about, and its drain claims across every
+> chain with no node filter. The steps below put records on a cloud that then drains them, so
+> whether the same shape arises here is a question to answer while building this task — S2
+> settles it neither way. `bench/sqlite-failover/README.md` → "What S2 measures, and what it does
+> not" has the measurement, and its "What the FAIL means against the real system" section has the
+> owner's revision of what a double here costs. The stream-lag route — the box files a record after
+> streaming it and dies before the `envios` update streams, so the promoted cloud holds it
+> `pendiente` and its drain re-submits — is worth showing here with the REAL stream rather than a
+> modelled ship, but note what it is: the same SAME-IDENTITY duplicate S2 finds, which a real AEAT
+> refuses (error 3000, read as filed). It is a mechanism to demonstrate, not a new danger, and the
+> model's stub would score it as a double it is not.
 
 **Files:**
 - Create: `bench/sqlite-failover/src/scenarios/s0_happy_loop.ts`

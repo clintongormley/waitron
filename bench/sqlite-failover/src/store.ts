@@ -1,6 +1,6 @@
 /**
- * The object store every scenario runs against: one MinIO container per store, with an S3 client
- * pointed at it.
+ * The object store the scenarios that need one run against: one MinIO container per store, with an
+ * S3 client pointed at it. S2 needs none — it models a hand-over between in-memory SQLite databases.
  *
  * MinIO stands in for the production store, which is not chosen yet (spec §5), so what S6
  * (`store-cas.ts`) establishes about conditional writes is a fact about MinIO on the pin below.
