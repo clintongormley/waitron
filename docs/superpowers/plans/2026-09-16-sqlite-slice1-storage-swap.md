@@ -101,18 +101,20 @@ This task has two halves that land as **two pull requests**: P1a proves the voca
 - Create: `packages/db/src/schema/columns.test.ts`
 - Modify (P1a): `packages/db/src/schema/drawer-opens.ts`
 - Modify (P1b): the remaining 71 files that call `pgTable(`
-- Modify: `packages/db/src/index.ts` (export the vocabulary)
+- Modify (P1b, its first step): `packages/db/src/index.ts` (export the vocabulary)
 
 **Interfaces:**
 
 - Produces, consumed by P5, P6 and F1:
   - `id(name: string)` — a uuid primary-key-shaped column
-  - `ts(name: string)` — a timestamptz column in `date` mode
+  - `ts(name: string)` — a timestamptz column in `date` mode, read back as a `Date`
+  - `tsString(name: string)` — the same column type in `string` mode, read back as the driver's string; the two emit identical SQL, so a column keeps whichever mode it already had
   - `json<T>(name: string)` — a jsonb column typed `T`
   - `money(name: string)` — a monetary amount
   - `quantity(name: string)` — a quantity with three decimal places
   - `rate(name: string)` — a percentage rate with two decimal places
-  - `enumText<T extends string>(name: string, values: readonly T[])` — a closed vocabulary
+  - `enumText<T extends string>(name: string, values: readonly T[])` — a closed vocabulary: a text column carrying its permitted values
+  - `enumCheck(column)` — the `in (...)` constraint body for an `enumText` column, built from that column's own values, so the constraint and the type cannot list different sets
   - `table` — the table builder
 - Consumes: nothing.
 
@@ -152,9 +154,11 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
   });
 
   it("gives a timestamp column date mode, not string mode", () => {
-    // mode: "date" is what every existing caller uses; string mode would change
-    // what every read returns without changing the column type, so the type
-    // assertion above cannot catch it.
+    // The mode changes what a read returns without changing the column type, so
+    // the type assertion above cannot catch it. `ts` is the date-mode helper;
+    // string-mode columns need their own helper, `tsString` — string mode is the
+    // majority in this repository, which this plan originally had backwards. See
+    // the P1a findings below.
     expect(columnsOf().at.mapFromDriverValue("2026-09-16T10:00:00Z")).toBeInstanceOf(Date);
   });
 });
@@ -172,7 +176,15 @@ Expected: FAIL — `Cannot find module './columns.js'`.
 
 Create `packages/db/src/schema/columns.ts`:
 
+Updated 2026-09-17, after the item ran: the sketch below is the shape that actually landed, which
+differs from what this plan first proposed in three places — a second timestamp helper (`tsString`),
+a different `enumText` body, and a new `enumCheck` helper. The "P1a findings" section under these
+steps has the timestamp one. The other two were measured while writing the file and their receipts
+are in the file's own comments, not in the findings. The comments below are shortened so the step
+stays readable; read `packages/db/src/schema/columns.ts` for the full version.
+
 ```ts
+import { getTableColumns, sql, type AnyColumn } from "drizzle-orm";
 import { boolean, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /**
@@ -189,8 +201,15 @@ import { boolean, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from
 /** A uuid identifier. */
 export const id = (name: string) => uuid(name);
 
-/** A moment on the server clock, read back as a `Date`. */
+/** A moment on the server clock, read back as a JavaScript `Date`. */
 export const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+
+/**
+ * A moment on the server clock, read back as the string the driver rendered — no `Date` is built.
+ * `ts` and `tsString` emit the same SQL type, so the step 6 probe cannot tell them apart; only a
+ * test of `mapFromDriverValue` can.
+ */
+export const tsString = (name: string) => timestamp(name, { withTimezone: true, mode: "string" });
 
 /** A structured document. */
 export const json = <T>(name: string) => jsonb(name).$type<T>();
@@ -205,14 +224,37 @@ export const quantity = (name: string) => numeric(name, { precision: 12, scale: 
 export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
 
 /**
- * A closed vocabulary. Text plus a check constraint rather than a database enum type, which is
- * already the house preference for a vocabulary that may widen (`drawer_opens.reason`,
- * `invoice_series.purpose`): widening costs a one-line migration instead of an `ALTER TYPE`.
+ * A closed vocabulary: a text column whose permitted values are listed in a `check()` constraint.
  *
- * The caller still writes the `check()` on the table; this helper supplies the column and its
- * TypeScript type so the two cannot drift apart.
+ * This is NOT the house preference in either direction — the repository declares more `pgEnum`
+ * types than checked text columns. Text plus a check is for an AUDIT vocabulary that may widen,
+ * where widening costs a one-line migration instead of an `ALTER TYPE`. A per-venue CONFIG mode
+ * stays a `pgEnum`. The file itself names an example of each.
+ *
+ * Passing the values to `text` (rather than typing the column with `$type<T>()` and ignoring them)
+ * is what puts them on the column as `enumValues`, which is what `enumCheck` below reads.
  */
-export const enumText = <T extends string>(name: string, _values: readonly T[]) => text(name).$type<T>();
+export const enumText = <T extends string>(name: string, values: readonly T[]) =>
+  text(name, { enum: values as readonly [T, ...T[]] });
+
+/**
+ * The `in (...)` constraint body for an `enumText` column, read off that column's own values, so
+ * the constraint and the column's TypeScript type cannot list different sets. Two measured details
+ * it has to carry — `.inlineParams()`, and a fallback to the table's own column — are written out
+ * in the real file's comment, with what each measurement was.
+ */
+export const enumCheck = (column: AnyColumn) => {
+  const onTable: readonly AnyColumn[] = Object.values(getTableColumns(column.table));
+  const values: readonly string[] | undefined =
+    column.enumValues ?? onTable.find((c) => c.name === column.name)?.enumValues;
+  if (values === undefined) {
+    throw new Error(`enumCheck: column "${column.name}" was not declared with enumText`);
+  }
+  return sql`${column} in (${sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  )})`.inlineParams();
+};
 
 export const flag = (name: string) => boolean(name);
 export const count = (name: string) => integer(name);
@@ -231,14 +273,17 @@ Expected: PASS, both cases.
 
 - [ ] **Step 5: Convert one module and prove the migration is unchanged**
 
-Rewrite `packages/db/src/schema/drawer-opens.ts` to import from `./columns.js`. The check constraint stays exactly where it is; only the column builders move.
+Rewrite `packages/db/src/schema/drawer-opens.ts` to import from `./columns.js`. The check constraint stays on the table, exactly where it was; only the column builders move, and the constraint's values now come from the column instead of being typed a second time.
+
+Updated 2026-09-17, after the item ran: the constraint body and the exported type below are not
+what this plan first proposed. The hand-written `sql` string and the hand-written union type were
+each a second copy of the same vocabulary, written out by hand beside the `enumText` call that
+already held it; both now read the column instead, through `enumCheck` and `enumValues`. The `sql`
+import goes with them. The landed file is `packages/db/src/schema/drawer-opens.ts`.
 
 ```ts
-import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/pg-core";
-import { enumText, flag, id, table, ts } from "./columns.js";
-
-export type DrawerOpenReason = "cash_sale" | "manual";
+import { enumCheck, enumText, flag, id, table, ts } from "./columns.js";
 
 export const drawerOpens = table(
   "drawer_opens",
@@ -252,8 +297,11 @@ export const drawerOpens = table(
     authorizedBy: id("authorized_by"),
     viaOverride: flag("via_override").notNull().default(false),
   },
-  (t) => [check("drawer_opens_reason_ck", sql`${t.reason} in ('cash_sale', 'manual')`)],
+  (t) => [check("drawer_opens_reason_ck", enumCheck(t.reason))],
 );
+
+/** The `reason` vocabulary as a type, read off the column — the `orders.ts` `DONENESS` shape. */
+export type DrawerOpenReason = (typeof drawerOpens.reason.enumValues)[number];
 ```
 
 Keep the existing explanatory comments — thin them where they narrate history, per `CLAUDE.md` §1, but do not delete the ones stating why `till_id` and `sale_id` carry hand-written foreign keys.
@@ -262,17 +310,58 @@ Keep the existing explanatory comments — thin them where they narrate history,
 
 This is the acceptance check for the whole task, and it must be run, not reasoned about.
 
+**Do not use `drizzle-kit check` for this.** It never reads the schema source — it only checks the
+migration folder against itself — so it answers "everything's fine" whatever the helpers emit.
+Measured on 2026-09-17 in `packages/db` by changing `flag` from `boolean(name)` to `integer(name)`
+and running `pnpm --filter @waitron/db exec drizzle-kit check`: `Everything's fine`, exit 0, with a
+column type already broken.
+
+Generate into a throwaway COPY of the migration folder instead, and diff:
+
 ```bash
-git stash && pnpm --filter @waitron/db exec drizzle-kit generate --name probe_before && git stash pop
+cp -R drizzle drizzle-probe-tmp
+grep schema: drizzle.config.ts          # this package's own schema entry point
+pnpm exec drizzle-kit generate --dialect postgresql --schema ./src/schema/index.ts --out ./drizzle-probe-tmp --name probe
+diff -r drizzle drizzle-probe-tmp
+rm -rf drizzle-probe-tmp
 ```
 
-Then regenerate with the change in place and compare. Simpler and less error-prone:
+**All three of `--dialect`, `--schema` and `--out` have to be on the command line, and `--schema`
+differs between packages.** Passing any one of them makes drizzle-kit ignore `drizzle.config.ts`
+entirely, and it then refuses because the other two are missing. Measured in `packages/db` on
+2026-09-17, passing only `--out`:
 
-```bash
-pnpm --filter @waitron/db exec drizzle-kit check
+```text
+Error  Please provide required params:
+    [x] schema: undefined
+    [x] dialect: undefined
+    [✓] out: './drizzle-probe-tmp'
 ```
 
-Expected: no pending changes reported — the schema the vocabulary produces is the schema already in the snapshots. **If `drizzle-kit` reports a difference, the vocabulary is wrong**, not the snapshot; fix the helper rather than regenerating.
+exit 1 — and `[x]` there marks a MISSING parameter, not one supplied by the config file. So read the
+entry point out of the package's own `drizzle.config.ts` (the `grep` above) and pass it. Nine
+packages use `./src/schema/index.ts`; four do not — `packages/bookings` uses
+`./src/schema/bookings.ts`, `packages/media` uses `./src/schema/images.ts`, `packages/venue-service`
+uses `./src/schema/service.ts`, and `packages/fiscal-none` uses `./src/index.ts`.
+
+**Read the exit status and the message, never the silent `diff` alone.** This is the trap that makes
+the probe worth stating carefully: when drizzle-kit refuses it writes nothing at all, so `diff -r`
+is silent — which is exactly what a PASS looks like. A silent diff on its own is not evidence. The
+pass you are looking for is `No schema changes, nothing to migrate` with exit 0 AND a silent diff.
+(`CLAUDE.md` §1: a measurement taken where both answers look alike measures nothing. This one cost a
+false receipt in this plan's own first draft, caught by a reviewer who ran a control.)
+
+Two smaller things. Run it from the package directory — `--out` is resolved relative to the working
+directory, so an absolute path fails. And the scratch folder is created inside the package, so a run
+that stops part-way leaves `drizzle-probe-tmp` sitting in `git status`; delete it.
+
+Expected: `No schema changes, nothing to migrate`, and `diff -r` silent — the schema the vocabulary
+produces is the schema already in the snapshots. The real migration folder is never written to.
+
+This probe has a control in the other direction, which is why it is trusted: with the broken `flag`
+above, the same commands emitted
+`ALTER TABLE "drawer_opens" ALTER COLUMN "via_override" SET DATA TYPE integer;`. **If it reports a
+difference, the vocabulary is wrong**, not the snapshot; fix the helper rather than regenerating.
 
 - [ ] **Step 7: Run the package suite**
 
@@ -286,9 +375,18 @@ Expected: PASS.
 
 Append a short section to the plan file itself (this file), under "P1a findings", stating for each helper whether it hid the difference cleanly and naming anything it could not. Specifically answer: does any table use a real `pgEnum` that `enumText` cannot express, and how many?
 
+Count DECLARATIONS, not every line that mentions the word:
+
 ```bash
-grep -rn 'pgEnum(' packages apps --include='*.ts' | grep -v node_modules | grep -v '.test.ts' | wc -l
+grep -rnE 'export const [A-Za-z0-9_]+ = pgEnum\(' packages apps --include='*.ts' \
+  | grep -v node_modules | grep -v '.test.ts' | wc -l
+grep -rlE 'export const [A-Za-z0-9_]+ = pgEnum\(' packages apps --include='*.ts' \
+  | grep -v node_modules | grep -v '.test.ts' | wc -l
 ```
+
+A bare `grep -rn 'pgEnum('` with the same two filters returns a larger number, because some comments
+quote `pgEnum(` while explaining a column. Whichever filter you use, write it into the finding beside
+the number, so a later reader re-running a different command does not conclude the finding is stale.
 
 - [ ] **Step 9: Commit and open the pull request**
 
@@ -300,36 +398,262 @@ git commit -s -m "Put the database column types in one module, and use it for on
 The SQLite switch has to change 795 column definitions across 72 files. Routing
 them through one module first means the switch changes this file instead.
 
-The helpers emit exactly the PostgreSQL types they replace, which drizzle-kit
-confirms by reporting no pending schema change. One table, drawer_opens, now
-uses them. The report of what the vocabulary could not hide is in the plan."
+The helpers emit exactly the PostgreSQL types they replace. The check for that
+is generating the migrations into a copy of the migration folder and diffing it
+against the real one: drizzle-kit reported no schema changes, and the diff was
+empty. One table, drawer_opens, now uses them. The report of what the
+vocabulary could not hide is in the plan."
 ```
 
 Then `/finish-branch`.
 
+### P1a findings
+
+What the vocabulary hid, and what it could not. Everything below was measured on 2026-09-17, and
+each finding says which measurement it rests on: the generate-into-a-copy probe from step 6, a
+census by `grep` over `packages` and `apps` skipping `node_modules` and test files, a direct probe of
+a column's `mapFromDriverValue` or `mapToDriverValue`, or — where the finding is that some check does
+NOT catch something — making the change in the source and running that check over it.
+
+**Hidden cleanly — `drawer_opens` converted with no schema change at all.** `id`, `ts`, `json`,
+`money`, `quantity`, `rate`, `flag`, `count`, `label` and `table` each emit exactly the type they
+replace; `drizzle-kit generate` against a copy of the snapshot folder produced
+`No schema changes, nothing to migrate` and `diff -r` was silent.
+
+**The acceptance check in this plan was wrong, and it is now fixed above.** `drizzle-kit check`
+does not read the schema source. Control: `flag` changed from `boolean(name)` to `integer(name)`,
+`drizzle-kit check` still printed `Everything's fine` and exited 0. The generate-into-a-copy probe
+caught the same break immediately. A pass and a fail looked identical under the old check, so it was
+measuring nothing.
+
+**What `enumText` could NOT hide: the database enum.** Counted on 2026-09-17 with the step 8
+command, which matches a declaration — `export const … = pgEnum(` — and drops `node_modules` and
+test files: **35 declarations across 21 files**. The filter matters, so here it is spelled out: a
+bare `grep -rn 'pgEnum('` with the same two exclusions returns 38 across 24 on this commit, and the
+three extra lines are comments quoting `pgEnum(` while explaining a column, in
+`packages/ui/src/floor.ts`, `apps/till/src/api/client.ts` and `apps/dashboard/src/api/client.ts`.
+Both numbers are right; they answer different questions. Treat the shape as the finding rather than
+either number. A `pgEnum` is a distinct PostgreSQL type created by
+`CREATE TYPE … AS ENUM`; `enumText` emits `text`. Pointing `enumText` at one is a real schema change,
+measured by converting `ticket_items.state` from `ticketState("state")` to
+`enumText("state", ["queued", "preparing", "ready"] as const)`:
+
+```sql
+ALTER TABLE "ticket_items" ALTER COLUMN "state" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "ticket_items" ALTER COLUMN "state" SET DEFAULT 'queued';
+```
+
+**Consequence for P1b: leave every `pgEnum` column alone.** Convert the columns around it and keep
+importing `pgEnum` from `drizzle-orm/pg-core` in the files that declare one. The rollout cannot carry
+the enums, because doing so breaks the "no schema change" rule that is the whole point of P1.
+
+**Consequence for F1:** SQLite has no enum type, so every one of them has to become text plus a
+check constraint at the flip, and that conversion carries a migration — it is flip work, not prepare
+work. The mechanical part is already proven: `enumText` plus a `check()` is exactly the shape
+`drawer_opens.reason` already uses, and this item converted it.
+
+**One thing the guard in P1b step 5 will not see.** It reads TEXT, so a file that keeps importing
+`pgEnum` (every file declaring one must) still has a `drizzle-orm/pg-core` import line; the guard's
+second half looks for the column-builder names specifically, so an enum-declaring file passes. That
+is correct, but it means the guard proves "no raw column builder", never "fully converted".
+
+**What `ts` could NOT hide: a timestamp's mode — and this is the finding to read twice.** `ts()` is
+hard-wired to `mode: "date"`, on the assumption written into this plan's own test comment that date
+mode is what every existing caller uses. That assumption was wrong.
+
+The mode changes what the driver mapping does in both directions, and does not change the SQL type.
+Probed on 2026-09-17 by handing each spelling's `mapFromDriverValue` the string
+`"2026-09-16T10:00:00Z"`: a `timestamp` with no mode at all gave back a `Date`, `mode: "date"` gave
+back a `Date`, and `mode: "string"` gave back the string. The write direction differs too, probed the
+same day: date mode's `mapToDriverValue` handed that same string threw
+`TypeError: value.toISOString is not a function`, and string mode's handed a `Date` returned
+`"2026-09-16T10:00:00.000Z"`. All spellings report the SQL type `timestamp with time zone`. So they
+emit the same DDL, produce the same generated migration, and leave the step 4 probe's `diff -r`
+silent. **Converting a string-mode column to `ts()` changes every read of that column, and the
+schema probe — the acceptance check this task leans on — cannot see it.**
+
+What WOULD notice, so nobody dismisses this warning as invisible to everything: `ts()` and
+`tsString()` give a column different TypeScript types in both directions — a select returns `Date`
+against `string`, and an insert wants the opposite — so most call sites for a converted column stop
+compiling, and the pre-push hook typechecks the packages a push changed. P1b step 4 also runs
+`pnpm --filter <package> test:coverage`, and any call site that does compile and then writes a
+string into a date-mode column hits the `TypeError` above. The warning is worth keeping anyway,
+because the check this plan calls the acceptance check for the task stays silent, and because
+"most call sites stop compiling" is a statement about the types, not a count anybody has taken —
+nobody has converted a string-mode column and counted what went red. Read the mode off the line
+being replaced; do not lean on the compiler to find it for you.
+
+String mode is not the minority case. Counted on 2026-09-17 across `packages` and `apps`, skipping
+`node_modules` and test files: about 90 timestamp columns in about 45 files carry `mode: "string"`,
+against about 19 carrying `mode: "date"` — roughly five to one the other way from what the plan
+assumed. The two modes are not even split cleanly by package:
+`packages/db/src/schema/daily-closes.ts:66` is date mode and `packages/db/src/schema/sale-voids.ts:30`
+is string mode, in the same package. Those numbers are a dated measurement, not the finding; the
+finding is that the mode is per column and the probe is blind to it.
+
+So the vocabulary carries two timestamp helpers rather than one: `ts` for date mode, and the
+`tsString` this item adds for string mode. **P1b must read the mode off each line it is replacing and
+keep it, column by column.** A file converted mechanically, every `timestamp(...)` becoming
+`ts(...)`, passes step 4's probe and its `diff -r`, because the only thing it changed is the one
+thing neither of them looks at.
+
+**Five more column builders are in live use, and the vocabulary has an equivalent for none of them.**
+Step 3 tells the reader to replace each column builder with its vocabulary equivalent. For these
+there is nothing to replace it with. Counted on 2026-09-17 over the non-test files that import from
+`drizzle-orm/pg-core`:
+
+| Builder                          | Sites on 2026-09-17 | Where to look first                                                                                                                                            |
+| -------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `date()`                         | 14                  | `packages/db/src/schema/daily-closes.ts:59`, `packages/db/src/schema/purchase-invoices.ts:63,66`, `packages/fiscal-verifactu/src/schema/registros.ts:56,101` |
+| `time()`                         | 4                   | `packages/db/src/schema/tenants.ts:134`, `packages/bookings/src/schema/bookings.ts:57`                                                                          |
+| `smallint()`                     | 5                   | `packages/db/src/schema/dining-tables.ts:59,60,62`                                                                                                             |
+| `bigint(…, { mode: "number" })`  | 3                   | `packages/db/src/schema/catalogue.ts:32`, `packages/db/src/schema/node-membership.ts:33`, `packages/identity/src/schema/webauthn.ts:34`                         |
+| a hand-rolled `bytea` customType | 3                   | `packages/db/src/schema/print-jobs.ts:26`, `packages/credentials/src/schema/tenant-credentials.ts:15`, `packages/media/src/schema/images.ts:16`                  |
+
+**Add each missing helper, with its own generated-type test, before converting the first column that
+needs it** — the same shape as the cases already in `packages/db/src/schema/columns.test.ts`. Do not
+improvise a substitution at the call site. Reaching for `count()` because a `smallint` holds a small
+number, or `label()` because a date is stored as text elsewhere, puts the engine decision back into
+the call sites that P1 exists to empty, and the flip then has to find them again.
+
+`bytea` needs a decision before it can have a helper, because the three blocks are not the same
+block. `packages/db/src/schema/print-jobs.ts:26` and
+`packages/credentials/src/schema/tenant-credentials.ts:15` both declare
+`customType<{ data: Buffer; driverData: Buffer }>`, so TypeScript hands their callers a node
+`Buffer`. `packages/media/src/schema/images.ts:16` declares
+`customType<{ data: Uint8Array; driverData: Buffer }>` and converts in both directions, so its
+callers get a plain `Uint8Array`. One named binary helper can be the only version F1 changes in one
+place ONLY once those two shapes are reconciled — which means picking the type callers see and
+changing the call sites on the other side. Until that decision is made and the callers are checked,
+the vocabulary would need two binary helpers, which puts the engine decision back where P1 is trying
+to remove it. `packages/media` is on the rollout list in P1b step 2, so this lands inside P1b, not
+after it.
+
+**One `text` column that must never become `label()`.**
+`packages/fiscal-verifactu/src/schema/registros.ts:86-94` stores `cuota_total` and `importe_total` as
+`text` deliberately, and the comment above them says why: `packages/verifactu/src/huella.ts` hashes
+those stored values verbatim as strings, so the bytes stored have to be the bytes hashed, which only
+`text` guarantees; `numeric(12,2)` re-renders on read and is additionally too narrow for the format's
+twelve integer digits. Under a mechanical conversion those two lines look exactly like free text and
+`label()` is the obvious substitution.
+
+It must not be made, and nothing in P1b would report it. `label()` emits `text` today, so the step 4
+probe stays silent; the break arrives at the flip, when every `label()` body changes at once. The
+existing guard, `packages/fiscal-verifactu/src/monetary-columns.test.ts`, inserts a
+twelve-integer-digit amount and asserts it reads back byte-identically — it names no helper and reads
+no schema source.
+
+That last sentence was a reading of the test file until 2026-09-17, when the substitution was
+actually made and the guard run. `registros_facturacion`'s `cuota_total` and `importe_total` were
+changed from `text(...)` to a locally defined `label(...)` with the same body the vocabulary's
+helper has, and:
+
+```bash
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/monetary-columns.test.ts
+```
+
+exited 0, reporting `Test Files 1 passed (1)` and `Tests 1 passed (1)`. The substitution was in
+place and the guard did not notice it. So this is the test that catches a lossy column type, not the
+test that catches this substitution — measured, not inferred. `CLAUDE.md` §5: a wrong value in the
+fiscal records is not repairable afterwards.
+
+**The vocabulary is not exported yet, and P1b's first cross-package conversion cannot start until it
+is.** P1a deliberately left `packages/db/src/index.ts` alone — nothing outside `packages/db` needed
+the vocabulary yet, and the commit message says so. But `packages/db`'s `exports` map is enumerated
+rather than a wildcard (`packages/db/package.json`; `CLAUDE.md` §3 pins that it is enumerated), so
+`.` → `./src/index.ts` is the only door any other package has, and on 2026-09-17 neither
+`packages/db/src/index.ts` nor `packages/db/src/schema/index.ts` mentions `columns.js`. That is why
+P1b now opens with a step that adds the export. There is no dependency problem in doing it: of the
+sixteen packages on the rollout list, fifteen already declare `@waitron/db` in their `dependencies`
+(read out of each `package.json` on 2026-09-17). The sixteenth is `packages/db` itself, which does
+not declare a dependency on itself and does not need one — its own files import `./columns.js`
+directly.
+
 ### P1b — roll the vocabulary out
 
-- [ ] **Step 1: Split the work by package**
+- [ ] **Step 1: Export the vocabulary from `packages/db`, first, on its own**
+
+P1a left `packages/db/src/index.ts` untouched on purpose. Nothing outside `packages/db` can reach
+`columns.ts` until it is re-exported there, because `packages/db`'s `exports` map is enumerated
+rather than a wildcard (`packages/db/package.json`) and `.` → `./src/index.ts` is the only door. Add
+the export before converting any other package; every package on the list below except
+`packages/db` itself already declares `@waitron/db` in its `dependencies`, so nothing else has to
+move.
+
+Add the missing helpers here too, each with its own generated-type case in
+`packages/db/src/schema/columns.test.ts`, before the first column that needs one is converted:
+`date`, `time`, `smallint`, `bigint` and the binary (`bytea`) type. The P1a findings above list where
+each one is in use. (The string-mode timestamp is not on that list: P1a added `tsString` already.)
+
+- [ ] **Step 2: Split the work by package**
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `recipes`, `layouts`, `reporting`.
 
-- [ ] **Step 2: For each package, convert every table file**
+- [ ] **Step 3: For each package, convert every table file**
 
 Replace `pgTable` with `table`, and each column builder with its vocabulary equivalent. Leave `check()`, `index()`, `unique()`, `foreignKey()` and `primaryKey()` imports coming from `drizzle-orm/pg-core` — the vocabulary covers columns and the table builder only.
 
-- [ ] **Step 3: Prove nothing changed**
+Three things this step is not allowed to do mechanically, each from the P1a findings above: a
+`timestamp` keeps the mode it already has, read off the line being replaced; a builder with no
+vocabulary equivalent waits for the helper rather than borrowing a near-enough one; and
+`registros_facturacion`'s `cuota_total` and `importe_total` stay as they are — they are `text`
+because the fiscal fingerprint hashes the stored bytes, and `label()` is not a synonym for that.
+
+- [ ] **Step 4: Prove nothing changed**
+
+The generate-into-a-copy probe from P1a step 6 — **not `drizzle-kit check`, which cannot see the
+schema source at all**. Run it from the package directory:
 
 ```bash
-pnpm --filter <package> exec drizzle-kit check
+cp -R drizzle drizzle-probe-tmp
+grep schema: drizzle.config.ts          # this package's own schema entry point
+pnpm exec drizzle-kit generate --dialect postgresql --schema ./src/schema/index.ts --out ./drizzle-probe-tmp --name probe
+diff -r drizzle drizzle-probe-tmp
+rm -rf drizzle-probe-tmp
 ```
 
-Expected: no pending changes. Then:
+**`--schema` is per package — change it.** All three flags are required (P1a step 6 has the measured
+refusal), and four packages do not keep their schema at `./src/schema/index.ts`: read from each
+`drizzle.config.ts` on 2026-09-17, `packages/media` uses `./src/schema/images.ts`,
+`packages/bookings` uses `./src/schema/bookings.ts`, `packages/venue-service` uses
+`./src/schema/service.ts`, and `packages/fiscal-none` uses `./src/index.ts`. A pasted
+`--schema ./src/schema/index.ts` points those four at a file they do not have — and drizzle-kit then
+writes nothing, so the `diff -r` is silent and looks like a pass. **Read the exit status and the
+`No schema changes, nothing to migrate` line, never the silent diff on its own.**
+
+Those four are a different set from step 2's rollout list, and the overlap is only three.
+`packages/fiscal-none` is not on step 2's list and declares no `pgTable` anywhere (checked
+2026-09-17), so this step never runs there; it is named above because the warning is about
+drizzle-kit's `--schema` flag across the repository, not about the rollout. Reaching for it as "the
+fourth package to convert" would be reading the wrong list.
+
+Four packages on step 2's list have no schema at all — `packages/purchasing`, `packages/recipes`,
+`packages/layouts` and `packages/reporting` each have no `drizzle.config.ts`, no `drizzle/` folder
+and no `pgTable(` anywhere in `src` (checked 2026-09-17). There is nothing for this step to run in
+them and nothing for step 3 to convert; skip them here.
+
+Two of the four are picked up later in this plan and two are not. Grepped over this plan file on
+2026-09-17: `@waitron/reporting` and `@waitron/purchasing` both appear in P5's step 8 test list, and
+`@waitron/purchasing` again in P6, so the money and quantity work does reach them.
+`packages/recipes` and `packages/layouts` appear nowhere in this plan except step 2's list above and
+this paragraph. A case-insensitive `grep -rniE "price|amount|cost|total|quantity|qty|numeric"` over
+`packages/recipes/src` on 2026-09-17 returned nothing at all, so there is nothing for P5 or P6 to
+find there either. **The likeliest explanation is
+that those two are on step 2's list by mistake, and that needs a decision rather than an
+assumption:** either drop them from the list, or say what work in this plan actually touches them.
+Do not treat them as covered.
+
+The same two warnings as in P1a: `--out` is relative to the working directory, so run this from the
+package directory and never give it an absolute path; and the scratch folder is created inside the
+package, so a run that stops part-way leaves `drizzle-probe-tmp` in `git status` — delete it.
+
+Expected: `No schema changes, nothing to migrate` with exit 0, and `diff -r` silent. Then:
 
 ```bash
 pnpm --filter <package> test:coverage
 ```
 
-- [ ] **Step 4: Guard the rule so it does not rot**
+- [ ] **Step 5: Guard the rule so it does not rot**
 
 In the final P1b pull request, add to `packages/db/src/schema/columns.test.ts`:
 
@@ -343,21 +667,34 @@ it("no table file imports a column builder directly from drizzle", async () => {
     // The vocabulary module itself is the one place these may be imported.
     if (file.endsWith("schema/columns.ts")) continue;
     const bad = /from "drizzle-orm\/pg-core"/.test(text) &&
-      /\b(uuid|timestamp|jsonb|numeric|boolean|integer)\(/.test(text);
+      /\b(uuid|timestamp|jsonb|numeric|text|boolean|integer)\(/.test(text);
     if (bad) offenders.push(file);
   }
   expect(offenders).toEqual([]);
 });
 ```
 
+The list of builder names has to match what the vocabulary covers — every COLUMN builder
+`packages/db/src/schema/columns.ts` imports from `drizzle-orm/pg-core`, and no fewer. Read on
+2026-09-17, that file imports eight names from `drizzle-orm/pg-core`: `boolean`, `integer`, `jsonb`,
+`numeric`, `pgTable`, `text`, `timestamp`, `uuid`. Seven of those eight are in the regex above. The
+eighth, `pgTable`, is deliberately not: it is the table builder rather than a column builder, and it
+is already what the line above the regex uses to decide which files to look at. State the rule as
+the seven column builders, so the count in the regex and the sentence beside it agree. `text` was
+missing from an earlier draft of this predicate, and a reviewer ran that draft on 2026-09-17 against
+a file holding `import { text } from "drizzle-orm/pg-core";` and `table("x", { kind: text("kind") })`:
+it returned false, so the file passed. Whenever step 1 adds a helper, add its builder here in the
+same change.
+
 Note in a comment that this guard reads TEXT, so a builder reached through an alias is invisible to it — the hedge `CLAUDE.md` §7 requires for a guard weaker than its name.
 
-- [ ] **Step 5: Commit each package separately**
+- [ ] **Step 6: Commit each package separately**
 
 ```bash
 git commit -s -m "Use the shared column types in <package>
 
-No schema change: drizzle-kit reports nothing pending."
+No schema change: generating this package's migrations into a copy of its
+migration folder and diffing that against the real one found no difference."
 ```
 
 ---
@@ -2126,7 +2463,8 @@ A bar that is now easily exceeded because a package shrank is raised. A bar that
 
 ## P1a findings
 
-_Filled in by task P1a, step 8. Until then this section is empty by design._
+Written by task P1a. The report itself is inside Task P1, under "### P1a findings" — it sits beside
+the steps it came from rather than at the end of the file.
 
 ---
 
