@@ -93,7 +93,9 @@ export type HeldSummary = {
    * Per node, the highest `secuencia` held with NO gap below it, counting up from 1 (a chain's
    * first record is secuencia 1). A receiver holding 1, 2, 5 reports 2, not 5: `MAX(secuencia)`
    * would report 5 and 3 and 4 would never be shipped again, and nothing downstream looks for a
-   * hole. Re-shipping 5 is the price, and it costs nothing because `applyTail` is idempotent.
+   * hole. Re-shipping 5 is the price. Its `records` row is re-inserted `ON CONFLICT DO NOTHING` and
+   * nothing about it changes; its `envios` row is not inert, because a re-shipped copy whose
+   * `estado` has advanced IS adopted — the `terminal-state-wins` rule, `EnvioRule` below.
    *
    * Sparse, not one entry per node: `summarise` only creates a key for a `node_id` that appears in
    * `records`, so a chain the receiver holds nothing for is `undefined` here, which `diffTail` reads
@@ -273,7 +275,10 @@ export function summarise(db: NodeDb): HeldSummary {
  * Records are selected by a high-water mark rather than row by row, and the mark is the receiver's
  * highest CONTIGUOUS `secuencia` for this chain, so everything at or below it is certainly held and
  * everything above it is shipped. A row above the mark that the receiver already holds is shipped
- * again, which changes nothing: `applyTail` is idempotent.
+ * again: its `records` row changes nothing, that insert being `ON CONFLICT DO NOTHING`, but its
+ * `envios` row can, because `applyTail` adopts a re-shipped submission state that has advanced
+ * (`EnvioRule`). A row at or BELOW the mark is not shipped again at all, whatever its submission
+ * state has done since the receiver took its copy — S2's Part D measures what that costs.
  *
  * The narrow claim the design rests on is about the SENDER'S OWN chain, not about `records` as a
  * whole: the only writer of a node's own chain is `recordSale`, appending 1, 2, 3, …. `applyTail`
@@ -336,12 +341,14 @@ export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
  *    filing a record the record's OWNER has already filed — neither side implies the other, so S2
  *    drives both.
  *    The guard reads the row already in the table and not the one arriving, so a `pendiente`
- *    arriving over an `enviando` row does overwrite it. That is not a hole in the model, because
- *    nothing here leaves a row `enviando` across a call: `drainPass` is synchronous, and reading
- *    `envios` back after a pass on node v26.7.0 gave every row `enviado` when the stub accepted
- *    all three, `enviado pendiente pendiente` when it threw on the second, and three `pendiente`
- *    when it threw on all of them — never an `enviando`. A row put into `enviando` by hand does
- *    stay there, since a pass claims only `pendiente` rows; no function in this file does that.
+ *    arriving over an `enviando` row does overwrite it. `drainPass` never leaves a row `enviando`
+ *    across a call: it is synchronous, and reading `envios` back after a pass on node v26.7.0 gave
+ *    every row `enviado` when the stub accepted all three, `enviado pendiente pendiente` when it
+ *    threw on the second, and three `pendiente` when it threw on all of them — never an `enviando`.
+ *    `applyShippedTail` is the way one does arrive: it writes `excluded.estado` verbatim, so a tail
+ *    taken WHILE the sender's own drain held a row `enviando` puts the receiver's row into
+ *    `enviando` — and since a pass claims only `pendiente` rows, no drain on the receiver moves it
+ *    again. S2's Part E measures that.
  *  - `regressing` — the upsert with no guard on the row already there. S2's control for the first
  *    side: a receiver row the receiver itself has submitted is walked back to the state the shipped
  *    copy was in, and the next drain pass files it again.
@@ -354,7 +361,8 @@ type EnvioRule = "terminal-state-wins" | "regressing" | "insert-only";
 const ENVIO_UPSERT: Record<EnvioRule, string> = {
   "terminal-state-wins": `INSERT INTO envios (node_id, secuencia, estado, acked) VALUES (?, ?, ?, ?)
      ON CONFLICT(node_id, secuencia) DO UPDATE SET estado = excluded.estado, acked = excluded.acked
-     WHERE envios.estado <> 'enviado' AND envios.acked = 0`,
+     WHERE envios.estado <> 'enviado' AND envios.acked = 0
+       AND (envios.estado <> excluded.estado OR envios.acked <> excluded.acked)`,
   regressing: `INSERT INTO envios (node_id, secuencia, estado, acked) VALUES (?, ?, ?, ?)
      ON CONFLICT(node_id, secuencia) DO UPDATE SET estado = excluded.estado, acked = excluded.acked`,
   "insert-only": `INSERT INTO envios (node_id, secuencia, estado, acked) VALUES (?, ?, ?, ?)
@@ -413,8 +421,10 @@ function applyShippedTail(
     let refusedForeign = 0;
     const skippedClashes: SupplierInvoiceRow[] = [];
 
-    // Idempotent by construction: a ship is retried whenever its confirmation is lost, so a second
-    // apply of rows already held must be a no-op rather than an error.
+    // `records` is idempotent by construction: a ship is retried whenever its confirmation is
+    // lost, so a second apply of a RECORDS row already held must be a no-op rather than an error.
+    // That is a claim about this insert alone — the `envios` write further down DOES change a row
+    // already there, under the rule `EnvioRule` states.
     const insertRecord = receiver.handle.prepare(
       `INSERT INTO records (node_id, secuencia, huella, huella_anterior, payload)
        VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
@@ -436,6 +446,13 @@ function applyShippedTail(
     // `enviado`/`acked=1` row handed a `pendiente` (read back afterwards: unchanged) and
     // `{changes:1}` for the same statement over a `pendiente` row — probed against this schema
     // before the rule was written.
+    //
+    // The rule's second condition — the arriving row's `estado`/`acked` differing from the row
+    // already there — is what keeps that count truthful when nothing changes. Probed on node
+    // v26.7.0 against this schema, one record shipped and then shipped again unaltered: without the
+    // condition the second apply returned `applied:1`, with it `applied:0`, and both left every
+    // table byte-identical. S2's Part E holds the count to a number, so the `scenarios` run is the
+    // standing check.
     const insertEnvio = receiver.handle.prepare(ENVIO_UPSERT[envioRule]);
     for (const row of tail.envios) {
       if (row.node_id !== senderNodeId) {

@@ -22,6 +22,10 @@ pnpm --filter @waitron/bench-sqlite-failover typecheck
 
 Docker must be running: each scenario starts its own MinIO container via Testcontainers.
 
+**`scenarios` currently exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is
+FAIL — a recorded result, not a broken harness. See "What S2 measures, and what it does not" below. A
+later task reading its own run's exit code has to account for that.
+
 `TESTCONTAINERS_RYUK_DISABLED=true` is required locally (`CLAUDE.md` §4), and it turns off the reaper
 that would otherwise clean up after an interrupted run. Scenarios run one at a time and each stops its
 own store in a `finally`, so an interrupt strands the container of the scenario in flight, not one per
@@ -95,52 +99,104 @@ is not the measurement, and it may differ from run to run.
 
 ## What S2 measures, and what it does not
 
-S2 drives the rig's model of the submission state machine — `drainPass`, `applyTail` and the
-`envios` table in `src/model.ts`. Its result is evidence about that mechanism and about nothing
+**S2's verdict is FAIL, and that is a result rather than a broken harness.** The rig found a way the
+loop as modelled here files one sale with the tax agency twice. It is the one mistake this product
+cannot undo, so the scenario records it instead of reporting PASS beside it. What to do about it is
+the owner's decision, and nothing here proposes a fix.
+
+S2 drives the rig's model of the submission state machine — `drainPass`, `applyTail`, `diffTail` and
+the `envios` table in `src/model.ts`. Its result is evidence about that mechanism and about nothing
 else: `packages/fiscal-verifactu` is not imported here and has its own suites.
 
-**The rule has two sides, and they are separate facts.** A record the RECEIVER has already filed
-must not be walked back to `pendiente` by a re-shipped copy taken before it was filed, or the
-receiver files it twice itself. A record the SENDER has already filed must be adopted as filed by a
-receiver still holding it `pendiente`, or the receiver files a record its owner has already filed.
-Neither side implies the other, and only the second was red before this scenario: with the earlier
-`ON CONFLICT DO NOTHING` write, a re-shipped `pendiente` changed nothing on a row the receiver had
-marked `enviado`, so the first side held by accident of the conflict clause rather than by a rule.
+**The safe case and the unsafe one differ by one thing: what the sender knew when it built the
+second batch.**
+
+- **A ship RETRIED IN FULL is safe** (Parts A and B). The sender's confirmation never came back, so
+  it has learned nothing since and re-sends the same range — every row included, whatever state each
+  is in now. A record the receiver has already filed is not walked back to unfiled by the older copy
+  arriving over it, and a record the SENDER has already filed is adopted as filed by a receiver still
+  holding it unfiled. Thirteen filings across the three chains, none of them twice.
+- **A ship RECOMPUTED against a REFRESHED view of the receiver files a record twice** (Part D). Here
+  the sender asks the receiver what it holds and sends only the difference. `diffTail` picks records
+  by a high-water mark over the receiver's `records`, so a record the receiver already holds is not
+  in the batch at all — and the batch therefore carries no news that its owner has since filed it.
+  The receiver's drain claims across every chain with no node filter, so it files that record itself.
+  Measured: the sender takes two sales, ships record 1 while it is still unfiled, then files both of
+  its own records; the recomputed batch carries record 2 only; the receiver is left holding
+  `1 pendiente, 2 enviado`, and its next drain files `refreshed-sender:1` a second time.
+
+**The rule those two sides rest on, and why each needs its own control.** A record the RECEIVER has
+already filed must not be walked back to `pendiente` by a re-shipped copy taken before it was filed,
+or the receiver files it twice itself. A record the SENDER has already filed must be adopted as filed
+by a receiver still holding it `pendiente`, or the receiver files a record its owner has already
+filed. Neither side implies the other, and only the second was red before this scenario: with the
+earlier `ON CONFLICT DO NOTHING` write, a re-shipped `pendiente` changed nothing on a row the receiver
+had marked `enviado`, so the first side held by accident of the conflict clause rather than by a rule.
 
 Both sides are measured against ONE ledger of filings, because there is one tax agency: a record
 filed by the node that owns it and filed again by the node it was shipped to has been filed twice,
-whichever database each filing came out of. A ledger per node cannot see that at all.
+whichever database each filing came out of. A ledger per node cannot see that at all. Parts A, B and
+C deliberately SHARE one ledger, which is what lets the whole-ledger backstops catch a filing for a
+chain no per-part check names; every part that is MEANT to file twice — Part D, Part E's second half
+and both controls — keeps its own ledger and its own nodes, so it cannot disturb the count of a part
+that is not.
 
-**Each side has its own control, because a control for one side proves nothing about the other.**
 `applyTailRegressing` drops the guard: the three rows the receiver had filed regress to `pendiente`
-and its next pass files them again. `applyTailInsertOnly` keeps the write as it stood before this
-scenario: the two rows the receiver already held stay `pendiente`, and it files rows its owner had
-already filed. Each control names the exact rows it expects to see filed twice — "a duplicate
-happened somewhere" would also be satisfied by a broken harness. Both are thin wrappers over the
-same `applyTail` body with one parameter changed, the `envios` rule, so a control differs from the
-real path in that rule and in nothing else.
+and its next pass files them again. `applyTailInsertOnly` drops the shipped submission state whenever
+the receiver already holds the row: the two rows the receiver already held stay `pendiente`, and it
+files rows its owner had already filed. Each control names the exact rows it expects to see filed
+twice — "a duplicate happened somewhere" would also be satisfied by a broken harness. Both are thin
+wrappers over the same `applyTail` body with one parameter changed, the `envios` rule, so a control
+differs from the real path in that rule and in nothing else.
 
-**What it does not measure.** Spec §4's S2 asks for a third thing: "the ship for a chain runs with
-that chain paused in the drain's blocked set". The model's blocked set is a local variable inside
-one `drainPass` call and is gone when that call returns (`src/model.ts`, `drainPass`), so no ship
-can run while a chain sits in it, and nothing in S2 asserts that one does. What Part C measures
-instead is the two things this model can show: a refused submission blocks the rest of that chain
-for the rest of the pass — the chain's second row is due and `pendiente` and is never handed to the
-stub at all — and a tail applied after that pass is drained by the next pass with every row filed
-exactly once, the row that was refused included. A design that needs the pause to OUTLIVE a pass is
-not modelled here; it would need a blocked set kept somewhere a ship can read.
+**The drain's blocked set, which spec §4's S2 also asks for, IS reachable** (Part E). An earlier
+version of this section said it was not. The set lives for the whole of one `drainPass` loop and
+`submit` is called from inside that loop, so a ship issued from inside a `submit` callback runs with
+whatever chains are blocked at that instant still blocked. The true narrow statement is that the set
+is not reachable from OUTSIDE `drainPass`, which is why the callback is the only seat to observe it
+from — and that shipping from inside the callback is also the only way this synchronous model can
+express "a ship lands mid-pass" at all, so what Part E measures is this model's ORDERING and not a
+claim about how the real system's drain and its ship interleave.
+
+Part E measures two things from that seat:
+
+- **A ship for a blocked chain.** Chain one's first row is refused, which blocks it; from a later
+  `submit` callback in the same pass, the rest of chain one is shipped in. The blocked chain files
+  nothing for the rest of that pass — its second row is due and `pendiente` and is never handed to
+  the stub — while chain two drains normally in the same pass, and the next pass files chain one
+  whole, three records once each, the refused row and the row that arrived mid-pass included. The
+  mid-pass apply reports `applied` = 2, counting only the record and submission row that were not
+  already there.
+- **A batch taken while the SENDER's own drain holds a row `enviando`.** `applyTail` writes the
+  shipped state verbatim, so the receiver adopts `enviando`; a drain claims only `pendiente` rows,
+  so no pass on the receiver ever touches that row again. Measured: the batch carried
+  `[1 enviando, 2 pendiente]`, the receiver was left `1 enviando acked=0, 2 pendiente acked=0`, row 1
+  is stuck against the receiver's own DRAIN, and row 2 — shipped unfiled and filed by its owner
+  moments later — is filed a second time by the receiver. What is NOT measured: a later ship carrying
+  row 1 as `enviado, acked=1` would satisfy the terminal-state-wins guard and clear it, and S2 sends
+  no such ship. This is recorded, not asserted: nothing here says a stuck row is the right answer.
+
+**The verdict is FAIL when ANY measured part records a second filing, and today two of them do** —
+Part D's recomputed ship, and Part E's second half. They have different causes, which matters for
+what would clear them: a ship that carried submission state for rows the receiver already holds would
+clear Part D, and leave Part E's standing. Part E's double comes from the receiver draining a foreign
+chain at the moment its live owner is draining the same chain, so clearing it means changing who may
+file a chain, not what a ship carries.
+
+That is also why no single mutation of `src/model.ts` tried here returns S2 to PASS: Part D's term was
+shown to vary (see the mutation list below), Part E's second half was not observed clear under any of
+them, and clearing both needs a design decision rather than a mutation.
 
 Two narrower boundaries:
 
 - The guard tests the row already in the receiver's table and not the one arriving, so an arriving
-  `pendiente` does overwrite an `enviando` row. Nothing in this model leaves a row in that state
-  across a call, and that was measured rather than argued: reading `envios` back after a pass gave
-  every row `enviado` when the stub accepted all three, `enviado pendiente pendiente` when it threw
-  on the second, and three `pendiente` when it threw on all of them — never an `enviando`. A row put
-  there by hand stays, since a pass claims only `pendiente` rows; no function in `src/model.ts` puts
-  one there.
-- Read off the package, not run: S2 starts no container and opens no store — it is SQLite plus this
-  rig's own two functions. It still runs inside a `scenarios` run that starts MinIO for the others.
+  `pendiente` does overwrite an `enviando` row. `drainPass` never leaves a row in that state across a
+  call, and that was measured rather than argued: reading `envios` back after a pass gave every row
+  `enviado` when the stub accepted all three, `enviado pendiente pendiente` when it threw on the
+  second, and three `pendiente` when it threw on all of them — never an `enviando`. `applyTail` is
+  the way one does arrive, and Part E's second half above is the measurement of it.
+- Read off the package, not run: S2 starts no container and opens no store — it is SQLite plus
+  `src/model.ts`. It still runs inside a `scenarios` run that starts MinIO for the others.
 
 S2's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
 @waitron/bench-sqlite-failover scenarios`, 2026-09-17:
@@ -148,17 +204,42 @@ S2's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
 ```
 | id | title | verdict | detail |
 | --- | --- | --- | --- |
-| S2 | no second tax-agency submission on a retried tail ship | PASS | filed=13 double=0 (A receiver files 5 once; B receiver files none of the owner's 4; C blocked chain drains 4 next pass after 1 refusal); controls double-file: regressing=3 insert-only=2 |
+| S2 | no second tax-agency filing on a re-sent or recomputed tail ship | FAIL | RETRIED-IN-FULL ship safe: filed=13 double=0 (A receiver files 5 once; B receiver files none of the owner's 4; C blocked chain drains 4 next pass after 1 refusal). D REFRESHED-SUMMARY ship files twice: refreshed-sender:1 (fresh tail carried records [2]; receiver left 1 pendiente acked=0, 2 enviado acked=1). E ship issued mid-pass for a blocked chain: that chain files nothing more that pass, next pass files 3 once, double=0. E tail taken mid-drain carried [1 enviando, 2 pendiente]: receiver left 1 enviando acked=0, 2 pendiente acked=0, and its own drain claims no enviando row, so 1 enviando acked=0 is stuck against that drain and cloud-f:2 is filed twice. Controls double-file: regressing=3 insert-only=2 |
 ```
 
-Its assertions were put to mutation rather than read: eleven small changes to `src/model.ts` (nine
-of a single line; two of a pair, where one rule is spelled out in two statements), each run whole,
-each making one named assertion the one that failed. Three further assertions were
-shown to bite by re-running a mutation with the earlier assertion that had caught it first taken
-out. Seven were not made to fail by any mutation tried — preconditions, and whole-ledger backstops
-that a sharper assertion earlier in the scenario always reached first. The mutations, the message
-each produced, and those seven by name are in this task's pull request, so nothing here reads as
-proved that was not.
+That run exits non-zero, which is the runner working: S2 is critical, and a critical FAIL is what
+this gate exists to report.
+
+Parts A, B and C's assertions were put to mutation rather than read: eleven small changes to
+`src/model.ts` (nine of a single line; two of a pair, where one rule is spelled out in two
+statements), each run whole, each making one named assertion the one that failed. Three further
+assertions were shown to bite by re-running a mutation with the earlier assertion that had caught it
+first taken out. Seven were not made to fail by any mutation tried — preconditions, and whole-ledger
+backstops that a sharper assertion earlier in the scenario always reached first. Those eleven were
+run before Parts D and E existed and against the `envios` rule as it stood then; the mutations, the
+message each produced, and those seven by name are in that task's pull request.
+
+Parts D and E were put to four more, each run whole, each named by the message it produced:
+
+- `diffTail`'s high-water mark forced to 0, so every ship carries the whole chain: Part D's segment
+  of the detail line changes from `files twice: refreshed-sender:1` to `files twice: none`, with no
+  edit to the scenario — the verdict really is read off the measurement. **S2 still reports FAIL and
+  the run still exits 1**, because Part E's second half is untouched by that mutation: its receiver
+  holds nothing when the mid-drain tail is taken, so that tail already carried the whole chain. This
+  mutation is the one that shows a term can go clean; it is not a demonstration that the verdict can
+  reach PASS, and no mutation tried here does that.
+- A refused submission ending the whole pass (`break`) instead of blocking only its own chain: "Part
+  E: the ship for the blocked chain ran from inside a submit callback". The pass stops at the
+  refusal, so the later callback that issues the ship never runs.
+- The blocked set never added to at all: "Part E: the blocked chain files nothing for the rest of the
+  pass its refusal blocked". Part C's two assertions reach this mutation first, so this one was run
+  with those two taken out — the same method as the three re-runs above.
+- The `terminal-state-wins` rule's second condition removed — the arriving row's `estado`/`acked`
+  differing from the row already there: "Part E: the mid-pass ship counts only the two rows it
+  actually changed", the count having gone 2 → 4. A separate probe on node v26.7.0 took the control
+  in the other direction: a second, identical `applyTail` of one shipped record reported `applied:1`
+  without the condition and `applied:0` with it, every table byte-identical either way, while an
+  apply that really does advance a row reported 1 under both.
 
 ## Why it can't join `pnpm -r test`
 

@@ -225,7 +225,9 @@ export default async function ({ startStore }) {
 
 The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins rule and a minimal drain with an idempotency-asserting submit stub.
 
-> **2026-09-17, as landed.** The step-1 snippet below has three defects, and the code is what holds.
+> **2026-09-17, as landed.** This note covers the WHOLE of Task 4, not only its step-1 snippet: the
+> task's opening line, its **Files** and **Interfaces** lines and step 4's expected detail each
+> describe a design that was not built, and the code is what holds. Five corrections.
 >
 > 1. **The submit stub does not assert, and does not throw.** `drainPass` catches a throwing
 >    `submit`, returns the row to `pendiente` and blocks that chain for the rest of the pass, so an
@@ -245,10 +247,28 @@ The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins r
 >    with no node filter, files a record its owner has already filed. S2 therefore has two parts,
 >    one per side, each with its own control (`applyTailRegressing` for the first,
 >    `applyTailInsertOnly` for the second), both controls being thin wrappers over one shared
->    `applyTail` body with the `envios` rule as its one parameter. A third part covers what the rig
->    can honestly show about spec §4's blocked-set requirement; what it cannot show is stated in
->    `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not", not left to look
->    covered.
+>    `applyTail` body with the `envios` rule as its one parameter. A third part covers spec §4's
+>    blocked-set requirement. **Corrected later the same day:** an earlier draft of this item, and of
+>    the README section it points at, said that requirement could not be measured because the blocked
+>    set is a local variable. That was wrong — the set is live for the whole loop and `submit` is
+>    called from inside it, so a ship issued from a later `submit` callback in the same pass runs with
+>    a chain paused. Part E measures it. `bench/sqlite-failover/README.md` → "What S2 measures, and
+>    what it does not" carries what IS and is not measured.
+> 4. **`drainPass` was not changed by this task, and neither was the `submit` stub's contract.** The
+>    opening line above ("a minimal drain with an idempotency-asserting submit stub") and the
+>    **Files** line's "(complete `drainPass` terminal-state handling …)" both describe work the diff
+>    does not contain. `git show ab59b646 -- bench/sqlite-failover/src/model.ts` has three hunks: the
+>    schema comment, the `applyTail` doc comment (now `EnvioRule`) with `ENVIO_UPSERT` and the two
+>    control wrappers, and `applyShippedTail`'s `envios` insert. No changed line is inside
+>    `drainPass`'s body; the one changed line that NAMES it is a comment in the `EnvioRule` block
+>    referring to it. `drainPass` landed whole in Task 1 and this task only read it. The **Interfaces → Produces** line is corrected in place below,
+>    because a later task would otherwise read it as a contract.
+> 5. **Step 4's expected `submitted=5/5` is not what the scenario reports, and PASS is no longer what
+>    it measures.** The detail is a sentence per part, and the verdict is read off the measurement:
+>    S2 is FAIL as landed, because a ship recomputed against a REFRESHED view of the receiver ships
+>    nothing at all for a record the receiver already holds, so the receiver's drain files a record
+>    its owner has already filed. The README's "What S2 measures" section carries the result and what
+>    is open; the design decision is the owner's.
 
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (complete `drainPass` terminal-state handling and `applyTail`'s `envios` terminal-state-wins branch)
@@ -256,7 +276,7 @@ The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins r
 
 **Interfaces:**
 - Consumes: `openNode`, `recordSale`, `drainPass`, `applyTail`, `diffTail` (Task 1).
-- Produces: an `applyTail` whose `envios` apply is **terminal-state-wins** (a row already `enviado`/`acked` on the receiver is never regressed by a re-shipped `pendiente`); a `drainPass` whose `submit` stub throws if a `(node_id, secuencia)` is submitted twice.
+- Produces: an `applyTail` whose `envios` apply is **terminal-state-wins** (a row already `enviado`/`acked` on the receiver is never regressed by a re-shipped `pendiente`, and a receiver row that is not yet terminal adopts the shipped state). ~~a `drainPass` whose `submit` stub throws if a `(node_id, secuencia)` is submitted twice~~ — corrected 2026-09-17: the stub records every `(node_id, secuencia)` it is handed and never throws on a repeat, and `drainPass` is unchanged by this task; see the note above, item 1 and item 4.
 
 - [ ] **Step 1: Write the failing scenario** `s2_no_double_submit.ts`:
 ```ts
@@ -405,6 +425,13 @@ export default async function ({ startStore }) {
 ---
 
 ### Task 7: S0 — the happy loop end to end
+
+> **2026-09-17, from Task 4.** S2 measured a second tax-agency filing arising whenever a receiver
+> holds a record whose submission state it never learns about, and its drain claims across every
+> chain with no node filter. The steps below put records on a cloud that then drains them, so
+> whether the same shape arises here is a question to answer while building this task — S2
+> settles it neither way. `bench/sqlite-failover/README.md` → "What S2 measures, and what it does
+> not" has the measurement.
 
 **Files:**
 - Create: `bench/sqlite-failover/src/scenarios/s0_happy_loop.ts`

@@ -19,9 +19,10 @@ export default async function smoke({ startStore }: ScenarioContext): Promise<Sc
     assert.equal(second.secuencia, 2, "the chain advances");
     assert.notEqual(second.huella, first.huella, "each record hashes to its own huella");
 
-    // The append-only triggers are a guard nothing else in this rig runs — applyTail only ever
-    // inserts ON CONFLICT DO NOTHING, which fires neither of them. Every way SQLite offers of
-    // changing a row is checked here, INSERT OR REPLACE included: it deletes the conflicting row
+    // The append-only triggers are a guard nothing else in this rig runs: applyTail re-inserts a
+    // RECORDS row with ON CONFLICT DO NOTHING, which fires neither trigger, and its envios write
+    // does update a row already there but envios carries no such trigger. Every way SQLite offers
+    // of changing a row is checked here, INSERT OR REPLACE included: it deletes the conflicting row
     // internally, and that internal delete reaches the BEFORE DELETE trigger only because openNode
     // turns recursive_triggers on.
     const mutations: [string, string][] = [

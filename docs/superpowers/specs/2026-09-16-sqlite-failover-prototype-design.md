@@ -96,6 +96,9 @@ cites the real table or code it stands in for, so a reader can check the model i
   set** so a paused chain is skipped (`blockedSifIds`, `drain.ts:304,547`). "Submitting to AEAT" is a
   stub that records an *idempotency assertion*: it fails the scenario if the same `(node_id, secuencia)`
   is ever submitted twice. That assertion is the whole point of scenario S2.
+  *(2026-09-17: the landed stub has no assertion in it — `drainPass` swallows one — and S2's blocked-set
+  assertion turned out to be reachable. What the rig measures instead, and the second-filing path it
+  found, are in `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not".)*
 
 Non-fiscal ledger shapes the loop also touches are modelled just as thinly: a `sales`/`sale_lines` pair
 (parent carries `node_id`, child hangs off `sale_id`) and a `supplier_invoices` table carrying a
@@ -172,6 +175,9 @@ to satisfy it. The scenarios map one-to-one onto topology §12.2's obligations.
   apply is **terminal-state-wins** for `envios` (an `enviado` row is never regressed to `pendiente` by
   the re-shipped older version); the ship for a chain runs with that chain paused in the drain's blocked
   set. A control: with terminal-state-wins removed, the rig reproduces the double submission.
+  *(2026-09-17, as landed: all three are measured, the blocked-set one included, and S2's verdict is
+  FAIL — a ship recomputed against a refreshed view of the receiver files a record twice.
+  `bench/sqlite-failover/README.md` → "What S2 measures, and what it does not" carries the result.)*
 - **Failure means:** the design can double-file to the tax agency — the single most serious possible
   finding; stop and tell the owner immediately.
 
