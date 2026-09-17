@@ -158,10 +158,12 @@ out, and neither is a double filing a run here could show:
 - **The stuck `enviando` row** (Part E's second half) is a MODEL GAP, not a real-system filing hole.
   The rig's minimal drain claims only `pendiente` rows and never recovers a stale claim, so a shipped
   `enviando` sticks and never files. The real drain does not have this hole: it commits `enviando`
-  before the AEAT call (so a promoted mirror holds the state), and `recoverStaleClaims` resets any
-  `enviando` older than five minutes back to `pendiente` at the top of every pass, re-filing it with
-  AEAT's duplicate check catching the already-filed (`packages/fiscal-verifactu/src/drain.ts`;
-  topology §5.2, owner question 2026-09-17).
+  before the AEAT call (so a promoted mirror holds the state), and it resets an inherited in-flight
+  row and re-files it, with AEAT's duplicate check catching the already-filed
+  (`packages/fiscal-verifactu/src/drain.ts`). At PROMOTION every inherited `enviando` is reset to
+  `pendiente` unconditionally before the node files — nothing is in flight then — and steady-state
+  `recoverStaleClaims` resets any older than five minutes each pass (topology §5.1 step 1, §5.2,
+  owner 2026-09-17).
 - **A DIFFERENT identity for one economic sale** — an invoice number reissued under re-keying — is
   the one genuine double-filing shape, and the only real-system concern that survives. AEAT does not
   refuse it, because the identity triple differs. S2 does not model it; fresh-series-on-restore
