@@ -2254,9 +2254,9 @@ with nothing to replace them with, and two fiscal amounts held as text that must
 text helper. **P1b's first step, landed in #393, closes that third gap and opens the vocabulary to the rest of
 the workspace**: `packages/db/src/schema/columns.ts` now has `day`, `timeOfDay`, `smallCount`, `bigCount`
 and `binary`, each pinned by its own generated-type test, and `packages/db/src/index.ts` re-exports
-the vocabulary, which is the only door another package has into it. **P1b's second step converts
-`packages/db` itself**: the 33 table files that still named PostgreSQL's types now name meanings
-instead. No schema change, and the probe is the receipt for exactly that much: it generated the
+the vocabulary, which is the only door another package has into it. **P1b's second step, landed in
+#394, converts `packages/db` itself**: the 33 table files that still named PostgreSQL's types now
+name meanings instead. No schema change, and the probe is the receipt for exactly that much: it generated the
 package's migrations into a copy of the migration folder, printed `No schema changes, nothing to
 migrate`, exited 0, and the diff of the two folders was silent — with the same probe run before any
 edit, which says the folder was not already out of date. That the probe can SEE a real change is
@@ -2278,6 +2278,18 @@ same value stops decoding and starts returning `"72,101,108,108,111"` where it r
 a silently wrong answer rather than a failure. The readers themselves are wider than first counted:
 thirteen files in all, about twenty of the sites in
 `apps/server/src/receipt-print.test.ts` alone.
+
+Two things #394 deliberately left for later, each with its next action. **The payload column is the
+next pull request in this rollout, before the remaining packages**: convert
+`print_jobs.payload` to the `binary` helper, delete the `Buffer.from` in the printing package's
+enqueue path, and fix the two assertions named above — but NOT the copy in that package's agent
+runtime, which reads its row with raw SQL and so never passes through a column mapping at all.
+**And the house rule is not written down yet, on purpose**: the one-line `CLAUDE.md` §3 entry naming
+`packages/db/src/schema/columns.ts` as the only place the engine's column types are named, with its
+receipt in `docs/developers/conventions-data.md`, lands in P1b's FINAL pull request together with
+the guard that enforces it. Until the rollout reaches the other packages every one of them is a
+standing violation of that rule, and a written rule with standing violations needs a guard rather
+than another paragraph.
 
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
