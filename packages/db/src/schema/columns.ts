@@ -1,3 +1,4 @@
+import { getTableColumns, sql, type AnyColumn } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -23,8 +24,28 @@ import {
 /** A uuid identifier. */
 export const id = (name: string) => uuid(name);
 
-/** A moment on the server clock, read back as a `Date`. */
+/**
+ * A moment on the server clock, read back as a JavaScript `Date`.
+ *
+ * `ts` and `tsString` emit the SAME SQL type (`timestamp with time zone`), so converting a column
+ * to the wrong one is invisible to the SCHEMA PROBE and to any migration diff: the generated SQL is
+ * byte-identical either way. It is not invisible to everything else. The two differ in `columnType`
+ * (`PgTimestamp` against `PgTimestampString` — the one-line discriminator, asserted in
+ * `columns.test.ts`), in what a read returns, and in the WRITE mapper: measured 2026-09-17, a
+ * date-mode column's `mapToDriverValue` given a string threw "value.toISOString is not a function",
+ * while a string-mode column's given a `Date` returned "2026-09-16T10:00:00.000Z". The typechecker
+ * usually gets there first: the swap flips the inferred select type between `Date | null` and
+ * `string | null` and the insert type between `Date` and `string`, so a call site using the value as
+ * one of those stops compiling. Pick by what the existing column declared, never by which helper is
+ * shorter.
+ */
 export const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+
+/**
+ * A moment on the server clock, read back as the STRING the driver rendered — no `Date` is
+ * constructed. See `ts` above for why the generated schema cannot tell the two apart, and what can.
+ */
+export const tsString = (name: string) => timestamp(name, { withTimezone: true, mode: "string" });
 
 /** A structured document. */
 export const json = <T>(name: string) => jsonb(name).$type<T>();
@@ -39,17 +60,60 @@ export const quantity = (name: string) => numeric(name, { precision: 12, scale: 
 export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
 
 /**
- * A closed vocabulary. Text plus a check constraint rather than a database enum type, which is
- * already the house preference for a vocabulary that may widen (`drawer_opens.reason`,
- * `invoice_series.purpose`): widening costs a one-line migration instead of an `ALTER TYPE`.
+ * A closed vocabulary: a text column whose permitted values are listed in a `check()` constraint.
  *
- * The caller still writes the `check()` on the table; this helper supplies the column and its
- * TypeScript type so the two cannot drift apart. `values` is read for its TYPE only, which is why
- * the parameter is unused in the body.
+ * The values array is written ONCE, at the call site. This helper derives the column's TypeScript
+ * type from it and hands the same array to drizzle as the column's `enumValues`; `enumCheck` below
+ * builds the constraint's SQL from those, so the type and the constraint cannot state different
+ * sets.
+ *
+ * There is no house rule choosing between this shape and a `pgEnum`, and no two-family split to
+ * apply: the repository carries both, declares more `pgEnum` types than checked text columns (a
+ * `pgEnum` declaration looks like `packages/db/src/schema/tenants.ts:52`), and the checked text
+ * columns it does carry were each taken for their own stated reason. Two of those reasons, and they
+ * are different reasons: `packages/db/src/schema/series.ts:58-61`, because the permitted set depends
+ * on an unverified question to the accountant, so widening must cost one line of migration rather
+ * than an `ALTER TYPE`; `packages/payments/src/schema/payments.ts:72-74`, because adding a value
+ * later must not hit the one-transaction `ALTER TYPE` trap (its check is at `payments.ts:132-133`).
+ * So: read the sibling column's own comment before copying either shape, rather than looking for a
+ * rule here.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- type-only parameter, see above
-export const enumText = <T extends string>(name: string, _values: readonly T[]) =>
-  text(name).$type<T>();
+export const enumText = <T extends string>(name: string, values: readonly T[]) =>
+  text(name, { enum: values as readonly [T, ...T[]] });
+
+/**
+ * The `in (...)` constraint body for an `enumText` column, read off that column's own values, so
+ * the constraint and the column's TypeScript type cannot list different sets.
+ *
+ * Two measurements from 2026-09-17 shape the body:
+ *
+ * - `.inlineParams()` is what writes the values into the DDL as literals. Without it drizzle
+ *   renders them as bind placeholders — `in ($1, $2)` — which lands in the generated migration and
+ *   changes the schema.
+ * - A table's extra-config callback is handed an `ExtraConfigColumn`, a different object from the
+ *   table's own column. It renders as the right column reference, but its `enumValues` is
+ *   undefined at runtime, so reading it directly threw "Cannot read properties of undefined
+ *   (reading 'map')" — both inside `drizzle-kit generate` and when the node-postgres client builds
+ *   its relational config. Every column knows its table, and the table's own column does carry the
+ *   values, which is what the fallback reads.
+ *
+ * That second measurement is also why the parameter is any column rather than a type that demands
+ * a vocabulary: TypeScript types the extra-config column's `enumValues` as `string[] | undefined` —
+ * not the vocabulary union — so no call from the only place a check can be declared would compile.
+ * A column `enumText` did not declare is refused at runtime instead.
+ */
+export const enumCheck = (column: AnyColumn) => {
+  const onTable: readonly AnyColumn[] = Object.values(getTableColumns(column.table));
+  const values: readonly string[] | undefined =
+    column.enumValues ?? onTable.find((c) => c.name === column.name)?.enumValues;
+  if (values === undefined) {
+    throw new Error(`enumCheck: column "${column.name}" was not declared with enumText`);
+  }
+  return sql`${column} in (${sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  )})`.inlineParams();
+};
 
 /** A true/false flag. */
 export const flag = (name: string) => boolean(name);
@@ -57,7 +121,21 @@ export const flag = (name: string) => boolean(name);
 /** A whole number. */
 export const count = (name: string) => integer(name);
 
-/** Free text. */
+/**
+ * Free text.
+ *
+ * A fiscal amount held as `text` is NOT free text and must not become `label()`:
+ * `packages/fiscal-verifactu/src/schema/registros.ts:86-96` keeps `cuota_total`/`importe_total` as
+ * `text` because the fiscal fingerprint hashes the stored bytes verbatim, so the stored bytes must
+ * equal the hashed bytes.
+ *
+ * Nothing catches that substitution, so do not expect a test to stop you.
+ * `packages/fiscal-verifactu/src/monetary-columns.test.ts` builds its database from the migration
+ * SQL and reads no schema source: measured 2026-09-17, with both columns redeclared through a
+ * locally defined helper whose body is `label()`'s, `vitest run src/monetary-columns.test.ts`
+ * exited 0 with one test passing. What that test does catch is a stored type that has become lossy
+ * — the amount it round-trips is rejected by `numeric(12, 2)` with SQLSTATE 22003.
+ */
 export const label = (name: string) => text(name);
 
 export const table = pgTable;

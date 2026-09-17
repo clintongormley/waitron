@@ -1,8 +1,5 @@
-import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/pg-core";
-import { enumText, flag, id, table, ts } from "./columns.js";
-
-export type DrawerOpenReason = "cash_sale" | "manual";
+import { enumCheck, enumText, flag, id, table, ts } from "./columns.js";
 
 /**
  * The cash-drawer AUDIT log (counter-receipt/drawer slice §2). One append-only row per drawer kick,
@@ -23,7 +20,8 @@ export type DrawerOpenReason = "cash_sale" | "manual";
  * `authorized_by` (nullable) and `via_override` (bool, default false) are the authorization AUDIT: who
  * authorized the open under a `gated` `drawer_open_policy` and whether a supervisor override was used.
  * `authorized_by` is a plain uuid with NO FK, the same `person_id` seam — it points at the identity
- * slice's persons without depending on it.
+ * slice's persons without depending on it. Both are drizzle-native (a nullable uuid and a bool with a
+ * default), so they land in the generated migration, not the --custom one.
  */
 export const drawerOpens = table(
   "drawer_opens",
@@ -40,9 +38,9 @@ export const drawerOpens = table(
     // timestamp, not an application-supplied one).
     openedAt: ts("opened_at").notNull().defaultNow(),
     // Why the drawer opened: 'cash_sale' (auto kick on a cash sale) or 'manual' (staff open). A text
-    // column + CHECK, matching invoice_series.purpose / incidents.severity — a small closed vocabulary
-    // an audit table widens with a one-line migration, where a pgEnum needs ALTER TYPE. (receipt_print_mode
-    // on locations is a pgEnum instead, matching order_flow — a per-venue CONFIG mode, a different family.)
+    // column + CHECK, matching invoice_series.purpose / incidents.severity. `enumText` and
+    // `enumCheck` (`packages/db/src/schema/columns.ts`) build the column and its constraint from the
+    // single values array below.
     reason: enumText("reason", ["cash_sale", "manual"] as const).notNull(),
     // NULLABLE bare column: a manual open has no sale; a cash-sale open references it. The
     // (sale_id) → sales(id) FK is hand-written in the
@@ -61,5 +59,10 @@ export const drawerOpens = table(
     // false — the common case is no override, and the flag records the exception.
     viaOverride: flag("via_override").notNull().default(false),
   },
-  (t) => [check("drawer_opens_reason_ck", sql`${t.reason} in ('cash_sale', 'manual')`)],
+  // The constraint's values are read off the column itself (`enumCheck`), so the vocabulary is
+  // declared once, in the `enumText` call above.
+  (t) => [check("drawer_opens_reason_ck", enumCheck(t.reason))],
 );
+
+/** The `reason` vocabulary as a type, read off the column so the values are written down once. */
+export type DrawerOpenReason = (typeof drawerOpens.reason.enumValues)[number];
