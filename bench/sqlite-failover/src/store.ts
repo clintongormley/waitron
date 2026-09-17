@@ -11,6 +11,7 @@
 import {
   CreateBucketCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -51,6 +52,8 @@ export type Store = {
   bucket: string;
   putJson(key: string, value: unknown): Promise<void>;
   getJson(key: string): Promise<unknown>;
+  /** Every key under `prefix`, whatever a page of the listing holds. */
+  listKeys(prefix: string): Promise<string[]>;
   stop(): Promise<void>;
 };
 
@@ -116,6 +119,23 @@ async function connect(container: StartedTestContainer): Promise<Store> {
       const output = await client.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
       if (!output.Body) throw new Error(`no body for ${key}`);
       return JSON.parse(await output.Body.transformToString());
+    },
+    async listKeys(prefix) {
+      // The continuation loop is not decoration for a rig that writes a handful of keys: the
+      // listing comes back a page at a time, and a caller that counted a prefix from one page would
+      // read a truncated answer as the whole truth. Measured in this worktree on 2026-09-17 against
+      // the pinned image, with 1005 keys written under one prefix: a single `ListObjectsV2` answered
+      // `keys=1000 truncated=true`, while this loop returned `keys=1005 unique=1005`.
+      const keys: string[] = [];
+      let token: string | undefined;
+      do {
+        const page = await client.send(
+          new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix, ContinuationToken: token }),
+        );
+        for (const object of page.Contents ?? []) if (object.Key) keys.push(object.Key);
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+      return keys;
     },
     async stop() {
       client.destroy();

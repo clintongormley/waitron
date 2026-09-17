@@ -171,6 +171,16 @@ export default async function ({ startStore }) {
 
 ### Task 3: S1 — offline double promotion, the CAS fence
 
+> **2026-09-17, as landed.** Two things below were changed while building it, and the code is what
+> holds. (1) The keys live under the venue prefix `venues/v1/` — topology design §2.2 — not at the
+> bucket root: `venues/v1/claims/term-<n>.json`, `venues/v1/current.json`,
+> `venues/v1/gen-<term>-<node>/OWNER`. That is the prefix Tasks 6, 7 and 8 already stream a
+> generation into, so a later task does not have to reconcile two namespaces. (2) `promoteUnfenced`
+> is a real read-check-write taking the base as an argument, not a plain PUT that always returns
+> `"won"`; a control that cannot return anything else measures nothing, and the base is passed in so
+> the control does not depend on the order the store serves two reads in. Details and the runs behind
+> both: PR for this task, and `bench/sqlite-failover/README.md`.
+
 **Files:**
 - Create: `bench/sqlite-failover/src/promotion.ts` (`export async function promote(store, term, nodeId): Promise<"won"|"lost">`, `export async function promoteUnfenced(...)` the control)
 - Create: `bench/sqlite-failover/src/scenarios/s1_double_promotion.ts`
