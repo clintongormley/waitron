@@ -1,11 +1,16 @@
 import { getTableColumns, sql, type AnyColumn } from "drizzle-orm";
 import {
+  bigint,
   boolean,
+  customType,
+  date,
   integer,
   jsonb,
   numeric,
   pgTable,
+  smallint,
   text,
+  time,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -46,6 +51,17 @@ export const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 
  * constructed. See `ts` above for why the generated schema cannot tell the two apart, and what can.
  */
 export const tsString = (name: string) => timestamp(name, { withTimezone: true, mode: "string" });
+
+/**
+ * A calendar day: no time, no zone. Read back as the string the driver rendered — a bare
+ * `date(name)` is drizzle's STRING mode. `date(name, { mode: "date" })` emits the same SQL type and
+ * returns a `Date`, so the schema tells them apart no better than it does `ts` from `tsString`; the
+ * read mapping does, and `columns.test.ts` pins it.
+ */
+export const day = (name: string) => date(name);
+
+/** A time of day: no date, no zone — a venue's opening time rather than a moment. */
+export const timeOfDay = (name: string) => time(name);
 
 /** A structured document. */
 export const json = <T>(name: string) => jsonb(name).$type<T>();
@@ -121,6 +137,16 @@ export const flag = (name: string) => boolean(name);
 /** A whole number. */
 export const count = (name: string) => integer(name);
 
+/** A whole number with a small fixed range — a weekday, a position on a floor plan. */
+export const smallCount = (name: string) => smallint(name);
+
+/**
+ * A whole number wider than `count`, read back as a JavaScript number.
+ * `bigint(name, { mode: "bigint" })` emits the same SQL type and reads back a `bigint` instead, so
+ * only the read mapping separates the two; `columns.test.ts` pins which one this is.
+ */
+export const bigCount = (name: string) => bigint(name, { mode: "number" });
+
 /**
  * Free text.
  *
@@ -137,5 +163,32 @@ export const count = (name: string) => integer(name);
  * — the amount it round-trips is rejected by `numeric(12, 2)` with SQLSTATE 22003.
  */
 export const label = (name: string) => text(name);
+
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => "bytea",
+  toDriver: (value) => Buffer.from(value),
+  fromDriver: (value) => new Uint8Array(value),
+});
+
+/**
+ * Opaque bytes (`bytea`), handed to callers as a `Uint8Array` and bound as a node `Buffer`.
+ *
+ * `Uint8Array` is the caller-facing type because the callers already hold one and convert only
+ * because the column demands a `Buffer`: `packages/printing/src/outbox.ts:26` takes a `Uint8Array`
+ * and calls `Buffer.from` at line 55, and `packages/printing/src/runtime.ts:288-291` copies a
+ * read-back payload back into a `Uint8Array`. No table uses this helper yet, so those two hand
+ * conversions are still the live ones; converting their columns to it will DELETE them rather than
+ * add a third.
+ *
+ * `packages/db/src/schema/print-jobs.ts` and `packages/credentials/src/schema/tenant-credentials.ts`
+ * declare their own `bytea` typed as `Buffer` in both directions, so converting those two columns
+ * changes what their call sites receive — the SQL type is the same either way, so nothing in the
+ * schema will report it.
+ *
+ * The custom type itself stays private: drizzle's overloads on it also accept no name at all and a
+ * config object, so exporting it directly would make `binary()` compile where every sibling helper
+ * here demands a column name.
+ */
+export const binary = (name: string) => bytea(name);
 
 export const table = pgTable;

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
-import { PgDialect, check, getTableConfig } from "drizzle-orm/pg-core";
+import { PgDialect, check, getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 import {
@@ -20,7 +20,15 @@ import {
   flag,
   count,
   label,
+  day,
+  timeOfDay,
+  smallCount,
+  bigCount,
+  binary,
 } from "./columns.js";
+import * as vocabulary from "./columns.js";
+import * as publicSurface from "../index.js";
+import { binary as doorBinary, day as doorDay, table as doorTable } from "../index.js";
 import { drawerOpens } from "./drawer-opens.js";
 
 const probe = table("probe", {
@@ -35,6 +43,11 @@ const probe = table("probe", {
   on: flag("on"),
   n: count("n"),
   name: label("name"),
+  onDay: day("on_day"),
+  opensAt: timeOfDay("opens_at"),
+  small: smallCount("small"),
+  big: bigCount("big"),
+  bytes: binary("bytes"),
 });
 
 const otherProbe = table("other_probe", {
@@ -49,11 +62,13 @@ const checkedProbe = table(
 
 const render = (fragment: SQL) => new PgDialect().sqlToQuery(fragment).sql;
 
-const columnsOf = () => Object.fromEntries(getTableConfig(probe).columns.map((c) => [c.name, c]));
+/** A table's columns keyed by the name they carry in SQL, which is what every assertion here uses. */
+const columnsOf = (built: PgTable) =>
+  Object.fromEntries(getTableConfig(built).columns.map((c) => [c.name, c]));
 
 describe("the column vocabulary emits today's PostgreSQL types", () => {
   it("keeps the exact SQL type of every helper", () => {
-    const c = columnsOf();
+    const c = columnsOf(probe);
     expect(c.pk.getSQLType()).toBe("uuid");
     expect(c.at.getSQLType()).toBe("timestamp with time zone");
     expect(c.at_string.getSQLType()).toBe("timestamp with time zone");
@@ -63,14 +78,21 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
     expect(c.vat.getSQLType()).toBe("numeric(5, 2)");
     expect(c.kind.getSQLType()).toBe("text");
     expect(c.on.getSQLType()).toBe("boolean");
-    expect(c.n.getSQLType()).toBe("integer");
     expect(c.name.getSQLType()).toBe("text");
+    expect(c.on_day.getSQLType()).toBe("date");
+    expect(c.opens_at.getSQLType()).toBe("time");
+    expect(c.bytes.getSQLType()).toBe("bytea");
+    // The three whole-number helpers are named together because they are interchangeable at a call
+    // site and are not interchangeable in the database.
+    expect(c.small.getSQLType()).toBe("smallint");
+    expect(c.n.getSQLType()).toBe("integer");
+    expect(c.big.getSQLType()).toBe("bigint");
   });
 
   it("distinguishes the two timestamp helpers by what a read returns, not by SQL type", () => {
     // The assertion above shows both report the same SQL type, so the generated schema cannot tell
     // a column converted to the wrong one from a correct one. The read mapping can.
-    const c = columnsOf();
+    const c = columnsOf(probe);
     expect(c.at.mapFromDriverValue("2026-09-16T10:00:00Z")).toBeInstanceOf(Date);
     expect(c.at_string.mapFromDriverValue("2026-09-16T10:00:00Z")).toBe("2026-09-16T10:00:00Z");
   });
@@ -78,7 +100,7 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
   it("gives the two timestamp helpers different drizzle column types", () => {
     // The cheapest discriminator of the two, and the shape the sibling suite uses
     // (`packages/payments/src/monetary-columns.test.ts:45`).
-    const c = columnsOf();
+    const c = columnsOf(probe);
     expect(c.at.columnType).toBe("PgTimestamp");
     expect(c.at_string.columnType).toBe("PgTimestampString");
   });
@@ -145,9 +167,7 @@ const DRAWER_OPENS_TYPES = {
 } as const;
 
 /** `drawer_opens` as the vocabulary builds it, keyed by column name. */
-const liveColumns = Object.fromEntries(
-  getTableConfig(drawerOpens).columns.map((c) => [c.name, c] as const),
-);
+const liveColumns = columnsOf(drawerOpens);
 
 describe("the generated migration and the converted table agree", () => {
   const body = createTableBody("drawer_opens");
@@ -190,18 +210,23 @@ describe("the generated migration and the converted table agree", () => {
  */
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
+/** What the server says it created: one table's `data_type` per column name. */
+const reportedTypes = async (tableName: string) => {
+  const result = (await pg.db.execute(sql`
+    select column_name, data_type
+    from information_schema.columns
+    where table_schema = 'public' and table_name = ${tableName}`)) as unknown as
+    | { rows: { column_name: string; data_type: string }[] }
+    | { column_name: string; data_type: string }[];
+  const rows = Array.isArray(result) ? result : result.rows;
+  return Object.fromEntries(rows.map((r) => [r.column_name, r.data_type]));
+};
+
 describe("the migrated database reports the types the vocabulary declared", () => {
   let reported: Record<string, string> = {};
 
   beforeAll(async () => {
-    const result = (await pg.db.execute(sql`
-      select column_name, data_type
-      from information_schema.columns
-      where table_schema = 'public' and table_name = 'drawer_opens'`)) as unknown as
-      | { rows: { column_name: string; data_type: string }[] }
-      | { column_name: string; data_type: string }[];
-    const rows = Array.isArray(result) ? result : result.rows;
-    reported = Object.fromEntries(rows.map((r) => [r.column_name, r.data_type]));
+    reported = await reportedTypes("drawer_opens");
   });
 
   it("created drawer_opens with exactly the columns named below", () => {
@@ -219,4 +244,128 @@ describe("the migrated database reports the types the vocabulary declared", () =
       expect(liveColumns[column]?.getSQLType()).toBe(reported[column]);
     });
   }
+});
+
+/**
+ * No migration declares `day`, `timeOfDay`, `smallCount`, `bigCount` or `binary` yet, so
+ * `drawer_opens` cannot settle them the way it settles the helpers before them. The probe table at
+ * the top of this file can: create it in the same database from the DDL drizzle-kit generates for
+ * that very table object — the statement it would write into a migration, not one typed here — and
+ * then ask the server what it made.
+ *
+ * The type `information_schema` reports is the server's own spelling, not the helper's:
+ * `timeOfDay`'s `time` comes back as `time without time zone`.
+ */
+const NEW_HELPER_TYPES = {
+  on_day: "date",
+  opens_at: "time without time zone",
+  small: "smallint",
+  big: "bigint",
+  bytes: "bytea",
+} as const;
+
+describe("the same database reports the types the newest helpers declared", () => {
+  let reported: Record<string, string> = {};
+
+  beforeAll(async () => {
+    const { generateDrizzleJson, generateMigration } = await import("drizzle-kit/api");
+    const statements = await generateMigration(
+      await generateDrizzleJson({}),
+      await generateDrizzleJson({ probe }),
+    );
+    for (const statement of statements) await pg.db.execute(sql.raw(statement));
+    reported = await reportedTypes("probe");
+  });
+
+  it("created probe with every column the vocabulary declared on it", () => {
+    // What this catches: drizzle-kit emitting no statements at all, or DDL that silently drops a
+    // column. Weaker than the `drawer_opens` control above in one way, because it compares against
+    // `probe` itself — the very object the DDL was generated from — so it does NOT catch "a column
+    // the loop never names". The type table below names five of probe's columns; the rest have
+    // their existence checked here and their type checked by nothing.
+    expect(Object.keys(reported).sort()).toEqual(Object.keys(columnsOf(probe)).sort());
+  });
+
+  for (const [column, sqlType] of Object.entries(NEW_HELPER_TYPES)) {
+    it(`stored "${column}" as ${sqlType}`, () => {
+      expect(reported[column]).toBe(sqlType);
+    });
+  }
+
+  it("writes and reads back the same bytes through the bytea column", async () => {
+    // Only that the bytes survive a real column. The trap, so nobody adds a mapping assertion here:
+    // on PGlite this case cannot see the Buffer-to-Uint8Array conversion AT ALL, because PGlite's
+    // own bytea parser already returns a `Uint8Array` and drizzle passes the driver value straight
+    // through when `fromDriver` is absent. Measured 2026-09-17: with BOTH `toDriver` and
+    // `fromDriver` deleted from the `bytea` custom type, this case still passed and the only red
+    // one in the file was "binary binds a Buffer and reads back a plain Uint8Array" in the describe
+    // below — which is where that mapping is pinned. `printing.test.ts` gets the opposite answer
+    // for its own bytea column because it runs on real PostgreSQL, where the node-postgres DRIVER
+    // hands back a `Buffer`; that difference is the driver's, not any helper's.
+    await pg.db.insert(probe).values({ bytes: new Uint8Array([1, 2, 3]) });
+    const [row] = await pg.db.select({ bytes: probe.bytes }).from(probe);
+    expect(row?.bytes).toEqual(new Uint8Array([1, 2, 3]));
+  });
+});
+
+describe("the newest helpers differ in ways their SQL type cannot show", () => {
+  // The SQL types themselves are pinned with every other helper's, on the shared probe table above.
+  const c = columnsOf(probe);
+
+  it("gives day the string reading, not the Date one", () => {
+    // A date column asked for `{ mode: "date" }` emits the same SQL type and returns a `Date`, so
+    // the schema probe cannot separate the two — only the read mapping can, as with ts/tsString.
+    expect(c.on_day.columnType).toBe("PgDateString");
+    expect(c.on_day.mapFromDriverValue("2026-09-16")).toBe("2026-09-16");
+  });
+
+  it("hands a timeOfDay value back as the driver's own string", () => {
+    // Pins the shape a caller receives. Unlike `day` and `bigCount` above this is NOT a mode
+    // discriminator: drizzle's `time` takes no `mode` (only `precision` and `withTimezone`), so
+    // `PgTime` never overrides `mapFromDriverValue` and this is an identity check. Measured
+    // 2026-09-17: rebuilding `timeOfDay` on `timestamp(..., { mode: "date" })` does turn it red,
+    // but the two SQL-type cases go red with it — so treat this as documentation of the returned
+    // type, not as the assertion that would catch such a swap.
+    expect(c.opens_at.mapFromDriverValue("06:00:00")).toBe("06:00:00");
+  });
+
+  it("gives bigCount the number reading, not the bigint one", () => {
+    // `{ mode: "number" }` and `{ mode: "bigint" }` both emit `bigint`: the ts/tsString trap again.
+    expect(c.big.columnType).toBe("PgBigInt53");
+    expect(c.big.mapFromDriverValue("42")).toBe(42);
+  });
+
+  it("binary takes a column name, like every other helper", () => {
+    // `customType(...)` returns a two-parameter function whose overloads also admit `binary()` and
+    // `binary({ ... })`, so exporting that result directly would let a call with no name compile.
+    expect(binary.length).toBe(1);
+  });
+
+  it("binary binds a Buffer and reads back a plain Uint8Array", () => {
+    // A `Buffer` IS a `Uint8Array`, so `toBeInstanceOf(Uint8Array)` passes for both and cannot tell
+    // the two apart; `Buffer.isBuffer` is what does.
+    expect(Buffer.isBuffer(c.bytes.mapToDriverValue(new Uint8Array([1, 2, 3])))).toBe(true);
+    const read = c.bytes.mapFromDriverValue(Buffer.from([1, 2, 3]));
+    expect(Buffer.isBuffer(read)).toBe(false);
+    expect(read).toEqual(new Uint8Array([1, 2, 3]));
+  });
+});
+
+describe("the vocabulary is reachable from outside packages/db", () => {
+  it("re-exports every name columns.ts provides, as the same value", () => {
+    // Comparing identities keeps a helper added later from being reachable only in here. Weaker
+    // than its name in one way: `Object.keys` on a module namespace sees VALUES, so an exported
+    // TYPE is never checked.
+    const door = publicSurface as Record<string, unknown>;
+    const inside = vocabulary as Record<string, unknown>;
+    const names = Object.keys(inside);
+    expect(names.length).toBeGreaterThan(0); // positive control: an empty list checks nothing
+    expect(names.filter((name) => door[name] !== inside[name])).toEqual([]);
+  });
+
+  it("builds a column through that door", () => {
+    const c = columnsOf(doorTable("door_probe", { on: doorDay("on"), bytes: doorBinary("bytes") }));
+    expect(c.on.getSQLType()).toBe("date");
+    expect(c.bytes.getSQLType()).toBe("bytea");
+  });
 });

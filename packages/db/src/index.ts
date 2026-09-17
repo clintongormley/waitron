@@ -3,6 +3,28 @@ export { createPgliteDb, createPostgresDb } from "./client.js";
 export type { Database, Driver, Schema, Transaction } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
+// The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and
+// its names are listed by hand rather than starred. Guard: `schema/columns.test.ts`.
+export {
+  bigCount,
+  binary,
+  count,
+  day,
+  enumCheck,
+  enumText,
+  flag,
+  id,
+  json,
+  label,
+  money,
+  quantity,
+  rate,
+  smallCount,
+  table,
+  timeOfDay,
+  ts,
+  tsString,
+} from "./schema/columns.js";
 export * from "./schema/tenants.js";
 export { readTenant } from "./read-tenant.js";
 export type { Tenant } from "./read-tenant.js";

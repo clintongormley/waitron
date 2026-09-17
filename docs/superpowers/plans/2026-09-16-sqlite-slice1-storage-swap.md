@@ -516,6 +516,15 @@ improvise a substitution at the call site. Reaching for `count()` because a `sma
 number, or `label()` because a date is stored as text elsewhere, puts the engine decision back into
 the call sites that P1 exists to empty, and the flip then has to find them again.
 
+_Updated 2026-09-17: all five now have a helper, so the paragraph and table above no longer describe
+the tree. They stay as written because a findings section records what was true when it was
+written._ P1b step 1 below added `day`, `timeOfDay`, `smallCount`, `bigCount` and `binary` to
+`packages/db/src/schema/columns.ts` and re-exported all of them from `packages/db/src/index.ts`,
+each with its own cases in `packages/db/src/schema/columns.test.ts`. What each one is called, what
+it emits and why it is named that way is in P1b step 1 — that is where the detail lives now. What
+has NOT happened is the conversion: no table file changed on that branch, so every site listed in
+the table above is still spelled the old way.
+
 `bytea` needs a decision before it can have a helper, because the three blocks are not the same
 block. `packages/db/src/schema/print-jobs.ts:26` and
 `packages/credentials/src/schema/tenant-credentials.ts:15` both declare
@@ -528,6 +537,20 @@ changing the call sites on the other side. Until that decision is made and the c
 the vocabulary would need two binary helpers, which puts the engine decision back where P1 is trying
 to remove it. `packages/media` is on the rollout list in P1b step 2, so this lands inside P1b, not
 after it.
+
+_Updated 2026-09-17: the decision has been taken, and it went ONE helper, not two._ The vocabulary's
+`binary` hands callers a `Uint8Array` and binds a node `Buffer` — that is the `packages/media`
+shape, not the `Buffer`-both-ways shape — in the private custom type at
+`packages/db/src/schema/columns.ts:167-171`. Why that side was picked, and which call sites it
+moves, is in P1b step 1 below; that is where the detail lives now. **The callers on the other side
+have NOT been changed yet.** All three hand-rolled blocks named above are still in the tree —
+`packages/db/src/schema/print-jobs.ts:26` and
+`packages/credentials/src/schema/tenant-credentials.ts:15` still declare
+`customType<{ data: Buffer; driverData: Buffer }>`, and `packages/media/src/schema/images.ts:16`
+still declares its own `customType<{ data: Uint8Array; driverData: Buffer }>`. Read on 2026-09-17
+with `grep -n customType packages/db/src/schema/print-jobs.ts \
+packages/credentials/src/schema/tenant-credentials.ts packages/media/src/schema/images.ts`, which
+printed all three declarations. Replacing them is step 3's work, not step 1's.
 
 **One `text` column that must never become `label()`.**
 `packages/fiscal-verifactu/src/schema/registros.ts:86-94` stores `cuota_total` and `importe_total` as
@@ -569,21 +592,128 @@ sixteen packages on the rollout list, fifteen already declare `@waitron/db` in t
 not declare a dependency on itself and does not need one — its own files import `./columns.js`
 directly.
 
+_Updated 2026-09-17: the paragraph above is done, and stays as written because a findings section
+records what was true when it was written._ The branch that landed P1b step 1 below is what retired
+it: `packages/db/src/index.ts` now re-exports the vocabulary's names, listed one by one rather than
+starred, so every package that depends on `@waitron/db` can reach it through the one door the
+enumerated `exports` map opens. The export block is `packages/db/src/index.ts:6-27`; the command
+that shows it is `sed -n '6,27p' packages/db/src/index.ts`, which prints the two comment lines and
+the whole hand-listed block (eighteen names, read on 2026-09-17). A plain
+`grep -n columns packages/db/src/index.ts` is NOT the receipt for this claim and was cited here in
+error: it matches two lines, the comment and the closing `} from "./schema/columns.js";`, and
+neither of them shows a single name. The names
+are hand-listed because the test that pins them — `packages/db/src/schema/columns.test.ts` — cannot
+fail under a star export: no helper added later could ever be missing from it. **A helper added in
+step 3 has to be added to that export list in the same change**, or that test goes red.
+
+One half of the paragraph is still true and does not need fixing:
+`packages/db/src/schema/index.ts` still does not mention `columns.js`, and it should not.
+`grep -n columns packages/db/src/schema/index.ts` finds nothing, and that file is the barrel of TABLE
+modules — every line in it re-exports a file that defines tables, and the type of `Database` is built
+from it. `columns.ts` defines no table: `grep -nE 'table\(|pgTable\(' packages/db/src/schema/columns.ts`
+returns no matches at all, because its only mention of the table builder is
+`export const table = pgTable;`, which passes the builder along rather than calling it. Re-exporting
+it from the schema barrel would put column helpers into the shape `Database` is parameterised on, for
+no gain.
+
 ### P1b — roll the vocabulary out
 
-- [ ] **Step 1: Export the vocabulary from `packages/db`, first, on its own**
+- [x] **Step 1: Export the vocabulary from `packages/db`, first, on its own** — done 2026-09-17
 
-P1a left `packages/db/src/index.ts` untouched on purpose. Nothing outside `packages/db` can reach
-`columns.ts` until it is re-exported there, because `packages/db`'s `exports` map is enumerated
-rather than a wildcard (`packages/db/package.json`) and `.` → `./src/index.ts` is the only door. Add
-the export before converting any other package; every package on the list below except
-`packages/db` itself already declares `@waitron/db` in its `dependencies`, so nothing else has to
-move.
+P1a left `packages/db/src/index.ts` untouched on purpose, and that is the reason this step existed:
+until it ran, nothing outside `packages/db` could reach `columns.ts`, because `packages/db`'s
+`exports` map is enumerated rather than a wildcard (`packages/db/package.json`) and
+`.` → `./src/index.ts` is the only door. So the export had to come before converting any other
+package; every package on the list below except `packages/db` itself already declares `@waitron/db`
+in its `dependencies`, so nothing else had to move.
+
+_Done 2026-09-17: the door is open. `packages/db/src/index.ts:6-27` re-exports the vocabulary, the
+names listed one by one rather than starred — `sed -n '6,27p' packages/db/src/index.ts`._
 
 Add the missing helpers here too, each with its own generated-type case in
 `packages/db/src/schema/columns.test.ts`, before the first column that needs one is converted:
 `date`, `time`, `smallint`, `bigint` and the binary (`bytea`) type. The P1a findings above list where
 each one is in use. (The string-mode timestamp is not on that list: P1a added `tsString` already.)
+
+**What step 1 actually added, so step 3 does not have to re-derive it.** The five helpers are `day`
+(`date`, bare), `timeOfDay` (`time`, bare), `smallCount` (`smallint`), `bigCount` (`bigint` in number
+mode) and `binary` (the `bytea` custom type).
+
+Three of them are named for what the column MEANS, matching the file's existing
+`money`/`quantity`/`rate` style rather than the SQL type: `day`, `timeOfDay` and `binary`. The two
+integer helpers are not, and that is on purpose. `smallCount` and `bigCount` spell the SQL WIDTH out
+in prose, because the width is the only thing that separates them from the `count` helper the file
+already has, and there is no one meaning they could be named after instead. The `smallint` columns in
+the tree are not counts of anything: `packages/workforce/src/schema/availability.ts:32` is
+`weekday: smallint("weekday").notNull()`, a day of the week, and
+`packages/db/src/schema/dining-tables.ts:59-62` hold `pos_x`, `pos_y` and `rotation` — a position on
+a floor plan and an angle. The `bigint` columns are no more alike than that:
+`packages/db/src/schema/catalogue.ts:32` is a catalogue version,
+`packages/db/src/schema/node-membership.ts:33` is a membership term and
+`packages/identity/src/schema/webauthn.ts:34` is a WebAuthn signature counter. Every line named here
+was opened and read on 2026-09-17. So the helper names the width and the call site keeps the meaning.
+
+**What each helper copies is a property to check, not a count to match.** The rule is: each helper
+emits exactly what the sites it replaces emit today, so read the spelling off the call sites rather
+than trusting a total. As a dated reading, taken by grep over `packages` and `apps` on 2026-09-17,
+skipping `node_modules` and test files: every `date` site (14 of them) and every `time` site (4) uses
+the bare form with no options object, every `smallint` site (5) likewise, and every `bigint` site (3)
+passes `{ mode: "number" }`. Those numbers are the receipt for that reading, not the instruction — a
+later grep returning different numbers means the tree moved, not that the rule changed.
+
+Two of the five carry the `ts`/`tsString` trap — a second spelling emitting the SAME SQL type — so
+`columns.test.ts` pins each by its read mapping. A bare `date(name)` is drizzle's STRING mode
+(`columnType` `PgDateString`, a read returns `"2026-09-16"`), while `date(name, { mode: "date" })`
+returns a `Date`; `bigint` in number mode is `PgBigInt53` and returns a number, while bigint mode
+returns `42n`. Both pairs emit identical DDL, so the step 4 probe is blind to picking the wrong one.
+
+**The binary decision, and what it will cost the conversion pull requests.** The three hand-rolled
+`bytea` blocks disagree with each other, and step 1 converted none of them — all three are still in
+the tree, checked on 2026-09-17. `packages/db/src/schema/print-jobs.ts:26` and
+`packages/credentials/src/schema/tenant-credentials.ts:15` hand callers a node `Buffer`;
+`packages/media/src/schema/images.ts:16` hands them a `Uint8Array`. The vocabulary took the
+`Uint8Array` shape, read off the callers rather than argued: `packages/printing/src/outbox.ts:26`
+already accepts a `Uint8Array` (`payload: Uint8Array,`) and calls `Buffer.from` at line 55 only
+because the column demands a `Buffer`, and `packages/printing/src/runtime.ts:288-291` copies a
+read-back payload straight back into a `Uint8Array`. So the conversions will delete those hand
+conversions rather than add any.
+
+**The call sites are not confined to the two packages that own those columns.** Converting
+`print-jobs.ts` changes what its callers are handed from `Buffer` to `Uint8Array`, and the SQL type
+stays `bytea` either way — **the step 4 probe will not report it**. Each of these was opened and read
+on 2026-09-17:
+
+- `packages/printing/src/outbox.ts:55` — `payload: Buffer.from(payload),` on the insert. The
+  conversion deletes the `Buffer.from`.
+- `packages/printing/src/runtime.ts:291` —
+  `await transport.send(target, new Uint8Array(job.payload));` on the read back. The conversion
+  deletes the `new Uint8Array`, and the three comment lines above it (288-290) explaining the copy go
+  with it.
+- `packages/printing/src/outbox.test.ts:33-38` — a test helper `jobRow`, whose return type on line 38
+  is written out as `Promise<{ status: string; payload: Buffer }>`. That type has to change, and so
+  does the doc comment above it, which says the payload "decodes through the bytea customType to a
+  Buffer".
+- `apps/server/src/till-sale-integrated.pg.test.ts:278-288` — a helper whose signature on line 279 is
+  `async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Buffer[]>`, with the
+  same kind of doc comment above it on line 278.
+- `packages/db/src/schema/printing.test.ts:243-245` — the one that changes meaning rather than just
+  type. Line 244 is `expect(Buffer.isBuffer(row!.payload)).toBe(true);`, and that assertion FLIPS to
+  `false` the moment the column becomes `binary`, because the helper's `fromDriver` returns
+  `new Uint8Array(value)` — the private `bytea` custom type at
+  `packages/db/src/schema/columns.ts:167-171`, whose `fromDriver` is line 170, opened and read on
+  2026-09-17. (Lines 180-184, which an earlier draft of this bullet cited, are now prose inside the
+  doc comment: the custom type was moved above that comment while step 1 was being written.)
+  Line 245 then calls
+  `row!.payload.toString("utf8")`, which a `Uint8Array` does not support in the way a `Buffer` does,
+  so it needs rewriting too, not just retyping.
+
+`print-jobs.ts` lives in `packages/db`, which is the FIRST package on step 2's rollout list below, so
+this arrives at the very start of the rollout rather than at the end. **The `packages/db` conversion
+pull request has to include `packages/printing` and `apps/server` in its own verification — their
+typechecks and their suites — and neither of those packages appears on step 2's list at all.** This
+is the exact shape that has already cost this project three rounds of red CI: a `packages/db` change
+that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
+typecheck scoped to the changed package both miss.
 
 - [ ] **Step 2: Split the work by package**
 
@@ -667,7 +797,7 @@ it("no table file imports a column builder directly from drizzle", async () => {
     // The vocabulary module itself is the one place these may be imported.
     if (file.endsWith("schema/columns.ts")) continue;
     const bad = /from "drizzle-orm\/pg-core"/.test(text) &&
-      /\b(uuid|timestamp|jsonb|numeric|text|boolean|integer)\(/.test(text);
+      /\b(uuid|timestamp|date|time|jsonb|numeric|text|boolean|smallint|integer|bigint)\(/.test(text);
     if (bad) offenders.push(file);
   }
   expect(offenders).toEqual([]);
@@ -675,16 +805,30 @@ it("no table file imports a column builder directly from drizzle", async () => {
 ```
 
 The list of builder names has to match what the vocabulary covers — every COLUMN builder
-`packages/db/src/schema/columns.ts` imports from `drizzle-orm/pg-core`, and no fewer. Read on
-2026-09-17, that file imports eight names from `drizzle-orm/pg-core`: `boolean`, `integer`, `jsonb`,
-`numeric`, `pgTable`, `text`, `timestamp`, `uuid`. Seven of those eight are in the regex above. The
-eighth, `pgTable`, is deliberately not: it is the table builder rather than a column builder, and it
-is already what the line above the regex uses to decide which files to look at. State the rule as
-the seven column builders, so the count in the regex and the sentence beside it agree. `text` was
-missing from an earlier draft of this predicate, and a reviewer ran that draft on 2026-09-17 against
-a file holding `import { text } from "drizzle-orm/pg-core";` and `table("x", { kind: text("kind") })`:
-it returned false, so the file passed. Whenever step 1 adds a helper, add its builder here in the
-same change.
+`packages/db/src/schema/columns.ts` imports from `drizzle-orm/pg-core`, and no fewer. **That import
+block is the rule; the list in the draft above is not.** Open the file, read its import block, and
+take the column-builder names from it — the list grows every time step 1 adds a helper, so a list
+written down here is stale the moment one is added. This paragraph has already been wrong once for
+exactly that reason.
+
+As a dated reading of that import block on 2026-09-17, after step 1 landed its five helpers: eleven
+of the names it imports are column builders — `uuid`, `timestamp`, `date`, `time`, `jsonb`,
+`numeric`, `text`, `boolean`, `smallint`, `integer`, `bigint` — and that is what the regex above now
+lists. Before step 1 the draft carried seven. Treat both numbers as receipts for when they were
+taken, not as the thing to check the regex against.
+
+Two names in that import block are NOT column builders and are left out for their own reasons.
+`pgTable` is the table builder, and it is already what the line above the regex uses to pick which
+files to look at. `customType` is a builder FACTORY, and it **deserves a decision rather than a
+silent omission**: the three hand-rolled `bytea` blocks that step 1's `binary` helper exists to
+replace are each built with `customType`, so a table file calling `customType(` is doing the very
+thing this guard exists to stop, and leaving it out means the guard cannot see the next one. Decide
+when writing the guard; if it is left out, say so in the comment beside it.
+
+`text` was missing from an earlier draft of this predicate, and a reviewer ran that draft on
+2026-09-17 against a file holding `import { text } from "drizzle-orm/pg-core";` and
+`table("x", { kind: text("kind") })`: it returned false, so the file passed. That is the shape of
+the failure a short list produces — silence, not an error.
 
 Note in a comment that this guard reads TEXT, so a builder reached through an alias is invisible to it — the hedge `CLAUDE.md` §7 requires for a guard weaker than its name.
 
@@ -2210,7 +2354,17 @@ git commit -s -m "Open the venue and node databases, with the settings the engin
 
 - [ ] **Step 11: Switch the vocabulary to SQLite**
 
-`packages/db/src/schema/columns.ts` is the only file whose column types change. Per the spec's §5.1:
+`packages/db/src/schema/columns.ts` is the only file whose column types change.
+
+**The rule, which matters more than the sketch below: this step rewrites EVERY helper the vocabulary
+exports, and the list of them is read off `columns.ts` on the day the flip runs — never off this
+plan.** A helper added to the vocabulary between now and the flip has to be added here in the same
+change, because a helper left behind still emits a PostgreSQL type and nothing in this step group
+would say so. To read the current list: `grep -n '^export const' packages/db/src/schema/columns.ts`,
+or the hand-listed re-export block at `packages/db/src/index.ts:6-27`, which the guard
+`packages/db/src/schema/columns.test.ts` keeps in step with the module.
+
+The sketch the spec gives, from its §5.1 table:
 
 ```ts
 import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
@@ -2227,6 +2381,41 @@ export const count = (name: string) => integer(name);
 export const label = (name: string) => text(name);
 export const table = sqliteTable;
 ```
+
+**That sketch is now short of the module, and the gap is not small.** The vocabulary has grown twice
+since the sketch was written — P1a added `tsString`, and P1b step 1 added five more — and the sketch
+was never brought along. Read on 2026-09-17, `columns.ts` exports eighteen names and the sketch gives
+a body for eleven of them. The seven with no body here, and what each one needs deciding before F1
+can write it:
+
+- `tsString` — a timestamp read back as the driver's string rather than as a `Date`. The spec's table
+  has one row for both timestamp helpers (“ISO-8601 text”), so on SQLite the two would emit the same
+  thing; what F1 has to settle is whether the pair still needs to be two helpers once the stored type
+  is text, and if they collapse into one, every call site of the one that goes has to move.
+- `day` — a calendar day. Today it reads back as a string (`PgDateString`).
+- `timeOfDay` — a time of day with no date and no zone. Today it reads back as a string.
+- `smallCount` and `bigCount` — the two integer widths. Today `bigCount` reads back as a JavaScript
+  number, not a `bigint`. SQLite has one integer storage class, so the width distinction that
+  separates these from `count` may have nothing to land on; decide whether all three collapse, and if
+  they do, say so here rather than leaving three helpers that are the same body.
+- `enumCheck` — the `in (...)` constraint body for an `enumText` column. Unlike every other name
+  here it builds a constraint rather than a column, and its imports come from `drizzle-orm` rather
+  than `drizzle-orm/pg-core` (`packages/db/src/schema/columns.ts:1`), so it may survive the flip
+  untouched — but that is a thing to CHECK against the SQLite dialect, not to assume. Step 12 below
+  already moves `check()` itself to `drizzle-orm/sqlite-core`.
+- `binary` — **the one with no obvious answer, flagged here so F1 meets the question early rather
+  than late.** SQLite has a BLOB storage class, so there is somewhere to put the bytes; what is
+  undecided is what a caller should be handed on the way out and what the SQLite driver actually
+  returns on a read. The PostgreSQL helper hands callers a `Uint8Array` and binds a node `Buffer`
+  (`packages/db/src/schema/columns.ts:167-171`), and by then there will be real call sites depending
+  on that — P1b step 3 converts three hand-rolled `bytea` columns onto it. **Do not invent this
+  answer while writing the other bodies: settle it against the driver, with a round trip, before F1
+  starts.**
+
+For each helper that is rewritten, the thing to preserve is the READ MAPPING, not just the storage
+type — the trap P1a and P1b both paid for is two spellings that emit the same type and differ only
+in what a read returns. `packages/db/src/schema/columns.test.ts` pins today's mappings; whatever it
+has to become on SQLite, it should still pin them one by one.
 
 If P1a's report said the enum could not be hidden, apply that report's resolution here rather than inventing a new one.
 
