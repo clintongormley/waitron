@@ -164,23 +164,31 @@ export const bigCount = (name: string) => bigint(name, { mode: "number" });
  */
 export const label = (name: string) => text(name);
 
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => "bytea",
+  toDriver: (value) => Buffer.from(value),
+  fromDriver: (value) => new Uint8Array(value),
+});
+
 /**
  * Opaque bytes (`bytea`), handed to callers as a `Uint8Array` and bound as a node `Buffer`.
  *
  * `Uint8Array` is the caller-facing type because the callers already hold one and convert only
  * because the column demands a `Buffer`: `packages/printing/src/outbox.ts:26` takes a `Uint8Array`
  * and calls `Buffer.from` at line 55, and `packages/printing/src/runtime.ts:288-291` copies a
- * read-back payload back into a `Uint8Array`. Both conversions live here instead.
+ * read-back payload back into a `Uint8Array`. No table uses this helper yet, so those two hand
+ * conversions are still the live ones; converting their columns to it will DELETE them rather than
+ * add a third.
  *
  * `packages/db/src/schema/print-jobs.ts` and `packages/credentials/src/schema/tenant-credentials.ts`
  * declare their own `bytea` typed as `Buffer` in both directions, so converting those two columns
  * changes what their call sites receive — the SQL type is the same either way, so nothing in the
  * schema will report it.
+ *
+ * The custom type itself stays private: drizzle's overloads on it also accept no name at all and a
+ * config object, so exporting it directly would make `binary()` compile where every sibling helper
+ * here demands a column name.
  */
-export const binary = customType<{ data: Uint8Array; driverData: Buffer }>({
-  dataType: () => "bytea",
-  toDriver: (value) => Buffer.from(value),
-  fromDriver: (value) => new Uint8Array(value),
-});
+export const binary = (name: string) => bytea(name);
 
 export const table = pgTable;
