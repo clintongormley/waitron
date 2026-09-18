@@ -226,7 +226,17 @@ to satisfy it. The scenarios map one-to-one onto topology §12.2's obligations.
 - **Assert:** sale-commit p95/p99 stay within a stated bound (reusing the pglite bench's latency bars as
   the reference — p95 ≤ 150 ms, p99 ≤ 400 ms) and the WAL size stays bounded (a stated ceiling, e.g.
   it does not exceed a small multiple of the streamed data). This scenario is a **measurement**: its
-  numbers are recorded whatever they are.
+  numbers are recorded whatever they are. *(2026-09-18, run: **the example ceiling in that sentence is
+  not met, and was not adopted.** The WAL held about 80x the data the checkpoint then wrote into the
+  database — 310MB over 3.85MB — so "a small multiple of the streamed data" would fail whatever the
+  growth looked like. The landed bar is a per-sale ceiling of 64KiB — the run's AVERAGE WAL bytes per
+  sale, which is neither a disk budget nor a statement about the SHAPE of the growth: the same load
+  at an 8192-byte SQLite page size grew linearly and sat over that ceiling throughout, so a breach
+  can equally mean a wider page or a wider schema. The scenario prints
+  `spec-small-multiple-ceiling=not-met` so
+  the substitution is visible in its own row. The latency bars held, two to three orders of magnitude
+  clear: 481x on p95 (0.312ms against 150ms) and 917x on p99 (0.436ms against 400ms) on the recorded
+  run. `bench/sqlite-failover/README.md` → "What S4 measures, and what it does not".)*
 - **Failure means:** a **recorded caveat**, not a stop — it constrains how long a box may run offline
   and whether a periodic local checkpoint is needed, which is slice-2 design input, not a foundation
   break.

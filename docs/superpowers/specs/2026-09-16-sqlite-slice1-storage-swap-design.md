@@ -489,7 +489,15 @@ PostgreSQL-only tests converted or deleted. Depends on every prepare item. **Own
 4. **Single-writer throughput is unmeasured.** Nothing in this repository says what a venue's write
    load costs under one serialised writer. No sentence here claims it is sufficient; the gate-2
    prototype measures sale latency under an offline write load, and that measurement — not this design
-   — is what the claim will rest on.
+   — is what the claim will rest on. *(2026-09-18, run: that measurement now exists. The
+   prototype's S4 drove 7500 sales through one SQLite writer with `wal_autocheckpoint = 0` and a
+   Litestream daemon pointed at a closed port: commit p50 0.128ms, p95 0.312ms, p99 0.436ms, max
+   1.583ms on the recorded run, against the pglite bench's 150ms and 400ms bars, and the WAL grew
+   about 41KB a sale to 310MB. Two limits on reading it: the percentiles move with the machine
+   (p95 0.297–0.333ms across the offline-arm runs the README lists), and what was driven is the
+   prototype's own five-table model
+   in SQLite, not this design's schema. `bench/sqlite-failover/README.md` → "What S4 measures, and
+   what it does not".)*
 5. **`main` has no failover between slice 1 and slice 3** (§1). Accepted, because Waitron is
    pre-production; it is not acceptable at go-live, and slices 3–5 are what close it.
 6. **Grants stop defending the code against itself at the flip** (§6.3). The source-reading guard is a

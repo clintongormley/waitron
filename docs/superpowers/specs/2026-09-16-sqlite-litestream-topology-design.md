@@ -682,7 +682,28 @@ quietly assumes finer granularity than Litestream gives.
   review finding 8). With `wal_autocheckpoint = 0` only Litestream checkpoints, so the one shape that
   could put our own process on the sale path is a long offline stretch (§4.2) letting the WAL grow
   unbounded; **§12's prototype must run a multi-day offline write load and confirm the sale latency and
-  WAL size stay bounded** before this bullet is believed.
+  WAL size stay bounded** before this bullet is believed. *(2026-09-18, run: the prototype's S4 has now
+  driven that load — 7500 sales with `wal_autocheckpoint = 0` and a Litestream daemon pointed at a
+  closed port. **The latency half holds; the WAL half does not.** The commit did not slow as the WAL
+  grew — p95 0.312ms and p99 0.436ms against the 150ms/400ms bars, the last modelled day's p95 below
+  the first's — but the WAL grew to 310MB, about 41KB a sale averaged over the run, which is roughly
+  104 days of offline trading per GiB at an assumed 250 sales a day: bounded by how long the box
+  stays offline, not by a size. What that growth's SHAPE is stays open — S4 drives ONE load size, and
+  the only comparison this rig has run across sizes was run at a different SQLite page size, so
+  nothing here says the growth is linear. The sentence about our own process is now measured rather
+  than hypothetical: one `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection took SECONDS —
+  6776.9ms to 12412.2ms across the runs the README lists — and came back `busy=1` with the WAL
+  untouched while the daemon held the database, against MILLISECONDS with the daemon killed (4.2ms to
+  48.6ms across the runs listed there). The gap is what
+  reproduced, and the pairs those runs allow span 139x to 2955x — two to three orders of magnitude;
+  no single duration reproduced at all. Two
+  narrowings. The sale taken straight after that blocked checkpoint still committed in 0.241ms on
+  the recorded run, and
+  nothing attempted a sale DURING it — the rig is one process and its checkpoint is synchronous. And
+  the growth does not depend on the pragma this bullet names: with a Litestream daemon attached but
+  offline, dropping `wal_autocheckpoint = 0` changed nothing, because SQLite's own automatic
+  checkpoint is refused the same way. `bench/sqlite-failover/README.md` → "What S4 measures, and what
+  it does not" carries the run and the mutations.)*
 - **Money and quantity conversion** does not change the stored hash fields (already `text`), only the
   arithmetic feeding them; §9's byte-identical-huella test and §12 gate the change (finding 5).
 
@@ -819,7 +840,17 @@ From the discussion note §7, plus what the design added:
    litestream ever writes different bytes under a key it has already used, which is the case that
    would make the same-lineage half unsafe. §4.4 carries the detail.)*
 9. **A long offline stretch with `wal_autocheckpoint = 0`** could grow the WAL unbounded and put our own
-   process on the sale path (§10 finding 8) — the prototype's multi-day offline check bounds it.
+   process on the sale path (§10 finding 8) — the prototype's multi-day offline check bounds it. *(2026-09-18, run: S4 measured both halves, and
+   they came out differently. The WAL does grow without a bound of its own — about 41KB a sale
+   averaged over the run, roughly 104 offline days per GiB at an assumed 250 sales a day; S4 drives
+   one load size, so it establishes nothing about the SHAPE of that growth. "Our own process on the
+   sale path" landed narrower than the words suggest: an explicit checkpoint blocked for seconds —
+   6776.9ms to 12412.2ms across the runs the README lists, and no single duration reproduced — while
+   the sale
+   immediately after it took 0.241ms on the recorded run, and no sale was attempted during the
+   block. The
+   condition in this line is also not what drives the outcome — with an offline daemon attached the
+   WAL grows the same whether the pragma is set or not. §10 finding 8 carries the numbers.)*
 10. **A split brain loses the losing side's in-flight service** (§5.3, owner-raised 2026-09-16): open
     tabs and kitchen tickets are `state` and are wiped on the loser, usually the box. Fiscally safe;
     operationally real. The MVP defence is human-promotion discipline plus a fence-time export; a true

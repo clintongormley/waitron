@@ -80,8 +80,10 @@ const FAST_COMPACTION = [
 ];
 
 /**
- * The pinned binary, or `null`. Never throws: the scenarios treat "no litestream here" as SKIPPED,
- * and an exception from a lookup would be recorded as a critical failure of the harness instead.
+ * The pinned binary, or `null`. Never throws: an exception from a lookup would be recorded as a
+ * critical failure of the harness instead. Most scenarios treat "no litestream here" as SKIPPED; S4
+ * (`scenarios/s4_offline_load.ts`) is the exception and degrades to its SQLite half, which is why
+ * this returns a value rather than throwing on either path.
  *
  * A wrong VERSION is also `null`, not a warning. Everything this rig records about litestream is a
  * measurement on the pin, so a different build silently answering the same calls would produce
@@ -159,14 +161,18 @@ export function writeConfig(opts: {
  * seconds after `kill()`, and the scenario's `finally` awaits it before anything stops the MinIO
  * container.
  *
- * Two scenarios call this, and neither needs that flush. `s_litestream_roundtrip` makes its last
- * read before killing its daemon. S3 (`scenarios/s3_copied_replica.ts`) kills the daemon, awaits
- * `exited`, and then runs a `syncOnce` with box-a's handle still open — and that S3 does not need
- * the flush was RUN rather than read off the code: with `kill()` sending SIGKILL first, so no flush
- * could happen, S3 still passed twice (2026-09-18, `copied-sha-equal=true` both times). What that
- * run did NOT separate is which of the one-shot and the daemon's own last sync carried the final
- * writes: the daemon syncs continuously, so a pass is equally consistent with everything already
- * being uploaded by the time it was killed. S0 (`s0_happy_loop.ts`) starts no daemon at all; it uses
+ * Three scenarios call this, at four sites, and none of them needs that flush.
+ * `s_litestream_roundtrip` makes its last read before killing its daemon. S3
+ * (`scenarios/s3_copied_replica.ts`) kills the daemon, awaits `exited`, and then runs a `syncOnce`
+ * with box-a's handle still open — and that S3 does not need the flush was RUN rather than read off
+ * the code: with `kill()` sending SIGKILL first, so no flush could happen, S3 still passed twice
+ * (2026-09-18, `copied-sha-equal=true` both times). What that run did NOT separate is which of the
+ * one-shot and the daemon's own last sync carried the final writes: the daemon syncs continuously,
+ * so a pass is equally consistent with everything already being uploaded by the time it was killed.
+ * S4 (`scenarios/s4_offline_load.ts`) starts a daemon in each of its two arms: the offline one is
+ * pointed at a closed port and has nothing reachable to flush TO, and the control reads
+ * `store.listKeys` before the `finally` that kills its daemon, so its `store-keys` is a count taken
+ * mid-stream rather than after a flush. S0 (`s0_happy_loop.ts`) starts no daemon at all; it uses
  * only `syncOnce` and `restore`.
  *
  * Every child is also registered for the parent's own exit (see `children` below): the scenario
