@@ -26,13 +26,16 @@ afterEach(() => {
 // building a new set per test was most of its runtime (measured before and after: see
 // docs/developers/testing-guide.md). Nothing in the bin is per-case state — the knobs travel as
 // WT_* environment variables the stubs read at run time. What a stub writes stays inside the case's
-// own directories: $WT_LOG, which `sandbox` gives a fresh path per case, plus the fixture files
+// own directories: $WT_LOG and its `.probes` counter, which `sandbox` gives a fresh path per case,
+// plus the fixture files
 // `curl` drops at its `-o` target and whatever `mv` moves under WAITRON_DIR.
 //
 // The docker stub inspects the WHOLE arg string ($*) rather than shifting, so a change to flag order
 // cannot silently break it:
 //   - `compose version` exits 0, so Docker looks installed and ensure_docker skips the apt block.
-//   - `compose ps`   -> prints $WT_DOCKER_PS ("healthy" by default, so wait_healthy returns first try).
+//   - `compose ps`   -> prints $WT_DOCKER_PS ("healthy" by default, so wait_healthy returns first
+//     try), after $WT_DOCKER_PS_PENDING probes that answer empty — a container with no health
+//     verdict yet, which is what the script's retry loop exists for.
 //   - `compose logs` -> prints the database_ahead line when $WT_AHEAD_LOGS is 1.
 //   - `compose exec … psql … -d waitron …` -> prints $WT_DB_STAMP, but ONLY when `-d waitron` is
 //     present, so a stamp query that forgot the app-db name (the wrong-db bug) reads empty and its
@@ -89,7 +92,12 @@ case "$1" in
         # and the pull-failure test fails.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
-      *" ps "*|*" ps") echo "\${WT_DOCKER_PS}" ;;
+      *" ps "*|*" ps")
+        # WT_DOCKER_PS_PENDING probes answer empty before the box reports WT_DOCKER_PS: a container
+        # that has no health verdict yet. The counter is a file in the case's own directory, so cases
+        # cannot see each other's, and it is what the probe-count assertions read.
+        n=$(cat "\${WT_LOG}.probes" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.probes"
+        if [ "$n" -le "\${WT_DOCKER_PS_PENDING:-0}" ]; then echo ""; else echo "\${WT_DOCKER_PS}"; fi ;;
       *" logs "*)
         [ "\${WT_AHEAD_LOGS}" = "1" ] && echo "provisioning.database_ahead: the database is newer" ;;
       *" exec "*)
@@ -139,6 +147,7 @@ function sandbox({
   dbStamp = "",
   aheadLogs = false,
   dockerPs = "healthy",
+  dockerPsPending = 0,
   readError = false,
   rmFail = "",
   envWriteFail = false,
@@ -160,6 +169,7 @@ function sandbox({
       WT_DB_STAMP: dbStamp,
       WT_AHEAD_LOGS: aheadLogs ? "1" : "0",
       WT_DOCKER_PS: dockerPs,
+      WT_DOCKER_PS_PENDING: String(dockerPsPending),
       WT_READ_ERROR: readError ? "1" : "0",
       WT_RM_FAIL: rmFail,
       WT_MV_FAIL: envWriteFail ? "1" : "0",
@@ -169,12 +179,17 @@ function sandbox({
   };
 }
 
-// Two budgets. spawnSync's timeout kills a child that hangs; Vitest's per-test timeout bounds how
-// long the whole TEST may take, and a test it fails for its duration alone is a healthy run reported
-// as broken — the default, 5s, did exactly that here. Every case below makes exactly ONE `run()`
-// call and does no other slow work, so bounding the test above the spawn timeout covers its whole
-// healthy range. That reasoning is about THIS suite, not a general rule: a test that waits twice can
-// outlast such a bound. Guard: `scripts/spawn-timeout-budget.test.ts`; receipt in
+// Two budgets, protecting against different failures. Vitest's per-test timeout bounds how long the
+// whole TEST may take, and a test it fails for its duration alone is a healthy run reported as
+// broken — the default, 5s, did exactly that here. Every case below makes exactly ONE `run()` call
+// and does no other slow work, so bounding the test above the spawn timeout covers that side. That
+// reasoning is about THIS suite, not a general rule: a test that waits twice can outlast such a
+// bound. Guard: `scripts/spawn-timeout-budget.test.ts`.
+//
+// spawnSync's timeout is the OTHER side, and it kills a child that is still working. It therefore
+// has to clear the child's own worst case: `wait_healthy` in `deploy/waitron.sh` retries for about
+// three minutes by default, which no per-test bound can rescue. `WAITRON_SH_HEALTH_DELAY` below
+// shrinks that budget for every case while leaving the retrying in place. Receipt in
 // `docs/developers/testing-guide.md`.
 const RUN_TIMEOUT_MS = 20_000;
 vi.setConfig({ testTimeout: RUN_TIMEOUT_MS + 10_000 });
@@ -186,6 +201,8 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
       ...process.env,
       PATH: `${STUB_BIN}${delimiter}${process.env.PATH}`,
       WAITRON_DIR: sb.boxDir,
+      // The child's whole health-retry budget, shrunk from ~175s to ~2s. A case may still override it.
+      WAITRON_SH_HEALTH_DELAY: "0.05",
       ...sb.env,
       ...extraEnv,
     },
@@ -272,6 +289,31 @@ describe("waitron.sh health check", () => {
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/did not come up healthy/);
   });
+  // Both cases below leave WAITRON_SH_MAX_HEALTH_TRIES alone, so they run the try count the script
+  // ships, and both assert the probe COUNT — the status and the message alone are satisfied by a
+  // child that never retries at all, which is how the first version of the second case was caught
+  // passing with the tries pinned to 1.
+  const SHIPPED_TRIES = readFileSync(SCRIPT, "utf8").match(/WAITRON_SH_MAX_HEALTH_TRIES:-(\d+)/)[1];
+  const probes = (sb) => readFileSync(`${sb.log}.probes`, "utf8").trim();
+
+  it("retries while the container has no health verdict yet, then succeeds", () => {
+    const sb = sandbox({ dockerPsPending: 1 });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(probes(sb)).toBe("2");
+    expect(r.stdout).toContain("https://waitron.local/manage/email");
+  });
+
+  // This is the case that holds the spawn bound: delete `WAITRON_SH_HEALTH_DELAY` from `run()` and
+  // the child retries for ~175s, so `spawnSync` kills it (measured at 20.17s, ETIMEDOUT). The case
+  // above does NOT prove that — with the shipped 5s delay it merely slows to about six seconds.
+  it("gives up with the unhealthy message after the shipped number of tries", () => {
+    const sb = sandbox({ dockerPs: "starting" });
+    const r = run(sb, ["install"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/did not come up healthy/);
+    expect(probes(sb)).toBe(SHIPPED_TRIES);
+  });
 });
 
 describe("waitron.sh install preserves .env on a failed write", () => {
@@ -294,8 +336,9 @@ describe("waitron.sh install preserves .env on a failed write", () => {
 
 describe("waitron.sh database_ahead advice", () => {
   // A box that never goes healthy (dockerPs "starting") whose logs carry database_ahead. The
-  // sandbox already models aheadLogs and tradingEnv; only the health loop needs bounding, via the
-  // WAITRON_SH_MAX_HEALTH_TRIES override so the test does not wait three minutes.
+  // sandbox already models aheadLogs and tradingEnv. `run()`'s delay default is what bounds the wall
+  // clock; the try pin keeps these cases to one probe, so a failure here reads as the advice being
+  // wrong rather than 36 probes of noise.
   it("tells a non-production box to reset", () => {
     const sb = sandbox({ dockerPs: "starting", aheadLogs: true });
     const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });

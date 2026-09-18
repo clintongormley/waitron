@@ -117,7 +117,67 @@ failed against a 7s bound. `scripts/pre-push.test.mjs` is the case in this repo,
 invokes the hook three times and a `git()` helper that spawns with no timeout at all; its bound comes
 from measuring its cases, not from its spawn timeout. Where a suite's every case makes exactly one
 bounded call — `scripts/waitron-sh.test.mjs` and `scripts/main-tag-guard.test.mjs` — the shortcut
-does hold, and each says so in its own comment rather than relying on a general rule.
+does hold for THAT bound, and each says so in its own comment rather than relying on a general rule.
+It leaves the other side of the pair open, which is the next section.
+
+### The child's own retry budget is part of the test's worst case
+
+The pair of bounds protects against two different failures, and reasoning about one says nothing
+about the other. Vitest's per-test timeout can fail a healthy test for its DURATION; `spawnSync`'s
+timeout KILLS a child that is still working. A suite can get the first right and still fail healthy
+runs through the second — if the program under test can legitimately take longer than the spawn
+timeout allows.
+
+`deploy/waitron.sh` does. Its `wait_healthy` polls a container 36 times, five seconds apart — 35
+sleeps, so about 175 seconds — against `scripts/waitron-sh.test.mjs`'s 20-second spawn timeout. `wait_healthy` has TWO call sites — install and reset — and most of that suite's cases pin neither
+`WAITRON_SH_MAX_HEALTH_TRIES` nor anything else that bounds the loop, so any probe coming back as
+something other than `healthy` put the child into it. Counted on the pre-fix file: the two install
+cases and four reset cases, not the two the first version of this entry claimed. Measured with a stubbed `docker` by a review seat that drove each arm in one process and counted the
+probes. The first arm pays this suite's cold-stub cost (a freshly written executable costs hundreds of
+ms on macOS — see the stub-reuse section below), so it is not comparable with the rest; arms two and
+three agree on a warm baseline near 0.1s:
+
+| Arm | Probes | Wall clock | Exit |
+| --- | --- | --- | --- |
+| healthy on the first probe (cold stubs) | 1 | 0.692s | 0 |
+| one probe misses, then healthy | 2 | 5.090s | 0 |
+| never healthy, tries pinned to four | 4 | 15.119s | 1 |
+| never healthy, 36 tries, delay 0.05 | 36 | 2.179s | 1 |
+
+Each retry costs a whole five-second sleep. Against the 20-second spawn timeout that is finely
+balanced, and the arithmetic is worth doing rather than rounding: on the warm baseline of ~0.1s, four
+retries land at 20.1s — over the bound by a tenth of a second — and five clear it outright. A killed
+child comes back with `status: null`, which reads as a broken test rather than a slow machine.
+
+**That is a hypothesis about the failure recorded against this suite on 2026-09-18** under two
+campaign runners and a MinIO container, not an established cause. What is known: the FILE took 29.5s
+while its other cases ran at normal speed, which fits one child killed at the 20-second bound rather
+than a uniform slowdown. That run's output was not kept, the miss has never been reproduced, and
+nothing says what made a deterministic stub answer wrong. Plain CPU contention did not reproduce it:
+six runs under 36 busy-loop processes on an 18-core machine (load average 62) all passed, and moved
+the `install <ref>` case from 1.30s to 1.48s — a failure to reproduce at one load level, not a cause
+eliminated.
+
+The change cuts the WAIT rather than the try count, so the retrying itself survives:
+`WAITRON_SH_HEALTH_DELAY` (default 5) sits beside the try-count override the script already had, and
+the suite's `run()` sets it to 0.05 for every case. **It reduces the exposure; it does not guarantee
+anything.** The seat falsified the stronger claim by patching the stub's `ps` branch to `sleep 0.6` before
+answering: 29 probes, then `ETIMEDOUT` at 20.003s. What the change buys is the sleeps — 175 seconds of them down to under two —
+while the probes' own cost stays. Unset, the default is unchanged, re-measured on the edited script:
+36 probes, 35 sleeps of five seconds, and an empty override falls back to five (`:-` substitutes for
+empty as well as unset).
+
+Two cases pin it, both proved by mutation, and they prove different things.
+`retries while the container has no health verdict yet, then succeeds` asserts the install succeeds
+AND that two probes were recorded; `gives up with the unhealthy message after the shipped number of
+tries` asserts the probe count equals the number read out of the script. Pinning the try count to 1
+fails both — which is how the first version of this test was caught asserting nothing about retrying,
+since a give-up message arrives just as happily after one try. Only the SECOND case holds the spawn
+bound: delete the delay default from `run()` and its child retries for ~175s and is killed, measured
+at 20.17s with `ETIMEDOUT`, while the first case merely slows to about six seconds and still passes.
+Neither sees the shipped five-second default, so `scripts/deploy-image-env.test.ts` pins that as text,
+with the closing brace in the pattern — proven by mutating the script to `:-50` and `:-360` and
+watching both fail, where the unanchored version had let them through.
 
 `scripts/ci-workflow.test.mjs` paid for this first, on PRs #128 and #129: a cold CI runner with no
 warm pnpm store ran its sequential `pnpm ls` spawns at **at least** ~3.3x their warm time (a floor,
@@ -126,7 +186,8 @@ default. The lesson did not travel — sibling suites carried the same shape unt
 `scripts/waitron-sh.test.mjs` (20s spawn timeout), `scripts/pre-push.test.mjs` (15s) and
 `scripts/main-tag-guard.test.mjs` (30s).
 
-What made waitron-sh the one that actually failed was its margin. Its `install <ref>` case takes
+What made waitron-sh the one that actually failed in the #407 incident (2026-09-18, the Vitest side)
+was its margin. Its `install <ref>` case takes
 ~1.3s on an idle host and **4518ms** with the machine driven to load average 66 — CPU burners on
 every core plus a loop writing and executing fresh small executables — which is under the old 5000ms
 ceiling by under half a second. Nothing in that suite touches Docker: `docker` is a stub on `PATH`.
@@ -216,7 +277,7 @@ on this host:
 
 | suite | stubs per case | before | after |
 | ----- | -------------- | ------ | ----- |
-| `scripts/waitron-sh.test.mjs` | 5–6 | ~11.5s | ~2.1s |
+| `scripts/waitron-sh.test.mjs` | 5–6 | ~11.5s | ~2.1s (~4.75s since the two shipped-try-count cases landed on 2026-09-18 — re-measured three times after them) |
 | `scripts/main-tag-guard.test.mjs` | 2 | ~3.3s | ~0.55s |
 | the whole root Vitest project | — | ~21.7s | ~8.0s |
 

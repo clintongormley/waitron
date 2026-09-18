@@ -2439,11 +2439,29 @@ that absorbs a row whose id the receiver holds under a DIFFERENT supplier and nu
 scenario — the package README says which line and why.
 **One flake found while landing S5 — FIXED in #407 (2026-09-18).** `scripts/waitron-sh.test.mjs` →
 "builds both images from the git context and records them in .env" failed twice under load and
-passed four runs out of four on its own. The guess recorded here at the time was wrong in two ways
+passed four runs out of four on its own. The guess recorded here at the time was wrong in one way
 worth keeping: the case builds no Docker images (`docker` is a stub on `PATH`, and nothing in that
-suite reaches Docker), and the cause was not a readiness wait. The suite handed `spawnSync` a 20s
+suite reaches Docker). It also said the cause was not a readiness wait — true of THAT failure, and
+superseded for the one below, which was the health retry loop after all. The suite handed `spawnSync` a 20s
 timeout but set no `testTimeout`, so Vitest's 5s default failed the case for its duration while it
 was completing normally. See B9 above, and `docs/developers/testing-guide.md`.
+**It came back on 2026-09-18 and #407 was only half the fix.** The same case failed twice again, under
+two campaign runners and a MinIO container. The Vitest side was fixed; the SPAWN side was not. The
+script under test retries a health probe 36 times five seconds apart — about 175s against the suite's
+20s spawn timeout — and two cases did not pin the try count, so one probe returning anything but
+`healthy` cost the case five of its twenty seconds, and enough of them in one run killed it — which on the
+measured baseline takes four, landing a tenth of a second past the bound. Never observed; it is the
+hypothesis this fix is built on. Measured by a review seat, counting probes: 0.692s healthy on the first probe (cold stubs), 5.090s
+when one probe answers empty first, 15.119s never-healthy with the tries pinned to four, 2.179s for
+the full 36 at the new delay; and six runs under
+36 busy-loop processes on an 18-core machine all passed, which is a failure to reproduce at one load
+level rather than a cause eliminated. Fixed
+by cutting the WAIT rather than the retrying (`WAITRON_SH_HEALTH_DELAY`), with two cases that leave
+the try count alone and assert the PROBE COUNT — the first version asserted only the give-up message,
+which one try satisfies just as well, and a review seat falsified it by pinning the tries to 1 and
+watching it still pass. The change reduces exposure rather than removing it: the same seat slowed each
+probe by 0.6s and still reached `ETIMEDOUT`, at 20.003s. **Still not established:** what made a probe miss — that output was not kept and the
+miss has not been reproduced.
 **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
 turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.
