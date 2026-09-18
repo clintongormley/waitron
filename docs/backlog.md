@@ -1779,6 +1779,20 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **`test-server` can fail with every test passing — a Vitest worker RPC timeout (2026-09-18, open).**
+  Seen on #410: `test-server (3)` reported `Test Files 87 passed (87)`, `Tests 1313 passed (1313)`,
+  `Errors 1 error`, and failed the shard on an unhandled
+  `Error: [vitest-worker]: Timeout calling "onTaskUpdate"` after a 300s run. Nothing in the test
+  results is wrong — the worker could not reach the main process to report task updates inside
+  Vitest's own RPC timeout, which is a different clock from `testTimeout` and is not configurable
+  from a suite. Re-running the same commit passed, and the same branch content had passed on its
+  previous head, so it is intermittent rather than a regression. **Why it matters more than an
+  ordinary flake:** it fails a shard whose tests all passed, so the failure says nothing about the
+  code and the natural response is to re-run, which is how a real failure would get waved through
+  next to it. Worth finding out whether the server shard is simply too big for one reporter — it is
+  the longest job in the run — before reaching for a larger RPC timeout. Related but distinct from
+  the `EADDRINUSE` retry noted further down, which is a port collision, not a reporting stall.
+
 - **The spawn-timeout guard now covers `packages/` and `apps/` — LANDED (2026-09-18).** It read only
   `scripts/` when it arrived in #407, which was recorded at the time as a real gap rather than a
   reasoned exemption: 22 of the 48 main Vitest configs under `packages/` and `apps/` (three more are suffixed) set no `testTimeout`
