@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  foreignKey,
-  index,
-  integer,
-  pgTable,
-  smallint,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index } from "drizzle-orm/pg-core";
+import { count, day, id, smallCount, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -23,24 +14,22 @@ import { persons } from "@waitron/identity";
  * to. `effective_from`/`effective_to` bound the date range the window applies over; `effective_to`
  * null means open-ended.
  */
-export const availability = pgTable(
+export const availability = table(
   "availability",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
     /** Day of week, 0–6. */
-    weekday: smallint("weekday").notNull(),
+    weekday: smallCount("weekday").notNull(),
     /** Start of the window, minutes past local midnight, [0, 1440]. */
-    availableFromMinute: integer("available_from_minute").notNull(),
+    availableFromMinute: count("available_from_minute").notNull(),
     /** End of the window, minutes past local midnight, [0, 1440], strictly after the start. */
-    availableToMinute: integer("available_to_minute").notNull(),
+    availableToMinute: count("available_to_minute").notNull(),
     /** First day the window applies, inclusive. */
-    effectiveFrom: date("effective_from").notNull(),
+    effectiveFrom: day("effective_from").notNull(),
     /** Last day the window applies, inclusive; null while open-ended. */
-    effectiveTo: date("effective_to"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    effectiveTo: day("effective_to"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the

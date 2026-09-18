@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { locations } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/pg-core";
+import { count, id, label, locations, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
@@ -31,25 +22,23 @@ import { rosterVersions } from "./roster-versions.js";
  * (`publishRoster` attaches every in-period draft shift at the version's location). Deleting the
  * version SET NULLs it — the shift survives as a draft again, because planning data is discardable.
  */
-export const shifts = pgTable(
+export const shifts = table(
   "shifts",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
     /** The workplace the shift is scheduled at. */
-    locationId: uuid("location_id").notNull(),
-    startsAt: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
-    startsOffsetMinutes: integer("starts_offset_minutes").notNull(),
-    endsAt: timestamp("ends_at", { withTimezone: true, mode: "string" }).notNull(),
-    endsOffsetMinutes: integer("ends_offset_minutes").notNull(),
+    locationId: id("location_id").notNull(),
+    startsAt: tsString("starts_at").notNull(),
+    startsOffsetMinutes: count("starts_offset_minutes").notNull(),
+    endsAt: tsString("ends_at").notNull(),
+    endsOffsetMinutes: count("ends_offset_minutes").notNull(),
     /** The role the person is rostered in (bar, kitchen, …), free text at the floor. Null when
      * unspecified. Full role taxonomy is the identity sub-project's (#5), not the schedule's. */
-    role: text("role"),
+    role: label("role"),
     /** The published roster version this shift belongs to; null while an unpublished draft. */
-    rosterVersionId: uuid("roster_version_id"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    rosterVersionId: id("roster_version_id"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason

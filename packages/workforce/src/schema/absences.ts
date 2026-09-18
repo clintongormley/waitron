@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  foreignKey,
-  index,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgEnum } from "drizzle-orm/pg-core";
+import { day, id, label, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -47,27 +38,25 @@ export type AbsenceStatus = (typeof absenceStatus.enumValues)[number];
  * with `absence.overlaps` before inserting; the DB carries no exclusion constraint for it, so the
  * guard is the application's.
  */
-export const absences = pgTable(
+export const absences = table(
   "absences",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
     kind: absenceKind("absence_kind").notNull(),
     /** First day of the absence, inclusive. */
-    startsOn: date("starts_on").notNull(),
+    startsOn: day("starts_on").notNull(),
     /** Last day of the absence, inclusive. */
-    endsOn: date("ends_on").notNull(),
+    endsOn: day("ends_on").notNull(),
     status: absenceStatus("status").notNull().default("requested"),
     /** A free-text note the requester or approver may attach; null when none. */
-    note: text("note"),
+    note: label("note"),
     /** The manager who decided this absence (approve/reject), recorded when the route supplies it;
      * null while the absence is still `requested`. Mirrors roster_versions.published_by_person_id. */
-    decidedByPersonId: uuid("decided_by_person_id"),
+    decidedByPersonId: id("decided_by_person_id"),
     /** When the absence was decided; null until it is. */
-    decidedAt: timestamp("decided_at", { withTimezone: true, mode: "string" }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    decidedAt: tsString("decided_at"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a

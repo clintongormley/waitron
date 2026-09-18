@@ -1,16 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  foreignKey,
-  index,
-  pgEnum,
-  pgTable,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { locations } from "@waitron/db";
+import { check, foreignKey, index, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { day, id, locations, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -51,27 +41,25 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
  * `roster_versions_publish_shape_ck` invariant). `published_by_person_id` records who published, when
  * a caller supplies it.
  */
-export const rosterVersions = pgTable(
+export const rosterVersions = table(
   "roster_versions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     /** The workplace this schedule covers. */
-    locationId: uuid("location_id").notNull(),
+    locationId: id("location_id").notNull(),
     /** First day of the scheduled period, inclusive. */
-    periodStart: date("period_start").notNull(),
+    periodStart: day("period_start").notNull(),
     /** Last day of the scheduled period, inclusive. */
-    periodEnd: date("period_end").notNull(),
+    periodEnd: day("period_end").notNull(),
     /** When the version was published; null while it is a draft. */
-    publishedAt: timestamp("published_at", { withTimezone: true, mode: "string" }),
+    publishedAt: tsString("published_at"),
     /** Who published it — a manager acting — recorded at publish time only when the caller supplies
      * it, otherwise null. Unlike `published_at`, no check ties this column to `status`
      * (`roster_versions_publish_shape_ck` constrains `published_at` alone); `publishRoster` is its
      * only writer. */
-    publishedByPersonId: uuid("published_by_person_id"),
+    publishedByPersonId: id("published_by_person_id"),
     status: rosterVersionStatus("status").notNull().default("draft"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
