@@ -900,10 +900,10 @@ assignable to type '"g" | "kg" | "mg" | null | undefined'` while the `label()` c
 That is caller-facing and the probe is blind to it.
 
 _Superseded 2026-09-18 as to its CONDITION, by the `packages/fiscal-verifactu` report further down
-this step: the narrowing happens when the values reach `enumText` still carrying their literal types,
-which the quoted run must have done and the sentence above does not say. A bare array literal
-produces no union at all. The fact this paragraph rests on — that the pair is not a free substitution
-on an existing column — stands._
+this step: whether `enumText` narrows depends on the COLUMN as well as the spelling — `as const`
+narrows in every case, a bare array literal narrows on a NOT NULL column and loses it on a nullable
+one, and a variable holding the array never narrows. The fact this
+paragraph rests on — that the pair is not a free substitution on an existing column — stands._
 
 The second is the ARRAY column. `content_languages.languages` is `label("languages").array()`, and
 `.array()` is a drizzle call reached OFF the helper — the vocabulary has no array helper and its
@@ -963,7 +963,7 @@ already carrying `enumCheck`'s spacing.
   from the file. It carries the `", "` spacing `enumCheck` emits, so substituting there would be
   schema-silent, and the reason for leaving it is the caller-facing one #397 measured: `enumText`
   narrows what a caller may WRITE. _Read that with the 2026-09-18 correction further down this step:
-  it holds when the values are written so they keep their literal types, and a converter has to take
+  whether it narrows depends on the column as well as the spelling, and a converter has to take
   a control that actually reaches the column before reporting it either way._
 - `payments_card_entry_mode_ck` is
   `${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
@@ -1161,176 +1161,6 @@ A one-word change, a `const` type parameter (`<const T extends string>`), closes
 nullable case but NOT the variable case, which stays `string` either way — measured by the re-read
 seat. So it narrows the gap rather than removing it. It is not taken here, because this pull request
 is a package conversion and that is a change to the shared vocabulary's types; it is written up in
-`~/waitron-campaign/questions.md` for its own change.
-
-Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
-(silent, `No schema changes, nothing to migrate`, exit 0) and after (the same, `diff -r` silent),
-and the NEGATIVE CONTROL was taken in the same worktree before converting anything:
-`offline_amount_cap` moved from scale 2 to scale 3 made the same command write `0002_probe.sql` and
-add a journal entry, so the silent runs mean something. A column-by-column comparison against the
-base commit, built on drizzle's own `getTableConfig` rather than on text — comparing SQL type,
-`columnType`, nullability, primary key, defaults, enum values, uniqueness and the read mapping,
-keyed by TABLE as well as column name — reported **41 columns, 0 mismatches**, cross-checked against
-the probe's own per-table counts, which print 8/2/5/8/18 and sum to the same 41.
-
-**That comparison was proved by a mutation the probe is blind to, which is the point of having it.**
-`payments.settled_at` was moved from `tsString` to `ts` — the same SQL type, a different read
-mapping. The comparison reported exactly that column, `PgTimestampString` → `PgTimestamp`, with the
-read mapping going from the driver's string to a `Date`. The probe, run on the same mutated tree,
-printed `No schema changes, nothing to migrate` at exit 0 with a silent `diff -r`. So the
-`ts`/`tsString` trap is invisible to the acceptance check this plan prescribes, measured here rather
-than argued.
-
-A line-by-line comparison then established the property the count above cannot: **every line this
-branch changes in the five files is an import line, a column declaration, or the one `pgTable(` →
-`table(` rename on each file's table-opening line; nothing else differs.** Every `pgEnum`
-declaration, `check()` body, index, unique, foreign key, primary key and comment is identical on
-both sides, with one stated normalisation — `pgTable(` is rewritten to `table(` before comparing,
-that being the one rename the conversion makes outside the column lines.
-
-_Stated as a property rather than as a line count on purpose, and the reason is a defect in the
-first version of this paragraph._ It said "182 lines", and a reviewer counting a different way got
-197. Both numbers were honest; neither was the point. Worse, the filter that produced 182 matched a
-foreign-key block's closing line as though it were a column's continuation —
-`}).onDelete("restrict"),` in six places, and the bare `}),` on the one foreign key declared without
-an `onDelete` — so it removed all seven from BOTH sides and never compared them at all — the same
-shape as #397's duplicate-key defect, a checker whose total quietly hides what it skipped. Re-run
-with a filter that swallows only a column declaration's own continuation lines, the comparison
-covers 189 lines and still reports them identical, and the seven foreign-key lines are now among
-them. `CLAUDE.md` §7 says it directly: a count is a receipt that goes stale, so describe the
-property.
-
-Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace, which is what covers
-the sibling packages that read these tables) and `pnpm --filter @waitron/payments test:coverage`
-(exit 0, 32 files, 414 tests, no test edited, all five schema files 100%).
-
-**And the same report for `packages/fiscal-verifactu`.** Its six table files hold 67 columns across
-seven tables — 5 in `acks.ts`, 5 in `cadenas.ts`, 3 in `envio-flujo.ts`, 11 in `envios.ts`, 33 in
-`registros.ts` and 7 + 3 in `sif.ts` — and every builder they used had a helper: `uuid`, `text`,
-`integer`, `date`, `jsonb`, `boolean` and `timestamp`. There is no `pgEnum` in the package, no array
-column (`grep -rn '\.array()' packages/fiscal-verifactu/src` exits 1), and no `time`, `smallint`,
-`bigint`, `bytea` or `numeric` column on either side of the diff.
-
-**Every timestamp here is the BARE `{ withTimezone: true }` with no mode, so every one becomes
-`ts`.** That is the spelling #394 measured as identical to `mode: "date"` — same `columnType`, same
-SQL type, same read and write mapping — with `mode: "string"` as the negative control that separates
-them. The converted files hold no `tsString` call at all.
-
-**This is the first package in the rollout that deliberately keeps a column builder imported straight
-from drizzle.** `registros_facturacion`'s `cuota_total` and `importe_total` stay `text(...)`, for the
-reason the paragraphs above step 3 give, so `registros.ts` still carries
-`import { check, index, text, uniqueIndex } from "drizzle-orm/pg-core"`. Step 5's guard predicate, as
-drafted, would report that file as an offender: it flags any file containing `table(` that imports
-`text` from `drizzle-orm/pg-core`. **Whoever writes the final pull request has to allow `text` IN THAT FILE — not the file, and not
-`text` everywhere.** A whole-file allowance would blind the guard to every other direct builder
-import in the repository's most fiscally sensitive schema file: a `numeric("cuota_total")` added there
-later would pass the guard that exists to catch exactly that. And dropping `text` from the predicate
-would blind it everywhere, which #397's reviewer already measured (a draft without `text` passed a
-file declaring `kind: text("kind")`).
-
-Two things the conversion did not absorb, and this package met TWO shapes no earlier one had.
-
-The first is the seven text columns carrying a hand-written `check()`. Five of them —
-`acks.state`, `envios.estado`, `registros_facturacion`'s `tipo_registro`, `tipo_rectificativa` and
-`entorno` — are the shape the rollout keeps meeting: their constraints already carry the `", "`
-spacing `enumCheck` emits, so substituting is schema-silent (measured on `acks_state_ck` — the pair
-substituted, the step 4 probe printed `No schema changes, nothing to migrate`, exit 0, `diff -r`
-silent). **And here the caller-narrowing reason comes back negative for four of the five, with the
-fifth being a column the typechecker cannot see at all.** All five narrowed to
-`enumText(..., as const)` with their correct value sets left `pnpm -r typecheck` at exit 0. Two
-controls say what that is worth, and they disagree with each other, which is the useful part:
-
-- Narrowing `entorno` to `["production"] as const` while the code still writes `preproduction`
-  failed with `TS2322` at `packages/fiscal-verifactu/src/registro-row.ts:145` and `:174` — the two
-  `return {` object literals in `toRegistroRow`, whose value reaches
-  `tx.insert(registrosFacturacion).values(row)` at `chain.ts:244`. So the three `registros.ts`
-  columns are covered by a typed write and the green run means something for them.
-- Narrowing `acks.state` and `envios.estado` together to `["nonsense"] as const` — a set the code
-  never writes — gave exit 2 with four errors, but every one of them is about `envios.estado`
-  (`submission-alerts.ts:28` and `:46`, plus the column's own `.default("pendiente")`). Narrowing
-  `acks.state` ALONE to that same wrong set left `pnpm -r typecheck` at **exit 0**. `acks` rows are
-  written only through raw SQL (`packages/fiscal-verifactu/src/acks.ts:71-80`, a `tx.execute`), so no
-  typed write reaches that column and the typechecker cannot report a narrowing on it either way.
-
-So: four columns measured caller-safe, one unmeasurable, and all five stay `label()` on the scope
-decision alone — rewriting a constraint is outside this conversion. **The first version of this
-paragraph claimed all five, "because the write path already hands each column its exact union".**
-That was a conclusion the experiment did not carry, and the convention reviewer found it by tracing
-each column's writers; `CLAUDE.md` §1's both-answers-look-alike, for the second time in this one
-report.
-
-The other two are shapes the rollout had not met, and they are NOT the same kind of reason — an
-earlier draft of this paragraph filed both under "no value list can stand in for these at all",
-which is false for the first of them:
-
-- **A constraint written as an EQUALITY**, `registros_tipo_huella_ck` = `${t.tipoHuella} = '01'`,
-  quoted from the file. A singleton list expresses exactly the same predicate: the run-it reviewer
-  ran `(v = '01')` against `(v in ('01'))` in PGlite for `'01'`, `'02'`, `''` and NULL and got the
-  same answer every time. **So this is the DDL reason the rollout already records, not a new kind of
-  reason** — substituting `enumText("tipo_huella", ["01"])` plus `enumCheck` made the step 4 probe
-  write `0002_probe.sql` containing exactly
-  `ALTER TABLE "registros_facturacion" DROP CONSTRAINT "registros_tipo_huella_ck"` followed by an ADD
-  with `CHECK (… in ('01'))`. What is new is only the shape the reason turned up in: a body that is
-  not an `in (…)` list.
-- **A constraint that is a PATTERN rather than a set**, `registros_huella_ck`'s
-  `${t.huella} ~ '^[0-9A-F]{64}$'`. This one is read off `enumText`'s signature and NOT measured:
-  the helper takes a list of values, and a 64-character hex pattern has no list to hand it. Stated
-  as what the helper takes rather than as an impossibility proof — #398's correction is the reason
-  for that care, and saying "not measured" out loud is the rest of it.
-
-**An incomplete claim in `columns.ts` was found while taking that narrowing measurement, and it is
-corrected in this pull request.** The paragraph beside `enumText` said flatly that the pair narrows
-what a caller may write, citing #397's `tsc` run. Its condition was missing, and the condition is
-what a converter needs: narrowing happens when the values reach `enumText` still carrying their
-literal types. Measured 2026-09-18 in the catalogue package — the same package the original reading
-was taken in — with every spelling and the control in ONE file, forcing `tsc --noEmit` to print each
-column's resolved data type through an assignment to `never`:
-
-```
-src/narrowing-probe.ts(13,14): error TS2322: Type 'string' is not assignable to type 'never'.
-src/narrowing-probe.ts(14,14): error TS2322: Type '"g" | "kg" | "mg"' is not assignable to type 'never'.
-src/narrowing-probe.ts(15,14): error TS2322: Type '"g" | "kg" | "mg"' is not assignable to type 'never'.
-src/narrowing-probe.ts(16,14): error TS2322: Type '"g" | "kg" | "mg"' is not assignable to type 'never'.
-src/narrowing-probe.ts(17,14): error TS2322: Type '"g" | "kg" | "mg"' is not assignable to type 'never'.
-src/narrowing-probe.ts(18,14): error TS2322: Type 'string' is not assignable to type 'never'.
-src/narrowing-probe.ts(19,14): error TS2322: Type 'string' is not assignable to type 'number'.
-```
-
-Line by line, the declarations those rows report on:
-
-```ts
-const VALUES = ["kg", "g", "mg"];
-13  enumText("u", ["kg", "g", "mg"])                        ->  string
-14  enumText("u", ["kg", "g", "mg"] as const)               ->  "g" | "kg" | "mg"
-15  enumText("u", ["kg", "g", "mg"] as ("kg"|"g"|"mg")[])   ->  "g" | "kg" | "mg"
-16  enumText<"kg" | "g" | "mg">("u", ["kg", "g", "mg"])     ->  "g" | "kg" | "mg"
-17  text("u", { enum: ["kg", "g", "mg"] })                  ->  "g" | "kg" | "mg"
-18  enumText("u", VALUES)                                   ->  string
-19  const control: number = "a string"                      // the control, and it fired
-```
-
-So `as const` is not the condition, only one way to meet it: an annotation and an explicit type
-argument narrow too, a bare array literal does not, and neither does a `const` variable holding one
-— in both of those `T` is inferred as `string`. Line 19 is why the six rows above it mean something:
-before that control was taken, three assignments of an out-of-set literal had all compiled and looked
-like evidence of nothing. **No column in the tree ever lost its narrowing** — all four `enumText`
-calls in the repository pass their values in a narrowing form (`drawer-opens.ts:44` and three in
-`columns.test.ts`). What was wrong was the sentence, and every later reader of it (this plan,
-`docs/backlog.md`, the two sibling schema comments) inherited it.
-
-Two readings that do not reconcile, said plainly rather than smoothed over. #397's receipt quoted a
-real compiler message — `Type 'string' is not assignable to type '"g" | "kg" | "mg" | null |
-undefined'` — from what its text describes as a plain `enumText` declaration, and this probe's line
-13 says a plain declaration produces no union to be refused by. That probe's source was not recorded,
-so which spelling it actually used cannot be recovered. The review's first read of this went the other
-way again — the convention reviewer traced TypeScript's own `isLiteralOfContextualType` and concluded
-the inline form must narrow and the correction must be wrong. The run above is the third independent
-taking of the measurement (mine, the run-it reviewer's, then this one-file re-run), and all three
-agree on line 13.
-
-A one-word change would make the original sentence true as written — a `const` type parameter,
-`<const T extends string>` — and it is NOT taken here, because this pull request is a package
-conversion and that is a change to the shared vocabulary's types. It is written up in
 `~/waitron-campaign/questions.md` for its own change.
 
 Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
