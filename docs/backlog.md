@@ -2252,12 +2252,14 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype is no longer parked: since 2026-09-17 it is being built alongside slice 1, one task per
-PR. Six of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
+PR. Seven of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
 a conditional write), S1 (a double promotion fenced by one, #392), S2 (one sale submitted to the
-tax agency twice, #395), S5 (a supplier invoice number typed on both machines, #406) and the
-litestream foundation the last three scenarios stand on (#411). **That sixth one unblocks S0, S3 and
-S4, which are the rest of the queue**: it can find the pinned binary, point it at the store, upload a
-database, keep streaming one as it is written, and rebuild it from the store afterwards. Four things
+tax agency twice, #395), S5 (a supplier invoice number typed on both machines, #406), the
+litestream foundation the last three scenarios stand on (#411) and S0, the whole failover loop end
+to end (#415). **The litestream foundation unblocked S0, S3 and S4; S0 is now in, so S3 and S4 are
+the rest of the queue** alongside Task 10, the write-up: it can find the pinned binary, point it at
+the store, upload a database, keep streaming one as it is written, and rebuild it from the store
+afterwards. Four things
 it measured that those three will otherwise re-derive: restoring refuses a non-empty output file
 unless forced, and writes no SQLite sidecar files of its own; a restore works with the source
 database absent, which is what makes it evidence about the store; litestream writes its ordinary log
@@ -2300,9 +2302,16 @@ arrives later, in a batch handed over after that node is already running, is sti
 reset's job, because a reset that runs at startup cannot see one delivered afterwards. Today the only reset of a sale left in that state is
 `recoverStaleClaims`'s five-minute one in `packages/fiscal-verifactu/src/drain.ts`, plus the backoff
 that returns a sale whose submission threw — read on 2026-09-17, not run. Building that restart reset is work this backlog now owns, and it belongs with
-whichever slice turns promotion on. And S0 (Task 7) has to check its own shape against the recomputed-batch case, because a
-promoted node can already hold an out-of-date copy of a sale from the Litestream stream, and sending
-only what the receiver lacks never corrects it. S2's verdict stays FAIL and the scenario runner exits
+whichever slice turns promotion on. **S0 (Task 7, #415) has now checked its own shape against that
+case, and the answer is yes** — a promoted node can hold an out-of-date copy of a sale from the
+Litestream stream, and the hand-over, which sends only what the receiver lacks, never corrects it.
+S0's Part C drives that with the real litestream binary by one-shot uploads: leave out the upload
+that would carry the box's filing state, and the promoted node files four sales a second time,
+`box-a:1` to `box-a:4`, each a verbatim same-identity copy (same node, sequence number, hash and
+payload), asserted row by row. It is recorded rather than failed, for the reason above — the tax
+agency refuses a record it already holds and our drain reads that as filed — and it does not decide
+S0's verdict, which is read off Parts A and B. Part A is its control: the same code path with the
+upload restored re-files nothing. S2's verdict stays FAIL and the scenario runner exits
 1 on it deliberately; no scenario runs in CI, so the evidence for one is its recorded run in the pull
 request. The unattended runner that was building these tasks stopped itself on that FAIL (its STOP
 file lives outside the repo, in the campaign directory); the owner read the FAIL down and restarted
@@ -2316,9 +2325,30 @@ shape should be settled, and changing it earlier would invalidate the recorded r
 package README without a fresh measurement. S5 closed the second of those three: `NodeDb` now has an
 `all`, and only S2 still casts twice. Task 6 settled the first and third for its OWN scenario only
 (2026-09-18): the litestream foundation check hoists its node ids and prints a terse `key=value`
-verdict, and the README quote was re-measured in the same change rather than left to drift. S2 still
-inlines its ids and still prints prose, so the suggestion stands for it — what changed is that the
-shape Task 10 has to parse is now settled, and it is `key=value`.
+verdict, and the README quote was re-measured in the same change rather than left to drift. S0 did
+the same (#415, 2026-09-18) after review caught it printing prose, and re-measured its own README
+quote. **S2 is now the only scenario still printing prose and still inlining its ids**, so the
+suggestion stands for it alone, and the shape Task 10 has to parse is settled: `key=value`.
+**S0 is in (#415), verdict PASS, and it is critical.** The box streams, files its own sales, sells
+again and dies; the cloud rebuilds from the store, takes a higher term and sells for itself; the box
+returns, sees the higher term and hands over its unsent sales. What S0 pins: the cloud ends holding
+the box's six records with the contents the box wrote them with, compared field by field; the
+cloud's own sale is a separate intact chain; every record sits under the node that wrote it; every
+chain's hash links verify with no gap; every record reached the tax-agency stand-in exactly once;
+and the pointer in the store names the cloud's term and generation, read back rather than assumed.
+Four things it deliberately does NOT establish, each of which a later task or reader would otherwise
+assume. **It never starts the streaming daemon** — every upload is a one-shot, so "the box dies
+before the next upload" is a scripted step here and not the timing window the product would face;
+`replicate` is still driven only by the rig's `LS` foundation check, and Tasks 8 and 9 are where a
+daemon would be. **"Exactly once" is a claim about the filing ledger, not the table**, which is keyed
+by node and sequence number and could not hold a row twice whatever the loop did. **Nothing fences
+the returning box**: it hands over because the scenario has it hand over, not because anything would
+stop it selling, so the decommission-then-promote rule the topology design §5.2 states is still
+unmodelled. And **nothing streams the cloud's own generation**, so a node restoring `gen-2-cloud-1`
+and following the pointer is Task 8's. One assertion in the scenario is driven by no scenario run and
+only by a mutation — Part C's attribution check, which exists to exclude a duplicate filed under a
+different identity — and the package README names it and says so.
+
 **S5 is in (#406), verdict PASS, and it is non-critical.** A supplier invoice number typed on both
 machines while they are apart cannot be stored by the machine receiving the batch, which already
 holds that supplier and number under its own id. The batch now names that row in its result and
