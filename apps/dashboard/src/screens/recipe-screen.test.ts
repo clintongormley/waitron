@@ -50,6 +50,7 @@ const products: Product[] = [
     unitPrice: "3.50",
     vatClass: "reduced",
     active: true,
+    soldAlone: true,
     allergens: null,
     dietOverride: null,
     manualAllergens: null,

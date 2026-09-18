@@ -134,6 +134,7 @@ function emptyDraft(): ProductEditorDraft {
     unitId: null,
     unitPrice: "0.00",
     available: true,
+    soldAlone: true,
     vatClass: "general",
     variants: [],
     categoryIds: [],

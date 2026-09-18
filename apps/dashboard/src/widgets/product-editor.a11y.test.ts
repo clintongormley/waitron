@@ -22,6 +22,7 @@ const coffee: ProductEditorDraft = {
   unitPrice: "3.00",
   vatClass: "reduced",
   available: true,
+  soldAlone: true,
   variants: [],
   allergens: { milk: { presence: "may_contain" } },
   dietaryDeclarations: ["vegan"],
