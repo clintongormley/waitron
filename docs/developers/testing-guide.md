@@ -54,6 +54,24 @@ legitimately builds its own resource, and then guarded (`if (db !== undefined) a
 enforced by `scripts/guarded-teardowns.test.ts`, whose header records why an ESLint rule was
 rejected. Suites sharing a database clean up in a `finally`, order-independent.
 
+## A PGlite suite is being moved behind one helper, and it is not the rule yet.
+
+`useVenueDb` (`@waitron/db/testing/venue-db.js`) forwards to `usePgliteDb` unchanged — same options,
+same handle, same per-test reset — so that the planned SQLite switch replaces one function body
+instead of every call site (plan `2026-09-16-sqlite-slice1-storage-swap.md`, task P2).
+
+State of the rollout, so nobody reads more into this than it says: **no suite has been converted
+yet.** The suites that call `usePgliteDb` still call it directly, and they convert one package at a
+time. Note also that `usePgliteDb` is not the only door: some suites call `createPgliteDb`
+themselves, and `describeEachTarget`'s PGlite half is a third. Those are not a mechanical rename and
+are decided with the storage flip, not here.
+Until that finishes this is guidance for a converted package, not a rule — a rule with standing
+violations needs a guard, and a guard cannot pass while the violations stand. The house rule in
+`CLAUDE.md` and the guard that enforces it therefore land TOGETHER, in their own pull request AFTER
+the last conversion. That is the shape the column-vocabulary rollout ended in: #414 was the last
+conversion, and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together
+afterwards.
+
 **Containers and Docker**
 
 ## A container port-binding timeout needs Docker state as well as database logs.

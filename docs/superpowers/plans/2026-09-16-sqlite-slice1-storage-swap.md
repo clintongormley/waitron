@@ -2365,21 +2365,66 @@ migration folder and diffing that against the real one found no difference."
 
 **Runner:** autonomous. **Depends on:** nothing.
 
-211 files pick a database through `usePgliteDb`, `useRealPostgres` or `describeEachTarget`. Put one helper in front of them so the flip changes one function body.
+The suites that need a database pick one by naming the driver themselves, through `usePgliteDb`,
+`useRealPostgres` or `describeEachTarget`. Put one helper in front of them so the flip changes one
+function body.
+
+**The count in this paragraph used to read "211 files", and a count is a receipt that goes stale
+(CLAUDE.md §7). Measured 2026-09-18**, with the commands, because the answer depends entirely on the
+scope you count over. Both greps exclude the two files that are ALLOWED to name the driver —
+`lifecycle.ts`, which defines `usePgliteDb`, and `venue-db.ts`, the seam itself:
+
+```bash
+grep -rlE "\busePgliteDb\(" --include="*.ts" packages apps \
+  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)\.ts$" | wc -l   # 208
+grep -rlE "\b(usePgliteDb|useRealPostgres|describeEachTarget)\(" --include="*.ts" packages apps \
+  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)\.ts$" | wc -l   # 218
+```
+
+Two earlier readings of these, both corrected here rather than quietly replaced. The first pass
+reported 209 and 219 and said they were measured on `b9bbe1d7`: they were measured on the branch,
+and they counted `venue-db.ts` — the one file whose whole purpose is to be the permitted caller — as
+a call site still to convert. On `b9bbe1d7` itself the same commands give 208 and 218, the same as
+the branch once the seam is excluded. And the run-it reviewer counted 205 over `*.test.ts` only,
+which is the same property over a narrower scope and is unchanged by any of this.
+
+Do not treat any of these numbers as a completion target. **The property this task can actually
+reach is: no TEST SUITE calls `usePgliteDb` directly — only `venue-db.ts` does.** It is deliberately
+narrower than "no file names the PGlite driver", which was the first attempt at stating it and is
+unsatisfiable: measured the same day, `grep -rln "createPgliteDb" --include="*.ts" packages apps`
+outside `packages/db/src/testing/` returns 27 files, among them `packages/db/src/client.ts`, which
+is where the driver is named ON PURPOSE, `packages/db/src/index.ts` which re-exports it, and several
+`apps/server/scripts/*-demo.ts`. Step 5 converts none of those and is not meant to.
+
+`client.ts` is the only file under `packages/` and `apps/` that imports `@electric-sql/pglite`.
+State that scope: `git grep -ln "@electric-sql/pglite" -- '*.ts'` over the whole workspace also
+returns `bench/pglite-throughput/src/bench.ts`, which is a workspace member.
+
+**And step 5 is not the whole of it**, which the first statement of this property hid. Counted over
+`*.test.ts` under `packages/` and `apps/`: 11 suites take a PGlite database by calling
+`createPgliteDb` themselves, with no helper at all (`packages/db/src/index.test.ts` does it inside
+the `it`), and 7 more get theirs from `describeEachTarget`'s PGlite half. A mechanical
+`usePgliteDb(` → `useVenueDb(` replacement reaches none of those 18. They are F1's to place, with
+the rest of the 66-test disposition.
 
 **Files:**
 
 - Create: `packages/db/src/testing/venue-db.ts`
 - Create: `packages/db/src/testing/venue-db.test.ts`
-- Modify: `packages/db/src/testing/index.ts` (export it)
-- Modify: the 211 files that call the three existing helpers — one pull request per package
+- Modify: `packages/db/package.json` — add `"./testing/venue-db.js"` to the `exports` map. **Corrected
+  2026-09-18 while building it:** this plan said `packages/db/src/testing/index.ts`, and there is no
+  such file. The `exports` map is enumerated deliberately (CLAUDE.md §3), so a new testing entry point
+  is a new line in it, exactly like `./testing/lifecycle.js` beside it. Receipt that the entry works:
+  `createRequire` rooted at `packages/catalogue/package.json` resolves
+  `@waitron/db/testing/venue-db.js` to `packages/db/src/testing/venue-db.ts`.
+- Modify: the files that call the three existing helpers — one pull request per package. (No count here on purpose; the paragraph above gives the commands and the scopes they measure.)
 
 **Interfaces:**
 
 - Consumes: `usePgliteDb(options: PgliteSuiteOptions): PgliteSuite` from `packages/db/src/testing/lifecycle.ts`
 - Produces, consumed by F1: `useVenueDb(options: VenueDbOptions): VenueDb`, where `VenueDb` has a readonly `db: Database`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test** — done 2026-09-18, in the pull request that adds the helper: three cases, the third of them the one that discriminates.
 
 Create `packages/db/src/testing/venue-db.test.ts`:
 
@@ -2387,10 +2432,10 @@ Create `packages/db/src/testing/venue-db.test.ts`:
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "./venue-db.js";
-import { coreMigrations } from "../migrations.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 
 describe("useVenueDb", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("gives a migrated database", async () => {
     const result = await suite.db.execute(sql`select count(*)::int as n from tenants`);
@@ -2398,7 +2443,9 @@ describe("useVenueDb", () => {
   });
 
   it("empties data between tests", async () => {
-    await suite.db.execute(sql`insert into tenants (id, legal_name) values (1, 'probe')`);
+    await suite.db.execute(
+      sql`insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', 'B00000000', 'Probe')`,
+    );
     const before = await suite.db.execute(sql`select count(*)::int as n from tenants`);
     expect(before.rows[0]).toEqual({ n: 1 });
   });
@@ -2412,7 +2459,27 @@ describe("useVenueDb", () => {
 
 The third case is the one that matters. A reset helper that silently stopped resetting would pass the first two.
 
-- [ ] **Step 2: Run it and watch it fail**
+**Corrections made while building it, 2026-09-18.** The migration set is exported as
+`CORE_MIGRATIONS`, not `coreMigrations`. `tenants.country` and `tenants.tax_id` are both `notNull`
+(`packages/db/src/schema/tenants.ts:70-71`), so the two-column insert this sketch first carried
+could not have run at all. And the first case's assertion is `{ n: 0 }` rather than the sketch's
+`{ n: expect.any(Number) }`, matching `lifecycle.test.ts`'s own convention — `expect.any(Number)`
+would accept a database that had not been emptied.
+
+**A correction written here was itself false, and the run-it reviewer falsified it by running it**
+— which is CLAUDE.md §1's "the correction is where the false claim is born", so it is recorded
+rather than quietly fixed. This paragraph first said the two-column insert would make the THIRD case
+fail for a not-null violation. It does not. Restoring that insert and running the suite fails the
+SECOND case with SQLSTATE `23502`, naming the missing column; the first and third cases both pass,
+because no row was ever written for the third to find. So the sketch as written would have reported
+a reset that never happened as a pass.
+
+**The control was run** (CLAUDE.md §4, prove by deletion): with the helper changed to
+`usePgliteDb({ ...options, resetPerTest: false })`, exactly the third case fails
+(`expected { n: 1 } to deeply equal { n: +0 }` — vitest prints `+0`) and the first two stay green — which is this
+paragraph's claim, measured rather than asserted.
+
+- [x] **Step 2: Run it and watch it fail** — done 2026-09-18: `Cannot find module './venue-db.js'`.
 
 ```bash
 pnpm --filter @waitron/db test -- venue-db.test.ts
@@ -2420,28 +2487,31 @@ pnpm --filter @waitron/db test -- venue-db.test.ts
 
 Expected: FAIL — `Cannot find module './venue-db.js'`.
 
-- [ ] **Step 3: Write the helper**
+- [x] **Step 3: Write the helper** — done 2026-09-18: `packages/db/src/testing/venue-db.ts`.
 
 Create `packages/db/src/testing/venue-db.ts`:
 
 ```ts
 import { usePgliteDb, type PgliteSuiteOptions, type PgliteSuite } from "./lifecycle.js";
 
-/**
- * The one way a suite asks for a venue database.
- *
- * Today it is PGlite. The SQLite switch replaces this body and nothing else, which is why every
- * suite goes through it rather than naming a driver.
- */
 export type VenueDbOptions = PgliteSuiteOptions;
 export type VenueDb = PgliteSuite;
 
+/**
+ * The seam a PGlite suite asks for its database through, so that the storage switch changes one
+ * function body rather than every call site.
+ *
+ * (The doc comment sits on the FUNCTION, not above the type aliases — every sibling helper in this
+ * directory documents the function. And it does not say this is "the one way" a suite asks: that
+ * sentence was in this sketch, and it is false until step 5's conversions land. The shipped
+ * wording is in `packages/db/src/testing/venue-db.ts`; read that rather than this sketch.)
+ */
 export function useVenueDb(options: VenueDbOptions): VenueDb {
   return usePgliteDb(options);
 }
 ```
 
-- [ ] **Step 4: Run the test and watch it pass**
+- [x] **Step 4: Run the test and watch it pass** — done 2026-09-18: 3 passed.
 
 ```bash
 pnpm --filter @waitron/db test -- venue-db.test.ts
@@ -2451,7 +2521,11 @@ Expected: PASS, all three.
 
 - [ ] **Step 5: Convert package by package**
 
-One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — those name a real container deliberately, and F1 decides each one's fate as part of the 66-test disposition (task F1 step 24).
+One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — and note, corrected twice on 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are not alike and that neither correction licenses moving `describeEachTarget`.
+
+`useRealPostgres` names a real container deliberately. `describeEachTarget` is NOT a real-container helper: it registers BOTH targets (`const allTargets: Target[] = [pgliteTarget, postgresTarget()]`) and, on the default path, skips the postgres half when Docker is absent — with `REQUIRE_DOCKER=1` set it throws instead (`resolveTargets`).
+
+But its PGlite half is still not a candidate for this helper, and the first correction said it was. `pgliteTarget.create()` boots a FRESH WASM cluster PER TEST, called from each test's own `beforeEach`; `usePgliteDb` hands out ONE database per SUITE with a per-test TRUNCATE. Those are different isolation contracts, and `Target`'s own doc comment argues for the per-test one at length — including that there is deliberately no `target.db` accessor. Routing that half through here would change what the harness guarantees, so it is F1's question, as part of the 66-test disposition (task F1 step 24), not a mechanical conversion.
 
 - [ ] **Step 6: Verify each package**
 
@@ -2465,7 +2539,7 @@ pnpm --filter <package> test:coverage
 git commit -s -m "Ask for a test database through one helper in <package>
 
 Same PGlite database as before. The SQLite switch replaces the helper's body
-rather than 211 call sites."
+rather than every call site."
 ```
 
 ---
@@ -2503,10 +2577,10 @@ import { sql } from "drizzle-orm";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { createChangePublisher } from "./change-log.js";
-import { coreMigrations } from "./migrations.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 
 describe("the change log", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("publishes a change only after the transaction commits", async () => {
     const publisher = createChangePublisher();
@@ -2707,10 +2781,10 @@ import { sql } from "drizzle-orm";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { claimRows } from "./job-claim.js";
-import { coreMigrations } from "./migrations.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 
 describe("claimRows", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   const seed = async () => {
     await suite.db.execute(sql`create table if not exists probe_jobs (
@@ -3460,10 +3534,10 @@ import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "./testing/venue-db.js";
 import { constraintTarget, isUniqueViolation } from "./constraint-target.js";
-import { coreMigrations } from "./migrations.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 
 describe("constraintTarget", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   const violate = async (statements: string[]): Promise<unknown> => {
     try {
@@ -4047,6 +4121,21 @@ git commit -s -m "Keep ledger tables append-only, and archive with the engine's 
 - [ ] **Step 24: Switch the test helper's body**
 
 `packages/db/src/testing/venue-db.ts` opens a real temporary file, not an in-memory database, so write-ahead behaviour, file locking and the two-file split are the real ones. Its three tests from P2 must pass unmodified.
+
+**One thing this step inherits, raised by P2's convention reviewer and deliberately left to here.**
+The accessor's "read before the hook ran" error is thrown by `usePgliteDb` and says
+`usePgliteDb: database not started` (`packages/db/src/testing/lifecycle.ts`, and every sibling
+accessor names itself the same way). A suite converted by P2 never calls that function, so the name
+in the message is already not one its file contains — and after this step it names a driver that no
+longer exists, which is the opposite of what that loud throw is for. P2 did not fix it because the
+cheapest fix is to stop naming a function at all — `"test database not started: the accessor was
+read before beforeAll ran"` at `lifecycle.ts`'s throw site changes no signature, wraps nothing and
+leaves the handle identical. (The note first claimed the only two fixes were changing
+`usePgliteDb`'s signature or wrapping the handle. That was an impossibility claim with a
+counterexample, found by the fix wave's own reviewer; CLAUDE.md §1.) P2 left it because the message
+belongs to `usePgliteDb`, not to the seam, and this step replaces that body anyway.
+`lifecycle.test.ts` matches only `/not started/i` — three occurrences, checked — so its cases stay
+green under any of these wordings.
 
 - [ ] **Step 25: Work through the 66 PostgreSQL-only tests, one at a time**
 

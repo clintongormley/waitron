@@ -11,7 +11,8 @@
     "./testing/seed.js": "./src/testing/seed.ts",
     "./testing/shared-container.js": "./src/testing/shared-container.ts",
     "./testing/two-node.js": "./src/testing/two-node.ts",
-    "./testing/two-node-wireguard.js": "./src/testing/two-node-wireguard.ts"
+    "./testing/two-node-wireguard.js": "./src/testing/two-node-wireguard.ts",
+    "./testing/venue-db.js": "./src/testing/venue-db.ts"
   },
   "scripts": {
     "test": "vitest run",
