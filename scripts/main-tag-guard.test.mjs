@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 // `scripts/main-tag-guard.sh` decides whether the commit being published may take the `:main` image
 // tag, and ci.yml's publish job asks it before adding that tag. Two pushes to `main` run at the same
@@ -36,8 +36,13 @@ const OLDER = "d0e0923c5da1b576505e45e39e195906681e2ebc";
 
 // A registry read that hangs cannot be interrupted by Vitest's own timer, because `spawnSync` blocks
 // the worker's event loop — the hazard `scripts/ci-workflow.test.mjs` documents at length. Nothing
-// here touches the network, so this bound only ever fires on a stub that will not exit.
+// here touches the network, so the trigger this is here for is a stub that will not exit.
 const SPAWN_TIMEOUT_MS = 30_000;
+// Vitest's per-test timeout is kept above it for a separate reason: it does not shorten the kill
+// above, but a test it fails for its duration alone is a healthy run reported as broken, and the
+// default is 5s. Each case here makes one `runGuard()` call, so this covers its healthy range.
+// Guard: `scripts/spawn-timeout-budget.test.ts`.
+vi.setConfig({ testTimeout: SPAWN_TIMEOUT_MS + 10_000 });
 
 const temporaryDirectories = [];
 afterAll(() => {

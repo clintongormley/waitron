@@ -2,10 +2,20 @@ import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const zero = "0".repeat(40);
+
+// The hook's budget, with Vitest's per-test timeout kept well above it, because Vitest failing a
+// test for its duration alone reports a healthy run as broken — its default is 5s and these cases
+// measure ~1.1s, rising to ~2.5s on a loaded machine. Note the bound is NOT derived from the spawn
+// timeout: a case may `invoke()` three times, and `git()` below spawns with no timeout at all, so
+// the healthy worst case is a sum this file does not bound. 25s is set from the measurement with
+// room, not from 15s. Guard: `scripts/spawn-timeout-budget.test.ts`, which checks only that the
+// bound clears the largest SINGLE wait; receipt in `docs/developers/testing-guide.md`.
+const HOOK_TIMEOUT_MS = 15_000;
+vi.setConfig({ testTimeout: HOOK_TIMEOUT_MS + 10_000 });
 
 // Exercise the real shell and classifiers; pnpm records requests without launching nested suites.
 function fixture(path, run, { signed = true, fail = "", emptySelection = false } = {}) {
@@ -90,7 +100,7 @@ if (kind === "ls") {
         cwd: dir,
         input,
         encoding: "utf8",
-        timeout: 15000,
+        timeout: HOOK_TIMEOUT_MS,
         env: {
           ...env,
           PATH: `${join(dir, "bin")}:${env.PATH}`,

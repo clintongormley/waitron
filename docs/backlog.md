@@ -1779,6 +1779,26 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **Reuse the stub executables in `scripts/waitron-sh.test.mjs` — open (2026-09-18).** Found while fixing
+  that suite's flakiness; the flake itself is fixed, and this is the leftover. Each of its cases
+  builds a fresh sandbox of five or six stub executables, and executing a freshly written file costs
+  about 120ms against about 12ms to execute the same file again (six distinct fresh files as the
+  control; an independent rerun on a loaded host measured 144–199ms against 5.9–16.1ms). The likely
+  cause is macOS's first-execution check of a new executable, which no run here established. Reusing
+  the stubs measured 168–209ms per fixture against 1463–1689ms, so the win on this suite is real:
+  build the stub directory once per FILE and pass the per-case knobs (`dockerPs`, `readError`,
+  `rmFail`, `pullFail`, `envWriteFail`) through environment variables instead of interpolating them
+  into each stub's body. **Do not assume it generalises** — the same reuse applied to
+  `scripts/pre-push.test.mjs`, whose fixtures are dominated by real `git` work, measured 10.59s
+  against 12.61s, which is not worth the rewrite. Measure before extending it to another suite.
+  Left out of the flake fix so the timing change and a sandbox rewrite were not one diff. Worth
+  doing: the suite runs ungated, on every non-docs push, in the hook and in CI's `lint` job.
+
+  A second, smaller item from the same review: when a stub genuinely hangs, `run()`'s callers assert
+  `expect(r.status).toBe(0)` and the failure reads `expected null to be +0`, although `r.signal`,
+  `r.error.code` and the recorded call log are all sitting there. Having `run()` report those would
+  make a real hang diagnosable.
+
 - **Fast local pre-push checks — LANDED #338 (2026-09-12).** The hook keeps sign-offs, the locked
   install, formatting, lint, the root guards and scoped typechecks, and runs no package tests at all;
   CI owns the package suites and their coverage thresholds, and `scripts/pre-push.test.mjs` is the
@@ -2295,12 +2315,13 @@ failing statement, not the transaction, and the probe has a control that prints 
 dated note in the plan. One thing S5 does not check, stated so nobody assumes it does: the branch
 that absorbs a row whose id the receiver holds under a DIFFERENT supplier and number is driven by no
 scenario — the package README says which line and why.
-**One flake found while landing S5, unowned:** `scripts/waitron-sh.test.mjs` →
-"builds both images from the git context and records them in .env" failed twice under load on
-2026-09-18 and passed four runs out of four on its own. It builds Docker images, and two campaign
-sessions were working on the machine. It is in the root guard suite, which the pre-push hook and the
-ungated `lint` CI job both run, so it will keep costing whoever meets it a re-run and a doubt. It
-wants its own small branch — almost certainly a timeout or a readiness wait, not a design change.
+**One flake found while landing S5 — FIXED 2026-09-18.** `scripts/waitron-sh.test.mjs` →
+"builds both images from the git context and records them in .env" failed twice under load and
+passed four runs out of four on its own. The guess recorded here at the time was wrong in two ways
+worth keeping: the case builds no Docker images (`docker` is a stub on `PATH`, and nothing in that
+suite reaches Docker), and the cause was not a readiness wait. The suite handed `spawnSync` a 20s
+timeout but set no `testTimeout`, so Vitest's 5s default failed the case for its duration while it
+was completing normally. See B9 above, and `docs/developers/testing-guide.md`.
 **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
 turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.

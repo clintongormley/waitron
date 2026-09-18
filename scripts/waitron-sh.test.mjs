@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "..", "deploy", "waitron.sh");
@@ -124,6 +124,16 @@ exit 0
   return { boxDir, bin, log, root };
 }
 
+// Two budgets. spawnSync's timeout kills a child that hangs; Vitest's per-test timeout bounds how
+// long the whole TEST may take, and a test it fails for its duration alone is a healthy run reported
+// as broken — the default, 5s, did exactly that here, on runs measuring ~1.3s idle and 4.5s on a
+// loaded machine. Every case below makes exactly ONE `run()` call and does no other slow work, so
+// bounding the test above the spawn timeout covers its whole healthy range. That reasoning is about
+// THIS suite, not a general rule: a test that waits twice can outlast such a bound. Guard:
+// `scripts/spawn-timeout-budget.test.ts`; receipt in `docs/developers/testing-guide.md`.
+const RUN_TIMEOUT_MS = 20_000;
+vi.setConfig({ testTimeout: RUN_TIMEOUT_MS + 10_000 });
+
 function run(sb, args, extraEnv = {}) {
   return spawnSync("bash", [SCRIPT, ...args], {
     encoding: "utf8",
@@ -133,7 +143,7 @@ function run(sb, args, extraEnv = {}) {
       WAITRON_DIR: sb.boxDir,
       ...extraEnv,
     },
-    timeout: 20000,
+    timeout: RUN_TIMEOUT_MS,
   });
 }
 
