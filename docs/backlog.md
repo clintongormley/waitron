@@ -2412,7 +2412,7 @@ same `numeric(5, 2)`, and the column gained a short comment block saying its uni
 where the receipt is. The task that turns rates into basis points (P6) now carries the
 same warning, because under its rule `0.25` becomes `25`, which reads as 0.25%.
 
-**`packages/bookings` is the tenth pull request** — one table file, one table, 13 columns, no schema
+**`packages/bookings` is the tenth pull request (#403)** — one table file, one table, 13 columns, no schema
 change. The package itself met no new shape: its one database enum (`booking_status`) stays for the
 usual reason, and there was no `enumText`/`enumCheck` decision to make, because the package has no
 value-set check constraint anywhere — its only `check()` is a range over an integer, `party_size > 0`.
