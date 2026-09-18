@@ -2936,9 +2936,18 @@ asserts the row the second wrote is gone, and with the helper's body changed to
 `resetPerTest: false` exactly that case fails and the other two stay green.
 
 **The conversion is under way**, one pull request per package, fewest calling files first;
-`packages/fiscal-none` was the first. Which files are still to go is a grep rather than a list here,
-and it needs the exclusion that drops the four files allowed to name either helper — the grep pair
-is in `docs/developers/testing-guide.md`, and it lists FILES, not packages and not call sites.
+`packages/fiscal-none` was the first, LANDED as #423 on 2026-09-19, leaving 206 files to go. Which
+files those are is a grep rather than a list here, and it needs the exclusion that drops the four
+files allowed to name either helper — the grep pair is in `docs/developers/testing-guide.md`, and it
+lists FILES, not packages and not call sites.
+
+#423's own lesson was about prose, not code: three rounds of correction on four sentences, each
+round's correction wrong in a new way, and the third round's reader was itself wrong about one of
+them (it read 209 where the named commit gives 210, because the fix wave had removed the literal
+string from two documents). The rule that came out of it is already in `CLAUDE.md` §1 — a correction
+deserves more scrutiny than the text it replaces — and the specific trap worth remembering is that a
+document printing a grep pattern matches that pattern, so an instruction telling you which files are
+left counts itself among them.
 
 **The part of P2 that is NOT a mechanical rename, found by this branch's review and worth carrying
 because the plan's step 5 does not reach it.** `usePgliteDb` is not the only door to a PGlite
