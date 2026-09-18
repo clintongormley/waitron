@@ -423,9 +423,12 @@ container or browser test** — most of these rules exist because a test passed 
   test can take, which is the SUM of its waits plus its untimed work, not the largest one. Cost: root
   guard suites declaring 15–30s spawn timeouts ran under 5s, and `scripts/waitron-sh.test.mjs`
   failed on a loaded machine while behaving normally — that case measures ~1.3s idle and 4518ms
-  under load, against the 5000ms default. Guard: `scripts/spawn-timeout-budget.test.ts`, weaker than
-  its name in several ways its header states — it reads TEXT, cannot tell code from strings, checks
-  only the largest SINGLE wait, and reads only `scripts/`.
+  under load, against the 5000ms default. **Under `packages/` and `apps/` the bound usually comes from
+  the package's `vitest.config.ts`, not the file** — and an `expect.poll` or `vi.waitFor` is a wait
+  like any other. Guard: `scripts/spawn-timeout-budget.test.ts`, weaker than its name in several ways
+  its header states — it reads TEXT, cannot tell code from strings, checks only the largest SINGLE
+  wait, and declines wherever a bound or a config cannot be resolved rather than risk failing a
+  correct file.
 - **A suite's executable stubs are built ONCE per file, not once per test.** Executing a freshly
   written file costs hundreds of ms on macOS (120ms idle, 503–842ms loaded) against single-digit ms to
   re-execute it, so a per-test stub helper pays that every case; move what each case varies into

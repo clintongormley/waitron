@@ -102,5 +102,10 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
       await listener.close();
       await nodeB.run("drop subscription live_probe_subscription");
     }
-  }, 30_000);
+    // 90s. This case makes five `vi.waitFor` calls, and they add up on ONE clock: two bounded at
+    // 15s and three on Vitest's 1s default, so a healthy worst case is 33s before counting the
+    // container and SQL work between them — past the 30s this used to allow. The spawn-timeout
+    // guard compares a bound against the LARGEST single wait and cannot see a sum, so this one is
+    // set by hand from the waits the case actually makes.
+  }, 90_000);
 });

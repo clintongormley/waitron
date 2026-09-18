@@ -372,7 +372,12 @@ describe.runIf(dockerAvailable())("two-node fixture", () => {
     // Drop the subscription before teardown so its walsender/apply worker releases node A's
     // replication slot cleanly.
     await cluster.nodeB.run(`DROP SUBSCRIPTION smoke_sub`);
-  });
+    // 60s, not the package's 30s default, because the poll above is bounded at 30s and everything
+    // before it — two CREATE TABLEs, an INSERT, a publication and a subscription with copy_data,
+    // all against two networked containers — happens on the same clock. At the package default the
+    // poll could never report its own timeout: the test would be failed first, and failed on a run
+    // that was merely slow. Guard: `scripts/spawn-timeout-budget.test.ts`.
+  }, 60_000);
 });
 
 // The `command` override (swap S4, I4): Case 4 of the fiscal fidelity suite needs an 8 MB
