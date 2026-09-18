@@ -202,6 +202,19 @@ to satisfy it. The scenarios map one-to-one onto topology §12.2's obligations.
 - **Assert:** the restored database is byte-identical (same `PRAGMA integrity_check`, same row set, same
   chain heads) to a restore from a directly-streamed generation. A control: with the copy-up made
   additive-only (deletions not propagated), the restore **diverges or fails**, proving the check bites.
+  *(2026-09-18, as landed: the byte-identical assertion holds, and **the control as written here was RUN
+  and does NOT bite**. An additive copy-up into a destination holding only THIS lineage's files — some of
+  them objects the source had since compacted away — restored a database identical to the direct one:
+  same bytes, same rows, same chain tips, no error from litestream. That is kept as S3's Part C, which
+  records its outcome and decides nothing. The control that DOES bite is a destination holding ANOTHER
+  node's replica: there the additive copy leaves the foreign objects in place and the restore exits 0
+  and hands back the other node's ledger, with no error from litestream anywhere — S3's Part B, which is
+  what the landed scenario uses as its control. So the claim this scenario supports is narrower than the
+  sentence above: a copied replica equals a direct stream when the copy is a MIRROR, and an additive copy
+  onto a DIRTY destination silently restores whatever the leftovers win. What was not tested either way
+  is whether litestream ever writes different bytes under a key it has already used.
+  `bench/sqlite-failover/README.md` → "What S3's copy covers, and what its Part C records" carries the
+  recorded run and the mutation list.)*
 - **Failure means:** the two-box topology silently corrupts a cloud restore — a serious finding.
 
 ### S4 — multi-day offline write load, checkpointing disabled

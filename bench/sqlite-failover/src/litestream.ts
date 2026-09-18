@@ -59,6 +59,27 @@ const ENV_SECRET_ACCESS_KEY = "WAITRON_BENCH_SECRET_ACCESS_KEY";
 const credentialsByConfig = new Map<string, Store["credentials"]>();
 
 /**
+ * Litestream's compaction settings, turned down from minutes to seconds. They are TOP-LEVEL keys,
+ * not per-database ones: written under `dbs[0]` instead, the same run kept every L0 file and
+ * litestream reported nothing wrong (measured 2026-09-18 on the pin).
+ *
+ * What the individual keys MEAN is not established here, and this comment does not say. What is
+ * established is the effect of setting all four together, and the names are litestream's own: the
+ * pinned binary carries the struct tags `yaml:"l0-retention"` and
+ * `yaml:"l0-retention-check-interval"`, and a string `remove expired l0 files: %w`
+ * (`strings .bin/litestream`, 2026-09-18). The three intervals below are the only set this rig has
+ * run; nothing here establishes a lower bound, or which of the four is doing the work.
+ */
+const FAST_COMPACTION = [
+  `l0-retention: 2s`,
+  `l0-retention-check-interval: 1s`,
+  `levels:`,
+  `  - interval: 2s`,
+  `  - interval: 30s`,
+  `  - interval: 60s`,
+];
+
+/**
  * The pinned binary, or `null`. Never throws: the scenarios treat "no litestream here" as SKIPPED,
  * and an exception from a lookup would be recorded as a critical failure of the harness instead.
  *
@@ -92,20 +113,29 @@ export async function resolveLitestream(): Promise<{ bin: string; version: strin
  * default `delete` journal mode replicated with `replicate -once` (exit 0) and restored its rows,
  * with `PRAGMA journal_mode` reading `delete` before the run and `wal` after — litestream switched
  * it (same measurement).
+ *
+ * `fastCompaction` writes the four GLOBAL keys in `FAST_COMPACTION` below. Without them a replica
+ * on this pin keeps every L0 file it has written for the whole of a scenario's run: measured
+ * 2026-09-18, a `replicate` daemon under a default config still listed every `0000/` file it had
+ * uploaded after 90 seconds and had created no `0001/` file. With them, three L0 files disappeared
+ * 6-8 seconds after being written, once a `0001/` file covering their transaction range existed.
+ * S3 (`scenarios/s3_copied_replica.ts`) is the only caller that needs a deletion to happen at all.
  */
 export function writeConfig(opts: {
   dbPath: string;
   store: Store;
   prefix: string;
   configPath: string;
+  fastCompaction?: boolean;
 }): string {
-  const { dbPath, store, prefix, configPath } = opts;
+  const { dbPath, store, prefix, configPath, fastCompaction = false } = opts;
   const url = `s3://${store.bucket}/${prefix}?endpoint=${store.endpoint}&region=us-east-1&force-path-style=true`;
   writeFileSync(
     configPath,
     [
       `access-key-id: \${${ENV_ACCESS_KEY_ID}}`,
       `secret-access-key: \${${ENV_SECRET_ACCESS_KEY}}`,
+      ...(fastCompaction ? FAST_COMPACTION : []),
       ``,
       `dbs:`,
       `  - path: ${dbPath}`,
@@ -129,9 +159,15 @@ export function writeConfig(opts: {
  * seconds after `kill()`, and the scenario's `finally` awaits it before anything stops the MinIO
  * container.
  *
- * No scenario needs that flush today: `s_litestream_roundtrip` is this function's only caller and
- * makes its last read before killing its daemon, and S0 (`s0_happy_loop.ts`) uses only `syncOnce`
- * and `restore`, and starts no daemon.
+ * Two scenarios call this, and neither needs that flush. `s_litestream_roundtrip` makes its last
+ * read before killing its daemon. S3 (`scenarios/s3_copied_replica.ts`) kills the daemon, awaits
+ * `exited`, and then runs a `syncOnce` with box-a's handle still open — and that S3 does not need
+ * the flush was RUN rather than read off the code: with `kill()` sending SIGKILL first, so no flush
+ * could happen, S3 still passed twice (2026-09-18, `copied-sha-equal=true` both times). What that
+ * run did NOT separate is which of the one-shot and the daemon's own last sync carried the final
+ * writes: the daemon syncs continuously, so a pass is equally consistent with everything already
+ * being uploaded by the time it was killed. S0 (`s0_happy_loop.ts`) starts no daemon at all; it uses
+ * only `syncOnce` and `restore`.
  *
  * Every child is also registered for the parent's own exit (see `children` below): the scenario
  * kills it in a `finally`, but a runner that dies outside that `finally` would otherwise leave

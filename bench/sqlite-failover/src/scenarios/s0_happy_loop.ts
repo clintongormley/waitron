@@ -4,9 +4,10 @@
 // sells for itself; the box comes back, sees the higher term, and ships its tail instead of selling.
 //
 // Every upload here is `syncOnce`. Nothing in this scenario starts `replicate`, litestream's
-// continuous daemon, which is the mode the product would run and which only `s_litestream_roundtrip`
-// drives. That is why "the box dies before the next sync" is a scripted step here: under the daemon
-// it would be a timing window, and this scenario says nothing about that window.
+// continuous daemon, which is the mode the product would run; the daemon is driven by
+// `s_litestream_roundtrip` and by S3 (`s3_copied_replica.ts`), never here. That is why "the box dies
+// before the next sync" is a scripted step here: under the daemon it would be a timing window, and
+// this scenario says nothing about that window.
 //
 // What it asserts, on Part A:
 //   - the receiver ends up holding box-a's records 1..6 with the exact contents box-a wrote them

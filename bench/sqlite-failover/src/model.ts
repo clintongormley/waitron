@@ -162,6 +162,24 @@ export function openNode(nodeId: string, path?: string): NodeDb {
   // row, the same statement: OFF -> not refused, the row's huella and payload were rewritten;
   // ON -> refused, "records is append-only". `s_smoke` asserts all four refusals.
   handle.exec("PRAGMA recursive_triggers = ON");
+  // A writer here can be competing with a litestream process reading the same file (S3 sells under
+  // a `replicate` daemon), and without a busy timeout SQLite refuses instead of waiting. It is only
+  // half the fix, and the other half is `BEGIN IMMEDIATE` in `withTx`. The experiment, run twice by
+  // different people on 2026-09-18: a node selling every 5ms for 12 seconds against a daemon on the
+  // fast compaction settings, about 1800 writes a time. Each half ALONE leaves writes refused with
+  // "database is locked" — 16 and 19 on the first run, 15 and 15 on the second — and the two
+  // together leave none, on both runs. The counts move run to run; what reproduced is that one
+  // change alone is not enough.
+  //
+  // Five seconds is a bound on a STALL, and it is NOT justified by a measurement. Nothing here has
+  // measured how long a litestream checkpoint holds the file, which is the wait this pragma exists
+  // for. The only wait on record is an ARTIFICIAL one a probe chose: a holder process told to keep
+  // `BEGIN IMMEDIATE` for 1500ms, against a second connection carrying this pragma, which waited it
+  // out and committed — 1590ms in `delete` journal mode and 1613ms in WAL (2026-09-18; longer than
+  // the hold because the wait also covers the holder's commit). That number is a fact about the
+  // probe, not about this rig. The five seconds is deliberately large rather than dialled to
+  // anything.
+  handle.exec("PRAGMA busy_timeout = 5000");
   handle.exec(SCHEMA);
   return {
     nodeId,
@@ -175,8 +193,38 @@ export function openNode(nodeId: string, path?: string): NodeDb {
   };
 }
 
+/**
+ * Every caller writes, so the write lock is asked for at BEGIN rather than partway through.
+ *
+ * The OUTCOME this rests on was measured in BOTH journal modes, and reproduces in both — which
+ * matters because litestream switches the file to WAL while it replicates (`litestream.ts`), so a
+ * node in S3 is in `delete` mode until the daemon starts and in WAL afterwards. Measured 2026-09-18
+ * on node v26.7.0, `node:sqlite`, against a holder process that took `BEGIN IMMEDIATE` and kept it
+ * for 1500ms, with the probe connection carrying `PRAGMA busy_timeout = 5000`:
+ *
+ *     mode=delete style=deferred  -> REFUSED database is locked elapsed-ms=0
+ *     mode=delete style=immediate -> ACCEPTED elapsed-ms=1590
+ *     mode=wal    style=deferred  -> REFUSED database is locked elapsed-ms=1
+ *     mode=wal    style=immediate -> ACCEPTED elapsed-ms=1613
+ *
+ * "deferred" is what `recordSale` does under a plain `BEGIN`: read `chain_head`, then insert. It is
+ * refused AT ONCE in both modes, the timeout buying it nothing, while the same connection asking up
+ * front with `BEGIN IMMEDIATE` waits the holder out and commits.
+ *
+ * WHY the deferred transaction is refused differs by mode, and was NOT established here. A separate
+ * two-connection probe the same day, with nobody holding a write lock, says the two modes behave
+ * differently: in `delete` mode a connection on `BEGIN` alone did not stop another's
+ * `BEGIN EXCLUSIVE` (`ACCEPTED`), while one on `BEGIN` and then a `SELECT` did (refused, "database
+ * is locked") — so there a held READ lock is what refuses the upgrade. In WAL mode NEITHER stopped
+ * it: a reader there blocks nobody, and that read-lock account does not carry over. What carries
+ * over is the table above.
+ *
+ * Under load the same difference shows as counts: with `openNode`'s pragma set and this word left
+ * out, 16 of about 1800 writes were refused on one run and 15 on another (the runs recorded on that
+ * pragma).
+ */
 function withTx<T>(handle: DatabaseSync, body: () => T): T {
-  handle.exec("BEGIN");
+  handle.exec("BEGIN IMMEDIATE");
   try {
     const out = body();
     handle.exec("COMMIT");

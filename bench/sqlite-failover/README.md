@@ -24,8 +24,9 @@ pnpm --filter @waitron/bench-sqlite-failover typecheck
 Docker must be running: most scenarios start their own MinIO container via Testcontainers. S2 and
 S5 never do — each models its hand-over between two in-memory SQLite databases, so neither needs a
 container or a store. `LS` starts one only once `setup:litestream` has been run: without the pinned
-binary it reports SKIPPED before it reaches the store. S0 does the same, and starts ONE container
-when it does run: its three runs of the loop share that store and are kept apart by term.
+binary it reports SKIPPED before it reaches the store. S0 and S3 do the same, and each starts ONE
+container when it does run: S0's three runs of the loop share that store and are kept apart by term,
+and S3's three parts share it and are kept apart by prefix.
 
 `setup:litestream` downloads the pinned litestream release into the gitignored `.bin/` for this
 host's platform. Nothing else installs it, so the scenarios that drive litestream report SKIPPED
@@ -124,8 +125,8 @@ SKIPPED, then `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sq
 scenarios`, 2026-09-18, the `LS` row →
 `version=0.5.17 one-shot-keys=1 one-shot-restored=3 daemon-restored=4 first-sync-restores=3 after-write-restores=3 control-refused="litestream restore exited 1: Error: no matching backup files available"`.
 That is the foundation check only (find the binary, config, stream, restore); it claims nothing about
-the failover loop, which is what S0, S3 and S4 are for — S0 is in, and its recorded run is in its own
-section below. A different
+the failover loop, which is what S0, S3 and S4 are for — S0 and S3 are in, and each recorded run is
+in its own section below. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
 their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
 — so the conditional-write result will be a fact about the mechanism, and re-running it against the
@@ -142,9 +143,9 @@ its tail instead of selling. The three runs differ by two flags — does the box
 the box's own filings reach the store before it dies.
 
 **S0 never starts the streaming daemon.** Every upload it makes is `syncOnce`; `replicate`, the
-long-running mode the product would run, is driven by the `LS` foundation check and by nothing else
-in this rig. That is why "the box dies before the next sync" is a scripted step here: under the
-daemon it would be a timing window, and S0 measures nothing about that window.
+long-running mode the product would run, is driven by the `LS` foundation check and by S3, and by
+nothing else in this rig. That is why "the box dies before the next sync" is a scripted step here:
+under the daemon it would be a timing window, and S0 measures nothing about that window.
 
 **The three parts share ONE store and are separated by TERM**, the way `s1_double_promotion`
 separates its fenced race from its control. Box terms 1, 3 and 5 name the generation each part's box
@@ -315,6 +316,262 @@ What S0 leaves for the tasks after it: nothing streams the CLOUD's own generatio
 node that restores `gen-2-cloud-1` and follows the pointer is plan Task 8's, and the promotion here
 writes the pointer and a generation marker and no database.
 
+## What S3's copy covers, and what its Part C records
+
+S3 asks whether a replica COPIED from one prefix of the store to another restores the same database
+as the prefix litestream streamed to directly. It runs three parts against one MinIO store and one
+temporary directory, under four prefixes of the one venue — `venues/v1/gen-1-box-a` is the source
+box-a streams to, and `gen-2`, `gen-3` and `gen-4` are the destinations Parts A, B and C copy into.
+Nothing here drives `promotion.ts`: no term is claimed, no pointer is written, and the generation
+names only follow topology §2.2's shape so these keys sit where a promotion's would.
+
+**Part A is the verdict.** Box-a sells under a real `replicate` daemon and keeps selling until the
+store has DELETED a key it previously held — an outer deadline over a real listing, never a sleep,
+and a loud failure at the bound. That wait is the first of the two things this scenario had to
+establish, because "the copy propagates deletions" is a claim about a case that has to actually
+arise. The daemon is then stopped, the last writes flushed with a one-shot, box-a's database
+**deleted from disk**, and the copy made into a destination that already holds a DIFFERENT venue's
+replica — box-b's, nine sales each followed by its own sync. After
+`copyUp(…, { propagateDeletions: true })` the destination must hold exactly the source's objects and
+nothing else, and the database restored from it must be the database restored from the source: the
+same file bytes, the same `records` rows compared field by field against the rows box-a itself
+wrote, the same `chain_head` rows, and `PRAGMA integrity_check` reading ok on both.
+
+**The file bytes are hashed BEFORE anything opens the database**, so that nothing `openNode` does can
+enter the hash: it runs `CREATE TABLE IF NOT EXISTS` and its triggers, and opening a database
+litestream has restored creates the `-wal` and `-shm` sidecars beside it. That ordering is the
+conservative one; it is not a claim that an open WOULD change the file. The one probe that looked
+found the main file unchanged. On 2026-09-18, a model database seeded with five sales and left in
+WAL journal mode was hashed, opened with `openNode`, hashed again while open, closed and hashed a
+third time: `hash-open equal=true wal=true shm=true`, `hash-close equal=true`. The sidecars do
+appear; on that run the main file's bytes did not move. Whether some other open could move them is
+not established.
+
+**The dirty destination is what makes Part A a measurement.** Copying into an EMPTY prefix gives the
+same answer with the flag set either way, so the two flags would look alike and nothing would be
+under test. Part B runs the identical recipe with the flag off and gets a different venue's ledger
+back.
+
+**Part B is the control**, and it drives Part A's own comparison over what the additive copy left,
+requiring it to throw — a control asserting "the rows are box-b's" in words of its own would stay
+green if Part A's comparison had stopped checking anything. Its destination is dirtied the same way
+Part A's is and with its own count printed — `control-foreign-keys` is how many objects box-b's nine
+sales left under `gen-3-box-a` before box-a's replica was copied over them, the twin of
+`foreign-keys` under `gen-2-box-a`. What the additive copy leaves behind is
+not a litestream error: the restore exits 0 and writes a database. On the recorded run that database
+holds **box-b's nine rows** — `control-rows=9 control-nodes=[box-b]` — and SQLite reports it damaged,
+`row 1 missing from index sqlite_autoindex_chain_head_1`, so the assertion that refuses it is the
+integrity check rather than the row comparison. Both the integrity string and the refusal's own
+words are printed, because a later run refusing at the row comparison instead would be a different
+finding and should read as one.
+
+**Part C is a MEASUREMENT and decides nothing.** It is the control plan Task 8 asked for, and **it
+does not reproduce the opposite result on this pin**. The plan expected an additive copy to diverge
+because stale compacted files would be present; when the destination holds only THIS lineage's
+files — an early copy taken while the daemon was still streaming, some of whose objects the source
+has since deleted — the restore comes back identical to the direct one. A replica file's name
+carries the transaction range it covers (a listing taken on 2026-09-18 read
+`venues/v1/gen-1-box-a/0000/0000000000000001-0000000000000001.ltx` and two like it), so putting a
+file back under the name it already had puts the same range back twice. What Part C did NOT test is
+whether litestream ever writes different bytes under a name it has used before. Part C asserts only
+its two preconditions — the destination must hold objects the source no longer has — and REPORTS the
+outcome, computed rather than written as a literal.
+
+**Part C has three outcomes and none of them fails the scenario**, corrected on 2026-09-18: a
+litestream that DECLINES to restore the same-lineage replica is a legitimate result of the
+experiment, and until that day it made the whole scenario throw, which the runner reports as a
+critical FAIL. The outcome is now `identical`, `diverged: <the assertion that refused it>`, or
+`refused: …`. That third string is not litestream's own words alone: it is this rig's wrapper text
+(`litestream restore exited <code>: `) followed by litestream's first line of stderr.
+
+**Which declines count is matched on litestream's WORDS, not on a non-zero exit** — a second
+correction the same day, because the first attempt matched only the wrapper and that wrapper goes on
+EVERY non-zero exit of `restore`. Driven from a scratch copy of the scenario whose Part C restore
+threw instead of running:
+
+- with litestream's missing-backup words, S3 PASSED and printed `same-lineage-rows=0
+same-lineage-additive="refused: litestream restore exited 1: Error: no matching backup files
+available"`;
+- with the decode error a wrongly copied replica really produces — `litestream restore exited 1:
+Error: decode database: decode header: non-contiguous transaction ids in input files:
+(0000000000000002,0000000000000002) -> (0000000000000001,0000000000000001)`, the same words the
+  shifted-`CopySource` mutation below produced — S3 threw and failed;
+- and against the wrapper-only matcher, that same decode error was recorded as an outcome and S3
+  reported **PASS**, printing `same-lineage-additive="refused: litestream restore exited 1: Error:
+decode database: …"`. That is the defect the words-matcher removes, and it is the shape the `LS`
+  control above already paid for once.
+
+A store error (`NoSuchBucket`) and an output file that is already there and not empty (`cannot
+restore, output path already exists and is not empty`) are exit 1 with the same wrapper too, both
+measured in `src/litestream.ts`; each of those now fails the scenario as well.
+
+**`same-lineage-rows=0` means no restore happened**, not that a restore came back empty — there is no
+database to count rows in when litestream declines. Read `same-lineage-additive` first; it is what
+separates the two.
+
+**What S3 is not evidence about.** Not `packages/fiscal-verifactu`: every table here is the rig's
+model. Not whether an additive copy is safe into an EMPTY destination — nothing here copies into
+one. Not whether copying is how a real node should re-home a replica; this measures what a copy
+does, not what the product should do. And not a lower bound on the compaction settings or on how
+long a deletion takes: the part waits for the effect and reports how long it waited.
+
+**S3 found a flake in the rig itself, and it is fixed at the root.** S3 is the first scenario to
+write to a database while a litestream DAEMON is reading it, and on one full run it failed with
+`database is locked`. Both halves of the cause were established by running a node that sold every
+5ms for twelve seconds against a daemon on the fast compaction settings — about 1800 writes each
+time, on 2026-09-18, and run twice by different people: a busy timeout alone left 16 refusals on the
+first run and 15 on the second; `BEGIN IMMEDIATE` alone, with no timeout, left 19 and then 15; the
+two together left 0 on both. The counts move run to run — what reproduced is that either change
+alone leaves writes refused. `model.ts` now opens every node with `PRAGMA busy_timeout = 5000` and
+begins every write transaction with `BEGIN IMMEDIATE`. Every other scenario's verdict line still
+reads exactly as its own recorded run did.
+
+**Why the timeout alone is not enough**, corrected twice on 2026-09-18. The first correction got the
+journal mode wrong: it read a `delete`-mode control as though it described the case the fix is
+about, and by the time box-a is writing under a `replicate` daemon litestream has switched the file
+to WAL (`src/litestream.ts` records `PRAGMA journal_mode` reading `delete` before a run and `wal`
+after). The three results below are kept apart deliberately.
+
+**The `delete`-mode finding, as a `delete`-mode finding.** Two connections on one file, nobody
+holding a write lock: with the first on `BEGIN` alone, the second's `BEGIN EXCLUSIVE` was
+`ACCEPTED`; with the first on `BEGIN` and then one `SELECT`, the second's was refused, "database is
+locked". So in that mode a plain `BEGIN` takes no lock and the first READ takes one.
+
+**The same probe in WAL does not reproduce the read-lock half.** Both cases were `ACCEPTED`: a
+reader there blocks nobody.
+
+```
+mode=delete A=begin-only    -> B BEGIN EXCLUSIVE ACCEPTED
+mode=delete A=begin+select  -> B BEGIN EXCLUSIVE REFUSED: database is locked
+mode=wal    A=begin-only    -> B BEGIN EXCLUSIVE ACCEPTED
+mode=wal    A=begin+select  -> B BEGIN EXCLUSIVE ACCEPTED
+```
+
+**The outcome the fix rests on reproduces in BOTH modes.** A second probe, with a holder process
+taking `BEGIN IMMEDIATE` and keeping it for 1500ms while the probe connection carried
+`PRAGMA busy_timeout = 5000` (node v26.7.0, `node:sqlite`, measured 2026-09-18):
+
+```
+mode=delete style=deferred  -> REFUSED database is locked elapsed-ms=0
+mode=delete style=immediate -> ACCEPTED elapsed-ms=1590
+mode=wal    style=deferred  -> REFUSED database is locked elapsed-ms=1
+mode=wal    style=immediate -> ACCEPTED elapsed-ms=1613
+```
+
+"deferred" is what `recordSale` does under a plain `BEGIN` — read `chain_head`, then insert — and in
+both modes it is refused at once with the timeout set, while the same connection asking up front
+with `BEGIN IMMEDIATE` waits the holder out and commits. **WHY the deferred one is refused differs
+by mode, and this rig has not established it**; the `delete`-mode read-lock story above does not
+carry over to WAL, and nothing was run that would settle the WAL case.
+
+**The five seconds is not justified by a measurement.** It is a bound on a stall, and nothing here
+has measured how long a litestream checkpoint holds the file — the wait it exists for. The only wait
+on record is an ARTIFICIAL one the probe above chose: a 1500ms hold, waited out in 1590ms and 1613ms
+because the wait also covers the holder's commit. That is a fact about the probe. The number is
+deliberately large rather than dialled to anything.
+
+**The numbers in the verdict line are not fixed.** Box-a sells for as long as the wait takes, so
+`direct-rows`, `source-keys` and `deletion-waited-ms` differ run to run — 15, 16 and 19 rows across
+three runs, all correct. `mirror-deleted` and `control-stale` move with them: they count the foreign
+objects whose names box-a's replica did not happen to reuse.
+
+**`deletion-waited-ms` is QUANTISED to the poll interval, and is neither the store's latency nor
+litestream's.** It times the polling loop alone, and that loop is sell, sleep a quarter-second, list
+— so a deletion that lands mid-sleep is not seen until the next poll, and the number is a wait
+rounded UP to the next 250ms. The sleeps are the measurement's RESOLUTION, not overhead sitting on
+top of the wait: subtracting them leaves a figure nothing measured, and an earlier version of this
+paragraph invited exactly that by setting the sale cadence against the total. Read it as "the fast
+compaction settings did produce a deletion within this long, to a resolution of 250ms", and never as
+a latency. Corrected 2026-09-18 twice over: until that day the clock also covered opening box-a, its
+first three sales, the config write, the daemon spawn, the daemon's kill and the final one-shot —
+setup and teardown, now outside it.
+
+S3's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
+@waitron/bench-sqlite-failover scenarios`, 2026-09-18:
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S3 | a copied replica equals a direct stream | PASS | version=0.5.17 source-keys=6 source-deleted=1 deletion-waited-ms=4164 direct-rows=19 foreign-keys=9 copied=6 mirror-deleted=6 copied-rows=19 copied-sha-equal=true control-foreign-keys=9 control-copied=6 control-stale=6 control-rows=9 control-nodes=[box-b] control-integrity="row 1 missing from index sqlite_autoindex_chain_head_1" control-refused="the copied replica restores an intact database" same-lineage-stale=1 same-lineage-rows=19 same-lineage-additive="identical" |
+```
+
+That run's exit code is 1, and S3 is not why: S2 is the critical FAIL the runner reports.
+
+**Part A was watched to fail first**, on the one thing this task added that did not exist: with the
+scenario written and `src/copy-up.ts` absent, the runner reported
+`s3_copied_replica | threw | FAIL | Cannot find module …/src/copy-up.ts`. Every assertion below was
+then driven by its own mutation. Each was applied on its own and the scenario run, on 2026-09-18,
+and every file was restored from a copy kept outside the repository afterwards:
+
+- the stream left on litestream's DEFAULT compaction settings (`fastCompaction: false`) → "litestream
+  deleted none of the 131 replica files it wrote under venues/v1/gen-1-box-a within 120000ms —
+  nothing below is measuring a propagated deletion". That is the negative control for the four
+  config keys: 131 files written, none removed, in two minutes;
+- box-a's own rows captured under a node id nothing wrote → "box-a kept selling while the daemon
+  streamed";
+- the source database left on disk instead of deleted before the restores → "the source database is
+  gone before any restore". That deletion is what makes every comparison below a statement about the
+  STORE rather than about the file next door;
+- Part A's copy made additive → "after the mirroring copy the destination holds exactly the source's
+  objects and nothing else";
+- Part A's restore pointed at the early-copy prefix, which holds a subset → "the copied replica
+  restores the same ledger rows as the direct stream";
+- the capture of box-a's rows made to drop its last record → "those rows are the ones box-a itself
+  wrote, field for field";
+- the hash made to depend on the file's path as well as its bytes → "the two restored files are byte
+  for byte the same database";
+- the reader made to return no chain tips for the copied restore → "the copied replica restores the
+  same chain tips as the direct stream";
+- the reader made to report the DIRECT restore damaged → "the directly streamed replica restores an
+  intact database";
+- the control given the real rule back (`propagateDeletions: true`) → "an additive copy deletes
+  nothing from the destination", so the control is not green by construction;
+- the same, with that assertion removed as well → "the additive copy leaves the foreign lineage's
+  objects under the destination";
+- the control's destination left clean, the foreign lineage streamed to a prefix of its own → the
+  same "the additive copy leaves the foreign lineage's objects under the destination", which is the
+  assertion that keeps the control from copying into an empty prefix and proving nothing;
+- the control's destination dirtied with box-a's OWN lineage instead of a foreign one → "Part A's
+  comparison refuses the database the additive copy restores". That is Part C's finding arriving in
+  Part B: same-lineage leftovers do not diverge, so the control needs a FOREIGN lineage to refuse;
+- the same-lineage copy taken AFTER the stream instead of during it → "the early copy holds at least
+  one object the source has since deleted";
+- Part C's second copy made to mirror → "the second additive copy still leaves the source's deleted
+  objects in place";
+- the foreign lineage never synced → "the foreign lineage streamed nothing under
+  venues/v1/gen-2-box-a";
+- every object copied under the RIGHT key but with another object's BYTES — `CopySource` shifted by
+  one, so the destination's key set still matches the source's exactly → the restore itself is
+  refused, `litestream restore exited 1: Error: decode database: decode header: non-contiguous
+transaction ids in input files: (0000000000000002,0000000000000002) ->
+(0000000000000001,0000000000000001)`. So what catches an object copied wrongly under a right name
+  is litestream's own decode, not any comparison in this file: the scenario fails by throwing, which
+  the runner reports as a critical FAIL. The comparisons above ARE each driven by a mutation, but by
+  mutations of what the scenario READS — the restore pointed at another prefix, the hash made
+  path-dependent — and no mutation of the COPY reaches them, because a wrong key set is refused by
+  the object comparison first and wrong bytes are refused by litestream;
+- `copyUp` given one prefix twice → it throws `copyUp was given one prefix twice: venues/v1/gen-1-box-a`,
+  and given a destination nested under the source → `copyUp prefixes overlap: venues/v1/gen-1-box-a
+and venues/v1/gen-1-box-a/nested`. A scenario that throws is reported by the runner as a critical
+  FAIL under its filename.
+
+Two assertions have no mutation of their own, and saying which is cheaper than implying otherwise:
+
+- "the copied replica restores an intact database" is never driven by a mutation, because it fires on
+  every UNMUTATED run: it is the assertion Part B's control refuses on. The mutation above drives its
+  twin on the direct side instead;
+- `suffixesUnder`'s "… is not under …" guard. Every key it is handed comes from `store.listKeys`,
+  which filters by that prefix, so no mutation of the scenario reaches it; it guards a later caller
+  passing a listing from somewhere else.
+
+The SKIPPED path was run rather than read, because a critical scenario that quietly starts a
+container while claiming it was skipped is the failure that would hide. With `.bin/litestream` moved
+aside and no `litestream` on `PATH` (`command -v litestream` finds none on this host), the scenario
+was called directly from a throwaway file with a `startStore` that throws if it is ever reached, and
+returned `S3 SKIPPED critical=true litestream v0.5.17 not found; … — S3 is UNPROVEN until then`. The
+control in the other direction — the same call with the binary back — printed `THREW PROBE:
+startStore was called`.
+
 ## What S1's fence is, and what it is not
 
 S1 measures the fence this **rig** uses: one key per term, claimed with a create-only write, under
@@ -389,8 +646,9 @@ dies before that update streams leaves the promoted receiver holding it `pendien
 sends what the receiver LACKS, so it never corrects that row. Against the real endpoint that is one
 refused duplicate submission per such row. S2 does not measure it — it models the receiver's stale
 copy as coming from an earlier partial ship. **S0's Part C now drives it with the real litestream
-binary, by one-shot syncs** — not by the streaming daemon, which only the `LS` check starts — and
-measured four such rows in one run: see "What S0's loop covers, and what its Part C records" above.
+binary, by one-shot syncs** — not by the streaming daemon, which the `LS` check and S3 start and no
+other scenario does — and measured four such rows in one run: see "What S0's loop covers, and what
+its Part C records" above.
 
 **On the first follow-up this section first named — "make the stub answer a repeat the way AEAT
 does" — a second look on 2026-09-17 found it would measure nothing, and it is dropped.** A stub that
