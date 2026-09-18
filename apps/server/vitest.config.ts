@@ -23,10 +23,9 @@ export default defineConfig({
     // opposite direction. Local wall-clock 48.6s → 24.9s at 4 forks.
     //
     // This cap is also one of the two levers if a shard ever exits 1 with every test passing — a
-    // worker-to-main reporting timeout that vitest 3.2.7 hardcodes at 60s and no config raises, seen
-    // once on PR #414, with four workers plus the main process on a four-vCPU runner. Nothing was
-    // changed for it: docs/developers/ci-and-gates.md → "A shard can exit 1 with every one of its
-    // tests passing".
+    // worker-to-main reporting timeout that vitest's built-in fork pool leaves at birpc's 60s default
+    // and no config key here raises. See docs/developers/ci-and-gates.md → "A shard can exit 1 with
+    // every one of its tests passing".
     poolOptions: { forks: { maxForks: 4 } },
     // Boots ONE shared container with a `manifest` template migrated through apps/server's
     // production path; the converted real-Postgres suites clone it via `useTemplateDb` instead of
