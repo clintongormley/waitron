@@ -1382,7 +1382,22 @@ Two halves, one branch each (owner decision 2026-09-12).
   NFC is Chrome-for-Android only; the browser's own QR decoder is not dependable, so decode in JS or
   WASM. Also here: restoring `stripe_on_device` (Tap-to-Pay). Redsys and
   bank terminals are parked; Bizum research is under *Later and parked*.
-- **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI.
+- **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
+  BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
+  Stripe Checkout adapter that already exists forecloses no cheaper provider later.
+- **A guest paying from their own phone** (owner idea 2026-09-18, parked — the surface it needs does
+  not exist). The waiter hands a greeted table a QR code standing for its newly opened tab; the diner
+  scans it, reads the menu, orders, watches what has been served and what is still coming, and settles
+  at the end. Two owner decisions were taken while pricing it: **the diner's phone reaches us over the
+  PUBLIC INTERNET** through the venue's cloud instance, not the restaurant's wifi — which is what lets
+  a provider call back to say the money arrived; and **Waitron runs SEVERAL payment providers at
+  once**, routing each payment method and channel to whichever is cheapest for that cell, so this is
+  never a single-vendor choice. The owner's worked example: Mollie for Bizum, SumUp for card-present,
+  the online card case still open. Costs of doing that, to weigh rather than wish away: one merchant
+  account and one settlement reconciliation per provider, and one adapter each to write and keep
+  working. Prices and receipts:
+  [2026-09-18-online-payment-providers-bizum.md](research/2026-09-18-online-payment-providers-bizum.md).
+  The ordering surface itself is parked under *online ordering (SP15)* and the customer-facing menu.
 
 ### A7. Users, roles and the dashboard shell
 
@@ -3055,10 +3070,20 @@ settled decision — specced with the owner, never landed unattended) · KDS ops
 read-back and audit view, station kind, definable kitchen statuses) · recipes depth (nested
 sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and
 procurement (SP20; the AI forecast waits for the deterministic system) · the expo device kind ·
-**Bizum** (research 2026-08-30: account-to-account through Redsys or a PSP, roughly 0.4–0.6% direct
-versus Stripe's 4.99% + €0.40; SumUp has none; in person a dynamic QR works today and the NFC tap is
-rolling out through late 2026; the architecture-picking question, unverified, is whether a SumUp or
-Stripe Tap-to-Pay phone can accept a Bizum tap — resolve before designing any in-person Bizum UX).
+**Bizum** (research 2026-08-30; online prices re-read 2026-09-18, receipts in
+[2026-09-18-online-payment-providers-bizum.md](research/2026-09-18-online-payment-providers-bizum.md)).
+**A Bizum payment costs a FLAT fee, not a percentage** — MONEI is the only provider publishing the
+underlying acquiring cost and states it as €0.17 — so a provider that passes that through and marks it
+up thinly (Mollie, Sipay) prices Bizum several times below one charging a percentage on top (Stripe,
+MONEI). **Stripe's Bizum rate is 1,5 % + 0,25 €, not the 4,99 % + 0,40 € this entry carried until
+2026-09-18**; that figure is Klarna's, taken off the wrong row of Stripe's Spanish pricing page. The
+earlier 0,4–0,6 % direct figure is untouched and still unverified. SumUp has none — now read off its
+checkout API's payment-method enum rather than from marketing copy, which is what makes it settled.
+Mollie prices the two figures that would decide this as pass-through without publishing them, so
+**a written quote from Mollie and one from the deli's bank are what close this**, not more reading. In
+person a dynamic QR works today and the NFC tap is rolling out through late 2026; the
+architecture-picking question, unverified, is whether a SumUp or Stripe Tap-to-Pay phone can accept a
+Bizum tap — resolve before designing any in-person Bizum UX.
 
 ---
 
