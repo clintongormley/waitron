@@ -8,8 +8,10 @@ export type VenueDb = PgliteSuite;
  * function body rather than every call site.
  *
  * It forwards to {@link usePgliteDb} unchanged: same options, same handle, same per-test reset.
- * No suite has moved onto it yet — every existing suite still calls `usePgliteDb` directly, and
- * they convert a package at a time (plan task P2 step 5).
+ * No suite has been converted onto it yet — the suites that call `usePgliteDb` still call it
+ * directly, and they convert a package at a time (plan task P2 step 5). Some suites reach PGlite
+ * without `usePgliteDb` at all, through `createPgliteDb` or `describeEachTarget`; that conversion
+ * is not mechanical and is task F1's, not step 5's.
  *
  * It is NOT the seam for a real container, and it is not the seam for `describeEachTarget` either.
  * `useRealPostgres` names a container deliberately. `describeEachTarget` is a dual-target harness

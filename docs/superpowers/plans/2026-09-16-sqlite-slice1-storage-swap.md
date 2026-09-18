@@ -2365,32 +2365,47 @@ migration folder and diffing that against the real one found no difference."
 
 **Runner:** autonomous. **Depends on:** nothing.
 
-Most suites pick a database by naming the driver themselves, through `usePgliteDb`,
+The suites that need a database pick one by naming the driver themselves, through `usePgliteDb`,
 `useRealPostgres` or `describeEachTarget`. Put one helper in front of them so the flip changes one
 function body.
 
 **The count in this paragraph used to read "211 files", and a count is a receipt that goes stale
-(CLAUDE.md §7). Measured 2026-09-18 on the tree at `b9bbe1d7`**, with the command, because the answer
-depends entirely on the scope you count over:
+(CLAUDE.md §7). Measured 2026-09-18**, with the commands, because the answer depends entirely on the
+scope you count over. Both greps exclude the two files that are ALLOWED to name the driver —
+`lifecycle.ts`, which defines `usePgliteDb`, and `venue-db.ts`, the seam itself:
 
 ```bash
-# files that call usePgliteDb, excluding the file that defines it
-grep -rlE "\busePgliteDb\(" --include="*.ts" packages apps | grep -v "src/testing/lifecycle.ts" | wc -l   # 209
-# files that call any of the three named above
-grep -rlE "\b(usePgliteDb|useRealPostgres|describeEachTarget)\(" --include="*.ts" packages apps | grep -v "src/testing/lifecycle.ts" | wc -l   # 219
+grep -rlE "\busePgliteDb\(" --include="*.ts" packages apps \
+  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)\.ts$" | wc -l   # 208
+grep -rlE "\b(usePgliteDb|useRealPostgres|describeEachTarget)\(" --include="*.ts" packages apps \
+  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)\.ts$" | wc -l   # 218
 ```
 
-The run-it reviewer counted 205 for the first of those, over `*.test.ts` only — the same property,
-a narrower scope.
+Two earlier readings of these, both corrected here rather than quietly replaced. The first pass
+reported 209 and 219 and said they were measured on `b9bbe1d7`: they were measured on the branch,
+and they counted `venue-db.ts` — the one file whose whole purpose is to be the permitted caller — as
+a call site still to convert. On `b9bbe1d7` itself the same commands give 208 and 218, the same as
+the branch once the seam is excluded. And the run-it reviewer counted 205 over `*.test.ts` only,
+which is the same property over a narrower scope and is unchanged by any of this.
 
 Do not treat any of these numbers as a completion target. **The property this task can actually
 reach is: no TEST SUITE calls `usePgliteDb` directly — only `venue-db.ts` does.** It is deliberately
 narrower than "no file names the PGlite driver", which was the first attempt at stating it and is
 unsatisfiable: measured the same day, `grep -rln "createPgliteDb" --include="*.ts" packages apps`
 outside `packages/db/src/testing/` returns 27 files, among them `packages/db/src/client.ts`, which
-is where the driver is named ON PURPOSE (it is the only file importing `@electric-sql/pglite`),
-`packages/db/src/index.ts` which re-exports it, and several `apps/server/scripts/*-demo.ts`. Step 5
-converts none of those and is not meant to.
+is where the driver is named ON PURPOSE, `packages/db/src/index.ts` which re-exports it, and several
+`apps/server/scripts/*-demo.ts`. Step 5 converts none of those and is not meant to.
+
+`client.ts` is the only file under `packages/` and `apps/` that imports `@electric-sql/pglite`.
+State that scope: `git grep -ln "@electric-sql/pglite" -- '*.ts'` over the whole workspace also
+returns `bench/pglite-throughput/src/bench.ts`, which is a workspace member.
+
+**And step 5 is not the whole of it**, which the first statement of this property hid. Counted over
+`*.test.ts` under `packages/` and `apps/`: 11 suites take a PGlite database by calling
+`createPgliteDb` themselves, with no helper at all (`packages/db/src/index.test.ts` does it inside
+the `it`), and 7 more get theirs from `describeEachTarget`'s PGlite half. A mechanical
+`usePgliteDb(` → `useVenueDb(` replacement reaches none of those 18. They are F1's to place, with
+the rest of the 66-test disposition.
 
 **Files:**
 
@@ -2461,7 +2476,7 @@ a reset that never happened as a pass.
 
 **The control was run** (CLAUDE.md §4, prove by deletion): with the helper changed to
 `usePgliteDb({ ...options, resetPerTest: false })`, exactly the third case fails
-(`expected { n: 1 } to deeply equal { n: 0 }`) and the first two stay green — which is this
+(`expected { n: 1 } to deeply equal { n: +0 }` — vitest prints `+0`) and the first two stay green — which is this
 paragraph's claim, measured rather than asserted.
 
 - [x] **Step 2: Run it and watch it fail** — done 2026-09-18: `Cannot find module './venue-db.js'`.
