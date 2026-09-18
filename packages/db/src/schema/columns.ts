@@ -128,9 +128,19 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * (converted 2026-09-18 — and SCOPE alone is what keeps those two: measured there, substituting
  * leaves the generated schema identical and breaks no caller today, while the narrowing itself
  * still happens, both columns being NOT NULL. Receipts in the P1b identity report in
- * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Others are unconverted on
- * `main` on that date, among them `packages/fiscal-verifactu/src/schema/registros.ts`. So take the
- * two reasons as the property and the names as a dated reading.
+ * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`), and
+ * `scheduled_runs.state` in `packages/scheduler` (converted 2026-09-18), where the narrowing costs
+ * nothing at all: the column is already declared `.$type<RunState>()`, so `enumText` would change
+ * no caller-facing type — `RunState` is `(typeof runState)[number]`, which is the union `enumText`
+ * derives. Others are unconverted on `main` on that date, among them
+ * `packages/fiscal-verifactu/src/schema/registros.ts`. So take the two reasons as the property and
+ * the names as a dated reading.
+ *
+ * Scope keeps `scheduled_runs.state` plain, like the identity pair above, but it is the only column
+ * measured so far where none of the three COSTS — the spacing, the narrowing, the branding —
+ * applies, so it is the sub-case to reach for if these constraints are ever rewritten. That is not
+ * a claim about the cheapest instance in the tree: the others have not been measured for narrowing
+ * or branding at all.
  *
  * One mechanical note, because a converter meeting a NULLABLE checked column will ask: `enumCheck`
  * returns only the `in (…)` fragment, so a null arm is composed AROUND it rather than emitted by

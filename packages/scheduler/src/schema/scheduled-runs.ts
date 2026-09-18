@@ -1,14 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  integer,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, uniqueIndex } from "drizzle-orm/pg-core";
+import { count, id, json, label, table, tsString } from "@waitron/db";
 
 /**
  * The lifecycle of one scheduled run. `pending` is work enqueued but not yet attempted (a
@@ -28,38 +20,42 @@ export type RunState = (typeof runState)[number];
  * (duty, period_from) would break the one caller that legitimately needs N rows per
  * key: a re-sweep must run a period AGAIN without overwriting what the first sweep recorded.
  */
-export const scheduledRuns = pgTable(
+export const scheduledRuns = table(
   "scheduled_runs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     /** `PeriodDuty.name`. Changing a duty's name orphans its history — it is an identifier. */
-    duty: text("duty").notNull(),
+    duty: label("duty").notNull(),
     /** The half-open `[period_from, period_to)` stored explicitly, never derived: a later
      * timezone-aware cadence must change how periods are COMPUTED, not what past rows mean. */
-    periodFrom: timestamp("period_from", { withTimezone: true, mode: "string" }).notNull(),
-    periodTo: timestamp("period_to", { withTimezone: true, mode: "string" }).notNull(),
+    periodFrom: tsString("period_from").notNull(),
+    periodTo: tsString("period_to").notNull(),
     /** 0 = derived from a gap; N > 0 = the Nth re-sweep of the same period. */
-    generation: integer("generation").notNull().default(0),
-    state: text("state").$type<RunState>().notNull(),
+    generation: count("generation").notNull().default(0),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair.
+    // Every COST columns.ts records for that substitution was measured here on 2026-09-18 and none
+    // of them lands: the constraint already carries the ", " spacing enumCheck emits, so
+    // substituting is schema-silent; the narrowing is already in force, $type<RunState>() refusing
+    // a plain string today; and the union enumText derives from `runState` IS `RunState`, so there
+    // is no branded type to lose. What keeps it plain is the one thing columns.ts records that is a
+    // decision rather than a measurement: scope. Rewriting a constraint is not a conversion's job.
+    // See enumText in packages/db/src/schema/columns.ts.
+    state: label("state").$type<RunState>().notNull(),
     /** Incremented at CLAIM, not at completion — so a run stranded by a crash has already spent
      * its attempt, and a reclaim cannot loop for ever. */
-    attempts: integer("attempts").notNull().default(0),
+    attempts: count("attempts").notNull().default(0),
     /** When this row becomes claimable. Null unless `pending` or `failed`. */
-    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true, mode: "string" }),
-    startedAt: timestamp("started_at", { withTimezone: true, mode: "string" }),
-    finishedAt: timestamp("finished_at", { withTimezone: true, mode: "string" }),
+    nextAttemptAt: tsString("next_attempt_at"),
+    startedAt: tsString("started_at"),
+    finishedAt: tsString("finished_at"),
     /** The duty's own result, stored verbatim. Null until a run finishes. This is the durable home
      * for findings a duty cannot otherwise persist — payments reconcile's `remediationFailures`
      * names the scheduler as its owner. */
-    summary: jsonb("summary").$type<Record<string, unknown>>(),
+    summary: json<Record<string, unknown>>("summary"),
     /** A structured code — an AppError code, or the literal "unknown". NEVER prose. */
-    errorCode: text("error_code"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    errorCode: label("error_code"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
+    updatedAt: tsString("updated_at").notNull().defaultNow(),
   },
   (t) => [
     // The claim-by-INSERT depends on this: ON CONFLICT DO NOTHING against this key is what makes

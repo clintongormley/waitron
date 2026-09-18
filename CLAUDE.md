@@ -389,10 +389,11 @@ container or browser test** — most of these rules exist because a test passed 
 - **Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.** A
   second bridge with a different MTU stalled larger queries while small ones passed. Use
   `networkedPostgresContainer`.
-- **Concurrent coverage runs must not share a package's report directory.** Vitest cleans that
-  shared directory, so two overlapping runs over the same package end in `ENOENT`. Inspect the
-  resolved selection first, or give an intentional second run its own
-  `--coverage.reportsDirectory`.
+- **Concurrent coverage runs must not share a package's report directory, and an intentional second
+  one belongs OUTSIDE the package.** Vitest cleans a shared directory, so two overlapping runs over
+  the same package end in `ENOENT`; and a leftover directory inside the package under a non-dot name
+  is measured as SOURCE by the next package run, sinking the ratio for reasons unrelated to the code.
+  Inspect the resolved selection first. See [testing-guide.md](docs/developers/testing-guide.md).
 - **Reuse a supplied test container before probing Docker again.** A failing `docker info` is not
   evidence that a container global setup already started is absent.
 - **A container port-binding timeout needs Docker state as well as database logs.** Save

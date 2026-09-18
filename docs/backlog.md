@@ -2433,8 +2433,33 @@ which is also the shape of the two remaining odd-path packages, `media` and `ven
 plan's step 4 and its P1a twin are corrected in place, and so is the P1a summary earlier in this
 entry, which had the same "fails silently" wording.
 
+**`packages/scheduler` is the eleventh pull request** — one table file, one table, 14 columns, no
+schema change. Every shape in it was a shape the rollout had already met, with one exception worth
+recording. Its `scheduled_runs.state` column is a checked text column over a value set, and it is the
+first in the rollout where every COST `columns.ts` records for moving such a column to the
+`enumText`/`enumCheck` pair was measured and none of them lands: substituting is schema-silent, the
+narrowing is already in force because the column is declared `.$type<RunState>()` and refuses a plain
+string today, and there is no branded type to lose because the union `enumText` derives from
+`runState` is the same type as `RunState`. Scope keeps it a plain column — `columns.ts` records scope
+too, as a decision rather than a measurement, and rewriting a constraint is not a conversion's job —
+and the comment beside it says that rather than borrowing a reason it does not have. Anyone who later
+decides to rewrite these constraints should start here; `columns.ts` now names it as that sub-case.
+
+It also paid for a trap in the acceptance method itself, now written into `CLAUDE.md` §4,
+`docs/developers/testing-guide.md` and the plan's step 4: a coverage run given its own
+`--coverage.reportsDirectory` under a non-dot name INSIDE the package leaves a directory the next
+package run measures as source, because the only entries in vitest's coverage excludes that would
+catch it are `coverage/**` and `**/[.]**`. The HTML reporter's own assets add 267 statements, and
+one leftover directory took this
+package from 99.5% to 59.91% against a 90 threshold — a number that looks like a coverage regression
+and is not. The fix is to put a second run's directory outside the package, which is what the rule's
+own cited receipt had already been doing. Two false claims reached a committed draft of the plan's
+report and were removed by the review wave: an increment quoted as uniform across readings that in
+fact came from two different trees, and a repeatability claim the run-it reviewer falsified —
+statement readings do repeat, branch readings do not, so no branch delta is quoted anywhere.
+
 What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then
-`scheduler`, `venue-service`, `credentials` and `media`, one pull
+`venue-service`, `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their
