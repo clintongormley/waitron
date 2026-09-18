@@ -681,6 +681,80 @@ export default async function ({ startStore }) {
 
 ### Task 8: S3 — copied replica equals direct stream (deletions propagate)
 
+> **2026-09-18, as landed.** Everything below was measured on this machine against the pin
+> (litestream v0.5.17 darwin-arm64, node v26.7.0, the pinned MinIO image). The scenario is three
+> parts sharing one store, not the one sequence steps 1-4 describe, and **step 1's CONTROL does not
+> reproduce the opposite result on this pin** — that is the largest deviation and the rest follow
+> from it. The recorded run, the mutation list and the two assertions that have no mutation are in
+> `bench/sqlite-failover/README.md` → "What S3's copy covers, and what its Part C records".
+>
+> - **The plan's control — additive-only diverges because stale compacted files are present — was
+>   run, and it does NOT diverge.** With the destination holding only THIS lineage's files, some of
+>   them taken before the source compacted and deleted them, the restore comes back identical to the
+>   direct one: same file bytes, same rows, same chain tips. A replica file's name carries the
+>   transaction range it covers (`venues/v1/gen-1-box-a/0000/0000000000000001-0000000000000001.ltx`,
+>   read off a listing), so putting a file back under the name it already had puts the same range
+>   back twice. That measurement is kept as Part C, which asserts only its preconditions and
+>   RECORDS its outcome; it decides nothing.
+> - **What replaced it is a destination holding a FOREIGN lineage.** Part B streams a second venue's
+>   replica (box-b, nine sales, one sync each) into the destination and then copies box-a's over it
+>   additively. The restore exits 0 and hands back **box-b's nine rows** — a different venue's
+>   ledger, no error anywhere. Part A uses the identical recipe with `propagateDeletions: true` and
+>   is the verdict. So the scenario's claim is narrower and sharper than step 6's: a copied replica
+>   equals a direct stream when the copy is a MIRROR, and an additive copy onto a dirty destination
+>   silently restores whatever the leftovers win.
+> - **Which assertion refuses the control is recorded rather than assumed, and it is not the row
+>   comparison.** The mixed set of files restores a database SQLite itself calls damaged —
+>   `row 1 missing from index sqlite_autoindex_chain_head_1` — while still reading back box-b's rows,
+>   so Part A's integrity check is what fires. The verdict prints both that string and the refusal's
+>   own words, because a later run refusing at the row comparison would be a different finding.
+> - **`copyUp` returns `{ copied, deleted }`, not `void`.** The counts go in the verdict line, and
+>   `deleted` is the number that separates the two modes: an additive copy of a source that dropped
+>   files is indistinguishable from a mirror of a source that never did, if all a caller can see is
+>   that the call returned. It also refuses two prefixes where one contains the other, rather than
+>   handling them.
+> - **Step 2 names the config keys the plan never did.** Deletion during compaction is real on this
+>   pin but needs four GLOBAL keys, which `writeConfig` now writes behind a `fastCompaction` option:
+>   `l0-retention: 2s`, `l0-retention-check-interval: 1s`, and a three-entry `levels` list at 2s/30s/
+>   60s. The negative control was run: with the DEFAULT settings, box-a wrote 131 replica files in two
+>   minutes and litestream deleted none of them, and the scenario fails on exactly that sentence.
+>   What the individual keys mean is not established — only the effect of setting all four.
+> - **Step 2's "run, watch it fail" happened, and its red was the missing module.** With the scenario
+>   written and `src/copy-up.ts` absent, the runner reported
+>   `s3_copied_replica | threw | FAIL | Cannot find module …/src/copy-up.ts`. `writeConfig`'s
+>   `fastCompaction` option was added BEFORE that run, as infrastructure the scenario needed to reach
+>   its subject at all, so it is not part of the red; nothing else in the scenario was red first,
+>   every other interface it composes having already existed. The mutation list in
+>   the README stands in for the rest, one mutation per assertion.
+> - **Step 2's other prediction — "the mirror restore diverges because deletions were not
+>   propagated" — is about Part B, not Part A**, and it holds there.
+> - **The wait for a deletion is part of the scenario, not a setup detail.** Box-a keeps selling under
+>   a real `replicate` daemon until the store has dropped a key it held, on an outer deadline over a
+>   real listing (about 3.5-4.3 seconds on the recorded runs). Because the part sells for as long as
+>   the wait takes, `direct-rows`, `source-keys` and `deletion-waited-ms` differ run to run.
+> - **Box-a's database is deleted before any restore.** Without that, a `restore` that copied the file
+>   next door would satisfy every comparison — the run where it did is in the `LS` section of the
+>   README. The file bytes are also hashed BEFORE `openNode` touches them, because opening a database
+>   runs `CREATE TABLE IF NOT EXISTS` and creates the `-wal`/`-shm` sidecars.
+> - **Step 5's parallel second stream (`gen-1-boxbis`) was not built.** The direct stream every copy is
+>   judged against is box-a's OWN source prefix, restored separately. A second node streaming "the
+>   same writes" would be a different lineage with different uuids in every payload, so the two
+>   restores could never be byte-identical and the comparison step 6 asks for would be impossible.
+> - **S3 found a flake in the rig, and fixing it changed `model.ts`.** S3 is the first scenario to
+>   write to a database while a litestream DAEMON reads it, and one full run failed with
+>   `database is locked`. Measured both ways, a node selling every 5ms for twelve seconds against a
+>   daemon on the fast settings, about 1800 writes a time, and run twice by different people:
+>   `PRAGMA busy_timeout` alone left 16 refusals and then 15, `BEGIN IMMEDIATE` alone left 19 and
+>   then 15, both together left 0 on both runs — a deferred BEGIN asks for the write lock partway
+>   through and SQLite refuses that upgrade rather than waiting. The counts move run to run; what
+>   reproduced is that either change alone leaves writes refused. `openNode` now sets the timeout and
+>   `withTx` begins with `BEGIN IMMEDIATE`. Every other scenario's verdict line still reads exactly
+>   as its own recorded run did.
+> - **Outside the new files the change edits four things:** `writeConfig`'s new option and the flake
+>   fix in `src/litestream.ts` and `src/model.ts`, the package README (its new S3 section plus two
+>   sentences that said S3 was still owed), and this note. `promotion.ts`, `store.ts` and
+>   `scenarios.ts` are untouched.
+
 **Files:**
 - Create: `bench/sqlite-failover/src/copy-up.ts` (`export async function copyUp(store, fromPrefix, toPrefix, opts: { propagateDeletions: boolean }): Promise<void>`)
 - Create: `bench/sqlite-failover/src/scenarios/s3_copied_replica.ts`

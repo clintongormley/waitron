@@ -162,6 +162,16 @@ export function openNode(nodeId: string, path?: string): NodeDb {
   // row, the same statement: OFF -> not refused, the row's huella and payload were rewritten;
   // ON -> refused, "records is append-only". `s_smoke` asserts all four refusals.
   handle.exec("PRAGMA recursive_triggers = ON");
+  // A writer here can be competing with a litestream process reading the same file (S3 sells under
+  // a `replicate` daemon), and without a busy timeout SQLite refuses instead of waiting. It is only
+  // half the fix, and the other half is `BEGIN IMMEDIATE` in `withTx`. The experiment, run twice by
+  // different people on 2026-09-18: a node selling every 5ms for 12 seconds against a daemon on the
+  // fast compaction settings, about 1800 writes a time. Each half ALONE leaves writes refused with
+  // "database is locked" — 16 and 19 on the first run, 15 and 15 on the second — and the two
+  // together leave none, on both runs. The counts move run to run; what reproduced is that one
+  // change alone is not enough. Five seconds because the longest wait is a litestream checkpoint,
+  // and this is a bound on a stall rather than a budget.
+  handle.exec("PRAGMA busy_timeout = 5000");
   handle.exec(SCHEMA);
   return {
     nodeId,
@@ -175,8 +185,17 @@ export function openNode(nodeId: string, path?: string): NodeDb {
   };
 }
 
+/**
+ * Every caller writes, so the write lock is taken at BEGIN rather than upgraded to partway through.
+ *
+ * A plain `BEGIN` takes a read lock and asks for the write lock at the first INSERT, and SQLite
+ * refuses that upgrade outright rather than waiting — a busy timeout cannot help, because waiting
+ * for a lock you already hold a read lock against is how two writers deadlock. Measured with the
+ * runs recorded on `openNode`'s busy-timeout pragma: with the pragma set and this word left out,
+ * 16 of about 1800 writes were refused with "database is locked" on one run and 15 on another.
+ */
 function withTx<T>(handle: DatabaseSync, body: () => T): T {
-  handle.exec("BEGIN");
+  handle.exec("BEGIN IMMEDIATE");
   try {
     const out = body();
     handle.exec("COMMIT");
