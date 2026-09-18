@@ -2390,8 +2390,29 @@ wrong helper on a hashed column is loud rather than silent. The one place it wou
 `workforce_chains.updated_at`, which nothing reads or writes from JavaScript; that column now carries
 a comment saying so.
 
+**`packages/workforce-es` is the ninth pull request** — one table file, one table, 20 columns, no
+schema change. It is the first package in the rollout with no `text` column at all, so the converted
+file calls `label()` nowhere; it is the second in a row with no `enumText`/`enumCheck` decision to
+make, for a different reason from `packages/workforce`'s (that one has text columns but no value-set
+check over one; this one has no text column for a check to constrain). Its one `check()` is a range
+check and its one database enum stays, for the usual reason.
+
+**What it found is a question rather than a change, and it is for the owner.** The tree says two
+different things about what unit `convenio_config.night_premium_pct` is in, and no code settles
+which. Two comments — the column's own and its paraphrase on the generic ruleset type — call it a
+fraction, so a 25% premium would be stored `0.25`. Its NAME, and the 2026-07-22 workforce design,
+call it a percentage, which would store `25.00`. No site computes with the value; it is read from the
+row and handed on. That makes it cheap to settle now and expensive once a venue has written a row. It also
+decides a second question: two decimal places on a FRACTION mean the column can express a premium
+only in whole percentage points — measured, `0.125` stores as `0.13` — so a 12.5% night premium would
+not be representable, while as a percentage `12.50` is exact. Both the scale and the name are
+pre-existing, in the package's baseline migration. The conversion changed neither: `rate()` emits the
+same `numeric(5, 2)`, and the column gained a short comment block saying its unit is undecided and
+where the receipt is. The task that turns rates into basis points (P6) now carries the
+same warning, because under its rule `0.25` becomes `25`, which reads as 0.25%.
+
 What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then
-`workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials` and `media`, one pull
+`bookings`, `scheduler`, `venue-service`, `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their

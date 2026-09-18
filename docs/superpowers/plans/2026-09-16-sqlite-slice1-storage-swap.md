@@ -740,7 +740,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -1307,6 +1307,138 @@ and the real-PostgreSQL `restore-continuation.pg.test.ts` all ran unedited. The 
 folder reads 100% on every measure after the conversion, and the package as a whole 99.88% statements
 / 99.45% branches / 100% functions / 99.88% lines against thresholds of 90/90/85/85
 (`packages/workforce/vitest.config.ts:44`).
+
+**And the same report for `packages/workforce-es`.** One table file, one table, 20 columns —
+`convenio_config`, the Spain-specific configuration surface that supplies the overtime rule and the
+working-time guardrails as data. The builders it used were `uuid`, `integer`, `numeric` in two
+shapes (`numeric(5, 2)` and `numeric(12, 2)` — the same scale, different precisions), `boolean` and
+`timestamp` in string mode, every one of which has a vocabulary equivalent. _Two superlatives were cut from this
+paragraph in review._ It is not "the smallest conversion in the rollout", and it is false in both
+directions: four packages still unconverted are smaller, `packages/credentials` being one table of
+six columns, and behind it P1b's third pull request (#396) converted a single column. And it is not
+"the first in a country module" either: `packages/fiscal-verifactu` was converted first, in the
+parked #399, and the repository's own prose calls that one Spain-specific too. "Country module" was
+a coined phrase besides, and it collides with `CLAUDE.md` §3's country PACK, which is deliberately
+not a module. The base
+commit is named rather than written `HEAD`, because `HEAD` stops meaning the base tree the moment
+this lands: `git grep -c "\b<builder>(" 034a701f -- packages/workforce-es/src/schema` returns
+nothing for `date`, `time`, `smallint`, `bigint`, `jsonb`, `bytea` or `customType`, and
+`git grep -n '\.array()' 034a701f -- packages/workforce-es/src` exits 1, so there is no array
+column either. The package is exempt from the english-only guard, because `convenio` is a declared
+Spanish labour token; `scripts/english-only.test.ts` pins the two vocabulary OWNERS as exactly
+`workforce-es` and `fiscal-verifactu` — which is a narrower thing than "the Spanish-by-design
+packages", the same file naming `verifactu`, `reporting`, `country-es` and `country-gb` as Spanish by
+nature and unscanned. The exemption never comes into play here, since a conversion renames nothing.
+
+**It is the first package in the rollout with no `text` column at all.** The same command
+returns nothing for `text` at the base commit, and the converted file calls `label()` nowhere. What
+that does NOT make it is the first package to escape the `enumText`/`enumCheck` question:
+`packages/workforce`, directly above, escaped it too, and the paragraph here first claimed otherwise
+while the paragraph above it said the opposite — a twin the convention reviewer caught. So this is
+the second conversion in a row with no such decision to make, and the reason has moved rather than
+repeated. Workforce has text columns but no VALUE-SET check over one; this package has no text
+column for a check to constrain. Its one `check()` constraint is a range check
+(`working_days_per_week between 1 and 7`).
+
+The single timestamp column is string mode, read off the line being replaced: at the base commit
+`grep -c 'mode: "string"'` over the file returns 1 and `grep -c 'mode: "date"'` returns 0, and the
+converted file holds exactly one `tsString` call and no bare `ts(` call.
+
+One thing the conversion did not absorb: the one `pgEnum` column, `convenio_config.overtime_model`,
+on the `overtime_model` type declared in the same file. `enumText` emits `text`, so pointing it at a
+database enum is a real schema change; the file keeps importing `pgEnum` from `drizzle-orm/pg-core`,
+which is again why the step 5 guard can never prove a package "fully converted".
+
+**The answer this package adds is about `rate()`, and it is an open question rather than a change.**
+`night_premium_pct` is `numeric(5, 2)`, so `rate()` is its exact equivalent and the substitution is
+silent in the schema, in the read mapping and in the caller-facing type — the comparison below covers
+all three. What the conversion surfaced is that the tree says two different things about the column's UNIT and
+no code settles which. Two comments say a fraction: the column's own ("plus de nocturnidad as a fraction (e.g. 0.25)") and
+its paraphrase on `WorkTimeRuleset.nightPremiumPct` in `packages/workforce/src/ruleset.ts`. The
+column's NAME says the opposite — `night_premium_pct` — and the 2026-07-22 workforce design writes it
+"nocturnidad %" (`docs/superpowers/specs/2026-07-22-workforce-and-time-record-design.md`). And no
+code arbitrates them: reading every site rather than counting them, `nightPremiumPct` is declared in
+the schema and in that ruleset type, aliased and passed through by the resolver in
+`packages/workforce-es/src/convenio.ts`, and given a value by three fixtures — the package's own
+`convenio.test.ts` and `migrations.test.ts` and `packages/workforce/test/fixtures.ts`. No site
+multiplies, divides or compares it. _The first version of this paragraph offered the package's own test as a third witness
+for the fraction reading; it is not one._ `packages/workforce-es/src/convenio.test.ts` inserts `0.25`
+and expects `0.25` back, a round trip that passes whichever unit the column is in — §1's measurement
+taken where both answers look alike.
+
+Every other `rate()` COLUMN in the schema holds a percentage-style number: `vat_rate` in
+`packages/db/src/schema/sales.ts` and `orders.ts`, whose fixtures write `"21.00"`, and `rate` and
+`deductible_proportion` in `packages/db/src/schema/purchase-invoices.ts`, whose default is the
+literal `"100.00"`. (The fifth `rate()` call in the tree is a fixture in
+`packages/db/src/schema/columns.test.ts` holding no domain value — named because the workforce report
+was corrected for letting exactly that file into a count.) The helper's own comment reads "A
+percentage rate: two decimal places, e.g. a 21.00 VAT rate", so if this column is a fraction it is
+the one site reading the helper differently. Nothing was changed in `columns.ts` for it, which is
+one of the three files the parked `fiscal-verifactu` branch has to rebase over; what the column
+gained instead is a short comment block saying its unit is undecided. _Priced honestly rather than
+waved through:_ the comment itself costs #399 nothing, because that branch does not touch
+`convenio-config.ts` — but this pull request still edits `docs/backlog.md` and this plan, two of the
+same three files, so it adds to that conflict exactly as the identity and workforce conversions did.
+The comment's SHAPE departs from the five sibling carve-out comments, which are `//` lines above the
+column; this one is inside the column's existing `/** */`, so it is what a reader sees on hover. That
+was chosen rather than overlooked: the sentence is about what the column MEANS, which is what the
+rest of that block already carries, and splitting it across two comment styles would separate the two
+halves of one statement.
+
+**The question this leaves for the owner, and it comes before the rounding one.** Is
+`night_premium_pct` a fraction or a percentage? Under the comments' reading a 25% premium is stored
+`0.25`; under the name's it is `25.00`. Nothing in the code tells them apart, because nothing
+computes with the value yet — which is also what makes it cheap to settle now and expensive once a
+venue has written a row. Only if it is a FRACTION does the second question arise: two decimal places
+on a fraction means the column can express a premium only in whole percentage points. Measured
+2026-09-18 against PGlite, inserting `0.25`, `0.125` and `0.005` into a `numeric(5, 2)` column stores
+`0.25`, `0.13` and `0.01`, so a 12.5% night premium would not be representable; read as a percentage,
+`12.50` is exact and the question does not arise at all. Both the scale and the name are
+pre-existing — the scale is in `packages/workforce-es/drizzle/0000_workforce-es_baseline.sql` — and
+this conversion moves neither. Whether a night premium is ever a half-point figure is a question for
+the labour advisor, which is the class of question the table's own header says it defers to a row
+rather than to code.
+
+Verified on 2026-09-18, each with a control. The step 4 probe ran BEFORE any edit as a baseline
+(`1 tables / convenio_config 20 columns`, `No schema changes, nothing to migrate`, exit 0, `diff -r`
+silent) and after the conversion (the same), and the NEGATIVE CONTROL was taken in the same worktree
+between them: moving `working_days_per_week` from `integer` to `smallint` made the same command write
+`0002_probe.sql` and add a journal entry. A column-by-column comparison against the base commit,
+built on drizzle's own `getTableConfig` — comparing SQL type, `columnType`, nullability, primary key,
+defaults, enum values, uniqueness and the read mapping, keyed by TABLE as well as column name —
+reported **20 columns, 0 mismatches**, cross-checked against the probe's own per-table count, which
+prints the same 20. It was proved by the mutation the probe is blind to: `created_at` moved from
+`tsString` to `ts`, which the comparison named (`PgTimestampString` → `PgTimestamp`, the read mapping
+going from the driver's string to a `Date`) while the probe, run on the same mutated tree, printed
+`No schema changes, nothing to migrate` at exit 0 with a silent `diff -r`.
+
+A line classification then established the property the counts cannot: **every line this branch
+changes is an import line, a column declaration or one of its continuation lines, or the one
+`pgTable(` → `table(` rename on the table-opening line.** Everything else — every comment, the
+`pgEnum` declaration, the `check()` body, the unique and the foreign key — is byte-identical on both
+sides, with the one stated normalisation that `pgTable(` is rewritten to `table(` before comparing.
+The count of column DECLARATIONS is 20 on both sides, the third independent reading of the same 20,
+even though the conversion shortens the one multi-line declaration onto a single line. Proved by
+mutation twice: respacing the `convenio_config_working_days_ck` body and changing the foreign key's
+`onDelete("restrict")` to `cascade` were each reported as an unclassified difference, and the file
+was restored from a saved copy rather than with `git checkout` between them. The second of those
+mutations is worth naming, because the foreign-key line is exactly the class of line #398's first
+comparator silently skipped.
+
+Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace, which is what covers
+`packages/workforce` and the rest of the Spain lane's readers) and
+`pnpm --filter @waitron/workforce-es test:coverage` (exit 0, 7 files, 27 tests, no test edited). The
+package reads 100% on every measure against thresholds of 90/90/85/85
+(`packages/workforce-es/vitest.config.ts`), and it read 100% before the conversion too — measured by
+putting the base commit's file back and re-running the same suite. _The denominator DID move, and the
+first version of this sentence said it had not._ Read off `coverage-summary.json` rather than off the
+percentage: `convenio-config.ts` goes from 40 covered statements out of 40 to 38 out of 38, and the
+package from 181 to 179, because the conversion collapses the one multi-line column declaration onto
+a single line. That is the same mechanism as `packages/identity`'s fall; what differs is that nothing
+here became partially covered, so the percentage stays at 100. The run-it reviewer had marked the
+original sentence UNVERIFIED on the ground that equal percentages do not establish equal
+denominators, which was right, and measuring it showed the claim was not merely unproven but
+backwards.
 
 - [ ] **Step 4: Prove nothing changed**
 
@@ -2127,6 +2259,15 @@ Two quantity columns at scale 3 become whole thousandths; five rate columns at s
 
 - Consumes: `quantity(name)`, `rate(name)` from P1.
 - Produces: a quantity is a `number` of thousandths (1.5 kg is `1500`); a rate is a `number` of basis points (21% is `2100`).
+
+**Before converting the five rate columns, settle what `convenio_config.night_premium_pct` is in.**
+P1b's `packages/workforce-es` report above found that the tree does not say: two comments call it a
+fraction (`0.25`), its name and the 2026-07-22 workforce design call it a percentage, and no code
+multiplies it. Under the basis-points rule above, `0.25` becomes `25`, which then reads as 0.25% to
+anyone trusting the sentence beside it. The other four rate columns are VAT-style percentages and
+carry no such ambiguity. One consequence for the Files list above: the fifth column is declared in
+`packages/workforce-es/src/schema/convenio-config.ts` and lives in that package's own migration set,
+so P6 reaches past `packages/db`.
 
 - [ ] **Step 1: Write the failing test**
 
