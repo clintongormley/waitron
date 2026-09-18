@@ -2392,8 +2392,15 @@ Neither is the number to work from now. The exclusion printed above is one file 
 has to drop `lifecycle.test.ts` and `venue-db.test.ts`, the two helpers' contract tests, which are
 not work to convert either — `packages/db/src/testing/lifecycle.test.ts:26` is
 `describe("usePgliteDb")`. The corrected pair is in `docs/developers/testing-guide.md`, and on the
-same commit its first command gives 206. Re-run it rather than reading a number here. And the run-it reviewer counted 205 over `*.test.ts` only,
-which is the same property over a narrower scope and is unchanged by any of this.
+same commit its first command gives 206. Re-run it rather than reading a number here — every one
+of these numbers falls by one each time a package lands, and each is the reading on the commit named
+beside it, nothing more.
+
+Three scopes appear in this paragraph and they are easy to mix up, which has already happened once
+here. Over `*.ts` with the four-file exclusion, a tree with nothing converted gives 207. The run-it
+reviewer's 205 is a third scope: `*.test.ts` only, with no exclusion at all; that same scope WITH
+the exclusion gives 204. All three fall by one per package landed. Do not put a number from one
+scope beside a number from another.
 
 Do not treat any of these numbers as a completion target. **The property this task can actually
 reach is: no TEST SUITE calls `usePgliteDb` directly — only `venue-db.ts` does.** It is deliberately
@@ -2529,12 +2536,14 @@ Expected: PASS, all three.
 - [ ] **Step 5: Convert package by package**
 
 Order: by how many of a package's FILES call it, fewest first, so each pull request is a clean
-checkpoint. That is not the same as a call-site count: over the 206 files the command below
-selects, four packages hold more calls than files — `apps/server` 56 files / 58 calls,
-`packages/fiscal-verifactu` 25 / 27, `packages/db` 20 / 21, `packages/reporting` 13 / 14 (206 files
-and 212 calls in total, counted per file on the branch that converted `packages/fiscal-none`). All
-four divergences are at the heavy end, so today the two orders agree on which package is next; check
-that rather than assuming it.
+checkpoint. That is not the same as a call-site count. Measured on the branch that converted
+`packages/fiscal-none`, over the 206 files the command below selected there, four packages held
+more calls than files — `apps/server` 56 files / 58 calls, `packages/fiscal-verifactu` 25 / 27,
+`packages/db` 20 / 21, `packages/reporting` 13 / 14, for 206 files and 212 calls in total. Those
+four are the only packages where the two counts differ; every other package's files and calls are
+equal, so the two orders agreed on which package was next. That is a property of one tree, not a
+rule — `packages/payments` sits at 14 files, above one of the divergent packages, which is enough to
+show the divergences are not simply "the heavy ones". Check it on the tree you are converting.
 
 Re-measure rather than trusting a written order, and keep the exclusion: without it `packages/db`
 comes back carrying three files that are not yours to convert — `lifecycle.ts` and `venue-db.ts`,
