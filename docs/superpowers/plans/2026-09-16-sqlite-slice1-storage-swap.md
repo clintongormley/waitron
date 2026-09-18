@@ -1551,9 +1551,9 @@ the schema and in that ruleset type, aliased and passed through by the resolver 
 `packages/workforce-es/src/convenio.ts`, and given a value by three fixtures — the package's own
 `convenio.test.ts` and `migrations.test.ts` and `packages/workforce/test/fixtures.ts`. No site
 multiplies, divides or compares it. _The first version of this paragraph offered the package's own test as a third witness
-for the fraction reading; it is not one._ `packages/workforce-es/src/convenio.test.ts` inserts `0.25`
-and expects `0.25` back, a round trip that passes whichever unit the column is in — §1's measurement
-taken where both answers look alike.
+for the fraction reading; it is not one._ `packages/workforce-es/src/convenio.test.ts` inserts a
+value and expects the same one back, a round trip that passes whichever unit the column is in — §1's
+measurement taken where both answers look alike.
 
 Every other `rate()` COLUMN in the schema holds a percentage-style number: `vat_rate` in
 `packages/db/src/schema/sales.ts` and `orders.ts`, whose fixtures write `"21.00"`, and `rate` and
@@ -1587,6 +1587,12 @@ pre-existing — the scale is in `packages/workforce-es/drizzle/0000_workforce-e
 this conversion moves neither. Whether a night premium is ever a half-point figure is a question for
 the labour advisor, which is the class of question the table's own header says it defers to a row
 rather than to code.
+
+**Resolved 2026-09-18 (owner): it is a PERCENTAGE** — `25.00` is 25%. The column NAME and the
+2026-07-22 design were the correct witnesses; the two fraction comments are wrong and are corrected
+in `packages/workforce-es/src/schema/convenio-config.ts` and `packages/workforce/src/ruleset.ts`. No
+schema change follows: `numeric(5, 2)` holds `12.50` exactly, so the rounding worry above only ever
+applied to the retired fraction reading.
 
 Verified on 2026-09-18, each with a control. The step 4 probe ran BEFORE any edit as a baseline
 (`1 tables / convenio_config 20 columns`, `No schema changes, nothing to migrate`, exit 0, `diff -r`
@@ -2692,12 +2698,10 @@ Two quantity columns at scale 3 become whole thousandths; five rate columns at s
 - Consumes: `quantity(name)`, `rate(name)` from P1.
 - Produces: a quantity is a `number` of thousandths (1.5 kg is `1500`); a rate is a `number` of basis points (21% is `2100`).
 
-**Before converting the five rate columns, settle what `convenio_config.night_premium_pct` is in.**
-P1b's `packages/workforce-es` report above found that the tree does not say: two comments call it a
-fraction (`0.25`), its name and the 2026-07-22 workforce design call it a percentage, and no code
-multiplies it. Under the basis-points rule above, `0.25` becomes `25`, which then reads as 0.25% to
-anyone trusting the sentence beside it. The other four rate columns are VAT-style percentages and
-carry no such ambiguity. One consequence for the Files list above: the fifth column is declared in
+**`convenio_config.night_premium_pct` is a PERCENTAGE** (owner decision 2026-09-18, settled while
+P1b's `packages/workforce-es` report above flagged that the tree said it two ways). So it converts to
+basis points exactly like the four VAT-style rate columns — `25.00`% becomes `2500` — with no special
+handling. One consequence for the Files list above: this fifth column is declared in
 `packages/workforce-es/src/schema/convenio-config.ts` and lives in that package's own migration set,
 so P6 reaches past `packages/db`.
 
