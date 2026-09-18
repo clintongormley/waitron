@@ -235,7 +235,16 @@ export const flag = (name: string) => boolean(name);
 /** A whole number. */
 export const count = (name: string) => integer(name);
 
-/** A whole number with a small fixed range — a weekday, a position on a floor plan. */
+/**
+ * A whole number stored as `smallint`.
+ *
+ * The name spells the SQL WIDTH out because width is the only thing separating it from `count`, and
+ * a converter must pick by what a column ALREADY stores, never by what it means. Two columns can
+ * carry the same meaning and different widths: `availability.weekday` and `shift_templates.weekday`
+ * in `packages/workforce` are `smallint`, while `department_hours.weekday` in
+ * `packages/venue-service` is `integer` and takes `count`. Choosing this helper for that last one
+ * writes a migration.
+ */
 export const smallCount = (name: string) => smallint(name);
 
 /**

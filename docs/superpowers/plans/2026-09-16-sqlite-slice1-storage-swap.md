@@ -665,8 +665,8 @@ Three of them are named for what the column MEANS, matching the file's existing
 integer helpers are not, and that is on purpose. `smallCount` and `bigCount` spell the SQL WIDTH out
 in prose, because the width is the only thing that separates them from the `count` helper the file
 already has, and there is no one meaning they could be named after instead. The `smallint` columns in
-the tree are not counts of anything: `availability.weekday` in
-`packages/workforce/src/schema/availability.ts` is a day of the week, and `dining_tables`'s `pos_x`,
+the tree are not counts of anything: `availability.weekday` and `shift_templates.weekday` in
+`packages/workforce` are days of the week, and `dining_tables`'s `pos_x`,
 `pos_y` and `rotation` in `packages/db/src/schema/dining-tables.ts` are a position on a floor plan
 and an angle. The `bigint` columns are no more alike than that: `catalogue.version` in
 `packages/db/src/schema/catalogue.ts` is a catalogue version, `node_membership.term` in
@@ -744,7 +744,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/fiscal-verifactu` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/fiscal-verifactu` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18; `packages/venue-service` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -1856,6 +1856,165 @@ declaration, the `pgTable(`→`table(` rename, or the carve-out comment added ab
 once so the two numbers cannot be read as a contradiction: the classifier reports ZERO unclassified
 differences for the conversion itself, and ONE once the carve-out comment is in the file — that
 comment being a deliberate addition, not a line the conversion moved.
+
+**And the same report for `packages/venue-service`.** One table file (`src/schema/service.ts`),
+eight tables, 52 columns, no schema change. The builders it used were `uuid`, `text`, `boolean`,
+`integer`, `time`, `jsonb` and `timestamp` in string mode, every one of which has a helper, so no
+column builder is left coming from `drizzle-orm/pg-core`; the file's remaining import from there is
+`check`, `foreignKey`, `index`, `primaryKey` and `unique`, which the vocabulary does not cover. Its
+one `timestamp` column is string mode, read off the line being replaced (`mode: "string"` appears
+once in the base file and `mode: "date"` not at all, and the converted file holds one `tsString` call
+and no `ts` call). There is no `pgEnum` and no `.array()` column anywhere in the package
+(`grep -rn "pgEnum\|\.array()" packages/venue-service/src --include='*.ts'` exits 1), and no `date`,
+`smallint`, `bigint`, `numeric` or `bytea` column on either side of the diff. The two `time` columns
+are not a first for the rollout — `timeOfDay` was already in use in `packages/bookings` and in
+`packages/db`'s `tenants.ts` when this was written.
+
+**The one thing the conversion did not absorb is the check-constraint carve-out, and here it is one
+reason rather than a mixture.** Five text columns carry a `check()` listing their permitted values —
+`departments.default_service_mode`, `zone_service_policies.service_mode`,
+`order_service_contexts.service_mode`, `working_line_contexts.hardware_unit` and
+`working_line_contexts.vat_class` — and every one of them is written WITHOUT the `", "` spacing
+`enumCheck` emits, so the first of the two reasons `columns.ts` records covers all five. Read that
+sentence with its hedge attached: the spelling was read off the source for all five, but the DDL
+CONSEQUENCE was measured on TWO of them, chosen to cover both shapes the file holds. That is also a
+statement about this package only — the earlier packages' checked columns were not re-surveyed to
+rank it.
+
+The reason was measured here rather than carried over from `option_groups.type`. Note what that is
+NOT: `columns.ts`'s "measure it on the column in front of you" is scoped to the NARROWING question,
+which this conversion does not measure at all. Measuring the SPACING reason per package is a choice
+made here, not an instruction followed. Two of the five were
+substituted for `enumText` + `enumCheck` on 2026-09-18 — `departments.default_service_mode`, which is
+`NOT NULL` with a plain `in (…)`, and `working_line_contexts.hardware_unit`, which is nullable and
+composes a null arm around the helper — and the step 4 probe then generated a migration whose whole
+content is those two constraints dropped and re-added:
+
+```
+ALTER TABLE "departments" DROP CONSTRAINT "departments_service_mode_ck";
+ALTER TABLE "working_line_contexts" DROP CONSTRAINT "working_line_contexts_hardware_unit_ck";
+ALTER TABLE "departments" ADD CONSTRAINT "departments_service_mode_ck" CHECK ("departments"."default_service_mode" in ('table_tab', 'prepay', 'invoice_first', 'ticket_then_pay'));
+ALTER TABLE "working_line_contexts" ADD CONSTRAINT "working_line_contexts_hardware_unit_ck" CHECK ("working_line_contexts"."hardware_unit" is null or "working_line_contexts"."hardware_unit" in ('kg', 'g', 'mg'));
+```
+
+Only the spacing moves. The nullable half also exercises the composition note in `columns.ts` — that
+a null arm is written AROUND `enumCheck` and the values stay inline through the nesting — through
+drizzle-kit's own `generate` path for the first time: the emitted MIGRATION carries
+`in ('kg', 'g', 'mg')` as literals, not `in ($1, $2, $3)`. _A first draft of this sentence claimed the
+first REAL DDL from a REAL table, and the convention reviewer falsified it from this same plan: the
+`packages/payments` report above records the run-it reviewer executing the composed form against
+PGlite and getting a `23514` on an invalid value, which is a constraint that had to exist on a table
+to raise it. The narrower claim — drizzle-kit's generator, into a migration file — is the one that
+survives._ So the note holds, and the reason for leaving the column alone is the generated text, not
+the null.
+
+**This is the second package in the rollout the step 4 `--schema` warning applies to**, after
+`packages/bookings` measured it: `packages/venue-service/drizzle.config.ts` points `--schema` at
+`./src/schema/service.ts`, and the package has no `src/schema/index.ts` at all. Every probe run below
+passed that path, read off `drizzle.config.ts` with `grep schema: drizzle.config.ts` before the first
+run rather than pasted, and each run's EXIT STATUS was read rather than the diff alone.
+
+Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
+(`No schema changes, nothing to migrate`, exit 0, `diff -r` silent and zero bytes) and again after
+the conversion (the same), with the NEGATIVE CONTROL taken between them in the same worktree:
+`department_hours.weekday` moved from `integer` to `smallint` made the same command write
+`0002_probe.sql` and add a journal entry, so the silent runs mean something. A column-by-column
+comparison against the base commit `23ce395b`, built on drizzle's own `getTableConfig` rather than on
+text and keyed by TABLE as well as column name, reported **52 columns, 0 mismatches**, cross-checked
+against drizzle-kit's own per-table counts, which print 5/8/2/5/7/16/3/6 and sum to the same 52.
+
+**That comparison was proved by a mutation the probe is blind to**: `departments.created_at` moved
+from `tsString` to `ts`. The comparison named it — `PgTimestampString` against `PgTimestamp`, and a
+read mapping returning `[object String]` against `[object Date]` — and the step 4 probe run on that
+SAME tree printed `No schema changes, nothing to migrate` at exit 0 with a silent `diff -r`. That
+pairing is the point of having both checks, and it is why neither on its own is the acceptance check.
+
+**A blind spot in the line classifier, found because its total disagreed with the probe's.** The
+classifier is a throwaway script that lives in `/tmp` and is in no file in this repository, so this
+paragraph is the only record of it — read it as a description, not as something you can re-run. It
+walks each table file with a small state machine, and INSIDE the column object it picks out
+declarations with `^\s+[A-Za-z_$][\w$]*: `, a space after the colon required. That predicate quoted
+on its own is not the instrument: run over the WHOLE file it matches 111 lines rather than 51,
+because `columns:`, `foreignColumns:` and `name:` inside every `foreignKey({…})` block match it too
+— 20 such blocks, three lines each, is the whole of the 60-line difference. It is the state
+machine's scoping that makes the quoted regex mean what it says, and a first draft of this paragraph
+left that out, which the convention reviewer caught by running the quoted predicate on its own and
+getting a number nothing here mentions. _A second draft then blamed `primaryKey({…})` blocks as
+well; all five in this file are written on ONE line, so they contribute nothing, and 60 + 51 is
+already the 111._
+
+What the space requirement misses is a declaration whose value prettier has pushed entirely onto the
+NEXT line, leaving a bare `allergens:`. _A draft of this sentence blamed prettier's `printWidth` in
+general and offered "a long method chain" as another way in. That is FALSE and the tree refutes it:
+a chain that overruns the limit breaks at the `.` and keeps the value's head on the name line —
+`packages/db/src/schema/join-requests.ts:25` reads `locationId: id("location_id")` with `.notNull()`
+below it, and dozens more do the same. The correction was wider than the thing it corrected, which
+is the shape this repository's §1 warns about._ What this file actually meets is a value whose FIRST
+token is itself too long to share the line — a generic argument spanning most of the width. How
+general that shape is, this branch does not establish; what it measured is that exactly ONE
+declaration in the tree's schema files has it. That column was filed under "everything that is not a
+column", where its conversion then showed up as an unclassified difference that looks like a real
+finding. What caught it was the cross-check rather than the report: the classifier said 51
+column declarations and the parity probe said 52. With the space made optional the two agree at 52,
+and the classifier reports **0 unclassified differences**. This is the catalogue report's lesson
+arriving a second time — a checker that reports a total is itself a claim — with the difference that
+this time the number was checked against another instrument.
+
+**The earlier reports rest on that same instrument, so they were checked rather than left standing.**
+A defect found in a shared instrument retires every receipt taken with it until somebody looks. The
+reading, taken at the PARENT commit of each of the ten earlier conversion commits:
+
+```
+git grep -nE '^[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*:$' <parent> -- 'packages/*/src/schema/*.ts'
+```
+
+returns exactly ONE line at every one of them, and it is the same line each time —
+`packages/venue-service/src/schema/service.ts:255:    allergens:`, this package's own column, which
+predates the whole rollout. _An earlier draft of this paragraph said the reading returned NO match,
+which is false; it was written from a summary rather than from the command's output, in the paragraph
+whose subject is not letting a receipt stand unchecked._ The conclusion the reading supports is
+unchanged and is the one that matters: no package converted BEFORE this one held a declaration the
+broken predicate could miss, so their "every changed line is…" properties are unaffected. Eight
+reports state such a property — catalogue, payments, fiscal-verifactu, identity, workforce,
+workforce-es, bookings and scheduler. `packages/db`'s does not: that conversion, the largest in the
+rollout, was never line-classified at all, so there is no receipt of this kind to retire there and
+none to reinstate.
+
+The classifier was then proved by two mutations in the region it is responsible for, each caught and
+each reverted: the spacing inside `working_line_contexts_hardware_unit_ck`'s body, and the column
+order of `zone_menus_order_idx`.
+
+Behaviour, which no probe reaches, was carried by `pnpm -r typecheck` (exit 0 for the whole
+workspace), `pnpm lint` 0, `pnpm format:check` 0, the root guard project (42 files, 3036 tests) and
+`pnpm --filter @waitron/venue-service test:coverage` (exit 0, 13 files, 84 tests, no test edited,
+`src/schema` 100%).
+
+**What every changed line is**, as a property rather than a count: an import, a column declaration,
+the `pgTable(`→`table(` rename, or one of the five carve-out comments added above the checked text
+columns. No `check()` body, index, unique, foreign key, primary key or blank line differs from the
+base commit. Said once so two readings cannot look like a contradiction: run on the conversion alone
+the classifier prints `UNCLASSIFIED DIFFERENCES: 0`, and run on the file as it now stands it prints
+`1` — that one difference being a single hunk list holding exactly the five comment blocks and
+nothing else. They are a deliberate addition, not a line the conversion moved. Quoted as the two
+runs printed them rather than explained, because the script is not in the tree and a claim about how
+it counts is one nobody can re-run.
+
+**The comments were added because every sibling that has such a column carries one and this package
+did not**, which the convention reviewer found. Taken on `main` at `23ce395b`,
+`grep -rn "NOT the enumText/enumCheck pair" packages` returned six: `packages/catalogue`,
+`packages/payments` (twice), `packages/identity` (twice) and `packages/scheduler`. Read "every
+sibling" with its exception attached — `packages/db` has eight such columns and leaves them BARE,
+recording their reason in `columns.ts` instead; `workforce`, `workforce-es` and `bookings` have no
+value-set checked text column at all, so they are not evidence either way. One departure from the siblings, taken deliberately and stated here because
+nothing else records it: this is the first package to hold SEVERAL value-set checked text columns in
+one file, all of them held by the SAME single reason, so the reason is written out once above
+`departments.default_service_mode` and the other four carry a one-line pointer to it. _Not "the
+first whose checked columns are all in one file" — catalogue's one and scheduler's one are each in
+one file too; it is the plurality that is new._ Five copies of one seven-line paragraph in a file of
+290 lines is the comment bloat `CLAUDE.md` §1 measures the cost of.
+`packages/db`'s own eight checked columns are the other precedent — bare, with their reason recorded
+in `columns.ts` instead — so the convention a converter should read off the tree is that the reason
+is recorded SOMEWHERE a reader of the column will reach, not that it is repeated per column.
 
 - [ ] **Step 4: Prove nothing changed**
 
