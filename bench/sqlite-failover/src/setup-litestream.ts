@@ -3,7 +3,8 @@
  * release into the gitignored `.bin/`, where `resolveLitestream()` looks for it.
  *
  * Nothing in the repository ships a litestream binary and nothing installs one: the scenarios that
- * drive it report SKIPPED until this has been run once.
+ * drive it report SKIPPED until this has been run once. S4 (`scenarios/s4_offline_load.ts`) is the
+ * exception — it degrades to its SQLite half and says `version=absent` in its row.
  */
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

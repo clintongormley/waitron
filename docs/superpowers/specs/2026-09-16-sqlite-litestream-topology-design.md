@@ -689,11 +689,13 @@ quietly assumes finer granularity than Litestream gives.
   the first's — but the WAL grew linearly at about 41KB a sale to 310MB, which is roughly 104 days of
   offline trading per GiB at an assumed 250 sales a day: bounded by how long the box stays offline,
   not by a size. The sentence about our own process is now measured rather than hypothetical: one
-  `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection took SECONDS — 6.8s to 12.4s over six
-  runs — and came back `busy=1` with the WAL untouched while the daemon held the database, against
-  MILLISECONDS with the daemon killed (4.2ms to 48.6ms over five). The three-orders-of-magnitude gap
-  is what reproduced; no single duration did. Two
-  narrowings. The sale taken straight after that blocked checkpoint still committed in 0.5ms, and
+  `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection took SECONDS — 6776.9ms to 12412.2ms
+  over ten runs — and came back `busy=1` with the WAL untouched while the daemon held the database,
+  against MILLISECONDS with the daemon killed (4.2ms to 48.6ms over ten). The gap is what
+  reproduced, and the pairs those runs allow span 139x to 2955x — two to three orders of magnitude;
+  no single duration reproduced at all. Two
+  narrowings. The sale taken straight after that blocked checkpoint still committed in 0.241ms on
+  the recorded run, and
   nothing attempted a sale DURING it — the rig is one process and its checkpoint is synchronous. And
   the growth does not depend on the pragma this bullet names: with a Litestream daemon attached but
   offline, dropping `wal_autocheckpoint = 0` changed nothing, because SQLite's own automatic
@@ -838,8 +840,10 @@ From the discussion note §7, plus what the design added:
    process on the sale path (§10 finding 8) — the prototype's multi-day offline check bounds it. *(2026-09-18, run: S4 measured both halves, and
    they came out differently. The WAL does grow without a bound of its own — about 41KB a sale,
    linear, roughly 104 offline days per GiB at an assumed 250 sales a day. "Our own process on the
-   sale path" landed narrower than the words suggest: an explicit checkpoint blocked for 11.7s, while
-   the sale immediately after it took 0.5ms, and no sale was attempted during the block. The
+   sale path" landed narrower than the words suggest: an explicit checkpoint blocked for seconds —
+   6776.9ms to 12412.2ms over ten runs, and no single duration reproduced — while the sale
+   immediately after it took 0.241ms on the recorded run, and no sale was attempted during the
+   block. The
    condition in this line is also not what drives the outcome — with an offline daemon attached the
    WAL grows the same whether the pragma is set or not. §10 finding 8 carries the numbers.)*
 10. **A split brain loses the losing side's in-flight service** (§5.3, owner-raised 2026-09-16): open

@@ -837,7 +837,7 @@ export default async function ({ startStore }) {
 > **2026-09-18, as landed.** Everything below was measured on this machine against the pin
 > (litestream v0.5.17 darwin-arm64, node v26.7.0, the pinned MinIO image). The recorded run, the
 > mutation list and the 2x2 probe are in `bench/sqlite-failover/README.md` → "What S4 measures, and
-> what it does not". Five things differ from the steps above, and the code is what landed:
+> what it does not". Six things differ from the steps above, and the code is what landed:
 >
 > - **The load is driven in ROUNDS with an idle pause, in BOTH arms, and step 3's continuous load
 >   measured nothing about being offline.** Driven back to back, 7500 sales finish in about a second;
@@ -845,6 +845,12 @@ export default async function ({ startStore }) {
 >   `peak-wal-bytes=310759272` — the offline figure — because litestream never gets a turn. Fifteen
 >   rounds of five hundred with a 1500ms idle is what landed, in the offline arm and the control
 >   alike, so the two differ in one thing: whether the config names a live store or a closed port.
+> - **A missing binary is NOT reported as SKIPPED, unlike every sibling that drives litestream.**
+>   Step 2 asks for the SQLite half to run anyway, so `resolveLitestream()`'s answer is threaded
+>   through as an optional binary rather than returning early: without it S4 drops the daemon, the
+>   control and the container, runs the offline load alone and prints `version=absent`. The scenario
+>   file says so in its header, because the three siblings all return SKIPPED and a reader will
+>   expect the same shape here.
 > - **Step 2's "or do not start it" was not taken.** A new `src/unreachable-store.ts` gives
 >   `writeConfig` a `Store` whose endpoint is a local port that was bound, read and released, and it
 >   VERIFIES that premise with a TCP connection that has to be refused — an offline arm that was
@@ -857,19 +863,25 @@ export default async function ({ startStore }) {
 >   every run taken.
 > - **A Part C was added, and it is the most decision-relevant thing here** — risk 9's own sentence,
 >   "put our own process on the sale path". One `PRAGMA wal_checkpoint(TRUNCATE)` from our own
->   connection took **seconds** with the offline daemon running — 6.8s to 12.4s across six runs —
->   answered `busy=1` with about four frames of roughly thirty thousand moved, and left the WAL
->   untouched; with the daemon killed the same statement took **milliseconds** — 4.2ms to 48.6ms
->   across five — and truncated it to zero. What reproduced in every run that reached it is that
->   SHAPE, three orders of magnitude apart, not any particular duration: an earlier draft of this
->   note said "11.7-12.5s every time" and a later run at 6.8s falsified it. It decides nothing and
->   feeds the detail, the way S3's Part C does.
+>   connection took **seconds** with the offline daemon running — 6776.9ms to 12412.2ms across ten
+>   runs — answered `busy=1` having moved `checkpointed=4` against a `log` of about seventy-five
+>   thousand, and left the WAL untouched; with the daemon killed the same statement took
+>   **milliseconds** — 4.2ms to 48.6ms across ten — and truncated it to zero. What reproduced in
+>   every run that reached it is that SHAPE: the pairs those two lists allow span 139x to 2955x, two
+>   to three orders of magnitude, and no particular duration reproduced at all — an earlier draft of
+>   this note said "11.7-12.5s every time" and a later run at 6.8s falsified it. Both lists of ten
+>   are in the README section this note names at the top. It decides nothing and feeds the detail,
+>   the way S3's Part C does.
 > - **Step 5's WAL ceiling is a STATED ceiling, and the spec's illustrative one is not met.** Spec §4
 >   S4 offers "a small multiple of the streamed data"; the measured amplification is about 80x
 >   (310MB of WAL over a 3.85MB database), so that formulation was not adopted and the scenario
 >   prints `spec-small-multiple-ceiling=not-met` rather than quietly substituting a bar that passes.
->   What landed is 64KiB a sale, which tests the growth's SHAPE — nothing in this repository records
->   the appliance's partition size, so it is not a disk guarantee.
+>   What landed is 64KiB a sale, which bounds the run's AVERAGE WAL bytes per sale — nothing in this
+>   repository records the appliance's partition size, so it is not a disk guarantee, and it says
+>   nothing about the SHAPE of the growth either. An earlier wording claimed it did: running the same
+>   load at an 8192-byte page size kept the growth linear (77,796 / 78,182 / 78,473 bytes a sale at
+>   2500 / 5000 / 7500 sales) while sitting over the ceiling throughout, so a breach can equally mean
+>   a wider page or a wider schema. The README section carries that experiment.
 >
 > Two further findings worth carrying forward. **`wal_autocheckpoint = 0` is not what makes the
 > offline WAL grow — the attached daemon is**: with an offline litestream holding the database,

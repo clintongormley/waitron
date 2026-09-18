@@ -24,6 +24,12 @@
 //     that WAL back, with the offline daemon running and again with it gone. That pair is the answer
 //     to risk 9's second half and it feeds the detail alone.
 //
+// A missing litestream is NOT reported as SKIPPED here, unlike every sibling that drives the binary
+// (`s0_happy_loop.ts`, `s3_copied_replica.ts`, `s_litestream_roundtrip.ts`, each of which returns
+// early): plan Task 9 step 2 asks for the SQLite half to run anyway, so the binary is threaded
+// through as optional and a run without it drops the daemon, the control and the container and says
+// `version=absent` in its row.
+//
 // What this scenario is NOT evidence about: `packages/fiscal-verifactu` — every table here is the
 // rig's MODEL (`model.ts`), so what a commit costs in pages is this schema's and not the product's;
 // anything that turns on elapsed time, because the load is volume and not wall-clock; and whether
@@ -77,9 +83,15 @@ const MAX_P99_MS = 400;
 /**
  * The WAL ceiling, and it is a STATED ceiling and not a derived one. Nothing in this repository
  * records the appliance's partition size, so this is NOT a disk guarantee and must not be read as
- * one. What it tests is the SHAPE of the growth: it sits well above what a commit in this model's
- * schema costs, so a run that breaches it grew super-linearly — the unbounded case risk 9 names —
- * rather than merely growing.
+ * one. What it bounds is an AVERAGE — peak WAL divided by `SALES`, over the whole run — and it sits
+ * well above what a commit in this model's schema costs, about 41KB a sale on the recorded runs.
+ *
+ * It does NOT establish the SHAPE of that growth, and must not be read as doing so. Measured
+ * 2026-09-18 on this rig with SQLite's page size set to 8192 and everything else identical: 2500
+ * sales gave 194,489,184 WAL bytes (77,796 a sale), 5000 gave 390,909,096 (78,182), 7500 gave
+ * 588,544,976 (78,473) — linear throughout, and over this ceiling the whole way. So a breach can
+ * equally mean a wider page, a wider schema or another index. Saying anything about the shape needs
+ * a comparison ACROSS load sizes, which this scenario does not drive.
  */
 const MAX_WAL_BYTES_PER_SALE = 64 * 1024;
 
@@ -150,6 +162,11 @@ type Load = {
   peakWalBytes: number;
   endWalBytes: number;
   dbBytes: number;
+  /**
+   * Rows in `records` when the load finished, read before any Part C sale. `recordSale` writes one
+   * per sale, so it is what each arm actually COMMITTED as opposed to attempted.
+   */
+  rows: number;
   /** Rounds whose idle pause left the main database file larger — where a checkpoint moves pages. */
   checkpointRounds: number;
 };
@@ -196,13 +213,38 @@ export default async function offlineLoad({
   try {
     const offline = await runOfflineArm(litestream?.bin, dir);
 
+    // The plateau comparison below is satisfied by a control that did no work at all — a smaller
+    // peak is what it asks for — so what each arm COMMITTED is asserted first. Measured 2026-09-18,
+    // `recordSale` removed from the control arm alone, its daemon and pauses and readings left
+    // alone: the scenario still returned MEASURED with `breaches=none`, the empty control reading
+    // `peak-wal=16512 … store-keys=3 checkpoint-rounds=0/15 p95-ms=0`. Store keys do not catch it
+    // either — an empty database still produced three.
+    assert.equal(
+      offline.load.rows,
+      SALES,
+      `the offline arm committed ${offline.load.rows} rows in \`records\`, not the ${SALES} its load drives`,
+    );
+
     // The store is started only now, and only when there is a litestream to stream with: Part A
-    // needs no container, and one held up through Part A's load and Part C's twelve-second
-    // checkpoint would be a container running for nothing.
+    // needs no container, and one held up through Part A's load and Part C's held-up checkpoint
+    // would be a container running for nothing.
     let control: ControlArm | undefined;
     if (litestream) {
       store = await startStore();
       control = await runControlArm(litestream.bin, store, dir);
+      assert.equal(
+        control.load.rows,
+        SALES,
+        `the control arm committed ${control.load.rows} rows in \`records\` against the offline arm's ${offline.load.rows}, so the two arms did not drive the same ${SALES}-sale load`,
+      );
+      // At least ONE round, not all fifteen: what the control has to show is that a reachable store
+      // gets its checkpoints through at all, and a cadence pinned here would be this machine's
+      // rather than litestream's. The recorded runs read 15 rounds of 15 for the control against 0
+      // of 15 for the offline arm, so which way it falls is not close.
+      assert.ok(
+        control.load.checkpointRounds > 0,
+        `the control arm's idle left the database file larger in ${control.load.checkpointRounds} of ${ROUNDS} rounds, so nothing checkpointed and its peak of ${control.load.peakWalBytes} bytes is not a plateau`,
+      );
       assert.ok(
         control.load.peakWalBytes * PLATEAU_FACTOR <= offline.load.peakWalBytes,
         `with the store reachable the WAL plateaus: ${control.load.peakWalBytes} bytes against the offline arm's ${offline.load.peakWalBytes} for the same ${SALES} sales, which is under ${PLATEAU_FACTOR}x apart`,
@@ -227,8 +269,10 @@ export default async function offlineLoad({
       id: "S4",
       title: "offline write load",
       // The verdict is read off the measurement rather than off a passing assertion, the way S2's
-      // is — and a breached bar is a recorded caveat, never a stop (spec §7), so `critical` is false
-      // on every path out of here.
+      // is — and a breached bar is a recorded caveat, never a stop (spec §7), so a BREACH is
+      // `critical: false`. A throw is the other path and it is not covered by that: the WAL floor,
+      // the plateau assertion, the pragma readbacks and the refusal probe all throw, and the runner
+      // records a scenario that throws as `critical: true` under its FILENAME (`src/scenarios.ts`).
       verdict: breaches.length > 0 ? "FAIL" : "MEASURED",
       critical: false,
       detail:
@@ -252,12 +296,17 @@ export default async function offlineLoad({
         `breaches=${breaches.length === 0 ? "none" : `"${breaches.join(" ")}"`}`,
     };
   } finally {
-    // The store is stopped FIRST, for the reason `s_smoke.ts` records: a throw ahead of `stop()`
-    // would leave the MinIO container running, and `pnpm reap` ignores a container younger than two
-    // hours, so nothing would clear it for the rest of the session. The directory goes last, and it
-    // holds a few hundred megabytes of WAL.
-    if (store) await store.stop();
-    rmSync(dir, { recursive: true, force: true });
+    try {
+      // The store is stopped FIRST, for the reason `s_smoke.ts` records: a throw ahead of `stop()`
+      // would leave the MinIO container running, and `pnpm reap` ignores a container younger than
+      // two hours, so nothing would clear it for the rest of the session.
+      if (store) await store.stop();
+    } finally {
+      // The directory goes last and it goes EITHER WAY: it holds a few hundred megabytes of WAL,
+      // and a `stop()` that rejects would otherwise leave all of it behind (measured 2026-09-18
+      // with a rejecting `stop()` injected — the temporary directory survived the run).
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 }
 
@@ -274,6 +323,7 @@ async function runOfflineArm(bin: string | undefined, dir: string): Promise<Offl
   const dbPath = join(dir, "offline.db");
   const node = openNode(NODE, dbPath);
   let daemon: ReturnType<typeof replicate> | undefined;
+  let unreachableStore: Store | undefined;
   let daemonAlive = false;
   let daemonNote = `no-litestream-v${LITESTREAM_VERSION}`;
   let attachedMs: number | null = null;
@@ -283,6 +333,7 @@ async function runOfflineArm(bin: string | undefined, dir: string): Promise<Offl
 
     if (bin) {
       const unreachable = await createUnreachableStore();
+      unreachableStore = unreachable.store;
       daemonNote = unreachable.refusedWith;
       const config = writeConfig({
         dbPath,
@@ -341,6 +392,11 @@ async function runOfflineArm(bin: string | undefined, dir: string): Promise<Offl
       daemon.kill();
       await daemon.exited;
     }
+    // Consistency rather than a leak — the unreachable store owns no container and its `stop()` only
+    // destroys an SDK client nothing ever sent a command through, so nothing here survives process
+    // exit. It is stopped because every other `Store` in the rig is stopped in a `finally`, and
+    // because `unreachable-store.ts` wrote that `stop()` for this caller.
+    if (unreachableStore) await unreachableStore.stop();
     node.close();
   }
 }
@@ -415,6 +471,7 @@ async function driveLoad(node: NodeDb, dbPath: string): Promise<Load> {
     peakWalBytes,
     endWalBytes: walBytes(dbPath),
     dbBytes: statSync(dbPath).size,
+    rows: Number(node.get<{ n: number }>("SELECT count(*) AS n FROM records")?.n ?? -1),
     checkpointRounds,
   };
 }
