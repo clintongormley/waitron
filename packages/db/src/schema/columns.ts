@@ -120,10 +120,14 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * The second group is open, and it keeps growing as the rollout reaches new packages: checked text
  * columns written with `enumCheck`'s spacing exist outside this package too, among them
  * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17),
- * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18) and, still
- * unconverted on that date, `packages/fiscal-verifactu/src/schema/registros.ts` and
- * `packages/identity/src/schema/google-oidc-states.ts`. So take the two reasons as the property and
- * the names as a dated reading.
+ * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18), and
+ * `google_oidc_states.mode` and `management_account_actions.purpose` in `packages/identity`
+ * (converted 2026-09-18 — and SCOPE alone is what keeps those two: measured there, substituting
+ * leaves the generated schema identical and breaks no caller today, while the narrowing itself
+ * still happens, both columns being NOT NULL. Receipts in the P1b identity report in
+ * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Others are unconverted on
+ * `main` on that date, among them `packages/fiscal-verifactu/src/schema/registros.ts`. So take the
+ * two reasons as the property and the names as a dated reading.
  *
  * One mechanical note, because a converter meeting a NULLABLE checked column will ask: `enumCheck`
  * returns only the `in (…)` fragment, so a null arm is composed AROUND it rather than emitted by

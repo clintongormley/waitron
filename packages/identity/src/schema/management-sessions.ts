@@ -1,4 +1,5 @@
-import { foreignKey, index, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index } from "drizzle-orm/pg-core";
+import { id, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -7,18 +8,14 @@ import { persons } from "./persons.js";
  * `last_seen_at` is refreshed on activity and `ended_at` is stamped on sign-out, so app_user
  * holds SELECT, INSERT, UPDATE (no DELETE).
  */
-export const managementSessions = pgTable(
+export const managementSessions = table(
   "management_sessions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    lastSeenAt: timestamp("last_seen_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    endedAt: timestamp("ended_at", { withTimezone: true, mode: "string" }),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
+    lastSeenAt: tsString("last_seen_at").notNull().defaultNow(),
+    endedAt: tsString("ended_at"),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count a

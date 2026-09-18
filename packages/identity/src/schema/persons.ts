@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { id, label, table, tsString } from "@waitron/db";
 
 /**
  * A person's role. A single `role` column is this slice's permission-assignment mechanism (design
@@ -19,52 +20,50 @@ export const personStatus = pgEnum("person_status", ["pending", "active", "suspe
  * suspended — so the app role holds SELECT, INSERT, UPDATE (drizzle/0001_identity_baseline_sql.sql), never a
  * DELETE and never an append-only trigger.
  */
-export const persons = pgTable(
+export const persons = table(
   "persons",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    displayName: text("display_name").notNull(),
-    firstNames: text("first_names"),
-    lastNames: text("last_names"),
-    telephone: text("telephone"),
+    id: id("id").primaryKey().defaultRandom(),
+    displayName: label("display_name").notNull(),
+    firstNames: label("first_names"),
+    lastNames: label("last_names"),
+    telephone: label("telephone"),
     /** Hashed by ./verify-pin.ts (scrypt, salted) — never plaintext. The check below refuses an
      * empty value; the hash format is the caller's responsibility. */
-    pinHash: text("pin_hash"),
-    passwordHash: text("password_hash"),
+    pinHash: label("pin_hash"),
+    passwordHash: label("password_hash"),
     /** AES-256-GCM ciphertext containing the recoverable TOTP secret. The server decrypts it with
      * the venue account key shared with mirrors so authenticator verification works after failover. */
-    totpSecret: text("totp_secret"),
+    totpSecret: label("totp_secret"),
     /** The person's preferred UI language (a SUPPORTED_LOCALES code). Null = no
      * preference; the app falls back to the venue default. Validated at each
      * write boundary — setPersonLocale for a person changing their own, planVenue
      * for the admin a venue is provisioned with — not by a DB enum, so a new
      * locale is a catalogue + constant change with no migration. Nothing stops a
      * writer that skips both: the only constraint here is non-empty. */
-    locale: text("locale"),
+    locale: label("locale"),
     /** When this person was offered a passkey at sign-in. Null = never offered, which is what
      * makes the offer appear exactly once: it is stamped when they resolve it, by adding one or by
      * skipping, so a browser that dies mid-offer asks again. Nullable and unstamped for everyone who
      * existed before the offer did, so each of them is offered once too. */
-    passkeyOfferedAt: timestamp("passkey_offered_at", { withTimezone: true, mode: "string" }),
+    passkeyOfferedAt: tsString("passkey_offered_at"),
     /** The person's login email — required at every human-account boundary and used for dashboard
      * sign-in, activation, and recovery. The column stays nullable for internal principals and
      * low-level fixtures. Unique case-insensitively, through the custom migration's functional
      * partial index. */
-    email: text("email"),
+    email: label("email"),
     /** A requested replacement address. It does not become a login identifier until the person
      * proves they control it. */
-    pendingEmail: text("pending_email"),
+    pendingEmail: label("pending_email"),
     /** Records when the person completed a bearer link delivered to this address. Changing the
      * address clears the record. */
-    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true, mode: "string" }),
+    emailVerifiedAt: tsString("email_verified_at"),
     /** Google's stable OpenID Connect subject identifier. Email is deliberately not used as the
      * provider identity because a Google account can change addresses. */
-    googleSubject: text("google_subject"),
+    googleSubject: label("google_subject"),
     role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("persons_tenant_google_subject_uq")

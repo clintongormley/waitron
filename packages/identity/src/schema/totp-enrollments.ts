@@ -1,17 +1,16 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, foreignKey, index } from "drizzle-orm/pg-core";
+import { id, label, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
-export const totpEnrollments = pgTable(
+export const totpEnrollments = table(
   "totp_enrollments",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
-    encryptedSecret: text("encrypted_secret").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
+    encryptedSecret: label("encrypted_secret").notNull(),
+    expiresAt: tsString("expires_at").notNull(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     foreignKey({

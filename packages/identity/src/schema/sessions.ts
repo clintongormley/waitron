@@ -1,5 +1,5 @@
-import { foreignKey, index, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
-import { tills } from "@waitron/db";
+import { foreignKey, index } from "drizzle-orm/pg-core";
+import { id, table, tills, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -8,14 +8,14 @@ import { persons } from "./persons.js";
  * tills). MUTABLE: `ended_at` is stamped on logout, so app_user holds SELECT, INSERT, UPDATE (no
  * DELETE), with no immutability triggers.
  */
-export const sessions = pgTable(
+export const sessions = table(
   "sessions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
-    tillId: uuid("till_id").notNull(),
-    openedAt: timestamp("opened_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
-    endedAt: timestamp("ended_at", { withTimezone: true, mode: "string" }),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
+    tillId: id("till_id").notNull(),
+    openedAt: tsString("opened_at").notNull().defaultNow(),
+    endedAt: tsString("ended_at"),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count a
