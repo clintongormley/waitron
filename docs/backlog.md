@@ -2471,7 +2471,8 @@ the silent diff on its own — is not merely right but enough to catch THIS mist
 clause, which is the part a reader needed to know. It is not enough on its own to accept a
 conversion: a real schema change exits 0 and writes a migration, which is what the silent diff is
 there for. Measured where no `src/schema/index.ts` exists at all,
-which is also the shape of the two remaining odd-path packages, `media` and `venue-service`. The
+which is also the shape of the two odd-path packages that followed, `venue-service` (converted, the
+paragraph below) and `media` (still to come). The
 plan's step 4 and its P1a twin are corrected in place, and so is the P1a summary earlier in this
 entry, which had the same "fails silently" wording.
 
@@ -2500,7 +2501,38 @@ report and were removed by the review wave: an increment quoted as uniform acros
 fact came from two different trees, and a repeatability claim the run-it reviewer falsified —
 statement readings do repeat, branch readings do not, so no branch delta is quoted anywhere.
 
-What is left of P1b is `venue-service`, `credentials` and `media`, one pull
+**`packages/venue-service` is the twelfth pull request** — one table file, eight tables, 52 columns,
+no schema change. It is the second package the plan's `--schema` warning applies to (its drizzle
+config points at `./src/schema/service.ts`; there is no `src/schema/index.ts`), and the warning did
+its job: the path was read off the config before the first probe run rather than pasted.
+
+Two things it contributes beyond another package converted.
+
+The first is a blind spot in the throwaway line-comparison script most packages in this rollout have
+been checked with — not all of them: `packages/db`'s conversion, the largest, was never line-
+classified. The script picks out a column declaration by requiring a space after the colon, and a
+value long enough to be pushed entirely onto the next line leaves a bare `allergens:` that the script
+filed as "not a column". What caught it was a cross-check rather than the script's own report: it
+counted 51 column declarations where the migration tool and the parity comparison both counted 52.
+Because the script is shared, the eight earlier reports that state an "every changed line is…"
+property were re-checked rather than left standing, and they hold — that one column is the only
+declaration of its shape anywhere in the tree's schema files, at tip and at each earlier conversion's
+parent commit, and it is this package's own.
+
+The second is smaller and is a trap for whoever converts next. `smallCount`'s docstring in
+`packages/db/src/schema/columns.ts` offered "a weekday" as its example of a `smallint` column. The
+tree holds three `weekday` columns and they are not all `smallint`: `packages/workforce`'s two are,
+and this package's `department_hours.weekday` is `integer`. A converter picking the helper by what
+the column MEANS rather than by what it stores would have written a migration. The docstring now says
+so, with all three named.
+
+Its five checked text columns stay plain `label()` columns beside their untouched constraints, all
+five held by the same single reason — none carries the `", "` spacing `enumCheck` emits, measured on
+two of them, one NOT NULL and one nullable. The nullable one also put the composition note in
+`columns.ts` through drizzle-kit's own generator for the first time, and the emitted migration
+carries the values inline as the note says it should.
+
+What is left of P1b is `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their

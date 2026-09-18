@@ -1,45 +1,44 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  check,
-  foreignKey,
-  index,
-  integer,
-  jsonb,
-  pgTable,
-  primaryKey,
-  text,
-  time,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
 import { menuItems } from "@waitron/catalogue";
 import {
   catalogues,
   categories,
+  count,
   devices,
+  flag,
   floorZones,
+  id,
+  json,
   kitchenStations,
+  label,
   locations,
   products,
+  table,
+  timeOfDay,
+  tsString,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 
-export const departments = pgTable(
+export const departments = table(
   "departments",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    locationId: uuid("location_id").notNull(),
-    name: text("name").notNull(),
-    tradingName: text("trading_name").notNull(),
-    defaultServiceMode: text("default_service_mode").notNull(),
-    isDefault: boolean("is_default").notNull().default(false),
-    active: boolean("active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    id: id("id").primaryKey().defaultRandom(),
+    locationId: id("location_id").notNull(),
+    name: label("name").notNull(),
+    tradingName: label("trading_name").notNull(),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair.
+    // The first of the two reasons in columns.ts holds, and it holds for all five value-set checked
+    // text columns in this file: none of their constraints carries the ", " spacing enumCheck
+    // emits, so substituting rewrites the constraint. Measured 2026-09-18 on this column and on
+    // working_line_contexts.hardware_unit -- the schema probe generated a migration dropping and
+    // re-adding both, differing from the originals only in that spacing. Rewriting a constraint is
+    // not a conversion's job. See enumText in packages/db/src/schema/columns.ts.
+    defaultServiceMode: label("default_service_mode").notNull(),
+    isDefault: flag("is_default").notNull().default(false),
+    active: flag("active").notNull().default(true),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     unique("departments_location_name_key").on(t.locationId, t.name),
@@ -55,15 +54,17 @@ export const departments = pgTable(
   ],
 );
 
-export const zoneServicePolicies = pgTable(
+export const zoneServicePolicies = table(
   "zone_service_policies",
   {
-    locationId: uuid("location_id").notNull(),
-    zoneId: uuid("zone_id").notNull(),
-    departmentId: uuid("department_id").notNull(),
-    serviceMode: text("service_mode"),
-    defaultMenuId: uuid("default_menu_id"),
-    isCounterDefault: boolean("is_counter_default").notNull().default(false),
+    locationId: id("location_id").notNull(),
+    zoneId: id("zone_id").notNull(),
+    departmentId: id("department_id").notNull(),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
+    // for the reason stated above departments.default_service_mode.
+    serviceMode: label("service_mode"),
+    defaultMenuId: id("default_menu_id"),
+    isCounterDefault: flag("is_counter_default").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.zoneId], name: "zone_service_policies_pk" }),
@@ -94,12 +95,12 @@ export const zoneServicePolicies = pgTable(
   ],
 );
 
-export const zoneMenus = pgTable(
+export const zoneMenus = table(
   "zone_menus",
   {
-    zoneId: uuid("zone_id").notNull(),
-    menuId: uuid("menu_id").notNull(),
-    displayOrder: integer("display_order").notNull().default(0),
+    zoneId: id("zone_id").notNull(),
+    menuId: id("menu_id").notNull(),
+    displayOrder: count("display_order").notNull().default(0),
   },
   (t) => [
     primaryKey({ columns: [t.zoneId, t.menuId], name: "zone_menus_pk" }),
@@ -117,11 +118,11 @@ export const zoneMenus = pgTable(
   ],
 );
 
-export const deviceZoneDefaults = pgTable(
+export const deviceZoneDefaults = table(
   "device_zone_defaults",
   {
-    deviceId: uuid("device_id").notNull(),
-    zoneId: uuid("zone_id").notNull(),
+    deviceId: id("device_id").notNull(),
+    zoneId: id("zone_id").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.deviceId], name: "device_zone_defaults_pk" }),
@@ -138,16 +139,16 @@ export const deviceZoneDefaults = pgTable(
   ],
 );
 
-export const preparationRoutes = pgTable(
+export const preparationRoutes = table(
   "preparation_routes",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    locationId: uuid("location_id").notNull(),
-    zoneId: uuid("zone_id"),
-    categoryId: uuid("category_id"),
-    productId: uuid("product_id"),
-    stationId: uuid("station_id"),
-    noPreparation: boolean("no_preparation").notNull().default(false),
+    id: id("id").primaryKey().defaultRandom(),
+    locationId: id("location_id").notNull(),
+    zoneId: id("zone_id"),
+    categoryId: id("category_id"),
+    productId: id("product_id"),
+    stationId: id("station_id"),
+    noPreparation: flag("no_preparation").notNull().default(false),
   },
   (t) => [
     foreignKey({
@@ -184,14 +185,14 @@ export const preparationRoutes = pgTable(
   ],
 );
 
-export const departmentHours = pgTable(
+export const departmentHours = table(
   "department_hours",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    departmentId: uuid("department_id").notNull(),
-    weekday: integer("weekday").notNull(),
-    opensAt: time("opens_at").notNull(),
-    closesAt: time("closes_at").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    departmentId: id("department_id").notNull(),
+    weekday: count("weekday").notNull(),
+    opensAt: timeOfDay("opens_at").notNull(),
+    closesAt: timeOfDay("closes_at").notNull(),
   },
   (t) => [
     foreignKey({
@@ -204,14 +205,16 @@ export const departmentHours = pgTable(
   ],
 );
 
-export const orderServiceContexts = pgTable(
+export const orderServiceContexts = table(
   "order_service_contexts",
   {
-    workingOrderId: uuid("working_order_id").notNull(),
-    locationId: uuid("location_id").notNull(),
-    zoneId: uuid("zone_id").notNull(),
-    departmentId: uuid("department_id").notNull(),
-    serviceMode: text("service_mode").notNull(),
+    workingOrderId: id("working_order_id").notNull(),
+    locationId: id("location_id").notNull(),
+    zoneId: id("zone_id").notNull(),
+    departmentId: id("department_id").notNull(),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
+    // for the reason stated above departments.default_service_mode.
+    serviceMode: label("service_mode").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workingOrderId], name: "order_service_contexts_pk" }),
@@ -237,28 +240,30 @@ export const orderServiceContexts = pgTable(
   ],
 );
 
-export const workingLineContexts = pgTable(
+export const workingLineContexts = table(
   "working_line_contexts",
   {
-    workingOrderLineId: uuid("working_order_line_id").notNull(),
-    menuItemId: uuid("menu_item_id").notNull(),
-    menuId: uuid("menu_id").notNull(),
-    menuName: text("menu_name").notNull(),
-    departmentId: uuid("department_id").notNull(),
-    departmentName: text("department_name").notNull(),
-    categoryName: text("category_name").notNull(),
-    unitId: uuid("unit_id").notNull(),
-    unitName: jsonb("unit_name").$type<Record<string, string>>().notNull(),
-    unitPrecision: integer("unit_precision").notNull(),
-    hardwareUnit: text("hardware_unit"),
-    vatClass: text("vat_class").notNull(),
+    workingOrderLineId: id("working_order_line_id").notNull(),
+    menuItemId: id("menu_item_id").notNull(),
+    menuId: id("menu_id").notNull(),
+    menuName: label("menu_name").notNull(),
+    departmentId: id("department_id").notNull(),
+    departmentName: label("department_name").notNull(),
+    categoryName: label("category_name").notNull(),
+    unitId: id("unit_id").notNull(),
+    unitName: json<Record<string, string>>("unit_name").notNull(),
+    unitPrecision: count("unit_precision").notNull(),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
+    // for the reason stated above departments.default_service_mode.
+    hardwareUnit: label("hardware_unit"),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
+    // for the reason stated above departments.default_service_mode.
+    vatClass: label("vat_class").notNull(),
     allergens:
-      jsonb("allergens").$type<
-        Record<string, { presence: "contains" | "may_contain"; source?: string }>
-      >(),
-    diet: jsonb("diet").$type<unknown>(),
-    dietDerivation: jsonb("diet_derivation").$type<unknown>(),
-    dietOverride: jsonb("diet_override").$type<unknown>(),
+      json<Record<string, { presence: "contains" | "may_contain"; source?: string }>>("allergens"),
+    diet: json<unknown>("diet"),
+    dietDerivation: json<unknown>("diet_derivation"),
+    dietOverride: json<unknown>("diet_override"),
   },
   (t) => [
     primaryKey({ columns: [t.workingOrderLineId], name: "working_line_contexts_pk" }),
