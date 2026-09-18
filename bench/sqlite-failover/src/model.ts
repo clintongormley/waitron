@@ -132,6 +132,7 @@ export type NodeDb = {
     sql: string,
     ...params: SQLInputValue[]
   ): Row | undefined;
+  all<Row = Record<string, SQLOutputValue>>(sql: string, ...params: SQLInputValue[]): Row[];
   /**
    * Release the SQLite handle. Every node a scenario opens is closed, a `:memory:` one included:
    * the handle is unusable afterwards (`ERR_INVALID_STATE`), so the close belongs in a `finally`
@@ -168,6 +169,8 @@ export function openNode(nodeId: string, path?: string): NodeDb {
     exec: (sql) => handle.exec(sql),
     get: <Row>(sql: string, ...params: SQLInputValue[]) =>
       handle.prepare(sql).get(...params) as Row | undefined,
+    all: <Row>(sql: string, ...params: SQLInputValue[]) =>
+      handle.prepare(sql).all(...params) as unknown as Row[],
     close: () => handle.close(),
   };
 }
@@ -370,16 +373,89 @@ const ENVIO_UPSERT: Record<EnvioRule, string> = {
 };
 
 /**
- * Apply a shipped tail to the receiver, in one transaction. `envios` follows
- * `terminal-state-wins` — see `EnvioRule` for what that rule is and what it does not cover.
+ * How a shipped `supplier_invoices` row meets a row the receiver already holds under the same
+ * `(supplier, invoice_number)`. Like `EnvioRule` this is a parameter so a scenario can drive the
+ * same ship under each of them; only the first is a rule the design claims, and the other two exist
+ * to be the controls that reproduce its absence.
  *
- * One branch is deliberately NOT here yet, and a scenario that needs it will fail until it is: the
- * `supplier_invoices` savepoint-isolated clash branch (Task 5, S5). Today a natural-key clash is
- * absorbed by `ON CONFLICT DO NOTHING` and lands in neither the table nor `skippedClashes` — it is
- * dropped without a word, which is exactly what S5 exists to change.
+ *  - `report-and-skip` — the rule. The insert is attempted, and a refusal is read in two steps,
+ *    because the two questions have different answers. WHICH CONSTRAINT refused the row is in the
+ *    error, and only a uniqueness refusal is a shape this rule knows (`isUniquenessRefusal`);
+ *    anything else is rethrown and takes the batch down with it. WHAT that refusal means is not in
+ *    the error, and comes from the rows already in the table: a row holding that pair under a
+ *    DIFFERENT id is the clash the design leaves to a person (outbox-swap §4.2), so the arriving
+ *    row is named in `skippedClashes` and left out of the table, while a row already held under the
+ *    SAME id is a retried ship and a silent no-op. Distinguishing those two is the whole branch — a
+ *    ship is retried whenever its confirmation is lost, so reporting every refusal as a clash would
+ *    hand a person a queue of rows that are already applied.
+ *    Nothing wraps that insert in a SAVEPOINT, and it needs none. SQLite's own documentation says
+ *    of ABORT, its default conflict resolution, that it "backs out any changes made by the current
+ *    SQL statement; but changes caused by prior SQL statements within the same transaction are
+ *    preserved and the transaction remains active" (https://sqlite.org/lang_conflict.html,
+ *    read 2026-09-18).
+ *    Confirmed on the engine this rig runs — SQLite 3.53.4, `process.versions.sqlite` under node
+ *    v26.7.0 — by running one batch twice, once with the clashing insert inside
+ *    `SAVEPOINT`/`ROLLBACK TO` and once with the `try`/`catch` alone: both arms committed the same
+ *    rows and neither `COMMIT` errored. S5's `assert.deepStrictEqual(rowsHeldFrom(receiver,
+ *    senderId), rowsShipped(tail, clashId))` holds a savepoint-free apply to keeping the rest of
+ *    the batch — every row of it, the sender's other supplier invoice included — so the `scenarios`
+ *    run is the standing check. An insert here written with a conflict resolution other than the
+ *    default puts all of that back in question — see the README section "What S5 measures, and the
+ *    savepoint it does not need".
+ *  - `silent-drop` — the plain `ON CONFLICT DO NOTHING` write. S5's control for the failure spec §4
+ *    rules out with "not silently dropped": the clash is absorbed, `skippedClashes` stays empty,
+ *    and nothing anywhere records that a row was lost.
+ *  - `unisolated` — nothing catches the refusal, so the error leaves `withTx` and rolls the whole
+ *    batch back. S5's control for the failure the same line rules out with "not crashing the whole
+ *    ship": one clash costs the entire ship.
+ *
+ * Unlike its sibling `ENVIO_UPSERT`, whose three statements really do differ, `CLASH_INSERT` holds
+ * the same statement character for character under `report-and-skip` and under `unisolated`: what
+ * separates those two is whether `applyShippedTail` catches the refusal, not what it sends.
+ */
+type ClashRule = "report-and-skip" | "silent-drop" | "unisolated";
+
+const CLASH_INSERT: Record<ClashRule, string> = {
+  "report-and-skip": `INSERT INTO supplier_invoices (id, node_id, supplier, invoice_number)
+     VALUES (?, ?, ?, ?)`,
+  "silent-drop": `INSERT INTO supplier_invoices (id, node_id, supplier, invoice_number)
+     VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+  unisolated: `INSERT INTO supplier_invoices (id, node_id, supplier, invoice_number)
+     VALUES (?, ?, ?, ?)`,
+};
+
+/**
+ * SQLite's extended result codes for the two refusals `report-and-skip` knows how to read: a
+ * PRIMARY KEY conflict and a UNIQUE-index conflict. Measured on SQLite 3.53.4
+ * (`process.versions.sqlite` under node v26.7.0), against a table with a text primary key, a NOT
+ * NULL column and a two-column UNIQUE — a duplicate primary key gave 1555, a duplicate unique pair
+ * 2067, a missing NOT NULL value 1299 and a trigger's RAISE(ABORT) 1811.
+ *
+ * The same probe is why `errstr` cannot do this job, and a reader will reach for it: all four
+ * refusals carry the errstr "constraint failed", so classifying on it would let a NOT NULL refusal
+ * or a trigger's refusal be treated as a clash.
+ */
+const SQLITE_CONSTRAINT_PRIMARYKEY = 1555;
+const SQLITE_CONSTRAINT_UNIQUE = 2067;
+
+function isUniquenessRefusal(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { errcode } = error as { errcode?: unknown };
+  return errcode === SQLITE_CONSTRAINT_PRIMARYKEY || errcode === SQLITE_CONSTRAINT_UNIQUE;
+}
+
+type ShipRules = { envio: EnvioRule; clash: ClashRule };
+
+/**
+ * Apply a shipped tail to the receiver, in one transaction. `envios` follows `terminal-state-wins`
+ * and `supplier_invoices` follows `report-and-skip` — see `EnvioRule` and `ClashRule` for what each
+ * rule is and what it does not cover.
  */
 export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatch): ApplyResult {
-  return applyShippedTail(receiver, senderNodeId, tail, "terminal-state-wins");
+  return applyShippedTail(receiver, senderNodeId, tail, {
+    envio: "terminal-state-wins",
+    clash: "report-and-skip",
+  });
 }
 
 /** S2's control for one side of terminal-state-wins — see `EnvioRule`. */
@@ -388,7 +464,10 @@ export function applyTailRegressing(
   senderNodeId: string,
   tail: TailBatch,
 ): ApplyResult {
-  return applyShippedTail(receiver, senderNodeId, tail, "regressing");
+  return applyShippedTail(receiver, senderNodeId, tail, {
+    envio: "regressing",
+    clash: "report-and-skip",
+  });
 }
 
 /** S2's control for the other side of terminal-state-wins — see `EnvioRule`. */
@@ -397,14 +476,41 @@ export function applyTailInsertOnly(
   senderNodeId: string,
   tail: TailBatch,
 ): ApplyResult {
-  return applyShippedTail(receiver, senderNodeId, tail, "insert-only");
+  return applyShippedTail(receiver, senderNodeId, tail, {
+    envio: "insert-only",
+    clash: "report-and-skip",
+  });
+}
+
+/** S5's control for a clash nobody is told about — see `ClashRule`. */
+export function applyTailSilentDrop(
+  receiver: NodeDb,
+  senderNodeId: string,
+  tail: TailBatch,
+): ApplyResult {
+  return applyShippedTail(receiver, senderNodeId, tail, {
+    envio: "terminal-state-wins",
+    clash: "silent-drop",
+  });
+}
+
+/** S5's control for a clash that costs the whole ship — see `ClashRule`. */
+export function applyTailUnisolated(
+  receiver: NodeDb,
+  senderNodeId: string,
+  tail: TailBatch,
+): ApplyResult {
+  return applyShippedTail(receiver, senderNodeId, tail, {
+    envio: "terminal-state-wins",
+    clash: "unisolated",
+  });
 }
 
 function applyShippedTail(
   receiver: NodeDb,
   senderNodeId: string,
   tail: TailBatch,
-  envioRule: EnvioRule,
+  rules: ShipRules,
 ): ApplyResult {
   // The only writer of a node's OWN chain is `recordSale`, appending 1, 2, 3, … (see `diffTail`).
   // A tail claiming to come from the receiver itself is refused before any of it is written, and
@@ -453,7 +559,7 @@ function applyShippedTail(
     // condition the second apply returned `applied:1`, with it `applied:0`, and both left every
     // table byte-identical. S2's Part E holds the count to a number, so the `scenarios` run is the
     // standing check.
-    const insertEnvio = receiver.handle.prepare(ENVIO_UPSERT[envioRule]);
+    const insertEnvio = receiver.handle.prepare(ENVIO_UPSERT[rules.envio]);
     for (const row of tail.envios) {
       if (row.node_id !== senderNodeId) {
         refusedForeign += 1;
@@ -499,18 +605,56 @@ function applyShippedTail(
       );
     }
 
-    const insertSupplierInvoice = receiver.handle.prepare(
-      `INSERT INTO supplier_invoices (id, node_id, supplier, invoice_number) VALUES (?, ?, ?, ?)
-       ON CONFLICT DO NOTHING`,
+    // `supplier_invoices` carries the model's one natural key, so it is the one table where a row
+    // the sender owns can be unapplicable rather than merely already-held — see `ClashRule`.
+    const insertSupplierInvoice = receiver.handle.prepare(CLASH_INSERT[rules.clash]);
+    const invoiceHoldingPair = receiver.handle.prepare(
+      `SELECT id FROM supplier_invoices WHERE supplier = ? AND invoice_number = ?`,
     );
+    const invoiceById = receiver.handle.prepare(`SELECT id FROM supplier_invoices WHERE id = ?`);
     for (const row of tail.supplierInvoices) {
       if (row.node_id !== senderNodeId) {
         refusedForeign += 1;
         continue;
       }
-      applied += changed(
-        insertSupplierInvoice.run(row.id, row.node_id, row.supplier, row.invoice_number),
-      );
+      if (rules.clash !== "report-and-skip") {
+        applied += changed(
+          insertSupplierInvoice.run(row.id, row.node_id, row.supplier, row.invoice_number),
+        );
+        continue;
+      }
+      try {
+        applied += changed(
+          insertSupplierInvoice.run(row.id, row.node_id, row.supplier, row.invoice_number),
+        );
+      } catch (error) {
+        // Classify by the ERROR before looking at the table: a refusal that is not a uniqueness
+        // one — a NOT NULL value missing, a trigger's RAISE(ABORT) — is no clash, whatever rows
+        // happen to sit there, and reading the table first would swallow it.
+        if (!isUniquenessRefusal(error)) throw error;
+        const holder = invoiceHoldingPair.get(row.supplier, row.invoice_number) as
+          { id: string } | undefined;
+        if (holder) {
+          // Held under another id: the clash a person resolves. Held under this same id: a ship
+          // arriving twice, and there is nothing to do.
+          if (String(holder.id) !== row.id) skippedClashes.push(row);
+          continue;
+        }
+        // Nothing holds the pair, so it was the primary key that refused: the receiver holds this
+        // id already, under some other supplier and number. That is an already-applied id rather
+        // than a clash over the invoice number, so it is left alone and not reported. Nothing
+        // drives this line today: a retried ship carries each row's id and its pair together, so
+        // S5 is green with the line deleted — the README section on S5 records that run.
+        if (invoiceById.get(row.id)) continue;
+        // Past `isUniquenessRefusal` only two codes arrive, 1555 and 2067, and this table carries
+        // exactly two uniqueness constraints for them to come from: `id TEXT PRIMARY KEY` (`SCHEMA`
+        // above, model.ts:51) and `UNIQUE (supplier, invoice_number)` (model.ts:53). The pair
+        // lookup answers for the second and the id lookup for the first, so each code leaves
+        // through a branch above. A third uniqueness constraint added to the table would leave a
+        // code with no branch, and this rethrow is how such a refusal leaves the apply rather than
+        // being counted as a row applied.
+        throw error;
+      }
     }
 
     // The receiver's view of a foreign chain's tip is derived from the rows it holds, and only ever

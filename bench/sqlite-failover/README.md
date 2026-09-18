@@ -20,8 +20,9 @@ pnpm --filter @waitron/bench-sqlite-failover scenarios
 pnpm --filter @waitron/bench-sqlite-failover typecheck
 ```
 
-Docker must be running: every scenario but S2 starts its own MinIO container via Testcontainers.
-S2 needs no container and no store — it models the hand-over in SQLite alone.
+Docker must be running: every scenario but S2 and S5 starts its own MinIO container via
+Testcontainers. Those two need no container and no store — each models its hand-over between two
+in-memory SQLite databases.
 
 **`scenarios` currently exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is
 FAIL — a recorded result, not a broken harness. See "What S2 measures, and what it does not" below. A
@@ -349,6 +350,76 @@ Parts D and E were put to four more, each run whole, each named by the message i
   in the other direction: a second, identical `applyTail` of one shipped record reported `applied:1`
   without the condition and `applied:0` with it, every table byte-identical either way, while an
   apply that really does advance a row reported 1 under both.
+
+## What S5 measures, and the savepoint it does not need
+
+S5 ships a tail carrying a supplier invoice whose supplier and invoice number the receiving node has
+already typed for itself under a different id. The apply names that row in its result, leaves it out
+of the table, and applies everything else in the batch — the sender's other supplier invoice
+included — compared row by row against the rows the sender shipped, not counted, because an apply
+that altered a value on the way in still lands one row per row sent. Shipping the same tail again
+reports the same one clash and changes nothing.
+
+Its two controls are the two failures spec §4's S5 rules out in one line — the clash must be
+"not applied, not silently dropped, not crashing the whole ship" — and each is a `ClashRule` setting
+of the same apply (`src/model.ts`). `silent-drop` is "not silently dropped": the row goes into
+neither the table nor the report, and nobody is told. `unisolated` is "not crashing the whole ship":
+the refusal is left uncaught and rolls the whole batch back.
+
+**A refusal is classified by the error before the table is looked at.** Only a uniqueness refusal is
+a shape this rule knows; anything else is rethrown and takes the batch down with it. Measured on
+SQLite 3.53.4 (`process.versions.sqlite` under node v26.7.0), against a table with a text primary
+key, a `NOT NULL` column and a two-column `UNIQUE`: a duplicate primary key gave extended result code
+1555, a duplicate unique pair 2067, a missing `NOT NULL` value 1299 and a trigger's `RAISE(ABORT)` 1811. The same probe is why the error's `errstr` cannot do this job, and a reader will reach for it:
+all four refusals carry the errstr "constraint failed".
+
+What holds that rule to its word is S5's own last assertion. The receiver there already holds the
+arriving row's id — which is what a rule reading the table rather than the error calls a ship
+arriving twice — and refuses the insert for an unrelated reason, a trigger's `RAISE(ABORT)`. The
+apply has to let that refusal out and roll the batch back. Proved by deletion on 2026-09-18, twice:
+with the error check removed altogether, and with it widened to accept any constraint code, the run
+fails on "a refusal that is not about uniqueness leaves the apply instead of being read as a clash".
+Without that assertion the check is invisible — S5 was green with the check deleted before the
+assertion existed.
+
+**The savepoint.** The plan for this scenario asked for each invoice insert to be wrapped in a
+`SAVEPOINT`. It is not, and it needs none. SQLite's own documentation says of `ABORT`, its default
+conflict resolution, that it "backs out any changes made by the current SQL statement; but changes
+caused by prior SQL statements within the same transaction are preserved and the transaction remains
+active" (<https://sqlite.org/lang_conflict.html>, read 2026-09-18). That was confirmed on the engine
+this rig runs — SQLite 3.53.4 under node v26.7.0 — rather than taken on trust: one transaction was run twice — a
+sale, a clashing invoice insert, then a clean invoice and a second sale — once with the clashing
+insert inside `SAVEPOINT`/`ROLLBACK TO` and once with only a `try`/`catch` around it, and both runs
+committed both sales and the clean invoice, left the receiver's own row alone, and neither `COMMIT`
+errored. The probe can tell the two apart — repeated with the clashing insert written as
+`INSERT OR ROLLBACK`, the savepoint run committed nothing at all and the savepoint-free run lost the
+row written before the clash and then failed its `COMMIT`. S5's own
+`assert.deepStrictEqual(rowsHeldFrom(receiver, senderId), rowsShipped(tail, clashId))` is the
+standing check that a savepoint-free apply keeps the rest of the batch, so the `scenarios` run holds
+it. Anything here that later uses a conflict resolution other than the default has to re-run that
+probe before relying on any of this.
+
+**The retry, put to mutation.** Two changes to the clash branch in `src/model.ts`, each run whole on
+2026-09-18 against the code as it stands:
+
+- Every row found holding the pair reported as a clash, the different-id comparison dropped: the run
+  fails on "the retry reports the same one clash". That is the assertion that earns the branch.
+- The primary-key fallback — `if (invoiceById.get(row.id)) continue;` — deleted: **S5 still passes**,
+  and it is fair to say so rather than claim a proof. Classifying by the error first moved the
+  retried-ship case into the pair lookup above it, so the fallback now only catches a uniqueness
+  refusal where nothing holds the pair, which is a primary-key conflict against a row whose supplier
+  and invoice number have since changed. No scenario here ships that, so nothing checks that line.
+
+S5's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover
+scenarios`, 2026-09-18:
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S5 | supplier-invoice clash reported and skipped, ship otherwise intact | PASS | applied=13 clashes=1 retry-applied=0 retry-clashes=1; silent-drop: clashes=0 clash-rows-held=0 records-held=3/3; unisolated: refused="UNIQUE constraint failed: supplier_invoices.supplier, supplier_invoices.invoice_number" records-held=0/3 sales-held=0/3 clean-invoice-rows-held=0; not-a-uniqueness-refusal: refused="the receiver refuses this row for its own reasons" records-held=0/3 |
+```
+
+That run's exit code is 1, and S5 is not why: S2 is the critical FAIL the runner reports.
 
 ## Why it can't join `pnpm -r test`
 

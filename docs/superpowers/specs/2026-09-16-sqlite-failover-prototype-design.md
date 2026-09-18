@@ -305,7 +305,8 @@ exists to produce.
   a hole. Two corrections to the sentence above, which predates them: the gate moved on 2026-09-16 to
   run before SLICE 2, so slice 1 was never what it covered and slice 1's own work carried on for that
   reason rather than because of this reading; and the campaign's prototype tasks 5-10 are still
-  stopped.)* This is the
+  stopped. 2026-09-18: the campaign was re-armed and Task 5 has been built — S5 exists and passes —
+  so the sentence just above is true only of tasks 6-10 from that date on.)* This is the
   prototype's most important interaction with the rest of the queue.
 - **A non-critical failure (S4 latency/WAL, S5 handled-clash) is a recorded caveat**, and the campaign
   continues. S4 in particular is expected to *produce numbers*, not pass/fail.
