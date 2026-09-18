@@ -2301,7 +2301,11 @@ its verdict string is English prose where every sibling prints a terse `key=valu
 is the one with a consequence — Task 10 builds a JSON dump from those strings, so that is where the
 shape should be settled, and changing it earlier would invalidate the recorded run quoted in the
 package README without a fresh measurement. S5 closed the second of those three: `NodeDb` now has an
-`all`, and only S2 still casts twice.
+`all`, and only S2 still casts twice. Task 6 settled the first and third for its OWN scenario only
+(2026-09-18): the litestream foundation check hoists its node ids and prints a terse `key=value`
+verdict, and the README quote was re-measured in the same change rather than left to drift. S2 still
+inlines its ids and still prints prose, so the suggestion stands for it — what changed is that the
+shape Task 10 has to parse is now settled, and it is `key=value`.
 **S5 is in (#406), verdict PASS, and it is non-critical.** A supplier invoice number typed on both
 machines while they are apart cannot be stored by the machine receiving the batch, which already
 holds that supplier and number under its own id. The batch now names that row in its result and

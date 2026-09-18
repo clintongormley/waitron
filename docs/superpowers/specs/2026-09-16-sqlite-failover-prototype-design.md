@@ -266,7 +266,8 @@ throwaway rig that must not enter CI's test shards":
 
 - **`bench/sqlite-failover`** — a private workspace package (`"private": true`, `type: module`), with
   scripts `scenarios` (runs S0–S6, prints a per-scenario PASS/FAIL/MEASURED table, exits non-zero only
-  on a **critical** failure — §7) and `typecheck`. **No `test` script and no `*.test.ts`**, so no CI
+  on a **critical** failure — §7), `setup:litestream` (added 2026-09-18: downloads the pinned litestream
+  release into a gitignored `.bin/`) and `typecheck`. **No `test` script and no `*.test.ts`**, so no CI
   job and no pre-push step ever runs a SCENARIO. That is not the same as CI never seeing the package:
   it stays a workspace member the shard filters and the root guard suite read by name, which is why it
   is listed in `PACKAGES_WITHOUT_TESTS` and `LIGHT_B_PACKAGES` (`scripts/changed-scope.mjs`) and

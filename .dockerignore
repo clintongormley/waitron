@@ -17,4 +17,6 @@ reports
 docs
 __screenshots__
 **/*.tsbuildinfo
+# The failover rig's litestream binary, downloaded per host into a gitignored directory.
+bench/*/.bin
 .DS_Store

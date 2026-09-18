@@ -51,6 +51,12 @@ export type Store = {
   endpoint: string;
   client: S3Client;
   bucket: string;
+  /**
+   * The same root credentials the `client` holds, exposed because a second reader needs them: the
+   * litestream child process gets them through its environment (`litestream.ts`), and it does not
+   * share this client.
+   */
+  credentials: { accessKeyId: string; secretAccessKey: string };
   putJson(key: string, value: unknown): Promise<void>;
   getJson(key: string): Promise<unknown>;
   /** Every key under `prefix`, whatever a page of the listing holds. */
@@ -86,6 +92,7 @@ export async function startStore(): Promise<Store> {
 
 async function connect(container: StartedTestContainer): Promise<Store> {
   const endpoint = `http://${container.getHost()}:${container.getMappedPort(9000)}`;
+  const credentials = { accessKeyId: ROOT_USER, secretAccessKey: ROOT_PASSWORD };
   const client = new S3Client({
     endpoint,
     region: "us-east-1",
@@ -93,7 +100,7 @@ async function connect(container: StartedTestContainer): Promise<Store> {
     // `BadRequest: An unsupported API call for method: PUT at '/'` — the SDK's default
     // virtual-host style leaves the bucket out of the path MinIO reads.
     forcePathStyle: true,
-    credentials: { accessKeyId: ROOT_USER, secretAccessKey: ROOT_PASSWORD },
+    credentials,
   });
   try {
     await client.send(new CreateBucketCommand({ Bucket: BUCKET }));
@@ -106,6 +113,7 @@ async function connect(container: StartedTestContainer): Promise<Store> {
     endpoint,
     client,
     bucket: BUCKET,
+    credentials,
     async putJson(key, value) {
       await client.send(
         new PutObjectCommand({

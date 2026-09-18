@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "scenarios": "node src/scenarios.ts",
+    "setup:litestream": "node src/setup-litestream.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

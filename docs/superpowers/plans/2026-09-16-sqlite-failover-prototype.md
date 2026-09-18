@@ -417,10 +417,78 @@ export default async function () {
 
 ### Task 6: Litestream integration foundation
 
+> **2026-09-18, as landed.** Everything below was measured on this machine against the pin
+> (litestream v0.5.17 darwin-arm64, node v26.7.0, the pinned MinIO image), not read off
+> documentation. Tasks 7, 8 and 9 drive this code, so read this before the Files and Interfaces
+> blocks underneath it — several of those describe an interface that is not what landed.
+>
+> - **The Interfaces block below describes litestream 0.3's config, and this pin is 0.5.** What
+>   landed writes a singular `replica:` object holding a URL —
+>   `replica: { url: s3://<bucket>/<prefix>?endpoint=…&region=…&force-path-style=true }` — with the
+>   credentials named as `${VAR}` and supplied in the child's environment, which is the shape 0.5's
+>   own bundled sample config documents. That is a choice, not a requirement: the pin was also given
+>   0.3's plural `replicas:` list with separate `type`/`bucket`/`path`/`endpoint`/`region` keys, and
+>   it replicated and restored just as well. `force-path-style=true` was likewise measured NOT to be
+>   required against a `http://localhost:<port>` endpoint, and is kept only because no other kind of
+>   endpoint has been tried.
+> - **`syncOnce` is `litestream replicate -once`**, which syncs everything and exits 0. The `sync`
+>   subcommand this plan hints at is a different thing: its help asks for a control socket, so it
+>   talks to a daemon that is already running.
+> - **`syncInterval` was NOT implemented** — nothing drives it, and the daemon part of the scenario
+>   waits on an observed effect rather than on a configured interval. `writeConfig` instead takes a
+>   required `configPath`, because the caller chooses where the file goes. `replicate` returns
+>   `{ kill(), exited }` rather than a raw `ChildProcess`, so a caller can wait for the child to be
+>   GONE rather than for the signal to have been sent.
+> - **`writeConfig` is now the only way to make a config this module will run.** It records the
+>   store's credentials against the config path it wrote, and the spawn helpers refuse a config they
+>   have no credentials for rather than running litestream with empty ones and getting a store error
+>   back. A Task 7 author hand-writing a yaml will hit that refusal by name.
+> - **`Store` grew a `credentials` field** (`src/store.ts`), which is how those credentials reach the
+>   litestream child; it does not share the S3 client.
+> - **Every litestream call is bounded and kills its child at the bound.** A caller's own deadline
+>   cannot do this job: a poll that re-checks the clock each time round never gets back to the check
+>   while awaiting a child that has stopped. Measured against a stub whose `restore` sleeps — with no
+>   bound, a 60-second poll was still unsettled at 65 seconds and its cleanup had not run, so the
+>   MinIO container stayed up too. The bound also settles ITSELF rather than waiting for the child's
+>   `close` event, which fires when the stdio pipes close and so never arrives if the killed child's
+>   own children inherited them.
+> - **The scenario is larger than the snippet below, and the extra parts are the measurement.** The
+>   snippet restores while the source database is still on disk, where a `restore` that merely copied
+>   the file beside it would return exactly the same rows — measured: with `restore` replaced by
+>   `copyFileSync` and the source left in place, the whole scenario reports PASS. As landed it deletes
+>   the source first, compares the restored rows one by one rather than counting them, drives a
+>   `replicate` daemon, and carries a control in which a prefix nothing streamed must yield no
+>   database.
+> - **A daemon part that writes immediately after spawning measures nothing.** With `replicate`
+>   mutated to spawn the one-shot, an earlier shape of that part reported PASS with all four rows: the
+>   one-shot syncs a few hundred milliseconds in, by which time the extra inserts have landed. It
+>   waits for the first sync to be VISIBLE before writing again; the mutation then fails at the
+>   deadline having seen 2 of 4.
+> - **A control that counts errors is not a control.** The empty-prefix control first accepted any
+>   non-empty error message, and a restore replaced by `throw new Error("spawn ENOENT")` left the
+>   whole scenario PASSing — a litestream that could not be run recorded as a litestream that
+>   refused. It now matches litestream's missing-backup words and prints them in the verdict.
+>
+> Four facts Tasks 7-9 will need, none of them things to re-derive:
+>
+> - **`restore` refuses a NON-EMPTY output path** — `Error: cannot restore, output path already
+>   exists and is not empty: …. Use -force to overwrite`, before any store call. An EMPTY file there
+>   is fine, and litestream removes it itself if the restore then fails. Nothing here passes `-force`.
+>   A successful restore writes the output file and nothing else; the `-shm`/`-wal` sidecars beside it
+>   are SQLite's, and appear only once something opens the result.
+> - **A restore with the source database absent returns every row**, which is what makes a restore
+>   evidence about the STORE rather than about the file next door.
+> - **litestream logs to STDOUT**, not stderr (its bundled `etc/litestream.yml` documents
+>   `logging.stderr` as defaulting to false; measured — one `replicate -once` gave 7 lines on stdout
+>   and 0 on stderr). Errors from `restore` DO go to stderr, including a real store failure
+>   (`NoSuchBucket`, exit 1, nothing on stdout).
+> - **No WAL pragma is needed first.** A database in `openNode`'s default `delete` journal mode
+>   replicated and restored fine, and litestream switched it to `wal` itself.
+
 Everything S0/S3/S4 need: locate/verify the pinned binary, generate a config, stream and restore against MinIO.
 
 **Files:**
-- Create: `bench/sqlite-failover/src/setup-litestream.ts` (downloads the pinned darwin-arm64 binary into gitignored `.bin/`)
+- Create: `bench/sqlite-failover/src/setup-litestream.ts` (~~downloads the pinned darwin-arm64 binary into gitignored `.bin/`~~ — corrected 2026-09-18: it downloads the pinned binary for THIS host into the gitignored `.bin/`, composing the asset name from `process.platform` and `process.arch`, so a platform the rig has not been run on fails on a missing asset rather than installing a darwin binary. `x64` is mapped to `x86_64`, because that is how the command-line tool's assets are named.)
 - Create: `bench/sqlite-failover/src/litestream.ts` (`resolveLitestream`, `writeConfig`, `replicate`, `restore`, `syncOnce`)
 - Create: `bench/sqlite-failover/.gitignore` (`.bin/`)
 - Create: `bench/sqlite-failover/src/scenarios/s_litestream_roundtrip.ts` (a foundation check: stream one write, restore it)
@@ -464,7 +532,7 @@ export default async function ({ startStore }) {
 
 - [ ] **Step 2: Run, watch it fail** — FAIL (`litestream.ts` missing) — or SKIPPED if the binary is genuinely absent; if SKIPPED, first run `setup:litestream` (Step 3) then re-run to get a real fail.
 
-- [ ] **Step 3: Implement `setup-litestream.ts`** — fetch the GitHub release asset for `v0.5.17` darwin-arm64 (query `releases/tags/v0.5.17` for the asset whose name matches `darwin-arm64`, download, extract into `.bin/`, chmod +x). Print the resolved path and version. **Establish** the exact asset name from the release API rather than hardcoding it.
+- [ ] **Step 3: Implement `setup-litestream.ts`** — fetch the GitHub release asset for `v0.5.17` (query `releases/tags/v0.5.17` ~~for the asset whose name matches `darwin-arm64`~~, download, extract into `.bin/`, chmod +x). Print the resolved path and version. **Establish** the exact asset name from the release API rather than hardcoding it. — corrected 2026-09-18: matching on a substring picks whichever artefact the release API happens to list first. The `v0.5.17` release holds both `litestream-0.5.17-darwin-arm64.tar.gz` (the command-line tool) and `litestream-vfs-v0.5.17-darwin-arm64.tar.gz` (a different artefact), so a `includes("darwin-arm64")` test matches two of them. What landed builds the full asset name from this host and looks for exactly that name.
 
 - [ ] **Step 4: Implement `litestream.ts`** per the interfaces. Establish `syncOnce`'s exact command against the pin (litestream 0.5's one-shot/replicate-then-flush behaviour) and note in a comment what was observed.
 
