@@ -161,9 +161,12 @@ it("rejects a non-boolean soldAlone", () => {
 soldAlone: flag("sold_alone").notNull().default(true),
 ```
 
-Add a comment stating the invariant: a product with `sold_alone = false` is a full product (price,
-VAT, allergens, category, unit) that is never offered standalone — only referenced (extras, later
-recipes). Do NOT reference "modifier" — this column outlives that word.
+Add a comment stating the flag's MEANING, not enforcement it does not yet have (CLAUDE.md §1): a
+product with `sold_alone = false` is a full product (price, VAT, allergens, category, unit) intended
+only to be referenced from elsewhere (an extra now, a recipe ingredient later) rather than offered
+standalone — and the menu/till selection is what enforces that, in a later slice. Do NOT write "never
+offered standalone" as if the code already prevents it (the selling query filters only on `active`
+until then), and do NOT reference "modifier" — this column outlives that word.
 
 - [ ] **Step 4: Regenerate the core migration** — `products` is in the core set. Follow
       `CLAUDE.md` §3: `pnpm --filter @waitron/db db:generate` (the repo's generate script), verify the
