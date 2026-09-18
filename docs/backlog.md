@@ -3044,7 +3044,7 @@ branch's commits rather than quietly rewritten. The practical lesson for the con
 count is not a receipt unless the command and the tree are beside it, and a correction deserves a
 reader who is not its author.
 
-**Task P7 — nothing joins the two database files any more (pull request #426).** The storage switch
+**Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
 only be backed up or restored separately if no row in one points at a row in the other. Six such
 pointers existed, every one of them from a node's own table into the venue's: a till shift-login
@@ -3070,6 +3070,21 @@ reasons are worth carrying: it would have gone vacuous at the flip (every table 
 check passing over an empty graph), and its package discovery was a regex over each
 `drizzle.config.ts` that a seat defeated by changing one config's quote style, passing the guard with
 a real crossing key in the tree.
+
+**What P7 left open, none of it blocking.** Three things, each a decision taken rather than an
+oversight. (1) **Nothing asserts that `drizzle-kit generate` is a no-op**, so a foreign key declared in
+a table file and never generated is invisible to the new check — searched for on 2026-09-19 and there
+is no such job or suite anywhere. A guard that regenerates a set into a copy of its migration folder
+and diffs it would close that, and the vocabulary rollout already proved that probe works (it is
+P1a's control). (2) **Three root-project readings of the schema now coexist** — this check reads the
+snapshots, `classification-complete.test.ts` reads the migration SQL for `CREATE TABLE`, and
+`module-graph-honesty.test.ts` reads it for `REFERENCES`. A single scanner in
+`packages/sync-enrolment/src/migration-tables.ts` returning tables AND foreign-key edges would serve
+all three; it was left alone because doing it properly means handling both declaration forms and
+subtracting drops by constraint name, which is a change of its own. (3) **The lowercase table-name to
+class map is built twice**, here and in `classification-complete.test.ts`, six lines each; extracting
+it would mean reworking that guard's duplicate-classifier loop, which carries more risk than the
+duplication.
 
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
