@@ -112,6 +112,11 @@ hook, or how tests are scheduled:
 - **CI's shards run `test:coverage`, not `test`.** Verify that package’s coverage job on the
   current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
   There is no single `test` job. Vitest `--shard` splits by FILE COUNT, so `N` must never exceed a package's test-file count.
+- **A shard can exit 1 with every one of its tests passing.** Vitest's worker-to-main reporting call
+  has a sixty-second timeout that no config key or environment variable in this repository can raise,
+  and it fails the shard on its own. Keep the job log before re-running, and read the test counts
+  before reading the diff. Cost: an unattended run stopped to ask whether a green-looking branch had
+  broken `apps/server`.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **Two pushes to `main` must never share a CI concurrency group.** GitHub keeps only one PENDING

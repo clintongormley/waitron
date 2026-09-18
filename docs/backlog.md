@@ -1779,20 +1779,6 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **`test-server` can fail with every test passing — a Vitest worker RPC timeout (2026-09-18, open).**
-  Seen on #410: `test-server (3)` reported `Test Files 87 passed (87)`, `Tests 1313 passed (1313)`,
-  `Errors 1 error`, and failed the shard on an unhandled
-  `Error: [vitest-worker]: Timeout calling "onTaskUpdate"` after a 300s run. Nothing in the test
-  results is wrong — the worker could not reach the main process to report task updates inside
-  Vitest's own RPC timeout, which is a different clock from `testTimeout` and is not configurable
-  from a suite. Re-running the same commit passed, and the same branch content had passed on its
-  previous head, so it is intermittent rather than a regression. **Why it matters more than an
-  ordinary flake:** it fails a shard whose tests all passed, so the failure says nothing about the
-  code and the natural response is to re-run, which is how a real failure would get waved through
-  next to it. Worth finding out whether the server shard is simply too big for one reporter — it is
-  the longest job in the run — before reaching for a larger RPC timeout. Related but distinct from
-  the `EADDRINUSE` retry noted further down, which is a port collision, not a reporting stall.
-
 - **The spawn-timeout guard now covers `packages/` and `apps/` — LANDED (2026-09-18).** It read only
   `scripts/` when it arrived in #407, which was recorded at the time as a real gap rather than a
   reasoned exemption: 22 of the 48 main Vitest configs under `packages/` and `apps/` (three more are suffixed) set no `testTimeout`
@@ -1900,6 +1886,26 @@ image constraints under *Detail → Box image*.
   nothing here explains it — treat it as still unexplained. And `packages/ui` and `apps/till` have the
   same harness with no reset, with `packages/ui/src/components/wt-button.test.ts` ending a test
   hovering a button, so the same flake is waiting there.
+- **A sixth: a CI shard exits 1 with every one of its tests passing (2026-09-18, PR #414,
+  `test-server (3)`, job 105632564989).** The output SIGNATURE was reproduced deliberately — not the
+  incident — with a reporter that accepts a passing result and then withholds its completion. The
+  shard printed `Test Files 87 passed (87)` and `Tests 1313 passed (1313)`, then one error —
+  vitest's worker-to-main reporting call (`onTaskUpdate`) timing out, which fails the shard on its
+  own and takes the aggregate `ci` job with it. The timeout is birpc's 60-second default, and in
+  vitest 3.2.7 nothing in this repository can raise it: the fork pool supplies no `timeout` and no
+  `VITEST_*` variable reaches it (the bracket form was checked as the control). That reproduction ran one passing test file locally on
+  vitest 3.2.7's built-in fork pool: one test passed, one error, exit 1 after 60,340ms — the
+  60-second default plus the suite's own 340ms. **What is still unexplained is why one worker's
+  `onTaskUpdate` went unanswered.** It is NOT that the main process stalled: the job log prints
+  completed test files continuously through the whole minute before the error (90 lines, largest gap
+  5.2s), and the largest output gap anywhere in the job is 21.9s, during startup. The error surfaces
+  only in the end-of-run unhandled-error block, so the log does not even show when the timeout fired.
+  The branch that met it touched nothing in `apps/server`, and the re-run on a prose-only change
+  passed. Starvation of the main process is therefore a weaker suspect than it looks, and the shard
+  is not the heavy one either (means over five green runs: 258s, 215s, 251s for shards 1, 2, 3). Written up in
+  [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
+  the job log on the next sighting — nobody knows the cause, and it is the cheapest evidence there
+  is.
 - **Comments across the tree still say PGlite cannot check a database permission** — the belief
   CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
   session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
