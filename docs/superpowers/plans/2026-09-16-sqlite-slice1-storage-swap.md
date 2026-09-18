@@ -121,7 +121,7 @@ This task has two halves that land as **two pull requests**: P1a proves the voca
 
 ### P1a — prove the vocabulary on one module
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test** — done 2026-09-18, in the pull request that adds the helper (the three cases, with the reset-disabled control).
 
 Create `packages/db/src/schema/columns.test.ts`. It asserts the generated DDL, not the builder's shape — a test that only checks the helper returns *something* would pass with every helper wrong.
 
@@ -165,7 +165,7 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail** — done 2026-09-18, in the pull request that adds the helper (`Cannot find module './venue-db.js'`).
 
 ```bash
 pnpm --filter @waitron/db test -- columns.test.ts
@@ -264,7 +264,7 @@ export const label = (name: string) => text(name);
 export const table = pgTable;
 ```
 
-- [ ] **Step 4: Run the test and watch it pass**
+- [x] **Step 4: Run the test and watch it pass** — done 2026-09-18, in the pull request that adds the helper (3 passed).
 
 ```bash
 pnpm --filter @waitron/db test -- columns.test.ts
@@ -2365,7 +2365,24 @@ migration folder and diffing that against the real one found no difference."
 
 **Runner:** autonomous. **Depends on:** nothing.
 
-211 files pick a database through `usePgliteDb`, `useRealPostgres` or `describeEachTarget`. Put one helper in front of them so the flip changes one function body.
+Most suites pick a database by naming the driver themselves, through `usePgliteDb`,
+`useRealPostgres` or `describeEachTarget`. Put one helper in front of them so the flip changes one
+function body.
+
+**The count in this paragraph used to read "211 files", and a count is a receipt that goes stale
+(CLAUDE.md §7). Measured 2026-09-18 on the tree at `b9bbe1d7`**, with the command, because the answer
+depends entirely on the scope you count over:
+
+```bash
+# files that call usePgliteDb, excluding the file that defines it
+grep -rlE "\busePgliteDb\(" --include="*.ts" packages apps | grep -v "src/testing/lifecycle.ts" | wc -l   # 209
+# files that call any of the three named above
+grep -rlE "\b(usePgliteDb|useRealPostgres|describeEachTarget)\(" --include="*.ts" packages apps | grep -v "src/testing/lifecycle.ts" | wc -l   # 219
+```
+
+The run-it reviewer counted 205 for the first of those, over `*.test.ts` only — the same property,
+a narrower scope. Do not treat any of these numbers as a completion target; the property is that no
+file outside `packages/db/src/testing/` names the PGlite driver.
 
 **Files:**
 
@@ -2419,11 +2436,20 @@ describe("useVenueDb", () => {
 
 The third case is the one that matters. A reset helper that silently stopped resetting would pass the first two.
 
-**Two corrections made while building it, 2026-09-18.** The migration set is exported as
-`CORE_MIGRATIONS`, not `coreMigrations`. And `tenants.country` and `tenants.tax_id` are both
-`notNull` (`packages/db/src/schema/tenants.ts:70-71`), so the two-column insert this sketch first
-carried could not have run at all — the third case would have failed for a not-null violation rather
-than for the reason it exists to check.
+**Corrections made while building it, 2026-09-18.** The migration set is exported as
+`CORE_MIGRATIONS`, not `coreMigrations`. `tenants.country` and `tenants.tax_id` are both `notNull`
+(`packages/db/src/schema/tenants.ts:70-71`), so the two-column insert this sketch first carried
+could not have run at all. And the first case's assertion is `{ n: 0 }` rather than the sketch's
+`{ n: expect.any(Number) }`, matching `lifecycle.test.ts`'s own convention — `expect.any(Number)`
+would accept a database that had not been emptied.
+
+**A correction written here was itself false, and the run-it reviewer falsified it by running it**
+— which is CLAUDE.md §1's "the correction is where the false claim is born", so it is recorded
+rather than quietly fixed. This paragraph first said the two-column insert would make the THIRD case
+fail for a not-null violation. It does not. Restoring that insert and running the suite fails the
+SECOND case with SQLSTATE `23502`, naming the missing column; the first and third cases both pass,
+because no row was ever written for the third to find. So the sketch as written would have reported
+a reset that never happened as a pass.
 
 **The control was run** (CLAUDE.md §4, prove by deletion): with the helper changed to
 `usePgliteDb({ ...options, resetPerTest: false })`, exactly the third case fails
@@ -2438,7 +2464,7 @@ pnpm --filter @waitron/db test -- venue-db.test.ts
 
 Expected: FAIL — `Cannot find module './venue-db.js'`.
 
-- [ ] **Step 3: Write the helper**
+- [x] **Step 3: Write the helper** — done 2026-09-18, in the pull request that adds the helper (`packages/db/src/testing/venue-db.ts`).
 
 Create `packages/db/src/testing/venue-db.ts`:
 
@@ -2469,7 +2495,7 @@ Expected: PASS, all three.
 
 - [ ] **Step 5: Convert package by package**
 
-One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — those name a real container deliberately, and F1 decides each one's fate as part of the 66-test disposition (task F1 step 24).
+One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — and note, corrected 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are NOT alike. `useRealPostgres` names a real container deliberately. `describeEachTarget` registers BOTH targets (`const allTargets: Target[] = [pgliteTarget, postgresTarget()]`) and skips the postgres half when Docker is absent, so its PGlite half is exactly the kind of thing this helper routes. Both are still left alone here, but for different reasons, and F1 decides each one's fate as part of the 66-test disposition (task F1 step 24).
 
 - [ ] **Step 6: Verify each package**
 
@@ -2521,10 +2547,10 @@ import { sql } from "drizzle-orm";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { createChangePublisher } from "./change-log.js";
-import { coreMigrations } from "./migrations.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 
 describe("the change log", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("publishes a change only after the transaction commits", async () => {
     const publisher = createChangePublisher();
@@ -2725,10 +2751,10 @@ import { sql } from "drizzle-orm";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { claimRows } from "./job-claim.js";
-import { coreMigrations } from "./migrations.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 
 describe("claimRows", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   const seed = async () => {
     await suite.db.execute(sql`create table if not exists probe_jobs (
@@ -3478,10 +3504,10 @@ import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "./testing/venue-db.js";
 import { constraintTarget, isUniqueViolation } from "./constraint-target.js";
-import { coreMigrations } from "./migrations.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 
 describe("constraintTarget", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   const violate = async (statements: string[]): Promise<unknown> => {
     try {
@@ -4065,6 +4091,16 @@ git commit -s -m "Keep ledger tables append-only, and archive with the engine's 
 - [ ] **Step 24: Switch the test helper's body**
 
 `packages/db/src/testing/venue-db.ts` opens a real temporary file, not an in-memory database, so write-ahead behaviour, file locking and the two-file split are the real ones. Its three tests from P2 must pass unmodified.
+
+**One thing this step inherits, raised by P2's convention reviewer and deliberately left to here.**
+The accessor's "read before the hook ran" error is thrown by `usePgliteDb` and says
+`usePgliteDb: database not started` (`packages/db/src/testing/lifecycle.ts`, and every sibling
+accessor names itself the same way). A suite converted by P2 never calls that function, so the name
+in the message is already not one its file contains — and after this step it names a driver that no
+longer exists, which is the opposite of what that loud throw is for. P2 did not fix it because the
+only fixes are changing `usePgliteDb`'s signature — a helper hundreds of files call — or wrapping
+the handle, and P2's whole claim is that the handle is the same object. Fix it here, where the body
+changes anyway. `lifecycle.test.ts` matches only `/not started/i`, so its cases stay green.
 
 - [ ] **Step 25: Work through the 66 PostgreSQL-only tests, one at a time**
 

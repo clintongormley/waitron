@@ -4,10 +4,10 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "./venue-db.js";
 
 /**
- * `useVenueDb` is the one way a suite asks for a venue database, so that the storage switch
- * replaces one function body rather than every call site. These cases are about the CONTRACT a
- * caller relies on — a migrated database, and data emptied between tests — not about which engine
- * is behind it today.
+ * These cases are about the CONTRACT a caller relies on — a migrated database, and data emptied
+ * between tests — not about which engine is behind it today. They do not distinguish the helper
+ * from a direct `usePgliteDb` call, and are not meant to: the helper forwards, and what is being
+ * pinned is the behaviour a converted suite keeps.
  */
 describe("useVenueDb", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
