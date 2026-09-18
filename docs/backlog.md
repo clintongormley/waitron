@@ -1398,6 +1398,17 @@ Two halves, one branch each (owner decision 2026-09-12).
   working. Prices and receipts:
   [2026-09-18-online-payment-providers-bizum.md](research/2026-09-18-online-payment-providers-bizum.md).
   The ordering surface itself is parked under *online ordering (SP15)* and the customer-facing menu.
+- **SumUp's card-present price is a plan choice, not a rate** (owner supplied the table, 2026-09-18).
+  Pay-as-you-go is 1,49 % on every card including Amex, premium and international; **Tarifa Plana at
+  €25/month is 0 % up to €2 500/month of Spanish debit and credit, then 0,79 %**, leaving the other
+  classes at 1,49 %; Pagos Plus at €19/month is 0,75 % on Spanish cards. Tarifa Plana overtakes
+  pay-as-you-go at roughly €1 680/month of in-person card takings and beats Pagos Plus at any volume a
+  single venue reaches, so it is the plan to assume — and SumUp offers negotiated rates above
+  €10 000/month, which is a phone call the deli should make rather than a rate to look up. This is
+  cheaper than Stripe Terminal's 1,4 % + 0,10 € on a Spanish card and half its 2,9 % + 0,10 € on a
+  tourist card, so it **confirms SumUp for the card-present seat**. SumUp's ONLINE rate is 1,95 % on
+  every plan — the plans change nothing outside the room, which is why SumUp stays a weak candidate
+  for the guest's own phone.
 
 ### A7. Users, roles and the dashboard shell
 

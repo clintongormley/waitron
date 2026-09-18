@@ -6,6 +6,11 @@ made and no provider was asked for a quote, so this note prices the advertised p
 the deli would actually be offered. Two of the cheapest figures rest on an inference that is flagged
 where it occurs.
 
+**A provider's price is a table, not a number** — plan tier crossed with channel, crossed again with
+card class. The first draft of this note learned that the hard way: it priced SumUp from the product
+page for online payments, which quotes the default plan only, and so missed both the in-person rates
+and the two paid plans. Every provider here should be assumed to have tiers nobody has read yet.
+
 Written because the owner asked which service should take a payment from a diner's own phone, and the
 first answer compared only the two providers already built into the tree — which is a question about
 the repository, not about the market.
@@ -108,6 +113,48 @@ therefore estimates, not quotes. And **SumUp's flat rate is its one real advanta
 cheapest option by a wide margin for a tourist's card, because it does not surcharge by card origin
 the way every percentage-plus-fixed competitor does. How much that is worth depends on the deli's
 actual card mix, which nobody has measured.
+
+**SumUp's 1,95 % is its ONLINE rate, and it is the same on every plan** — the paid plans below change
+only what happens in the room. `sumup.com/es-es/precios/` states it once per plan: _"1,95 % for online
+payments (e.g. Payment Links, Bookings, or other digital products)"_.
+
+## Cards, in person — and SumUp's plans
+
+Added 2026-09-18 after the owner supplied SumUp's own pricing table. This section was missing from the
+first draft, which priced SumUp from its online-payments product page and so recorded only one cell of
+a six-cell table. Source for everything here: `sumup.com/es-es/precios/`.
+
+SumUp sells three plans in Spain, plus a negotiated one:
+
+| Plan | Monthly | In person, Spanish debit and credit | In person, premium / international / Amex | Online |
+| --- | --- | --- | --- | --- |
+| Pago por uso | €0 | 1,49 % | 1,49 % | 1,95 % |
+| Pagos Plus | €19 | **0,75 %** | 1,49 % | 1,95 % |
+| Tarifa Plana | €25 | **0 % up to €2 500/month, then 0,79 %** | 1,49 % | 1,95 % |
+| A medida | negotiated | negotiated — offered from €10 000/month | negotiated | negotiated |
+
+SumUp's own guidance on when a paid plan starts paying: Pagos Plus _"si procesas pagos por valor de
+3200 € o más al mes"_, and custom pricing _"si tu negocio procesa 10 000 € o más al mes"_.
+
+**My arithmetic, not SumUp's, on which plan a deli should be on.** Tarifa Plana overtakes
+pay-as-you-go at about €1 680 a month of in-person Spanish card takings (€25 ÷ 1,49 %). It also beats
+Pagos Plus at every volume a single restaurant will see — the two cross around €34 000 a month, far
+past the €10 000 where SumUp starts offering negotiated rates. So the realistic choice is
+pay-as-you-go for a very quiet venue and **Tarifa Plana for anything busier**, with a phone call
+replacing both once card takings pass €10 000 a month.
+
+Against Stripe Terminal, whose published in-person rates are _"1,4 % + 0,10 €"_ for EEA cards and
+_"2,9 % + 0,10 €"_ outside it, on a €50 bill:
+
+| | Spanish card | Tourist card |
+| --- | --- | --- |
+| SumUp, Tarifa Plana | €0 within the monthly allowance, then €0.40 | €0.75 |
+| SumUp, pay-as-you-go | €0.75 | €0.75 |
+| Stripe Terminal | €0.80 | €1.55 |
+
+**This strengthens SumUp's claim on the card-present seat**, which is where the owner had already put
+it. SumUp is cheaper than Stripe Terminal on a Spanish card even before the monthly plan, and half the
+price on a tourist card, because it does not surcharge by card origin at all.
 
 ## Not priced
 
