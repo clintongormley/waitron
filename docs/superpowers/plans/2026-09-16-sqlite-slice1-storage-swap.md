@@ -569,6 +569,13 @@ deleted `print-jobs.ts`'s block, moved `print_jobs.payload` onto the shared `bin
 changed its callers. `packages/credentials` and `packages/media` still declare theirs, so the
 paragraph above holds for those two and no longer for `packages/db`.
 
+_Corrected again 2026-09-18: a second of the three has gone._ P1b's THIRTEENTH pull request deleted
+`tenant-credentials.ts`'s block and moved that table's `ciphertext`, `iv` and `auth_tag` onto the
+shared `binary` helper. Only `packages/media`'s block is left, and it is the one that already
+declares the shape the vocabulary took — so the "callers on the other side" the paragraph above is
+about have all now been changed. What changing them cost in `packages/credentials` is in that
+package's report under step 3.
+
 **Two `text` columns that must never become `label()`.**
 `packages/fiscal-verifactu/src/schema/registros.ts:88-89` stores `cuota_total` and `importe_total` as
 `text` deliberately, and the comment above them says why: `packages/verifactu/src/huella.ts` hashes
@@ -694,9 +701,11 @@ returns `42n`. Both pairs emit identical DDL, so the step 4 probe is blind to pi
 
 **The binary decision, and what it will cost the conversion pull requests.** The three hand-rolled
 `bytea` blocks disagree with each other, and step 1 converted none of them — all three were still in
-the tree, checked on 2026-09-17. _Two of the three are left: P1b's third pull request deleted
-`print-jobs.ts`'s block and moved that column onto the shared helper, so the first file named next
-no longer applies._ The `bytea` custom type in `packages/db/src/schema/print-jobs.ts`
+the tree, checked on 2026-09-17. _One of the three is left, `packages/media`'s. P1b's
+third pull request deleted `print-jobs.ts`'s block and moved that column onto the shared helper,
+and its THIRTEENTH deleted `tenant-credentials.ts`'s, so the first two files named next no longer
+apply._ The `bytea` custom
+type in `packages/db/src/schema/print-jobs.ts`
 and
 `packages/credentials/src/schema/tenant-credentials.ts:15` hand callers a node `Buffer`;
 `packages/media/src/schema/images.ts:16` hands them a `Uint8Array`. The vocabulary took the
@@ -744,7 +753,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/fiscal-verifactu` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18; `packages/venue-service` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/fiscal-verifactu` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18; `packages/venue-service` finished 2026-09-18; `packages/credentials` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -2016,6 +2025,89 @@ one file too; it is the plurality that is new._ Five copies of one seven-line pa
 in `columns.ts` instead — so the convention a converter should read off the tree is that the reason
 is recorded SOMEWHERE a reader of the column will reach, not that it is repeated per column.
 
+**And the same report for `packages/credentials`.** One table file, one table, six columns, no
+schema change, and the second conversion in the rollout to change what a CALLER is handed rather
+than only what the schema says — `print_jobs.payload` was the first. **The receipt for that second
+part, stated as what was actually run:** `git show --name-only` over the nine conversion pull
+requests between the two (`36c7f703 7ec41496 23ce395b 4eaaa94f 8a08446c 837c443e be866e7c 3ffc7fa4
+26619964`), keeping `.ts` paths and dropping those under any `src/schema/`, leaves exactly ONE file
+in the whole set: `bench/sqlite-failover/src/model.ts` in `23ce395b`, whose change is a line-number
+pointer inside a SQL comment. _An earlier draft of this receipt said the filtered list was empty for
+every one of the nine; it is not, and the draft also said "their OWN `src/schema/`" where seven of
+the nine edit `packages/db/src/schema/columns.ts` and one edits two other packages' table files. The
+conclusion survived the re-run; the sentence describing it did not._
+
+Its builders at the base commit were `text`, `integer`, `timestamp` in string mode and a hand-rolled
+`bytea` custom type used three times; every one has a vocabulary equivalent, so nothing is left
+coming from `drizzle-orm/pg-core` but `check` and `primaryKey`. There is no `pgEnum`, no `.array()`
+column and no value-set `in (...)` constraint anywhere in the package's schema —
+`git grep -nE '\b(date|time|smallint|bigint|numeric|jsonb|boolean|uuid|pgEnum)\(' 7267f832 -- packages/credentials/src/schema`
+and the same grep for `\.array\(\)|\bin \(` both exit 1 — so the enumText/enumCheck question this
+rollout keeps meeting does not arise here at all. The table's four checks are a range
+(`key_version >= 1`), two byte-length checks and a non-empty check, none of them a value set.
+
+**What the conversion cost outside the table file: one function's parameter type and one new
+interface, both inside this package.** The old block declared
+`customType<{ data: Buffer; driverData: Buffer }>`, so `ciphertext`, `iv` and `auth_tag` were typed
+`Buffer` and `store.ts` handed them straight to `open` in `cipher.ts`, whose `Sealed` parameter said
+`Buffer` too. The shared `binary` helper hands a reader a `Uint8Array`. `pnpm -r typecheck` is what
+found the blast radius, as it did for `print_jobs.payload`: it exited 2 naming `src/store.ts(63,5)`,
+`(64,5)` and `(65,5)` — the three properties of that one `open` call — and nothing else in the
+workspace, then exited 0 once `open` took the wider type. `cipher.ts` now declares two interfaces
+where it declared one: `Sealed` stays `Buffer`-typed and `open` takes a new `SealedRow` typed
+`Uint8Array`. **That pair is measured, not preferred.** Widening the single `Sealed` instead gave
+`tsc --noEmit` two `TS2339`s — `Property 'equals' does not exist on type 'Uint8Array'` at
+`cipher.test.ts(21,17)` and `(22,25)`, where the test calls `Buffer`'s own `.equals()` on a `seal()`
+result — so one interface costs two test edits and this rollout does not edit tests to pass. A
+`Sealed` satisfies `SealedRow` and not the reverse, so every existing caller compiles unchanged.
+
+**Where the failing test had to go, and why the obvious place was the wrong one.** This package has
+FIVE test files that touch a database and they do not share a target: `store.test.ts`,
+`rotate.test.ts`, `cli.test.ts` and `migrations.test.ts` are PGlite, and `credentials.test.ts` is
+real PostgreSQL through a non-superuser LOGIN (`useTemplateDb({ template: "core_credentials" })`;
+`packages/credentials/vitest.config.ts` names the split). The runtime assertion
+`print_jobs.payload` used — read a row back and assert `Buffer.isBuffer(...)` is false — was tried
+first in the PGlite suite, where it PASSED against the UNCONVERTED tree (1 passed, 130 skipped).
+That is `CLAUDE.md` §1's measurement taken where both answers look alike: PGlite's own bytea parser
+returns a `Uint8Array` and drizzle passes it straight through when a custom type declares no
+`fromDriver`, which is what the old block was, so the reading was about the DRIVER and not the
+column. _An earlier draft of this report concluded from that single reading that no runtime
+assertion in this package could tell the two declarations apart, and said so three times. Both
+the Codex run-it seat and the convention seat falsified it independently, on the same day and from
+different evidence._ Moved to `credentials.test.ts`, the same assertion goes
+red for exactly the right reason: `expected true to be false`, with the other four cases in that
+file still green — the control that says the round trip itself works either way. The compile-time
+case in `index.test.ts` stays as well, because the two fail for different reasons: it goes red if a
+column stops DECLARING `Uint8Array`, and the real-PostgreSQL one goes red if the value a read hands
+back stops BEING one. That is measured, not argued: deleting `fromDriver` from the `bytea` custom
+type behind `binary` left the compile-time case green (tsc clean) and turned the real-PostgreSQL one
+red with `expected true to be false`, its four neighbours in that file still passing. What
+`packages/db/src/schema/columns.test.ts` records is the other half — that deleting BOTH mapping
+functions is invisible under PGlite.
+
+Verified three ways, each with a control. The step 4 probe ran silent at exit 0 with
+`No schema changes, nothing to migrate` and a silent `diff -r` before any edit and again after the
+conversion, and a negative control between them — `key_version` `integer` → `smallint` — made the
+same command write `0002_probe.sql` and a journal entry. A `getTableConfig` comparison against the
+file at the base commit reported 6 columns in 1 table and exactly THREE mismatches: `ciphertext`,
+`iv` and `auth_tag`, each differing in one field, the read mapping, and in nothing else — same
+`sqlType` (`bytea`), same `columnType` (`PgCustomColumn`), same nullability, same defaults. That
+comparison's own control was `updated_at` `tsString` → `ts`, which took it to four mismatches
+(`PgTimestampString` → `PgTimestamp`, a read of `[object String]` → `[object Date]`) while the
+drizzle-kit probe stayed silent at exit 0 on the same tree — the mode trap, caught by the instrument
+that can see it and invisible to the one that cannot. **One thing to know before reusing that
+comparison on a binary column:** its object-tag half cannot tell a `Buffer` from a `Uint8Array`,
+because `Object.prototype.toString.call(Buffer.from([1,2,3]))` is `[object Uint8Array]` as well. It
+is the `String(...)` half that discriminates — a `Buffer` stringifies as its utf-8 decoding
+(`\u0001\u0002\u0003`) and a `Uint8Array` as a comma-joined list (`1,2,3`). Behaviour was carried
+by `pnpm -r typecheck` (exit 0 for the whole workspace) and
+`pnpm --filter @waitron/credentials test:coverage` (exit 0, 11 files, 132 tests, 100% of statements,
+branches, functions and lines), with no existing test edited.
+
+The diff is small enough to read whole rather than classify by script: in the table file every
+changed line is the import block, the deleted `bytea` block, the table-opening line (`pgTable(`
+becomes `table(`), or one of the six column declarations.
+
 - [ ] **Step 4: Prove nothing changed**
 
 The generate-into-a-copy probe from P1a step 6 — **not `drizzle-kit check`, which cannot see the
@@ -2125,7 +2217,9 @@ Two names in that import block are NOT column builders and are left out for thei
 `pgTable` is the table builder, and it is already what the line above the regex uses to pick which
 files to look at. `customType` is a builder FACTORY, and it **deserves a decision rather than a
 silent omission**: the three hand-rolled `bytea` blocks that step 1's `binary` helper exists to
-replace (two of them left, since `print-jobs.ts`'s went) are each built with `customType`, so a table file calling `customType(` is doing the very
+replace (ONE of them left, `packages/media`'s, since `print-jobs.ts`'s and
+`tenant-credentials.ts`'s went) are each built with `customType`, so a table file calling
+`customType(` is doing the very
 thing this guard exists to stop, and leaving it out means the guard cannot see the next one. Decide
 when writing the guard; if it is left out, say so in the comment beside it.
 
@@ -3737,8 +3831,10 @@ can write it:
   returns on a read. The PostgreSQL helper hands callers a `Uint8Array` and binds a node `Buffer`
   (the private `bytea` custom type in `packages/db/src/schema/columns.ts`), and by then there will
   be real call sites depending
-  on that — P1b step 3 converts three hand-rolled `bytea` columns onto it, one of which
-  (`print_jobs.payload`) is converted already. **Do not invent this
+  on that — P1b step 3 converts the tree's hand-rolled `bytea` columns onto it, FIVE of them across
+  three files, and all but `packages/media`'s `images.bytes` are converted already
+  (`print_jobs.payload`, and `tenant_credentials`'s `ciphertext`, `iv` and `auth_tag`).
+  **Do not invent this
   answer while writing the other bodies: settle it against the driver, with a round trip, before F1
   starts.**
 

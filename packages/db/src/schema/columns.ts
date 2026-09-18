@@ -295,12 +295,9 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
  * `BUILDER: Uint8Array isBuffer=false | RAW: Buffer isBuffer=true`, with both reads carrying the
  * same bytes, so the difference is the mapping and not the data.
  *
- * The hand-rolled `bytea` blocks still in the tree are not the same block.
+ * One hand-rolled `bytea` block is left in the tree, and it declares the same shape as this one:
  * `packages/media/src/schema/images.ts` declares this same `Uint8Array`-facing shape, body for
  * body, so converting it changes nothing a caller sees.
- * `packages/credentials/src/schema/tenant-credentials.ts` declares `Buffer` in both directions, so
- * converting that one changes what its call sites receive — the SQL type is the same either way,
- * so nothing in the schema will report it.
  *
  * The custom type itself stays private: drizzle's overloads on it also accept no name at all and a
  * config object, so exporting it directly would make `binary()` compile where every sibling helper

@@ -4,11 +4,31 @@ const ALGORITHM = "aes-256-gcm";
 /** GCM's standard nonce length, and the value `tenant_credentials_iv_len_ck` enforces. */
 const IV_BYTES = 12;
 
-/** What one write produces and one read consumes. Three columns, no encoding in between. */
+/** What one write produces. Three columns, no encoding in between; node's crypto hands `seal` its
+ * output as `Buffer`s, so that is what this says. */
 export interface Sealed {
   ciphertext: Buffer;
   iv: Buffer;
   authTag: Buffer;
+}
+
+/** What one read consumes — the same three columns as a row hands them back.
+ *
+ * Wider than `Sealed` rather than the same type, because the three columns are `binary()` columns
+ * and that helper's `fromDriver` returns a plain `Uint8Array` (`packages/db/src/schema/columns.ts`).
+ * A `Sealed` satisfies this shape and not the reverse, so a write's output still flows into `open`.
+ *
+ * Two interfaces rather than one widened `Sealed`, and that is a measurement rather than taste:
+ * `seal` returns what node's crypto hands it, which is `Buffer`s, and `cipher.test.ts:21-22` calls
+ * `Buffer`'s own `.equals()` on the result. Declaring `Sealed` with `Uint8Array` fields instead
+ * gave `tsc --noEmit` two `TS2339`s on exactly those two lines, measured 2026-09-18.
+ *
+ * That both types survive node's crypto is carried by `credentials.test.ts`'s real-PostgreSQL round
+ * trip, which reads a row through this column and decrypts it — a `Uint8Array` all the way in. */
+export interface SealedRow {
+  ciphertext: Uint8Array;
+  iv: Uint8Array;
+  authTag: Uint8Array;
 }
 
 /**
@@ -37,16 +57,16 @@ export function seal(key: Buffer, aad: Buffer, plaintext: string): Sealed {
  * into `credentials.decrypt_failed`, because only the store knows which row it was.
  *
  * `createDecipheriv`/`setAAD`/`setAuthTag` are deliberately INSIDE the try, not just `update`/
- * `final`: a `Sealed` with a malformed `iv` (e.g. zero-length) or `authTag` (any length but 16)
+ * `final`: a `SealedRow` with a malformed `iv` (e.g. zero-length) or `authTag` (any length but 16)
  * throws synchronously from Node's crypto binding — `ERR_CRYPTO_INVALID_IV` /
  * `ERR_CRYPTO_INVALID_AUTH_TAG` / `ERR_CRYPTO_INVALID_KEYLEN` — a DIFFERENT failure from GCM's own
  * authentication check at `final()`, but one this file has no defence against otherwise. Today the
  * column CHECKs (12-byte iv, 16-byte tag) and `loadKeyRing`'s own validation (32-byte key) mean
  * this package's own callers cannot reach it — but this file exists specifically to defend a row
- * against someone with database write access, and a `Sealed` built from a tampered row must not
+ * against someone with database write access, and a `SealedRow` built from a tampered row must not
  * crash the reader with a raw, untranslatable Node error string.
  */
-export function open(key: Buffer, aad: Buffer, sealed: Sealed): string | null {
+export function open(key: Buffer, aad: Buffer, sealed: SealedRow): string | null {
   try {
     const decipher = createDecipheriv(ALGORITHM, key, sealed.iv);
     decipher.setAAD(aad);

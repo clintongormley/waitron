@@ -57,3 +57,37 @@ describe("tenant_credentials constraint declarations (forces the lazy extraConfi
     expect(checkNames).toContain("tenant_credentials_purpose_ck");
   });
 });
+
+/**
+ * A COMPILE-TIME case, beside the RUNTIME one in `credentials.test.ts`. They fail for different
+ * reasons and neither replaces the other: this one goes red if a column stops DECLARING
+ * `Uint8Array`, and that one goes red if the value a real-PostgreSQL read hands back stops BEING
+ * one. Measured 2026-09-18 by deleting `fromDriver` from the `bytea` custom type behind `binary`
+ * in `packages/db/src/schema/columns.ts`: this case stayed green (tsc clean) and that one failed
+ * with `expected true to be false`, its four neighbours still passing.
+ *
+ * It belongs here rather than in a PGlite suite because PGlite's own bytea parser returns a
+ * `Uint8Array` whatever the column declares, so this package's four PGlite suites cannot tell the
+ * two declarations apart at runtime (measured in `packages/db/src/schema/columns.test.ts` with both
+ * mapping functions deleted). `pnpm --filter @waitron/credentials typecheck` is what runs it.
+ */
+describe("what a read hands back for the three sealed columns", () => {
+  it("types them as Uint8Array, not as a node Buffer", () => {
+    type CredentialRow = typeof api.tenantCredentials.$inferSelect;
+    // A `Buffer` is assignable to a `Uint8Array` and not the other way round, so assigning a PLAIN
+    // `Uint8Array` is the discriminating direction: this stops compiling the moment one of the
+    // three columns goes back to declaring `Buffer`.
+    const bytes = new Uint8Array([1, 2, 3]);
+    const sealed: Pick<CredentialRow, "ciphertext" | "iv" | "authTag"> = {
+      ciphertext: bytes,
+      iv: bytes,
+      authTag: bytes,
+    };
+    // The other direction, which the assignment above cannot give on its own: a column typed `any`
+    // would accept a plain `Uint8Array` too. So the reverse must NOT compile, and `@ts-expect-error`
+    // turns "it compiled after all" into a typecheck failure.
+    // @ts-expect-error a sealed column is a Uint8Array, and a node Buffer is the narrower type
+    const asBuffer: Buffer = sealed.ciphertext;
+    expect(asBuffer).toBe(bytes);
+  });
+});

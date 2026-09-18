@@ -2549,8 +2549,44 @@ two of them, one NOT NULL and one nullable. The nullable one also put the compos
 `columns.ts` through drizzle-kit's own generator for the first time, and the emitted migration
 carries the values inline as the note says it should.
 
-What is left of P1b is `credentials` and `media`, one pull
-request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
+**`packages/credentials` is the thirteenth pull request** — one table file, one table, six columns,
+no schema change, and the second conversion in the rollout that changes what a CALLER is handed
+rather than only what the schema says. `print_jobs.payload` was the first; over the nine
+conversions in between, `git show --name-only` lists exactly one `.ts` file outside a `src/schema/`
+path, a line-number pointer inside a SQL comment. This table's `ciphertext`, `iv` and `auth_tag`
+were declared through a hand-rolled `bytea` block that typed them as node `Buffer`s in both
+directions, and the shared `binary` helper hands a reader a `Uint8Array`. Nothing in the SQL reports
+that — `bytea` is the stored type either way. The typechecker did: `pnpm -r typecheck` named three
+lines of one `open(...)` call in `store.ts` and nothing else in the workspace, so the whole cost
+outside the table file was widening that one function's parameter and adding the wider interface it
+takes. `cipher.ts` now carries two interfaces instead of one — `Sealed` stays `Buffer`-typed, and
+`open` takes a `SealedRow`. One widened interface instead of two was tried and costs two test edits:
+`tsc` refuses `cipher.test.ts`'s two `.equals()` calls, which are `Buffer`'s method on a `seal()`
+result.
+
+What it contributes beyond another package converted is a measurement about the TEST, not the code
+— and it is a measurement that corrected itself. The obvious failing test was the one
+`print_jobs.payload` used: read a row back and assert `Buffer.isBuffer(...)` is false. Written in
+this package's PGlite suite against the unconverted tree, it PASSED, because PGlite's own bytea
+parser returns a `Uint8Array` already and drizzle hands that straight through when a custom type
+declares no `fromDriver`. The first draft of this branch read that as "no runtime assertion in this
+package can tell the two declarations apart" and built the whole test around it. That is a
+measurement taken where both answers look alike, and two of the three review seats falsified it:
+this package ALSO has a real-PostgreSQL suite, `credentials.test.ts`, and moving the same assertion
+there turns it red for the right reason. Both tests are kept, because they fail for different
+reasons, which was measured by deleting `fromDriver` from the shared helper: the compile-time one
+stayed green and the real-PostgreSQL one went red. **The lesson for the next converter: before
+concluding that a package cannot observe something at runtime, read its vitest config for the
+target split.**
+
+It also carries a warning for the parity comparison this rollout checks conversions with: that
+instrument's object-tag half cannot tell a `Buffer` from a `Uint8Array` either, because
+`Object.prototype.toString.call(Buffer.from([1, 2, 3]))` is `[object Uint8Array]` too. Only its
+`String(...)` half discriminates, a `Buffer` stringifying as its utf-8 decoding and a `Uint8Array`
+as a comma-joined list.
+
+What is left of P1b is `media`, one pull request, and then the guard. `purchasing` and
+`reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their
 tables live in `packages/db`.

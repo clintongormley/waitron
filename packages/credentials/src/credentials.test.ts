@@ -1,8 +1,9 @@
 // Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { loadKeyRing } from "./keyring.js";
+import { tenantCredentials } from "./schema/tenant-credentials.js";
 import { credentialProvisioned, getCredential, putCredential } from "./store.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -37,6 +38,30 @@ describe("the vault through a non-superuser LOGIN", () => {
         getCredential(tx, RING, { purpose: "payments.stripe" }),
       );
       expect(actual).toEqual(STRIPE);
+    } finally {
+      await probe.close();
+    }
+  });
+
+  it("hands the three sealed columns back as plain Uint8Arrays, not node Buffers", async () => {
+    // The one assertion this package can only make HERE. node-postgres returns a `bytea` as a node
+    // `Buffer`, and the shared `binary` column's `fromDriver` is what converts it; the PGlite suites
+    // cannot see that conversion at all, because PGlite's own bytea parser returns a `Uint8Array`
+    // whatever the column declares (`packages/db/src/schema/columns.test.ts` measured it with both
+    // mapping functions deleted). `Buffer.isBuffer` is the DISCRIMINATING check — a `Buffer` IS a
+    // `Uint8Array`, so `instanceof Uint8Array` would hold either way. Same shape as
+    // `packages/db/src/schema/printing.test.ts`'s assertion on `print_jobs.payload`.
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      await withTransaction(probe, (tx) =>
+        putCredential(tx, RING, { purpose: "payments.stripe", value: STRIPE }),
+      );
+      const [row] = await withTransaction(probe, (tx) =>
+        tx.select().from(tenantCredentials).where(eq(tenantCredentials.purpose, "payments.stripe")),
+      );
+      expect(Buffer.isBuffer(row!.ciphertext)).toBe(false);
+      expect(Buffer.isBuffer(row!.iv)).toBe(false);
+      expect(Buffer.isBuffer(row!.authTag)).toBe(false);
     } finally {
       await probe.close();
     }

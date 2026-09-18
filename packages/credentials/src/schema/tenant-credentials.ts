@@ -1,20 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  customType,
-  integer,
-  primaryKey,
-  pgTable,
-  text,
-  timestamp,
-} from "drizzle-orm/pg-core";
-
-/** `bytea` as a Node `Buffer` in both directions. drizzle-orm 0.45 ships no first-class bytea type,
- * and the alternative — text columns holding base64 — would put a second encoding between the
- * cipher and the row for no benefit. */
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType: () => "bytea",
-});
+import { check, primaryKey } from "drizzle-orm/pg-core";
+import { binary, count, label, table, tsString } from "@waitron/db";
 
 /**
  * The credentials for one purpose, sealed. The payload is a JSON object of string fields
@@ -30,25 +16,23 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
  * `fiscal.aeat` the row's `octet_length(ciphertext)` reveals the certificate blob's approximate
  * size to anyone with SELECT. Nothing here reveals field names or values.
  */
-export const tenantCredentials = pgTable(
+export const tenantCredentials = table(
   "tenant_credentials",
   {
     /** A stable identifier, not a description: renaming a purpose orphans every row under the old
      * name. `PURPOSES` in ../purposes.ts is the authority on which values are legal. */
-    purpose: text("purpose").notNull(),
+    purpose: label("purpose").notNull(),
     /** AES-256-GCM over the UTF-8 JSON payload, with the AAD bound to `purpose`. */
-    ciphertext: bytea("ciphertext").notNull(),
+    ciphertext: binary("ciphertext").notNull(),
     /** 12 bytes, fresh per write. Never reused: GCM's security collapses if an (key, iv) pair
      * encrypts two different plaintexts. */
-    iv: bytea("iv").notNull(),
-    authTag: bytea("auth_tag").notNull(),
+    iv: binary("iv").notNull(),
+    authTag: binary("auth_tag").notNull(),
     /** Which key ring member sealed THIS row. Reads select the key by this value rather than
      * assuming the current one, which is what lets a half-finished `rotate` keep serving both
      * halves instead of becoming an outage. */
-    keyVersion: integer("key_version").notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    keyVersion: count("key_version").notNull(),
+    updatedAt: tsString("updated_at").notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.purpose], name: "tenant_credentials_pk" }),
