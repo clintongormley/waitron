@@ -45,8 +45,10 @@ Every task's requirements implicitly include this section.
   `inmutabilidad`), never by hand-editing snapshots or `_journal.json`.
 - **Error codes name the domain concept, never the package** (`extras.*`, `options.*`), are registered
   in `packages/catalogue/src/errors.ts` with English + Spanish alert wording where the code is an
-  incident (`scripts/alert-codes.test.ts`), and are **never renamed once shipped**. Retired `modifier.*`
-  codes stay registered, left unthrown.
+  incident (`scripts/alert-codes.test.ts`), and are **never renamed once shipped**. Retired codes stay
+  registered, left unthrown — this covers both `modifier.*` and the old `options.*` codes
+  (`options.group_invalid`, `options.item_invalid`, `options.selection_invalid`) that described the
+  previous option-group model.
 - **The gate per task:** run the focused behavioural tests for what you changed while implementing,
   then `/finish-branch` at the end of the branch runs the local checks once and watches CI. Do not add
   a whole-workspace local run just to finish.
@@ -82,7 +84,7 @@ Every task's requirements implicitly include this section.
 **Modified:**
 
 - `packages/db/src/schema/catalogue.ts` — add `sold_alone` to `products`; remove the `option_groups`
-  family in Task 12.
+  family in Task 13.
 - `packages/db/src/schema/orders.ts`, `sales.ts` — replace `modifier_snapshots` with the options
   snapshot column; the extras child line gains nothing new on filed `sale_lines` (frozen name already
   present), and on `working_order_lines` its `option_group_item_id` becomes `product_id`; remove
@@ -97,7 +99,7 @@ Every task's requirements implicitly include this section.
   views.
 - `docs/developers/modifiers.md` — rewritten; `docs/backlog.md` — reconciled.
 
-**Removed (Task 12):** `packages/catalogue/src/{modifiers,modifier-contract,modifier-projection,modifier-lock,modifier-limits}.ts`
+**Removed (Task 13):** `packages/catalogue/src/{modifiers,modifier-contract,modifier-projection,modifier-lock,modifier-limits}.ts`
 (the parts not carried into the new contracts), `apps/dashboard/src/widgets/choice-form.ts`,
 `apps/dashboard/src/widgets/option-group-manager.ts`, `packages/shared/src/modifier-snapshots.ts`.
 
@@ -109,8 +111,10 @@ Every task's requirements implicitly include this section.
 
 - Modify: `packages/db/src/schema/catalogue.ts` (the `products` table)
 - Modify: `packages/catalogue/src/product-types.ts` (`Product`, `ProductEditorInput`, `ProductEditorValue`)
-- Modify: `packages/catalogue/src/operations.ts` (product read), `product-editor.ts` (editor read/write),
-  `product-editor-input.ts` (body screen)
+- Modify: `packages/catalogue/src/operations.ts` — the product READ **and** the `createProduct`/`updateProduct`
+  WRITES both live here; `product-editor.ts` (editor read/write); `product-editor-input.ts` (editor body screen)
+- Modify: `apps/server/src/catalogue-api.ts` — the PRIMARY product create/update body screen (see the
+  blocker note below); `apps/server/src/catalogue-api.test.ts`
 - Test: `packages/catalogue/src/product-editor-input.test.ts`, `operations.test.ts`
 
 **Interfaces:**
@@ -118,23 +122,38 @@ Every task's requirements implicitly include this section.
 - Produces: `products.sold_alone` (boolean, NOT NULL DEFAULT true); `Product.soldAlone: boolean`;
   `ProductEditorInput.soldAlone: boolean`.
 
-- [ ] **Step 1: Write the failing test** — in `product-editor-input.test.ts`, assert
-      `parseProductEditorInput` accepts `soldAlone: false` and returns it, defaults it to `true` when
-      absent, and rejects a non-boolean with `management.request_invalid` naming field `soldAlone`.
+> **Two write paths, two error codes (plan-review blockers, 2026-09-18).** Verified against the code:
+> (1) `parseProductEditorInput` (`product-editor-input.ts`) rejects via its LOCAL `invalid()` →
+> `AppError("product.invalid", { field })`, NOT `management.request_invalid` — every existing test in
+> `product-editor-input.test.ts` asserts `product.invalid`. (2) Products have TWO writes: the editor
+> path (`POST .../product-editor` → `parseProductEditorInput` → `saveProductEditor` in
+> `product-editor.ts`) AND the PRIMARY path (`POST /management-api/products`, `PATCH .../products/:id` →
+> a body screen in `catalogue-api.ts` that throws `management.request_invalid` via `@waitron/server-kit`
+> → `createProduct`/`updateProduct` in `operations.ts`). `soldAlone` must persist on BOTH. So the
+> catalogue-unit rejection asserts `product.invalid`; the route-level rejection asserts
+> `management.request_invalid`.
+
+- [ ] **Step 1: Write the failing tests.** In `product-editor-input.test.ts`, assert
+      `parseProductEditorInput` accepts `soldAlone: false`, defaults it to `true` when absent, and
+      rejects a non-boolean with `product.invalid` field `soldAlone`. In `catalogue-api.test.ts`, assert
+      the `POST /management-api/products` (and PATCH) round-trips `soldAlone` and rejects a non-boolean
+      with `management.request_invalid` field `soldAlone` (match the existing product-route tests).
 
 ```ts
+// product-editor-input.test.ts — the CATALOGUE unit code throws product.invalid
 it("carries soldAlone through, defaulting to true", () => {
   expect(parseProductEditorInput({ ...validBody, soldAlone: false }).soldAlone).toBe(false);
   expect(parseProductEditorInput(validBody).soldAlone).toBe(true);
 });
 it("rejects a non-boolean soldAlone", () => {
   expect(() => parseProductEditorInput({ ...validBody, soldAlone: 1 })).toThrow(
-    expect.objectContaining({ code: "management.request_invalid", params: { field: "soldAlone" } }),
+    expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
   );
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/catalogue test product-editor-input`; expect a type/undefined failure.
+- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/catalogue test product-editor-input`
+      and `pnpm --filter @waitron/server test catalogue-api`; expect a type/undefined failure.
 
 - [ ] **Step 3: Add the column** — in `catalogue.ts`, add to `products`:
 
@@ -151,14 +170,20 @@ recipes). Do NOT reference "modifier" — this column outlives that word.
       generated SQL adds the column, and run the grant assertions + `inmutabilidad` afterwards. If a
       journal collision appears on rebase, reset the migrations dir to main's state and regenerate.
 
-- [ ] **Step 5: Thread through the type and read/write** — add `soldAlone` to `Product`,
-      `ProductEditorInput`, `ProductEditorValue` in `product-types.ts`; select it in the product read
-      in `operations.ts`; screen it in `parseProductEditorInput` (default `true`, boolean-or-throw
-      `management.request_invalid` field `soldAlone`); persist it in `product-editor.ts`'s write.
+- [ ] **Step 5: Thread through the type and BOTH write paths.** Add `soldAlone` to `Product`,
+      `ProductEditorInput`, `ProductEditorValue` in `product-types.ts`; select it in the product read in
+      `operations.ts`. Editor path: screen it in `parseProductEditorInput` (default `true`,
+      boolean-or-throw `product.invalid` field `soldAlone`); persist it in `product-editor.ts`'s write.
+      Primary path: add a `soldAlone` screen to the `catalogue-api.ts` product POST/PATCH body (default
+      `true`, boolean-or-throw `management.request_invalid` field `soldAlone` — match the sibling fields'
+      screening in that handler) and persist it in `createProduct`/`updateProduct` in `operations.ts`.
 
-- [ ] **Step 6: Run the tests and watch them pass** — `pnpm --filter @waitron/catalogue test product-editor-input operations`.
+- [ ] **Step 6: Run the tests and watch them pass** —
+      `pnpm --filter @waitron/catalogue test product-editor-input operations product-editor` and
+      `pnpm --filter @waitron/server test catalogue-api`.
 
-- [ ] **Step 7: Commit** — `git add -p && git commit -s -m "Add a sold-alone flag to products"`.
+- [ ] **Step 7: Verify and commit** — from the worktree, `pnpm --filter @waitron/catalogue typecheck && pnpm --filter @waitron/catalogue lint && pnpm format:check`, then
+      `git add -p && git commit -s -m "Add a sold-alone flag to products"`.
 
 ---
 
@@ -170,7 +195,7 @@ recipes). Do NOT reference "modifier" — this column outlives that word.
 - Modify: `packages/catalogue/src/classification.ts` (classify the two tables), `index.ts` (exports),
   `errors.ts` (codes)
 - Modify: `packages/shared/src/option-selection.ts` (create), `index.ts` (export)
-- Test: `option-contract.test.ts`, `options.pg.test.ts`
+- Test: `option-contract.test.ts`, `options.test.ts`
 
 **Interfaces:**
 
@@ -221,6 +246,10 @@ it("validateOptionSelections requires exactly one pick and rejects an unavailabl
       contract validates it names a label of the list, mirroring today's `option_groups.default_choice_id`).
       `option_labels.list_id` FK → `option_lists.id` ON DELETE CASCADE. Add indexes on `(list_id, sort)`.
 
+- [ ] **Step 3b: Regenerate the catalogue migration** for the two new tables (as Task 4 Step 3b spells
+      out) and commit it, BEFORE the Step 8 test — `usePgliteDb` applies migrations, so the tables must
+      exist in a generated, committed catalogue migration first.
+
 - [ ] **Step 4: Write the contract** — `parseOptionListInput` and `validateOptionSelections` in
       `option-contract.ts`, following the shape of `modifier-contract.ts` (the `label`/`record`/`keys`/`id`
       helpers) but with three names at both levels and no price/VAT/allergen fields. An options list is
@@ -236,7 +265,10 @@ export type OptionSnapshot = {
 };
 ```
 
-Export from `packages/shared/src/index.ts`.
+Export from `packages/shared/src/index.ts`. Note the staff name is a plain `string` on `OptionList`/
+`OptionLabel` but a `Record<string,string>` map in the snapshot (`listName`/`labelName`) — deliberate,
+mirroring `sale_lines.name` (plain) vs `descriptions` (map); freeze the plain staff name into a single-
+entry map under the venue's default language.
 
 - [ ] **Step 6: Write CRUD** — `options.ts`. `createOptionList`/`updateOptionList` validate content
       translations (`validateContentTranslations`) for every name; write list + labels in one
@@ -247,11 +279,19 @@ Export from `packages/shared/src/index.ts`.
       lands; return empty until then).
 
 - [ ] **Step 7: Classify + register errors** — add `classify("option_lists", "state", STATE)` and
-      `classify("option_labels", "state", STATE)` to `CATALOGUE_CLASSIFICATION`. Register
-      `options.invalid: { field: string }` and `options.not_found: { optionListId: string }` and
-      `options.in_use: { optionListId: string; dependency: string }` in `errors.ts`.
+      `classify("option_labels", "state", STATE)` to `CATALOGUE_CLASSIFICATION`. Register in `errors.ts`:
+      `options.invalid: { field: string }` (authoring/parse failures), `options.not_found: { optionListId:
+      string }`, `options.in_use: { optionListId: string; dependency: string }`, and
+      `options.label_required: { optionListId: string }` (spec §11 — the order-time missing/invalid-answer
+      case that `validateOptionSelections` throws; Task 7 uses it).
+      **Grep the siblings first (CLAUDE.md §1).** The `options.*` family is ALREADY populated by the old
+      option-group model: `options.group_invalid` and `options.item_invalid` in this `errors.ts`, and
+      `options.selection_invalid` in `apps/server/src/errors.ts`. Those describe the retired concept —
+      leave them registered and unthrown once Task 13 removes their throwers (extend the Global
+      Constraint's "retired codes stay registered" to the `options.*` family, not only `modifier.*`), and
+      keep the new suffixes above non-colliding with them.
 
-- [ ] **Step 8: Write the PGlite CRUD test** — `options.pg.test.ts` using `usePgliteDb`: create → read
+- [ ] **Step 8: Write the PGlite CRUD test** — `options.test.ts` using `usePgliteDb`: create → read
       back three names and label order; update relabels and reorders; delete cascades labels. Rejected
       writes assert the domain code, not `toBeInstanceOf(Error)`.
 
@@ -294,7 +334,7 @@ Export from `packages/shared/src/index.ts`.
 - Create: `packages/catalogue/src/schema/extras.ts` (`extra_lists`, `extra_list_items`),
   `extra-contract.ts`, `extras.ts`
 - Modify: `classification.ts`, `index.ts`, `errors.ts`, `packages/shared/src/extra-selection.ts` (create)
-- Test: `extra-contract.test.ts`, `extras.pg.test.ts`
+- Test: `extra-contract.test.ts`, `extras.test.ts`
 
 **Interfaces:**
 
@@ -336,25 +376,44 @@ it("resolveExtraPrice takes menu over item over product", () => {
       nullable. Add the `extra_list_items_qty_ck` check (`max_quantity >= 1`) and a `min_picks/max_picks`
       check (`max_picks is null or max_picks >= min_picks`, `min_picks >= 0`).
 
+- [ ] **Step 3b: Regenerate the catalogue migration.** The two tables are in the CATALOGUE drizzle set.
+      Regenerate it (`pnpm --filter @waitron/catalogue db:generate` if the package has its own script,
+      else the repo's catalogue generate path — check `packages/catalogue`'s `drizzle.config.*`),
+      verify the generated SQL adds exactly these tables, and commit the migration. The `*.test.ts`
+      below apply migrations (`usePgliteDb` → `runMigrations`), so the tables MUST be in a generated,
+      committed migration before the test runs. On a rebase collision, regenerate (never hand-edit).
+
 - [ ] **Step 4: Write the contract** (`extra-contract.ts`) and `resolveExtraPrice` (in `extras.ts`),
       following `modifier-contract.ts`'s helpers. VAT is not on the item — the resolver reads it from
       the product later (Task 8), so the contract does not touch VAT.
 
 - [ ] **Step 5: Write CRUD** (`extras.ts`): `create/update/deleteExtraList`, `getExtraList`,
       `listExtraLists`, `extraListDependants`. `deleteExtraList` cascades items and (Task 6) product
-      attachments and menu rows; a **product** delete is refused with `product.in_use` when an extras
-      list names it — add that check to the product delete path in `operations.ts` (extend the existing
-      menu-usage refusal). No advisory lock; no JSON containment.
+      attachments and menu rows. No advisory lock; no JSON containment.
+      **On refusing a product delete (plan-review blocker, 2026-09-18):** verified there is NO product
+      DELETE route and NO `deleteProduct` function in the tree today, and `product.in_use` does not
+      exist — so there is no existing "menu-usage refusal" to extend. The `extra_list_items.product_id`
+      FK is `ON DELETE RESTRICT`, which is the DB backstop that stops a referenced product being removed.
+      Register a new `product.in_use: { productId: string; dependency: string }` code in Step 6 so a
+      future product-delete path (out of branch-1 scope) can surface it; do NOT claim to extend a
+      refusal that does not exist, and do NOT build a product-delete route in this task.
 
-- [ ] **Step 6: Classify + errors** — classify the two tables `state`; register
+- [ ] **Step 6: Classify + errors** — add `classify("extra_lists", "state", STATE)` and
+      `classify("extra_list_items", "state", STATE)` to `CATALOGUE_CLASSIFICATION`. Register
       `extras.invalid: { field }`, `extras.not_found: { extraListId }`,
-      `extras.in_use: { extraListId; dependency }`, `extras.limit_exceeded: { listId }`.
+      `extras.in_use: { extraListId; dependency }`, `extras.limit_exceeded: { listId }`, and
+      `product.in_use: { productId; dependency }` (see Step 5). Grep the `errors.ts` siblings first —
+      the `options.*` and `product.*` families already carry codes (`options.group_invalid`,
+      `product.variant_in_use`, …); keep the new suffixes non-colliding and consistent.
 
-- [ ] **Step 7: Write the PGlite test** (`extras.pg.test.ts`) — create with two products at different
+- [ ] **Step 7: Write the PGlite test** (`extras.test.ts`) — create with two products at different
       prices; read back; the "exactly one bread" shape (`min_picks=1, max_picks=1`); delete cascades
-      items; `product.in_use` when a list names a product being deleted.
+      items. For the product-reference backstop, assert the DB refuses removing a product an
+      `extra_list_items` row names (the `ON DELETE RESTRICT` FK) — a direct
+      `delete from products where id = …` inside the test raises, since there is no product-delete
+      function to call. Rejected writes assert the domain code, not `toBeInstanceOf(Error)`.
 
-- [ ] **Step 8: Run and commit** — `git commit -s -m "Add extra lists: reusable product lists with per-role pricing"`.
+- [ ] **Step 8: Run and commit** — after `pnpm --filter @waitron/catalogue typecheck && pnpm --filter @waitron/catalogue lint && pnpm format:check`, `git commit -s -m "Add extra lists: reusable product lists with per-role pricing"`.
 
 ---
 
@@ -364,7 +423,7 @@ it("resolveExtraPrice takes menu over item over product", () => {
 
 - Modify: `packages/catalogue/src/schema/extras.ts` (add `menu_item_extra_lists`, `menu_item_extra_items`),
   `extras.ts` (publication read/write), `classification.ts`, `modifier-projection.ts` heir
-- Test: `extras.pg.test.ts`, a menu-projection test
+- Test: `extras.test.ts`, a menu-projection test
 
 **Interfaces:**
 
@@ -377,10 +436,24 @@ it("resolveExtraPrice takes menu over item over product", () => {
       `readMenuExtras` returns the published price (menu → item → product) and drops unpublished items;
       `readProductExtras` returns the product-default view.
 
-- [ ] **Step 2–4: Tables, then the projection reads**, mirroring `modifier-projection.ts` but keyed on
-      `product_id` instead of `option_id`, and using `resolveExtraPrice`. Classify both new tables.
+- [ ] **Step 2: Tables + migration.** Add the two tables to `schema/extras.ts`; add
+      `classify("menu_item_extra_lists", "state", STATE)` and
+      `classify("menu_item_extra_items", "state", STATE)`; regenerate + commit the catalogue migration
+      (as Task 4 Step 3b) before any DB test.
 
-- [ ] **Step 5: Run and commit** — `git commit -s -m "Publish extra lists per menu with per-offer prices"`.
+- [ ] **Step 3: The projection reads**, mirroring `readMenuModifiers`/`readProductModifiers`
+      (`modifier-projection.ts:31,53`) but keyed on `product_id` instead of `option_id`, and resolving
+      each item's price through `resolveExtraPrice`. Sample assertion the Step 1 test should carry:
+
+```ts
+// list default 3.00; list item overrides to 1.50; menu offer overrides to 1.00
+const byItem = (await readMenuExtras(tx, [menuItemId])).get(menuItemId)![0].items;
+expect(byItem.find((i) => i.productId === bacon)!.price).toBe("1.00"); // menu wins
+// unpublished item is dropped from the menu view but present in readProductExtras
+expect((await readProductExtras(tx, [productId])).get(productId)![0].items).toHaveLength(2);
+```
+
+- [ ] **Step 4: Run and commit** — after `pnpm --filter @waitron/catalogue typecheck && pnpm --filter @waitron/catalogue lint && pnpm format:check`, `git commit -s -m "Publish extra lists per menu with per-offer prices"`.
 
 ---
 
@@ -391,7 +464,7 @@ it("resolveExtraPrice takes menu over item over product", () => {
 - Create: `packages/catalogue/src/product-modifiers.ts`; add `product_modifiers` to `schema/extras.ts`
 - Modify: `apps/server/src/catalogue-api.ts`, `apps/server/src/errors.ts`,
   `packages/catalogue/src/{operations.ts,product-editor.ts,product-editor-input.ts,product-types.ts}`
-- Test: catalogue-api route test; `product-modifiers.pg.test.ts`; `product-editor-input.test.ts`
+- Test: catalogue-api route test; `product-modifiers.test.ts`; `product-editor-input.test.ts`
 
 **Interfaces:**
 
@@ -407,27 +480,34 @@ it("resolveExtraPrice takes menu over item over product", () => {
     `.../modifiers/extras/:id/dependants`.
 
 - [ ] **Step 1: Write the failing tests** — (a) the attachment table's "exactly one of" check rejects a
-      row with both or neither reference; (b) `parseProductEditorInput` accepts an ordered
-      `modifiers: [{kind,id}]`, rejects a bad `kind` and a non-uuid id with `management.request_invalid`
-      field `modifiers`, and rejects sending the legacy `modifierIds`/`optionGroupIds` alongside it; (c)
-      the extras routes CRUD.
+      row with both or neither reference; (b) in `product-editor-input.test.ts`, `parseProductEditorInput`
+      accepts an ordered `modifiers: [{kind,id}]`, rejects a bad `kind` and a non-uuid id with
+      **`product.invalid`** field `modifiers`, and rejects sending the legacy `modifierIds`/`optionGroupIds`
+      alongside it; (c) in the catalogue-api route test, the product POST/PATCH body rejects a malformed
+      `modifiers` with **`management.request_invalid`** field `modifiers` (the two error codes, as in
+      Task 1); (d) the extras routes CRUD.
 
 - [ ] **Step 2: Run and watch them fail.**
 
 - [ ] **Step 3: Add `product_modifiers`** and `product-modifiers.ts` read/write. Attachment ordering by
-      `sort`. `deleteExtraList`/`deleteOptionList` now cascade their rows here (complete the Task 2/4
+      `sort`. Add `classify("product_modifiers", "state", STATE)` to `CATALOGUE_CLASSIFICATION`, and
+      regenerate + commit the catalogue migration (as Task 4 Step 3b) before the `product-modifiers.test.ts`
+      runs. `deleteExtraList`/`deleteOptionList` now cascade their rows here (complete the Task 2/4
       cascades). `extraListDependants`/`optionListDependants` now read products through this table.
 
 - [ ] **Step 4: Replace `modifierIds` in the product body** — in `product-editor-input.ts`, remove the
-      `screenOptionGroupIds`/`modifierIds` screen, add a `modifiers` screen validating an ordered array
-      of `{ kind: "extras"|"options", id: uuid }`, reject either legacy field. Persist via
-      `writeProductModifiers` in the same transaction as the product write (`product-editor.ts`). Read
-      via `readProductModifiers` in `operations.ts`; add `modifiers` to `Product`/`ProductEditorValue`.
+      `screenOptionGroupIds`/`modifierIds` screen, add a `modifiers` screen validating an ordered array of
+      `{ kind: "extras"|"options", id: uuid }` (rejecting via the file's local `invalid()` →
+      `product.invalid`), reject either legacy field. Add the matching `modifiers` screen to the
+      `catalogue-api.ts` product body (throwing `management.request_invalid`). Persist via
+      `writeProductModifiers` in the same transaction as the product write (both `product-editor.ts` and
+      `createProduct`/`updateProduct`). Read via `readProductModifiers` in `operations.ts`; add
+      `modifiers` to `Product`/`ProductEditorValue`.
 
-- [ ] **Step 5: Add the extras routes** — mirror Task 3. Map `extras.*` statuses in
-      `apps/server/src/errors.ts`.
+- [ ] **Step 5: Add the extras routes** — mirror Task 3. Map `extras.*` (and the new `product.in_use`)
+      statuses in `apps/server/src/errors.ts`.
 
-- [ ] **Step 6: Run and commit** — `pnpm --filter @waitron/catalogue test`; then
+- [ ] **Step 6: Run and commit** — `pnpm --filter @waitron/catalogue test && pnpm --filter @waitron/server test catalogue-api && pnpm format:check`; then
       `git commit -s -m "Attach extras and options to a product through one ordered list"`.
 
 ---
@@ -457,7 +537,11 @@ it("resolveExtraPrice takes menu over item over product", () => {
       into `option_snapshots`; an extras pick becomes a child line carrying `product_id`, the product's
       frozen three names, `quantity = dish × picks`, the resolved price and **the product's own VAT
       rate** (fixture: a 21% wine as an extra on a 10% dish → child VAT 21%). A required options list
-      with no answer, and an extras `min_picks` violation, are rejected with the domain code.
+      with no answer is rejected with **`options.label_required`** (the code registered in Task 2 Step 7),
+      and an extras `min_picks` violation with **`extras.limit_exceeded`**. Note the six names each
+      carry three DIFFERENT texts in the fixture, so a wrong-name read fails (CLAUDE.md §4). (The old
+      order-time code `options.selection_invalid` in `apps/server/src/errors.ts` is retired — leave it
+      registered and unthrown; its throwers in `working-order.ts` are replaced here.)
 
 ```ts
 it("freezes six option names onto the line", async () => { /* assert option_snapshots row */ });
@@ -536,16 +620,25 @@ it("the alta fixture huella is unchanged by the extras/options rework", async ()
 });
 ```
 
-- [ ] **Step 2: Record the golden value** on `main`'s current behaviour for the equivalent fixture (a
-      dish + priced extra + options answer), so the test asserts "unchanged", not a guess. Note in the
-      test comment the command that produced it.
+- [ ] **Step 2: Record the golden value from `main` BEFORE writing branch code.** On a clean `main`
+      checkout, build the equivalent fixture (a dish + one priced extra + one options answer) in the
+      existing fiscal test harness and print the three values. Concretely: add a temporary `it.only` to
+      `packages/core/src/record-sale.test.ts` that calls the same record-and-file path the alta fixture
+      test uses and `console.log(JSON.stringify({ huella, importeTotal, cuotaTotal }))`, run
+      `pnpm --filter @waitron/core test record-sale -t "<that test>"`, copy the printed object into
+      `GOLDEN` as string literals, and delete the temporary test. Put the exact command in the test
+      comment. (There is no standalone golden-capture script today; the harness is the record-sale test —
+      read `record-sale.test.ts` for the alta fixture's helper before writing this.) The values must come
+      from `main`, not from the branch, or the test proves nothing.
 
 - [ ] **Step 3: Run and watch it fail** on the branch (the line shapes have changed).
 
 - [ ] **Step 4: Update `sale-line-rows.ts` / `record-sale.ts`** — carry the extra child line's frozen
-      facts (no `product_id`), the parent's `option_snapshots`; drop `modifier_snapshots`. The fiscal
-      record is still built from `total` + `vat_breakdown`, never from `sale_lines` (design §4), so the
-      arithmetic must land identically.
+      facts (no `product_id`) and the parent's `option_snapshots`; drop `modifier_snapshots`. Note the
+      VAT breakdown IS derived from the line inputs (`record-sale.ts` calls `buildVatBreakdown(input.lines)`
+      when none is supplied), so the arithmetic feeding the huella flows from these lines — which is
+      exactly why the byte-identical golden test guards this change. Add no catalogue reference to
+      `sale_lines` (spec §3.4 decision 11; the standing `sales.ts:191` rule).
 
 - [ ] **Step 5: Run the fiscal test and watch it pass**, plus the whole `@waitron/core` and
       `@waitron/fiscal-verifactu` suites (`test:coverage`) since the sale line shape is shared.
@@ -661,10 +754,19 @@ it("the alta fixture huella is unchanged by the extras/options rework", async ()
       two open items (optional options list; per-variant attachments deferred to branch 2), and that
       branch 2 (variants-as-products) is the next slice.
 
-- [ ] **Step 4: Run every guard** — `npx vitest run` at the repo root for the root-project guards, plus
+- [ ] **Step 4: Add the engine-neutrality guard** (spec §12 left this open; decide it here as a guard,
+      not a checklist item). Add a root-project test (e.g. `scripts/catalogue-engine-neutral.test.ts`)
+      that scans the new catalogue schema/CRUD files (`packages/catalogue/src/{schema/options,schema/extras,
+      options,extras,product-modifiers}.ts` and the order/sale path files this branch touched) and fails
+      if any contains `pg_advisory_xact_lock`, a `@>` JSON-containment operator, or a `pgEnum(` import —
+      the three constructs the SQLite flip removes (spec §7). It reads text, so state that in the test
+      header (it is weaker than "proves engine neutrality"). Prove it by deletion: add one banned
+      construct to a scanned file and watch it fail, then revert.
+
+- [ ] **Step 5: Run every guard** — `npx vitest run` at the repo root for the root-project guards, plus
       the changed packages' `test:coverage`. Prove any new guard by deletion.
 
-- [ ] **Step 5: Commit** — `git commit -s -m "Remove the old modifier tables, widgets and docs"`.
+- [ ] **Step 6: Commit** — `git commit -s -m "Remove the old modifier tables, widgets and docs"`.
 
 ---
 
