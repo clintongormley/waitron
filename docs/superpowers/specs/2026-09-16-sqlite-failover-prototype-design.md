@@ -289,7 +289,9 @@ throwaway rig that must not enter CI's test shards":
 
 - **`bench/sqlite-failover`** — a private workspace package (`"private": true`, `type: module`), with
   scripts `scenarios` (runs S0–S6, prints a per-scenario PASS/FAIL/MEASURED table, exits non-zero only
-  on a **critical** failure — §7), `setup:litestream` (added 2026-09-18: downloads the pinned litestream
+  on a **critical** failure — §7) *(2026-09-19, as landed: the table is TEN rows — a litestream
+  foundation check, a smoke check and a `RUNNER` self-check sit beside S0-S6 — and `--json` prints the
+  same run as one parseable document; see §8's note)*, `setup:litestream` (added 2026-09-18: downloads the pinned litestream
   release into a gitignored `.bin/`) and `typecheck`. **No `test` script and no `*.test.ts`**, so no CI
   job and no pre-push step ever runs a SCENARIO. That is not the same as CI never seeing the package:
   it stays a workspace member the shard filters and the root guard suite read by name, which is why it
@@ -320,7 +322,10 @@ exists to produce.
   is a *recorded outcome*, not a failing test to fix or a blocked item to retry. The runner records
   every scenario's PASS/FAIL/MEASURED in the results note and lands the note plus the rig.
 - **A critical-scenario failure STOPS the campaign.** If S0, S1, S2, S3 or S6 fails (the fiscal-safety
-  and restorability scenarios), the loop's premise is broken and continuing slice 1 would build on a
+  and restorability scenarios) *(2026-09-19, as landed: `RUNNER`, the runner's own self-check, is
+  marked critical too — for a different reason, that a wrong exit rule makes every other row's
+  reporting untrustworthy; and the runner has always treated a scenario that THROWS as critical
+  whatever its id)*, the loop's premise is broken and continuing slice 1 would build on a
   hole. The runner writes a loud summary to the campaign log and `touch`es the STOP sentinel, leaving
   the owner a `needs-owner-review` note — it does **not** grind on slice-1 items. *(2026-09-17, after
   S2 did exactly this: the stop is what the exit code buys, and the note is where the campaign hands

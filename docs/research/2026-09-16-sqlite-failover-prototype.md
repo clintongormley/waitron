@@ -21,9 +21,8 @@ back holding sales it never streamed and hands them over. Does that loop hold to
 hold together *fiscally*: no dropped ledger row, no forked hash chain, no sale filed twice with the
 Spanish tax agency?
 
-**The answer.** The loop holds everywhere but one place. Eight of the nine scenarios pass or
-measure, each against a control that reproduces the opposite result. The ninth — S2, the crux
-fiscal-safety case — **fails**, in one of its five parts and in the second half of another: a
+**The answer.** The loop holds everywhere but one place. Nine of the ten rows the rig prints pass or
+measure; the tenth — S2, the crux fiscal-safety case — **fails**, in one of its five parts and in the second half of another: a
 hand-over recomputed against a refreshed view of the receiver files one sale a second time, and so
 does a hand-over taken while the sender is part-way through filing. That is the gate's negative result and
 it is recorded rather than fixed. Against the real tax agency it costs a refused call rather than a
@@ -59,16 +58,19 @@ about the real ledger's code.** A shape the real schema has and the model lacks 
 that is stated in the prototype spec §9 and it has not changed.
 
 Each scenario is a self-contained file under `src/scenarios/`. The runner discovers them, runs them
-one at a time, prints one Markdown table, and exits non-zero only on a critical failure.
+one at a time, prints one Markdown table — or, with `--json`, one parseable document — and exits
+non-zero only on a critical failure.
 
 ### How a result here is made honest
 
 Three rules, each of which cost something on the way:
 
-- **Every scenario carries a control that reproduces the OPPOSITE result**, and the control drives
-  the scenario's *own* comparison rather than asserting the failure in words of its own. A control
-  that says "the rows are the wrong node's" in its own words stays green if the assertion it is
-  meant to protect has stopped checking anything.
+- **Every scenario that measures the loop carries a control that reproduces the OPPOSITE result**,
+  and the control drives the scenario's *own* comparison rather than asserting the failure in words
+  of its own. A control that says "the rows are the wrong node's" in its own words stays green if the
+  assertion it is meant to protect has stopped checking anything. Two rows have no control and are
+  not measurements of the loop: `smoke`, which checks the harness is up, and `RUNNER`, which drives
+  the runner's own rule over a table of cases.
 - **External behaviour is established by observing it, never by asserting it.** What MinIO's
   conditional write does, how litestream lays out a replica and when it deletes one, what an offline
   litestream does to a checkpoint — each was run before anything was built on it, and several of
@@ -107,38 +109,40 @@ TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover s
 | S0 | the happy failover loop, end to end | PASS | version=0.5.17 happy-box-a-filed=[box-a:1,box-a:2,box-a:3,box-a:4] happy-cloud-first-drain=[cloud-1:1] happy-cloud-second-drain=[box-a:5,box-a:6] happy-submissions=7 happy-distinct=7 happy-refiled=0 happy-current={term:2,node:cloud-1,gen:gen-2-cloud-1} control-ship=off control-held=box-a:1..4 control-refused="the cloud holds box-a's records 1..6 exactly as box-a wrote them" lag-sync-after-drain=off lag-refiled=4 lag-refiled-ids=[box-a:1,box-a:2,box-a:3,box-a:4] lag-refiled-shape=verbatim-same-identity lag-cloud-first-drain=[box-a:1,box-a:2,box-a:3,box-a:4,cloud-1:1] |
 | S1 | double promotion fenced by the store's conditional write | PASS | fenced: winners=1/2 winner=box-a store-keys=3; control: winners=2/2 store-keys=5 |
 | S2 | no second tax-agency filing on a re-sent or recomputed tail ship | FAIL | RETRIED-IN-FULL ship safe: filed=13 double=0 (A receiver files 5 once; B receiver files none of the owner's 4; C blocked chain drains 4 next pass after 1 refusal). D REFRESHED-SUMMARY ship files twice: refreshed-sender:1 (fresh tail carried records [2]; receiver left 1 pendiente acked=0, 2 enviado acked=1). E ship issued mid-pass for a blocked chain: that chain files nothing more that pass, next pass files 3 once, double=0. E tail taken mid-drain carried [1 enviando, 2 pendiente]: receiver left 1 enviando acked=0, 2 pendiente acked=0, and its own drain claims no enviando row, so 1 enviando acked=0 is stuck against that drain and cloud-f:2 is filed twice. Controls double-file: regressing=3 insert-only=2 |
-| S3 | a copied replica equals a direct stream | PASS | version=0.5.17 source-keys=6 source-deleted=1 deletion-waited-ms=4160 direct-rows=19 foreign-keys=9 copied=6 mirror-deleted=6 copied-rows=19 copied-sha-equal=true control-foreign-keys=9 control-copied=6 control-stale=6 control-rows=9 control-nodes=[box-b] control-integrity="row 1 missing from index sqlite_autoindex_chain_head_1" control-refused="the copied replica restores an intact database" same-lineage-stale=1 same-lineage-rows=19 same-lineage-additive="identical" |
-| S4 | offline write load | MEASURED | version=0.5.17 sales=7500 days=30 sales-per-day=250 day-rate=assumed-not-measured rounds=15 idle-ms=1500 offline-daemon=ECONNREFUSED offline-attach-ms=1118 offline-daemon-alive-after-load=true p50-ms=0.175 p95-ms=0.321 p99-ms=0.494 max-ms=1.854 first-day-p95-ms=0.414 last-day-p95-ms=0.193 peak-wal-bytes=309346112 wal-bytes-per-sale=41246 offline-checkpoint-rounds=0/15 checkpointed-db-bytes=3854336 wal-amplification=80.3x spec-small-multiple-ceiling=not-met spec-small-multiple=10 offline-days-per-gib=104.1 reclaim-offline="ms=12193.1 busy=1 log=75084 checkpointed=4 wal=309346112->309346112 shrank=false" reclaim-next-sale-ms=0.528 reclaim-control="ms=16.6 busy=0 log=0 checkpointed=0 wal=309383192->0 shrank=true" control="peak-wal=21077952 end-wal=21077952 db=3858432 store-keys=34 checkpoint-rounds=15/15 p95-ms=0.281 p99-ms=0.45" breaches=none |
+| S3 | a copied replica equals a direct stream | PASS | version=0.5.17 source-keys=6 source-deleted=1 deletion-waited-ms=4155 direct-rows=19 foreign-keys=9 copied=6 mirror-deleted=6 copied-rows=19 copied-sha-equal=true control-foreign-keys=9 control-copied=6 control-stale=6 control-rows=9 control-nodes=[box-b] control-integrity="row 1 missing from index sqlite_autoindex_chain_head_1" control-refused="the copied replica restores an intact database" same-lineage-stale=1 same-lineage-rows=19 same-lineage-additive="identical" |
+| S4 | offline write load | MEASURED | version=0.5.17 sales=7500 days=30 sales-per-day=250 day-rate=assumed-not-measured rounds=15 idle-ms=1500 offline-daemon=ECONNREFUSED offline-attach-ms=1024 offline-daemon-alive-after-load=true p50-ms=0.171 p95-ms=0.315 p99-ms=0.446 max-ms=2.729 first-day-p95-ms=0.403 last-day-p95-ms=0.196 peak-wal-bytes=308489152 wal-bytes-per-sale=41132 offline-checkpoint-rounds=0/15 checkpointed-db-bytes=3866624 wal-amplification=79.8x spec-small-multiple-ceiling=not-met spec-small-multiple=10 offline-days-per-gib=104.4 reclaim-offline="ms=12442.7 busy=1 log=74876 checkpointed=4 wal=308489152->308489152 shrank=false" reclaim-next-sale-ms=1.345 reclaim-control="ms=25.9 busy=0 log=0 checkpointed=0 wal=308526232->0 shrank=true" control="peak-wal=21143872 end-wal=21143872 db=3850240 store-keys=36 checkpoint-rounds=15/15 p95-ms=0.282 p99-ms=0.453" breaches=none |
 | S5 | supplier-invoice clash reported and skipped, ship otherwise intact | PASS | applied=13 clashes=1 retry-applied=0 retry-clashes=1; silent-drop: clashes=0 clash-rows-held=0 records-held=3/3; unisolated: refused="UNIQUE constraint failed: supplier_invoices.supplier, supplier_invoices.invoice_number" records-held=0/3 sales-held=0/3 clean-invoice-rows-held=0; not-a-uniqueness-refusal: refused="the receiver refuses this row for its own reasons" records-held=0/3 |
 | S6 | store conditional write | PASS | create-only=true if-match=refuses-stale race=1/8 unfenced=8/8 |
 | LS | litestream roundtrip | PASS | version=0.5.17 one-shot-keys=1 one-shot-restored=3 daemon-restored=4 first-sync-restores=3 after-write-restores=3 control-refused="litestream restore exited 1: Error: no matching backup files available" |
-| RUNNER | the runner's exit rule and --json dump | PASS | exit-rule-cases=8 critical-fail-exit=1 non-critical-fail-exit=0 critical-skipped-exit=0 critical-measured-exit=0 critical-pass-exit=0 empty-run-exit=0 throw-verdict=FAIL throw-critical=true throw-exit=1 json-parsed=true json-rows=3 json-exit-code=1 table-rows=5 table-escapes-pipe=true json-selected-by-flag=true |
+| RUNNER | the runner's exit rule and --json dump | PASS | exit-rule-cases=8 critical-fail-exit=1 non-critical-fail-exit=0 critical-skipped-exit=0 critical-measured-exit=0 critical-pass-exit=0 empty-run-exit=0 throw-verdict=FAIL throw-critical=true throw-exit=1 json-parsed=true json-rows=3 json-exit-code=1 json-critical-ids=1 table-rows=5 table-escapes-pipe=true table-flattens-newline=true json-selected-by-flag=true |
 | smoke | harness up: store + sqlite + model | PASS | chain advanced to 2, 4 mutations refused, store round-trip ok |
 ```
 
 stderr: `CRITICAL failure: S2 — see the results above.` Exit status **1**.
 
-**Which of those numbers are properties of the rig, and which move.** The whole suite was run **four
-times in succession** — three printing the table, one with `--json` — and the detail lines compared
-token by token. **Every verdict was the same on every run, and every run exited 1 with S2 the only
-critical failure.** The table above is the second of the four; the fourth was taken on the exact tree
-this note lands with. **S0, S1, S2, S5, S6, LS and smoke were byte-identical across all four.** (The
-first run was taken before the `RUNNER` row existed, so that row is identical across three runs rather
-than four.) Two scenarios moved, and only in the places the rig already names as outcomes rather than
-properties:
+**Which of those numbers are properties of the rig, and which move.** The whole suite was run **seven
+times** while this note was written — six printing the table, one with `--json` — and the detail lines
+compared token by token. **Every verdict was the same on every run, and every run exited 1 with S2 the
+only critical failure.** The table above is the last of the seven, taken on the exact tree this note
+lands with. **S0, S1, S2, S5, S6, LS and smoke were byte-identical across all seven.** (`RUNNER`'s
+detail is not comparable across the whole set: the row did not exist for the first run, and gained two
+keys when review found four of its checks missing, so it is identical within each group.) Two
+scenarios moved, and only in the places the rig already names as outcomes rather than properties:
 
 - **S3**, in up to four tokens of thirty-one, all of them downstream of a wait on a real store
-  listing: `deletion-waited-ms` read 4147, 4160, 4149 and 3896. With the shortest waits `source-keys`,
+  listing: `deletion-waited-ms` read between 3896 and 4160. With the shortest waits `source-keys`,
   `copied` and `control-copied` read 5 where the longer ones read 6, and the three row counts
-  (`direct-rows`, `copied-rows`, `same-lineage-rows`) read 19 on three runs and 18 on the fourth. They
-  were always **equal to each other**, which is what S3 asserts; the count itself is not the claim.
-- **S4**, in twenty-three tokens of forty-five — every latency and every write-ahead-log figure. That
-  is what a measurement of a real machine does. **Nothing in S4 should be quoted as a single number**:
-  the reclaim duration alone has read 6.8 s, 8.3 s and 12.2 s across runs, and the p95 0.312, 0.321 and
-  0.332 ms.
+  (`direct-rows`, `copied-rows`, `same-lineage-rows`) read 19 on most runs and 18 on one. They were
+  always **equal to each other**, which is what S3 asserts; the count itself is not the claim.
+- **S4**, in more than twenty tokens of forty-five — every latency and every write-ahead-log figure.
+  That is what a measurement of a real machine does, and these seven runs pushed the package README's
+  own recorded spreads out at both ends. **Nothing in S4 should be quoted as a single number.** Across
+  these runs the reclaim duration read between 8.3 s and 12.4 s, p95 between 0.302 and 0.332 ms, p99
+  between 0.420 and 0.506 ms, and the per-sale write-ahead-log rate between 41,132 and 41,415 bytes —
+  the rate stable to well under a percent while the percentiles wander.
 
 S1's `winner=` is the third value the rig names as a race outcome rather than a property — which node
-wins is not the measurement, `winners=1/2` is. It happened to read `box-a` on all four runs here, which
+wins is not the measurement, `winners=1/2` is. It happened to read `box-a` on every run here, which
 is not evidence that it always will.
 
 ---
@@ -229,7 +233,14 @@ with error 3000, per record, and `resolveEstadoEfectivo`
 the receiver's copy is marked filed and its chain carries on. **Every second filing S2 counts is, against
 the real endpoint, a wasted call rather than a record filed twice.** Two limits on that reading, stated
 because they are what would make it wrong: it compares no content when AEAT says `Correcta`, and it is
-safe here only because every duplicate this rig produces is a verbatim same-identity copy. A *different*
+safe here only because every duplicate this rig produces is a verbatim same-identity copy. **A third,
+found by following the call chain into the drain rather than stopping at the parser**: the parser
+classifies a 3000 four ways, and the drain reads three of them as filed — `Correcta` directly;
+`AceptadaConErrores` as an accept carrying a warning incident (`drain.ts`: "Still an accept … The record
+IS stored by AEAT"); and an unknown or absent duplicate state by consulting AEAT and comparing the hash,
+which for a verbatim copy matches and lands on accepted. The fourth, `Anulada`, does not: that identity
+is burned and the record halts. So the reading holds for a verbatim same-identity copy in three of the
+four cases, and the annulled one is a halt rather than a wasted call. A *different*
 record filed under a reused invoice number is a different case, and this rig does not model it. Both
 facts were established by reading the compliance findings and the code, and no live resend of an
 identical record has been observed.
@@ -248,9 +259,11 @@ failed, on a control assertion outside the submit callback.
 
 **How far the FAIL was pushed.** Parts A, B and C's assertions were driven by eleven mutations of the
 model, Parts D and E by four more, each applied alone and the scenario run whole. Two limits on that,
-both stated by the scenario itself: **seven of its assertions were not made to fail by any mutation
-tried** — preconditions, and whole-ledger backstops that a sharper assertion always reaches first — and
-**no single mutation returns S2 to PASS**, so nothing here identifies one change that would fix it.
+both recorded in the package README rather than in the scenario: **seven of its assertions were not made
+to fail by any mutation tried** — preconditions, and whole-ledger backstops that a sharper assertion
+always reaches first — and **no single mutation of `src/model.ts` returns S2 to PASS on its own**. That
+last one is narrower than it sounds: the README also records a review seat reaching PASS with two
+changes together, so it identifies no single fix rather than showing there is none.
 
 ### S3 — a copied replica equals a direct stream · critical · **PASS**
 
@@ -297,20 +310,27 @@ the store can be reached.
 
 **Three results.**
 
-1. **The cashier is fine.** p95 **0.321 ms** and p99 **0.494 ms** against the pglite bench's 150 ms and
-   400 ms bars — two to three orders of magnitude clear — and the last modelled day is *faster* than the
-   first. No drift as the write-ahead log grows; that was separately established over 12,000 sales to a
-   497 MB log before any of this was built.
+1. **The cashier is fine.** On the recorded run, p95 **0.315 ms** and p99 **0.446 ms**; across every
+   run recorded here and in the package README, p95 between 0.297 and 0.333 ms and p99 between 0.420
+   and 0.528 ms — against the pglite bench's 150 ms and
+   400 ms bars — two to three orders of magnitude clear. **The evidence for "no drift as the log grows"
+   is inside the run**: the last modelled day's p95 (0.196 ms) is below the first's (0.403 ms), with
+   the log having grown to 308 MB in between. Nothing here extends that beyond 7500 sales — an earlier
+   draft cited a longer probe, and it is gone because its output was never recorded anywhere a reader
+   could check.
 2. **The log grows linearly and is bounded only by how long the box stays offline** — about **41 KB a
-   sale**, 309 MB over 7500 sales, roughly **104 offline trading days per GiB**. It holds about **80x**
+   sale**, 308 MB over 7500 sales, roughly **104 offline trading days per GiB**. It holds about **80x**
    the data a checkpoint then writes into the database. The prototype spec's example ceiling — "a small
    multiple of the streamed data" — is therefore **not met**, and the row says so
    (`spec-small-multiple-ceiling=not-met`) rather than quietly substituting a bar that passes. **The
    control is what makes this a fact about being offline**: with the store reachable, litestream
    checkpoints the log and it plateaus at ~21 MB.
-3. **We cannot reclaim that space while litestream is attached.** Our own
-   `PRAGMA wal_checkpoint(TRUNCATE)` blocked for **seconds** — 6.8 s to 12.4 s across the runs recorded
-   here and in the package README — answered busy, reported 4 against a log figure of about 75,000, and
+3. **We cannot reclaim that space while an OFFLINE litestream is attached** — the condition is
+   attached AND unable to reach its store, since a reachable daemon checkpoints the log itself, which
+   is what the control arm shows. Our own
+   `PRAGMA wal_checkpoint(TRUNCATE)` blocked for **seconds** — 12.4 s on the recorded run, and 6.8 s to
+   12.4 s across every run recorded here and in the package README — answered busy, reported 4 against a
+   log figure of about 75,000, and
    left the file exactly the size it was. With the daemon gone the same call took milliseconds and
    truncated the log to nothing. Read that as seconds against milliseconds: the durations are not
    stable, and what SQLite's three return values mean is not something this rig established. That is
@@ -344,10 +364,11 @@ both machines during a partition — must be detected and reported, the offendin
 other row in the hand-over applied.
 
 **What passed.** 13 rows applied, 1 clash reported; a retry reports the same clash and applies nothing
-new. **Three controls**, each reproducing a different wrong behaviour: a silent drop applies the rows and
-reports no clash; an unisolated apply lets the database's own uniqueness error refuse the whole
-hand-over, holding none of the three ledger rows; and a refusal that is *not* a uniqueness violation is
-not swallowed as a clash. The error-classification rule was proved by deletion twice — removed
+new. **Two controls**, each reproducing one of the two failures the criterion rules out: a silent drop
+applies the rows and reports no clash, and an unisolated apply lets the database's own uniqueness error
+refuse the whole hand-over, holding none of the three ledger rows. A third arm is S5's own last
+assertion rather than a control: a refusal that is *not* a uniqueness violation must not be swallowed as
+a clash. The error-classification rule was proved by deletion twice — removed
 altogether, and widened to accept any constraint code.
 
 **What S5 does not establish.** Only a uniqueness refusal is a shape this rule knows; anything else is
@@ -375,7 +396,7 @@ compare-and-swap, because S1's fence claims a key create-only. The product's fen
 compare-and-swap one, which is why the value is written down.
 
 **One flake, recorded rather than smoothed over.** S6 failed once during S1's mutation runs with its
-message lost, then passed eight consecutive solo runs; all four whole-suite runs taken for this note
+message lost, then passed eight consecutive solo runs; all seven whole-suite runs taken for this note
 passed.
 If a later run sees it again, capture the whole table and stderr rather than re-running to green.
 
@@ -419,9 +440,10 @@ runner's own self-check.
 **A critical `SKIPPED` exits 0, and that is deliberate**: a skipped scenario is UNPROVEN, which is a fact
 for this note rather than a broken premise. Which is why the next line matters.
 
-**Nothing here has been skipped.** All ten rows above ran. Two scenarios *can* report SKIPPED — S0 and S3
-report it when the pinned litestream binary is absent, and each says in its own row that it is UNPROVEN
-until `setup:litestream` has been run — and neither did on any of the four recorded runs. S4 does not skip without
+**Nothing here has been skipped.** All ten rows above ran. Three scenarios *can* report SKIPPED when the
+pinned litestream binary is absent: S0 and S3, the two CRITICAL ones, each of which says in its own row
+that it is UNPROVEN until `setup:litestream` has been run, and `LS`, which is not critical. None of the
+three did on any of the seven recorded runs. S4 does not skip without
 the binary: it drops the daemon, the control and the container, runs the SQLite half alone, and says so
 in its row. **If a future run reports SKIPPED for a critical scenario, that scenario is UNPROVEN and this
 note's verdict for it does not carry over.**
@@ -442,11 +464,20 @@ carries them, so the consequence that motivated the change does not arise, and r
 negative result this gate produced would have rewritten its recorded run for no measurement. The
 suggestion stands for whoever picks the rig up next.
 
-**One hedge, because it is the kind a failing test can never restore.** The self-check drives everything
-the runner decides *except* the single line that hands `process.argv` to it. That was established by
-mutation on 2026-09-18: with the flag read inside `main()`, cutting its wiring made `--json` print the
-table and the self-check still reported PASS. The decision was moved behind a function that takes the
-argument list, which shrinks the uncovered surface to that one call; it does not remove it.
+**The hedge, because it is the kind a failing test can never restore.** The self-check drives
+everything in `src/runner-contract.ts` and **nothing in `main()`** — and `main()` decides four things
+no scenario reaches: which files count as scenarios, handing `process.argv` to the renderer, the
+summary line written to stderr, and turning the computed exit code into the process's own exit status.
+Two of the four were measured rather than reasoned about. Cutting the argument hand-off made `--json`
+print the table with the self-check still reporting PASS (2026-09-18). Replacing
+`process.exit(exitCode)` with `process.exitCode = 0`, against a run holding a critical FAIL, made the
+process exit **0** while the table showed the failure and the self-check again reported PASS
+(2026-09-19). The other two are named because the same argument covers them: a discovery filter that
+silently matched a subset would print a short table and exit 0, and the stderr summary is what an
+unattended caller reads. A scenario cannot reach any of the four without spawning the runner, which
+would run the whole suite. **So a caller trusting this rig's exit code is trusting `main()`, which
+nothing drives.** This hedge has been widened twice, each time by a reviewer who found it too narrow;
+read "the self-check covers the runner" as false.
 
 ---
 
@@ -506,11 +537,13 @@ Two design decisions this measurement hands to slice 2:
 ```bash
 export TESTCONTAINERS_RYUK_DISABLED=true
 pnpm --filter @waitron/bench-sqlite-failover setup:litestream   # once per checkout
-pnpm --filter @waitron/bench-sqlite-failover scenarios          # the table; exits 1 on S2
-pnpm --filter @waitron/bench-sqlite-failover scenarios --json   # the same run, machine-readable
+pnpm --filter @waitron/bench-sqlite-failover scenarios                   # the table; exits 1 on S2
+pnpm --silent --filter @waitron/bench-sqlite-failover scenarios --json   # the same run, machine-readable
 ```
 
 Docker must be running. No scenario runs in CI, by design — the package has no test script, so the
 evidence for a result is its recorded run in the pull request that produced it, never a green CI job.
-`bench/sqlite-failover/README.md` carries, for each scenario, the mutations that prove its assertions and
-the assertions that no mutation drives.
+`bench/sqlite-failover/README.md` carries, for most scenarios, the mutations that prove its assertions
+and the assertions that no mutation drives. It has such a section for S0, S2, S3, S4, S5, `LS` and
+`RUNNER`. **S1, S6 and `smoke` have none** — S1's section states what it does and does not model but
+records no mutation — so what drives those three scenarios' assertions is not written down anywhere.

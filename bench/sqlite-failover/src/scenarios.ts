@@ -3,10 +3,10 @@
  * a Markdown table — or, with `--json`, one JSON document — and exits non-zero only when a CRITICAL
  * scenario failed.
  *
- * A scenario is a measurement, not a build gate (spec §7): a FAIL is a recorded outcome, and only
- * the critical scenarios — S0, S1, S2, S3 and S6 — stop anything, plus any scenario that THROWS,
- * whatever its id. The rule itself is in `runner-contract.ts`, where `s_runner_contract.ts` drives
- * it over a table of cases.
+ * A scenario is a measurement, not a build gate (spec §7): a FAIL is a recorded outcome, and only a
+ * CRITICAL one stops anything — spec §7's five, S0, S1, S2, S3 and S6, plus `RUNNER`, this runner's
+ * own self-check, plus any scenario that THROWS whatever its id. The rule itself is in
+ * `runner-contract.ts`, where `s_runner_contract.ts` drives it over a table of cases.
  */
 import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";

@@ -924,14 +924,15 @@ export default async function ({ startStore }) {
 > Four things about this task came out differently from the steps below, and each is recorded here
 > rather than in the note, which carries results and not process.
 >
-> - **Step 1's recorded run is four runs, not one.** The whole suite was run four times in succession
->   — three printing the table, one with `--json`, the last on the exact tree this landed with — and
->   the detail lines
->   compared token by token, because a single run cannot tell a property of the rig from a number that
->   moves. Every verdict was the same on every run. S0, S1, S2, S5, S6, LS and smoke were
->   byte-identical across all four — `RUNNER` across three, the first run predating it; S3 moved in up
->   to four tokens, all downstream of a wait on a real store listing; S4 moved in twenty-three of
->   forty-five. The note says which are which. Exit status 1 on every run, S2 the only critical FAIL.
+> - **Step 1's recorded run is seven runs, not one.** The whole suite was run seven times — six
+>   printing the table, one with `--json`, the last on the exact tree this landed with — and the detail
+>   lines compared token by token, because a single run cannot tell a property of the rig from a number
+>   that moves. Every verdict was the same on every run, and every run exited 1 with S2 the only
+>   critical FAIL. S0, S1, S2, S5, S6, LS and smoke were byte-identical across all seven; `RUNNER`'s
+>   detail is comparable only within groups, since the row did not exist for the first run and gained
+>   two keys in the review fix wave; S3 moved in up to four tokens, all downstream of a wait on a real
+>   store listing; S4 moved in more than twenty of forty-five, and these runs pushed the package
+>   README's own recorded spreads out at both ends. The note says which are which.
 > - **Step 3's self-check needed its own module.** `scenarios.ts` ends in a top-level `await main()`,
 >   so a scenario importing a VALUE from it runs the whole suite — measured with a `node:module` load
 >   hook, which printed `LOADED SCENARIO MODULE: s0_happy_loop.ts` and then s1, s2, s3, s4. The rule
@@ -943,10 +944,20 @@ export default async function ({ startStore }) {
 >   With the `--json` flag read inside `main()`, cutting its wiring printed the table under `--json`
 >   and the self-check still reported PASS; with `formatTable` returning `""` the runner printed
 >   NOTHING and still exited 0, again PASS. Both were run before the change, not reasoned about.
->   `render(argv, results)` now makes the choice and the scenario drives it both ways. The hedge that
->   remains, stated because a failing test can never restore it: the one line handing the real
->   `process.argv` to `render` is driven by nothing, and a scenario cannot reach it without spawning
->   the runner.
+>   `render(argv, results)` now makes the choice and the scenario drives it both ways. **Review found
+>   four more uncaught mutations** — the JSON document's own `criticalFailures` list, the table's title
+>   column, the newline flattening in a cell, and a throw that is not an `Error` losing its text —
+>   each reproduced as a PASS first, then closed and re-driven. One of the four caught a mistake in
+>   the new ASSERTION rather than in the code: counting the table's pipe-prefixed lines does not
+>   change when a row splits, because the tail of a split row does not start with a pipe. **The hedge
+>   was then widened twice, each time by a reviewer who found it too narrow**, and the honest form is:
+>   the self-check drives everything in `runner-contract.ts` and NOTHING in `main()` — which decides
+>   which files count as scenarios, hands the renderer the real `process.argv`, writes the stderr
+>   summary, and turns the exit code into the process's exit status. Two of those four were measured:
+>   cutting the argument hand-off printed the table under `--json` with the row still PASS; replacing
+>   `process.exit(exitCode)` with `process.exitCode = 0` against a run holding a critical FAIL exited
+>   0 with the failure on the table and the row still PASS. A scenario cannot reach any of the four
+>   without spawning the runner.
 > - **S2's detail string was deliberately left as prose.** `docs/backlog.md` named this task as where
 >   that shape should be settled, because a JSON dump would be built from those strings. The dump
 >   carries each `detail` verbatim as a string and parses none of them, so the consequence that
