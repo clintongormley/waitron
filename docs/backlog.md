@@ -2232,9 +2232,9 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype is no longer parked: since 2026-09-17 it is being built alongside slice 1, one task per
-PR. Four of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
-a conditional write), S1 (a double promotion fenced by one, #392) and S2 (one sale submitted to the
-tax agency twice, #395). S1's caveat, which the results
+PR. Five of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
+a conditional write), S1 (a double promotion fenced by one, #392), S2 (one sale submitted to the
+tax agency twice, #395) and S5 (a supplier invoice number typed on both machines, #406). S1's caveat, which the results
 note must carry: the rig's fence is a per-term key claimed create-only, where the product's is
 `current.json` written only if its version is unchanged, so S1 is evidence that a refusal by the
 store stops a double promotion and not a measurement of the product's own conditional write. The
@@ -2272,14 +2272,35 @@ promoted node can already hold an out-of-date copy of a sale from the Litestream
 only what the receiver lacks never corrects it. S2's verdict stays FAIL and the scenario runner exits
 1 on it deliberately; no scenario runs in CI, so the evidence for one is its recorded run in the pull
 request. The unattended runner that was building these tasks stopped itself on that FAIL (its STOP
-file lives outside the repo, in the campaign directory), so tasks 5-10 wait for it to be restarted.
+file lives outside the repo, in the campaign directory); the owner read the FAIL down and restarted
+it on 2026-09-18, so tasks 6-10 are being built again.
 Three suggestions from S2's review were deliberately not taken, and they belong to whoever picks the
 rig up next: the scenario inlines its node ids where its siblings hoist them to named constants; one
 of its reads reaches past the `NodeDb` helper and casts twice because that helper has no `all`; and
 its verdict string is English prose where every sibling prints a terse `key=value` list. The last one
 is the one with a consequence — Task 10 builds a JSON dump from those strings, so that is where the
 shape should be settled, and changing it earlier would invalidate the recorded run quoted in the
-package README without a fresh measurement.
+package README without a fresh measurement. S5 closed the second of those three: `NodeDb` now has an
+`all`, and only S2 still casts twice.
+**S5 is in (#406), verdict PASS, and it is non-critical.** A supplier invoice number typed on both
+machines while they are apart cannot be stored by the machine receiving the batch, which already
+holds that supplier and number under its own id. The batch now names that row in its result and
+leaves it out, and everything else in the batch lands; sending the same batch again reports the same
+one clash and changes nothing. What the review cost, and what the next task should know: a refusal
+was being classified by the rows already in the table rather than by the error, so any other refusal
+was swallowed whenever the receiver happened to hold a row that looked like an explanation — it now
+reads SQLite's extended result code first, and a third control holds it to that. The plan's
+`SAVEPOINT` was dropped on a measurement rather than an argument (SQLite 3.53.4 rolls back the
+failing statement, not the transaction, and the probe has a control that prints a difference), with a
+dated note in the plan. One thing S5 does not check, stated so nobody assumes it does: the branch
+that absorbs a row whose id the receiver holds under a DIFFERENT supplier and number is driven by no
+scenario — the package README says which line and why.
+**One flake found while landing S5, unowned:** `scripts/waitron-sh.test.mjs` →
+"builds both images from the git context and records them in .env" failed twice under load on
+2026-09-18 and passed four runs out of four on its own. It builds Docker images, and two campaign
+sessions were working on the machine. It is in the root guard suite, which the pre-push hook and the
+ungated `lint` CI job both run, so it will keep costing whoever meets it a re-run and a doubt. It
+wants its own small branch — almost certainly a timeout or a readiness wait, not a design change.
 **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
 turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.
