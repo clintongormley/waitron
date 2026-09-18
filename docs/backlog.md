@@ -2438,6 +2438,16 @@ worth keeping: the case builds no Docker images (`docker` is a stub on `PATH`, a
 suite reaches Docker), and the cause was not a readiness wait. The suite handed `spawnSync` a 20s
 timeout but set no `testTimeout`, so Vitest's 5s default failed the case for its duration while it
 was completing normally. See B9 above, and `docs/developers/testing-guide.md`.
+**It came back on 2026-09-18 and #407 was only half the fix.** The same case failed twice again, under
+two campaign runners and a MinIO container. The Vitest side was fixed; the SPAWN side was not. The
+script under test retries a health probe 36 times five seconds apart — about 175s against the suite's
+20s spawn timeout — and two cases did not pin the try count, so one probe returning anything but
+`healthy` cost the case five of its twenty seconds and four of them killed the child. Measured: 1s
+healthy, 6s with one missed probe, 15s never-healthy with the tries pinned to four; and six runs under
+36 busy-loop processes on an 18-core machine never failed, which rules out plain CPU contention. Fixed
+by cutting the WAIT rather than the retrying (`WAITRON_SH_HEALTH_DELAY`), with a test that leaves the
+try count alone. **Still not established:** what made a probe miss — that output was not kept and the
+miss has not been reproduced.
 **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
 turned up that the rest of slice 1 depends on, both written up under "P1a findings" in the plan.
