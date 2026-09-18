@@ -32,7 +32,9 @@ const OLDER = "d0e0923c5da1b576505e45e39e195906681e2ebc";
 const SPAWN_TIMEOUT_MS = 30_000;
 // Vitest's per-test timeout is kept above it for a separate reason: it does not shorten the kill
 // above, but a test it fails for its duration alone is a healthy run reported as broken, and the
-// default is 5s. Each case here makes one `runGuard()` call, so this covers its healthy range.
+// default is 5s. Each case here makes one `runGuard()` call, so this covers the Vitest side; the
+// spawn side is covered too, because `scripts/main-tag-guard.sh` has no sleep and no retry loop, so
+// its child cannot outlast the bound the way `deploy/waitron.sh`'s health retries could.
 // Guard: `scripts/spawn-timeout-budget.test.ts`.
 vi.setConfig({ testTimeout: SPAWN_TIMEOUT_MS + 10_000 });
 

@@ -165,25 +165,21 @@ function sandbox({
       WT_MV_FAIL: envWriteFail ? "1" : "0",
       WT_PULL_FAIL: pullFail ? "1" : "0",
       WT_HANG: hang,
-      // The health wait is the one place the script sleeps, and its default budget — 36 tries five
-      // seconds apart — is nine times this suite's whole per-run bound. A single probe that misses
-      // (the stub is deterministic, but a machine under load can drop one) therefore costs a case
-      // five of its twenty seconds, and four misses kill the run outright: measured on this host,
-      // one miss took a healthy `install` from 1s to 6s. Cutting the WAIT rather than the try count
-      // keeps the retrying, so a missed probe costs milliseconds instead of failing the suite.
-      WAITRON_SH_HEALTH_DELAY: "0.05",
     },
   };
 }
 
-// Two budgets, protecting against different failures. spawnSync's timeout kills a child that is
-// still working; Vitest's per-test timeout bounds how long the whole TEST may take, and a test it
-// fails for its duration alone is a healthy run reported as broken — the default, 5s, did exactly
-// that here. Every case below makes exactly ONE `run()` call and does no other slow work, so
-// bounding the test above the spawn timeout covers its whole healthy range. The SPAWN side needs the
-// child to fit too, which is what `WAITRON_SH_HEALTH_DELAY` in `sandbox` is for: unbounded there, the
-// script's own health retries outlast this timeout. That reasoning is about THIS suite, not a general rule: a test that waits twice can
-// outlast such a bound. Guard: `scripts/spawn-timeout-budget.test.ts`; receipt in
+// Two budgets, protecting against different failures. Vitest's per-test timeout bounds how long the
+// whole TEST may take, and a test it fails for its duration alone is a healthy run reported as
+// broken — the default, 5s, did exactly that here. Every case below makes exactly ONE `run()` call
+// and does no other slow work, so bounding the test above the spawn timeout covers that side. That
+// reasoning is about THIS suite, not a general rule: a test that waits twice can outlast such a
+// bound. Guard: `scripts/spawn-timeout-budget.test.ts`.
+//
+// spawnSync's timeout is the OTHER side, and it kills a child that is still working. It therefore
+// has to clear the child's own worst case: `wait_healthy` in `deploy/waitron.sh` retries for about
+// three minutes by default, which no per-test bound can rescue. `WAITRON_SH_HEALTH_DELAY` below
+// shrinks that budget for every case while leaving the retrying in place. Receipt in
 // `docs/developers/testing-guide.md`.
 const RUN_TIMEOUT_MS = 20_000;
 vi.setConfig({ testTimeout: RUN_TIMEOUT_MS + 10_000 });
@@ -195,6 +191,8 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
       ...process.env,
       PATH: `${STUB_BIN}${delimiter}${process.env.PATH}`,
       WAITRON_DIR: sb.boxDir,
+      // The child's whole health-retry budget, shrunk from ~175s to ~2s. A case may still override it.
+      WAITRON_SH_HEALTH_DELAY: "0.05",
       ...sb.env,
       ...extraEnv,
     },
@@ -281,6 +279,16 @@ describe("waitron.sh health check", () => {
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/did not come up healthy/);
   });
+  // Every other health case pins WAITRON_SH_MAX_HEALTH_TRIES to 1, so none of them runs the try
+  // count the script ships. This one leaves it alone. Delete the `WAITRON_SH_HEALTH_DELAY` default
+  // in `run()` and it stops being a test: the child retries for ~175s and `spawnSync` kills it at
+  // 20s (measured: ETIMEDOUT at 20.17s).
+  it("gives up with the unhealthy message at the shipped try count", () => {
+    const sb = sandbox({ dockerPs: "starting" });
+    const r = run(sb, ["install"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/did not come up healthy/);
+  });
 });
 
 describe("waitron.sh install preserves .env on a failed write", () => {
@@ -301,22 +309,11 @@ describe("waitron.sh install preserves .env on a failed write", () => {
   });
 });
 
-describe("waitron.sh health check at the default try count", () => {
-  // The other health cases pin WAITRON_SH_MAX_HEALTH_TRIES to 1, so none of them exercises the try
-  // count the script actually ships. This one leaves it alone: a box that never reports healthy must
-  // give up and SAY so, inside the suite's own budget.
-  it("gives up with the unhealthy message, without pinning the try count", () => {
-    const sb = sandbox({ dockerPs: "starting" });
-    const r = run(sb, ["install"]);
-    expect(r.status).not.toBe(0);
-    expect(r.stderr).toMatch(/did not come up healthy/);
-  });
-});
-
 describe("waitron.sh database_ahead advice", () => {
   // A box that never goes healthy (dockerPs "starting") whose logs carry database_ahead. The
-  // sandbox already models aheadLogs and tradingEnv; only the health loop needs bounding, via the
-  // WAITRON_SH_MAX_HEALTH_TRIES override so the test does not wait three minutes.
+  // sandbox already models aheadLogs and tradingEnv. The wall clock is bounded by `run()`'s delay
+  // default; the try pin here keeps each case to ONE probe, so the recorded call log is the one the
+  // assertions describe.
   it("tells a non-production box to reset", () => {
     const sb = sandbox({ dockerPs: "starting", aheadLogs: true });
     const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });

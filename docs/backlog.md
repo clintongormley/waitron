@@ -2433,18 +2433,20 @@ that absorbs a row whose id the receiver holds under a DIFFERENT supplier and nu
 scenario — the package README says which line and why.
 **One flake found while landing S5 — FIXED in #407 (2026-09-18).** `scripts/waitron-sh.test.mjs` →
 "builds both images from the git context and records them in .env" failed twice under load and
-passed four runs out of four on its own. The guess recorded here at the time was wrong in two ways
+passed four runs out of four on its own. The guess recorded here at the time was wrong in one way
 worth keeping: the case builds no Docker images (`docker` is a stub on `PATH`, and nothing in that
-suite reaches Docker), and the cause was not a readiness wait. The suite handed `spawnSync` a 20s
+suite reaches Docker). It also said the cause was not a readiness wait — true of THAT failure, and
+superseded for the one below, which was the health retry loop after all. The suite handed `spawnSync` a 20s
 timeout but set no `testTimeout`, so Vitest's 5s default failed the case for its duration while it
 was completing normally. See B9 above, and `docs/developers/testing-guide.md`.
 **It came back on 2026-09-18 and #407 was only half the fix.** The same case failed twice again, under
 two campaign runners and a MinIO container. The Vitest side was fixed; the SPAWN side was not. The
 script under test retries a health probe 36 times five seconds apart — about 175s against the suite's
 20s spawn timeout — and two cases did not pin the try count, so one probe returning anything but
-`healthy` cost the case five of its twenty seconds and four of them killed the child. Measured: 1s
+`healthy` cost the case five of its twenty seconds, and four misses in one run killed the child. Measured: 1s
 healthy, 6s with one missed probe, 15s never-healthy with the tries pinned to four; and six runs under
-36 busy-loop processes on an 18-core machine never failed, which rules out plain CPU contention. Fixed
+36 busy-loop processes on an 18-core machine all passed, which is a failure to reproduce at one load
+level rather than a cause eliminated. Fixed
 by cutting the WAIT rather than the retrying (`WAITRON_SH_HEALTH_DELAY`), with a test that leaves the
 try count alone. **Still not established:** what made a probe miss — that output was not kept and the
 miss has not been reproduced.

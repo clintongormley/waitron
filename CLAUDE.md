@@ -429,6 +429,15 @@ container or browser test** — most of these rules exist because a test passed 
   its header states — it reads TEXT, cannot tell code from strings, checks only the largest SINGLE
   wait, and declines wherever a bound or a config cannot be resolved rather than risk failing a
   correct file.
+- **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included.** Getting the
+  Vitest bound right says nothing about this one: the test timeout fails a healthy test for its
+  duration, while the spawn timeout KILLS the child and returns `status: null`, which reads as a
+  broken test. Cost: `deploy/waitron.sh` retries a health probe for about three minutes by default,
+  against a twenty-second spawn timeout, so one probe that came back wrong burned a quarter of a
+  case's budget and four of them killed it. Cut the WAIT, not the retrying
+  (`WAITRON_SH_HEALTH_DELAY`). **`scripts/spawn-timeout-budget.test.ts` does not cover this** — it
+  reads the SUITE's declared waits, never the child's, so nothing guards the rule in general.
+  Receipt: [testing-guide.md](docs/developers/testing-guide.md).
 - **A suite's executable stubs are built ONCE per file, not once per test.** Executing a freshly
   written file costs hundreds of ms on macOS (120ms idle, 503–842ms loaded) against single-digit ms to
   re-execute it, so a per-test stub helper pays that every case; move what each case varies into
@@ -438,13 +447,6 @@ container or browser test** — most of these rules exist because a test passed 
   deliberately left alone. Prove the knobs still arrive by neutralising
   each one: a value that stops reaching a shared stub leaves it on its default, which passes.
   Receipt: [testing-guide.md](docs/developers/testing-guide.md).
-- **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included.** Getting the
-  Vitest bound right says nothing about this one: the test timeout fails a healthy test for its
-  duration, while the spawn timeout KILLS the child and returns `status: null`, which reads as a
-  broken test. `deploy/waitron.sh` retries a health probe 36 times five seconds apart — about 175s
-  against a 20s spawn timeout — so one missed probe cost a case five of its twenty seconds. Cut the
-  WAIT, not the retrying (`WAITRON_SH_HEALTH_DELAY`). Receipt:
-  [testing-guide.md](docs/developers/testing-guide.md).
 - **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a socket dir out of
   Docker Desktop's VM gives `ECONNREFUSED` on macOS.
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
