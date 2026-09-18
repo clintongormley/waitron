@@ -123,9 +123,10 @@ the house rule is retain-then-retry rather than re-running to green. Then read t
 passing plus this one error does not establish a failed assertion, and it does not identify a cause
 either, so the diff is not where to start. This is not the silent-shard case in
 [testing-guide.md](testing-guide.md) — there, tests were still unfinished; here they all finished.
-Then re-run the shard. If it starts recurring, the two levers are lightening what that shard does per
-tick (its four workers on four vCPUs) or patching vitest — both changes to CI machinery, and both
-wanting a measurement first, because neither has one today.
+Then re-run the shard. If it starts recurring, the two levers are lightening what EVERY shard does per
+tick (four workers plus the main process on four vCPUs — the rebalance-shard-3 version is ruled out
+above) or patching vitest. Both are changes to CI machinery, and both still want a measurement of the
+stall itself, which nobody has.
 
 ### CI does not run every check on every push
 
