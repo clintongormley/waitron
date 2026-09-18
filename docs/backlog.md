@@ -2286,7 +2286,8 @@ turned up that the rest of slice 1 depends on, both written up under "P1a findin
 First, the check the plan told us to accept the work on — `drizzle-kit check` — reads nothing about
 the schema and passes with a column type deliberately broken; the real check generates into a copy of
 the migration folder and diffs it, and all three of `--dialect`, `--schema` and `--out` have to be
-passed or the tool fails silently and the comparison looks like a pass. Second, the vocabulary cannot
+passed or the tool refuses — loudly, with a non-zero exit and an error naming what is missing, so it
+is the `diff` taken on its own afterwards that looks like a pass, never the run. Second, the vocabulary cannot
 cover everything: the 35 database enum types, the timestamp columns that read back as strings (the
 majority, and the schema check is blind to getting one wrong), five column builders that were in use
 with nothing to replace them with, and two fiscal amounts held as text that must never take the plain
@@ -2411,8 +2412,29 @@ same `numeric(5, 2)`, and the column gained a short comment block saying its uni
 where the receipt is. The task that turns rates into basis points (P6) now carries the
 same warning, because under its rule `0.25` becomes `25`, which reads as 0.25%.
 
+**`packages/bookings` is the tenth pull request** — one table file, one table, 13 columns, no schema
+change. The package itself met no new shape: its one database enum (`booking_status`) stays for the
+usual reason, and there was no `enumText`/`enumCheck` decision to make, because the package has no
+value-set check constraint anywhere — its only `check()` is a range over an integer, `party_size > 0`.
+That is `packages/workforce`'s reason, met again.
+
+**What it did find is about the acceptance check itself.** This is the first package in the rollout
+whose drizzle schema entry point is not `./src/schema/index.ts`, so the plan's warning about the
+`--schema` flag was exercised for the first time — and measuring it corrected one clause of it. The
+plan said a pasted wrong path makes drizzle-kit write nothing, "so the `diff -r` is silent and looks
+like a pass". Nothing is written and the diff is silent, both as predicted; what the run does NOT do
+is look like a pass — drizzle-kit exits 1 and prints `No schema files found for path config`. So the
+plan's own remedy — read the exit status AND the `No schema changes, nothing to migrate` line, never
+the silent diff on its own — is not merely right but enough to catch THIS mistake at its first
+clause, which is the part a reader needed to know. It is not enough on its own to accept a
+conversion: a real schema change exits 0 and writes a migration, which is what the silent diff is
+there for. Measured where no `src/schema/index.ts` exists at all,
+which is also the shape of the two remaining odd-path packages, `media` and `venue-service`. The
+plan's step 4 and its P1a twin are corrected in place, and so is the P1a summary earlier in this
+entry, which had the same "fails silently" wording.
+
 What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then
-`bookings`, `scheduler`, `venue-service`, `credentials` and `media`, one pull
+`scheduler`, `venue-service`, `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their

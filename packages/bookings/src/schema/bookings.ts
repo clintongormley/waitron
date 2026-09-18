@@ -1,20 +1,8 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  foreignKey,
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  time,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, pgEnum } from "drizzle-orm/pg-core";
 // The FK targets are core tables — this module's schema points INTO core (a clean leaf), so they
 // import from @waitron/db rather than a sibling file.
-import { locations } from "@waitron/db";
+import { count, day, id, label, locations, table, timeOfDay, tsString } from "@waitron/db";
 
 /**
  * The lifecycle of a staff-entered reservation (design §1). `booked` on creation; `seated` when the
@@ -33,9 +21,10 @@ export const bookingStatus = pgEnum("booking_status", [
 /**
  * WALL-CLOCK, NOT AN INSTANT (design §2b, the #52 lesson): a booking is a future intention
  * ("Tuesday 20:00 at the venue"), not a moment that has occurred, so `booking_date` is a plain `date`
- * and `booking_time` a plain `time`, both venue-local — never a UTC instant. There is no instant to
- * misrender, so this cannot repeat #52; the one place "now" matters (the reserved-on-floor imminence
- * read, FP-1) computes the venue wall-clock from `locations.time_zone` at read time.
+ * and `booking_time` a plain `time` — the `day` and `timeOfDay` helpers — both venue-local, never a
+ * UTC instant. There is no instant to misrender, so this cannot repeat #52; the one place "now"
+ * matters (the reserved-on-floor imminence read, FP-1) computes the venue wall-clock from
+ * `locations.time_zone` at read time.
  *
  * `table_id` (optional table assignment) and `tab_id` (set on seat) are BARE uuid columns: their FKs,
  * table_id → dining_tables(id) and tab_id → working_orders(id), are hand-written in the custom
@@ -46,33 +35,32 @@ export const bookingStatus = pgEnum("booking_status", [
  * schema is a separate slice (migrates AFTER `core`), so this table records the actor without
  * depending on it (packages/db must not import @waitron/identity — it would close a load-time cycle).
  */
-export const bookings = pgTable(
+export const bookings = table(
   "bookings",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     /** The workplace the reservation is for. */
-    locationId: uuid("location_id").notNull(),
-    // Venue-local wall-clock date + time (§2b) — plain `date`/`time`, NOT an instant.
-    bookingDate: date("booking_date").notNull(),
-    bookingTime: time("booking_time").notNull(),
+    locationId: id("location_id").notNull(),
+    // Venue-local wall-clock date + time (§2b) — `day`/`timeOfDay`, a plain `date` and a plain
+    // `time`, NOT an instant.
+    bookingDate: day("booking_date").notNull(),
+    bookingTime: timeOfDay("booking_time").notNull(),
     // Covers expected. CHECK > 0 below — a zero/negative party is malformed.
-    partySize: integer("party_size").notNull(),
-    contactName: text("contact_name").notNull(),
+    partySize: count("party_size").notNull(),
+    contactName: label("contact_name").notNull(),
     // Free-text contact (design §0) — no customer/CRM entity exists. Both nullable.
-    contactPhone: text("contact_phone"),
-    notes: text("notes"),
+    contactPhone: label("contact_phone"),
+    notes: label("notes"),
     // Optional table assignment (TS-1). BARE column — its FK to dining_tables is hand-written in the
     // custom migration, and skips the check while NULL.
-    tableId: uuid("table_id"),
+    tableId: id("table_id"),
     // Set on seat: the tab opened for the arriving party (TS-1). BARE column — its FK to
     // working_orders is hand-written in the custom migration.
-    tabId: uuid("tab_id"),
+    tabId: id("tab_id"),
     status: bookingStatus("status").notNull().default("booked"),
     // The identity person who took the booking. Plain uuid, NO FK — the drawer_opens.person_id seam.
-    createdBy: uuid("created_by").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    createdBy: id("created_by").notNull(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason
