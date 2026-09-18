@@ -2744,6 +2744,45 @@ controls rather than only claimed. One scoped exception survives, `text` in
 `packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the exact bytes
 hashed into the huella; a different builder in that same file is still reported.
 
+**A follow-up to the vocabulary, LANDED as #418 on 2026-09-18** — `enumText` takes a `const` type
+parameter, so a column's value set narrows what a caller may write even when the values are written
+inline with no `as const`. Before it, that spelling silently lost the narrowing on a NULLABLE column
+and the typechecker stopped flagging a bad write; the database's own `in (...)` check still refused
+the value, so this restored an early warning rather than the only guard. The owner chose it on
+2026-09-18 after the sixth pull request above measured the condition. It is a type-level change and
+nothing else: `drizzle-kit generate` prints "No schema changes, nothing to migrate", no migration is
+added, and the JavaScript `tsc` emits for `columns.ts` are byte-identical with and without the word
+(with a control that made that comparison fail). `pnpm -r typecheck` is at exit 0 across the
+workspace.
+
+**What it did NOT close, which is the part worth carrying:** values held in an UNANNOTATED variable
+still widen to `string`, because `const VALUES = ["a", "b"]` is `string[]` before `enumText` is ever
+called. Two spellings of that declaration are the way out — `as const` on it, or a `("a" | "b")[]`
+annotation — and both are pinned. So the condition is no longer "how the values are written crossed
+with the column's nullability"; it is where the values come from. Every cell of that table is a
+compile-time case in `packages/db/src/schema/columns.test.ts`, enforced by
+`pnpm --filter @waitron/db typecheck` rather than by the test run: vitest's typecheck mode is off in
+this repository and these do not need it, which is worth knowing before anyone goes looking for the
+config that would make them run in the suite.
+
+**The finding of the branch is about METHOD, and it fired twice on one small change.** Both false
+claims it produced were inside CORRECTIONS, which is exactly where CLAUDE.md §1 says to expect them.
+(1) The run-it seat broke the type-comparison helper the branch had hand-written: both of its
+controls put the wider type first, so degrading the helper to plain assignability passed them both —
+the pins would have kept passing while pinning nothing. The fix was to delete the helper for
+vitest's own `expectTypeOf`, which fails in all three directions including the one the controls
+missed. The same seat falsified "a variable never narrows unless `as const`". (2) The scoped re-read
+of those fixes then caught a NEW false claim written while correcting a stale count — "every
+`enumText` call in the repository passes its values `as const`" — whose counter-example was the
+branch's own probe table, four of whose columns deliberately do not. The pins now carry a control of
+their own, one deliberately wrong pin under `@ts-expect-error`, closed from both sides and both
+directions run.
+
+Four earlier statements of the retired condition were left standing by the branch's first sweep and
+found by the convention seat: one inside `columns.ts` itself about twenty-five lines above the edit,
+three in this file, and one in the rollout plan's identity report a hundred and forty lines below
+where the dated notes had been placed. A sweep that stops at the paragraph you edited is not a sweep.
+
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
 already covers them. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
