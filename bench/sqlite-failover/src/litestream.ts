@@ -159,9 +159,15 @@ export function writeConfig(opts: {
  * seconds after `kill()`, and the scenario's `finally` awaits it before anything stops the MinIO
  * container.
  *
- * No scenario needs that flush today: `s_litestream_roundtrip` is this function's only caller and
- * makes its last read before killing its daemon, and S0 (`s0_happy_loop.ts`) uses only `syncOnce`
- * and `restore`, and starts no daemon.
+ * Two scenarios call this, and neither needs that flush. `s_litestream_roundtrip` makes its last
+ * read before killing its daemon. S3 (`scenarios/s3_copied_replica.ts`) kills the daemon, awaits
+ * `exited`, and then runs a `syncOnce` with box-a's handle still open — and that S3 does not need
+ * the flush was RUN rather than read off the code: with `kill()` sending SIGKILL first, so no flush
+ * could happen, S3 still passed twice (2026-09-18, `copied-sha-equal=true` both times). What that
+ * run did NOT separate is which of the one-shot and the daemon's own last sync carried the final
+ * writes: the daemon syncs continuously, so a pass is equally consistent with everything already
+ * being uploaded by the time it was killed. S0 (`s0_happy_loop.ts`) starts no daemon at all; it uses
+ * only `syncOnce` and `restore`.
  *
  * Every child is also registered for the parent's own exit (see `children` below): the scenario
  * kills it in a `finally`, but a runner that dies outside that `finally` would otherwise leave

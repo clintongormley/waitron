@@ -143,9 +143,9 @@ its tail instead of selling. The three runs differ by two flags — does the box
 the box's own filings reach the store before it dies.
 
 **S0 never starts the streaming daemon.** Every upload it makes is `syncOnce`; `replicate`, the
-long-running mode the product would run, is driven by the `LS` foundation check and by nothing else
-in this rig. That is why "the box dies before the next sync" is a scripted step here: under the
-daemon it would be a timing window, and S0 measures nothing about that window.
+long-running mode the product would run, is driven by the `LS` foundation check and by S3, and by
+nothing else in this rig. That is why "the box dies before the next sync" is a scripted step here:
+under the daemon it would be a timing window, and S0 measures nothing about that window.
 
 **The three parts share ONE store and are separated by TERM**, the way `s1_double_promotion`
 separates its fenced race from its control. Box terms 1, 3 and 5 name the generation each part's box
@@ -337,10 +337,15 @@ nothing else, and the database restored from it must be the database restored fr
 same file bytes, the same `records` rows compared field by field against the rows box-a itself
 wrote, the same `chain_head` rows, and `PRAGMA integrity_check` reading ok on both.
 
-**The file bytes are hashed BEFORE anything opens the database.** `openNode` runs
-`CREATE TABLE IF NOT EXISTS` and its triggers, and opening a SQLite database creates the `-wal` and
-`-shm` sidecars beside it — so a hash taken after an open is a hash of something the restore did not
-produce.
+**The file bytes are hashed BEFORE anything opens the database**, so that nothing `openNode` does can
+enter the hash: it runs `CREATE TABLE IF NOT EXISTS` and its triggers, and opening a database
+litestream has restored creates the `-wal` and `-shm` sidecars beside it. That ordering is the
+conservative one; it is not a claim that an open WOULD change the file. The one probe that looked
+found the main file unchanged. On 2026-09-18, a model database seeded with five sales and left in
+WAL journal mode was hashed, opened with `openNode`, hashed again while open, closed and hashed a
+third time: `hash-open equal=true wal=true shm=true`, `hash-close equal=true`. The sidecars do
+appear; on that run the main file's bytes did not move. Whether some other open could move them is
+not established.
 
 **The dirty destination is what makes Part A a measurement.** Copying into an EMPTY prefix gives the
 same answer with the flag set either way, so the two flags would look alike and nothing would be
@@ -349,7 +354,10 @@ back.
 
 **Part B is the control**, and it drives Part A's own comparison over what the additive copy left,
 requiring it to throw — a control asserting "the rows are box-b's" in words of its own would stay
-green if Part A's comparison had stopped checking anything. What the additive copy leaves behind is
+green if Part A's comparison had stopped checking anything. Its destination is dirtied the same way
+Part A's is and with its own count printed — `control-foreign-keys` is how many objects box-b's nine
+sales left under `gen-3-box-a` before box-a's replica was copied over them, the twin of
+`foreign-keys` under `gen-2-box-a`. What the additive copy leaves behind is
 not a litestream error: the restore exits 0 and writes a database. On the recorded run that database
 holds **box-b's nine rows** — `control-rows=9 control-nodes=[box-b]` — and SQLite reports it damaged,
 `row 1 missing from index sqlite_autoindex_chain_head_1`, so the assertion that refuses it is the
@@ -369,6 +377,38 @@ whether litestream ever writes different bytes under a name it has used before. 
 its two preconditions — the destination must hold objects the source no longer has — and REPORTS the
 outcome, computed rather than written as a literal.
 
+**Part C has three outcomes and none of them fails the scenario**, corrected on 2026-09-18: a
+litestream that DECLINES to restore the same-lineage replica is a legitimate result of the
+experiment, and until that day it made the whole scenario throw, which the runner reports as a
+critical FAIL. The outcome is now `identical`, `diverged: <the assertion that refused it>`, or
+`refused: …`. That third string is not litestream's own words alone: it is this rig's wrapper text
+(`litestream restore exited <code>: `) followed by litestream's first line of stderr.
+
+**Which declines count is matched on litestream's WORDS, not on a non-zero exit** — a second
+correction the same day, because the first attempt matched only the wrapper and that wrapper goes on
+EVERY non-zero exit of `restore`. Driven from a scratch copy of the scenario whose Part C restore
+threw instead of running:
+
+- with litestream's missing-backup words, S3 PASSED and printed `same-lineage-rows=0
+same-lineage-additive="refused: litestream restore exited 1: Error: no matching backup files
+available"`;
+- with the decode error a wrongly copied replica really produces — `litestream restore exited 1:
+Error: decode database: decode header: non-contiguous transaction ids in input files:
+(0000000000000002,0000000000000002) -> (0000000000000001,0000000000000001)`, the same words the
+  shifted-`CopySource` mutation below produced — S3 threw and failed;
+- and against the wrapper-only matcher, that same decode error was recorded as an outcome and S3
+  reported **PASS**, printing `same-lineage-additive="refused: litestream restore exited 1: Error:
+decode database: …"`. That is the defect the words-matcher removes, and it is the shape the `LS`
+  control above already paid for once.
+
+A store error (`NoSuchBucket`) and an output file that is already there and not empty (`cannot
+restore, output path already exists and is not empty`) are exit 1 with the same wrapper too, both
+measured in `src/litestream.ts`; each of those now fails the scenario as well.
+
+**`same-lineage-rows=0` means no restore happened**, not that a restore came back empty — there is no
+database to count rows in when litestream declines. Read `same-lineage-additive` first; it is what
+separates the two.
+
 **What S3 is not evidence about.** Not `packages/fiscal-verifactu`: every table here is the rig's
 model. Not whether an additive copy is safe into an EMPTY destination — nothing here copies into
 one. Not whether copying is how a real node should re-home a replica; this measures what a copy
@@ -379,17 +419,72 @@ long a deletion takes: the part waits for the effect and reports how long it wai
 write to a database while a litestream DAEMON is reading it, and on one full run it failed with
 `database is locked`. Both halves of the cause were established by running a node that sold every
 5ms for twelve seconds against a daemon on the fast compaction settings — about 1800 writes each
-time, on 2026-09-18, and run twice by different people: a plain `BEGIN` takes a read lock and asks
-for the write lock at the first INSERT, and SQLite refuses that upgrade rather than waiting, so a
-busy timeout alone left 16 refusals on the first run and 15 on the second; `BEGIN IMMEDIATE` alone,
-with no timeout, left 19 and then 15; the two together left 0 on both. The counts move run to run —
-what reproduced is that either change alone leaves writes refused. `model.ts` now opens every node
-with `PRAGMA busy_timeout = 5000` and begins every write transaction with `BEGIN IMMEDIATE`. Every
-other scenario's verdict line still reads exactly as its own recorded run did.
+time, on 2026-09-18, and run twice by different people: a busy timeout alone left 16 refusals on the
+first run and 15 on the second; `BEGIN IMMEDIATE` alone, with no timeout, left 19 and then 15; the
+two together left 0 on both. The counts move run to run — what reproduced is that either change
+alone leaves writes refused. `model.ts` now opens every node with `PRAGMA busy_timeout = 5000` and
+begins every write transaction with `BEGIN IMMEDIATE`. Every other scenario's verdict line still
+reads exactly as its own recorded run did.
+
+**Why the timeout alone is not enough**, corrected twice on 2026-09-18. The first correction got the
+journal mode wrong: it read a `delete`-mode control as though it described the case the fix is
+about, and by the time box-a is writing under a `replicate` daemon litestream has switched the file
+to WAL (`src/litestream.ts` records `PRAGMA journal_mode` reading `delete` before a run and `wal`
+after). The three results below are kept apart deliberately.
+
+**The `delete`-mode finding, as a `delete`-mode finding.** Two connections on one file, nobody
+holding a write lock: with the first on `BEGIN` alone, the second's `BEGIN EXCLUSIVE` was
+`ACCEPTED`; with the first on `BEGIN` and then one `SELECT`, the second's was refused, "database is
+locked". So in that mode a plain `BEGIN` takes no lock and the first READ takes one.
+
+**The same probe in WAL does not reproduce the read-lock half.** Both cases were `ACCEPTED`: a
+reader there blocks nobody.
+
+```
+mode=delete A=begin-only    -> B BEGIN EXCLUSIVE ACCEPTED
+mode=delete A=begin+select  -> B BEGIN EXCLUSIVE REFUSED: database is locked
+mode=wal    A=begin-only    -> B BEGIN EXCLUSIVE ACCEPTED
+mode=wal    A=begin+select  -> B BEGIN EXCLUSIVE ACCEPTED
+```
+
+**The outcome the fix rests on reproduces in BOTH modes.** A second probe, with a holder process
+taking `BEGIN IMMEDIATE` and keeping it for 1500ms while the probe connection carried
+`PRAGMA busy_timeout = 5000` (node v26.7.0, `node:sqlite`, measured 2026-09-18):
+
+```
+mode=delete style=deferred  -> REFUSED database is locked elapsed-ms=0
+mode=delete style=immediate -> ACCEPTED elapsed-ms=1590
+mode=wal    style=deferred  -> REFUSED database is locked elapsed-ms=1
+mode=wal    style=immediate -> ACCEPTED elapsed-ms=1613
+```
+
+"deferred" is what `recordSale` does under a plain `BEGIN` — read `chain_head`, then insert — and in
+both modes it is refused at once with the timeout set, while the same connection asking up front
+with `BEGIN IMMEDIATE` waits the holder out and commits. **WHY the deferred one is refused differs
+by mode, and this rig has not established it**; the `delete`-mode read-lock story above does not
+carry over to WAL, and nothing was run that would settle the WAL case.
+
+**The five seconds is not justified by a measurement.** It is a bound on a stall, and nothing here
+has measured how long a litestream checkpoint holds the file — the wait it exists for. The only wait
+on record is an ARTIFICIAL one the probe above chose: a 1500ms hold, waited out in 1590ms and 1613ms
+because the wait also covers the holder's commit. That is a fact about the probe. The number is
+deliberately large rather than dialled to anything.
 
 **The numbers in the verdict line are not fixed.** Box-a sells for as long as the wait takes, so
-`direct-rows`, `source-keys` and `deletion-waited-ms` differ run to run — 16 rows in one run and 19
-in another, both correct.
+`direct-rows`, `source-keys` and `deletion-waited-ms` differ run to run — 15, 16 and 19 rows across
+three runs, all correct. `mirror-deleted` and `control-stale` move with them: they count the foreign
+objects whose names box-a's replica did not happen to reuse.
+
+**`deletion-waited-ms` is QUANTISED to the poll interval, and is neither the store's latency nor
+litestream's.** It times the polling loop alone, and that loop is sell, sleep a quarter-second, list
+— so a deletion that lands mid-sleep is not seen until the next poll, and the number is a wait
+rounded UP to the next 250ms. The sleeps are the measurement's RESOLUTION, not overhead sitting on
+top of the wait: subtracting them leaves a figure nothing measured, and an earlier version of this
+paragraph invited exactly that by setting the sale cadence against the total. Read it as "the fast
+compaction settings did produce a deletion within this long, to a resolution of 250ms", and never as
+a latency. Corrected 2026-09-18 twice over: until that day the clock also covered opening box-a, its
+first three sales, the config write, the daemon spawn, the daemon's kill and the final one-shot —
+setup and teardown, now outside it.
 
 S3's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
 @waitron/bench-sqlite-failover scenarios`, 2026-09-18:
@@ -397,7 +492,7 @@ S3's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
 ```
 | id | title | verdict | detail |
 | --- | --- | --- | --- |
-| S3 | a copied replica equals a direct stream | PASS | version=0.5.17 source-keys=6 source-deleted=1 deletion-waited-ms=4176 direct-rows=19 foreign-keys=9 copied=6 mirror-deleted=6 copied-rows=19 copied-sha-equal=true control-copied=6 control-stale=6 control-rows=9 control-nodes=[box-b] control-integrity="row 1 missing from index sqlite_autoindex_chain_head_1" control-refused="the copied replica restores an intact database" same-lineage-stale=1 same-lineage-rows=19 same-lineage-additive=identical |
+| S3 | a copied replica equals a direct stream | PASS | version=0.5.17 source-keys=6 source-deleted=1 deletion-waited-ms=4164 direct-rows=19 foreign-keys=9 copied=6 mirror-deleted=6 copied-rows=19 copied-sha-equal=true control-foreign-keys=9 control-copied=6 control-stale=6 control-rows=9 control-nodes=[box-b] control-integrity="row 1 missing from index sqlite_autoindex_chain_head_1" control-refused="the copied replica restores an intact database" same-lineage-stale=1 same-lineage-rows=19 same-lineage-additive="identical" |
 ```
 
 That run's exit code is 1, and S3 is not why: S2 is the critical FAIL the runner reports.
@@ -551,8 +646,9 @@ dies before that update streams leaves the promoted receiver holding it `pendien
 sends what the receiver LACKS, so it never corrects that row. Against the real endpoint that is one
 refused duplicate submission per such row. S2 does not measure it — it models the receiver's stale
 copy as coming from an earlier partial ship. **S0's Part C now drives it with the real litestream
-binary, by one-shot syncs** — not by the streaming daemon, which only the `LS` check starts — and
-measured four such rows in one run: see "What S0's loop covers, and what its Part C records" above.
+binary, by one-shot syncs** — not by the streaming daemon, which the `LS` check and S3 start and no
+other scenario does — and measured four such rows in one run: see "What S0's loop covers, and what
+its Part C records" above.
 
 **On the first follow-up this section first named — "make the stub answer a repeat the way AEAT
 does" — a second look on 2026-09-17 found it would measure nothing, and it is dropped.** A stub that

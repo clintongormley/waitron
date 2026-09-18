@@ -24,7 +24,8 @@
 //   - that copying is how a real node should re-home a replica. This measures what a copy does, not
 //     whether the product should make one.
 //   - a lower bound on the compaction settings, or on how long a deletion takes. The part waits for
-//     the effect and reports how long it waited for nothing.
+//     the effect and reports how long it waited, QUANTISED to the 250ms poll interval — a wait
+//     rounded up to the next poll, never a latency. `Source.waitedMs` says why.
 //
 // Part B is the CONTROL and Part C is a MEASUREMENT that decides nothing; each carries its own
 // explanation below.
@@ -61,6 +62,10 @@ const FOREIGN = "box-b";
  * The generation names follow topology §2.2's `gen-<term>-<node-id>` shape so these keys sit in the
  * same space a promotion's would. Nothing here drives `promotion.ts`: no term is claimed and no
  * pointer is written, and a reader should not take these numbers for terms anybody fought over.
+ *
+ * The node id in a DESTINATION name is where box-a's replica ends up, not who wrote what is there
+ * now: `gen-2-box-a` and `gen-3-box-a` each hold BOX-B's replica until the copy lands on top of it
+ * (`dirtyDestination`), and `gen-4-box-a` holds an early copy of box-a's own.
  */
 const SOURCE_PREFIX = `${VENUE}/gen-1-${BOX_A}`;
 const MIRROR_PREFIX = `${VENUE}/gen-2-${BOX_A}`;
@@ -112,7 +117,18 @@ type Source = {
   finalKeys: string[];
   /** Key suffixes the early same-lineage copy put under `SAME_LINEAGE_PREFIX` — Part C's setup. */
   earlyCopySuffixes: string[];
-  /** How long the part waited for a deletion, recorded so the compaction settings can be read. */
+  /**
+   * The wall time of the POLLING LOOP alone — from box-a's first sale under the daemon to the poll
+   * that saw a key gone.
+   *
+   * It is QUANTISED to the poll interval, and it is neither the store's latency nor litestream's.
+   * The loop is sell, sleep `WRITE_INTERVAL_MS`, list — so this is the poll interval times the
+   * number of polls it took, plus the loop's own work, and a deletion that lands mid-sleep is not
+   * seen until the next poll. The sleeps are the measurement's RESOLUTION, not overhead sitting on
+   * top of the wait: subtracting them leaves a number nothing measured. Read it as "the fast
+   * compaction settings did produce a deletion within this long, to a resolution of
+   * `WRITE_INTERVAL_MS`", and never as how long a deletion takes.
+   */
   waitedMs: number;
 };
 
@@ -154,8 +170,11 @@ export default async function copiedReplica({
       detail:
         `version=${litestream.version} source-keys=${source.finalKeys.length} source-deleted=${source.deletedKeys.length} deletion-waited-ms=${source.waitedMs} direct-rows=${direct.records.length} ` +
         `foreign-keys=${mirrored.foreignKeys} copied=${mirrored.copied} mirror-deleted=${mirrored.deleted} copied-rows=${mirrored.rows} copied-sha-equal=${mirrored.shaEqual} ` +
-        `control-copied=${control.copied} control-stale=${control.stale} control-rows=${control.rows} control-nodes=[${control.nodes}] control-integrity="${control.integrity}" control-refused="${control.refusal}" ` +
-        `same-lineage-stale=${sameLineage.stale} same-lineage-rows=${sameLineage.rows} same-lineage-additive=${sameLineage.outcome}`,
+        `control-foreign-keys=${control.foreignKeys} control-copied=${control.copied} control-stale=${control.stale} control-rows=${control.rows} control-nodes=[${control.nodes}] control-integrity="${control.integrity}" control-refused="${control.refusal}" ` +
+        // Quoted, like every other free-text value here: `outcome` is `identical` on the recorded
+        // runs but otherwise carries a whole sentence — an assertion's, or litestream's own stderr
+        // line — colons, spaces and all.
+        `same-lineage-stale=${sameLineage.stale} same-lineage-rows=${sameLineage.rows} same-lineage-additive="${sameLineage.outcome}"`,
     };
   } finally {
     // The store is stopped FIRST, for the reason `s_smoke.ts` records: a throw ahead of `stop()`
@@ -186,14 +205,13 @@ export default async function copiedReplica({
  */
 async function streamUntilDeletion(bin: string, store: Store, dir: string): Promise<Source> {
   const dbPath = join(dir, "venue.db");
-  const started = Date.now();
   const captured = await streamAndCapture(bin, store, dir, dbPath);
 
   // Box-a's handle is closed by the time this runs, so the file is nobody's.
   for (const suffix of ["", "-wal", "-shm"]) rmSync(`${dbPath}${suffix}`, { force: true });
   assert.ok(!existsSync(dbPath), "the source database is gone before any restore");
 
-  return { dbPath, ...captured, waitedMs: Date.now() - started };
+  return { dbPath, ...captured };
 }
 
 /** The stream itself, from box-a's first sale to the read of its last — the handle's whole life. */
@@ -202,9 +220,12 @@ async function streamAndCapture(
   store: Store,
   dir: string,
   dbPath: string,
-): Promise<Omit<Source, "dbPath" | "waitedMs">> {
+): Promise<Omit<Source, "dbPath">> {
   const boxA = openNode(BOX_A, dbPath);
   let earlyCopySuffixes: string[] = [];
+  // Assigned in the try below and read after it: the only way past that block without assigning it
+  // is a throw, which leaves this function altogether.
+  let waitedMs: number;
 
   try {
     for (let i = 0; i < SALES_BEFORE_STREAM; i += 1) recordSale(boxA, 1000 + i);
@@ -219,7 +240,12 @@ async function streamAndCapture(
     const daemon = replicate(bin, config);
     const seen = new Set<string>();
     try {
-      const deadline = Date.now() + STORE_DEADLINE_MS;
+      // The clock starts HERE, not at the top of the helper: everything before this — opening
+      // box-a, three sales, the config, the daemon spawn — is setup, and folding it in would make
+      // `deletion-waited-ms` a number about the scenario rather than about the deletion. It is
+      // still quantised to the poll interval, and still not a latency (see `Source.waitedMs`).
+      const loopStarted = Date.now();
+      const deadline = loopStarted + STORE_DEADLINE_MS;
       let sale = 0;
       while (Date.now() < deadline) {
         recordSale(boxA, 2000 + sale);
@@ -241,6 +267,7 @@ async function streamAndCapture(
         // the ones the source dropped, and breaking on any deletion at all could leave without one.
         if (gone.some((key) => earlyCopySuffixes.includes(key.slice(SOURCE_PREFIX.length)))) break;
       }
+      waitedMs = Date.now() - loopStarted;
     } finally {
       daemon.kill();
       await daemon.exited;
@@ -265,7 +292,7 @@ async function streamAndCapture(
       boxARows.length > SALES_BEFORE_STREAM,
       "box-a kept selling while the daemon streamed",
     );
-    return { boxARows, deletedKeys, finalKeys, earlyCopySuffixes };
+    return { boxARows, deletedKeys, finalKeys, earlyCopySuffixes, waitedMs };
   } finally {
     boxA.close();
   }
@@ -427,6 +454,12 @@ async function additiveIntoDirtyDestination(
  * destination must hold objects the source has since dropped. The OUTCOME is computed and reported,
  * not asserted — a scenario that asserted "identical" here would be stating the conclusion of a
  * measurement it took (`CLAUDE.md` §1), and the verdict does not rest on it.
+ *
+ * It has three: `identical`, `diverged: <the assertion that refused it>`, and `refused: <this rig's
+ * wrapper text and litestream's first stderr line>` for a replica that litestream declines to
+ * restore at all. All three are results of this experiment, so none fails the scenario. Only the
+ * missing-backup decline counts as the third (`isRestoreRefusal`); any other non-zero exit —
+ * a decode error, a store error, an output file already there — still fails the scenario.
  */
 async function sameLineageAdditive(
   bin: string,
@@ -456,22 +489,73 @@ async function sameLineageAdditive(
     "the second additive copy still leaves the source's deleted objects in place",
   );
 
-  const restored = await restoreFrom(
-    bin,
-    store,
-    dir,
-    SAME_LINEAGE_PREFIX,
-    "restored-same-lineage",
-    source,
-  );
-  let outcome = "identical";
+  // The restore is INSIDE the recording, not ahead of it. A same-lineage additive replica that
+  // litestream DECLINES to restore is one of the three answers this experiment can come back with,
+  // and a part
+  // whose contract is that it decides nothing must not turn that answer into a critical FAIL of the
+  // whole scenario. Only litestream's missing-backup decline is recorded (`isRestoreRefusal`).
+  // Every other non-zero exit still fails the scenario, and that is the whole point of matching on
+  // the words: a decode error off a wrongly copied replica, a store error, and an output file that
+  // is already there all exit non-zero too, and each of those is a broken rig or a broken copy
+  // rather than a result. So is a TypeError here, and so is the separate `was killed after …ms` the
+  // child timeout throws.
+  let restored: Restored | null = null;
+  let outcome: string;
   try {
-    assertSameDatabase(restored, direct, source.boxARows);
+    restored = await restoreFrom(
+      bin,
+      store,
+      dir,
+      SAME_LINEAGE_PREFIX,
+      "restored-same-lineage",
+      source,
+    );
+    outcome = "identical";
   } catch (error) {
-    if (!(error instanceof assert.AssertionError)) throw error;
-    outcome = `diverged: ${error.message.split("\n")[0] ?? ""}`;
+    if (!isRestoreRefusal(error)) throw error;
+    outcome = `refused: ${(error as Error).message.split("\n")[0] ?? ""}`;
   }
-  return { copied, stale: stale.length, rows: restored.records.length, outcome };
+
+  if (restored) {
+    try {
+      assertSameDatabase(restored, direct, source.boxARows);
+    } catch (error) {
+      if (!(error instanceof assert.AssertionError)) throw error;
+      outcome = `diverged: ${error.message.split("\n")[0] ?? ""}`;
+    }
+  }
+  // `rows` is 0 when there is no restored database to count, which since the three outcomes landed
+  // means "litestream declined and no restore happened" — NOT "the restore came back empty". The
+  // `outcome` beside it in the verdict line is what separates the two, and it is the one to read
+  // first.
+  return { copied, stale: stale.length, rows: restored?.records.length ?? 0, outcome };
+}
+
+/**
+ * Litestream DECLINING this replica, as opposed to anything else going wrong.
+ *
+ * Matched on litestream's own decline WORDS, not on a non-zero exit: `litestream.ts` wraps EVERY
+ * non-zero exit of `restore` as `litestream restore exited <code>: …`, so a matcher reading only
+ * that wrapper would record a broken rig as a result of the experiment. Three other exit-1 answers
+ * wear the same wrapper and none of them is a verdict — a wrongly copied replica
+ * (`decode database: decode header: non-contiguous transaction ids in input files`, measured on
+ * this branch 2026-09-18), a store failure (`NoSuchBucket`, measured in `litestream.ts`), and an
+ * output file that is already there and not empty (`cannot restore, output path already exists and
+ * is not empty`, also measured in `litestream.ts`). Each of those still fails the scenario.
+ *
+ * This is the shape `s_litestream_roundtrip.ts`'s control already pays for: a control that accepted
+ * ANY error as a refusal recorded a litestream that could not be RUN as a litestream that refused.
+ *
+ * Both halves were driven on 2026-09-18 from a scratch copy of this scenario whose Part C restore
+ * threw instead of running: with litestream's missing-backup words, S3 PASSED and recorded them;
+ * with the decode-error words, S3 threw and failed.
+ */
+function isRestoreRefusal(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /^litestream restore exited \d+: /.test(error.message) &&
+    error.message.includes("no matching backup files available")
+  );
 }
 
 /**
@@ -518,7 +602,20 @@ async function dirtyDestination(
   const node = openNode(FOREIGN, dbPath);
   try {
     // No `fastCompaction` here, deliberately: this replica's files have to still be there when the
-    // copy lands on top of them, and the default L0 retention is minutes rather than seconds.
+    // copy lands on top of them. Two receipts hold that up, neither of them a claim about what
+    // litestream's timers do between calls. That the DEFAULTS delete nothing on this timescale is
+    // measured in `litestream.ts`: a `replicate` daemon under a default config still listed every
+    // `0000/` file it had uploaded after 90 seconds. That the foreign objects were still there when
+    // each copy ARRIVED is checked per run rather than assumed — Part B asserts that the additive
+    // copy leaves some (`stale.length > 0`), and both counts are printed, `mirror-deleted` being
+    // the foreign objects Part A's mirror found to delete and `control-stale` the ones Part B's
+    // additive copy left. Neither count speaks for a foreign object whose suffix matched one of
+    // box-a's, because the copy overwrote it; the numbers move run to run for that reason.
+    //
+    // What this function itself RUNS is nine sales, each followed by its own `replicate -once`, and
+    // the listing it reads back afterwards — nine objects on the recorded run (`foreign-keys=9` and
+    // `control-foreign-keys=9`), which is the count it returns. That listing is taken straight
+    // after the last sync, so on its own it shows only that the objects existed at that instant.
     const config = writeConfig({
       dbPath,
       store,
@@ -566,11 +663,16 @@ async function restoreFrom(
 /**
  * A restored database, hashed and then read.
  *
- * The hash is taken BEFORE `openNode` touches the file, and that order is the measurement: `openNode`
- * runs `CREATE TABLE IF NOT EXISTS` and its triggers (`model.ts`), and opening a SQLite database
- * creates the `-wal` and `-shm` sidecars beside it — so a hash taken after an open is a hash of
- * something the restore did not produce, and two such hashes could differ for reasons that have
- * nothing to do with what the store held.
+ * The hash is taken BEFORE `openNode` touches the file, so that nothing `openNode` does can enter
+ * it: it runs `CREATE TABLE IF NOT EXISTS` and its triggers (`model.ts`), and opening a database
+ * litestream has restored creates the `-wal` and `-shm` sidecars beside it. The ordering is the
+ * conservative one, and it is not an assertion that an open WOULD change the file.
+ *
+ * The one probe that looked found the main file unchanged by an open. Measured 2026-09-18 on this
+ * host: a model database seeded with five sales and left in WAL journal mode, hashed, opened with
+ * `openNode`, hashed again while open, closed and hashed a third time — `hash-open equal=true
+ * wal=true shm=true`, `hash-close equal=true`. So the sidecars do appear and, on that run, the main
+ * file's bytes did not move. Whether some other open could move them is not established here.
  */
 function readRestored(path: string): Restored {
   const sha256 = createHash("sha256").update(readFileSync(path)).digest("hex");

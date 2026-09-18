@@ -41,13 +41,31 @@ export async function copyUp(
     await store.client.send(
       new CopyObjectCommand({
         Bucket: store.bucket,
-        // `CopySource` is `<bucket>/<key>`, and it is NOT escaped here. Every key this rig copies is
-        // a litestream replica file under a prefix this rig chose, and a listing taken on
-        // 2026-09-18 after three one-shot syncs read, in full:
-        // `venues/v1/gen-1-box-a/0000/0000000000000001-0000000000000001.ltx` and two like it — a
-        // four-digit directory, then a pair of numbers, a dash and `.ltx`. Letters, digits, dashes,
-        // dots and slashes, none of which needs escaping. A key holding a space, a `+` or a `%`
-        // would need it, and nothing here writes one.
+        // `CopySource` is `<bucket>/<key>`, and it is NOT escaped here. That is safe only for the
+        // restricted alphabet this rig writes: every key it copies is a litestream replica file
+        // under a prefix it chose, and a listing taken on 2026-09-18 after three one-shot syncs
+        // read, in full: `venues/v1/gen-1-box-a/0000/0000000000000001-0000000000000001.ltx` and two
+        // like it — a four-digit directory, then a pair of numbers, a dash and `.ltx`. Letters,
+        // digits, dashes, dots and slashes.
+        //
+        // WHICH characters actually need escaping was measured rather than guessed, 2026-09-18,
+        // five keys driven through this function against the pinned MinIO image: the `.ltx` key
+        // above copied; a key holding a SPACE copied, landing under its own name; a key holding a
+        // `+` copied, also under its own name, so MinIO did not read it as a space. The two that
+        // failed both hold a PERCENT — `has%2Fslash.ltx` and `has%25.ltx` — each answering
+        // `NoSuchKey: The specified key does not exist.`.
+        //
+        // WHY they fail was then settled by a control rather than reasoned about, 2026-09-18 against
+        // the same image: the DECODED key was written and the ESCAPED name asked for, which can only
+        // land if the escape is decoded on the way in. Both landed —
+        // `wrote="probe/from/has/slash.ltx" asked-for="probe/from/has%2Fslash.ltx" -> COPIED` and
+        // `wrote="probe/from/has%.ltx" asked-for="probe/from/has%25.ltx" -> COPIED`. So the
+        // unescaped `CopySource` really does have the store look for the decoded key. The
+        // destination `Key` is NOT decoded the same way: both copies landed under the literal
+        // escaped name (`probe/to/has%2Fslash.ltx`, `probe/to/has%25.ltx`), and it is that asymmetry
+        // that makes an unescaped `CopySource` wrong rather than merely inconsistent. A caller
+        // widening the alphabet past what is listed above should escape, and re-run that probe
+        // rather than trust this list.
         CopySource: `${store.bucket}/${key}`,
         Key: `${toPrefix}${key.slice(fromPrefix.length)}`,
       }),
