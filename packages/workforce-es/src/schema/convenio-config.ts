@@ -1,17 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  check,
-  foreignKey,
-  integer,
-  numeric,
-  pgEnum,
-  pgTable,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { locations } from "@waitron/db";
+import { check, foreignKey, pgEnum, unique } from "drizzle-orm/pg-core";
+import { count, flag, id, locations, money, rate, table, tsString } from "@waitron/db";
 
 /**
  * The overtime-model reading a convenio selects (art. 35 daily-accrual vs art. 34.2 distribución
@@ -38,60 +27,58 @@ export const overtimeModel = pgEnum("overtime_model", ["daily_accrual", "period_
  * MUTABLE, with `GRANT SELECT, INSERT, UPDATE` to app_user. This is configuration an admin edits,
  * not the immutable registro — it carries no append-only trigger and no chain.
  */
-export const convenioConfig = pgTable(
+export const convenioConfig = table(
   "convenio_config",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    locationId: uuid("location_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    locationId: id("location_id").notNull(),
 
     // Overtime / projection inputs (plan §3.1) — the two D2.0 consumes plus the period-net terms.
     /** Ordinary working days per week — the daily-target denominator. Replaces the former
      * `DEFAULT_WORKING_DAYS_PER_WEEK = 5` module constant; 1..7 so the projection never divides by
      * zero. */
-    workingDaysPerWeek: integer("working_days_per_week").notNull().default(5),
+    workingDaysPerWeek: count("working_days_per_week").notNull().default(5),
     /** Which overtime reading binds as the headline. Default daily-accrual (art. 35) reproduces
      * today's conservative default; the asesor flips it to period_net where a convenio allows
      * distribución irregular. */
     overtimeModel: overtimeModel("overtime_model").notNull().default("daily_accrual"),
     /** art. 34.2 reference period, only meaningful under period_net; null otherwise. */
-    referencePeriodDays: integer("reference_period_days"),
+    referencePeriodDays: count("reference_period_days"),
     /** art. 34.2 compensation window, only under period_net; null otherwise. */
-    compensationWindowDays: integer("compensation_window_days"),
+    compensationWindowDays: count("compensation_window_days"),
     /** Explicit per-day target override; null falls back to weekly ÷ working_days_per_week. */
-    dailyTargetMinutes: integer("daily_target_minutes"),
+    dailyTargetMinutes: count("daily_target_minutes"),
 
     // Guardrail limits (plan §3.2) — the ET statutory floor as defaults; a convenio may only tighten.
     /** art. 34.1 average weekly cap. */
-    maxWeeklyMinutes: integer("max_weekly_minutes").notNull().default(2400),
+    maxWeeklyMinutes: count("max_weekly_minutes").notNull().default(2400),
     /** art. 34.3 minimum rest between shifts. */
-    minInterShiftRestMinutes: integer("min_inter_shift_rest_minutes").notNull().default(720),
+    minInterShiftRestMinutes: count("min_inter_shift_rest_minutes").notNull().default(720),
     /** art. 34.3 maximum ordinary daily working time. */
-    maxOrdinaryDailyMinutes: integer("max_ordinary_daily_minutes").notNull().default(540),
+    maxOrdinaryDailyMinutes: count("max_ordinary_daily_minutes").notNull().default(540),
     /** art. 34.4 worked-time threshold above which a break is owed. */
-    breakThresholdMinutes: integer("break_threshold_minutes").notNull().default(360),
+    breakThresholdMinutes: count("break_threshold_minutes").notNull().default(360),
     /** art. 34.4 minimum break length. */
-    minBreakMinutes: integer("min_break_minutes").notNull().default(15),
+    minBreakMinutes: count("min_break_minutes").notNull().default(15),
     /** art. 37.1 minimum weekly rest. */
-    weeklyRestMinutes: integer("weekly_rest_minutes").notNull().default(2160),
+    weeklyRestMinutes: count("weekly_rest_minutes").notNull().default(2160),
     /** art. 35.2 annual overtime cap, in hours. */
-    annualOvertimeCapHours: integer("annual_overtime_cap_hours").notNull().default(80),
+    annualOvertimeCapHours: count("annual_overtime_cap_hours").notNull().default(80),
     /** art. 36 night-window start, minutes from local midnight (22:00). */
-    nightWindowStartMinute: integer("night_window_start_minute").notNull().default(1320),
+    nightWindowStartMinute: count("night_window_start_minute").notNull().default(1320),
     /** art. 36 night-window end, minutes from local midnight (06:00). */
-    nightWindowEndMinute: integer("night_window_end_minute").notNull().default(360),
+    nightWindowEndMinute: count("night_window_end_minute").notNull().default(360),
 
     // Provincial premiums (plan §3.2) — asesor-blocked, default null so no figure is ever invented.
     /** plus de nocturnidad as a fraction (e.g. 0.25); null until the convenio's figure is known. */
-    nightPremiumPct: numeric("night_premium_pct", { precision: 5, scale: 2 }),
+    nightPremiumPct: rate("night_premium_pct"),
     /** plus de turno partido, per-day amount in tenant currency; null until known. */
-    splitShiftPremium: numeric("split_shift_premium", { precision: 12, scale: 2 }),
+    splitShiftPremium: money("split_shift_premium"),
     /** Whether turno-partido breaks count as worked time (convenio/interpretive). Conservative
      * default. */
-    breaksCountAsWorked: boolean("breaks_count_as_worked").notNull().default(false),
+    breaksCountAsWorked: flag("breaks_count_as_worked").notNull().default(false),
 
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a

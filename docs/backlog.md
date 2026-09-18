@@ -2390,8 +2390,26 @@ wrong helper on a hashed column is loud rather than silent. The one place it wou
 `workforce_chains.updated_at`, which nothing reads or writes from JavaScript; that column now carries
 a comment saying so.
 
+**`packages/workforce-es` is the ninth pull request** — one table file, one table, 20 columns, no
+schema change. It is the smallest conversion in the rollout and the first one in a country module,
+and it is the first package with no `text` column at all, which takes two decisions off the table
+rather than putting them on it: the converted file calls `label()` nowhere, and the
+`enumText`/`enumCheck` question every earlier package had to answer for its checked text columns was
+never available here. Its one `check()` constraint is a range check, not a value set. Its one
+database enum stays, for the usual reason. The one thing it adds to what the vocabulary is known to
+cover is a naming observation about `rate()`: `night_premium_pct` holds a FRACTION — the column's
+own comment, the generic ruleset type and the package's own test all say `0.25` — while every
+`rate()` site that existed before it holds a percentage-style number, `vat_rate` and
+`deductible_proportion` among them, and the helper's comment describes it as "a percentage rate,
+e.g. a 21.00 VAT rate". The SQL type and the read mapping are identical either way, so nothing was
+changed for it; the helper simply covers two conventions now, which the plan records. One thing left
+alone and put in the pull request for the owner: two decimal places on a fraction means the column
+can only express a premium in whole percentage points — measured, `0.125` stores as `0.13` — so a
+12.5% night premium is not representable. That is pre-existing, in the package's baseline migration,
+and whether it matters is a question for the labour advisor rather than for a conversion.
+
 What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then
-`workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials` and `media`, one pull
+`bookings`, `scheduler`, `venue-service`, `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their
