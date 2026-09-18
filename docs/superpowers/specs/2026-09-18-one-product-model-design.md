@@ -60,10 +60,11 @@ The two big pieces are independent, so they are two branches with one shared spe
   products — but nothing would read that table yet, so it is a later project. Recipe authoring was
   removed from the dashboard earlier (`docs/backlog.md`, the #377 era) and its return is an open
   product question; this design does not answer it, it only stops blocking it.
-- **Per-variant overrides in the editor.** The model *allows* a variant to override its parent's VAT,
-  category, routing or allergens (see §4), because inventory will need per-variant cost, barcode and
-  stock. The branch-2 editor exposes only three names, price, photo and availability, exactly what the
-  variant form exposes today. Everything else on a variant reads its parent's value.
+- **Per-variant modifier attachments.** A variant uses its parent's extras and options lists; there
+  is no per-variant attachment row. (A variant offering different extras from its parent is a possible
+  later addition, called out in §4.4, not built now.) Every *other* field a variant normally inherits —
+  VAT, category, unit, routing, allergens, dietary declarations — *is* editable per variant on the
+  variant's own product page (§4.4); that is built, a change from an earlier draft that deferred it.
 
 ## 0. Decisions taken with the owner (2026-09-18)
 
@@ -282,6 +283,11 @@ Price, in order: the menu's per-item `price` if set → the list item's `price` 
 `unit_price`. VAT is **always the product's own `vat_class`**; the "inherit the dish's rate" choice is
 removed (decision 9).
 
+In every editor a blank `price` follows the inheritance-hint pattern (§9.1): the field is empty, and
+the price it would fall back to — the product's own `unit_price` in the extras list editor, the list
+item's resolved price in the per-menu editor — is shown as the field's hint/placeholder text, so a
+manager sees the effective price without a value being stored. Typing a value overrides it.
+
 ### 3.4 On the order and the sale
 
 Each picked product becomes a **child line** of the dish, exactly as extras do today (see the
@@ -342,11 +348,21 @@ flip gives triggers — the concrete reason branch 2 waits for the flip (decisio
 
 ### 4.4 Attachments and overrides
 
-In branch 2 a variant always uses its parent's extras and options lists — there is no per-variant
-attachment row. The §1.2 fallback governs the *columns* (VAT, category, routing, allergens); the
-editor does not expose overriding them, so a variant created through it has them null and reads its
-parent's. The model allows the override so inventory can add per-variant cost, barcode and stock later
-without another rework.
+A variant is a product, so it has its **own product page**, and that page edits **any field**: the
+ones a variant normally owns (three names, price, photo, availability) and the ones it normally
+inherits (VAT, category, unit, kitchen station and course, allergens, dietary declarations). Following
+the inheritance-hint pattern (§9.1), an inherited field is shown **empty with the parent's value as the
+field's hint/placeholder text**: leaving it empty keeps the inheritance — the §1.2 fallback reads the
+parent's value — and entering a value overrides it for this variant only. This is also how inventory
+will later set a variant's own cost, barcode and stock.
+
+The parent's product editor **also** has a quick variants section (§9) that edits only the common
+fields inline — three names, price, photo, availability — without opening each variant's own page; the
+full set of overrides lives on the variant's own page.
+
+The **modifier attachment list (§5) is the one thing a variant does not override in this design**: a
+variant always offers its parent's extras and options lists. A per-variant attachment is a possible
+later addition (recorded in §14), not built now.
 
 ### 4.5 Removed
 
@@ -425,6 +441,18 @@ rebase are fixed by regeneration, never by editing snapshots or the journal.
 
 ## 9. Dashboard surfaces
 
+### 9.1 The inheritance-hint pattern
+
+Several fields in these editors carry a value only to *override* an inherited default: an extra's price
+(falls back to the product's price, §3.3) and a variant's inherited fields (fall back to the parent's,
+§4.4). Every such field uses one pattern: the input is **empty when the field inherits**, and the value
+it would fall back to is shown as the field's **hint/placeholder text** so the manager sees the
+effective value without one being stored. Typing a value overrides the default; clearing the field
+returns it to inheriting. This keeps "inherits" and "set to the same value as the parent" distinct in
+the data — a blank stays blank — while the manager always sees the number that will apply.
+
+### 9.2 Screens
+
 - **Sidebar and screen (branch 1):** one **Modifiers** entry, one page, two tabs — **Extras** and
   **Options** — each the Categories-pattern table for its kind (header Add button, full-width search
   with filters, remembered sort in session storage, a detail modal with Edit/Close, a delete flow with
@@ -438,8 +466,11 @@ rebase are fixed by regeneration, never by editing snapshots or the journal.
 - **Products list (branch 1):** gains a `sold_alone` column and filter, so ingredients and
   extra-only products live in the same list rather than a separate screen.
 - **Products list and editor (branch 2):** the list nests variants under their parent from `parent_id`
-  (instead of the variants table); the editor's variants section edits child products inline with the
-  fields the variant form has today — three names, price, photo, available — nothing more exposed.
+  (instead of the variants table). The parent editor's variants section edits the common fields inline —
+  three names, price, photo, available. Each variant also opens its **own product page**, where every
+  inherited field (VAT, category, unit, routing, allergens, dietary declarations) can be overridden,
+  each shown with the parent's value as its hint (§4.4, §9.1). The one field not overridable per variant
+  is the modifier attachment list (§4.4).
 - **Media usage scan (branch 2):** reads one column, `products.image`, instead of two
   (`packages/media/src/images.ts`).
 
@@ -557,6 +588,8 @@ per-task reviews because it touches fiscal invariants and a cross-package contra
 - **Optional options list** — not built (§11), recorded so it is not assumed.
 - **The components table (recipes/bundles)** — not built; the model is ready for it (§0, "does NOT
   build").
+- **Per-variant modifier attachments** — not built (§4.4): a variant offers its parent's extras and
+  options lists. Recorded so a future session does not assume a variant can carry its own.
 - **`docs/backlog.md`** is updated in the same change that lands each branch (the moment it goes stale
   is a merge), and the modifier/variant entries in it are reconciled against what these branches ship.
 
