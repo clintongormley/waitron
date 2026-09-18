@@ -508,7 +508,7 @@ there is nothing to replace it with. Counted on 2026-09-17 over the non-test fil
 | `date()`                         | 14                  | `packages/db/src/schema/daily-closes.ts:59`, `packages/db/src/schema/purchase-invoices.ts:63,66`, `packages/fiscal-verifactu/src/schema/registros.ts:56,101` |
 | `time()`                         | 4                   | `packages/db/src/schema/tenants.ts:134`, `packages/bookings/src/schema/bookings.ts:57`                                                                          |
 | `smallint()`                     | 5                   | `packages/db/src/schema/dining-tables.ts:59,60,62`                                                                                                             |
-| `bigint(…, { mode: "number" })`  | 3                   | `packages/db/src/schema/catalogue.ts:32`, `packages/db/src/schema/node-membership.ts:33`, `packages/identity/src/schema/webauthn.ts:34`                         |
+| `bigint(…, { mode: "number" })`  | 3                   | `catalogue.version` and `node_membership.term` in `packages/db/src/schema/`, `webauthn_credentials.counter` in `packages/identity/src/schema/webauthn.ts` — named rather than numbered, the conversions having moved all three |
 | a hand-rolled `bytea` customType | 3                   | `packages/db/src/schema/print-jobs.ts:26`, `packages/credentials/src/schema/tenant-credentials.ts:15`, `packages/media/src/schema/images.ts:16`                  |
 
 **Add each missing helper, with its own generated-type test, before converting the first column that
@@ -667,7 +667,8 @@ the tree are not counts of anything: `packages/workforce/src/schema/availability
 a floor plan and an angle. The `bigint` columns are no more alike than that:
 `packages/db/src/schema/catalogue.ts:32` is a catalogue version,
 `packages/db/src/schema/node-membership.ts:33` is a membership term and
-`packages/identity/src/schema/webauthn.ts:34` is a WebAuthn signature counter. Every line named here
+`webauthn_credentials.counter` in `packages/identity/src/schema/webauthn.ts` is a WebAuthn
+signature counter (named rather than numbered: the identity conversion moved it off line 34). Every line named here
 was opened and read on 2026-09-17. So the helper names the width and the call site keeps the meaning.
 
 **What each helper copies is a property to check, not a count to match.** The rule is: each helper
@@ -736,7 +737,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -1011,6 +1012,146 @@ property.
 Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace, which is what covers
 the sibling packages that read these tables) and `pnpm --filter @waitron/payments test:coverage`
 (exit 0, 32 files, 414 tests, no test edited, all five schema files 100%).
+
+**And the same report for `packages/identity`, which met no new shape and one new ANSWER.** Its
+eight table files declare nine tables holding 67 columns — 7 in `google-oidc-states.ts`, 11 in
+`management-account-actions.ts`, 5 in `management-sessions.ts`, 17 in `persons.ts`, 5 in
+`recovery-codes.ts`, 5 in `sessions.ts`, 5 in `totp-enrollments.ts` and 12 across `webauthn.ts`'s
+two tables. The column builders they used were `uuid`, `text`, `timestamp` in string mode, `integer` and
+`bigint` in number mode, every one of which has a vocabulary equivalent. `persons.ts` also declares
+two `pgEnum` columns, which have no equivalent and are the first of the two things this conversion
+did not absorb, below.
+
+Two separate readings of the base tree, both run rather than assumed, and the base commit is named
+because `HEAD` stops meaning the base tree the moment this lands. First, the builders that are
+ABSENT: `git grep -c '\b<builder>(' 2661178c -- packages/identity/src/schema` returns nothing for
+`date`, `time`, `smallint`, `numeric`, `jsonb`, `boolean` or `bytea`, and
+`git grep -n '\.array()' 2661178c -- packages/identity/src` exits 1, so there is no array
+column either. Second,
+the one builder that is PRESENT and easy to miss: the same command returns a single hit for
+`bigint`, in `webauthn.ts`.
+
+All nineteen timestamp columns are string mode, read off each line being replaced: over the eight
+files at the base commit `grep -c 'mode: "string"'` returns 19 (1 + 4 + 3 + 3 + 2 + 2 + 2 + 2, in
+the order this paragraph lists the files) and `grep -c 'mode: "date"'` returns 0, and the converted
+files hold exactly 19 `tsString` calls and no bare `ts(` call at all. The one `bigint` is
+`webauthn_credentials.counter` in `{ mode: "number" }`, which is what `bigCount` emits.
+
+Two things the conversion did not absorb, and the second one is where this package differs from
+every earlier one.
+
+The first is the two `pgEnum` columns, `persons.role` and `persons.status`, on the `person_role` and
+`person_status` types declared in the same file. `enumText` emits `text`, so pointing it at a
+database enum is a real schema change; `persons.ts` keeps importing `pgEnum` from
+`drizzle-orm/pg-core`.
+
+The second is the two checked text columns — `google_oidc_states.mode` beside
+`google_oidc_states_mode_ck`, and `management_account_actions.purpose` beside
+`management_account_actions_purpose_ck`. Both became plain `label()` columns beside untouched
+constraints, and **neither of the two reasons `columns.ts` records refuses the substitution here.**
+Scope alone is not a new reason — `columns.ts` already records it for five `packages/db` columns.
+What is new is that this is the first package where both reasons were MEASURED away for every
+checked text column it has, so scope is all that is left: rewriting an existing constraint is
+outside a conversion pull request.
+
+- **The DDL-spacing reason does not apply**, and it was measured rather than read off the spacing.
+  The substitution was made in full — both columns moved to `enumText` with their real value sets
+  and both constraint bodies replaced by `enumCheck(t.<column>)` — and the step 4 probe over that
+  tree printed `No schema changes, nothing to migrate` at exit 0 with a silent `diff -r`. So the
+  generated text is unchanged, and the tree was then restored from a saved copy.
+- **No CURRENT caller of either column would break**, measured with a control that fired FIRST.
+  That is the checkable sentence, and it is narrower than "the narrowing reason does not apply":
+  both columns are `.notNull()`, and on a NOT NULL column a bare value list DOES narrow the insert
+  type, so the narrowing itself still happens. (That property was measured on the
+  `packages/fiscal-verifactu` branch, whose `columns.ts` note carries the full spelling-by-
+  nullability table; until that pull request lands, this sentence is the only statement of it on
+  `main`.) What was measured HERE is only that nothing in the tree today writes either column
+  through a wider type. Narrowing
+  each column to a set the code does not write — `mode` to `["login"]`, dropping `link`, and
+  `purpose` to `["invitation", "password_reset"]`, dropping `email_change` — made
+  `pnpm -r typecheck` exit 2 naming four call sites: `src/google-oidc.ts(49,37)` for the first and
+  `src/account-action.ts(91,9)`, `(108,6)` and `(155,9)` for the second. That is the control, and it
+  is what makes the next line mean anything: with the real value sets in place the same command
+  exited 0 across the whole workspace, so no caller of either column would break.
+
+**Each of those two columns now carries a short comment saying so, which is why the line
+classification below has an exception.** Both merged sibling conversions do the same —
+`units.hardware_unit` in `packages/catalogue` and `payment_policy.offline_mode` and
+`payments.card_entry_mode` in `packages/payments` each carry three or four lines above the column
+naming the reason. The first version of this pull request left both columns bare, and the
+convention reviewer's point was that the reason matters MORE here than in the siblings: there,
+a reader can look up one of the two recorded reasons; here neither applies, so without the comment
+the only record is this plan.
+
+`packages/db/src/schema/columns.ts` is edited here, and the first version of this pull request
+argued for leaving it alone. That argument was wrong and the review said so. The sentence there
+names `google-oidc-states.ts` as "still unconverted on that date", and the date in it is
+2026-09-18 — the same date the same paragraph uses two names earlier to mean CONVERTED. A reading
+at that granularity cannot separate the two, so the sentence tells a reader something untrue about
+a file this change converts.
+
+**What that costs, priced properly rather than waved through.** The parked
+`packages/fiscal-verifactu` pull request (#399) touches three of the files this one does —
+`packages/db/src/schema/columns.ts`, `docs/backlog.md` and this plan — and in the backlog the two
+branches replace the SAME sentence. So this is a three-file conflict for whoever rebases #399, not
+a one-line one. It is still the cheaper side: #399 rewrites those `columns.ts` lines KEEPING
+identity in the unconverted list, so `main` would carry the untrue sentence whichever order the two
+land in, and a conflict a person resolves once beats a false claim nobody notices.
+
+**The rollout order was departed from, and neither list says so.** Step 2 above orders the packages
+`… payments, fiscal-verifactu, identity, …`, and `fiscal-verifactu` was converted but PARKED as an
+open pull request rather than landed, because it edits the column declarations of the immutable
+`registros_facturacion`. Identity was taken next rather than waiting on a person. Nothing about the
+two packages is coupled in CODE — a conversion adds no migration and the two touch no schema file
+in common — so the departure costs nothing at the database. What it does cost is the three-file
+prose conflict priced in the paragraph above.
+
+Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
+(silent, `No schema changes, nothing to migrate`, exit 0, `diff -r` silent) and after (the same),
+and the NEGATIVE CONTROL was taken in the same worktree between them: moving
+`management_account_actions.code_attempts` from `integer` to `smallint` made the same command write
+`0002_probe.sql` and add a journal entry. A column-by-column comparison against the base commit,
+built on drizzle's own `getTableConfig` — comparing SQL type, `columnType`, nullability, primary
+key, defaults, enum values, uniqueness and the read mapping, keyed by TABLE as well as column name —
+reported **67 columns, 0 mismatches**, cross-checked against the probe's own per-table counts, which
+print 7/11/5/17/5/5/5/4/8 and sum to the same 67. It was proved by a mutation the probe is blind to:
+`sessions.ended_at` moved from `tsString` to `ts`, which the comparison named
+(`PgTimestampString` → `PgTimestamp`, the read mapping going from the driver's string to a `Date`)
+while the probe, run on the same mutated tree, printed `No schema changes, nothing to migrate` with
+a silent `diff -r`.
+
+A line classification then established the property the counts cannot: **every line this branch
+changes in the eight files is an import line, a column declaration or one of its continuation lines,
+or the one `pgTable(` → `table(` rename on each table-opening line, or one of the two new comments
+described above.** Everything else — every other comment, `check()` body, index, unique, foreign
+key and blank line — is byte-identical on both sides, and the count of column DECLARATIONS is 67 on
+both sides even though the conversion shortens multi-line declarations onto one line. Proved by
+mutation twice over: removing the `", "` spacing from `google_oidc_states_mode_ck`'s body and
+reversing the column order of `management_account_actions_person_idx` were both reported, and both
+files were then restored from saved copies rather than with `git checkout`.
+
+_Stated as a property because the first version of this paragraph stated it as a count, and the
+count was wrong in the way the `packages/payments` report directly above predicts._ It said "the 266
+lines that are none of those are byte-identical". The comparator's bucket does hold 266 lines, but
+9 of them are the table-opening lines, which the comparator NORMALISES (`pgTable(` rewritten to
+`table(`) before comparing — so they are not byte-identical, and a reader re-counting gets 257. The
+run-it reviewer reached 257 by parsing the files with TypeScript's own syntax tree, the convention
+reviewer reached it by classifying lines by hand, and the fix-wave reader reached it a third way,
+which is why the property rather than the comparator is what this paragraph now states. The
+comparator itself is a scratch script and is not in the tree; the two mutations that prove it were
+run BEFORE the two carve-out comments were added, and it was re-run afterwards, reporting those two
+comment blocks and nothing else.
+
+Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace) and
+`pnpm --filter @waitron/identity test:coverage` (exit 0, 28 files, 228 tests, no test edited). The
+package's `src/schema` folder reads 80.65% statements after the conversion and 81.20% before it,
+measured by stashing the eight files and re-running the same suite. That IS a fall, and the earlier
+wording denying it was contradicted by the numbers beside it. What the measurement shows is that
+nothing became uncovered: the same four files are partially covered before and after, for the same
+reason (nothing in this package's tests walks those tables' extra-config callbacks), and the
+percentage falls because the conversion deletes covered continuation lines from the denominator.
+The whole package moves 94.99% to 94.97% the same way, and the thresholds (90/90/85/85) are met
+either way.
 
 - [ ] **Step 4: Prove nothing changed**
 

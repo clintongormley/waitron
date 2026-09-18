@@ -2345,8 +2345,30 @@ shape the earlier ones had not. It is worth recording that the pull request firs
 both reviewers falsified it by composing the thing and running it, one of them against PGlite. The
 durable half is now a test rather than a paragraph: `packages/db/src/schema/columns.test.ts` pins
 that a null arm composed around `enumCheck` keeps its values inline, and goes red if
-`.inlineParams()` is removed. What is left of P1b is the remaining packages, one pull request
-each, starting at `fiscal-verifactu`, and then the guard.
+`.inlineParams()` is removed.
+
+**`packages/fiscal-verifactu` is converted but NOT landed**, in the sixth pull request (#399), which
+is open and left for the owner: it edits the column declarations of the immutable
+`registros_facturacion` and of the chain head `cadenas`, which an unattended run does not merge.
+**`packages/identity` was therefore taken next**, in the seventh pull request — eight table files,
+nine tables, 67 columns, no schema change. Taking it out of the plan's order costs nothing at the
+database, because a vocabulary conversion adds no migration and the two branches touch no schema
+file in common; it does cost a three-file prose conflict for whoever rebases #399, priced in the
+plan. Identity's two carve-outs are the usual pair, but with an answer the rollout had not had
+before: the two database enums stay, and the two text columns with hand-written `check()`
+constraints (`google_oidc_states.mode`, `management_account_actions.purpose`) stay as plain
+`label()` columns held by SCOPE alone. Neither of the two recorded reasons refuses the substitution
+there — making it in full left the generated schema identical, and no caller of either column
+breaks, established with a control that fired first. The narrowing the second reason is about still
+happens, both columns being NOT NULL; it simply costs nothing today. So what keeps them is that
+rewriting an existing constraint is not what a conversion pull request does.
+
+What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then `workforce`,
+`workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials` and `media`, one pull
+request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
+have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
+`src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their
+tables live in `packages/db`.
 **And the house rule is still not written down, on purpose**: the one-line `CLAUDE.md` §3 entry naming
 `packages/db/src/schema/columns.ts` as the only place the engine's column types are named, with its
 receipt in `docs/developers/conventions-data.md`, lands in P1b's FINAL pull request together with

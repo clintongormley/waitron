@@ -1,13 +1,5 @@
-import {
-  bigint,
-  foreignKey,
-  index,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { foreignKey, index, unique } from "drizzle-orm/pg-core";
+import { bigCount, id, label, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -17,26 +9,24 @@ import { persons } from "./persons.js";
  * granted here, unlike `management_sessions`, mirroring `tenant_credentials`: a credential row is
  * live configuration, not a record anyone needs preserved.
  */
-export const webauthnCredentials = pgTable(
+export const webauthnCredentials = table(
   "webauthn_credentials",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
     /** The credential id the authenticator returned, base64url. Unique, so a login lookup resolves
      * exactly one credential; `credential_id` is the seam the verifier keys on. */
-    credentialId: text("credential_id").notNull(),
-    name: text("name"),
+    credentialId: label("credential_id").notNull(),
+    name: label("name"),
     /** base64url of the COSE public key — used to verify the authentication assertion's signature. */
-    publicKey: text("public_key").notNull(),
+    publicKey: label("public_key").notNull(),
     /** The authenticator's signature counter, bumped on each successful assertion to detect a cloned
      * authenticator. bigint (not integer): the spec allows a 32-bit counter, and `mode: "number"`
      * keeps it a JS number since the value never approaches 2^53. */
-    counter: bigint("counter", { mode: "number" }).notNull().default(0),
+    counter: bigCount("counter").notNull().default(0),
     /** JSON array string of the authenticator's transports ("usb", "internal", …), optional. */
-    transports: text("transports"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    transports: label("transports"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count a
@@ -65,11 +55,11 @@ export const webauthnCredentials = pgTable(
  * and rolls the transaction back — NOT swept: there is no sweep job (a background sweep is a possible
  * future follow-up).
  */
-export const webauthnChallenges = pgTable("webauthn_challenges", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const webauthnChallenges = table("webauthn_challenges", {
+  id: id("id").primaryKey().defaultRandom(),
   /** null for a login (discoverable) ceremony — the person is resolved from the returned
    * credential, not known when the challenge is minted. */
-  personId: uuid("person_id"),
-  challenge: text("challenge").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+  personId: id("person_id"),
+  challenge: label("challenge").notNull(),
+  createdAt: tsString("created_at").notNull().defaultNow(),
 });

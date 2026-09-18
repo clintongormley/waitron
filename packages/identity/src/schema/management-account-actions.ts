@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-  integer,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { count, id, label, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -17,23 +8,25 @@ import { persons } from "./persons.js";
  * account state: a newer action invalidates an older one and completion stamps `used_at`.
  * `token_hash` is SHA-256 of the random URL token; the bearer token itself is never stored.
  */
-export const managementAccountActions = pgTable(
+export const managementAccountActions = table(
   "management_account_actions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
-    purpose: text("purpose").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
+    // for the same reason as google_oidc_states.mode: measured 2026-09-18, substituting leaves the
+    // generated schema identical and no caller breaks today, while the narrowing itself still
+    // happens, so scope is what keeps it. See enumText in packages/db/src/schema/columns.ts.
+    purpose: label("purpose").notNull(),
     /** The replacement login address for an email-change proof. Null for invitations and resets. */
-    targetEmail: text("target_email"),
-    tokenHash: text("token_hash").notNull(),
-    codeHash: text("code_hash"),
-    codeExpiresAt: timestamp("code_expires_at", { withTimezone: true, mode: "string" }),
-    codeAttempts: integer("code_attempts").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
-    usedAt: timestamp("used_at", { withTimezone: true, mode: "string" }),
+    targetEmail: label("target_email"),
+    tokenHash: label("token_hash").notNull(),
+    codeHash: label("code_hash"),
+    codeExpiresAt: tsString("code_expires_at"),
+    codeAttempts: count("code_attempts").notNull().default(0),
+    createdAt: tsString("created_at").notNull().defaultNow(),
+    expiresAt: tsString("expires_at").notNull(),
+    usedAt: tsString("used_at"),
   },
   (t) => [
     foreignKey({

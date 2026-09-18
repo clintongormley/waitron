@@ -1,17 +1,16 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, foreignKey, index } from "drizzle-orm/pg-core";
+import { id, label, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
-export const recoveryCodes = pgTable(
+export const recoveryCodes = table(
   "recovery_codes",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
-    codeHash: text("code_hash").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
-    usedAt: timestamp("used_at", { withTimezone: true, mode: "string" }),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
+    codeHash: label("code_hash").notNull(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
+    usedAt: tsString("used_at"),
   },
   (t) => [
     foreignKey({
