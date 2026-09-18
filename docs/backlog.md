@@ -2363,7 +2363,7 @@ breaks, established with a control that fired first. The narrowing the second re
 happens, both columns being NOT NULL; it simply costs nothing today. So what keeps them is that
 rewriting an existing constraint is not what a conversion pull request does.
 
-**`packages/workforce` is converted too, in the eighth pull request** — nine table files, nine
+**`packages/workforce` is converted too, in the eighth pull request (#401)** — nine table files, nine
 tables, 86 columns, no schema change. It is the first package in the rollout with no VALUE-SET check
 constraint anywhere in it, so the `enumText`/`enumCheck` decision every earlier package had to make
 was simply not available here. It does have two text columns whose own value a check
