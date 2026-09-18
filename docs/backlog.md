@@ -2350,7 +2350,7 @@ that a null arm composed around `enumCheck` keeps its values inline, and goes re
 **`packages/fiscal-verifactu` is converted but NOT landed**, in the sixth pull request (#399), which
 is open and left for the owner: it edits the column declarations of the immutable
 `registros_facturacion` and of the chain head `cadenas`, which an unattended run does not merge.
-**`packages/identity` was therefore taken next**, in the seventh pull request — eight table files,
+**`packages/identity` was therefore taken next**, in the seventh pull request (#400) — eight table files,
 nine tables, 67 columns, no schema change. Taking it out of the plan's order costs nothing at the
 database, because a vocabulary conversion adds no migration and the two branches touch no schema
 file in common; it does cost a three-file prose conflict for whoever rebases #399, priced in the
