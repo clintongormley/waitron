@@ -2433,7 +2433,7 @@ which is also the shape of the two remaining odd-path packages, `media` and `ven
 plan's step 4 and its P1a twin are corrected in place, and so is the P1a summary earlier in this
 entry, which had the same "fails silently" wording.
 
-**`packages/scheduler` is the eleventh pull request** — one table file, one table, 14 columns, no
+**`packages/scheduler` is the eleventh pull request (#404)** — one table file, one table, 14 columns, no
 schema change. Every shape in it was a shape the rollout had already met, with one exception worth
 recording. Its `scheduled_runs.state` column is a checked text column over a value set, and it is the
 first in the rollout where every COST `columns.ts` records for moving such a column to the
