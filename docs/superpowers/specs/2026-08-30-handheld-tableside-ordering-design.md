@@ -31,6 +31,13 @@ verbatim before the design that follows from them.
    > was therefore a **risk-scoping choice, not a fiscal necessity**. Handhelds taking payment (cash
    > first) is the **NEXT build** — see `docs/backlog.md` item 4 "→ NEXT BUILD: handheld cash-at-table"
    > and the allowlist in `2026-08-30-device-auth-enrolment-fail-closed-design.md` §3.
+   >
+   > **The owner restated this on 2026-09-18** and described the card flow it implies: the waiter
+   > carries a reader to the table, pairs it to the handheld, starts the charge from the handheld and
+   > hands the reader to the customer. Decision O2 in
+   > [2026-09-18-handheld-and-till-hardware-decisions.md](2026-09-18-handheld-and-till-hardware-decisions.md),
+   > whose §2–§3 design the pairing. **Read the correction above as the decision** — the order-only
+   > sentence it corrects keeps being quoted as current.
 2. **Build a `handheld` device kind now** (enrolled via a pairing code), rather than deferring to a
    plain PWA + PIN. The staff PIN is still the action gate; the device layer adds trust, location
    binding, shell selection, and management/revocation.

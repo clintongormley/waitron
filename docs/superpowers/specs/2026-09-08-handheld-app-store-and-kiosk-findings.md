@@ -134,6 +134,13 @@ tier's per-device trust step remains the price of offline reachability, not a st
 
 ## 4. Owner decisions (2026-09-08)
 
+> **The second decision below was REVERSED on 2026-09-18: the venue buys and owns the handhelds, and
+> staff do not use their own phones.** See
+> [2026-09-18-handheld-and-till-hardware-decisions.md](2026-09-18-handheld-and-till-hardware-decisions.md)
+> §1 (O1) for the decision and its reasoning, and §2–§6 for what owning the devices changes — managed
+> enrolment is available again, and installing the box's root certificate becomes a provisioning step
+> rather than an ask of an individual. The rest of this section stands.
+
 - **Kiosk lockdown is OPTIONAL, never required.** The baseline handheld is an installed home-screen
   web app plus the till's own staff PIN, on anyone's phone. Fully Kiosk / managed enrolment are a
   documented option for venues that buy dedicated tablets.

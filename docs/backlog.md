@@ -1373,7 +1373,14 @@ Two halves, one branch each (owner decision 2026-09-12).
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
   auth. Gated on the deli having a Stripe account, which it does not.
-- **Slice 2 — the handheld NFC/QR link** and restoring `stripe_on_device` (Tap-to-Pay). Redsys and
+- **Slice 2 — the handheld NFC/QR link.** Owner decisions 2026-09-18
+  ([2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
+  §2–§3): the waiter carries the reader to the table and settles there; pairing is an NFC sticker, a
+  printed QR sticker, or **a dropdown, which is the fallback that always exists and should be built
+  first**. Readers are SHARED between waiters, so the tap and the scan are for confirming which
+  reader is in your hand, not for speed — a remembered reader is offered, never auto-selected. Web
+  NFC is Chrome-for-Android only; the browser's own QR decoder is not dependable, so decode in JS or
+  WASM. Also here: restoring `stripe_on_device` (Tap-to-Pay). Redsys and
   bank terminals are parked; Bizum research is under *Later and parked*.
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI.
 
@@ -2946,8 +2953,12 @@ conflict.
   httpOnly cookie. A native agent is built for hardware only, printing first.
 - **No relay.** Replication rides the box↔own-cloud-instance WireGuard link; remote access is the
   instance forwarding the box's name down the link without terminating TLS.
-- **Handheld kiosk mode is optional, never required** (owner, 2026-09-08) — most waiters use their own
-  phones, so the baseline is an installed home-screen web app plus the till's staff PIN.
+- **Handheld kiosk mode is optional, never required** (owner, 2026-09-08) — the baseline is an
+  installed home-screen web app plus the till's staff PIN. **The venue OWNS the handhelds** (owner,
+  2026-09-18, reversing "most waiters use their own phones"): a member of staff's broken phone is the
+  venue's liability, so lockdown and a certificate install are available again. Buy a cheap Android
+  with an autofocus camera, plus a spare; NFC is optional and Android-only. Decisions and receipts:
+  [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md).
 - **Comments carry invariants, not history** (CLAUDE.md §1). The coverage bar is negotiable with a
   reason.
 
@@ -3185,7 +3196,13 @@ today); generalise archive entry routing off declared source ids when a second n
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Later kiosk options, none built: Chromium `--kiosk` in the box image, Fully Kiosk resale for
-  dedicated tablets, Android Management API enrolment as a Waitron Cloud feature.
+  dedicated tablets, Android Management API enrolment as a Waitron Cloud feature. The counter till
+  boots into the app with no operating-system login — automatic console login, one full-screen
+  browser, and the till's own PIN as the boundary. Four traps to establish when the image is built
+  (the crash-restore dialog, Chromium's separate certificate store, screen blanking, BIOS power-loss
+  behaviour) in
+  [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
+  §5.
 
 ### Replication, membership & failover — residuals (Afterwards)
 

@@ -472,6 +472,13 @@ adapter (a buy-list note; not all have one).
   till = server, a till failure **is** a server failure. **[lean] Above one position, keep the SIF box
   separate from any till.**
 
+> **Revised 2026-09-18.** With ONE box, a till kept separate gains nothing when the box dies — the
+> till has no server to talk to either way. What separation actually protects against is the counter
+> ENVIRONMENT killing the server, which is a placement problem: the box goes in a cupboard under the
+> counter with a cable up to the touchscreen on top. Reasoning and what it does not change in
+> [2026-09-18-handheld-and-till-hardware-decisions.md](2026-09-18-handheld-and-till-hardware-decisions.md)
+> §5.
+
 ---
 
 ## 9. Installing the client on a phone or laptop, and the tap-to-pay want
