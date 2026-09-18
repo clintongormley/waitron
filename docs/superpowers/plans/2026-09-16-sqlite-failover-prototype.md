@@ -4,7 +4,7 @@
 
 **Goal:** Build the throwaway rig that proves the SQLite + Litestream box→store→promote→return-with-a-tail→ship→rejoin loop holds together fiscally, before slice 1 rewrites the storage layer.
 
-**Architecture:** A private workspace package `bench/sqlite-failover`, modelled on `bench/pglite-throughput` (Docker-dependent, run by hand; no scenario ever runs in CI). Seven scenarios (S0–S6) each assert one invariant from the topology design's gate-2 obligations and each carry a control that reproduces the opposite result. Four scenarios (S1, S2, S5, S6) exercise our own logic over `node:sqlite` with no Litestream, so they are deterministic and need no process orchestration — three of them against a local MinIO store, while S2 needs no store at all; three (S0, S3, S4) drive the real Litestream binary. The rig stands up a **minimal model** of the fiscal ledger — it does not import `packages/fiscal-verifactu` — and each model piece cites the real table it mirrors.
+**Architecture:** A private workspace package `bench/sqlite-failover`, modelled on `bench/pglite-throughput` (Docker-dependent, run by hand; no scenario ever runs in CI). Seven scenarios (S0–S6) each assert one invariant from the topology design's gate-2 obligations and each carry a control that reproduces the opposite result. Four scenarios (S1, S2, S5, S6) exercise our own logic over `node:sqlite` with no Litestream, so they are deterministic and need no process orchestration — two of them (S1 and S6) against a local MinIO store, while S2 and S5 need no store at all; three (S0, S3, S4) drive the real Litestream binary. The rig stands up a **minimal model** of the fiscal ledger — it does not import `packages/fiscal-verifactu` — and each model piece cites the real table it mirrors.
 
 **Tech Stack:** Node 26 (`node:sqlite` built-in; native `.ts` imports), `@aws-sdk/client-s3`, `testcontainers` (MinIO), the real `litestream` binary pinned to v0.5.17. No test framework — scenarios are plain scripts using `node:assert`, run via `node`, aggregated by a `scenarios` runner, exactly as the pglite bench's `bench` script works.
 
@@ -335,13 +335,49 @@ export default async function () {
 
 ### Task 5: S5 — the residual natural-key clash
 
+> **2026-09-18, as landed.** Six things below were changed while building it, and the code is what
+> holds. (1) **There is no `SAVEPOINT`**, which Step 3 asks for. It was measured rather than argued:
+> on SQLite 3.53.4, the engine node v26.7.0 carries, one transaction — a sale, a clashing invoice
+> insert, then a clean invoice and a second sale — was run once with the clashing insert inside `SAVEPOINT`/`ROLLBACK TO` and once with
+> only a `try`/`catch`, and both arms committed both sales and the clean invoice with no error on
+> `COMMIT`. What SQLite's own documentation says about its default conflict resolution, quoted with
+> its URL and the date it was read, is in `bench/sqlite-failover/README.md` → "What S5 measures, and
+> the savepoint it does not need". The same probe written with `INSERT OR ROLLBACK` does print a
+> difference, so it is capable of measuring one; a later insert here using a non-default conflict resolution has to
+> re-run it. (2) The step-1 snippet is not the scenario. It ships a hand-built batch whose
+> `records`, `sales` and `saleLines` are empty, so its "every other row applies" assertion would
+> have been asserted over nothing; the scenario uses the spec's own setup instead — two nodes, a
+> real `diffTail` of a real tail — and compares the rows the receiver ends up holding, field by
+> field, with the rows that were shipped. (3) A case neither plan nor spec names is pinned: **the same tail shipped
+> again**. A ship is retried whenever its confirmation is lost, so a branch reading every refused
+> insert as a clash would hand a person the sender's clean invoice as a clash on the second ship.
+> The rule distinguishes a row held under a DIFFERENT id (the clash) from one held under the SAME id
+> (a retry, and a silent no-op). (4) Two control seats the **Interfaces** block below does not
+> mention were added beside `applyTail`: `applyTailSilentDrop` and `applyTailUnisolated`, each a
+> setting of the new `ClashRule` parameter that `applyShippedTail` takes. They reproduce the two
+> failures spec §4's S5 rules out — `silent-drop` is "not silently dropped", where the row reaches
+> neither the table nor the report, and `unisolated` is "not crashing the whole ship", where the
+> uncaught refusal rolls the whole batch back. (5) S5 needs no object store, the same as S2: it
+> ships between two in-memory SQLite databases and starts no MinIO container, which is why the
+> Architecture paragraph at the top of this plan no longer says three scenarios use the store.
+> (6) **A refused insert is classified by SQLite's extended result code before the table is read at
+> all**, which neither plan nor spec asks for. Only 1555 (a primary key) and 2067 (a unique index)
+> are read any further; every other refusal — a missing `NOT NULL` value, a trigger's `RAISE(ABORT)`
+> — is rethrown and takes the batch down. Reading the table first would swallow those, because a
+> receiver that already holds the arriving row's id looks exactly like a ship arriving twice. The
+> scenario holds the apply to it with a third control, a receiver whose `BEFORE INSERT` trigger
+> refuses the arriving row for a reason of its own, on the assertion "a refusal that is not about
+> uniqueness leaves the apply instead of being read as a clash". Details and the runs behind all
+> six: PR for this task, and
+> `bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not need".
+
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (`applyTail`'s `supplier_invoices` clash branch)
 - Create: `bench/sqlite-failover/src/scenarios/s5_supplier_clash.ts`
 
 **Interfaces:**
 - Consumes: `openNode`, `applyTail`, `SupplierInvoiceRow`.
-- Produces: `applyTail` detects a `UNIQUE(supplier,invoice_number)` conflict against a row with a **different** id, adds it to `ApplyResult.skippedClashes`, skips it, and applies every other row (does not abort the transaction for the whole ship — the clash is isolated).
+- Produces: `applyTail` classifies a refused `supplier_invoices` insert by SQLite's extended result code first — only a primary-key (1555) or unique-index (2067) refusal is read any further, anything else is rethrown and rolls the whole ship back — and then reads the rows already held: a `UNIQUE(supplier,invoice_number)` conflict against a row with a **different** id goes into `ApplyResult.skippedClashes` and is skipped, the same id is a retried ship and a silent no-op, and either way every other row in the batch still applies (the transaction is not aborted — the clash is isolated).
 
 - [ ] **Step 1: Write the failing scenario** `s5_supplier_clash.ts`:
 ```ts

@@ -29,8 +29,9 @@
 // Everything here is the rig's MODEL of the submission state machine (`src/model.ts`) — no result
 // here is a statement about `packages/fiscal-verifactu`.
 //
-// Unlike every sibling scenario this one takes no `ScenarioContext`: the hand-over it models happens
-// between in-memory SQLite databases, so it starts no MinIO container and opens no object store.
+// Like S5 and unlike the rest, this scenario takes no `ScenarioContext`: the hand-over it models
+// happens between in-memory SQLite databases, so it starts no MinIO container and opens no object
+// store.
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {
