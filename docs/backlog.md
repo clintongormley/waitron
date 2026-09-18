@@ -2616,7 +2616,38 @@ instrument's object-tag half cannot tell a `Buffer` from a `Uint8Array` either, 
 `String(...)` half discriminates, a `Buffer` stringifying as its utf-8 decoding and a `Uint8Array`
 as a comma-joined list.
 
-What is left of P1b is `media`, one pull request, and then the guard. `purchasing` and
+**`packages/media` is the fourteenth pull request** — one table file, two tables, nine columns, no
+schema change, and it deletes the LAST hand-rolled `bytea` block in the tree. `grep -rn customType
+packages apps --include="*.ts"` now matches no file but `packages/db/src/schema/columns.ts` and
+`columns.test.ts`, where the one match is prose. That receipt is deliberately stated at FILE
+granularity: the docstring carrying it is itself one of the matches, so a count of matching LINES
+can move on a reword — an earlier draft counted five where this
+wording gives four. Unlike `packages/credentials`, this one changes nothing a caller
+is handed: media's block declared the `Uint8Array`-facing shape the vocabulary took, body for body,
+which was proved by writing the two five-line blocks to files and diffing them (exit 0) rather than
+by reading them side by side.
+
+The interesting part is what it took to make the CHECK mean anything. The parity comparison this
+rollout runs against every conversion reported zero mismatches here — and zero is also what a broken
+comparison prints, so the reading needed a control before it was worth anything. Two were run, both
+on this package's own columns: `created_at` `ts` → `tsString` moved it to one mismatch while the
+drizzle-kit probe stayed silent on the same tree, and swapping the `binary` helper for a local
+`customType` with no `fromDriver` moved it to one mismatch on `bytes`, printing
+`[object Uint8Array]:1,2,3` against the same object tag with a different `String(...)` value. So the
+instrument can see a changed byte mapping on this column, and the zero it reported is a fact rather
+than a silence.
+
+Its one carve-out is the array column, `images.labels`, the last of the five the rollout has met. It
+becomes `label("labels").array()` — the shape the four sibling array columns already use, where the
+builder is vocabulary and `.array()` is a drizzle call reached off it. Nothing in this rollout
+absorbs `.array()`, and the flip handles arrays on its own row of the spec's table whatever the
+vocabulary does. Coverage of the table file moved from 67.39% at the base commit to 64.28%
+converted, with the SAME 15 uncovered lines on both sides — the two constraint callbacks no test
+invokes — because the file lost four measured lines when the `bytea` block went. The package itself
+reads 94.15% at the base commit and 94.13% converted, and its bars are four separate numbers rather
+than one: 94.13 statements and lines against 90, 96.22 functions and 92.48 branches against 85.
+
+What is left of P1b is the guard. `purchasing` and
 `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their

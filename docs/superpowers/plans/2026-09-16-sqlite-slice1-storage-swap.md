@@ -576,6 +576,18 @@ declares the shape the vocabulary took — so the "callers on the other side" th
 about have all now been changed. What changing them cost in `packages/credentials` is in that
 package's report under step 3.
 
+_Corrected a third time, 2026-09-18: the last of the three has gone._ P1b's FOURTEENTH pull request
+deleted `packages/media/src/schema/images.ts`'s block and moved `media_image_data.bytes` onto the
+shared `binary` helper. `grep -rn customType packages apps --include="*.ts"` now matches no file
+but `packages/db/src/schema/columns.ts` and `columns.test.ts`, where the one match is prose. That
+receipt is stated at FILE granularity on purpose: the docstring carrying it is itself one of the
+matches, so a count of matching LINES can move on a reword — which is what happened: an earlier
+draft counted five, and this one's own rewording took it to four. So every paragraph on this
+page written while a hand-rolled block was still in the tree is a dated record rather than a
+description of today's tree. This one cost no caller anything: media's block declared
+the `Uint8Array`-facing shape body for body, proved by `diff` of the two five-line blocks exiting 0
+before the deletion.
+
 **Two `text` columns that must never become `label()`.**
 `packages/fiscal-verifactu/src/schema/registros.ts:88-89` stores `cuota_total` and `importe_total` as
 `text` deliberately, and the comment above them says why: `packages/verifactu/src/huella.ts` hashes
@@ -701,10 +713,10 @@ returns `42n`. Both pairs emit identical DDL, so the step 4 probe is blind to pi
 
 **The binary decision, and what it will cost the conversion pull requests.** The three hand-rolled
 `bytea` blocks disagree with each other, and step 1 converted none of them — all three were still in
-the tree, checked on 2026-09-17. _One of the three is left, `packages/media`'s. P1b's
-third pull request deleted `print-jobs.ts`'s block and moved that column onto the shared helper,
-and its THIRTEENTH deleted `tenant-credentials.ts`'s, so the first two files named next no longer
-apply._ The `bytea` custom
+the tree, checked on 2026-09-17. _None of the three is left. P1b's third pull request deleted
+`print-jobs.ts`'s block and moved that column onto the shared helper, its THIRTEENTH deleted
+`tenant-credentials.ts`'s, and its FOURTEENTH deleted `packages/media/src/schema/images.ts`'s — so
+all three files named next are a dated record of where those blocks used to be._ The `bytea` custom
 type in `packages/db/src/schema/print-jobs.ts`
 and
 `packages/credentials/src/schema/tenant-credentials.ts:15` hand callers a node `Buffer`;
@@ -753,7 +765,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/fiscal-verifactu` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18; `packages/venue-service` finished 2026-09-18; `packages/credentials` finished 2026-09-18
+- [x] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/fiscal-verifactu` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18; `packages/venue-service` finished 2026-09-18; `packages/credentials` finished 2026-09-18; `packages/media` finished 2026-09-18. The list is complete — `purchasing` and `reporting` are on it but have no `pgTable(` and no `drizzle-orm/pg-core` import in `src`, re-checked 2026-09-18.
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -842,7 +854,7 @@ _Dated note, 2026-09-17, later the same day:_ that last sentence describes the l
 THIRD pull request deleted. On today's tree `print_jobs.payload` IS a `binary` column, so the
 builder side of the probe already reads `Uint8Array` and only the raw-SQL side reads `Buffer`.
 
-- [ ] **Step 3: For each package, convert every table file**
+- [x] **Step 3: For each package, convert every table file** — done 2026-09-18 with `packages/media`, the last package on step 2's list with anything to convert.
 
 Replace `pgTable` with `table`, and each column builder with its vocabulary equivalent. Leave `check()`, `index()`, `unique()`, `foreignKey()` and `primaryKey()` imports coming from `drizzle-orm/pg-core` — the vocabulary covers columns and the table builder only.
 
@@ -920,7 +932,12 @@ bodies cannot redirect one. This is not a catalogue peculiarity. `grep -rn "\.ar
 on 2026-09-17, skipping tests, returns five columns in all: this one, three in `packages/db`
 (`join-requests.decoy_numbers`, `sales.invoice_locales`, `tenants.invoice_locales`) — whose own
 report above does not mention them either — and one still unconverted in `packages/media`
-(`images.labels`), which the converter of that package will meet. The spec gives arrays their own row in the flip table
+(`images.labels`), which the converter of that package will meet. _Dated note, 2026-09-18: it has.
+P1b's fourteenth pull request converted it to `label("labels").array()`, so all five array columns
+in the tree are now written that way. `grep -rn "\.array()" packages apps --include="*.ts"` returns
+exactly five lines and nothing else; four of them show `label(...).array()` whole, and media's shows
+`.array()` alone, because prettier breaks that chain and leaves `label("labels")` on the line
+above._ The spec gives arrays their own row in the flip table
 (`2026-09-16-sqlite-slice1-storage-swap-design.md` — array becomes text holding JSON), so F1 has to
 handle them whatever the vocabulary does, and no conversion pull request in this rollout can claim
 to have absorbed them.
@@ -2108,7 +2125,71 @@ The diff is small enough to read whole rather than classify by script: in the ta
 changed line is the import block, the deleted `bytea` block, the table-opening line (`pgTable(`
 becomes `table(`), or one of the six column declarations.
 
-- [ ] **Step 4: Prove nothing changed**
+**What `packages/media` added, as the FOURTEENTH pull request and the last hand-rolled `bytea` block
+in the tree.** One table file, two tables, nine columns, no schema change and — unlike
+`packages/credentials`, the other binary conversion — no change to what any caller is handed. That
+last part is measured rather than assumed: at the base commit `71bd7aa9`, `sed -n '16,20p'` of this
+package's block and `sed -n '274,278p'` of `columns.ts`'s were written to two files and `diff`ed,
+exit 0, so the two declarations are identical body for body. **Both ranges are as of `71bd7aa9`.**
+Media's block only exists there, and `columns.ts`'s moves whenever anything above it is edited —
+including in the commit this paragraph is part of — so on a later tree find it with
+`grep -n 'const bytea = customType' packages/db/src/schema/columns.ts` rather than by line number.
+An earlier draft of this sentence predicted what the stale range would return, and was wrong by the
+time it was committed, for exactly that reason. Both hand a reader a
+`Uint8Array` and bind a node `Buffer`, so deleting one for the other moves nothing across the
+boundary, and `pnpm -r typecheck` exiting 0 for the whole workspace is the second reading of the
+same fact.
+
+**The instrument needed its own control here, because zero mismatches was the expected result.** A
+`getTableConfig` comparison against the file at the base commit reported 9 columns in 2 tables
+(`media_images` 7, `media_image_data` 2, matching drizzle-kit's own per-table counts) and zero
+mismatches — which on its own is exactly what a broken comparison would print too. Two mutations
+were run against it. `created_at` `ts` → `tsString` took it to one mismatch
+(`PgTimestamp` → `PgTimestampString`, a read of `[object Date]` → `[object String]`) while the
+drizzle-kit probe stayed silent at exit 0 on the same tree. And, specifically for the column this
+package exists to convert, replacing `binary("bytes")` with a locally declared `customType` that
+omits `fromDriver` took it to one mismatch on `media_image_data.bytes`, printing
+`[object Uint8Array]:1,2,3` against `[object Uint8Array]:\u0001\u0002\u0003` — the object tag
+identical on both sides, the `String(...)` half the only thing that separates them. That reproduces,
+on this package's own column, the warning the `packages/credentials` report above records, and it is
+what makes the zero-mismatch reading mean something.
+
+**The step 4 probe ran three times, in this order**, which is what makes the third run mean
+something. Before any edit: `No schema changes, nothing to migrate`, exit 0, `diff -r` silent —
+so the migration folder was not already out of date. Then the negative control, `created_at`'s
+`withTimezone` flipped from `true` to `false`: the same command wrote `0002_probe.sql`, a snapshot
+and a journal entry, and `diff -r` exited 1. Then, after the conversion: silent again at exit 0.
+
+**The carve-out is the array column**, `images.labels`, and it is the last of the five the
+`packages/catalogue` report counted. It converts to `label("labels").array()`, which is the shape
+the four sibling array columns already use (`content_languages.languages`,
+`join_requests.decoy_numbers`, and `invoice_locales` in both `sales` and `tenants`): the column
+builder is vocabulary and `.array()` is a drizzle call reached off it. Nothing in this rollout
+absorbs `.array()`, and F1 handles arrays on its own row of the spec's flip table whatever the
+vocabulary does.
+
+None of the earlier packages' decisions arose here. There is no `pgEnum`, and no `date`, `time`,
+`smallint`, `bigint` or `numeric` column. **There is no checked text column in the sense that
+decision was about** — the `enumText`/`enumCheck` question, which only comes up when a check
+enumerates a value SET. This package has two checks and neither does: `media_images_filename_ck` is
+a regular expression over `filename`, and `media_images_names_ck` is a pair of `jsonb_typeof` tests.
+Both are left exactly as they were.
+
+Coverage moved and the reason is arithmetic rather than behaviour: `src/schema/images.ts` reads
+67.39% at the base commit and 64.28% converted, with the SAME 15 uncovered lines on both sides —
+the two `(t) => [...]` constraint callbacks, which no test invokes either way. The file lost four
+measured lines when the `bytea` block went, so the denominator shrank. The package as a whole reads
+94.15% at the base commit and 94.13% converted. Its bars are four separate numbers, not one:
+`packages/media/vitest.config.ts` sets statements 90, lines 90, functions 85 and branches 85, and
+the converted run reports 94.13 statements, 94.13 lines, 96.22 functions and 92.48 branches. That
+before-and-after comparison was taken with `--coverage.reportsDirectory=/tmp/...`, outside the
+package, per the rule the `packages/scheduler` report paid for.
+
+`pnpm --filter @waitron/media test:coverage` exits 0 with 11 files and 105 tests across all three of
+its vitest projects — node, real PostgreSQL and real headless Chromium — with no existing test
+edited.
+
+- [x] **Step 4: Prove nothing changed** — done 2026-09-18 with `packages/media`, the last package on step 2's list with anything to convert.
 
 The generate-into-a-copy probe from P1a step 6 — **not `drizzle-kit check`, which cannot see the
 schema source at all**. Run it from the package directory:
@@ -2217,8 +2298,8 @@ Two names in that import block are NOT column builders and are left out for thei
 `pgTable` is the table builder, and it is already what the line above the regex uses to pick which
 files to look at. `customType` is a builder FACTORY, and it **deserves a decision rather than a
 silent omission**: the three hand-rolled `bytea` blocks that step 1's `binary` helper exists to
-replace (ONE of them left, `packages/media`'s, since `print-jobs.ts`'s and
-`tenant-credentials.ts`'s went) are each built with `customType`, so a table file calling
+replace (all three now gone — `print-jobs.ts`'s, `tenant-credentials.ts`'s and
+`images.ts`'s) were each built with `customType`, so a table file calling
 `customType(` is doing the very
 thing this guard exists to stop, and leaving it out means the guard cannot see the next one. Decide
 when writing the guard; if it is left out, say so in the comment beside it.
@@ -2247,7 +2328,7 @@ naming `packages/db/src/schema/columns.ts` as the only place the engine's column
 and its receipt in `docs/developers/conventions-data.md`, land in the same change as the guard that
 enforces them.
 
-- [ ] **Step 6: Commit each package separately**
+- [x] **Step 6: Commit each package separately** — done 2026-09-18 with `packages/media`, the last package on step 2's list with anything to convert.
 
 ```bash
 git commit -s -m "Use the shared column types in <package>
@@ -3831,9 +3912,9 @@ can write it:
   returns on a read. The PostgreSQL helper hands callers a `Uint8Array` and binds a node `Buffer`
   (the private `bytea` custom type in `packages/db/src/schema/columns.ts`), and by then there will
   be real call sites depending
-  on that — P1b step 3 converts the tree's hand-rolled `bytea` columns onto it, FIVE of them across
-  three files, and all but `packages/media`'s `images.bytes` are converted already
-  (`print_jobs.payload`, and `tenant_credentials`'s `ciphertext`, `iv` and `auth_tag`).
+  on that — P1b step 3 converted the tree's hand-rolled `bytea` columns onto it, FIVE of them across
+  three files, and all five are converted (`print_jobs.payload`, `tenant_credentials`'s
+  `ciphertext`, `iv` and `auth_tag`, and `media_image_data.bytes`).
   **Do not invent this
   answer while writing the other bodies: settle it against the driver, with a round trip, before F1
   starts.**

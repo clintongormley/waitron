@@ -98,11 +98,11 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * This pair is for a NEW column. Every existing text column that already carried a hand-written
  * `check()` LISTING ITS PERMITTED VALUES stays as `label()` beside its untouched constraint as the
  * rollout reaches its package, and the reason is NOT one reason for all of them. The two reasons
- * below are the ones met so far; the list of columns each covers grows with the rollout, so read it
- * as a property and not as a roll-call. A checked text column whose check is NOT a value set — a
- * pattern, a length, a range — is not in that group at all, because the substitution was never
- * available there, and those columns carry no comment: `payments.card_last4` and `persons`'s
- * length-checked columns are the shape.
+ * below are the ones met so far; the list of columns each covers grew with the rollout and was
+ * never complete, so read it as a property and not as a roll-call. A checked text column whose
+ * check is NOT a value set — a pattern, a length, a range — is not in that group at all, because
+ * the substitution was never available there, and those columns carry no comment:
+ * `payments.card_last4` and `persons`'s length-checked columns are the shape.
  *
  * For three columns in THIS package it is measured. `enumCheck` joins its values with `", "`, so on
  * a constraint written without those spaces the substitution changes the DDL: made on
@@ -120,8 +120,8 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * brands its type as the exported `IncidentSeverity`, and `enumText` would replace that with a
  * union derived from the values array.
  *
- * The second group is open, and it keeps growing as the rollout reaches new packages: checked text
- * columns written with `enumCheck`'s spacing exist outside this package too, among them
+ * The second group reaches outside this package, and it grew as the rollout did: checked text
+ * columns written with `enumCheck`'s spacing exist elsewhere too, among them
  * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17),
  * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18),
  * `packages/fiscal-verifactu` (converted 2026-09-18 — `acks.state`, `envios.estado` and
@@ -134,8 +134,12 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * `scheduled_runs.state` in `packages/scheduler` (converted 2026-09-18), where the narrowing costs
  * nothing at all: the column is already declared `.$type<RunState>()`, so `enumText` would change
  * no caller-facing type — `RunState` is `(typeof runState)[number]`, which is the union `enumText`
- * derives. Packages the rollout has not yet reached are unconverted on `main` on that date. So take
- * the two reasons as the property and the names as a dated reading.
+ * derives. The rollout finished on 2026-09-18 with `packages/media`, so no further conversion will
+ * add a name here — but this was never a roll-call and is not one now, and the gap is in the FIRST
+ * of the two reasons rather than this one: `packages/venue-service`'s five value-set checks in
+ * `src/schema/service.ts` are all written without `enumCheck`'s spacing, so substituting there
+ * would rewrite a constraint, and none of the five is named anywhere here. So take the two reasons
+ * as the property and the names as a dated reading.
  *
  * Scope keeps `scheduled_runs.state` plain, like the identity pair above, but it is the only column
  * measured so far where none of the three COSTS — the spacing, the narrowing, the branding —
@@ -295,9 +299,11 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
  * `BUILDER: Uint8Array isBuffer=false | RAW: Buffer isBuffer=true`, with both reads carrying the
  * same bytes, so the difference is the mapping and not the data.
  *
- * One hand-rolled `bytea` block is left in the tree, and it declares the same shape as this one:
- * `packages/media/src/schema/images.ts` declares this same `Uint8Array`-facing shape, body for
- * body, so converting it changes nothing a caller sees.
+ * This is the tree's only `bytea` declaration. `grep -rn customType packages apps --include="*.ts"`
+ * on 2026-09-18 matched no file but this one and `columns.test.ts`, where the one match is prose.
+ * The receipt is stated at FILE granularity on purpose: this sentence is itself one of the matches,
+ * so a count of matching LINES can move on a reword — which is what happened, an earlier draft
+ * counting five where this wording gives four.
  *
  * The custom type itself stays private: drizzle's overloads on it also accept no name at all and a
  * config object, so exporting it directly would make `binary()` compile where every sibling helper

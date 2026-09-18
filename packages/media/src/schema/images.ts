@@ -1,37 +1,20 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  customType,
-  foreignKey,
-  index,
-  jsonb,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
+import { binary, id, json, label, table, ts } from "@waitron/db";
 
-const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
-  dataType: () => "bytea",
-  toDriver: (value) => Buffer.from(value),
-  fromDriver: (value) => new Uint8Array(value),
-});
-
-export const mediaImages = pgTable(
+export const mediaImages = table(
   "media_images",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    filename: text("filename").notNull(),
-    names: jsonb("names").$type<Record<string, string>>().notNull(),
-    altText: jsonb("alt_text").$type<Record<string, string>>().notNull(),
-    labels: text("labels")
+    id: id("id").primaryKey().defaultRandom(),
+    filename: label("filename").notNull(),
+    names: json<Record<string, string>>("names").notNull(),
+    altText: json<Record<string, string>>("alt_text").notNull(),
+    labels: label("labels")
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [
     unique("media_images_filename_key").on(t.filename),
@@ -45,11 +28,11 @@ export const mediaImages = pgTable(
 );
 
 // Bytes live separately so metadata reads and change subscriptions never select a photo payload.
-export const mediaImageData = pgTable(
+export const mediaImageData = table(
   "media_image_data",
   {
-    imageId: uuid("image_id").notNull(),
-    bytes: bytea("bytes").notNull(),
+    imageId: id("image_id").notNull(),
+    bytes: binary("bytes").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.imageId] }),
