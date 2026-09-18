@@ -2252,12 +2252,13 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype is no longer parked: since 2026-09-17 it is being built alongside slice 1, one task per
-PR. Seven of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
+PR. Eight of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
 a conditional write), S1 (a double promotion fenced by one, #392), S2 (one sale submitted to the
 tax agency twice, #395), S5 (a supplier invoice number typed on both machines, #406), the
-litestream foundation the last three scenarios stand on (#411) and S0, the whole failover loop end
-to end (#415). **The litestream foundation unblocked S0, S3 and S4; S0 is now in, so S3 and S4 are
-the rest of the queue** alongside Task 10, the write-up: it can find the pinned binary, point it at
+litestream foundation the last three scenarios stand on (#411), S0, the whole failover loop end
+to end (#415), and S3, a replica copied between two places in the store (#417). **S4 (a multi-day
+offline write load) and Task 10, the write-up, are the rest of the queue.** What the litestream
+foundation gave those scenarios: it can find the pinned binary, point it at
 the store, upload a database, keep streaming one as it is written, and rebuild it from the store
 afterwards. Four things
 it measured that those three will otherwise re-derive: restoring refuses a non-empty output file
@@ -2328,7 +2329,8 @@ package README without a fresh measurement. S5 closed the second of those three:
 verdict, and the README quote was re-measured in the same change rather than left to drift. S0 did
 the same (#415, 2026-09-18) after review caught it printing prose, and re-measured its own README
 quote. **S2 is now the only scenario still printing prose and still inlining its ids**, so the
-suggestion stands for it alone, and the shape Task 10 has to parse is settled: `key=value`.
+suggestion stands for it alone, and the shape Task 10 has to parse is settled: `key=value` — S3
+(#417) prints one too, with every free-text value quoted after review caught one that was not.
 **S0 is in (#415), verdict PASS, and it is critical.** The box streams, files its own sales, sells
 again and dies; the cloud rebuilds from the store, takes a higher term and sells for itself; the box
 returns, sees the higher term and hands over its unsent sales. What S0 pins: the cloud ends holding
@@ -2338,16 +2340,55 @@ chain's hash links verify with no gap; every record reached the tax-agency stand
 and the pointer in the store names the cloud's term and generation, read back rather than assumed.
 Four things it deliberately does NOT establish, each of which a later task or reader would otherwise
 assume. **It never starts the streaming daemon** — every upload is a one-shot, so "the box dies
-before the next upload" is a scripted step here and not the timing window the product would face;
-`replicate` is still driven only by the rig's `LS` foundation check, and Tasks 8 and 9 are where a
-daemon would be. **"Exactly once" is a claim about the filing ledger, not the table**, which is keyed
+before the next upload" is a scripted step here and not the timing window the product would face.
+(The daemon itself is no longer undriven: S3 (#417) sells under it and restores from what it wrote.
+S0 still uses one-shots only, so the sentence above stands for S0.) **"Exactly once" is a claim about the filing ledger, not the table**, which is keyed
 by node and sequence number and could not hold a row twice whatever the loop did. **Nothing fences
 the returning box**: it hands over because the scenario has it hand over, not because anything would
 stop it selling, so the decommission-then-promote rule the topology design §5.2 states is still
 unmodelled. And **nothing streams the cloud's own generation**, so a node restoring `gen-2-cloud-1`
-and following the pointer is Task 8's. One assertion in the scenario is driven by no scenario run and
+and following the pointer was left to Task 8 — which did NOT take it: S3 restores box-a's own
+generation from a copied prefix and never reads the pointer, so that case is still unowned and S4 or
+the write-up should say so rather than assume it was covered. One assertion in the scenario is driven by no scenario run and
 only by a mutation — Part C's attribution check, which exists to exclude a duplicate filed under a
 different identity — and the package README names it and says so.
+
+**S3 is in (#417), verdict PASS, and it is critical.** The question: if one machine holds a copy of
+another machine's replica in the object store, and that copy is pushed into the place a cloud node
+would restore from, does the restore give the same database as if the machine had streamed there
+directly? It does — **as long as the copy is a mirror**, meaning it also deletes what the source no
+longer has. What S3 pins: box-a sells while a real litestream daemon streams it, and keeps selling
+until the store has actually dropped a file it was holding, so the deletion case really arises;
+box-a's database is then deleted from disk and the replica copied into a destination that already
+holds a different machine's replica; with deletions propagated the restore is the same file bytes,
+the same ledger rows compared field by field against what box-a wrote, the same chain tips, and
+SQLite calling both files intact. The control is the same recipe with deletion propagation off,
+driven through that same comparison: it restores the OTHER machine's nine rows, litestream exiting 0
+and raising nothing, and what refuses it is SQLite calling the mixed file damaged.
+**The control the plan asked for does not bite on this pin, and that is recorded rather than hidden.**
+Where the leftovers at the destination are the same database's own older files — ones the source had
+since compacted away — the restore comes back identical, because a replica file's name carries the
+transaction range it covers, so putting one back under its old name puts the same range back twice.
+That is the scenario's Part C, which decides nothing. Both design documents now carry dated notes
+saying so, since the prototype spec's own S3 section still asserted the opposite. **What S3 does NOT
+establish:** whether litestream ever writes different bytes under a key it has already used — the one
+case that would make the same-lineage half unsafe; nothing about an EMPTY destination, since both
+copies land on a dirty one; and nothing about the cloud generation or the store pointer (above).
+Two things the rig needed on the way, both now in `model.ts` and `litestream.ts` for every later
+scenario: litestream only deletes files with four settings it defaults to minutes on (with the
+defaults, box-a wrote 131 replica files in two minutes and litestream removed none), and S3 is the
+first scenario writing to a database while a litestream daemon reads it, which surfaced a
+"database is locked" flake — nodes now set a busy timeout AND begin write transactions immediately,
+each measured to be insufficient alone.
+**What the review cost, and the one lesson worth carrying.** The run-it seat and the convention
+reviewer each found things the other could not, and the re-read of their FIXES found the only
+behavioural defect of the whole branch: the new code that recorded "litestream declined to restore"
+as a measurement matched any non-zero exit of the restore command, which is also what a corrupt copy
+and a dead store produce — so a genuinely broken copy would have been written down as a result with
+the scenario still passing. It now matches litestream's own missing-backup words. That is the same
+shape the litestream foundation's own control had already paid for once (a control that accepted any
+error as a refusal), which is the argument for keeping the third pass: a fix wave is where this
+repository's false claims are born.
 
 **S5 is in (#406), verdict PASS, and it is non-critical.** A supplier invoice number typed on both
 machines while they are apart cannot be stored by the machine receiving the batch, which already
