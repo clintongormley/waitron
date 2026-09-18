@@ -3020,6 +3020,19 @@ database per SUITE with a truncate between tests, which is a different isolation
 `Target`'s own doc comment argues for at length. They belong with F1's 66-test disposition, and the
 plan now says so.
 
+**One edge the conversions keep finding and deliberately leave alone.** A fixture that wraps the
+helper often adds its own per-test truncate of the tables it cares about, and that truncate is
+redundant: `usePgliteDb` defaults `resetPerTest` to true
+(`packages/db/src/testing/lifecycle.ts:132`) and its `afterEach` truncates EVERY table in the public
+schema with `restart identity cascade` (`lifecycle.ts:76-83`, applied at `:114-125`), so the
+fixture's own hook empties tables that are already empty. Seen while converting
+`packages/purchasing` (#427), whose `test/fixtures.ts` truncates the two purchase-invoice tables
+before each case; `packages/fiscal`'s converted suite (#424) has the same shape. Nothing is wrong —
+it costs one statement per test and the suites pass either way — and a conversion pull request is
+the wrong place to change what a fixture guarantees, so it is recorded here rather than fixed. If
+anyone takes it, the question to answer first is whether any such fixture relies on the truncate
+running BEFORE the first test, where the helper's reset has not yet run at all.
+
 Two more things left deliberately open. The house rule naming `useVenueDb`, and the guard that would
 enforce it, are NOT added yet — a rule with standing violations needs a guard and a guard cannot
 pass while the violations stand, so both land together in their own pull request after the last
