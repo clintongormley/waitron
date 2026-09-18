@@ -2293,12 +2293,12 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype is no longer parked: since 2026-09-17 it is being built alongside slice 1, one task per
-PR. Eight of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
+PR. Nine of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
 a conditional write), S1 (a double promotion fenced by one, #392), S2 (one sale submitted to the
 tax agency twice, #395), S5 (a supplier invoice number typed on both machines, #406), the
 litestream foundation the last three scenarios stand on (#411), S0, the whole failover loop end
-to end (#415), and S3, a replica copied between two places in the store (#417). **S4 (a multi-day
-offline write load) and Task 10, the write-up, are the rest of the queue.** What the litestream
+to end (#415), S3, a replica copied between two places in the store (#417), and S4, a multi-day
+offline write load (#422). **Task 10, the write-up, is the rest of the queue.** What the litestream
 foundation gave those scenarios: it can find the pinned binary, point it at
 the store, upload a database, keep streaming one as it is written, and rebuild it from the store
 afterwards. Four things
@@ -2389,8 +2389,8 @@ the returning box**: it hands over because the scenario has it hand over, not be
 stop it selling, so the decommission-then-promote rule the topology design §5.2 states is still
 unmodelled. And **nothing streams the cloud's own generation**, so a node restoring `gen-2-cloud-1`
 and following the pointer was left to Task 8 — which did NOT take it: S3 restores box-a's own
-generation from a copied prefix and never reads the pointer, so that case is still unowned and S4 or
-the write-up should say so rather than assume it was covered. One assertion in the scenario is driven by no scenario run and
+generation from a copied prefix and never reads the pointer, so that case is still unowned — S4 did
+not take it either, so the write-up must say so rather than assume it was covered. One assertion in the scenario is driven by no scenario run and
 only by a mutation — Part C's attribution check, which exists to exclude a duplicate filed under a
 different identity — and the package README names it and says so.
 
@@ -2430,6 +2430,54 @@ the scenario still passing. It now matches litestream's own missing-backup words
 shape the litestream foundation's own control had already paid for once (a control that accepted any
 error as a refusal), which is the argument for keeping the third pass: a fix wave is where this
 repository's false claims are born.
+
+**S4 is in (#422), verdict MEASURED, and it is non-critical.** The question the topology design
+would not let anyone answer from a desk: what does a box that has been offline for days do to its
+write-ahead log, and to the wait a cashier sees, while litestream cannot reach the store and nothing
+else is allowed to tidy the log up. Three answers, over 7500 sales standing in for thirty modelled
+days.
+
+**The cashier is fine and the disk is survivable.** The commit does not slow as the log grows — p95
+0.312ms and p99 0.436ms against the 150ms and 400ms bars, with the last modelled day faster than the
+first — and the log grows at about 40KiB a sale to 310MB, which is roughly 104 days of offline
+trading per gibibyte. So it is bounded by how long the box stays offline rather than by a size. It
+holds about eighty times the data a checkpoint then writes, which means the prototype spec's example
+ceiling, "a small multiple of the streamed data", is NOT met; the scenario prints that rather than
+substituting a bar that passes, and the bar it does use is per sale.
+
+**The result that matters for slice 2: we cannot get that space back while litestream is there.**
+Asking our own process to checkpoint took SECONDS (6.8s to 12.4s across runs), reported itself
+blocked, moved four frames of about seventy-five thousand, and left the file exactly as big as it
+was; with the daemon stopped the same statement took MILLISECONDS and emptied the log. That is
+topology risk 9's "could put our own process on the sale path", measured rather than assumed. Two
+narrowings recorded with it: no sale was attempted DURING the block (the rig is one process and the
+checkpoint is synchronous), and the sale immediately after still committed in well under a
+millisecond.
+
+**And the risk is WIDER than it was written.** It was stated as conditional on `wal_autocheckpoint
+= 0`. It is not: with an offline litestream attached, turning that setting off changes nothing,
+because SQLite's own automatic checkpoint is refused the same way ours is. So a slice-2 design that
+hoped to bound the log by changing that setting has nothing to change.
+
+**What S4 does not establish**, so the write-up does not have to re-derive it: anything that turns on
+elapsed time (the load is volume — thirty modelled days pass in half a minute); the real ledger's
+cost per commit, since this is the rig's five-table model and not `packages/fiscal-verifactu`'s
+schema; that a longer offline stretch stays linear, which needs a comparison across load sizes the
+scenario does not drive; and a disk budget, because nothing here records the appliance's partition
+size. Also left open: 250 sales a day is an ASSUMPTION — nothing in this repository records the
+deli's real ticket count — so every figure is reported per sale for rescaling, and a real figure
+would be worth having.
+
+**What the review cost, and the lesson that keeps repeating.** Three numbers in this branch's own
+CORRECTIONS were falsified by later runs — a duration range, a frame count, and a percentage twice —
+each written as if it were a property of the rig when it was one run's figure. Every one is now a
+range with its run count. The run-it seat found the control arm could pass while doing no work at
+all, and falsified the claim that breaching the log ceiling would prove super-linear growth. The
+scoped re-read of the fixes then found that one of those fixes had SHADOWED a mutation: a new
+assertion ran ahead of the plateau assertion, so the one recorded experiment that had ever proved the
+plateau assertion could no longer reach it. Fourth branch running, the re-read of the fix wave found
+the most serious item. Also fixed beyond S4: two sibling scenarios carried the same teardown bug —
+a rejecting store shutdown skipped the temporary-directory cleanup.
 
 **S5 is in (#406), verdict PASS, and it is non-critical.** A supplier invoice number typed on both
 machines while they are apart cannot be stored by the machine receiving the batch, which already
