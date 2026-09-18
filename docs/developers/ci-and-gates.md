@@ -98,20 +98,34 @@ installed vitest (3.2.7) rather than the documentation: the worker builds that c
 pool's caller is `dist/workers/forks.js` → `createForksRpcOptions(v8)`, which supplies none; so it
 falls back to birpc's `DEFAULT_TIMEOUT = 6e4` in `dist/chunks/index.B521nVV-.js`. Grepping the whole
 `dist` tree for `process.env.VITEST_` finds only `MAX_FORKS`, `MIN_FORKS`, `MAX_THREADS`,
-`MIN_THREADS`, `POOL_ID`, `WORKER_ID`, `VM_POOL` and `SKIP_INSTALL_CHECKS` — there is no environment
-override, and no config key reaches it. Raising it would mean carrying a patched dependency.
+`MIN_THREADS`, `POOL_ID`, `WORKER_ID`, `VM_POOL` and `SKIP_INSTALL_CHECKS`; the bracket form
+(`process.env["VITEST_…"]`) returns nothing either, which is the control that stops the grep pattern
+being the answer. So no `VITEST_*` variable reaches it, and no config key does. The claim is about
+the pool this repository uses: raising the timeout under the BUILT-IN fork pool would mean carrying a
+patched dependency. A custom pool or worker is vitest's own extension point and was not explored.
 
-**What this entry does NOT establish:** why the main process went quiet for a minute. It was not
-reproduced deliberately, and the re-run that passed is evidence rather than proof — the second run
+A review seat reproduced the signature rather than reading it, which is why this entry can be
+specific: a reporter that accepts a passing result and then withholds its completion produced
+`1 test passed` with `Errors 1 error`, the same `onTaskUpdate` message, both stack filenames above,
+and **exit 1 after 60,340ms** — the 60-second default, paid once, on a suite where nothing failed.
+The same seat pulled the original job's log (`gh api repos/clintongormley/waitron/actions/jobs/105632564989/logs`)
+and confirmed the counts quoted here.
+
+**What this entry does NOT establish:** why the main process went quiet for a minute. The SIGNATURE
+was reproduced deliberately (below); the STALL was not, and the re-run that passed is evidence rather than proof — the second run
 (35356264571) was on a head differing from the first only in prose, and all three `test-server`
 shards passed. The shard runs four test workers plus the main process on a four-vCPU runner with a
 PostgreSQL container alongside, so starvation is the obvious suspect and remains unmeasured.
 
-**What to do when you meet it.** Read the shard's own counts first: every test passing plus this one
-error is not a code regression, so do not go hunting in the diff. Re-run the shard. If it starts
-recurring, the two levers are lightening what that shard does per tick (its four workers on four
-vCPUs) or patching vitest — both changes to CI machinery, and both wanting a measurement first,
-because neither has one today.
+**What to do when you meet it.** Keep the job's log and its printed counts BEFORE you re-run —
+nobody knows the cause, so a second sighting's log is the only thing that could ever settle it, and
+the house rule is retain-then-retry rather than re-running to green. Then read the counts: every test
+passing plus this one error does not establish a failed assertion, and it does not identify a cause
+either, so the diff is not where to start. This is not the silent-shard case in
+[testing-guide.md](testing-guide.md) — there, tests were still unfinished; here they all finished.
+Then re-run the shard. If it starts recurring, the two levers are lightening what that shard does per
+tick (its four workers on four vCPUs) or patching vitest — both changes to CI machinery, and both
+wanting a measurement first, because neither has one today.
 
 ### CI does not run every check on every push
 

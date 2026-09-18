@@ -1873,6 +1873,21 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
+- **A sixth, and the only one whose SIGNATURE has been reproduced on demand: a CI shard exits 1 with
+  every one of its tests passing (2026-09-18, PR #414, `test-server (3)`, job 105632564989).** The
+  shard printed `Test Files 87 passed (87)` and `Tests 1313 passed (1313)`, then one error —
+  vitest's worker-to-main reporting call (`onTaskUpdate`) timing out, which fails the shard on its
+  own and takes the aggregate `ci` job with it. The timeout is birpc's 60-second default, and in
+  vitest 3.2.7 nothing in this repository can raise it: the fork pool supplies no `timeout` and no
+  `VITEST_*` variable reaches it (the bracket form was checked as the control). A review seat then
+  built a reporter that accepts a passing result and withholds its completion, and got the same
+  signature deliberately — one test passed, one error, exit 1 after 60,340ms. **What is still
+  unexplained is the STALL:** why the main process did not answer a worker for a full minute. The
+  branch that met it touched nothing in `apps/server`, and the re-run on a prose-only change passed.
+  Four workers plus the main process on a four-vCPU runner with a PostgreSQL container alongside is
+  the obvious suspect and is unmeasured. Written up in
+  [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
+  the job log on the next sighting, since it is the only thing that could settle the cause.
 - **A fifth, with a real hypothesis this time: `test-dashboard`'s browser a11y suite fails on a stray
   `:hover` state left over from a prior test in the same shared browser page.** Seen three times the
   same day (2026-09-13), on two unrelated PRs, in code neither branch touched: `products-editor`'s CI

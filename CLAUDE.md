@@ -112,6 +112,12 @@ hook, or how tests are scheduled:
 - **CI's shards run `test:coverage`, not `test`.** Verify that package’s coverage job on the
   current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
   There is no single `test` job. Vitest `--shard` splits by FILE COUNT, so `N` must never exceed a package's test-file count.
+- **A shard can exit 1 with every one of its tests passing.** Vitest's worker-to-main reporting call
+  has a sixty-second timeout that no config key or environment variable here can raise, and it fails
+  the shard on its own. Keep the job log before re-running, and read the test counts before reading
+  the diff. Seen once, on PR #414, where it stopped an unattended run to ask whether a green-looking
+  branch had broken `apps/server`. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **Two pushes to `main` must never share a CI concurrency group.** GitHub keeps only one PENDING
@@ -121,10 +127,6 @@ hook, or how tests are scheduled:
   publishing asks `scripts/main-tag-guard.sh` before moving `:main`. Guards:
   `scripts/ci-workflow.test.mjs` (reads ci.yml as TEXT, and sees no other workflow) and
   `scripts/main-tag-guard.test.mjs`.
-- **A shard can exit 1 with every one of its tests passing.** Vitest's worker-to-main reporting call
-  has a sixty-second timeout that no config key or environment variable in this repository can raise,
-  and it fails the shard on its own. Read the shard's test counts before reading the diff. Receipt:
-  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
 - **The GHA cache is a shared per-repository budget and this repo sits AT it.** Name the entries a new
