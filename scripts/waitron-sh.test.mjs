@@ -1,9 +1,17 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "..", "deploy", "waitron.sh");
@@ -13,61 +21,62 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-// A sandbox: a fresh WAITRON_DIR, a bin/ of stub executables placed first on PATH, and a log file
-// every stub appends its argv to. The docker stub inspects the WHOLE arg string ($*) rather than
-// shifting, so a change to flag order cannot silently break it:
+// The stub bin is built ONCE for the whole file. Executing a FRESHLY WRITTEN file costs about 120ms
+// on macOS against about 12ms to execute the same file again, and this suite builds six stubs, so
+// building a new set per test was most of its runtime (measured before and after: see
+// docs/developers/testing-guide.md). Nothing in the bin is per-case state — the knobs travel as
+// WT_* environment variables the stubs read at run time. What a stub writes stays inside the case's
+// own directories: $WT_LOG, which `sandbox` gives a fresh path per case, plus the fixture files
+// `curl` drops at its `-o` target and whatever `mv` moves under WAITRON_DIR.
+//
+// The docker stub inspects the WHOLE arg string ($*) rather than shifting, so a change to flag order
+// cannot silently break it:
 //   - `compose version` exits 0, so Docker looks installed and ensure_docker skips the apt block.
-//   - `compose ps`   -> prints dockerPs ("healthy" by default, so wait_healthy returns first try).
-//   - `compose logs` -> prints the database_ahead line when aheadLogs is set.
-//   - `compose exec … psql … -d waitron …` -> prints dbStamp, but ONLY when `-d waitron` is present,
-//     so a stamp query that forgot the app-db name (the wrong-db bug) reads empty and its test fails.
-//   - `run … <trading.env read>` -> prints tradingEnv (pass "__ABSENT__" to model an unprovisioned
-//     box whose state volume has no trading.env); `run … find …` (reset) prints nothing.
-//   - `volume inspect` -> exit 0 (the volume exists); `volume rm` -> exit 0 unless rmFail names a
+//   - `compose ps`   -> prints $WT_DOCKER_PS ("healthy" by default, so wait_healthy returns first try).
+//   - `compose logs` -> prints the database_ahead line when $WT_AHEAD_LOGS is 1.
+//   - `compose exec … psql … -d waitron …` -> prints $WT_DB_STAMP, but ONLY when `-d waitron` is
+//     present, so a stamp query that forgot the app-db name (the wrong-db bug) reads empty and its
+//     test fails.
+//   - `run … <trading.env read>` -> prints $WT_TRADING_ENV (set it to "__ABSENT__" to model an
+//     unprovisioned box whose state volume has no trading.env); `run … find …` (reset) prints nothing.
+//   - `volume inspect` -> exit 0 (the volume exists); `volume rm` -> exit 0 unless $WT_RM_FAIL names a
 //     volume ("db" makes `docker volume rm waitron_db` fail, to test the abort-on-failure path).
 // Failure knobs model the read/write faults the install and production-safety fixes must survive:
-//   - readError: BOTH is_production reads (trading.env cat and the db-stamp psql) exit non-zero, so
-//     the environment cannot be established — reset must then fail CLOSED.
-//   - rmFail: the named volume's `docker volume rm` exits non-zero.
-//   - envWriteFail: `mv` exits non-zero, so the atomic .env rewrite's final rename fails.
-//   - pullFail: `compose … pull` exits non-zero, as when the registry is unreachable or has no image
-//     for this machine's architecture.
+//   - WT_READ_ERROR: BOTH is_production reads (trading.env cat and the db-stamp psql) exit non-zero,
+//     so the environment cannot be established — reset must then fail CLOSED.
+//   - WT_RM_FAIL: the named volume's `docker volume rm` exits non-zero.
+//   - WT_MV_FAIL: `mv` exits non-zero, so the atomic .env rewrite's final rename fails.
+//   - WT_PULL_FAIL: `compose … pull` exits non-zero, as when the registry is unreachable or has no
+//     image for this machine's architecture.
+//   - WT_HANG: seconds the `docker` stub sleeps before doing anything, on EVERY invocation — the one
+//     knob that changes the shared stub's behaviour unconditionally. Only the last case sets it, to
+//     drive `run()`'s timeout path.
 // `curl`/`wget` write a marker to their -o target so fetched files exist. `qrencode` is a no-op.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
 // which has no systemctl).
-function sandbox({
-  tradingEnv = "",
-  dbStamp = "",
-  aheadLogs = false,
-  dockerPs = "healthy",
-  readError = false,
-  rmFail = "",
-  envWriteFail = false,
-  pullFail = false,
-} = {}) {
-  const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
-  dirs.push(root);
-  const boxDir = join(root, "box");
-  const bin = join(root, "bin");
-  const log = join(root, "calls.log");
-  mkdirSync(boxDir, { recursive: true });
-  mkdirSync(bin, { recursive: true });
-  const stub = (name, body) => {
-    const p = join(bin, name);
-    writeFileSync(
-      p,
-      `#!/usr/bin/env bash\nprintf '%s ' "${name}" >> "${log}"; printf '%s\\n' "$*" >> "${log}"\n${body}\n`,
-    );
-    chmodSync(p, 0o755);
-  };
-  const aheadEcho = aheadLogs ? 'echo "provisioning.database_ahead: the database is newer"' : ":";
-  const readErr = readError ? "1" : "0";
-  const pullErr = pullFail ? "1" : "0";
-  stub(
-    "docker",
-    `
+const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
+afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
+
+// `mv` is now stubbed for EVERY case, so that the bin can stay constant, and falls through to the
+// real one unless the case asks it to fail. Resolved to an absolute path because STUB_BIN is first
+// on PATH — a bare `exec mv` would re-enter this stub.
+const REAL_MV = spawnSync("bash", ["-c", "command -v mv"], { encoding: "utf8" }).stdout.trim();
+
+function stub(name, body) {
+  const p = join(STUB_BIN, name);
+  writeFileSync(
+    p,
+    `#!/usr/bin/env bash\nprintf '%s ' "${name}" >> "$WT_LOG"; printf '%s\\n' "$*" >> "$WT_LOG"\n${body}\n`,
+  );
+  chmodSync(p, 0o755);
+}
+
+stub(
+  "docker",
+  `
 args="$*"
+[ -n "\${WT_HANG}" ] && sleep "\${WT_HANG}"
 case "$args" in
   "compose version"*) exit 0 ;;
 esac
@@ -79,72 +88,131 @@ case "$1" in
         # (probed on Compose v5.1.0). install must not pass the flag; if it does, this stub exits 0
         # and the pull-failure test fails.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
-        [ "${pullErr}" = "1" ] && exit 1 ;;
-      *" ps "*|*" ps") echo "${dockerPs}" ;;
-      *" logs "*) ${aheadEcho} ;;
+        [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
+      *" ps "*|*" ps") echo "\${WT_DOCKER_PS}" ;;
+      *" logs "*)
+        [ "\${WT_AHEAD_LOGS}" = "1" ] && echo "provisioning.database_ahead: the database is newer" ;;
       *" exec "*)
         case "$args" in
           *psql*)
-            [ "${readErr}" = "1" ] && exit 1
-            case "$args" in *"-d waitron"*) echo "${dbStamp}" ;; esac ;;
+            [ "\${WT_READ_ERROR}" = "1" ] && exit 1
+            case "$args" in *"-d waitron"*) echo "\${WT_DB_STAMP}" ;; esac ;;
         esac ;;
     esac ;;
   volume)
     case "$2" in
       inspect) exit 0 ;;
       rm)
-        if [ -n "${rmFail}" ]; then
-          case "$args" in *"waitron_${rmFail}"*) exit 1 ;; esac
+        if [ -n "\${WT_RM_FAIL}" ]; then
+          case "$args" in *"waitron_\${WT_RM_FAIL}"*) exit 1 ;; esac
         fi
         exit 0 ;;
     esac ;;
   run)
     case "$args" in
       *trading.env*)
-        [ "${readErr}" = "1" ] && exit 1
-        echo "${tradingEnv}" ;;
+        [ "\${WT_READ_ERROR}" = "1" ] && exit 1
+        echo "\${WT_TRADING_ENV}" ;;
     esac ;;
 esac
 exit 0
 `,
-  );
-  if (envWriteFail) stub("mv", "exit 1");
-  stub(
-    "curl",
-    `
+);
+stub("mv", `[ "\${WT_MV_FAIL}" = "1" ] && exit 1\nexec "${REAL_MV}" "$@"`);
+stub(
+  "curl",
+  `
 out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; esac; done
 [ -n "$out" ] && printf 'stub\\n' > "$out"
 exit 0
 `,
-  );
-  stub("qrencode", "exit 0");
-  stub("systemctl", "exit 0");
-  // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
-  stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
-  return { boxDir, bin, log, root };
+);
+stub("qrencode", "exit 0");
+stub("systemctl", "exit 0");
+// as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
+stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
+
+// A case's own state: a fresh WAITRON_DIR and a fresh log, plus the knob values the shared stubs
+// read. Creating these costs a mkdir, not an exec.
+function sandbox({
+  tradingEnv = "",
+  dbStamp = "",
+  aheadLogs = false,
+  dockerPs = "healthy",
+  readError = false,
+  rmFail = "",
+  envWriteFail = false,
+  pullFail = false,
+  hang = "",
+} = {}) {
+  const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
+  dirs.push(root);
+  const boxDir = join(root, "box");
+  const log = join(root, "calls.log");
+  mkdirSync(boxDir, { recursive: true });
+  return {
+    boxDir,
+    log,
+    root,
+    env: {
+      WT_LOG: log,
+      WT_TRADING_ENV: tradingEnv,
+      WT_DB_STAMP: dbStamp,
+      WT_AHEAD_LOGS: aheadLogs ? "1" : "0",
+      WT_DOCKER_PS: dockerPs,
+      WT_READ_ERROR: readError ? "1" : "0",
+      WT_RM_FAIL: rmFail,
+      WT_MV_FAIL: envWriteFail ? "1" : "0",
+      WT_PULL_FAIL: pullFail ? "1" : "0",
+      WT_HANG: hang,
+    },
+  };
 }
 
 // Two budgets. spawnSync's timeout kills a child that hangs; Vitest's per-test timeout bounds how
 // long the whole TEST may take, and a test it fails for its duration alone is a healthy run reported
-// as broken — the default, 5s, did exactly that here, on runs measuring ~1.3s idle and 4.5s on a
-// loaded machine. Every case below makes exactly ONE `run()` call and does no other slow work, so
-// bounding the test above the spawn timeout covers its whole healthy range. That reasoning is about
-// THIS suite, not a general rule: a test that waits twice can outlast such a bound. Guard:
-// `scripts/spawn-timeout-budget.test.ts`; receipt in `docs/developers/testing-guide.md`.
+// as broken — the default, 5s, did exactly that here. Every case below makes exactly ONE `run()`
+// call and does no other slow work, so bounding the test above the spawn timeout covers its whole
+// healthy range. That reasoning is about THIS suite, not a general rule: a test that waits twice can
+// outlast such a bound. Guard: `scripts/spawn-timeout-budget.test.ts`; receipt in
+// `docs/developers/testing-guide.md`.
 const RUN_TIMEOUT_MS = 20_000;
 vi.setConfig({ testTimeout: RUN_TIMEOUT_MS + 10_000 });
 
-function run(sb, args, extraEnv = {}) {
-  return spawnSync("bash", [SCRIPT, ...args], {
+function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
+  const result = spawnSync("bash", [SCRIPT, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,
-      PATH: `${sb.bin}${delimiter}${process.env.PATH}`,
+      PATH: `${STUB_BIN}${delimiter}${process.env.PATH}`,
       WAITRON_DIR: sb.boxDir,
+      ...sb.env,
       ...extraEnv,
     },
-    timeout: RUN_TIMEOUT_MS,
+    timeout: timeoutMs,
   });
+  // A child killed by that timeout comes back with `status: null`, and every case below asserts on
+  // `status` — so the whole report would read `expected null to be +0`, naming neither the run nor
+  // the command that hung. The signal, the error code and the stub call log are all sitting in hand
+  // at this point; a hang is a fault in its own right, so raise it here rather than leaving it to a
+  // status assertion that cannot describe it.
+  if (result.error) {
+    const recorded = existsSync(sb.log)
+      ? readFileSync(sb.log, "utf8").trimEnd().split("\n").slice(-5)
+      : [];
+    // `error` covers more than the timeout kill — a missing interpreter arrives here as ENOENT with
+    // no signal at all, and calling that "did not finish within 20000ms" sends the reader looking
+    // for a hang that never happened. Separate the two.
+    const timedOut = result.error.code === "ETIMEDOUT";
+    throw new Error(
+      (timedOut
+        ? `waitron.sh ${args.join(" ")} did not finish within ${timeoutMs}ms ` +
+          `(ETIMEDOUT, killed with ${result.signal}). `
+        : `waitron.sh ${args.join(" ")} could not be run (${result.error.code}). `) +
+        `Last stub calls:\n  ${recorded.join("\n  ") || "(none recorded)"}`,
+    );
+  }
+  return result;
 }
 
 describe("waitron.sh install (published main)", () => {
@@ -350,5 +418,33 @@ describe("waitron.sh reset", () => {
     expect(calls).toMatch(/docker volume rm .*waitron_db\b/);
     expect(calls).not.toMatch(/docker volume rm .*waitron_backups\b/);
     expect(calls).not.toMatch(/find \/s .*! -name tls/);
+  });
+});
+
+// Deliberately the LAST case in the file. Run first, it was the one paying the cold-stub
+// first-execution cost — measured at 667ms, 787ms and 1836ms for a HEALTHY run — so it crossed a
+// 700ms budget whether the stub slept or not, and passed with its own `hang` knob neutralised. A
+// test whose failing case and passing case look alike measures nothing (CLAUDE.md §1). By here the
+// stubs are warm and a healthy `install` takes about 60ms, so the budget has room to mean something.
+describe("waitron.sh when a run does not finish", () => {
+  it("names the command, the signal and the recorded calls", () => {
+    // 2s, not longer: `spawnSync` signals only `bash`, so the stub's `sleep` is reparented and
+    // outlives the run. Short enough that it cannot become one of the orphans `pnpm reap` sweeps.
+    const sb = sandbox({ hang: "2" });
+    let caught;
+    try {
+      run(sb, ["install"], {}, { timeoutMs: 700 });
+    } catch (error) {
+      caught = error;
+    }
+    expect(
+      caught,
+      "a run killed by its own timeout must not be left to a status assertion",
+    ).toBeDefined();
+    expect(caught.message).toMatch(/did not finish within 700ms/);
+    expect(caught.message).toMatch(/ETIMEDOUT/);
+    expect(caught.message).toMatch(/SIGTERM/);
+    // The call log is the thing that says WHICH command hung.
+    expect(caught.message).toMatch(/docker/);
   });
 });

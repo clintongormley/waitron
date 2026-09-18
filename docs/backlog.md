@@ -1779,25 +1779,23 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **Reuse the stub executables in `scripts/waitron-sh.test.mjs` — open (2026-09-18).** Found while fixing
-  that suite's flakiness; the flake itself landed in #407, and this is the leftover. Each of its cases
-  builds a fresh sandbox of five or six stub executables, and executing a freshly written file costs
-  about 120ms against about 12ms to execute the same file again (six distinct fresh files as the
-  control; an independent rerun on a loaded host measured 144–199ms against 5.9–16.1ms). The likely
-  cause is macOS's first-execution check of a new executable, which no run here established. Reusing
-  the stubs measured 168–209ms per fixture against 1463–1689ms, so the win on this suite is real:
-  build the stub directory once per FILE and pass the per-case knobs (`dockerPs`, `readError`,
-  `rmFail`, `pullFail`, `envWriteFail`) through environment variables instead of interpolating them
-  into each stub's body. **Do not assume it generalises** — the same reuse applied to
-  `scripts/pre-push.test.mjs`, whose fixtures are dominated by real `git` work, measured 10.59s
-  against 12.61s, which is not worth the rewrite. Measure before extending it to another suite.
-  Left out of the flake fix so the timing change and a sandbox rewrite were not one diff. Worth
-  doing: the suite runs ungated, on every non-docs push, in the hook and in CI's `lint` job.
+- **Reuse the stub executables in the root guard suites — LANDED (2026-09-18).** The follow-up from
+  #407. `scripts/waitron-sh.test.mjs` and `scripts/main-tag-guard.test.mjs` now build their stub bins
+  once per FILE and pass what each case varies through environment variables, rather than writing a
+  fresh set of executables per test: ~11.5s to ~2.1s and ~3.3s to ~0.55s, taking the whole root Vitest
+  project from ~21.7s to ~8.0s. Both suites keep every assertion they had, and each knob was proved
+  still to reach its stub by neutralising it one at a time and checking the dependent cases fail.
+  `run()` in waitron-sh also reports a killed child now — the command, the signal and the last stub
+  calls — instead of leaving a hang to read as `expected null to be +0`. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md).
 
-  A second, smaller item from the same review: when a stub genuinely hangs, `run()`'s callers assert
-  `expect(r.status).toBe(0)` and the failure reads `expected null to be +0`, although `r.signal`,
-  `r.error.code` and the recorded call log are all sitting there. Having `run()` report those would
-  make a real hang diagnosable.
+  **Surveyed and deliberately not changed**, so nobody re-opens this: `scripts/pre-push.test.mjs`
+  writes one stub per case but each fixture also runs about eleven real `git` commands, and reusing
+  the stub measured 10.59s against 12.61s — inside git's own noise.
+  `scripts/reap-testcontainers.test.mjs` writes its stubs in one case out of seventeen, so there is
+  nothing to hoist. No suite under `packages/` or `apps/` writes executable stubs at all: nothing
+  there is written with the executable bit, by either the `mode:` or the `chmod` form, and nothing is
+  put on `PATH`.
 
 - **Fast local pre-push checks — LANDED #338 (2026-09-12).** The hook keeps sign-offs, the locked
   install, formatting, lint, the root guards and scoped typechecks, and runs no package tests at all;

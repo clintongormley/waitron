@@ -426,6 +426,15 @@ container or browser test** — most of these rules exist because a test passed 
   under load, against the 5000ms default. Guard: `scripts/spawn-timeout-budget.test.ts`, weaker than
   its name in several ways its header states — it reads TEXT, cannot tell code from strings, checks
   only the largest SINGLE wait, and reads only `scripts/`.
+- **A suite's executable stubs are built ONCE per file, not once per test.** Executing a freshly
+  written file costs hundreds of ms on macOS (120ms idle, 503–842ms loaded) against single-digit ms to
+  re-execute it, so a per-test stub helper pays that every case; move what each case varies into
+  environment variables the stub reads. **On Linux there is no such penalty** (0.2–0.6ms either way),
+  so this speeds up the local hook and not CI. Measure first — it only pays when the stubs are a large
+  share of the runtime, and `scripts/pre-push.test.mjs` (real `git` dominates) was measured and
+  deliberately left alone. Prove the knobs still arrive by neutralising
+  each one: a value that stops reaching a shared stub leaves it on its default, which passes.
+  Receipt: [testing-guide.md](docs/developers/testing-guide.md).
 - **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a socket dir out of
   Docker Desktop's VM gives `ECONNREFUSED` on macOS.
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to

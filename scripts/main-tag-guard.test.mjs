@@ -1,13 +1,5 @@
 import { spawnSync } from "node:child_process";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -68,26 +60,49 @@ function imageEnv(buildId) {
  * Runs the real script with `docker` and `gh` stubbed. Each stub appends its arguments to a file, so
  * a case can assert what the script asked the outside world for — including asking nothing at all.
  */
+// The two stubs are written ONCE for the whole file. Executing a freshly written file costs about
+// 120ms on macOS against about 12ms to execute the same file again, and this suite wrote both stubs
+// again for every case. What each case wants to vary — the output and exit status the outside world
+// hands the script, and where the arguments are recorded — now travels in the environment, so the
+// files themselves never change. A value carrying a quote is safe this way too, which it was not
+// when the stdout was interpolated into a single-quoted shell string.
+const STUB_BIN = mkdtempSync(join(tmpdir(), "main-tag-guard-bin-"));
+temporaryDirectories.push(STUB_BIN);
+for (const name of ["docker", "gh"]) {
+  const upper = name.toUpperCase();
+  const path = join(STUB_BIN, name);
+  writeFileSync(
+    path,
+    `#!/usr/bin/env sh\n` +
+      `printf '%s\\n' "$*" >> "$WT_ARGS_DIR/${name}.args"\n` +
+      `printf '%s' "$WT_${upper}_STDOUT"\n` +
+      `printf '%s' "$WT_${upper}_STDERR" >&2\n` +
+      `exit "\${WT_${upper}_STATUS:-0}"\n`,
+  );
+  chmodSync(path, 0o755);
+}
+
 function runGuard({ docker, gh, argv = [IMAGE, REPOSITORY, SHA] }) {
   const dir = mkdtempSync(join(tmpdir(), "main-tag-guard-"));
   temporaryDirectories.push(dir);
-  const bin = join(dir, "bin");
-  mkdirSync(bin);
 
+  const outputs = {};
   for (const [name, { stdout = "", stderr = "", status = 0 }] of Object.entries({ docker, gh })) {
-    const path = join(bin, name);
-    writeFileSync(
-      path,
-      `#!/usr/bin/env sh\nprintf '%s\\n' "$*" >> ${join(dir, `${name}.args`)}\n` +
-        `printf '%s' '${stdout}'\nprintf '%s' '${stderr}' >&2\nexit ${status}\n`,
-    );
-    chmodSync(path, 0o755);
+    const upper = name.toUpperCase();
+    outputs[`WT_${upper}_STDOUT`] = stdout;
+    outputs[`WT_${upper}_STDERR`] = stderr;
+    outputs[`WT_${upper}_STATUS`] = String(status);
   }
 
   const result = spawnSync(script, argv, {
     encoding: "utf8",
     timeout: SPAWN_TIMEOUT_MS,
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: {
+      ...process.env,
+      PATH: `${STUB_BIN}:${process.env.PATH}`,
+      WT_ARGS_DIR: dir,
+      ...outputs,
+    },
   });
 
   const argsOf = (name) =>

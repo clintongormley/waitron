@@ -131,17 +131,6 @@ What made waitron-sh the one that actually failed was its margin. Its `install <
 every core plus a loop writing and executing fresh small executables — which is under the old 5000ms
 ceiling by under half a second. Nothing in that suite touches Docker: `docker` is a stub on `PATH`.
 
-Where the second goes is worth knowing before optimising it. Executing a freshly written file costs
-about 120ms against about 12ms to execute the same file again — six distinct fresh files as the
-control, so it is per file and not a one-off warm-up; an independent rerun on a loaded host measured
-144–199ms against 5.9–16.1ms. The cause looks like macOS's first-execution check of a new
-executable, but that is the likely explanation and not something these runs establish: no `spctl` or
-`syspolicyd` observation was taken. Each of waitron-sh's cases builds a fresh sandbox of five or six
-stubs, so it pays that cost per test, and reusing the stubs across cases measured 168–209ms per
-fixture against 1463–1689ms. The same reuse does NOT pay off everywhere: applied to
-`scripts/pre-push.test.mjs`, whose fixtures are dominated by real `git` work rather than stubs, a
-review measured 10.59s against 12.61s. `docs/backlog.md` → B9 carries it as work to measure.
-
 Raising the bound widens the tolerance; it does not make a suite unfailable. A review deliberately
 built a case that ran 31708ms and it failed against the new 30000ms bound, correctly.
 
@@ -163,6 +152,59 @@ where precise reading fails — a bound written as an expression, a per-case bou
 or on a template-table `it.each`, a number after some other callback — it goes quiet instead. That is
 a deliberate hole, and its detector block has a case for each of those shapes recording the decline,
 alongside cases for what it does read and what it is blind to.
+
+## Build a suite's executable stubs ONCE per file, not once per test.
+
+Executing a FRESHLY WRITTEN file is expensive on macOS and free on Linux, and that asymmetry decides
+who benefits from this.
+
+The same probe — six distinct fresh executables, first run then re-run, so the control rules out a
+one-off warm-up — measured:
+
+| | first execution | re-execution |
+| --- | --- | --- |
+| macOS, idle | ~120ms | ~12ms |
+| macOS, loaded | 503–842ms | 3–4ms |
+| Linux (container) | 0.2–0.6ms | 0.2–0.3ms |
+
+So on macOS the penalty is real, per file, and swings by an order of magnitude with load; on Linux
+there is no penalty to speak of. The cause looks like macOS's first-execution check of a new
+executable, but that is the likely explanation rather than something these runs establish — no
+`spctl` or `syspolicyd` observation was taken.
+
+**What that means for where the time is saved:** the pre-push hook runs on a developer's machine, so
+a macOS developer gets the whole win on every push. CI runs on Linux, where these suites were never
+slow for this reason and will not get measurably faster. Worth knowing before reaching for the same
+rewrite to speed up a CI job.
+
+A suite that writes a fresh set of stub executables inside a per-test helper pays that per test, and
+it is easy to pay it without noticing, because each stub is tiny and the helper looks cheap. Measured
+on this host:
+
+| suite | stubs per case | before | after |
+| ----- | -------------- | ------ | ----- |
+| `scripts/waitron-sh.test.mjs` | 5–6 | ~11.5s | ~2.1s |
+| `scripts/main-tag-guard.test.mjs` | 2 | ~3.3s | ~0.55s |
+| the whole root Vitest project | — | ~21.7s | ~8.0s |
+
+The rewrite is the same in both: build the stub directory at MODULE scope, and move whatever each
+case varies — the health string, a failure flag, the stdout a fake `docker` should print — into
+environment variables the stub reads at run time, instead of interpolating them into the stub's body.
+Two things come free with it. A value containing a quote stops being a hazard, where interpolating
+into a single-quoted shell string could break the stub; and the per-case state shrinks to a temporary
+directory, which costs a `mkdir` rather than an exec.
+
+**It does not pay off everywhere, so measure before rewriting.** The cost only matters when the
+stubs are a large share of the suite's runtime. `scripts/pre-push.test.mjs` writes one stub per case
+but each of its fixtures also runs about eleven real `git` commands, and reusing the stub there
+measured 10.59s against 12.61s — inside the noise of `git` itself. `scripts/reap-testcontainers.test.mjs`
+writes stubs in a single case out of seventeen, so "once per file" and "once per test" are the same
+thing. Both were left alone deliberately.
+
+When a suite's stubs go shared, prove the knobs still reach them rather than trusting a green run: a
+value that no longer arrives usually leaves the stub taking its default, which is exactly the shape
+that passes. Neutralise each variable in turn and confirm the cases that depend on it fail — done
+for both suites above, every variable accounted for.
 
 ## Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.
 
