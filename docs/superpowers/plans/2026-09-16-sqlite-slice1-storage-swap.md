@@ -345,8 +345,9 @@ packages use `./src/schema/index.ts`; four do not — `packages/bookings` uses
 uses `./src/schema/service.ts`, and `packages/fiscal-none` uses `./src/index.ts`.
 
 **Read the exit status and the message, never the silent `diff` alone.** This is the trap that makes
-the probe worth stating carefully: when drizzle-kit refuses it writes nothing at all, so `diff -r`
-is silent — which is exactly what a PASS looks like. A silent diff on its own is not evidence. The
+the probe worth stating carefully: when drizzle-kit refuses it exits non-zero and says why, but it
+also writes nothing at all, so the `diff -r` that follows is silent — which is exactly what a PASS
+looks like. A silent diff on its own is not evidence. The
 pass you are looking for is `No schema changes, nothing to migrate` with exit 0 AND a silent diff.
 (`CLAUDE.md` §1: a measurement taken where both answers look alike measures nothing. This one cost a
 false receipt in this plan's own first draft, caught by a reviewer who ran a control.)
@@ -740,7 +741,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -1440,6 +1441,126 @@ original sentence UNVERIFIED on the ground that equal percentages do not establi
 denominators, which was right, and measuring it showed the claim was not merely unproven but
 backwards.
 
+**And the same report for `packages/bookings`, whose new answer is about the PROBE rather than the
+package.** One table file, one table, 13 columns. The builders it used were `uuid`, `date`, `time`,
+`integer`, `text` and `timestamp` in string mode, every one of which has a vocabulary equivalent. The
+file still imports `pgEnum` from `drizzle-orm/pg-core` alongside `check`, `foreignKey` and `index`,
+and `status` is still built from it — which is again why the step 5 guard can never prove a package
+"fully converted". Its one timestamp column is string mode, read off the line being replaced: at the
+base commit `git grep -c 'mode: "string"' 633086c1 -- packages/bookings/src/schema/bookings.ts`
+reports a count of 1, and the same command for `mode: "date"` exits 1, and the converted file holds one
+`tsString` call and no `ts` call. There is no array column and none of the six builders this package
+never had: `git grep -nE '\.array\(\)|\b(numeric|jsonb|boolean|smallint|bigint|bytea)\(' 633086c1 --
+packages/bookings/src` exits 1, and the same command over the converted tree exits 1 too; the path is
+the whole of `src`, not the one table file, because the sentence is about the package. The base
+commit is named rather than written `HEAD`, because `HEAD` stops meaning the base tree the moment
+this lands — and it is PASSED to `git grep` rather than asserted beside a working-tree `grep`, which
+is what the payments, identity and workforce-es reports above do. Theirs are true; the difference is
+in the receipt's shape, not in the fact.
+
+`booking_time` is worth one line: it is the second `timeOfDay` column in a TABLE FILE and the first
+outside `packages/db` — `tenants.day_cutover` is the other. Two things that sentence is deliberately
+not saying, both read on 2026-09-18: there is a third call in a test fixture
+(`packages/db/src/schema/columns.test.ts`), and `packages/venue-service` still holds two unconverted
+`time()` columns, so this is a count of a rollout in progress rather than of the repository's
+eventual shape.
+
+One thing the conversion did not absorb, and it is the one every package meets: the `status` column
+is a database enum (`booking_status`, five values), so it stays. There was no `enumText`/`enumCheck`
+decision available here at all, for the same reason as `packages/workforce`: the package has no
+value-set check constraint anywhere in it. Its one `check()` is a range over an integer
+(`bookings_party_size_ck`, `party_size > 0`), which neither helper has anything to say about.
+
+**This is the first package in the rollout whose drizzle schema entry point is not
+`./src/schema/index.ts`** — `packages/bookings/drizzle.config.ts` points `--schema` at
+`./src/schema/bookings.ts` — so step 4's warning about that flag was exercised for the first time,
+and measuring it corrected ONE CLAUSE of it. Step 4 said a pasted `--schema ./src/schema/index.ts`
+makes drizzle-kit write nothing, "so the `diff -r` is silent and looks like a pass". Run in
+`packages/bookings` on 2026-09-18 with the wrong path, drizzle-kit exits **1** and prints
+
+```text
+Error  No schema files found for path config ['./src/schema/index.ts']
+Error  If path represents a file - please make sure to use .ts or other extension in the path
+```
+
+and the `diff -r` that follows is indeed silent at exit 0 — which is the same observation as
+"nothing is written", not a second one. So step 4 is right that nothing is written, right that the
+diff is silent, and right in its instruction, which is to read the exit status AND the
+`No schema changes, nothing to migrate` line and never the silent diff on its own: an exit of 1
+refuses this mistake at the first of those. The clause that is wrong is "and looks like a pass", said
+of the RUN: the run looks like an error. That is worth one sentence rather than a shrug, because a
+reader who took the warning at face value would think the step's own remedy was not enough for this
+mistake. The
+control is the same command with the correct `--schema`, which exits 0 and prints
+`No schema changes, nothing to migrate`. Step 4's text is corrected in place, not only here.
+
+The scope of that correction, stated rather than assumed: it was measured where no
+`src/schema/index.ts` exists at all, and the two other rollout packages with an odd path are the same
+— `ls packages/media/src/schema packages/venue-service/src/schema` on 2026-09-18 shows `images.ts`,
+and `service.ts` with its test, and no `index.ts` in either. A package that HAS an `index.ts` which
+simply exports no table would be a different case, and nothing here measures it; no package on the
+rollout list is in that shape.
+
+Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
+(`No schema changes, nothing to migrate`, exit 0, `diff -r` silent) and again after the conversion
+(the same), and the negative control was taken in the same worktree in between: `party_size` moved
+from `integer` to `smallint` made the same command write `drizzle-probe-tmp/0002_probe.sql` and add a
+journal entry, so the silent runs mean something. A column-by-column comparison against the base
+commit, built on drizzle's `getTableConfig` — SQL type, `columnType`, nullability, primary key,
+defaults, enum values, uniqueness and the read mapping, keyed by table as well as column name —
+reported **13 columns, 0 mismatches**, cross-checked against drizzle-kit's own count, which prints
+`bookings 13 columns 2 indexes 1 fks`.
+
+**That comparison was proved by the mutation the probe is blind to.** `created_at` was moved from
+`tsString` to `ts` — the same SQL type, a different read mapping. The comparison named exactly that
+column, `PgTimestampString` → `PgTimestamp`, with the read of `2026-09-16 10:00:00+00` going from a
+string to a `Date`; the drizzle probe, run on the same mutated tree, printed
+`No schema changes, nothing to migrate` at exit 0 with a silent `diff -r`.
+
+A line-by-line comparison then established what the count cannot: **every line this branch changes is
+an import line, a column declaration, the one `pgTable(` → `table(` rename on the table-opening line,
+or one of TWO comment edits, named below.** The base file has 70 lines that are neither an import nor
+a column declaration: the `pgEnum` declaration, the comment blocks, the `check()` body, both indexes,
+the foreign key, every blank line, the table-opening line, and the table's remaining structural lines
+— its name, its braces, and the `(t) => [` that opens the extra config. **Sixty-five of them are
+byte-identical**, the table-opening line is identical once `pgTable(` is read as `table(`, and the
+four that remain are the two comments that named `date` and `time`, the words this change removed
+from the code below them. Both now name the helper as well as
+the type it emits: the table's header sentence about `booking_date` and `booking_time`, and the
+one-line comment above those two columns. Neither sentence was false before — the SQL types do not
+move — but a reader chasing `date` or `time` through the file would have found neither word, and the
+`packages/workforce` conversion rewrote the same shape (`time-entries.ts`, where a comment naming
+`mode: "string"` became one naming `tsString`). The comparison was itself proved by two mutations,
+each caught and named: respacing the check body to `sql\`${t.partySize}>0\``, and moving the foreign
+key's `onDelete` from `restrict` to `cascade`.
+
+The comparison also caught one edit of mine that did NOT survive, which is the more useful half. A
+comment sits above the `@waitron/db` import — the one explaining that the foreign-key targets are
+core tables — and the conversion merges the vocabulary into that same import line, so the first
+version of this branch extended the comment to mention the vocabulary. It was reverted because the
+sentence it replaced is still exactly true of the foreign-key targets it names, and the addition
+stated only what the import line already shows. Note what that reason is NOT: it is not a sibling
+precedent. No converted TABLE file in `packages/db`, `catalogue`, `payments`, `identity`,
+`workforce` or `workforce-es` carries a comment directly above an import, so there is no earlier
+conversion that left one alone. (Several test files beside them do — `packages/db/src/schema/sales.test.ts`
+is one — which is why the sentence is about table files rather than about the directory.)
+
+Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace) and
+`pnpm --filter @waitron/bookings test:coverage` (exit 0, 14 files, 132 tests, no test edited —
+this is a browser-mode package, so those 14 include the four real-Chromium dashboard files as well as
+the real-PostgreSQL schema suite). `src/schema/bookings.ts` reads 100% on every measure before and
+after, against thresholds of 90/90/85/85 (`packages/bookings/vitest.config.ts`). The denominator
+moved, read off `coverage-summary.json` rather than off the percentage, and quoted as
+covered-of-total pairs because the two runs share a number and a bare figure could come from either:
+the file goes from **45 of 45** covered statements to **43 of 43**, and the package from **1031 of
+1033** to **1029 of 1031**. The before reading was taken by writing the base commit's file over the
+working copy with `git show`, re-running the suite, and putting the converted file back; both
+readings were confirmed to belong to the tree they claim by checking whether the run's rendered
+source in `coverage/src/schema/bookings.ts.html` contains `pgTable` or `timeOfDay`. The two lines
+come from the one multi-line column declaration — `createdAt`'s `timestamp(...)` with its
+`.notNull()` and `.defaultNow()` on their own lines — collapsing onto a single line; nothing became
+partially covered, so no percentage moves. Same mechanism as `packages/workforce-es`.
+
 - [ ] **Step 4: Prove nothing changed**
 
 The generate-into-a-copy probe from P1a step 6 — **not `drizzle-kit check`, which cannot see the
@@ -1458,9 +1579,12 @@ refusal), and four packages do not keep their schema at `./src/schema/index.ts`:
 `drizzle.config.ts` on 2026-09-17, `packages/media` uses `./src/schema/images.ts`,
 `packages/bookings` uses `./src/schema/bookings.ts`, `packages/venue-service` uses
 `./src/schema/service.ts`, and `packages/fiscal-none` uses `./src/index.ts`. A pasted
-`--schema ./src/schema/index.ts` points those four at a file they do not have — and drizzle-kit then
-writes nothing, so the `diff -r` is silent and looks like a pass. **Read the exit status and the
-`No schema changes, nothing to migrate` line, never the silent diff on its own.**
+`--schema ./src/schema/index.ts` points those four at a file they do not have. Drizzle-kit then
+writes nothing AND refuses loudly — exit 1, `No schema files found for path config` — so it is the
+`diff -r` taken afterwards on its own that is silent and looks like a pass, never the run itself.
+**Read the exit status and the `No schema changes, nothing to migrate` line, never the silent diff on
+its own.** That was measured in `packages/bookings` on 2026-09-18, the first package in the rollout
+this warning applied to; the receipt is in that package's report under step 3.
 
 Those four are a different set from step 2's rollout list, and the overlap is only three.
 `packages/fiscal-none` is not on step 2's list and declares no `pgTable` anywhere (checked
