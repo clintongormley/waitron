@@ -2371,7 +2371,12 @@ migration folder and diffing that against the real one found no difference."
 
 - Create: `packages/db/src/testing/venue-db.ts`
 - Create: `packages/db/src/testing/venue-db.test.ts`
-- Modify: `packages/db/src/testing/index.ts` (export it)
+- Modify: `packages/db/package.json` — add `"./testing/venue-db.js"` to the `exports` map. **Corrected
+  2026-09-18 while building it:** this plan said `packages/db/src/testing/index.ts`, and there is no
+  such file. The `exports` map is enumerated deliberately (CLAUDE.md §3), so a new testing entry point
+  is a new line in it, exactly like `./testing/lifecycle.js` beside it. Receipt that the entry works:
+  `createRequire` rooted at `packages/catalogue/package.json` resolves
+  `@waitron/db/testing/venue-db.js` to `packages/db/src/testing/venue-db.ts`.
 - Modify: the 211 files that call the three existing helpers — one pull request per package
 
 **Interfaces:**
@@ -2387,10 +2392,10 @@ Create `packages/db/src/testing/venue-db.test.ts`:
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "./venue-db.js";
-import { coreMigrations } from "../migrations.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 
 describe("useVenueDb", () => {
-  const suite = useVenueDb({ migrations: [coreMigrations] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("gives a migrated database", async () => {
     const result = await suite.db.execute(sql`select count(*)::int as n from tenants`);
@@ -2398,7 +2403,9 @@ describe("useVenueDb", () => {
   });
 
   it("empties data between tests", async () => {
-    await suite.db.execute(sql`insert into tenants (id, legal_name) values (1, 'probe')`);
+    await suite.db.execute(
+      sql`insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', 'B00000000', 'Probe')`,
+    );
     const before = await suite.db.execute(sql`select count(*)::int as n from tenants`);
     expect(before.rows[0]).toEqual({ n: 1 });
   });
@@ -2411,6 +2418,17 @@ describe("useVenueDb", () => {
 ```
 
 The third case is the one that matters. A reset helper that silently stopped resetting would pass the first two.
+
+**Two corrections made while building it, 2026-09-18.** The migration set is exported as
+`CORE_MIGRATIONS`, not `coreMigrations`. And `tenants.country` and `tenants.tax_id` are both
+`notNull` (`packages/db/src/schema/tenants.ts:70-71`), so the two-column insert this sketch first
+carried could not have run at all — the third case would have failed for a not-null violation rather
+than for the reason it exists to check.
+
+**The control was run** (CLAUDE.md §4, prove by deletion): with the helper changed to
+`usePgliteDb({ ...options, resetPerTest: false })`, exactly the third case fails
+(`expected { n: 1 } to deeply equal { n: 0 }`) and the first two stay green — which is this
+paragraph's claim, measured rather than asserted.
 
 - [ ] **Step 2: Run it and watch it fail**
 
