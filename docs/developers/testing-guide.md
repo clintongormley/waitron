@@ -128,36 +128,48 @@ timeout KILLS a child that is still working. A suite can get the first right and
 runs through the second — if the program under test can legitimately take longer than the spawn
 timeout allows.
 
-`deploy/waitron.sh` does. Its `wait_healthy` polls a container 36 times, five seconds apart: about
-175 seconds, against `scripts/waitron-sh.test.mjs`'s 20-second spawn timeout. Two of that suite's
-cases (`install` and `install <ref>`) did not pin `WAITRON_SH_MAX_HEALTH_TRIES`, so a single probe
-that came back as anything other than `healthy` put the child into that loop. Measured with a stubbed
-`docker`, three arms: always healthy → exit 0 in **1 second**, one probe; **one missed probe → exit 0
-in 6 seconds**, two probes; never healthy with the tries pinned to four → exit 1 in 15 seconds. Each
-miss costs a whole 5-second sleep, so four of them reach the kill — and a killed child comes back
-with `status: null`, which reads as a broken test rather than a slow machine.
+`deploy/waitron.sh` does. Its `wait_healthy` polls a container 36 times, five seconds apart — 35
+sleeps, so about 175 seconds — against `scripts/waitron-sh.test.mjs`'s 20-second spawn timeout. Two of
+that suite's cases (`install` and `install <ref>`) did not pin `WAITRON_SH_MAX_HEALTH_TRIES`, so a
+single probe coming back as anything other than `healthy` put the child into that loop. Measured with
+a stubbed `docker`, by a review seat that drove each arm and counted the probes:
 
-That is the shape behind the failure recorded against this suite on 2026-09-18 under two campaign
-runners and a MinIO container: the FILE took 29.5s while its other cases ran at normal speed, which
-FITS one child killed at the 20-second bound rather than a uniform slowdown — a deduction from one
-duration, since that run's output was not kept. **What was never established is
-why a probe missed** — that run's output was not kept, and the miss itself has not been reproduced.
-What did NOT reproduce it is plain CPU contention: six runs under 36 busy-loop processes on an
-18-core machine (load average 62) all passed, and moved the `install <ref>` case from 1.30s to 1.48s
-— which is a failure to reproduce at one load level, not a cause eliminated.
+| Arm | Probes | Wall clock | Exit |
+| --- | --- | --- | --- |
+| healthy on the first probe | 1 | 0.692s | 0 |
+| one probe misses, then healthy | 2 | 5.090s | 0 |
+| never healthy, tries pinned to four | 4 | 15.119s | 1 |
+| never healthy, 36 tries, delay 0.05 | 36 | 2.179s | 1 |
 
-The fix cuts the WAIT rather than the try count, so the retrying itself survives:
+Each miss costs a whole five-second sleep, so four of them reach the kill — and a killed child comes
+back with `status: null`, which reads as a broken test rather than a slow machine.
+
+**That is a hypothesis about the failure recorded against this suite on 2026-09-18** under two
+campaign runners and a MinIO container, not an established cause. What is known: the FILE took 29.5s
+while its other cases ran at normal speed, which fits one child killed at the 20-second bound rather
+than a uniform slowdown. That run's output was not kept, the miss has never been reproduced, and
+nothing says what made a deterministic stub answer wrong. Plain CPU contention did not reproduce it:
+six runs under 36 busy-loop processes on an 18-core machine (load average 62) all passed, and moved
+the `install <ref>` case from 1.30s to 1.48s — a failure to reproduce at one load level, not a cause
+eliminated.
+
+The change cuts the WAIT rather than the try count, so the retrying itself survives:
 `WAITRON_SH_HEALTH_DELAY` (default 5) sits beside the try-count override the script already had, and
-the suite's `run()` sets it to 0.05 for every case. The whole 36-try budget then costs 36 sleeps of
-0.05s plus 36 stub executions — measured at 2.4s for the never-healthy case, against the 20-second
-bound, on a host this file elsewhere measures as roughly 3.5x slower under load. Unset, the default is
-unchanged: re-measured on the edited script, one missed probe still costs 6 seconds.
+the suite's `run()` sets it to 0.05 for every case. **It reduces the exposure; it does not guarantee
+anything.** The seat falsified the stronger claim by slowing each probe by 0.6s: 29 probes, then
+`ETIMEDOUT` at 20.003s. What the change buys is the sleeps — 175 seconds of them down to under two —
+while the probes' own cost stays. Unset, the default is unchanged, re-measured on the edited script:
+36 probes, 35 sleeps of five seconds, and an empty override falls back to five (`:-` substitutes for
+empty as well as unset).
 
-Pinned by `gives up with the unhealthy message at the shipped try count`, which leaves the try count
-alone. What makes it fail is deleting the `WAITRON_SH_HEALTH_DELAY` default from the suite's `run()`:
-the child then retries for ~175s and `spawnSync` kills it — measured at 20.17s with `ETIMEDOUT`,
-which is how this was found. It does not pin the shipped 5-second default; `scripts/deploy-image-env.test.ts`
-pins that as text, proven by mutating the script to `:-0.05` and watching it fail.
+Three cases pin it, and each was proved by mutation. `recovers from a probe that misses, and retries
+to do it` asserts the install succeeds AND that two probes were recorded; `gives up with the unhealthy
+message after the shipped number of tries` asserts 36. Pinning the try count to 1 fails both — which
+is how the first version of this test was caught asserting nothing about retrying, since a give-up
+message arrives just as happily after one try. Deleting the delay default from `run()` fails them the
+other way: the child retries for ~175s and `spawnSync` kills it, measured at 20.17s with `ETIMEDOUT`.
+Neither pins the shipped five-second default; `scripts/deploy-image-env.test.ts` pins that as text,
+proven by mutating the script to `:-0.05` and watching it fail.
 
 `scripts/ci-workflow.test.mjs` paid for this first, on PRs #128 and #129: a cold CI runner with no
 warm pnpm store ran its sequential `pnpm ls` spawns at **at least** ~3.3x their warm time (a floor,

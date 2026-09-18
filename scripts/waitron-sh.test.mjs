@@ -32,7 +32,8 @@ afterEach(() => {
 // The docker stub inspects the WHOLE arg string ($*) rather than shifting, so a change to flag order
 // cannot silently break it:
 //   - `compose version` exits 0, so Docker looks installed and ensure_docker skips the apt block.
-//   - `compose ps`   -> prints $WT_DOCKER_PS ("healthy" by default, so wait_healthy returns first try).
+//   - `compose ps`   -> prints $WT_DOCKER_PS ("healthy" by default, so wait_healthy returns first
+//     try), after $WT_DOCKER_PS_MISSES probes that answer empty — a health probe that misses.
 //   - `compose logs` -> prints the database_ahead line when $WT_AHEAD_LOGS is 1.
 //   - `compose exec … psql … -d waitron …` -> prints $WT_DB_STAMP, but ONLY when `-d waitron` is
 //     present, so a stamp query that forgot the app-db name (the wrong-db bug) reads empty and its
@@ -89,7 +90,12 @@ case "$1" in
         # and the pull-failure test fails.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
-      *" ps "*|*" ps") echo "\${WT_DOCKER_PS}" ;;
+      *" ps "*|*" ps")
+        # WT_DOCKER_PS_MISSES probes answer empty before the box reports WT_DOCKER_PS, which is what
+        # a health probe that misses looks like to the script's wait_healthy loop. The counter is a
+        # file in the case's own directory, so cases cannot see each other's.
+        n=$(cat "\${WT_LOG}.probes" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.probes"
+        if [ "$n" -le "\${WT_DOCKER_PS_MISSES:-0}" ]; then echo ""; else echo "\${WT_DOCKER_PS}"; fi ;;
       *" logs "*)
         [ "\${WT_AHEAD_LOGS}" = "1" ] && echo "provisioning.database_ahead: the database is newer" ;;
       *" exec "*)
@@ -139,6 +145,7 @@ function sandbox({
   dbStamp = "",
   aheadLogs = false,
   dockerPs = "healthy",
+  dockerPsMisses = 0,
   readError = false,
   rmFail = "",
   envWriteFail = false,
@@ -160,6 +167,7 @@ function sandbox({
       WT_DB_STAMP: dbStamp,
       WT_AHEAD_LOGS: aheadLogs ? "1" : "0",
       WT_DOCKER_PS: dockerPs,
+      WT_DOCKER_PS_MISSES: String(dockerPsMisses),
       WT_READ_ERROR: readError ? "1" : "0",
       WT_RM_FAIL: rmFail,
       WT_MV_FAIL: envWriteFail ? "1" : "0",
@@ -279,15 +287,27 @@ describe("waitron.sh health check", () => {
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/did not come up healthy/);
   });
-  // Every other health case pins WAITRON_SH_MAX_HEALTH_TRIES to 1, so none of them runs the try
-  // count the script ships. This one leaves it alone. Delete the `WAITRON_SH_HEALTH_DELAY` default
-  // in `run()` and it stops being a test: the child retries for ~175s and `spawnSync` kills it at
-  // 20s (measured: ETIMEDOUT at 20.17s).
-  it("gives up with the unhealthy message at the shipped try count", () => {
+  // The flake this suite had: one probe answering anything but `healthy` sent the child into a
+  // retry loop longer than `run()`'s whole timeout. Both cases below leave the try count alone, so
+  // they run the budget the script ships. Delete the `WAITRON_SH_HEALTH_DELAY` default in `run()`
+  // and they stop being tests: the child retries for ~175s and `spawnSync` kills it at 20s
+  // (measured: ETIMEDOUT at 20.17s).
+  it("recovers from a probe that misses, and retries to do it", () => {
+    const sb = sandbox({ dockerPsMisses: 1 });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    // Two probes, not one: asserting the STATUS alone would also pass if the retrying were gone.
+    expect(readFileSync(`${sb.log}.probes`, "utf8").trim()).toBe("2");
+    expect(r.stdout).toContain("https://waitron.local/manage/email");
+  });
+
+  it("gives up with the unhealthy message after the shipped number of tries", () => {
     const sb = sandbox({ dockerPs: "starting" });
     const r = run(sb, ["install"]);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/did not come up healthy/);
+    // The count is the point: pinning the try count to 1 would satisfy the assertions above.
+    expect(readFileSync(`${sb.log}.probes`, "utf8").trim()).toBe("36");
   });
 });
 

@@ -435,7 +435,8 @@ container or browser test** — most of these rules exist because a test passed 
   broken test. Cost: `deploy/waitron.sh` retries a health probe for about three minutes by default,
   against a twenty-second spawn timeout, so one probe that came back wrong burned a quarter of a
   case's budget and four of them killed it. Cut the WAIT, not the retrying
-  (`WAITRON_SH_HEALTH_DELAY`). **`scripts/spawn-timeout-budget.test.ts` does not cover this** — it
+  (`WAITRON_SH_HEALTH_DELAY`) — which reduces the exposure rather than removing it, since the probes'
+  own cost stays. **`scripts/spawn-timeout-budget.test.ts` does not cover this** — it
   reads the SUITE's declared waits, never the child's, so nothing guards the rule in general.
   Receipt: [testing-guide.md](docs/developers/testing-guide.md).
 - **A suite's executable stubs are built ONCE per file, not once per test.** Executing a freshly

@@ -2447,8 +2447,11 @@ script under test retries a health probe 36 times five seconds apart — about 1
 healthy, 6s with one missed probe, 15s never-healthy with the tries pinned to four; and six runs under
 36 busy-loop processes on an 18-core machine all passed, which is a failure to reproduce at one load
 level rather than a cause eliminated. Fixed
-by cutting the WAIT rather than the retrying (`WAITRON_SH_HEALTH_DELAY`), with a test that leaves the
-try count alone. **Still not established:** what made a probe miss — that output was not kept and the
+by cutting the WAIT rather than the retrying (`WAITRON_SH_HEALTH_DELAY`), with three cases that leave
+the try count alone and assert the PROBE COUNT — the first version asserted only the give-up message,
+which one try satisfies just as well, and a review seat falsified it by pinning the tries to 1 and
+watching it still pass. The change reduces exposure rather than removing it: the same seat slowed each
+probe by 0.6s and still reached `ETIMEDOUT`, at 20.003s. **Still not established:** what made a probe miss — that output was not kept and the
 miss has not been reproduced.
 **Slice 1's first task, P1a, landed in #390**: the column vocabulary in
 `packages/db/src/schema/columns.ts`, proven on `drawer_opens`, with no schema change. Two things it
