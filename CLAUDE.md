@@ -314,6 +314,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   own header states — it matches the column's SPELLINGS, so a column reintroduced under an unrelated name
   passes; it does not read test files; and it exempts, whole, each of the core migration files that
   historically carried the column, so a column re-added inside one of those is seen by nothing.
+- **`packages/db/src/schema/columns.ts` is the only file that names the engine's column and table
+  types.** A table declares `id`, `money`, `label`, `table` and the rest from there, never `uuid()`
+  or `numeric()` straight from `drizzle-orm/pg-core`, so the SQLite switch replaces one file rather
+  than every column in the tree. One scoped exception: `text` in
+  `packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the bytes the
+  huella hashed. Guard: `scripts/column-vocabulary.test.ts`, weaker than its name — it reads the
+  IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — the
   replication apply worker skips ordinary triggers. No policies, no RLS: one tenant per database.

@@ -141,6 +141,46 @@ external-provider credential. Setup derives geography-dependent values in the br
 derivation at the server boundary. Guarded by `scripts/module-seams.test.ts`; design:
 `docs/superpowers/specs/2026-09-09-country-packs-and-address-entry-design.md`.
 
+## `packages/db/src/schema/columns.ts` is the only file that names the engine's column and table types
+
+A table file declares its columns from that vocabulary — `id`, `ts`, `day`, `money`, `quantity`,
+`rate`, `label`, `flag`, `count`, `json`, `binary`, `enumText`, `table` and the rest — and never
+calls `uuid(…)`, `timestamp(…)` or `numeric(…)` straight from `drizzle-orm/pg-core`. The point is
+task F1: the SQLite switch replaces the bodies in that one file rather than every column declaration
+in the tree (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P1).
+
+What it cost: fourteen pull requests, #393 through #414, most of them one package at a time. Each
+conversion proved "no schema change" the same way — generate that package's migrations into a copy
+of its migration folder, diff the copy against the real one, expect no difference. Two changed what a
+CALLER is handed rather than what the database stores, both in the same direction: the hand-rolled
+`bytea` block behind `print_jobs.payload` in `packages/db` (#396) and the three sealed columns in
+`packages/credentials` (#413) typed their values as node `Buffer`s, where the shared `binary` helper
+hands a `Uint8Array`. `packages/media`'s block already declared the `Uint8Array` shape, so converting
+it changed nothing a caller sees.
+
+Left alone deliberately: a `pgEnum` column. `enumText` emits `text`, so converting one is a real
+schema change rather than a rename.
+
+Guarded by `scripts/column-vocabulary.test.ts`, whose own header says what it reads and where it is
+blind — read that before changing it, rather than this. Two things about it belong here, because they
+are decisions rather than mechanism:
+
+- **It is a ROOT guard, not a case in `packages/db`'s own suite**, which is where the plan put it. CI
+  runs a package's suite only when the scoping selects it, and the expansion is to a changed
+  package's DEPENDENTS: measured 2026-09-18, `pnpm --filter "...@waitron/bookings" ls --depth -1
+  --json` lists seven packages and `@waitron/db` is not among them, so the check would never have run
+  on a pull request adding a table file in `packages/bookings`. Same defect that moved the repo-wide
+  guards out of `packages/db` on 2026-08-01; the root `vitest.config.ts` header carries that history.
+- **One exception, scoped to a single builder rather than to the file**: `text` in
+  `packages/fiscal-verifactu/src/schema/registros.ts`, whose `cuota_total` and `importe_total` store
+  the exact bytes hashed into the Veri\*Factu huella and so must not pass through a helper that could
+  re-render them. A different builder in that same file is still reported.
+
+The rule landed in the same change as the guard and not earlier, although a reviewer asked for it
+after the first package converted: root `CLAUDE.md` §7 says a written rule with standing violations
+needs a guard rather than another paragraph, and until the last package converted every unconverted
+one was such a violation.
+
 ## No new table enters the core migration set without a stated reason in the commit
 
 A domain table a module owns belongs to that module's own migration set (`migrations.from`),

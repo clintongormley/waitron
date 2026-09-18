@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * The one place the storage engine's column types are named.
+ * The one place the storage engine's column and table types are named.
  *
  * Every table definition imports its columns from here so the engine can be changed in one file
  * rather than in every column definition across the schema. The bodies below emit PostgreSQL types;

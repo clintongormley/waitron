@@ -92,10 +92,14 @@ const HISTORICAL_TENANT_SQL: ReadonlySet<string> = new Set([
 /**
  * Every `.ts` file under `dir`, discovered rather than listed.
  *
- * The `isFile()` check is not decoration: a failing browser test writes its screenshot into a
- * DIRECTORY named after the test file, so a tree walk that trusts the extension hands a directory to
- * `readFileSync` and the guard dies with `EISDIR` instead of reporting on the repository (root
- * `CLAUDE.md` §4).
+ * The shape to keep is that the DIRECTORY branch is taken first: a failing browser test writes its
+ * screenshot into a directory named after the test file, and a walk that dispatched on the
+ * extension would hand that directory to `readFileSync` and die with `EISDIR` instead of reporting
+ * on the repository (root `CLAUDE.md` §4). The `isFile()` call then only drops an entry `statSync`
+ * reports as neither file nor directory. (Corrected 2026-09-18: this comment used to credit
+ * `isFile()` with saving the screenshot case, which the branch order says it does not — the version
+ * of `sourceFilesIn` in `packages/db/src/english-only.ts` is the one where it does, because that
+ * one filters on the extension first.)
  */
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];

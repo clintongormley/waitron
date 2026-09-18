@@ -2392,7 +2392,8 @@ edit, which says the folder was not already out of date. That the probe can SEE 
 P1a's control, where a column's type was deliberately broken and the probe caught it while
 `drizzle-kit check` did not. Behaviour is a separate question the probe cannot answer, because it is
 blind to a timestamp's mode and to a caller-facing type: the workspace typecheck and the package's
-own 615 tests carried that half. The rest of P1b is the remaining packages, one pull request each.
+own 615 tests carried that half. The rest of P1b is the remaining packages, one pull request each,
+and then a final one for the guard and the house rule.
 
 One cost the plan now carries, and one correction to how it was first written down. The `binary`
 helper hands callers a `Uint8Array` where two of the three hand-rolled binary columns handed them a
@@ -2647,21 +2648,37 @@ invokes — because the file lost four measured lines when the `bytea` block wen
 reads 94.15% at the base commit and 94.13% converted, and its bars are four separate numbers rather
 than one: 94.13 statements and lines against 90, 96.22 functions and 92.48 branches against 85.
 
-What is left of P1b is the guard. `purchasing` and
-`reporting` are on the plan's step 2 list but
+**P1b's FIFTEENTH and final pull request is the guard and the house rule**, landing together because
+a written rule with standing violations needs a guard rather than another paragraph (root
+`CLAUDE.md` §7) — until the last package converted, every unconverted one was such a violation.
+`purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their
-tables live in `packages/db`.
-**And the house rule is still not written down, on purpose**: the one-line `CLAUDE.md` §3 entry naming
-`packages/db/src/schema/columns.ts` as the only place the engine's column types are named, with its
-receipt in `docs/developers/conventions-data.md`, lands in P1b's FINAL pull request together with
-the guard that enforces it. Until the rollout reaches the other packages every one of them is a
-standing violation of that rule, and a written rule with standing violations needs a guard rather
-than another paragraph. One thing for whoever writes that final pull request, found during #397's
-review and deliberately not fixed there: `packages/db/src/index.ts` already cites "(CLAUDE.md §3)"
-beside the vocabulary re-export, and §3 carries no such rule yet. The pointer came in with #393 and
-becomes true the moment the rule lands, so it was left rather than widening #397's diff — but it is
-a claim standing in the tree until then.
+tables live in `packages/db`. So the conversions are complete, and the rule is now written: the
+`CLAUDE.md` §3 entry names `packages/db/src/schema/columns.ts` as the only file that names the
+engine's column and table types, its receipt is in `docs/developers/conventions-data.md`, and
+`scripts/column-vocabulary.test.ts` enforces it. That also retires a worry recorded here — the pointer was
+read as dangling, and reading what it rests on says it was not. Since #393 `packages/db/src/index.ts` has cited "(CLAUDE.md §3)"
+beside the vocabulary re-export, for the claim that another package reaches the vocabulary only
+through this barrel. §3 carried no rule about the vocabulary at all until now. It now names
+`columns.ts` as the only file that names the engine's column and table types; the "only through
+this barrel" half is covered by §3's separate rule that `@waitron/db`'s `exports` map is enumerated rather than a
+wildcard. #397's review recorded the worry and left it rather than widening that diff.
+
+Three things about the guard worth knowing before changing it. It lives under `scripts/`, in the
+ROOT Vitest project, and NOT in `packages/db/src/schema/columns.test.ts` where the plan put it: CI
+expands a changed package to its DEPENDENTS, so `pnpm --filter "...@waitron/bookings" ls --depth -1
+--json` lists seven packages without `@waitron/db` among them (measured 2026-09-18) and a check
+inside that package's suite would never run on the pull request that adds a table file elsewhere —
+the same defect that moved the repo-wide guards out of `packages/db` on 2026-08-01. It derives its
+forbidden set from the vocabulary's own `drizzle-orm/pg-core` import block rather than from a list
+written into the guard, so adding a helper does not go stale, and `customType` is in that set
+deliberately — all three hand-rolled `bytea` blocks the `binary` helper replaced were written with
+it. And it is weaker than its name: it reads the import or re-export line as text, so a builder reached
+through `import * as pg from "drizzle-orm/pg-core"` is invisible to it, which is pinned as one of its own
+controls rather than only claimed. One scoped exception survives, `text` in
+`packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the exact bytes
+hashed into the huella; a different builder in that same file is still reported.
 
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
