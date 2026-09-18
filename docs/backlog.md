@@ -2648,7 +2648,9 @@ invokes — because the file lost four measured lines when the `bytea` block wen
 reads 94.15% at the base commit and 94.13% converted, and its bars are four separate numbers rather
 than one: 94.13 statements and lines against 90, 96.22 functions and 92.48 branches against 85.
 
-**P1b's FIFTEENTH and final pull request is the guard and the house rule**, landing together because
+**P1b's FIFTEENTH and final pull request was the guard and the house rule, LANDED as #416 on
+2026-09-18** — which completes task P1b, and with P1a (#390) completes task P1. They landed together
+because
 a written rule with standing violations needs a guard rather than another paragraph (root
 `CLAUDE.md` §7) — until the last package converted, every unconverted one was such a violation.
 `purchasing` and `reporting` are on the plan's step 2 list but
@@ -2664,6 +2666,22 @@ through this barrel. §3 carried no rule about the vocabulary at all until now. 
 `columns.ts` as the only file that names the engine's column and table types; the "only through
 this barrel" half is covered by §3's separate rule that `@waitron/db`'s `exports` map is enumerated rather than a
 wildcard. #397's review recorded the worry and left it rather than widening that diff.
+
+What #416's review earned, recorded because the shape recurs: a guard's own reader can be talked out
+of reporting, and it took two seats to find both ways. The Codex seat planted
+`import { /* note */ text } from "drizzle-orm/pg-core"` — the specifier read as comment-plus-name,
+matched nothing, and the suite still reported 14 passed with a real offender in the tree; a
+single-quoted module name escaped the same way. The scoped re-read then broke the REPAIR with a
+closing brace written INSIDE the comment, which ends a `[^{}]*` capture early, and prettier leaves
+that shape byte-for-byte alone so `format:check` does not undo it. Both are controls now. The same
+re-read measured that the lazy `[\s\S]*?` block-comment form backtracks exponentially (253ms at 24
+consecutive comments, 5.3s at 32; the real tree scans in ~75ms either way).
+
+Nothing was left open by #416. One thing deliberately not done, so nobody re-derives it: the guard
+does not read `bench/`, `deploy/` or `scripts/`, and does not see a star re-export, a dynamic
+`import()`, a subpath import or a namespace import — all stated in its own header rather than fixed,
+because closing them needs a TypeScript parser and `typescript` is deliberately not a root
+dependency (the root `vitest.config.ts` header records that decision and its price).
 
 Three things about the guard worth knowing before changing it. It lives under `scripts/`, in the
 ROOT Vitest project, and NOT in `packages/db/src/schema/columns.test.ts` where the plan put it: CI
