@@ -438,6 +438,13 @@ container or browser test** — most of these rules exist because a test passed 
   deliberately left alone. Prove the knobs still arrive by neutralising
   each one: a value that stops reaching a shared stub leaves it on its default, which passes.
   Receipt: [testing-guide.md](docs/developers/testing-guide.md).
+- **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included.** Getting the
+  Vitest bound right says nothing about this one: the test timeout fails a healthy test for its
+  duration, while the spawn timeout KILLS the child and returns `status: null`, which reads as a
+  broken test. `deploy/waitron.sh` retries a health probe 36 times five seconds apart — about 175s
+  against a 20s spawn timeout — so one missed probe cost a case five of its twenty seconds. Cut the
+  WAIT, not the retrying (`WAITRON_SH_HEALTH_DELAY`). Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a socket dir out of
   Docker Desktop's VM gives `ECONNREFUSED` on macOS.
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to

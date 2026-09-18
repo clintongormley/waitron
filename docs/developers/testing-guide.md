@@ -117,7 +117,42 @@ failed against a 7s bound. `scripts/pre-push.test.mjs` is the case in this repo,
 invokes the hook three times and a `git()` helper that spawns with no timeout at all; its bound comes
 from measuring its cases, not from its spawn timeout. Where a suite's every case makes exactly one
 bounded call — `scripts/waitron-sh.test.mjs` and `scripts/main-tag-guard.test.mjs` — the shortcut
-does hold, and each says so in its own comment rather than relying on a general rule.
+does hold for THAT bound, and each says so in its own comment rather than relying on a general rule.
+It leaves the other side of the pair open, which is the next section.
+
+### The child's own retry budget is part of the test's worst case
+
+The pair of bounds protects against two different failures, and reasoning about one says nothing
+about the other. Vitest's per-test timeout can fail a healthy test for its DURATION; `spawnSync`'s
+timeout KILLS a child that is still working. A suite can get the first right and still fail healthy
+runs through the second — if the program under test can legitimately take longer than the spawn
+timeout allows.
+
+`deploy/waitron.sh` does. Its `wait_healthy` polls a container 36 times, five seconds apart: about
+175 seconds, against `scripts/waitron-sh.test.mjs`'s 20-second spawn timeout. Two of that suite's
+cases (`install` and `install <ref>`) did not pin `WAITRON_SH_MAX_HEALTH_TRIES`, so a single probe
+that came back as anything other than `healthy` put the child into that loop. Measured with a stubbed
+`docker`, three arms: always healthy → exit 0 in **1 second**, one probe; **one missed probe → exit 0
+in 6 seconds**, two probes; never healthy with the tries pinned to four → exit 1 in 15 seconds. Each
+miss costs a whole 5-second sleep, so four of them reach the kill — and a killed child comes back
+with `status: null`, which reads as a broken test rather than a slow machine.
+
+That is the shape behind the failure recorded against this suite on 2026-09-18 under two campaign
+runners and a MinIO container: the FILE took 29.5s while its other cases ran at normal speed, which
+is one child killed at the 20-second bound, not a uniform slowdown. **What was never established is
+why a probe missed** — that run's output was not kept, and the miss itself has not been reproduced.
+What was ruled out is plain CPU contention: six runs under 36 busy-loop processes on an 18-core
+machine (load average 62) never failed, and moved the `install <ref>` case from 1.30s to 1.48s.
+
+The fix cuts the WAIT rather than the try count, so the retrying itself survives:
+`WAITRON_SH_HEALTH_DELAY` (default 5) sits beside the try-count override the script already had, and
+the suite's sandbox sets it to 0.05 for every case. The whole 36-try budget then costs about two
+seconds, so no number of missed probes can reach the spawn timeout. Unset, the default is unchanged —
+re-measured on the edited script, one missed probe still costs 6 seconds.
+
+Pinned by `waitron.sh health check at the default try count`, which leaves the try count alone and
+asserts the give-up message. Before the change that test did not time out in Vitest: it was killed by
+`spawnSync` at 20.17s with `ETIMEDOUT`.
 
 `scripts/ci-workflow.test.mjs` paid for this first, on PRs #128 and #129: a cold CI runner with no
 warm pnpm store ran its sequential `pnpm ls` spawns at **at least** ~3.3x their warm time (a floor,

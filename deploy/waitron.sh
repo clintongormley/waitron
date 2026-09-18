@@ -230,16 +230,19 @@ is_production() {
 }
 
 # ~3 minutes for the app container to report healthy (setup mode is healthy on /setup-api/status).
-# WAITRON_SH_MAX_HEALTH_TRIES overrides the try count for tests, which otherwise wait 3 minutes.
+# Two test overrides, because a suite cannot afford either term of that product:
+# WAITRON_SH_MAX_HEALTH_TRIES cuts the try count, and WAITRON_SH_HEALTH_DELAY cuts the wait between
+# tries, so a test can keep the RETRYING and still finish in seconds.
 wait_healthy() {
   local tries="${WAITRON_SH_MAX_HEALTH_TRIES:-36}"
+  local delay="${WAITRON_SH_HEALTH_DELAY:-5}"
   while [ "$tries" -gt 0 ]; do
     # -qx matches the WHOLE line: `.Health` prints one status word, and a bare `grep healthy` would
     # also match "unhealthy" (it contains the substring) and report a failed container as ready.
     if docker compose -f "$WAITRON_DIR/compose.yml" ps --format '{{.Health}}' app 2>/dev/null | grep -qx healthy; then
       return 0
     fi
-    tries=$((tries - 1)); [ "$tries" -gt 0 ] && sleep 5
+    tries=$((tries - 1)); [ "$tries" -gt 0 ] && sleep "$delay"
   done
   return 1
 }

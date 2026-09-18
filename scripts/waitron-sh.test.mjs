@@ -165,15 +165,24 @@ function sandbox({
       WT_MV_FAIL: envWriteFail ? "1" : "0",
       WT_PULL_FAIL: pullFail ? "1" : "0",
       WT_HANG: hang,
+      // The health wait is the one place the script sleeps, and its default budget — 36 tries five
+      // seconds apart — is nine times this suite's whole per-run bound. A single probe that misses
+      // (the stub is deterministic, but a machine under load can drop one) therefore costs a case
+      // five of its twenty seconds, and four misses kill the run outright: measured on this host,
+      // one miss took a healthy `install` from 1s to 6s. Cutting the WAIT rather than the try count
+      // keeps the retrying, so a missed probe costs milliseconds instead of failing the suite.
+      WAITRON_SH_HEALTH_DELAY: "0.05",
     },
   };
 }
 
-// Two budgets. spawnSync's timeout kills a child that hangs; Vitest's per-test timeout bounds how
-// long the whole TEST may take, and a test it fails for its duration alone is a healthy run reported
-// as broken — the default, 5s, did exactly that here. Every case below makes exactly ONE `run()`
-// call and does no other slow work, so bounding the test above the spawn timeout covers its whole
-// healthy range. That reasoning is about THIS suite, not a general rule: a test that waits twice can
+// Two budgets, protecting against different failures. spawnSync's timeout kills a child that is
+// still working; Vitest's per-test timeout bounds how long the whole TEST may take, and a test it
+// fails for its duration alone is a healthy run reported as broken — the default, 5s, did exactly
+// that here. Every case below makes exactly ONE `run()` call and does no other slow work, so
+// bounding the test above the spawn timeout covers its whole healthy range. The SPAWN side needs the
+// child to fit too, which is what `WAITRON_SH_HEALTH_DELAY` in `sandbox` is for: unbounded there, the
+// script's own health retries outlast this timeout. That reasoning is about THIS suite, not a general rule: a test that waits twice can
 // outlast such a bound. Guard: `scripts/spawn-timeout-budget.test.ts`; receipt in
 // `docs/developers/testing-guide.md`.
 const RUN_TIMEOUT_MS = 20_000;
@@ -289,6 +298,18 @@ describe("waitron.sh install preserves .env on a failed write", () => {
     // The password survives, so a retry (ensure_env_password returns early) reuses the same one.
     expect(env).toContain("POSTGRES_PASSWORD=original-secret");
     expect(env.length).toBeGreaterThan(0);
+  });
+});
+
+describe("waitron.sh health check at the default try count", () => {
+  // The other health cases pin WAITRON_SH_MAX_HEALTH_TRIES to 1, so none of them exercises the try
+  // count the script actually ships. This one leaves it alone: a box that never reports healthy must
+  // give up and SAY so, inside the suite's own budget.
+  it("gives up with the unhealthy message, without pinning the try count", () => {
+    const sb = sandbox({ dockerPs: "starting" });
+    const r = run(sb, ["install"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/did not come up healthy/);
   });
 });
 
