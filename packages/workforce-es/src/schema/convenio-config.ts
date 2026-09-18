@@ -70,14 +70,8 @@ export const convenioConfig = table(
     nightWindowEndMinute: count("night_window_end_minute").notNull().default(360),
 
     // Provincial premiums (plan §3.2) — asesor-blocked, default null so no figure is ever invented.
-    /** plus de nocturnidad; null until the convenio's figure is known.
-     * UNIT UNDECIDED. The ruleset field this feeds, `WorkTimeRuleset.nightPremiumPct`, documents a
-     * fraction (0.25); this column's own NAME and the 2026-07-22 workforce design say a percentage
-     * (25.00). No site computes with the value, so nothing in the
-     * code arbitrates them, and `rate()` does not either: it is `numeric(5, 2)`, the same helper the
-     * VAT-rate columns use for a percentage. Receipt, including what the scale costs under each
-     * reading: the P1b workforce-es report in
-     * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`. */
+    /** plus de nocturnidad, as a PERCENTAGE (e.g. 25.00 = 25%); null until the convenio's figure is
+     * known. */
     nightPremiumPct: rate("night_premium_pct"),
     /** plus de turno partido, per-day amount in tenant currency; null until known. */
     splitShiftPremium: money("split_shift_premium"),

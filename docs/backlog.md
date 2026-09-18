@@ -2402,19 +2402,15 @@ make, for a different reason from `packages/workforce`'s (that one has text colu
 check over one; this one has no text column for a check to constrain). Its one `check()` is a range
 check and its one database enum stays, for the usual reason.
 
-**What it found is a question rather than a change, and it is for the owner.** The tree says two
-different things about what unit `convenio_config.night_premium_pct` is in, and no code settles
-which. Two comments — the column's own and its paraphrase on the generic ruleset type — call it a
-fraction, so a 25% premium would be stored `0.25`. Its NAME, and the 2026-07-22 workforce design,
-call it a percentage, which would store `25.00`. No site computes with the value; it is read from the
-row and handed on. That makes it cheap to settle now and expensive once a venue has written a row. It also
-decides a second question: two decimal places on a FRACTION mean the column can express a premium
-only in whole percentage points — measured, `0.125` stores as `0.13` — so a 12.5% night premium would
-not be representable, while as a percentage `12.50` is exact. Both the scale and the name are
-pre-existing, in the package's baseline migration. The conversion changed neither: `rate()` emits the
-same `numeric(5, 2)`, and the column gained a short comment block saying its unit is undecided and
-where the receipt is. The task that turns rates into basis points (P6) now carries the
-same warning, because under its rule `0.25` becomes `25`, which reads as 0.25%.
+**A question it surfaced was settled by the owner (2026-09-18): `convenio_config.night_premium_pct`
+is a PERCENTAGE** — a 25% premium is stored `25.00`, not `0.25`. The tree had said it two ways: the
+column NAME and the 2026-07-22 workforce design said percentage, while two comments (the column's own
+and its paraphrase on `WorkTimeRuleset.nightPremiumPct`) said fraction. The comments were the wrong
+ones and are corrected. No schema change: `rate()` is `numeric(5, 2)`, which holds a half-point
+premium (`12.50`) exactly — the representability worry (a fraction in `numeric(5, 2)` cannot express
+12.5%, storing `0.13`) only ever arose under the fraction reading, now retired. Nothing computes with
+the value yet, which is why it was cheap to settle now and would have been expensive once a venue had
+written a row. P6 (rates to basis points) now treats it like the other percentage rate columns.
 
 **`packages/bookings` is the tenth pull request (#403)** — one table file, one table, 13 columns, no schema
 change. The package itself met no new shape: its one database enum (`booking_status`) stays for the

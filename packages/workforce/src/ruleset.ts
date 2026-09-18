@@ -54,7 +54,7 @@ export interface WorkTimeRuleset {
   nightWindowStartMinute: number;
   /** art. 36 night-window end, minutes from local midnight (default 360 = 06:00). */
   nightWindowEndMinute: number;
-  /** Night-work premium as a fraction, or null when the collective agreement has not set a provincial figure. */
+  /** Night-work premium as a percentage (e.g. 25.00 = 25%), or null when the collective agreement has not set a provincial figure. */
   nightPremiumPct: number | null;
   /** Split-shift premium, a per-day amount in tenant currency, or null. */
   splitShiftPremium: number | null;
