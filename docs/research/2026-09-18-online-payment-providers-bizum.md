@@ -156,6 +156,61 @@ _"2,9 % + 0,10 €"_ outside it, on a €50 bill:
 it. SumUp is cheaper than Stripe Terminal on a Spanish card even before the monthly plan, and half the
 price on a tourist card, because it does not surcharge by card origin at all.
 
+## Routing by bill size — does it pay?
+
+Owner idea, 2026-09-18: _"we could even use sumup for lower bills and stripe for higher bills, if the
+prices work out"_. The seam allows it — a routing rule is a routing rule. The arithmetic below is
+mine, worked from the published rates above; the card-mix shares are assumptions, and the section
+says where that matters.
+
+SumUp charges a flat percentage online with no fixed fee, and everyone else charges a percentage plus
+25 cents, so SumUp wins small bills and loses large ones. On a Spanish card, online:
+
+| Bill | SumUp 1,95 % | Stripe 1,5 % + €0,25 | Mollie 1,20 % + €0,25 |
+| --- | --- | --- | --- |
+| €20 | **€0.39** | €0.55 | €0.49 |
+| €35 | €0.68 | €0.78 | **€0.67** |
+| €50 | €0.98 | €1.00 | **€0.85** |
+| €100 | €1.95 | €1.75 | **€1.45** |
+
+SumUp crosses Stripe at €55.56 and Mollie at €33.33.
+
+**The card mix moves that crossover further than the bill size does.** SumUp's 1,95 % applies to every
+card. Stripe's 1,5 % applies only to standard European cards — a premium European card is 2,8 % and a
+card issued outside the EEA is 3,15 %, both plus the same 25 cents. So Stripe's effective rate depends
+on who walks in, and with enough of them the crossover disappears:
+
+| Assumed share of premium and non-EEA cards | Stripe's blended rate | SumUp crosses at |
+| --- | --- | --- |
+| none | 1,50 % | €56 |
+| 5 % premium | 1,57 % | €65 |
+| 10 % premium, 5 % non-EEA | 1,71 % | €105 |
+| 15 % premium, 15 % non-EEA | 1,94 % | never |
+
+Those four rows are illustrative mixes, not the deli's. **The deli's own mix is the thing to measure,
+and it is a query against its card takings once it is trading, not a research question.** Until then,
+any bill-size rule is tuned to a number nobody has.
+
+**The constraint that caps how clever this can get.** The provider is chosen when the payment page is
+minted — before the diner has picked anything. At that moment the AMOUNT is known, so routing on
+amount works. The CARD CLASS is not known, and cannot be, so a tourist's card cannot be sent one way
+and a Spanish card another. What is feasible is a method chooser on our own tab page — Bizum or card —
+routing on the answer, because that is a choice the diner makes before the provider is picked.
+
+**Sizing the prize before building any of it.** Routing by amount between SumUp and Stripe saves
+roughly 10–20 cents a bill, and only in the band near the crossover. Routing by METHOD — getting the
+diner onto Bizum rather than a card — saves roughly 70 cents a bill. Method routing is therefore worth
+about four times amount routing, and it is the one where providers differ in kind rather than by a
+rounding error. Against that, each extra provider sharing a channel costs a merchant account, a
+settlement reconciliation and an adapter to keep working, and **a refund must go back through whichever
+provider took the payment**, so each routing decision is permanent for that bill.
+
+**The version worth building is a different one, and it is card-present.** SumUp's Tarifa Plana gives
+0 % on Spanish cards up to €2 500 a month — a monthly ALLOWANCE, not a per-bill rate. The rule that
+exploits it is "send Spanish cards to SumUp until the allowance is spent, then reconsider", which
+routes on cumulative monthly volume rather than on the size of any one bill. It is worth more than the
+bill-size rule and needs no second merchant account.
+
 ## Not priced
 
 - **Straight through the deli's bank, on a Redsys virtual terminal.** The traditional Spanish route,

@@ -1409,6 +1409,18 @@ Two halves, one branch each (owner decision 2026-09-12).
   tourist card, so it **confirms SumUp for the card-present seat**. SumUp's ONLINE rate is 1,95 % on
   every plan — the plans change nothing outside the room, which is why SumUp stays a weak candidate
   for the guest's own phone.
+- **Routing by BILL SIZE is allowed but is the smallest lever** (owner idea 2026-09-18, arithmetic in
+  the research note). SumUp charges a flat percentage online with no fixed fee and everyone else
+  charges a percentage plus 25 cents, so SumUp crosses Stripe at €55.56 and Mollie at €33.33 on a
+  Spanish card. **The card mix moves that crossover further than the bill size does** — a venue with
+  enough premium and foreign cards never crosses at all, because Stripe's blended rate converges on
+  SumUp's while keeping its fixed fee. The deli's own mix is a query against its card takings once it
+  trades, not a research question. Two things to know before anyone builds this: the provider is
+  chosen when the payment page is minted, so the AMOUNT can be routed on and the CARD CLASS cannot;
+  and a refund must return through whichever provider took the payment. Worth roughly 10–20 cents a
+  bill against roughly 70 for routing by METHOD onto Bizum, so **method first**. The variant that
+  earns its keep is card-present: spend SumUp's Tarifa Plana €2 500 monthly allowance first, which
+  routes on cumulative volume and needs no second merchant account.
 
 ### A7. Users, roles and the dashboard shell
 
