@@ -113,6 +113,15 @@ vice versa, or the two files could not be backed up independently.
 > that a `local` session references. Each such edge is resolved in slice 1 by moving the column or
 > denormalising; the plan enumerates them from the FK graph. This is named, not hand-waved: the FK
 > graph is machine-readable and the plan lists every cross-file edge before writing code.
+>
+> **Closed 2026-09-19 by plan task P7, and by a third route this paragraph does not name.** There were
+> six edges, every one a `local` row naming a venue row by id, so neither "move the column" nor
+> "carry a copy of the value" applied — an id is the payload, not a value that can be copied. Each was
+> resolved by dropping the constraint and keeping the column, with what establishes the id's target
+> named at the site. No classification was weakened. The guard is
+> `scripts/two-file-foreign-keys.test.ts`, and it reads drizzle's generated snapshots, so a key added
+> only in hand-written migration SQL is outside it. The six, and the one whose id is configuration
+> rather than a row already read, are in the plan's task P7 step 5.
 
 ### 2.2 Generations
 

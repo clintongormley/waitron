@@ -71,8 +71,7 @@ Items marked **owner review** touch the unrepairable fiscal core or the arithmet
 | `packages/db/src/job-claim.ts` | The shared claim-by-update helper that replaces `FOR UPDATE SKIP LOCKED`. |
 | `packages/db/src/constraint-target.ts` | Answers "which table and columns did this refusal name?", replacing constraint-name matching. |
 | `scripts/write-path-tables.test.ts` | The guard that replaces what grants enforce: a write path may not touch a table it has no business writing. |
-| `packages/db/src/schema/foreign-keys.ts` | Reads the foreign keys a schema module declares, off the Drizzle table objects. Added by P7, which is where the reason for its home is written. |
-| `scripts/two-file-foreign-keys.test.ts` | Fails if a foreign key crosses between `venue.db` and `node.db`. Created by P7, not by the flip — the flip's table below said otherwise until 2026-09-19. |
+| `scripts/two-file-foreign-keys.test.ts` | Fails if a foreign key crosses between `venue.db` and `node.db`, read from each set's drizzle head snapshot. Created by P7, not by the flip — the flip's table below said otherwise until 2026-09-19. Carries no engine types, so F1 changes nothing here unless drizzle's SQLite snapshots name those fields differently. |
 
 **Created by the flip:**
 
@@ -3277,7 +3276,6 @@ change is re-run here and passes against the same recorded values."
 **Files:**
 
 - Create: `scripts/two-file-foreign-keys.test.ts`
-- Create: `packages/db/src/schema/foreign-keys.ts` (added 2026-09-19 — the root project cannot import `drizzle-orm`; step 2 below says why)
 - Modify: whichever schema files hold a crossing edge
 
 **Interfaces:**
@@ -3299,7 +3297,11 @@ For each foreign key, look up both tables' classifications. Write the crossing e
 
 Create `scripts/two-file-foreign-keys.test.ts`. It belongs in the ROOT Vitest project, which the ungated lint job and the hook run on every non-docs push (`CLAUDE.md` §4).
 
-**Corrected while building it, 2026-09-19.** There is no `scripts/classification-helpers.ts` and the sketch below should not be read as naming one. Two things forced a different shape. The root project cannot import `drizzle-orm` — it is not a root dependency, and a root test that names it fails to resolve — so the part that reads Drizzle table objects lives in a package that already depends on it (`packages/db/src/schema/foreign-keys.ts`, `declaredForeignKeys`), and the root guard imports it by source path, exactly as `classification-complete.test.ts` imports `tablesCreatedBy` from `packages/sync-enrolment`. And the table set comes from each package's own `drizzle.config.ts` `schema:` entry point, the same file drizzle-kit builds its snapshot from, dynamically imported by the guard. The classification comes from `ALL_MODULES` as the sketch assumes.
+**Corrected while building it, 2026-09-19.** There is no `scripts/classification-helpers.ts` and the sketch below should not be read as naming one. What was built reads **drizzle's own head snapshot per migration set** — `meta/_journal.json` names the head, and `tables[*].foreignKeys[*]` holds `tableFrom`, `tableTo` and `columnsFrom` — resolved with the same helper shape `scripts/no-tenant-column.test.ts` already uses. The classification comes from `ALL_MODULES`, as the sketch assumes.
+
+The first attempt read the TypeScript instead, through a helper in `packages/db` that called `getTableConfig` (the root project cannot import `drizzle-orm`: it is in no root dependency). Two review seats independently rejected that shape and both were right, so it is written down rather than quietly replaced. It put a second file naming `drizzle-orm/pg-core` inside the very directory task P1 exists to keep engine-free, and after F1 every table would have been a `SQLiteTable`, `is(exported, PgTable)` false for all of them, the crossing check passing over an empty graph. And it discovered packages by regex over each `drizzle.config.ts` — measured by the Codex seat, changing one config's quotes from double to single made the guard pass **with a real crossing key in the tree**. Reading generated artifacts removes both: no engine types, no discovery regex, and a set whose snapshot is missing is refused by name instead of skipped.
+
+What it trades, stated because it is a real gap and not a rounding of one: a foreign key declared in TypeScript but not yet generated is invisible, and nothing asserts `db:generate` is a no-op. The other direction was worse — a reading taken from the TypeScript passes the moment someone edits it, while the constraint is still live in every migrated database, which is exactly the state this task's two `DROP CONSTRAINT` migrations exist to leave behind.
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3342,11 +3344,20 @@ Add a temporary crossing foreign key, confirm the guard fails, remove it. `CLAUD
 
 Per the topology design's §2.1, resolve by moving the column or denormalising — not by weakening the classification. A `local` session row that needs a `state` config value carries a copy of the value, not a reference to it.
 
+**Corrected while building it, 2026-09-19.** None of the six edges was resolved either of those two ways, and no classification was weakened either. All six were a `local` row naming a venue row by id — a person, a till, a location — and an id is not a value that can be copied: the reference IS the payload. So the route taken was a third one: **drop the constraint, keep the column**, and name at each site what now establishes that the id points at a real row. Five of the six take their id from a row the request had already read; the sixth, `join_requests.location_id`, is configuration checked by nothing at insert time, and its refusal moves to accept, where `devices.location_id` still holds a key to `locations`. A reader of §2.1 should expect this route as well as the two it names.
+
 - [x] **Step 6: Run the guard and the full root project**
 
 ```bash
-pnpm vitest run scripts/two-file-foreign-keys.test.ts && pnpm test:coverage
+npx vitest run scripts/two-file-foreign-keys.test.ts && npx vitest run --coverage
 ```
+
+**Corrected 2026-09-19:** this said `pnpm test:coverage`, which at the repository root is
+`vitest run --coverage && pnpm -r test:coverage` — the whole workspace, which `CLAUDE.md` §2 says not
+to add solely to finish an item. The root project is what this step wants. What was actually run on
+this branch: the root project (45 files, 3154 tests), `pnpm --filter @waitron/identity test:coverage`,
+`pnpm --filter @waitron/db test:coverage`, twelve `apps/server` suites chosen for touching the six
+tables or deleting a person, `pnpm -r typecheck`, `pnpm lint` and `pnpm format:check`.
 
 - [x] **Step 7: Commit**
 

@@ -82,6 +82,19 @@ describe("management session lifecycle", () => {
     expect(code).toBe("management_session.required");
   });
 
+  it("throws management_session.required when the session's person row has been deleted", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
+    // Reachable only since the storage switch dropped this table's foreign key to `persons` (they
+    // end up in different database files). Before that, the constraint refused this delete. Two nets
+    // produce the refusal, so breaking it takes both: measured by mutation, the inner join alone can
+    // be widened to a left join and this case still passes.
+    await suite.db.execute(sql`delete from persons where id = ${personId}`);
+
+    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
+    expect(code).toBe("management_session.required");
+  });
+
   it("throws management_session.expired past the idle timeout", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));

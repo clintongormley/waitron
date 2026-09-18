@@ -31,8 +31,8 @@ export const webauthnCredentials = table(
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count a
     // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI
-    // process), the same reason persons.ts and management-sessions.ts use this form. restrict, not
-    // cascade: removing a person must never silently discard a registered passkey.
+    // process), the same reason recovery-codes.ts and management-account-actions.ts use this form.
+    // restrict, not cascade: removing a person must never silently discard a registered passkey.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],

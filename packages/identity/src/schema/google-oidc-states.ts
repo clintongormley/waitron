@@ -8,6 +8,9 @@ export const googleOidcStates = table(
   "google_oidc_states",
   {
     id: id("id").primaryKey().defaultRandom(),
+    // Names a row in the VENUE's `persons` and carries no foreign key: `local` -> `state` would
+    // cross the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). It is null for
+    // a login ceremony, and for a link it is the person `verifyOwnCredentials` returned.
     personId: id("person_id"),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair.
     // The siblings that carry this comment are held by one of the two reasons in columns.ts;
@@ -23,11 +26,6 @@ export const googleOidcStates = table(
     expiresAt: tsString("expires_at").notNull(),
   },
   (t) => [
-    // `person_id` names a row in the VENUE's `persons` and carries NO foreign key: this table is
-    // classified `local` and persons is `state`, so the storage switch puts them in different files
-    // and a key across the two would stop either being restored on its own (topology design §2.1).
-    // Guard: `scripts/two-file-foreign-keys.test.ts`. It is null for a login ceremony, and for a
-    // link it is the person `verifyOwnCredentials` returned (`google-oidc.ts`).
     check("google_oidc_states_mode_ck", sql`${t.mode} in ('login', 'link')`),
     check("google_oidc_states_state_hash_ck", sql`length(${t.stateHash}) = 64`),
   ],

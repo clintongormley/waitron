@@ -11,20 +11,15 @@ export const sessions = table(
   "sessions",
   {
     id: id("id").primaryKey().defaultRandom(),
+    // Both name rows in the VENUE's tables and carry no foreign key: `local` -> `state` would cross
+    // the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The person comes back
+    // from `verifyPersonCredential` and the till from the authenticated device's registration.
     personId: id("person_id").notNull(),
     tillId: id("till_id").notNull(),
     openedAt: tsString("opened_at").notNull().defaultNow(),
     endedAt: tsString("ended_at"),
   },
   (t) => [
-    // `person_id` and `till_id` name rows in the VENUE's tables and carry NO foreign key. This
-    // table is classified `local`, so the storage switch keeps it in `node.db` while persons and
-    // tills live in `venue.db`, and a key across the two files would stop either being restored on
-    // its own (topology design §2.1). Guard: `scripts/two-file-foreign-keys.test.ts`. What now
-    // establishes that both ids name real rows is the request path: the person comes back from
-    // `verifyPersonCredential` (`login.ts`) and the till from the authenticated device's own
-    // registration (`apps/server/src/till-api.ts`, `device.tillId`).
-
     // The "open session at a till" lookup filters on till_id then ended_at IS NULL; this index
     // covers the equality predicate. Kept plain (not a partial `WHERE ended_at IS NULL` index) so
     // drizzle-kit round-trips it and db:generate stays a no-op; the open-rows filter is applied at

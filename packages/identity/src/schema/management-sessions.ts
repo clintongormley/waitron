@@ -11,17 +11,15 @@ export const managementSessions = table(
   "management_sessions",
   {
     id: id("id").primaryKey().defaultRandom(),
+    // Names a row in the VENUE's `persons` and carries no foreign key: `local` -> `state` would
+    // cross the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The caller has
+    // already authenticated the person it passes to `startManagementSession`.
     personId: id("person_id").notNull(),
     createdAt: tsString("created_at").notNull().defaultNow(),
     lastSeenAt: tsString("last_seen_at").notNull().defaultNow(),
     endedAt: tsString("ended_at"),
   },
   (t) => [
-    // `person_id` names a row in the VENUE's `persons` and carries NO foreign key: this table is
-    // classified `local` and persons is `state`, so the storage switch puts them in different files
-    // and a key across the two would stop either being restored on its own (topology design §2.1).
-    // Guard: `scripts/two-file-foreign-keys.test.ts`. The caller has already authenticated the
-    // person it passes (`management-session.ts`, `startManagementSession`).
     // Forward-looking for slice 1b's "open management session for a person" lookup — filtering on
     // person_id then ended_at IS NULL — whose equality predicate this index would cover. No consumer
     // does that lookup in this slice: `resolveManagementSession` and `endManagementSession` key on

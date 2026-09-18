@@ -20,10 +20,12 @@ export const joinRequestKind = pgEnum("join_request_kind", ["device", "print_age
 export const joinRequests = table("join_requests", {
   id: id("id").primaryKey().defaultRandom(),
   // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked for,
-  // so a joiner says nothing about which venue it is joining. No foreign key to `locations`: this
-  // table is classified `local` and locations is `state`, so the storage switch puts them in
-  // different files and a key across the two would stop either being restored on its own (topology
-  // design §2.1). Guard: `scripts/two-file-foreign-keys.test.ts`.
+  // so a joiner says nothing about which venue it is joining. No foreign key to `locations`: `local`
+  // -> `state` would cross the two database files (guard:
+  // `scripts/two-file-foreign-keys.test.ts`). Unlike the identity tables, that id is configuration
+  // rather than a row this request read, and nothing checks it exists when the row is written; a
+  // misconfigured venue is refused later, when accept copies it into `devices.location_id`, which
+  // does hold a key to `locations`.
   locationId: id("location_id").notNull(),
   kind: joinRequestKind("kind").notNull(),
   // The name the joiner asked for. A device accept copies it to `devices.label`, an agent accept to

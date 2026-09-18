@@ -1,8 +1,7 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { declaredForeignKeys } from "../packages/db/src/schema/foreign-keys.js";
 
 /**
  * Two database files, and nothing joining them at the database level.
@@ -13,29 +12,36 @@ import { declaredForeignKeys } from "../packages/db/src/schema/foreign-keys.js";
  * them, so the split's precondition is checked here rather than discovered at the flip.
  *
  * WHY A ROOT-PROJECT PROGRAM. The classification is assembled in `@waitron/composition` and the
- * foreign keys are declared in a dozen packages' schema files, so no per-package suite can see both
- * sides — the same reason `classification-complete.test.ts` lives here.
+ * foreign keys are spread across a dozen packages' own migration sets, so no per-package suite can
+ * see both sides — the same reason `classification-complete.test.ts` lives here.
+ *
+ * WHAT IT READS. Drizzle's own head snapshot per migration set, resolved through `meta/_journal.json`
+ * exactly as `no-tenant-column.test.ts` resolves it: the normalised schema drizzle-kit diffs to emit
+ * its SQL, which holds the graph directly as `tables[*].foreignKeys[*]`. Reading generated artifacts
+ * rather than the TypeScript keeps this file free of the storage engine's types, which is what the
+ * flip exists to avoid having to revisit.
  *
  * Three gaps, stated because a failing test can never restore a missing hedge:
  *
- * 1. **It reads the TypeScript schema, not the database.** A foreign key written by hand in a
- *    migration and never declared in a table file is invisible to it. Checked on 2026-09-18 by
- *    scanning every `packages/*∕drizzle/*.sql` for `ADD CONSTRAINT … FOREIGN KEY`: every crossing
- *    edge in the tree is declared in TypeScript, so today the two readings agree — but nothing keeps
- *    them agreeing.
- * 2. **A package is in scope only if it has a `drizzle.config.ts` naming its schema entry point**,
- *    which is read as TEXT from that file. A table declared in a file the entry point does not
- *    export is outside both this guard and drizzle-kit's own snapshot.
+ * 1. **A key declared in TypeScript but not yet generated is invisible to it**, and nothing asserts
+ *    that `db:generate` is a no-op — on 2026-09-19 `grep -rn "db:generate" .github .husky scripts
+ *    package.json` found no such check. The trade is deliberate: an ungenerated key reaches no
+ *    database, while a key still live in every migrated box would have passed a reading taken from
+ *    the TypeScript the moment someone edited it — which is exactly the state the two `DROP
+ *    CONSTRAINT` migrations beside this guard exist to leave behind.
+ * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not change
+ *    the snapshot — and there are such keys: read on 2026-09-19, scanning each
+ *    `packages/<pkg>/drizzle/` directory's SQL for `ADD CONSTRAINT … FOREIGN KEY` net of every `DROP
+ *    CONSTRAINT` finds MORE live keys than the snapshots hold. What that scan agrees with the
+ *    snapshots about is the answer: no crossing edge, from either reading. Nothing keeps them
+ *    agreeing. (The directory is written with a placeholder because a glob's closing `*` followed by
+ *    a slash would end this comment.)
  * 3. **It judges by the table NAME.** Two tables with the same physical name in different modules
  *    would be one node in this graph; `classification-complete.test.ts` is what forbids that.
  */
 
-const REPO_ROOT = join(import.meta.dirname, "..");
-const PACKAGES_DIR = join(REPO_ROOT, "packages");
-
-/** `schema: "./src/schema/index.ts"` — the entry point drizzle-kit itself builds its snapshot from,
- * so this guard reads exactly the table set the migrations are generated from. */
-const SCHEMA_ENTRY = /schema:\s*"([^"]+)"/;
+const repoRoot = join(import.meta.dirname, "..");
+const ROOTS = ["packages", "apps"];
 
 /** Which file a class lives in (topology design §2.1). */
 function fileOfClass(cls: string): string {
@@ -53,79 +59,116 @@ function classOfTable(): Map<string, string> {
   return classes;
 }
 
-/** Every package whose `drizzle.config.ts` names a schema entry point, with that path. */
-function schemaEntryPoints(): { packageDir: string; entry: string }[] {
-  const found: { packageDir: string; entry: string }[] = [];
-  for (const packageDir of readdirSync(PACKAGES_DIR).sort()) {
-    let config: string;
-    try {
-      config = readFileSync(join(PACKAGES_DIR, packageDir, "drizzle.config.ts"), "utf8");
-    } catch {
-      continue;
-    }
-    const match = SCHEMA_ENTRY.exec(config);
-    if (match?.[1] !== undefined) {
-      found.push({ packageDir, entry: join(PACKAGES_DIR, packageDir, match[1]) });
+/** Every `drizzle/` migration set directly under a package or app, as repo-relative paths. */
+function migrationSets(): string[] {
+  const sets: string[] = [];
+  for (const root of ROOTS) {
+    for (const entry of readdirSync(join(repoRoot, root))) {
+      const dir = join(repoRoot, root, entry, "drizzle");
+      if (existsSync(dir) && statSync(dir).isDirectory()) sets.push(relative(repoRoot, dir));
     }
   }
-  return found;
+  return sets.sort();
+}
+
+/**
+ * The snapshot drizzle holds for a set's HEAD. `"empty"` is a set that declares no migrations at all
+ * (`packages/fiscal-none` owns no tables); `"missing"` is a set whose journal names a head whose
+ * snapshot is not on disk, which would drop that set out of the check below without saying so — the
+ * case the suite refuses rather than skips.
+ */
+type HeadSnapshot = { kind: "file"; path: string } | { kind: "empty" } | { kind: "missing" };
+
+function headSnapshot(set: string): HeadSnapshot {
+  const journal = join(repoRoot, set, "meta", "_journal.json");
+  if (!existsSync(journal)) return { kind: "missing" };
+  const entries = JSON.parse(readFileSync(journal, "utf8")).entries as { idx: number }[];
+  if (entries.length === 0) return { kind: "empty" };
+  const head = Math.max(...entries.map((entry) => entry.idx));
+  const snapshot = join(repoRoot, set, "meta", `${String(head).padStart(4, "0")}_snapshot.json`);
+  return existsSync(snapshot)
+    ? { kind: "file", path: relative(repoRoot, snapshot) }
+    : { kind: "missing" };
 }
 
 interface Edge {
-  packageDir: string;
-  table: string;
-  columns: readonly string[];
-  references: string;
+  set: string;
+  constraint: string;
+  from: string;
+  columns: string[];
+  to: string;
 }
 
-async function allForeignKeys(): Promise<Edge[]> {
+/** Every foreign key in every set's head snapshot. */
+function declaredForeignKeys(): Edge[] {
   const edges: Edge[] = [];
-  for (const { packageDir, entry } of schemaEntryPoints()) {
-    const schemaModule: Record<string, unknown> = await import(/* @vite-ignore */ entry);
-    for (const fk of declaredForeignKeys(schemaModule)) {
-      edges.push({ packageDir, ...fk });
+  for (const set of migrationSets()) {
+    const head = headSnapshot(set);
+    if (head.kind !== "file") continue;
+    const snapshot = JSON.parse(readFileSync(join(repoRoot, head.path), "utf8")) as {
+      tables: Record<
+        string,
+        {
+          name: string;
+          foreignKeys?: Record<
+            string,
+            { name: string; tableFrom: string; tableTo: string; columnsFrom: string[] }
+          >;
+        }
+      >;
+    };
+    for (const table of Object.values(snapshot.tables)) {
+      for (const fk of Object.values(table.foreignKeys ?? {})) {
+        edges.push({
+          set,
+          constraint: fk.name,
+          from: fk.tableFrom.toLowerCase(),
+          columns: fk.columnsFrom,
+          to: fk.tableTo.toLowerCase(),
+        });
+      }
     }
   }
   return edges;
 }
 
-describe("the two database files are independent", () => {
-  it("has no foreign key crossing between them", async () => {
-    const classes = classOfTable();
-    const crossings = (await allForeignKeys())
-      .filter((edge) => {
-        const from = classes.get(edge.table.toLowerCase());
-        const to = classes.get(edge.references.toLowerCase());
-        return from !== undefined && to !== undefined && fileOfClass(from) !== fileOfClass(to);
-      })
-      .map(
-        (edge) =>
-          `${edge.packageDir}: ${edge.table}(${edge.columns.join(", ")}) -> ${edge.references}` +
-          ` [${classes.get(edge.table.toLowerCase())} -> ${classes.get(edge.references.toLowerCase())}]`,
-      );
-    expect(crossings.sort()).toEqual([]);
-  });
+// Read once, at collection: the root project declares no `testTimeout`, so every `it` runs under
+// vitest's 5s default, and this is work that belongs to neither test in particular.
+const edges = declaredForeignKeys();
+const classes = classOfTable();
 
-  it("knows the class of every table in the foreign-key graph", async () => {
-    const classes = classOfTable();
-    const unclassified = new Set<string>();
-    for (const edge of await allForeignKeys()) {
-      for (const table of [edge.table, edge.references]) {
-        if (!classes.has(table.toLowerCase())) unclassified.add(table);
+describe("the two database files are independent", () => {
+  it("has no foreign key crossing between them", () => {
+    const violations: string[] = [];
+    for (const edge of edges) {
+      const from = classes.get(edge.from);
+      const to = classes.get(edge.to);
+      const where = `${edge.set}: ${edge.constraint} — ${edge.from}(${edge.columns.join(", ")}) -> ${edge.to}`;
+      // An unclassified endpoint is a violation, not a skip: the crossing cannot be judged without
+      // both classes, and a filter would drop the edge and pass.
+      if (from === undefined || to === undefined) {
+        violations.push(`${where} [unclassified: ${from ?? edge.from}, ${to ?? edge.to}]`);
+      } else if (fileOfClass(from) !== fileOfClass(to)) {
+        violations.push(`${where} [${from} -> ${to}]`);
       }
     }
-    expect([...unclassified].sort()).toEqual([]);
+    expect(violations.sort()).toEqual([]);
   });
 
-  // Vacuous-pass anchor. An empty graph — a schema entry point that stopped resolving, a discovery
-  // that matched no package — would leave both checks above passing, which is what a fully resolved
-  // tree looks like too. So pin that the scan really read the tree.
-  it("reads a real foreign-key graph, not an empty one", async () => {
-    const edges = await allForeignKeys();
-    const printed = edges.map((e) => `${e.table} -> ${e.references}`);
+  it("reads a head snapshot for every migration set that declares one", () => {
+    // A set whose journal names a head with no snapshot on disk would drop out of the check above
+    // without saying so, and an absence assertion cannot notice its own missing input.
+    expect(migrationSets().filter((set) => headSnapshot(set).kind === "missing")).toEqual([]);
+  });
+
+  // Vacuous-pass anchor. An empty graph — a snapshot shape that changed under us, a discovery that
+  // matched no set — would leave the check above passing, which is what a fully resolved tree looks
+  // like too. So pin that the scan really read the tree.
+  it("reads a real foreign-key graph, not an empty one", () => {
+    const printed = edges.map((edge) => `${edge.from} -> ${edge.to}`);
     expect(printed).toContain("sale_lines -> sales");
     expect(printed).toContain("webauthn_credentials -> persons");
     expect(edges.length).toBeGreaterThanOrEqual(100);
-    expect(new Set(edges.map((e) => e.packageDir)).size).toBeGreaterThanOrEqual(6);
+    expect(new Set(edges.map((edge) => edge.set)).size).toBeGreaterThanOrEqual(6);
   });
 });

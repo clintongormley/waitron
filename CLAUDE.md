@@ -332,6 +332,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   Guards, on a new table: `scripts/classification-complete.test.ts`,
   `scripts/append-only-enable-always.test.ts`. Nothing guards the next rule: a PUBLISHED table needs
   a primary key, not just a UNIQUE, or Postgres refuses its UPDATEs (`55000`). `product_units` paid.
+- **The class also chooses the FILE, so no foreign key may join a `local` table to a `ledger`/`state`
+  one, in either direction.** The storage switch keeps `local` in `node.db` and the rest in
+  `venue.db`, and a key across them stops either being restored on its own. A `local` row that needs
+  a venue row keeps the plain id and names, at the column, what establishes the target exists. Guard:
+  `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it reads drizzle's GENERATED head
+  snapshots, so a key declared in TypeScript but not yet generated, or added only in hand-written
+  migration SQL, is invisible to it.
 - **The two publications a node holds are created by the table OWNER, and the replication role is a
   bootstrap the app provisioner only verifies** (`assertReplicationReady`). A subscription's
   connection string carries a password, so its statement is never logged and a failure throws only a

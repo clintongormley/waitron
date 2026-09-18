@@ -44,8 +44,8 @@ export async function authorize(
   // single innerJoin. `sessions` carries no foreign key to `persons` — they live in different files
   // after the storage switch (`schema/sessions.ts`) — so the row is absent when no session is open
   // and, in principle, when a session's person row has been deleted. Both read as
-  // `session.not_open`, which fails closed. No non-test file deletes a person today; the two greps
-  // are in the pull request.
+  // `session.not_open`, which fails closed — pinned by a case in `authorize.test.ts` that deletes the
+  // person and expects the refusal. No non-test file deletes a person today.
   const [row] = await tx
     .select({ personId: sessions.personId, role: persons.role })
     .from(sessions)

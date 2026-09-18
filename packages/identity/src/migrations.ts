@@ -2,8 +2,10 @@ import { fileURLToPath } from "node:url";
 
 /**
  * This package's migration set. Exported as data because cross-package ordering is the RUNTIME's
- * responsibility — core migrations must run before these (`sessions.till_id` references core's
- * `tills`) — and a descriptor makes the caller state that order out loud.
+ * responsibility — core migrations must run before these, because this set grants on its tables to
+ * `app_user`, the role core's `0001_db_baseline_sql.sql` creates — and a descriptor makes the caller
+ * state that order out loud. Until the storage switch dropped it, `sessions.till_id` referencing
+ * core's `tills` was the reason; the requirement outlived the key.
  */
 export const IDENTITY_MIGRATIONS = {
   migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),
