@@ -834,6 +834,48 @@ export default async function ({ startStore }) {
 
 ### Task 9: S4 — offline WAL and latency bound
 
+> **2026-09-18, as landed.** Everything below was measured on this machine against the pin
+> (litestream v0.5.17 darwin-arm64, node v26.7.0, the pinned MinIO image). The recorded run, the
+> mutation list and the 2x2 probe are in `bench/sqlite-failover/README.md` → "What S4 measures, and
+> what it does not". Five things differ from the steps above, and the code is what landed:
+>
+> - **The load is driven in ROUNDS with an idle pause, in BOTH arms, and step 3's continuous load
+>   measured nothing about being offline.** Driven back to back, 7500 sales finish in about a second;
+>   pointed at a live MinIO instead of the closed port, that shape still recorded
+>   `peak-wal-bytes=310759272` — the offline figure — because litestream never gets a turn. Fifteen
+>   rounds of five hundred with a 1500ms idle is what landed, in the offline arm and the control
+>   alike, so the two differ in one thing: whether the config names a live store or a closed port.
+> - **Step 2's "or do not start it" was not taken.** A new `src/unreachable-store.ts` gives
+>   `writeConfig` a `Store` whose endpoint is a local port that was bound, read and released, and it
+>   VERIFIES that premise with a TCP connection that has to be refused — an offline arm that was
+>   quietly online would measure nothing. Its `putJson`/`getJson`/`listKeys` throw rather than
+>   answering.
+> - **A CONTROL was added that the steps do not ask for** (`CLAUDE.md` §1): the same load against a
+>   REACHABLE store, where the WAL has to plateau. Without it, a growing WAL is equally consistent
+>   with "this write volume always makes this much WAL". Measured: 21,086,192 bytes against the
+>   offline arm's 310,404,952 for the same 7500 sales.
+> - **A Part C was added, and it is the most decision-relevant thing here** — risk 9's own sentence,
+>   "put our own process on the sale path". One `PRAGMA wal_checkpoint(TRUNCATE)` from our own
+>   connection took **11,727.8ms** with the offline daemon running, answered `busy=1 log=75341
+>   checkpointed=4`, and left the WAL untouched; with the daemon killed the same statement took
+>   **48.6ms** and truncated it to zero. The blocked arm reproduced in every run that reached it
+>   (11.7-12.5s, `busy=1` every time). It decides nothing and feeds the detail, the way S3's Part C
+>   does.
+> - **Step 5's WAL ceiling is a STATED ceiling, and the spec's illustrative one is not met.** Spec §4
+>   S4 offers "a small multiple of the streamed data"; the measured amplification is about 80x
+>   (310MB of WAL over a 3.85MB database), so that formulation was not adopted and the scenario
+>   prints `spec-small-multiple-ceiling=not-met` rather than quietly substituting a bar that passes.
+>   What landed is 64KiB a sale, which tests the growth's SHAPE — nothing in this repository records
+>   the appliance's partition size, so it is not a disk guarantee.
+>
+> Two further findings worth carrying forward. **`wal_autocheckpoint = 0` is not what makes the
+> offline WAL grow — the attached daemon is**: with an offline litestream holding the database,
+> dropping the pragma changed nothing (41,189 bytes a sale against 41,387), because SQLite's own
+> automatic checkpoint is refused the same way our explicit one is; with nothing attached the pragma
+> decides everything (41,135 against 558). That widens risk 9 rather than answering it. And **250
+> sales a day is an assumption, not a measurement** — nothing in this repository records the deli's
+> real ticket count, so every figure is also reported per sale.
+
 **Files:**
 - Create: `bench/sqlite-failover/src/scenarios/s4_offline_load.ts`
 

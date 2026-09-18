@@ -26,7 +26,10 @@ S5 never do — each models its hand-over between two in-memory SQLite databases
 container or a store. `LS` starts one only once `setup:litestream` has been run: without the pinned
 binary it reports SKIPPED before it reaches the store. S0 and S3 do the same, and each starts ONE
 container when it does run: S0's three runs of the loop share that store and are kept apart by term,
-and S3's three parts share it and are kept apart by prefix.
+and S3's three parts share it and are kept apart by prefix. S4 starts one too, and only for its
+reachable-store control — its offline half needs no container at all. Without the pinned binary S4
+does NOT report SKIPPED: it drops the daemon, the control and the container, runs the SQLite half
+alone and says so in its row.
 
 `setup:litestream` downloads the pinned litestream release into the gitignored `.bin/` for this
 host's platform. Nothing else installs it, so the scenarios that drive litestream report SKIPPED
@@ -125,7 +128,7 @@ SKIPPED, then `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sq
 scenarios`, 2026-09-18, the `LS` row →
 `version=0.5.17 one-shot-keys=1 one-shot-restored=3 daemon-restored=4 first-sync-restores=3 after-write-restores=3 control-refused="litestream restore exited 1: Error: no matching backup files available"`.
 That is the foundation check only (find the binary, config, stream, restore); it claims nothing about
-the failover loop, which is what S0, S3 and S4 are for — S0 and S3 are in, and each recorded run is
+the failover loop, which is what S0, S3 and S4 are for — all three are in, and each recorded run is
 in its own section below. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
 their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
@@ -571,6 +574,177 @@ was called directly from a throwaway file with a `startStore` that throws if it 
 returned `S3 SKIPPED critical=true litestream v0.5.17 not found; … — S3 is UNPROVEN until then`. The
 control in the other direction — the same call with the binary back — printed `THREW PROBE:
 startStore was called`.
+
+## What S4 measures, and what it does not
+
+S4 is the multi-day offline write load. It asks what a box does to its own WAL, and to the cashier's
+wait, while litestream cannot reach the store and `wal_autocheckpoint = 0` leaves nobody else to
+checkpoint — topology design §13's risk 9 and §10's finding 8. It is a MEASUREMENT (spec §7): its
+verdict is `MEASURED` unless a stated bar is breached, a breach is `FAIL` with `critical: false`, and
+it stops nothing either way.
+
+**The volume mapping, and the assumption inside it.** `SALES_PER_DAY = 250` and `DAYS = 30`, so 7500
+sales. **250 a day is an ASSUMPTION and not a measurement** — nothing in this repository records the
+deli's real ticket count, and the nearest stated figure,
+[`bench/pglite-throughput/src/bench.ts:60-78`](../pglite-throughput/src/bench.ts), models the worst
+realistic MINUTE (16 sales a minute across four tills), which implies no daily total whatever. Every
+figure below is therefore also given per sale, so a reader who knows the real rate can rescale it.
+And the load is **volume, not wall-clock** (spec §9): thirty days of trading driven through in about
+half a minute, so nothing here says anything about a quantity that turns on elapsed time.
+
+**Both arms pause between rounds, and that took a restructure.** Part A (offline) and Part B
+(reachable store) drive the identical load — fifteen rounds of five hundred sales with a 1500ms idle
+after each — and differ in ONE thing, whether the config names a live MinIO or a closed port. The
+first shape drove all 7500 sales back to back, and a mutation is what showed that shape measured
+nothing about being offline: pointed at a live store instead of the closed port, it recorded
+`peak-wal-bytes=310759272`, the offline figure, because 7500 sales finish in about a second and
+litestream never gets a turn. The idle is a cadence this rig CHOSE — it is not a model of a trading
+day, and litestream documents no such number.
+
+**The bars, and where each comes from.**
+
+- p95 ≤ 150ms and p99 ≤ 400ms are the pglite bench's, `bench/pglite-throughput/src/bench.ts:82-83`,
+  and their justification is the cashier's perceived wait at `bench.ts:75-78` — the receipt cannot
+  print until the commit lands. Spec §4's S4 asks for exactly this reuse.
+- Peak WAL ≤ 64KiB a sale is a **stated ceiling and not a derived one**. Nothing in this repository
+  records the appliance's partition size, so it is not a disk guarantee and must not be read as one.
+  What it tests is the SHAPE of the growth: it sits well above what a commit costs in this model's
+  schema, so a breach means super-linear growth rather than growth.
+- A FLOOR of one SQLite page a sale (4096 bytes) is a precondition rather than a bar: under it,
+  something checkpointed and Part A is not measuring an offline WAL at all. It bites — see the
+  mutations below.
+
+**What the recorded run measured.** The commit does not slow down as the WAL grows: p50 0.178ms,
+p95 0.333ms, p99 0.528ms, max 3.015ms, and the LAST modelled day's p95 (0.29ms) is below the FIRST
+day's (0.578ms), which is the direction a first-run warm-up goes and not drift. The pglite bars are
+passed by two to three orders of magnitude. The WAL reaches 310,404,952 bytes — 41,387 a sale — and
+that per-sale rate reproduced within about half a percent across every run taken in this shape
+(41,317, 41,353, 41,387, and 41,189 and 41,413 under two mutations that do not touch the write path).
+
+**The amplification is about 80x, and the spec's illustrative ceiling is NOT met.** After the control
+checkpoint completes, the database holds 3,854,336 bytes of the 310MB the WAL held. Spec §4's S4
+offers "a small multiple of the streamed data" as an example ceiling; eighty times is not a small
+multiple, so **that formulation was not adopted as the bar** and `MAX_WAL_BYTES_PER_SALE` is what the
+verdict uses. The scenario prints `spec-small-multiple-ceiling=not-met` rather than quietly
+substituting a bar that passes. The figure slice 2 actually needs is the last one on that line:
+`offline-days-per-gib=103.8` — at the assumed 250 sales a day, about 104 days of offline trading per
+GiB of WAL, arithmetic over the measured rate rather than a box that ran that long.
+
+**Risk 9's own question — can WE get the WAL back? Not while the daemon is there.** Part C times one
+`PRAGMA wal_checkpoint(TRUNCATE)` from our own connection, twice. With the offline daemon still
+running it took **11,727.8ms**, answered `busy=1 log=75341 checkpointed=4`, and left the WAL file
+exactly as it was. The daemon was then killed and the same statement took **48.6ms**, answered
+`busy=0 log=0 checkpointed=0`, truncated the WAL to zero and left the database at 3,854,336 bytes —
+so the pages did move. The blocked arm reproduced in every run that reached it, in both shapes of
+this scenario and in a hand-written probe: 11.7s to 12.5s, `busy=1` and `checkpointed=4` every time,
+the WAL never shrinking. What the three numbers in that row MEAN is SQLite's business and this rig
+has not established it; what is read here is `busy` and the file sizes either side.
+
+**Two things that pair does not show.** It does not show what a SALE would have done during those
+twelve seconds: this rig is one process and the checkpoint is synchronous, so no sale was attempted
+while it ran. The sale that is measured is the one immediately AFTER, and it committed in 0.521ms.
+And nothing in the product is driven here — no code path in `packages/` asks for this checkpoint;
+what was measured is a rig calling the pragma itself.
+
+**`wal_autocheckpoint = 0` is not what makes the offline WAL grow — the attached daemon is.** This
+came out of the mutation that drops the pragma, which did NOT collapse the WAL, and it needed its own
+2x2 before anything could be said about it. A scratch script outside the repository, driving this
+rig's `openNode` and `recordSale` for 7500 sales in each of four configurations, one run each
+(2026-09-18, node v26.7.0, litestream 0.5.17):
+
+```
+no daemon,      wal_autocheckpoint = 0     -> wal 308,513,872 (41,135/sale)  db 57,344
+no daemon,      wal_autocheckpoint = 1000  -> wal   4,185,952 (558/sale)     db 3,862,528
+offline daemon, wal_autocheckpoint = 0     -> wal 310,137,152 (41,352/sale)  db 57,344
+offline daemon, wal_autocheckpoint = 1000  -> wal 309,552,112 (41,274/sale)  db 65,536
+```
+
+With nothing attached the pragma decides everything; with an offline litestream attached it decides
+nothing, because SQLite's own automatic checkpoint is refused the same way our explicit one is. Read
+narrowly, that WIDENS risk 9 rather than answering it: the unbounded WAL does not depend on the
+pragma the risk is conditioned on. Nothing in the rig re-runs this 2x2 — it is a probe, and the
+scenario keeps the pragma set because that is the configuration topology §4.2 specifies.
+
+**Without the pinned binary S4 does not report SKIPPED** — unlike S0 and S3, it degrades. It runs the
+offline load with no daemon and no container at all, and its row then reads
+`version=absent offline-daemon=no-litestream-v0.5.17 … reclaim-offline=no-litestream-v0.5.17
+control=no-litestream-v0.5.17`. That state was run rather than read, with `.bin/litestream` moved
+aside and no `litestream` on `PATH`, against a `startStore` that throws if it is ever reached:
+`MEASURED … peak-wal-bytes=310145392 wal-bytes-per-sale=41353 … reclaim-control="ms=21.7 busy=0
+log=0 checkpointed=0 wal=310145392->0 shrank=true"`, and the probe was never called. What those
+numbers describe is SQLite with automatic checkpointing off and nothing else: no reachable-store
+control, and no risk-9 reclaim pair.
+
+**What S4 does NOT establish**, stated because a reader will assume some of it:
+
+- **that litestream tried and failed.** Against the closed port the daemon stays up — the recorded
+  run reads `offline-daemon-alive-after-load=true` — and that is all that was observed. Whether it
+  retried the endpoint, or did nothing at all, needs its log or the store, and this scenario reads
+  neither.
+- **anything that turns on elapsed time.** The load is volume; thirty modelled days pass in half a
+  minute.
+- **anything about the real ledger's cost per commit.** The ~41KB a sale is this rig's five-table
+  MODEL (`model.ts`) with its indexes at SQLite's default page size, not
+  `packages/fiscal-verifactu`'s schema.
+- **that a LONGER offline stretch stays linear.** The run stops at 7500 sales; `offline-days-per-gib`
+  extrapolates the measured rate and measures nothing beyond it.
+- **a disk budget.** The WAL ceiling is stated, not derived from any partition size — this repository
+  records none.
+
+S4's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover
+scenarios`, 2026-09-18:
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S4 | offline write load | MEASURED | version=0.5.17 sales=7500 days=30 sales-per-day=250 day-rate=assumed-not-measured rounds=15 idle-ms=1500 offline-daemon=ECONNREFUSED offline-attach-ms=1118 offline-daemon-alive-after-load=true p50-ms=0.178 p95-ms=0.333 p99-ms=0.528 max-ms=3.015 first-day-p95-ms=0.578 last-day-p95-ms=0.29 peak-wal-bytes=310404952 wal-bytes-per-sale=41387 offline-checkpoint-rounds=0/15 checkpointed-db-bytes=3854336 wal-amplification=80.5x spec-small-multiple-ceiling=not-met offline-days-per-gib=103.8 reclaim-offline="ms=11727.8 busy=1 log=75341 checkpointed=4 wal=310404952->310404952 shrank=false" reclaim-next-sale-ms=0.521 reclaim-control="ms=48.6 busy=0 log=0 checkpointed=0 wal=310454392->0 shrank=true" control="peak-wal=21086192 end-wal=21086192 db=3858432 store-keys=34 checkpoint-rounds=15/15 p95-ms=0.285 p99-ms=0.498" breaches=none |
+```
+
+That run's exit code is 1, and S4 is not why: S2 is the critical FAIL the runner reports. Every other
+scenario's row in that run matches its own recorded run above, with one exception the S3 section
+already covers — `deletion-waited-ms` read 4155 against the 4164 recorded there, which is the number
+that section says moves run to run.
+
+`offline-checkpoint-rounds=0/15` against the control's `checkpoint-rounds=15/15` is the pair to read
+first: it counts the rounds whose idle left the main database file larger, which is where a
+checkpoint moves pages to.
+
+**The red was watched on the module import, not through the runner.** With the scenario written and
+`src/unreachable-store.ts` absent,
+`node -e "import('./src/scenarios/s4_offline_load.ts')"` from `bench/sqlite-failover` gave
+`Cannot find module …/src/unreachable-store.ts imported from …/src/scenarios/s4_offline_load.ts`.
+The runner reports a scenario that throws under its FILENAME with `error.message` as the detail
+(`src/scenarios.ts`), so that is the string its row would have carried — read off the runner, not
+run.
+
+Every assertion and both bars were then put to mutation, each applied on its own and the scenario run
+whole, with the files restored from copies kept outside the repository afterwards (2026-09-18):
+
+- **the `wal_autocheckpoint = 0` pragma and its readback deleted → NOTHING CHANGED**, and saying so
+  is the point: `wal-bytes-per-sale=41189`, `offline-checkpoint-rounds=1/15`, verdict still MEASURED.
+  That is the finding in the 2x2 above — under an attached offline daemon the pragma does no work —
+  and it means Part A's measurement is insensitive to the pragma in exactly that configuration;
+- **the same mutation with the daemon removed as well** (the offline arm called with no binary) →
+  "the offline arm's WAL grew 559 bytes a sale, under one page — something checkpointed it, so
+  nothing here is measuring an offline WAL". So the floor precondition does bite, and it is what
+  catches a checkpoint that happened;
+- **the control's daemon never started** → the plateau assertion fails: "with the store reachable the
+  WAL plateaus: 309659232 bytes against the offline arm's 310413192 for the same 7500 sales, which is
+  under 4x apart". Without the daemon nothing checkpoints, the two arms land on the same number, and
+  the control is what refuses that;
+- **the OFFLINE arm pointed at the REACHABLE store** → "the offline arm's WAL grew 2817 bytes a sale,
+  under one page…". The floor fires first, before the plateau assertion gets a chance: 2817 x 7500 is
+  21.1MB, which is the control's plateau, so the arm that was supposed to be offline had plateaued;
+- **a 450ms stall on about 1.1% of the offline arm's commits, inside the timed region** → the bars
+  are read off the measurement rather than asserted, so the scenario does not throw: it reported
+  `FAIL` with `critical: false` and `breaches="p99-ms=450.105>400"`, p95 untouched at 0.174ms;
+- **`PRAGMA wal_autocheckpoint = 0` set to 1000, readback kept** → "automatic checkpointing is off,
+  which is the condition risk 9 is about";
+- **`PRAGMA journal_mode = WAL` set to DELETE** → "the database is in WAL journal mode". Those two
+  are why the pragmas are read BACK rather than just set;
+- **`unreachable-store.ts`'s reserved port left LISTENING instead of closed** → "127.0.0.1:53231
+  accepted a connection, so it is not an unreachable store". The helper verifies its own premise, and
+  that refusal probe is what establishes it.
 
 ## What S1's fence is, and what it is not
 
