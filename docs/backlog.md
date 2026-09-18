@@ -2835,6 +2835,50 @@ found by the convention seat: one inside `columns.ts` itself about twenty-five l
 three in this file, and one in the rollout plan's identity report a hundred and forty lines below
 where the dated notes had been placed. A sweep that stops at the paragraph you edited is not a sweep.
 
+**Task P2's FIRST pull request, LANDED as #421 on 2026-09-18** — `useVenueDb` in
+`packages/db/src/testing/venue-db.ts`, a wrapper over `usePgliteDb` that forwards unchanged, so the
+storage switch replaces one function body instead of every call site. Its exports-map entry is
+`@waitron/db/testing/venue-db.js`. Three tests, the third of them the one that discriminates: it
+asserts the row the second wrote is gone, and with the helper's body changed to
+`resetPerTest: false` exactly that case fails and the other two stay green.
+
+**No suite is converted yet.** Those are P2's remaining pull requests, one per package.
+
+**The part of P2 that is NOT a mechanical rename, found by this branch's review and worth carrying
+because the plan's step 5 does not reach it.** `usePgliteDb` is not the only door to a PGlite
+database. Counted over `*.test.ts` under `packages/` and `apps/` on 2026-09-18: 11 suites call
+`createPgliteDb` themselves with no helper at all (`packages/db/src/index.test.ts` does it inside the
+`it`), and 7 more get theirs from `describeEachTarget`'s PGlite half. Replacing `usePgliteDb(` with
+`useVenueDb(` reaches none of those 18, and `describeEachTarget`'s half in particular cannot simply
+move: `pgliteTarget.create()` hands out a fresh cluster PER TEST where the helper hands out one
+database per SUITE with a truncate between tests, which is a different isolation contract and one
+`Target`'s own doc comment argues for at length. They belong with F1's 66-test disposition, and the
+plan now says so.
+
+Two more things left deliberately open. The house rule naming `useVenueDb`, and the guard that would
+enforce it, are NOT added yet — a rule with standing violations needs a guard and a guard cannot
+pass while 208 violations stand, so both land together in their own pull request after the last
+conversion, which is the shape the vocabulary rollout ended in (#414 last conversion, #416 the guard
+and the rule). And a converted suite that reads its accessor too early still gets the error
+`usePgliteDb: database not started`, naming a function its own file does not call; the cheapest fix
+is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
+step replaces the body anyway.
+
+**The finding of this branch is again about METHOD, and it is the sharpest instance of it so far.**
+The code is three lines and never changed after the first commit. Everything after that was prose,
+and THREE rounds of review each found false claims inside the previous round's CORRECTIONS — nine in
+total, none of them in code. Round one: two over-claims plus a statement about
+`describeEachTarget` written from the plan's wording instead of from `harness.ts`. Round two: three
+new false claims born in round one's fixes, including an impossibility claim with a counterexample,
+plus an edit that ticked the plan's checkboxes on the WRONG TASK because it matched the first
+occurrence of each step heading in the file rather than the one inside P2. Round three, asked only
+"is any sentence this branch adds false?": four more, among them two counts stated as measured on a
+tree they were not measured on, and one universal ("every existing PGlite suite still calls
+`usePgliteDb`") that was not merely wrong but HID the 18 files above. Every one is written up in the
+branch's commits rather than quietly rewritten. The practical lesson for the conversions to come: a
+count is not a receipt unless the command and the tree are beside it, and a correction deserves a
+reader who is not its author.
+
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
 already covers them. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
