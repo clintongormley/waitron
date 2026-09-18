@@ -685,12 +685,14 @@ quietly assumes finer granularity than Litestream gives.
   WAL size stay bounded** before this bullet is believed. *(2026-09-18, run: the prototype's S4 has now
   driven that load — 7500 sales with `wal_autocheckpoint = 0` and a Litestream daemon pointed at a
   closed port. **The latency half holds; the WAL half does not.** The commit did not slow as the WAL
-  grew — p95 0.333ms and p99 0.528ms against the 150ms/400ms bars, the last modelled day's p95 below
+  grew — p95 0.312ms and p99 0.436ms against the 150ms/400ms bars, the last modelled day's p95 below
   the first's — but the WAL grew linearly at about 41KB a sale to 310MB, which is roughly 104 days of
   offline trading per GiB at an assumed 250 sales a day: bounded by how long the box stays offline,
   not by a size. The sentence about our own process is now measured rather than hypothetical: one
-  `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection took 11.7s and came back `busy=1` with the
-  WAL untouched while the daemon held the database, against 48.6ms with the daemon killed. Two
+  `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection took SECONDS — 6.8s to 12.4s over six
+  runs — and came back `busy=1` with the WAL untouched while the daemon held the database, against
+  MILLISECONDS with the daemon killed (4.2ms to 48.6ms over five). The three-orders-of-magnitude gap
+  is what reproduced; no single duration did. Two
   narrowings. The sale taken straight after that blocked checkpoint still committed in 0.5ms, and
   nothing attempted a sale DURING it — the rig is one process and its checkpoint is synchronous. And
   the growth does not depend on the pragma this bullet names: with a Litestream daemon attached but

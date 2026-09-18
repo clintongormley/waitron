@@ -852,15 +852,18 @@ export default async function ({ startStore }) {
 >   answering.
 > - **A CONTROL was added that the steps do not ask for** (`CLAUDE.md` §1): the same load against a
 >   REACHABLE store, where the WAL has to plateau. Without it, a growing WAL is equally consistent
->   with "this write volume always makes this much WAL". Measured: 21,086,192 bytes against the
->   offline arm's 310,404,952 for the same 7500 sales.
+>   with "this write volume always makes this much WAL". Measured on the recorded run: 20,974,952
+>   bytes against the offline arm's 309,531,512 for the same 7500 sales, a ratio near fifteen in
+>   every run taken.
 > - **A Part C was added, and it is the most decision-relevant thing here** — risk 9's own sentence,
 >   "put our own process on the sale path". One `PRAGMA wal_checkpoint(TRUNCATE)` from our own
->   connection took **11,727.8ms** with the offline daemon running, answered `busy=1 log=75341
->   checkpointed=4`, and left the WAL untouched; with the daemon killed the same statement took
->   **48.6ms** and truncated it to zero. The blocked arm reproduced in every run that reached it
->   (11.7-12.5s, `busy=1` every time). It decides nothing and feeds the detail, the way S3's Part C
->   does.
+>   connection took **seconds** with the offline daemon running — 6.8s to 12.4s across six runs —
+>   answered `busy=1` with about four frames of roughly thirty thousand moved, and left the WAL
+>   untouched; with the daemon killed the same statement took **milliseconds** — 4.2ms to 48.6ms
+>   across five — and truncated it to zero. What reproduced in every run that reached it is that
+>   SHAPE, three orders of magnitude apart, not any particular duration: an earlier draft of this
+>   note said "11.7-12.5s every time" and a later run at 6.8s falsified it. It decides nothing and
+>   feeds the detail, the way S3's Part C does.
 > - **Step 5's WAL ceiling is a STATED ceiling, and the spec's illustrative one is not met.** Spec §4
 >   S4 offers "a small multiple of the streamed data"; the measured amplification is about 80x
 >   (310MB of WAL over a 3.85MB database), so that formulation was not adopted and the scenario

@@ -614,35 +614,54 @@ day, and litestream documents no such number.
   something checkpointed and Part A is not measuring an offline WAL at all. It bites — see the
   mutations below.
 
-**What the recorded run measured.** The commit does not slow down as the WAL grows: p50 0.178ms,
-p95 0.333ms, p99 0.528ms, max 3.015ms, and the LAST modelled day's p95 (0.29ms) is below the FIRST
-day's (0.578ms), which is the direction a first-run warm-up goes and not drift. The pglite bars are
-passed by two to three orders of magnitude. The WAL reaches 310,404,952 bytes — 41,387 a sale — and
-that per-sale rate reproduced within about half a percent across every run taken in this shape
-(41,317, 41,353, 41,387, and 41,189 and 41,413 under two mutations that do not touch the write path).
+**What the recorded run measured.** The commit does not slow down as the WAL grows: p50 0.128ms,
+p95 0.312ms, p99 0.436ms, max 1.583ms, and the LAST modelled day's p95 (0.143ms) is below the FIRST
+day's (0.382ms), which is the direction a first-run warm-up goes and not drift. The pglite bars are
+passed by two to three orders of magnitude. The WAL reaches 309,531,512 bytes — 41,271 a sale.
+
+**Which of these numbers move, measured rather than guessed.** The run above is one of several taken
+on this machine in this shape, by two people, and they do not agree to the digit. The **per-sale WAL
+rate is the stable one**: 41,271, 41,317, 41,347, 41,353, 41,379, 41,387, 41,413 — a spread under a
+third of a percent, which is why the ceiling is expressed per sale. The **latency percentiles move
+with the machine**: p95 between 0.244ms and 0.333ms, p99 between 0.433ms and 0.528ms, max between
+1.583ms and 3.015ms, every one of them three orders of magnitude clear of its bar. The **reclaim
+timings move the most** and are treated below. Anything quoted here as a single number is one run's
+figure, not a property of the rig.
 
 **The amplification is about 80x, and the spec's illustrative ceiling is NOT met.** After the control
-checkpoint completes, the database holds 3,854,336 bytes of the 310MB the WAL held. Spec §4's S4
+checkpoint completes, the database holds 3,862,528 bytes of the 310MB the WAL held. Spec §4's S4
 offers "a small multiple of the streamed data" as an example ceiling; eighty times is not a small
 multiple, so **that formulation was not adopted as the bar** and `MAX_WAL_BYTES_PER_SALE` is what the
 verdict uses. The scenario prints `spec-small-multiple-ceiling=not-met` rather than quietly
-substituting a bar that passes. The figure slice 2 actually needs is the last one on that line:
-`offline-days-per-gib=103.8` — at the assumed 250 sales a day, about 104 days of offline trading per
+substituting a bar that passes — and it prints it by COMPARING this run's amplification against a
+stated `SPEC_SMALL_MULTIPLE` of ten, so the label is read off the measurement instead of being a
+sentence about it that a later change could leave standing. The figure slice 2 actually needs is the last one on that line:
+`offline-days-per-gib=104.1` — at the assumed 250 sales a day, about 104 days of offline trading per
 GiB of WAL, arithmetic over the measured rate rather than a box that ran that long.
 
 **Risk 9's own question — can WE get the WAL back? Not while the daemon is there.** Part C times one
 `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection, twice. With the offline daemon still
-running it took **11,727.8ms**, answered `busy=1 log=75341 checkpointed=4`, and left the WAL file
-exactly as it was. The daemon was then killed and the same statement took **48.6ms**, answered
-`busy=0 log=0 checkpointed=0`, truncated the WAL to zero and left the database at 3,854,336 bytes —
-so the pages did move. The blocked arm reproduced in every run that reached it, in both shapes of
-this scenario and in a hand-written probe: 11.7s to 12.5s, `busy=1` and `checkpointed=4` every time,
-the WAL never shrinking. What the three numbers in that row MEAN is SQLite's business and this rig
-has not established it; what is read here is `busy` and the file sizes either side.
+running it took **6,776.9ms**, answered `busy=1 log=75129 checkpointed=4`, and left the WAL file
+exactly as it was. The daemon was then killed and the same statement took **7.5ms**, answered
+`busy=0 log=0 checkpointed=0`, truncated the WAL to zero and left the database at 3,862,528 bytes —
+so the pages did move.
 
-**Two things that pair does not show.** It does not show what a SALE would have done during those
-twelve seconds: this rig is one process and the checkpoint is synchronous, so no sale was attempted
-while it ran. The sale that is measured is the one immediately AFTER, and it committed in 0.521ms.
+**How much of that reproduces, and how much is one run's number.** What reproduced in every run that
+reached it — both shapes of this scenario, two hand-written probes, and runs by two people — is the
+SHAPE: with the daemon there, `busy=1`, `checkpointed=4` of roughly thirty thousand frames, and a WAL
+file the same size afterwards as before; with the daemon gone, `busy=0` and a WAL truncated to zero.
+**The durations are not stable and an earlier draft of this section overstated them.** It said "11.7s
+to 12.5s … every time", which the run recorded above then falsified at 6.8s. Measured so far:
+blocked, 6.8s / 11.7s / 11.9s / 12.0s / 12.4s / 12.4s; unblocked, 4.2ms / 5.1ms / 7.5ms / 22.1ms /
+48.6ms. So the honest statement is **seconds against milliseconds, a difference of three orders of
+magnitude**, not any particular number of seconds. What the three numbers in that row MEAN is
+SQLite's business and this rig has not established it; what is read here is `busy` and the file sizes
+either side.
+
+**Two things that pair does not show.** It does not show what a SALE would have done during the
+seconds the checkpoint was blocked: this rig is one process and the checkpoint is synchronous, so no
+sale was attempted while it ran. The sale that is measured is the one immediately AFTER, and it
+committed in 0.241ms.
 And nothing in the product is driven here — no code path in `packages/` asks for this checkpoint;
 what was measured is a rig calling the pragma itself.
 
@@ -677,10 +696,25 @@ control, and no risk-9 reclaim pair.
 
 **What S4 does NOT establish**, stated because a reader will assume some of it:
 
-- **that litestream tried and failed.** Against the closed port the daemon stays up — the recorded
-  run reads `offline-daemon-alive-after-load=true` — and that is all that was observed. Whether it
-  retried the endpoint, or did nothing at all, needs its log or the store, and this scenario reads
-  neither.
+- **that litestream tried and failed — the SCENARIO does not show this, though a probe does.**
+  Against the closed port the daemon stays up, which is all the scenario observes
+  (`offline-daemon-alive-after-load=true`); it reads neither the daemon's log nor the store. A
+  scratch probe outside the rig did read that log, and litestream 0.5.17 does try and does fail: one
+  run on 2026-09-18, a daemon against `http://127.0.0.1:1` with a node selling throughout, logged its
+  eight startup lines and then, **116 seconds after starting**, one line —
+  `level=ERROR msg="sync error" … error="check database behind replica: get replica position:
+operation error S3: ListObjectsV2, exceeded maximum number of attempts, 10, … dial tcp
+127.0.0.1:1: connect: connection refused" consecutive_errors=1 backoff=1s`. Two things follow, and
+  the second is why the hedge stays. The endpoint really is refusing it, so the offline arm is a
+  litestream that cannot reach its store rather than one sitting idle. And **S4's own daemon does not
+  live that long** — arithmetic over the recorded row, not a measured wall time: it is alive from
+  `offline-attach-ms` (about 1.1s), through fifteen rounds each carrying a 1500ms idle, to the end of
+  the held-up checkpoint (about 12s), which is on the order of forty seconds. So within an S4 run
+  that line never appears. WHY the first failure takes nearly two minutes was not established: the
+  line names ten exhausted attempts, which is the SDK's retry budget, and a refused connection
+  returns at once, so something between those attempts accounts for the rest — this probe did not
+  look. A reader watching an S4 run should expect a silent daemon, and that silence is not evidence
+  either way.
 - **anything that turns on elapsed time.** The load is volume; thirty modelled days pass in half a
   minute.
 - **anything about the real ledger's cost per commit.** The ~41KB a sale is this rig's five-table
@@ -697,13 +731,16 @@ scenarios`, 2026-09-18:
 ```
 | id | title | verdict | detail |
 | --- | --- | --- | --- |
-| S4 | offline write load | MEASURED | version=0.5.17 sales=7500 days=30 sales-per-day=250 day-rate=assumed-not-measured rounds=15 idle-ms=1500 offline-daemon=ECONNREFUSED offline-attach-ms=1118 offline-daemon-alive-after-load=true p50-ms=0.178 p95-ms=0.333 p99-ms=0.528 max-ms=3.015 first-day-p95-ms=0.578 last-day-p95-ms=0.29 peak-wal-bytes=310404952 wal-bytes-per-sale=41387 offline-checkpoint-rounds=0/15 checkpointed-db-bytes=3854336 wal-amplification=80.5x spec-small-multiple-ceiling=not-met offline-days-per-gib=103.8 reclaim-offline="ms=11727.8 busy=1 log=75341 checkpointed=4 wal=310404952->310404952 shrank=false" reclaim-next-sale-ms=0.521 reclaim-control="ms=48.6 busy=0 log=0 checkpointed=0 wal=310454392->0 shrank=true" control="peak-wal=21086192 end-wal=21086192 db=3858432 store-keys=34 checkpoint-rounds=15/15 p95-ms=0.285 p99-ms=0.498" breaches=none |
+| S4 | offline write load | MEASURED | version=0.5.17 sales=7500 days=30 sales-per-day=250 day-rate=assumed-not-measured rounds=15 idle-ms=1500 offline-daemon=ECONNREFUSED offline-attach-ms=1114 offline-daemon-alive-after-load=true p50-ms=0.128 p95-ms=0.312 p99-ms=0.436 max-ms=1.583 first-day-p95-ms=0.382 last-day-p95-ms=0.143 peak-wal-bytes=309531512 wal-bytes-per-sale=41271 offline-checkpoint-rounds=0/15 checkpointed-db-bytes=3862528 wal-amplification=80.1x spec-small-multiple-ceiling=not-met spec-small-multiple=10 offline-days-per-gib=104.1 reclaim-offline="ms=6776.9 busy=1 log=75129 checkpointed=4 wal=309531512->309531512 shrank=false" reclaim-next-sale-ms=0.241 reclaim-control="ms=7.5 busy=0 log=0 checkpointed=0 wal=309568592->0 shrank=true" control="peak-wal=20974952 end-wal=20974952 db=3854336 store-keys=35 checkpoint-rounds=15/15 p95-ms=0.244 p99-ms=0.382" breaches=none |
 ```
 
 That run's exit code is 1, and S4 is not why: S2 is the critical FAIL the runner reports. Every other
-scenario's row in that run matches its own recorded run above, with one exception the S3 section
-already covers — `deletion-waited-ms` read 4155 against the 4164 recorded there, which is the number
-that section says moves run to run.
+scenario's row in it matches its own recorded run above VERBATIM — S0, S1, S2, S5, S6, LS — with one
+exception the S3 section already covers: its `deletion-waited-ms` read 3857 against the 4164 recorded
+there, and its `direct-rows`, `copied-rows` and `same-lineage-rows` read 18 against 19, which are the
+numbers that section says move because box-a sells for as long as the wait takes. The three row
+counts stayed EQUAL to each other, which is what S3 asserts. That comparison was run twice, on two
+whole-suite runs taken from this branch.
 
 `offline-checkpoint-rounds=0/15` against the control's `checkpoint-rounds=15/15` is the pair to read
 first: it counts the rounds whose idle left the main database file larger, which is where a

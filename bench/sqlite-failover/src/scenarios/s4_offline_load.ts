@@ -27,8 +27,9 @@
 // What this scenario is NOT evidence about: `packages/fiscal-verifactu` — every table here is the
 // rig's MODEL (`model.ts`), so what a commit costs in pages is this schema's and not the product's;
 // anything that turns on elapsed time, because the load is volume and not wall-clock; and whether
-// litestream RETRIED the unreachable endpoint and failed or simply did nothing, which nothing here
-// observes.
+// litestream RETRIED the unreachable endpoint and failed, which this scenario does not observe — it
+// reads neither the daemon's log nor the store. A probe OUTSIDE the rig has since watched that log
+// and seen it fail; the README's S4 section records what it saw and why a run this short cannot.
 import assert from "node:assert";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -81,6 +82,16 @@ const MAX_P99_MS = 400;
  * rather than merely growing.
  */
 const MAX_WAL_BYTES_PER_SALE = 64 * 1024;
+
+/**
+ * What this rig reads "a small multiple" as, for the one purpose of saying whether spec §4's S4
+ * example ceiling — "it does not exceed a small multiple of the streamed data" — was met. The spec
+ * offers no number; ten is this file's reading of the word, and it is here so that the label in the
+ * verdict is COMPUTED from the run rather than written down as a fact about it. The recorded runs
+ * read about 80x, so which way it falls is not close on this rig; a change that made it close would
+ * change the label rather than leave a stale one printed.
+ */
+const SPEC_SMALL_MULTIPLE = 10;
 
 /**
  * A FLOOR on the same number, and a precondition rather than a bar on the product: below one SQLite
@@ -161,7 +172,8 @@ type OfflineArm = {
   /**
    * Whether the daemon was still running when the load finished, read BEFORE Part C kills it. It
    * answers one half of what an unreachable endpoint does to litestream 0.5.17 — it does not exit.
-   * The other half, whether it retried the store and failed or did nothing at all, is not observed.
+   * The other half, whether it retried the store and failed, is not observed HERE; a probe outside
+   * the rig watched the daemon's log and saw it fail (README, S4).
    */
   daemonAliveAfterLoad: boolean;
   /** Null when no litestream was found, so there was no offline daemon to be held up by. */
@@ -227,11 +239,12 @@ export default async function offlineLoad({
         `first-day-p95-ms=${offline.load.firstDayP95} last-day-p95-ms=${offline.load.lastDayP95} ` +
         `peak-wal-bytes=${offline.load.peakWalBytes} wal-bytes-per-sale=${offline.walBytesPerSale} offline-checkpoint-rounds=${offline.load.checkpointRounds}/${ROUNDS} ` +
         `checkpointed-db-bytes=${offline.checkpointedDbBytes} wal-amplification=${amplification}x ` +
-        // RECORDED, not asserted, and it is the spec's own example ceiling failing: spec §4's S4
-        // offers "a small multiple of the streamed data", and this many times over is not a small
-        // multiple. The bar actually used is `MAX_WAL_BYTES_PER_SALE`, and saying so here is the
+        // RECORDED, not asserted, and read off THIS run's amplification rather than written down:
+        // spec §4's S4 offers "a small multiple of the streamed data" as an example ceiling, and the
+        // recorded runs are about eighty times over it. The bar actually used is
+        // `MAX_WAL_BYTES_PER_SALE`, and printing which way the spec's own formulation fell is the
         // point — a bar that passes was not substituted quietly.
-        `spec-small-multiple-ceiling=not-met ` +
+        `spec-small-multiple-ceiling=${amplification <= SPEC_SMALL_MULTIPLE ? "met" : "not-met"} spec-small-multiple=${SPEC_SMALL_MULTIPLE} ` +
         `offline-days-per-gib=${offlineDaysPerGib} ` +
         `reclaim-offline=${reclaimText(offline.reclaimOffline)} reclaim-next-sale-ms=${offline.nextSaleMs ?? "n/a"} ` +
         `reclaim-control=${reclaimText(offline.reclaimControl)} ` +
