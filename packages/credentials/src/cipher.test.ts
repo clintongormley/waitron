@@ -49,7 +49,7 @@ describe("seal and open", () => {
 
   // A `Sealed` with a malformed field length throws SYNCHRONOUSLY from Node's crypto binding
   // (ERR_CRYPTO_INVALID_AUTH_TAG / ERR_CRYPTO_INVALID_IV) — a different failure from GCM's own
-  // authentication check at `final()`. Nothing in this package's own path can build a `Sealed`
+  // authentication check at `final()`. Nothing in this package's own path can build a value of
   // this shape (the column CHECKs pin both lengths), but this file exists specifically to defend
   // against someone with database write access, so a row they hand-tamper into an illegal shape
   // must still return null, not crash the reader with a raw Node error string.

@@ -23,9 +23,9 @@ export type { Purpose } from "./purposes.js";
 export { loadKeyRing } from "./keyring.js";
 export type { KeyEntry, KeyRing } from "./keyring.js";
 
-// The sealed read/write path. cipher.ts stays entirely UNexported: `seal`/`open`/`aadFor`/`Sealed`
-// are primitives the store alone wraps — no function below takes or returns one, unlike KeyRing
-// above — so a caller reaching for them directly would be bypassing `putCredential`/`getCredential`
+// The sealed read/write path. cipher.ts stays entirely UNexported: `seal`/`open`/`aadFor`/`Sealed`/
+// `SealedRow` are primitives the store alone wraps — no function below takes or returns one,
+// unlike KeyRing above — so a caller reaching for them directly would be bypassing `putCredential`/`getCredential`
 // rather than using the vault.
 export {
   credentialProvisioned,
