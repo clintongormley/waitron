@@ -129,7 +129,7 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * `google_oidc_states.mode` and `management_account_actions.purpose` in `packages/identity`
  * (converted 2026-09-18 — and SCOPE alone is what keeps those two: measured there, substituting
  * leaves the generated schema identical and breaks no caller today, while the narrowing itself
- * still happens, both columns being NOT NULL. Receipts in the P1b identity report in
+ * still happens, a converter writing the values inline. Receipts in the P1b identity report in
  * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`), and
  * `scheduled_runs.state` in `packages/scheduler` (converted 2026-09-18), where the narrowing costs
  * nothing at all: the column is already declared `.$type<RunState>()`, so `enumText` would change
@@ -155,23 +155,29 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * composes a null arm around it".
  *
  * `units.hardware_unit` carries a reason worth stating in general: substituting there is
- * schema-silent, but `enumText` NARROWS what a caller may write. **Whether it narrows depends on the
- * column, not only on how the values are written**, so measure it on the column in front of you.
+ * schema-silent, but `enumText` NARROWS what a caller may write. **Whether it narrows depends on
+ * where the values come from**, so measure it rather than reading it off the spelling.
  *
- * Measured 2026-09-18 in the catalogue package, all spellings in one file with a control that fired
- * (`const control: number = "a string"`), printing each column's INSERT type by assigning it to
- * `never`:
+ * Every cell of the table below is a compile-time case in `columns.test.ts`. Reading it: values
+ * written INLINE narrow whatever the column's nullability, and `as const` on top of an inline list
+ * changes nothing. An UNANNOTATED variable holding them never narrows — it is widened to `string[]`
+ * at its own declaration, before `enumText` sees it — so what loses the values is that declaration
+ * rather than the call. Either `as const` or an annotation on it is the way out; "a variable" is not
+ * the condition, unannotated is.
  *
  *                                        nullable column              .notNull() column
- *   enumText(n, ["a", "b"])              string | null | undefined    "a" | "b"
+ *   enumText(n, ["a", "b"])              "a" | "b" | null | undefined "a" | "b"
  *   enumText(n, ["a", "b"] as const)     "a" | "b" | null | undefined "a" | "b"
  *   enumText(n, VALUES)                  string | null | undefined    string
+ *   enumText(n, VALUES_AS_CONST)         "a" | "b" | null | undefined "a" | "b"
+ *   enumText(n, VALUES_ANNOTATED)        "a" | "b" | null | undefined "a" | "b"
  *
- * (`VALUES` being a `const VALUES = ["a", "b"]` declared elsewhere.) So `as const` is the only
- * spelling that narrows in every case; a bare array literal narrows on a NOT NULL column and loses
- * it on a nullable one; a variable holding the array never narrows. The widening is not the type
- * parameter failing to infer — `enumText(n, ["a", "b"])._.data` on the builder itself is already
- * `"a" | "b"` — it happens on the nullable path afterwards.
+ * (`VALUES` being a `const VALUES = ["a", "b"]` declared elsewhere, `VALUES_AS_CONST` the same
+ * declaration written `as const`, `VALUES_ANNOTATED` the same declaration typed `("a" | "b")[]`.) The top-left cell read `string | null | undefined` until this
+ * helper took a `const` type parameter on 2026-09-18; reverting that one word fails the pin on that
+ * cell and no other, which is what says the rest of the table is unchanged by it. How that reading
+ * was arrived at is in the rollout's report in
+ * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`.
  *
  * The practical rule, because two earlier attempts at this sentence were both wrong in the
  * unsafe direction: **never conclude from the spelling that a substitution is caller-safe.** Take a
@@ -196,7 +202,7 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  *   `~ '^[0-9A-F]{64}$'`. Read off `enumText`'s signature and NOT measured: the helper takes a list
  *   of values, and a 64-character hex pattern has no list to hand it.
  */
-export const enumText = <T extends string>(name: string, values: readonly T[]) =>
+export const enumText = <const T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
 
 /**
