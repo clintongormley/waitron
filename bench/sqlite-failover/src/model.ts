@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue, SQLOutputValue } from "node:sqlite";
 
 const SCHEMA = `
--- MODEL of registros_facturacion (packages/fiscal-verifactu/src/schema/registros.ts:35,148).
+-- MODEL of registros_facturacion (packages/fiscal-verifactu/src/schema/registros.ts:23,142).
 -- Append-only, hash-chained, keyed (node_id, secuencia). NOT the real ledger.
 CREATE TABLE IF NOT EXISTS records (
   node_id TEXT NOT NULL, secuencia INTEGER NOT NULL,

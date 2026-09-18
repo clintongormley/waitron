@@ -123,8 +123,9 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * The second group is open, and it keeps growing as the rollout reaches new packages: checked text
  * columns written with `enumCheck`'s spacing exist outside this package too, among them
  * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17),
- * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18), five in
- * `packages/fiscal-verifactu` (converted 2026-09-18), and
+ * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18),
+ * `packages/fiscal-verifactu` (converted 2026-09-18 — `acks.state`, `envios.estado` and
+ * `registros_facturacion`'s `tipo_registro`, `tipo_rectificativa` and `entorno`), and
  * `google_oidc_states.mode` and `management_account_actions.purpose` in `packages/identity`
  * (converted 2026-09-18 — and SCOPE alone is what keeps those two: measured there, substituting
  * leaves the generated schema identical and breaks no caller today, while the narrowing itself
@@ -149,33 +150,50 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * above, like the other three. Guard: `columns.test.ts`, "keeps its values inline when a caller
  * composes a null arm around it".
  *
- * `units.hardware_unit` carries a reason worth stating in general: substituting there is schema-silent, but `enumText` NARROWS what a
- * caller may write — SO LONG AS the values reach it in a const position. That condition was missing
- * when this paragraph was first written, and without it the claim is false.
+ * `units.hardware_unit` carries a reason worth stating in general: substituting there is
+ * schema-silent, but `enumText` NARROWS what a caller may write — SO LONG AS the values reach it
+ * still carrying their literal types. That condition was missing when this paragraph was first
+ * written.
  *
- * Measured 2026-09-18 in the catalogue package, forcing `tsc --noEmit` to print each column's
- * resolved data type by assigning it to `never`: `enumText("u", ["kg", "g", "mg"])` resolves to
- * plain `string` — no narrowing at all — while `enumText("u", ["kg", "g", "mg"] as const)` and
- * drizzle's own `text("u", { enum: ["kg", "g", "mg"] })` both resolve to `"g" | "kg" | "mg"`. The
- * type parameter is inferred from a mutable array literal, which widens. The control for that probe
- * is that the same file reported `TS2322` on a `const x: number = "a string"`, so it was being
- * typechecked. The one caller in the tree, `drawer-opens.ts`, writes `as const`, so no column has
- * lost its narrowing; what was wrong was only the sentence.
+ * Measured 2026-09-18 in the catalogue package, in one file with its own control, by forcing
+ * `tsc --noEmit` to print each column's resolved data type through an assignment to `never`:
  *
- * A converter taking that reason therefore has to re-measure it per column WITH `as const`, and the
- * answer is not the same everywhere. In `packages/fiscal-verifactu` (converted 2026-09-18) it comes
- * back negative: all five of its checked text columns narrowed to `enumText(..., as const)` with
- * their correct value sets left `pnpm -r typecheck` at exit 0, because the write path already hands
- * each column its exact union. The control there was narrowing `registros_facturacion.entorno` to
- * `["production"] as const` while the code still writes `preproduction`, which failed with `TS2322`
- * at `packages/fiscal-verifactu/src/registro-row.ts:145`. So those five stay `label()` on the scope
- * decision alone.
+ *     enumText("u", ["kg", "g", "mg"])                      ->  string
+ *     enumText("u", ["kg", "g", "mg"] as const)             ->  "g" | "kg" | "mg"
+ *     enumText("u", ["kg", "g", "mg"] as ("kg"|"g"|"mg")[]) ->  "g" | "kg" | "mg"
+ *     enumText<"kg" | "g" | "mg">("u", ["kg", "g", "mg"])   ->  "g" | "kg" | "mg"
+ *     text("u", { enum: ["kg", "g", "mg"] })                ->  "g" | "kg" | "mg"
+ *     enumText("u", VALUES)   // const VALUES = [...]       ->  string
  *
- * Two shapes that package met which no value list can stand in for at all, both measured there:
- * a constraint written as an EQUALITY rather than an `in (…)` list — `registros_tipo_huella_ck` is
- * `= '01'`, and substituting the pair made the schema probe drop and re-add the constraint as
- * `in ('01')` — and a constraint that is a PATTERN rather than a set, `registros_huella_ck`'s
- * `~ '^[0-9A-F]{64}$'`, which has no values to list.
+ * So the narrowing form is anything that keeps the literal types — `as const`, an annotation, or an
+ * explicit type argument — and what loses them is a bare array literal or a variable holding one,
+ * where `T` is inferred as `string`. The control is that the same file reported `TS2322` on a
+ * `const x: number = "a string"`, so it was being typechecked; without it, three silences looked
+ * like evidence. Every `enumText` call in this repository passes its values in a narrowing form
+ * (`drawer-opens.ts`, and three in `columns.test.ts`), so no column has ever lost its narrowing —
+ * what was missing was the sentence's condition. The earlier receipt quoted a real compiler message
+ * and did not record its probe's source, so the two readings cannot be reconciled; this one states
+ * its spellings.
+ *
+ * **A converter taking that reason has to re-measure it per column, in the narrowing form, and
+ * needs a control that reaches the column.** The receipt for `packages/fiscal-verifactu` is in that
+ * task's report in `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`; its short
+ * form is that four of its five checked text columns can take the pair with no caller breaking, and
+ * the fifth, `acks.state`, is a column the typechecker cannot see at all — so they stay `label()`
+ * on the scope decision.
+ *
+ * Two shapes that package met which the pair does not reach, and they are NOT the same kind of
+ * reason:
+ *
+ * - **A constraint written as an EQUALITY** rather than an `in (…)` list.
+ *   `registros_tipo_huella_ck` is `= '01'`. `in ('01')` accepts exactly the same values — run
+ *   against PGlite for `'01'`, `'02'`, `''` and NULL by the run-it reviewer on 2026-09-18, which is
+ *   whose measurement that is — so this is the DDL reason already
+ *   recorded above and not a new one: substituting made the schema probe drop and re-add the
+ *   constraint as `in ('01')`.
+ * - **A constraint that is a PATTERN rather than a set**, `registros_huella_ck`'s
+ *   `~ '^[0-9A-F]{64}$'`. This one is read off the signature rather than measured: `enumText` takes
+ *   a list of values, and a 64-character hex pattern has no list to hand it.
  */
 export const enumText = <T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });

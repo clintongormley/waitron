@@ -15,9 +15,10 @@ export const paymentPolicy = table(
   {
     id: count("id").primaryKey().notNull().default(1),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair:
-    // that pair narrows the column's TypeScript type to the union of its values, which is a
-    // caller-facing change the schema probe cannot see. See enumText in
-    // packages/db/src/schema/columns.ts.
+    // written in the narrowing form the whole repository uses, that pair narrows the column's
+    // TypeScript type to the union of its values, which is a caller-facing change the schema probe
+    // cannot see. What counts as the narrowing form, and what silently is not one, is in enumText's
+    // own note in packages/db/src/schema/columns.ts.
     offlineMode: label("offline_mode").notNull(),
     offlineAmountCap: money("offline_amount_cap").notNull(),
     createdAt: tsString("created_at").notNull().defaultNow(),

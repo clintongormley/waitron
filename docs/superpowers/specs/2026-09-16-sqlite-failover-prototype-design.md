@@ -82,7 +82,7 @@ cites the real table or code it stands in for, so a reader can check the model i
 
 - **`records`** — the append-only fiscal ledger, mirroring `registros_facturacion`. Keyed
   `(node_id, secuencia)`, hash-chained (`huella`, `huella_anterior`), insert-only. Mirrors
-  `packages/fiscal-verifactu/src/schema/registros.ts:35,148` (the `node_id` rekey and the
+  `packages/fiscal-verifactu/src/schema/registros.ts:23,142` (the `node_id` rekey and the
   `(node_id, secuencia)` unique index).
 - **`chain_head`** — the per-node chain tip, mirroring `cadenas` (PK `node_id`,
   `packages/fiscal-verifactu/src/schema/cadenas.ts:44`). Updated in place, by the owning node only.

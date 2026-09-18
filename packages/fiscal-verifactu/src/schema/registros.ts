@@ -74,20 +74,17 @@ export const registrosFacturacion = table(
     // `text`, NOT `numeric(12,2)` — deliberately, and load-bearing. `packages/verifactu/src/
     // huella.ts`'s `buildCadena` reads `CuotaTotal`/`ImporteTotal` verbatim as strings and hashes
     // them byte-for-byte; it never re-runs `formatAmountExact`. The stored column value therefore IS
-    // the huella's input, and the stored bytes must equal the hashed bytes — which only `text`
-    // guarantees. `numeric` would silently re-render on read (and `numeric(12,2)` is additionally
-    // too narrow: `ImporteSgn12.2Type` allows 12 integer digits, i.e. up to
-    // "999999999999.99", while `numeric(12,2)` is 10 integer + 2 decimal and overflows on
-    // anything over 10 integer digits with SQLSTATE 22003). Nullable exactly as before: an
+    // the huella's input, and the stored bytes must equal the hashed bytes, which a character type
+    // gives and `numeric` does not: `numeric` silently re-renders on read, and `numeric(12,2)` is
+    // additionally too narrow — `ImporteSgn12.2Type` allows 12 integer digits, up to
+    // "999999999999.99", while `numeric(12,2)` is 10 integer + 2 decimal and overflows on anything
+    // over 10 integer digits with SQLSTATE 22003. Nullable exactly as before: an
     // anulación's `RegistroAnulacion` hashes neither field, so NULL is correct there.
     //
-    // It is NOT `label()` either, which is why these two lines still import `text` straight from
-    // drizzle while every other text column in this file went through the shared vocabulary.
-    // `label()` emits `text` today, so the substitution is silent now and breaks at the storage
-    // switch, when every `label()` body changes at once — and nothing in this package would report
-    // it (`monetary-columns.test.ts` builds its database from the migration SQL and reads no schema
-    // source; measured 2026-09-17, it passed with both columns declared through a `label()`-bodied
-    // helper). `packages/db/src/schema/columns.ts`'s `label` doc block carries that receipt.
+    // These two must also stay OUTSIDE any generic decision about text, and `label()` is exactly
+    // such a decision — which is why these are the only two lines in this file still importing a
+    // builder straight from drizzle. `label()` emits `text` today, so the substitution would change
+    // nothing a test can see: the receipt for that is in `columns.ts`'s `label` note.
     cuotaTotal: text("cuota_total"),
     importeTotal: text("importe_total"),
     // The Encadenamiento xsd:choice, flattened. Exactly one arm, enforced by CHECK below.
