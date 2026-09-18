@@ -2501,7 +2501,7 @@ report and were removed by the review wave: an increment quoted as uniform acros
 fact came from two different trees, and a repeatability claim the run-it reviewer falsified —
 statement readings do repeat, branch readings do not, so no branch delta is quoted anywhere.
 
-**`packages/venue-service` is the twelfth pull request** — one table file, eight tables, 52 columns,
+**`packages/venue-service` is the twelfth pull request (#408)** — one table file, eight tables, 52 columns,
 no schema change. It is the second package the plan's `--schema` warning applies to (its drizzle
 config points at `./src/schema/service.ts`; there is no `src/schema/index.ts`), and the warning did
 its job: the path was read off the config before the first probe run rather than pasted.
