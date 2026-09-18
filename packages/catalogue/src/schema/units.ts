@@ -10,10 +10,11 @@ export const units = table(
     name: json<Record<string, string>>("name").notNull(),
     abbreviation: json<Record<string, string>>("abbreviation").notNull(),
     precision: count("precision").notNull(),
-    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck
-    // pair: that pair narrows the column's TypeScript type to the union of its values, which
-    // is a caller-facing change the schema probe cannot see. See enumText in
-    // packages/db/src/schema/columns.ts.
+    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair:
+    // that pair narrows the column's TypeScript type to the union of its values, which is a
+    // caller-facing change the schema probe cannot see. Whether it narrows depends on the column as
+    // well as on how the values are written — enumText's own note in
+    // packages/db/src/schema/columns.ts has the measured table, and says how to control for it.
     hardwareUnit: label("hardware_unit"),
   },
   (t) => [

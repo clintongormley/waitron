@@ -123,7 +123,9 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * The second group is open, and it keeps growing as the rollout reaches new packages: checked text
  * columns written with `enumCheck`'s spacing exist outside this package too, among them
  * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17),
- * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18), and
+ * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18),
+ * `packages/fiscal-verifactu` (converted 2026-09-18 — `acks.state`, `envios.estado` and
+ * `registros_facturacion`'s `tipo_registro`, `tipo_rectificativa` and `entorno`), and
  * `google_oidc_states.mode` and `management_account_actions.purpose` in `packages/identity`
  * (converted 2026-09-18 — and SCOPE alone is what keeps those two: measured there, substituting
  * leaves the generated schema identical and breaks no caller today, while the narrowing itself
@@ -132,9 +134,8 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * `scheduled_runs.state` in `packages/scheduler` (converted 2026-09-18), where the narrowing costs
  * nothing at all: the column is already declared `.$type<RunState>()`, so `enumText` would change
  * no caller-facing type — `RunState` is `(typeof runState)[number]`, which is the union `enumText`
- * derives. Others are unconverted on `main` on that date, among them
- * `packages/fiscal-verifactu/src/schema/registros.ts`. So take the two reasons as the property and
- * the names as a dated reading.
+ * derives. Packages the rollout has not yet reached are unconverted on `main` on that date. So take
+ * the two reasons as the property and the names as a dated reading.
  *
  * Scope keeps `scheduled_runs.state` plain, like the identity pair above, but it is the only column
  * measured so far where none of the three COSTS — the spacing, the narrowing, the branding —
@@ -149,13 +150,47 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * above, like the other three. Guard: `columns.test.ts`, "keeps its values inline when a caller
  * composes a null arm around it".
  *
- * `units.hardware_unit` carries a reason worth stating in general: substituting there is schema-silent, but `enumText` NARROWS what a
- * caller may write. Measured 2026-09-17 with `tsc --noEmit` over two probe tables in the catalogue
- * package, one column declared each way — the `enumText` one refused a `string | null | undefined`
- * with `Type 'string' is not assignable to type '"g" | "kg" | "mg" | null | undefined'`, while the
- * `label()` control on the line above it compiled. So this pair is not a free substitution on an
- * existing column even when the DDL is identical: it is a caller-facing change the schema probe
- * cannot see.
+ * `units.hardware_unit` carries a reason worth stating in general: substituting there is
+ * schema-silent, but `enumText` NARROWS what a caller may write. **Whether it narrows depends on the
+ * column, not only on how the values are written**, so measure it on the column in front of you.
+ *
+ * Measured 2026-09-18 in the catalogue package, all spellings in one file with a control that fired
+ * (`const control: number = "a string"`), printing each column's INSERT type by assigning it to
+ * `never`:
+ *
+ *                                        nullable column              .notNull() column
+ *   enumText(n, ["a", "b"])              string | null | undefined    "a" | "b"
+ *   enumText(n, ["a", "b"] as const)     "a" | "b" | null | undefined "a" | "b"
+ *   enumText(n, VALUES)                  string | null | undefined    string
+ *
+ * (`VALUES` being a `const VALUES = ["a", "b"]` declared elsewhere.) So `as const` is the only
+ * spelling that narrows in every case; a bare array literal narrows on a NOT NULL column and loses
+ * it on a nullable one; a variable holding the array never narrows. The widening is not the type
+ * parameter failing to infer — `enumText(n, ["a", "b"])._.data` on the builder itself is already
+ * `"a" | "b"` — it happens on the nullable path afterwards.
+ *
+ * The practical rule, because two earlier attempts at this sentence were both wrong in the
+ * unsafe direction: **never conclude from the spelling that a substitution is caller-safe.** Take a
+ * control that reaches the column — narrow it to a set the code does not write and watch the
+ * typechecker fail — and if that control passes, the typechecker cannot see that column and you have
+ * measured nothing.
+ *
+ * Per-package receipts live in the rollout's report in
+ * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, not here. Its short form for
+ * `packages/fiscal-verifactu`: four of its five checked text columns take the pair with no caller
+ * breaking, and the fifth, `acks.state`, is a column the typechecker cannot see at all.
+ *
+ * Two shapes that package met which the pair does not reach, and they are NOT the same kind of
+ * reason:
+ *
+ * - **A constraint written as an EQUALITY** rather than an `in (…)` list.
+ *   `registros_tipo_huella_ck` is `= '01'`, and a singleton list accepts exactly the same values —
+ *   run against PGlite for `'01'`, `'02'`, `''` and NULL by the run-it reviewer on 2026-09-18. So the
+ *   reason is the same one the DDL reasons above share, that the GENERATED TEXT changes:
+ *   substituting made the schema probe drop and re-add the constraint as `in ('01')`.
+ * - **A constraint that is a PATTERN rather than a set**, `registros_huella_ck`'s
+ *   `~ '^[0-9A-F]{64}$'`. Read off `enumText`'s signature and NOT measured: the helper takes a list
+ *   of values, and a 64-character hex pattern has no list to hand it.
  */
 export const enumText = <T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
@@ -214,7 +249,7 @@ export const bigCount = (name: string) => bigint(name, { mode: "number" });
  * Free text.
  *
  * A fiscal amount held as `text` is NOT free text and must not become `label()`:
- * `packages/fiscal-verifactu/src/schema/registros.ts:86-96` keeps `cuota_total`/`importe_total` as
+ * `packages/fiscal-verifactu/src/schema/registros.ts:74-89` keeps `cuota_total`/`importe_total` as
  * `text` because the fiscal fingerprint hashes the stored bytes verbatim, so the stored bytes must
  * equal the hashed bytes.
  *

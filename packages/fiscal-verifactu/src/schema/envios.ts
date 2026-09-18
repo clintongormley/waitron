@@ -1,14 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  check,
-  index,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, index } from "drizzle-orm/pg-core";
+import { count, flag, id, label, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -26,35 +18,33 @@ import { registrosFacturacion } from "./registros.js";
  * need is created now, because adding columns to a table the write path already populates is a
  * migration against live fiscal data.
  */
-export const envios = pgTable(
+export const envios = table(
   "envios",
   {
     // The registro id IS the primary key. 1:1 becomes structural rather than conventional: there
     // is no shape of this table in which a registro can have two envío rows.
-    registroId: uuid("registro_id")
+    registroId: id("registro_id")
       .primaryKey()
       .references(() => registrosFacturacion.id),
-    estado: text("estado").notNull().default("pendiente"),
-    intentos: integer("intentos").notNull().default(0),
+    estado: label("estado").notNull().default("pendiente"),
+    intentos: count("intentos").notNull().default(0),
     // Persisted, never an in-memory timer. This is what makes art. 16.4's hourly duty survive a
     // restart and a week-long offline period.
-    proximoIntentoEn: timestamp("proximo_intento_en", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    incidencia: boolean("incidencia").notNull().default(false),
+    proximoIntentoEn: ts("proximo_intento_en").notNull().defaultNow(),
+    incidencia: flag("incidencia").notNull().default(false),
     // Written in the same transaction as the response that carried it. AEAT: the CSV "no podrá
     // ser recuperado a través de consultas posteriores" — neither consulta nor resubmission ever
     // returns it, so losing it is unrecoverable.
-    csv: text("csv"),
-    codigoError: text("codigo_error"),
-    mensajeError: text("mensaje_error"),
-    enviadoEn: timestamp("enviado_en", { withTimezone: true }),
-    confirmadoEn: timestamp("confirmado_en", { withTimezone: true }),
+    csv: label("csv"),
+    codigoError: label("codigo_error"),
+    mensajeError: label("mensaje_error"),
+    enviadoEn: ts("enviado_en"),
+    confirmadoEn: ts("confirmado_en"),
     // Set by reconcile when it re-submits a `noTrace` record (reset to `pendiente`), so a later
     // sweep can tell "already remediated once, still missing → escalate to an incident" from a
     // first detection. Cleared once AEAT has a trace of the record again. NULL for every record
     // reconcile has never had to remediate. See reconcile.ts's noTrace lifecycle.
-    reconciledResubmitAt: timestamp("reconciled_resubmit_at", { withTimezone: true }),
+    reconciledResubmitAt: ts("reconciled_resubmit_at"),
   },
   // See cadenas.ts's identical comment: this extraConfig callback is invoked lazily, only by
   // `drizzle-kit generate` (in its own process) or a `drizzle(client, { schema })` wired to this

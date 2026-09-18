@@ -2331,6 +2331,8 @@ its four table files, 52 columns, with no schema change: every column builder th
 things it did not absorb, both written up in the plan. One text column keeps its hand-written
 `check()` constraint rather than moving to the `enumText`/`enumCheck` pair, because that pair
 narrows what a caller may write — measured with the typechecker, and invisible to the schema probe.
+(The condition on that reason was established on 2026-09-18, in the sixth pull request below: whether
+the pair narrows depends on the column's nullability as well as on how the values are written.)
 And one column is an array, which the vocabulary has no helper for at all; there are five such
 columns in the tree — three more in `packages/db` and one in `packages/media` — and the flip has to
 convert every one of them whatever the vocabulary does.
@@ -2340,7 +2342,8 @@ columns, with no schema change. Its two carve-outs are the two the rollout keeps
 database enums, which `enumText` cannot stand in for because it emits `text`; and two text columns
 that keep their hand-written `check()` constraints — `payments.card_entry_mode` because its values
 are written without the spacing `enumCheck` emits, so substituting would change the schema, and
-`payment_policy.offline_mode` because the pair narrows what a caller may write. This package met no
+`payment_policy.offline_mode` because the pair narrows what a caller may write (read with the
+condition the sixth pull request below establishes for that reason). This package met no
 shape the earlier ones had not. It is worth recording that the pull request first claimed otherwise
 — that `enumCheck` was structurally unable to express a nullable column's constraint — and that
 both reviewers falsified it by composing the thing and running it, one of them against PGlite. The
@@ -2348,9 +2351,10 @@ durable half is now a test rather than a paragraph: `packages/db/src/schema/colu
 that a null arm composed around `enumCheck` keeps its values inline, and goes red if
 `.inlineParams()` is removed.
 
-**`packages/fiscal-verifactu` is converted but NOT landed**, in the sixth pull request (#399), which
-is open and left for the owner: it edits the column declarations of the immutable
-`registros_facturacion` and of the chain head `cadenas`, which an unattended run does not merge.
+**`packages/fiscal-verifactu` was converted in the sixth pull request (#399)** and, because it edits
+the column declarations of the immutable `registros_facturacion` and of the chain head `cadenas`,
+was left for the owner to land rather than merged by an unattended run — landed by the owner
+2026-09-18.
 **`packages/identity` was therefore taken next**, in the seventh pull request (#400) — eight table files,
 nine tables, 67 columns, no schema change. Taking it out of the plan's order costs nothing at the
 database, because a vocabulary conversion adds no migration and the two branches touch no schema
@@ -2458,8 +2462,7 @@ report and were removed by the review wave: an increment quoted as uniform acros
 fact came from two different trees, and a repeatability claim the run-it reviewer falsified —
 statement readings do repeat, branch readings do not, so no branch delta is quoted anywhere.
 
-What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then
-`venue-service`, `credentials` and `media`, one pull
+What is left of P1b is `venue-service`, `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their

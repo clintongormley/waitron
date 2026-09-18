@@ -272,7 +272,7 @@ history. `scripts/journal-monotonic.test.ts` continues to guard the new sets.
 The topology design's §9 and §10 both gate this, and slice 1 inherits the gate unchanged: **the same
 fixture sale must produce byte-identical `CuotaTotal`, `ImporteTotal` and huella before and after the
 conversion.** The stored fields are already text
-(`packages/fiscal-verifactu/src/schema/registros.ts:95-96`), so what the change can break is the
+(`packages/fiscal-verifactu/src/schema/registros.ts:91-92`), so what the change can break is the
 arithmetic feeding the formatting, which shows up as a rounding difference and nothing else. "Passes
 the validator" does not discharge this — it only proves the string is well-formed. The shared alta
 fixture is re-run against the real fiscal check in the same change, per CLAUDE.md §4.
