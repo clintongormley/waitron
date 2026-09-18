@@ -361,6 +361,38 @@ Vitest cleans that shared directory. Inspect the resolved selection first, or gi
 second run its own `--coverage.reportsDirectory`. Receipt:
 `docs/superpowers/plans/2026-09-12-setup-wizard-a2.md`.
 
+**And put that second directory outside the package**, which the advice above did not say and
+which is the more expensive half. The receipt it cites already worked that way —
+`docs/superpowers/plans/2026-09-12-setup-wizard-a2.md` records that "the follow-up used a separate
+`/tmp` report directory" — so the stronger remedy was the practice before it was the rule. A
+directory left inside the package is measured as source by the next PACKAGE run: of the sixteen
+patterns in vitest's default coverage excludes, the only two that would catch such a directory are
+`coverage/**` and `**/[.]**`. Both qualifiers matter, and they rest on different evidence. The NAME
+one was measured on
+2026-09-18 in `packages/scheduler`: `--coverage.reportsDirectory=.coverage-review` does NOT
+contaminate, the next run reading 402/404 at exit 0. The PACKAGE one is a reading, not a run — the
+root Vitest project sets its own `coverage.include` (`vitest.config.ts`), which replaces rather than
+merges and names nothing under `packages/`, so a stray directory in a package should be invisible
+there. Untested.
+
+What a non-dot directory inside the package costs: one run into `./coverage-x`, then an ordinary
+`pnpm --filter @waitron/scheduler test:coverage`, and the second run's statement total went from 404
+to 671 while its covered count stayed at 402 — **59.91%** against a 90 threshold, exit 1. The 267
+extra statements are named in that run's own `coverage-summary.json` and are the HTML reporter's own
+assets, written into the directory it had just written: `sorter.js` (192), `block-navigation.js` (73)
+and `prettify.js` (2). Each leftover directory adds another 267.
+
+It is worth a paragraph because it does not look like tooling — it looks like a coverage regression.
+**Attribute every reading to the tree it came from**, or the receipt misleads exactly the way the
+defect does: four successive runs here read 407, 674, 938 and 1205 statements, which is not one
+sequence but two, the first two on a tree whose clean total is 407 and the last two on one whose
+clean total is 404 (407, 407+267; then 404+2x267, 404+3x267).
+
+**What removing the directories does NOT buy is a repeatable branch count.** Statement readings do
+repeat — 405/407 and 402/404, reproduced independently by a second reviewer — but two clean runs of
+the same BASE tree gave 98/101 and 99/102 branches, so a before/after branch comparison across runs
+measures nothing. Compare statements; do not quote a branch delta.
+
 **Carried from the retired Copilot instructions file** (deleted 2026-09-12; read it with
 `git show f5941462:.github/instructions/waitron.instructions.md`). What was checked before deleting it: Copilot's automatic review was removed from
 this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` references the file, and

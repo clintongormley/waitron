@@ -741,7 +741,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -1561,6 +1561,108 @@ come from the one multi-line column declaration — `createdAt`'s `timestamp(...
 `.notNull()` and `.defaultNow()` on their own lines — collapsing onto a single line; nothing became
 partially covered, so no percentage moves. Same mechanism as `packages/workforce-es`.
 
+**And the same report for `packages/scheduler`.** One table file, one table, 14 columns, no schema
+change. Its shapes were all shapes the rollout had met: no `pgEnum`, no array column, no binary
+column, no `date`, `time`, `smallint` or `bigint`, and every timestamp in string mode, so the
+`ts`/`tsString` trap has one answer here and `tsString` is it.
+
+**The one genuinely new answer is about `scheduled_runs.state`.** It is a checked text column over a
+value set, so it is the `enumText`/`enumCheck` decision again — and here every COST `columns.ts`
+records for that substitution was measured and none of them lands, which is a first for the rollout.
+What keeps the column plain is the other thing `columns.ts` records, scope, which that file itself
+calls a decision rather than a measurement. Each of the three costs was run:
+
+- the spacing: substituting both (`enumText("state", runState)` and
+  `check("scheduled_runs_state_ck", enumCheck(t.state))`) left the step 4 probe silent at exit 0 with
+  a silent `diff -r`, so the generated schema does not change;
+- the narrowing, and this is the part `packages/identity` could not say: it is ALREADY IN FORCE. The
+  column is declared `.$type<RunState>()`, so a plain string is refused today — `tsc --noEmit` gave
+  `Type 'string' is not assignable to type '"failed" | "pending" | "running" | "succeeded" | "parked"'`
+  on an `InferInsertModel` assignment, with a `"pending"` control on the same line compiling. In
+  identity the narrowing was a live new consequence hidden behind "no caller breaks today"; here
+  there is no caller-facing change for `enumText` to make;
+- and the branding, the reason `columns.ts` records for `incidents.severity`: that `enumText` would
+  replace a branded exported type with a union derived from the values array. Here the two are the
+  SAME type, because `RunState` is itself `(typeof runState)[number]`. Proved with a type-identity
+  assertion and its control: the assertion that what `enumText` derives equals `RunState` compiled,
+  while the control asserting a bare `label()` equals `RunState` failed with
+  `Type 'false' does not satisfy the constraint 'true'`.
+
+Two things NOT to read into that. The three costs are NAMED rather than counted because the counts
+drifted while this pull request was being written: `columns.ts` records four considerations in all —
+the spacing and scope as its "two reasons", the branding for `incidents.severity`, the narrowing for
+`units.hardware_unit` — and earlier drafts of this report, of `docs/backlog.md` and of the column's
+own comment each totalled them differently. And the branding is only measured here in the sense that
+nobody had occasion to measure it before: identity had no branded type to lose, so it never arose.
+
+So what keeps it a plain `label()` is SCOPE — rewriting a constraint is not a conversion's job — and
+the column's comment says exactly that rather than borrowing a reason it does not have. The
+costs-versus-decision split is what makes that sentence safe: two earlier drafts of the comment said
+"neither reason in columns.ts holds" and then "nothing columns.ts records applies", and both were
+falsified by their own next sentence, because scope is one of the things `columns.ts` records and
+scope is what keeps this column plain. A future pass that decides to rewrite these constraints
+should start here — nothing measured stands
+against rewriting this one, which is more than can be said of any instance measured so far. The
+alternatives (the five scope-only columns in `packages/db`, the parked `registros.ts`, and whatever
+`venue-service`, `credentials` and `media` hold) have not been measured for narrowing or branding at
+all, so this is not a claim about the cheapest instance in the tree.
+
+**A trap this package paid for, which is about the acceptance method and not about columns.** The
+before/after coverage comparison this rollout quotes is CORRUPTIBLE by its own scratch — measured
+here; the ten earlier reports' figures were not re-checked. Vitest's coverage excludes carry
+`coverage/**` and `**/[.]**`, so a run given its own `--coverage.reportsDirectory` under a non-dot
+name inside the package leaves a directory the NEXT package run measures as source: the HTML
+reporter's `sorter.js` (192 statements), `block-navigation.js` (73) and `prettify.js` (2), 267 in
+total, named in the polluted run's own `coverage-summary.json`. One leftover directory reported
+59.91% against this package's 90 threshold. It does not look like tooling; it looks like a coverage
+regression. The NAME qualifier was measured on 2026-09-18:
+`--coverage.reportsDirectory=.coverage-review` does NOT contaminate, the next run reading 402/404 at
+exit 0. The PACKAGE qualifier is a reading, not a
+run: the root Vitest project sets its own `coverage.include`, which replaces rather than merges and
+names nothing under `packages/`, so a stray directory in a package should be invisible there —
+untested.
+
+It also put two false claims into a COMMITTED draft of this report, which the review wave caught and
+removed; the shape of both is worth more than the trap. The first: four successive runs here read
+407, 674, 938 and 1205 statements, and the draft quoted "+267 each time". The differences are 267,
+264, 267, because those readings are not one
+sequence but two — the first two on a tree whose clean total is 407 and the last two on one whose
+clean total is 404 (407, 407+267; then 404+2x267, 404+3x267). A paragraph whose whole point is that a
+coverage reading can belong to a tree other than the one it claims had made exactly that mistake.
+The second: "the readings repeat exactly" is false. Statement readings do — 405/407 and 402/404,
+reproduced independently by the run-it reviewer — but two clean runs of the BASE tree gave 98/101 and
+99/102 branches, so a before/after branch comparison across runs measures nothing, and this report
+quotes no branch delta. What the conversion moves is the statement pair, 405/407 to 402/404, covered
+and total falling by the same 3 as the multi-line timestamp declarations collapse, leaving 99.5%
+unchanged. Each reading's provenance was checked the way the bookings report asks — the rendered
+`coverage/src/schema/scheduled-runs.ts.html` contains `tsString` for the converted artifact and
+`pgTable` for the base one. The lesson is now a line in `CLAUDE.md` §4, a paragraph in
+`docs/developers/testing-guide.md` and a sentence in step 4 below, because the existing rule named
+the second report directory without saying where to put it — and its own cited receipt had already
+used a `/tmp` path.
+
+**Verification, each with a control.** Step 4 probe silent at exit 0 before any edit and after, with
+the negative control taken between them (`generation` integer->smallint wrote `0002_probe.sql` and a
+journal entry). `getTableConfig` parity comparison against the base commit: 14 columns, 0 mismatches,
+cross-checked against the probe's own `scheduled_runs 14 columns 1 indexes 0 fks` — PROVED BY
+MUTATION with `created_at` `tsString`->`ts`, which the comparison named
+(`PgTimestampString`->`PgTimestamp`, read `String`->`Date`) and which the drizzle probe, on the same
+tree, could not see at all. Line classification PROVED BY MUTATION twice (respacing a check body,
+reversing the unique index's column order — each reported). `pnpm -r typecheck` 0; `pnpm lint` 0;
+`pnpm format:check` 0; the root guard project 42 files / 3036 tests;
+`pnpm --filter @waitron/scheduler test:coverage` 0 with 9 files and 85 tests, no test edited,
+`src/schema` 100%. The run-it reviewer re-ran the step 4 probe with its own negative control, its
+own column comparison with its own timestamp-mode mutation, the `enumText` substitution, both typecheck
+controls, the two line mutations, the coverage experiments, the workspace typecheck, lint and
+format checks, the root guard project and the package coverage run — and reported no correctness
+defect at any severity.
+
+**What every changed line is**, stated as a property rather than a count: an import, a column
+declaration, the `pgTable(`→`table(` rename, or the carve-out comment added above `state`. Said
+once so the two numbers cannot be read as a contradiction: the classifier reports ZERO unclassified
+differences for the conversion itself, and ONE once the carve-out comment is in the file — that
+comment being a deliberate addition, not a line the conversion moved.
+
 - [ ] **Step 4: Prove nothing changed**
 
 The generate-into-a-copy probe from P1a step 6 — **not `drizzle-kit check`, which cannot see the
@@ -1616,6 +1718,15 @@ Do not open one for either package, and do not read their absence from the list 
 The same two warnings as in P1a: `--out` is relative to the working directory, so run this from the
 package directory and never give it an absolute path; and the scratch folder is created inside the
 package, so a run that stops part-way leaves `drizzle-probe-tmp` in `git status` — delete it.
+
+A third, of the same shape, measured in `packages/scheduler` on 2026-09-18 and now also a rule in
+`CLAUDE.md` §4: if you take a coverage reading into its own `--coverage.reportsDirectory` to compare
+before against after, put that directory OUTSIDE the package. A dot-prefixed name inside it measured
+safe too (`.coverage-review`), but the rule is the outside path, because a name is easier to get
+wrong than a location. Left inside under a
+non-dot name it is measured as SOURCE by the next package run — the HTML reporter's own assets add
+267 statements — and the run reports a coverage regression that has nothing to do with the code. The
+report under step 3 carries the receipt.
 
 Expected: `No schema changes, nothing to migrate` with exit 0, and `diff -r` silent. Then:
 
