@@ -2260,73 +2260,48 @@ Expected: `No schema changes, nothing to migrate` with exit 0, and `diff -r` sil
 pnpm --filter <package> test:coverage
 ```
 
-- [ ] **Step 5: Guard the rule so it does not rot**
+- [x] **Step 5: Guard the rule so it does not rot** — done 2026-09-18, in the final P1b pull request.
 
-In the final P1b pull request, add to `packages/db/src/schema/columns.test.ts`:
+The guard is `scripts/column-vocabulary.test.ts`, a ROOT-project guard, and the house rule it
+enforces went into `CLAUDE.md` §3 with its receipt in `docs/developers/conventions-data.md` in the
+same change.
 
-```ts
-it("no table file imports a column builder directly from drizzle", async () => {
-  const { sourceFilesIn } = await import("../../../../scripts/source-files.js");
-  const offenders: string[] = [];
-  for (const file of sourceFilesIn(["packages", "apps"])) {
-    const text = await readFile(file, "utf8");
-    if (!text.includes("pgTable(") && !text.includes("table(")) continue;
-    // The vocabulary module itself is the one place these may be imported.
-    if (file.endsWith("schema/columns.ts")) continue;
-    const bad = /from "drizzle-orm\/pg-core"/.test(text) &&
-      /\b(uuid|timestamp|date|time|jsonb|numeric|text|boolean|smallint|integer|bigint)\(/.test(text);
-    if (bad) offenders.push(file);
-  }
-  expect(offenders).toEqual([]);
-});
-```
+**It did NOT go into `packages/db/src/schema/columns.test.ts`, which is where this step said to put
+it**, and the reason is a measurement rather than a preference. CI runs a package's suite only when
+the scoping selects it, and the expansion is to a changed package's DEPENDENTS: `pnpm --filter
+"...@waitron/bookings" ls --depth -1 --json`, run on 2026-09-18, lists seven packages and
+`@waitron/db` is not among them. A check living in `packages/db`'s suite therefore would not run on a
+pull request that adds a table file in `packages/bookings` — the change it exists to catch. Root
+`CLAUDE.md` §4 already states the rule ("a guard that reads the whole tree belongs in the ROOT Vitest
+project"), and the root `vitest.config.ts` header carries the 2026-08-01 measurements from when the
+repo-wide guards were moved out of `packages/db` for exactly this.
 
-The list of builder names has to match what the vocabulary covers — every COLUMN builder
-`packages/db/src/schema/columns.ts` imports from `drizzle-orm/pg-core`, and no fewer. **That import
-block is the rule; the list in the draft above is not.** Open the file, read its import block, and
-take the column-builder names from it — the list grows every time step 1 adds a helper, so a list
-written down here is stale the moment one is added. This paragraph has already been wrong once for
-exactly that reason.
+**The draft predicate in this step was replaced, not copied.** Two things were wrong with it and one
+was decided:
 
-As a dated reading of that import block on 2026-09-17, after step 1 landed its five helpers: eleven
-of the names it imports are column builders — `uuid`, `timestamp`, `date`, `time`, `jsonb`,
-`numeric`, `text`, `boolean`, `smallint`, `integer`, `bigint` — and that is what the regex above now
-lists. Before step 1 the draft carried seven. Treat both numbers as receipts for when they were
-taken, not as the thing to check the regex against.
+- It imported `sourceFilesIn` from `scripts/source-files.js`, which does not exist. The function of
+  that name lives in `packages/db/src/english-only.ts` (see its signature there), takes ONE package
+  NAME rather than a list of roots, walks `packages/<name>/src` only — so it never reaches `apps/` —
+  and is deliberately not re-exported from that package's barrel (the reason is in
+  `packages/db/src/index.ts`). The guard walks the two roots itself, the way
+  `scripts/no-tenant-column.test.ts` does, including that file's `isFile()` check against a browser
+  test's screenshot directory.
+- It matched a builder's CALL with a regex over a hand-written list of names. The guard matches the
+  IMPORT SPECIFIER instead, and derives the forbidden set from the vocabulary's own `pg-core` import
+  block — so the list this step warned would go stale does not exist. Measured while writing it:
+  across `packages/` and `apps/`, exactly one file outside the vocabulary imports a column builder
+  from `drizzle-orm/pg-core`, and it is `registros.ts`'s `text`. Everything else importing from that
+  module takes constraint, index or enum builders (`check`, `index`, `foreignKey`, `primaryKey`,
+  `unique`, `uniqueIndex`, `pgEnum`) or types, none of which the vocabulary owns.
+- `customType` is IN the forbidden set, which is the explicit decision this step asked for. All three
+  hand-rolled `bytea` blocks the `binary` helper replaced were written with it, so a table file
+  calling `customType(` is doing the thing the guard exists to stop.
 
-Two names in that import block are NOT column builders and are left out for their own reasons.
-`pgTable` is the table builder, and it is already what the line above the regex uses to pick which
-files to look at. `customType` is a builder FACTORY, and it **deserves a decision rather than a
-silent omission**: the three hand-rolled `bytea` blocks that step 1's `binary` helper exists to
-replace (all three now gone — `print-jobs.ts`'s, `tenant-credentials.ts`'s and
-`images.ts`'s) were each built with `customType`, so a table file calling
-`customType(` is doing the very
-thing this guard exists to stop, and leaving it out means the guard cannot see the next one. Decide
-when writing the guard; if it is left out, say so in the comment beside it.
-
-`text` was missing from an earlier draft of this predicate, and a reviewer ran that draft on
-2026-09-17 against a file holding `import { text } from "drizzle-orm/pg-core";` and
-`table("x", { kind: text("kind") })`: it returned false, so the file passed. That is the shape of
-the failure a short list produces — silence, not an error.
-
-Note in a comment that this guard reads TEXT, so a builder reached through an alias is invisible to it — the hedge `CLAUDE.md` §7 requires for a guard weaker than its name.
-
-**There is one legitimate offender in the tree, and it is not a bug in the conversion.**
-`packages/fiscal-verifactu/src/schema/registros.ts` imports `text` from `drizzle-orm/pg-core` on
-purpose, for `cuota_total` and `importe_total` — see this task's `packages/fiscal-verifactu` report.
-Allow `text` in that one file — scoped to the builder, not a blanket pass for the file, which would
-let a `numeric("cuota_total")` added there later through the guard that exists to catch it. And do
-NOT drop `text` from the predicate to make it pass: a draft without `text` was run on 2026-09-17
-against a file declaring `kind: text("kind")` and returned false, which is the silent failure this
-guard exists to prevent.
-
-**The house rule goes in `CLAUDE.md` §3 in THIS pull request, with the guard, and not before it.**
-A reviewer asked for the rule as soon as the first package landed, and the answer is no: §7 says a
-written rule with standing violations needs a guard rather than another paragraph, and until the
-rollout finishes every unconverted package is a standing violation of it. So the one-line §3 entry
-naming `packages/db/src/schema/columns.ts` as the only place the engine's column types are named,
-and its receipt in `docs/developers/conventions-data.md`, land in the same change as the guard that
-enforces them.
+Proven by mutation, all three restored afterwards: a planted table file importing `uuid` was reported
+by name (`packages/db/src/schema/probe-offender.ts imports uuid`) and the suite went red; dropping the
+`registros.ts` allowance reported that file; blinding the import parser failed seven of the fourteen
+cases, so the controls bite rather than decorate. The known gap — a namespace import is invisible — is
+pinned as a control rather than only claimed, and stated in `CLAUDE.md` in the same line as the guard.
 
 - [x] **Step 6: Commit each package separately** — done 2026-09-18 with `packages/media`, the last package on step 2's list with anything to convert.
 
