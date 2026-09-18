@@ -570,7 +570,7 @@ changed its callers. `packages/credentials` and `packages/media` still declare t
 paragraph above holds for those two and no longer for `packages/db`.
 
 **One `text` column that must never become `label()`.**
-`packages/fiscal-verifactu/src/schema/registros.ts:86-94` stores `cuota_total` and `importe_total` as
+`packages/fiscal-verifactu/src/schema/registros.ts:74-90` stores `cuota_total` and `importe_total` as
 `text` deliberately, and the comment above them says why: `packages/verifactu/src/huella.ts` hashes
 those stored values verbatim as strings, so the bytes stored have to be the bytes hashed, which only
 `text` guarantees; `numeric(12,2)` re-renders on read and is additionally too narrow for the format's
@@ -741,7 +741,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/fiscal-verifactu` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18; `packages/workforce-es` finished 2026-09-18; `packages/bookings` finished 2026-09-18; `packages/scheduler` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -1016,6 +1016,118 @@ property.
 Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace, which is what covers
 the sibling packages that read these tables) and `pnpm --filter @waitron/payments test:coverage`
 (exit 0, 32 files, 414 tests, no test edited, all five schema files 100%).
+
+**And the same report for `packages/fiscal-verifactu`.** Its six table files hold 67 columns across
+seven tables — 5 in `acks.ts`, 5 in `cadenas.ts`, 3 in `envio-flujo.ts`, 11 in `envios.ts`, 33 in
+`registros.ts` and 7 + 3 in `sif.ts` — and every builder they used had a helper: `uuid`, `text`,
+`integer`, `date`, `jsonb`, `boolean` and `timestamp`. There is no `pgEnum` in the package, no array
+column (`grep -rn '\.array()' packages/fiscal-verifactu/src` exits 1), and no `time`, `smallint`,
+`bigint`, `bytea` or `numeric` column on either side of the diff.
+
+**Every timestamp here is the BARE `{ withTimezone: true }` with no mode, so every one becomes
+`ts`.** That is the spelling #394 measured as identical to `mode: "date"` — same `columnType`, same
+SQL type, same read and write mapping — with `mode: "string"` as the negative control that separates
+them. The converted files hold no `tsString` call at all.
+
+**This is the first package in the rollout that deliberately keeps a column builder imported straight
+from drizzle.** `registros_facturacion`'s `cuota_total` and `importe_total` stay `text(...)`, for the
+reason the paragraphs above step 3 give, so `registros.ts` still carries
+`import { check, index, text, uniqueIndex } from "drizzle-orm/pg-core"`. Step 5's guard predicate, as
+drafted, would report that file as an offender: it flags any file containing `table(` that imports
+`text` from `drizzle-orm/pg-core`. **Whoever writes the final pull request has to allow those two
+lines explicitly, with the reason, rather than dropping `text` from the predicate** — dropping it
+would blind the guard to the very substitution it exists to catch, which #397's reviewer already
+measured (a draft without `text` passed a file declaring `kind: text("kind")`).
+
+Two things the conversion did not absorb, and this package met TWO shapes no earlier one had.
+
+The first is the seven text columns carrying a hand-written `check()`. Five of them —
+`acks.state`, `envios.estado`, `registros_facturacion`'s `tipo_registro`, `tipo_rectificativa` and
+`entorno` — are the shape the rollout keeps meeting: their constraints already carry the `", "`
+spacing `enumCheck` emits, so substituting is schema-silent (measured on `acks_state_ck` — the pair
+substituted, the step 4 probe printed `No schema changes, nothing to migrate`, exit 0, `diff -r`
+silent). **And here the caller-narrowing reason comes back NEGATIVE, which is worth having measured
+rather than assumed.** All five narrowed to `enumText(..., as const)` with their correct value sets
+left `pnpm -r typecheck` at exit 0: the write path already hands each column its exact union
+(`entorno` is typed `Entorno` at `packages/fiscal-verifactu/src/registro-row.ts`). The control is
+what makes that a reading: narrowing `entorno` to `["production"] as const` while the code still
+writes `preproduction` failed with `TS2322` at `registro-row.ts:145` and `:174`. So those five stay
+`label()` on the scope decision alone — rewriting a constraint is outside this conversion — and this
+package is a candidate for the pair later.
+
+The other two are the new shapes, and both are about what a VALUE LIST cannot express:
+
+- **An equality constraint.** `registros_tipo_huella_ck` is `${t.tipoHuella} = '01'`, quoted from the
+  file. Substituting the pair on it — `enumText("tipo_huella", ["01"])` plus `enumCheck` — made the
+  step 4 probe write `0002_probe.sql` containing exactly
+  `ALTER TABLE "registros_facturacion" DROP CONSTRAINT "registros_tipo_huella_ck"` followed by an ADD
+  with `CHECK (… in ('01'))`. So this is the DDL reason, measured, on a constraint whose body is not
+  an `in (…)` list at all.
+- **A pattern constraint.** `registros_huella_ck` is `${t.huella} ~ '^[0-9A-F]{64}$'`. `enumText`'s
+  whole contract is a set of values written at the call site, and a 64-character hex pattern has no
+  set to write, so there is nothing to hand it. Stated as what the helper takes rather than as an
+  impossibility proof — #398's correction is the reason for that care.
+
+**A false claim in `columns.ts` was found while taking that narrowing measurement, and it is
+corrected in this pull request.** The paragraph beside `enumText` said flatly that the pair narrows
+what a caller may write, citing #397's `tsc` run. The condition was missing: narrowing happens only
+when the values reach `enumText` in a const position. Measured 2026-09-18 in the catalogue package —
+the same package the original reading was taken in — by forcing `tsc --noEmit` to print each
+column's resolved data type through an assignment to `never`:
+
+```
+enumText("u", ["kg", "g", "mg"])            ->  string
+enumText("u", ["kg", "g", "mg"] as const)   ->  "g" | "kg" | "mg"
+text("u", { enum: ["kg", "g", "mg"] })      ->  "g" | "kg" | "mg"
+```
+
+The type parameter is inferred from a mutable array literal, which widens to `string`. The control is
+that the same probe file reported `TS2322` on a `const x: number = "a string"`, so it was being
+typechecked; before that control was taken, three assignments of an out-of-set literal had all
+compiled and looked like evidence of nothing. **No column in the tree lost anything** — the single
+`enumText` caller, `packages/db/src/schema/drawer-opens.ts`, writes `as const`. What was wrong was
+only the sentence, and every later reader of it (this plan, `docs/backlog.md`) inherited it.
+
+A one-word fix would make the sentence true as written — a `const` type parameter,
+`<const T extends string>` — and it is NOT taken here, because this pull request is a package
+conversion and that is a change to the shared vocabulary's types. It is written up in
+`~/waitron-campaign/questions.md` for its own change.
+
+Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
+(`No schema changes, nothing to migrate`, exit 0, `diff -r` silent) and again after (the same), and
+the NEGATIVE CONTROL was taken in the same worktree before converting anything: `tiempo_espera_seg`
+moved from `integer` to `smallint` made the same command write `0002_probe.sql` and add a journal
+entry. A column-by-column comparison against the base commit, built on drizzle's `getTableConfig` —
+SQL type, `columnType`, nullability, primary key, defaults, enum values, uniqueness and the read
+mapping, keyed by TABLE as well as column name — reported **67 columns, 0 mismatches**, cross-checked
+against the probe's own per-table counts, which print 5/5/3/3/11/7/33 and sum to the same 67.
+
+**That comparison was proved by a mutation the probe is blind to.** `registros_facturacion.creado_en`
+was moved from `ts` to `tsString`: the comparison reported exactly that column,
+`PgTimestamp` → `PgTimestampString`, with the read mapping going from a `Date` to the driver's
+string, while the step 4 probe on the same mutated tree printed `No schema changes, nothing to
+migrate` at exit 0 with a silent `diff -r`. The same blindness #398 measured, re-measured on the
+table where it would matter most.
+
+A line-by-line classification of the diff then established the property: **every changed line is an
+import line, a column declaration or one of its continuation lines, the one `pgTable(` → `table(`
+rename per table, or the carve-out comment this change adds to `registros.ts`.** No `check()` body,
+index, unique index, foreign key, primary key or existing comment differs. Proved by mutation, in the
+other direction: changing `acks_state_ck`'s spacing and reversing `envios_drenaje_idx`'s column order
+made the classifier report exactly those four lines as unclassified. Two lines it does report are
+that same property and not an exception — `.notNull()` and `.defaultNow()` in `envios.ts` stopped
+being separate lines because `ts("proximo_intento_en")` is short enough for prettier to fit the whole
+declaration on one.
+
+Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace) and
+`pnpm --filter @waitron/fiscal-verifactu test:coverage` (exit 0, 42 files, 403 tests, no test edited,
+including `inmutabilidad` and `monetary-columns`). The root guard project was run too, because this
+change touches `packages/db`: `npx vitest run` at the root, 42 files, 3036 tests, exit 0. One
+per-file coverage row is worth naming so nobody reads it as new: `src/schema/acks.ts` sits at 77.27%
+statements, its extra-config callback uncovered, because that file carries no `/* v8 ignore */`
+markers where its five siblings do. It carried none at the base commit either
+(`git show HEAD:…/acks.ts | grep -c "v8 ignore"` returns 0), and adding them was left out of this
+conversion's scope.
 
 **And the same report for `packages/identity`, which met no new shape and one new ANSWER.** Its
 eight table files declare nine tables holding 67 columns — 7 in `google-oidc-states.ts`, 11 in
@@ -1782,6 +1894,13 @@ when writing the guard; if it is left out, say so in the comment beside it.
 the failure a short list produces — silence, not an error.
 
 Note in a comment that this guard reads TEXT, so a builder reached through an alias is invisible to it — the hedge `CLAUDE.md` §7 requires for a guard weaker than its name.
+
+**There is one legitimate offender in the tree, and it is not a bug in the conversion.**
+`packages/fiscal-verifactu/src/schema/registros.ts` imports `text` from `drizzle-orm/pg-core` on
+purpose, for `cuota_total` and `importe_total` — see this task's `packages/fiscal-verifactu` report.
+Allow that file explicitly, with the reason, and do NOT drop `text` from the predicate to make it
+pass: a draft without `text` was run on 2026-09-17 against a file declaring `kind: text("kind")` and
+returned false, which is the silent failure this guard exists to prevent.
 
 **The house rule goes in `CLAUDE.md` §3 in THIS pull request, with the guard, and not before it.**
 A reviewer asked for the rule as soon as the first package landed, and the answer is no: §7 says a

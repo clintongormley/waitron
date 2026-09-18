@@ -2348,9 +2348,10 @@ durable half is now a test rather than a paragraph: `packages/db/src/schema/colu
 that a null arm composed around `enumCheck` keeps its values inline, and goes red if
 `.inlineParams()` is removed.
 
-**`packages/fiscal-verifactu` is converted but NOT landed**, in the sixth pull request (#399), which
-is open and left for the owner: it edits the column declarations of the immutable
-`registros_facturacion` and of the chain head `cadenas`, which an unattended run does not merge.
+**`packages/fiscal-verifactu` was converted in the sixth pull request (#399)** and, because it edits
+the column declarations of the immutable `registros_facturacion` and of the chain head `cadenas`,
+was left for the owner to land rather than merged by an unattended run — landed by the owner
+2026-09-18.
 **`packages/identity` was therefore taken next**, in the seventh pull request (#400) — eight table files,
 nine tables, 67 columns, no schema change. Taking it out of the plan's order costs nothing at the
 database, because a vocabulary conversion adds no migration and the two branches touch no schema
@@ -2458,8 +2459,7 @@ report and were removed by the review wave: an increment quoted as uniform acros
 fact came from two different trees, and a repeatability claim the run-it reviewer falsified —
 statement readings do repeat, branch readings do not, so no branch delta is quoted anywhere.
 
-What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then
-`venue-service`, `credentials` and `media`, one pull
+What is left of P1b is `venue-service`, `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their

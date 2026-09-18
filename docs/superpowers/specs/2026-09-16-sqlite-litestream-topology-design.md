@@ -600,7 +600,7 @@ no-tenant-column guard.
   finding 5, 2026-09-16):
   - **Money** (`numeric(12,2)` amounts) → **integer cents**. It does **not** touch the stored fiscal
     hash fields — `cuota_total` and `importe_total` in `registros_facturacion` are already `text`
-    (`packages/fiscal-verifactu/src/schema/registros.ts:95-96`) and the huella hashes formatted strings
+    (`packages/fiscal-verifactu/src/schema/registros.ts:91-92`) and the huella hashes formatted strings
     (`packages/verifactu/src/huella.ts` joins `trimValue`-formatted values). What it touches is the
     **input to that formatting** — the arithmetic that produces the amount before it is formatted — so
     the risk is a rounding difference, not a changed hash field.

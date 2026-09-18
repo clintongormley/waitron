@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { nodes } from "@waitron/db";
+import { check, primaryKey } from "drizzle-orm/pg-core";
+import { count, id, label, nodes, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -14,21 +14,21 @@ import { registrosFacturacion } from "./registros.js";
  * values that must match the immutable row exactly — and the mutable copy is the one that can
  * drift.
  */
-export const cadenas = pgTable(
+export const cadenas = table(
   "cadenas",
   {
     // The node that owns this chain (node-id rekey, 2026-08-03: was `till_id`). Plain one-argument
     // FK.
-    nodeId: uuid("node_id")
+    nodeId: id("node_id")
       .notNull()
       .references(() => nodes.id),
     // Monotonic across SIF identities and NEVER reset. Re-registration breaks the chain POINTER
     // (below), not the counter: resetting to zero would collide head-on with
     // `registros_tenant_node_secuencia_uq`, and the sequence is ours anyway.
-    secuencia: integer("secuencia").notNull().default(0),
-    ultimoRegistroId: uuid("ultimo_registro_id").references(() => registrosFacturacion.id),
-    ultimaHuella: text("ultima_huella"),
-    actualizadoEn: timestamp("actualizado_en", { withTimezone: true }).notNull().defaultNow(),
+    secuencia: count("secuencia").notNull().default(0),
+    ultimoRegistroId: id("ultimo_registro_id").references(() => registrosFacturacion.id),
+    ultimaHuella: label("ultima_huella"),
+    actualizadoEn: ts("actualizado_en").notNull().defaultNow(),
   },
   // Drizzle stores this extraConfig callback lazily and invokes it only when something walks the
   // table's full metadata — `drizzle-kit generate`, in its own separate CLI process, or a

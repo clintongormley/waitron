@@ -123,7 +123,8 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * The second group is open, and it keeps growing as the rollout reaches new packages: checked text
  * columns written with `enumCheck`'s spacing exist outside this package too, among them
  * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17),
- * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18), and
+ * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18), five in
+ * `packages/fiscal-verifactu` (converted 2026-09-18), and
  * `google_oidc_states.mode` and `management_account_actions.purpose` in `packages/identity`
  * (converted 2026-09-18 — and SCOPE alone is what keeps those two: measured there, substituting
  * leaves the generated schema identical and breaks no caller today, while the narrowing itself
@@ -132,9 +133,8 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * `scheduled_runs.state` in `packages/scheduler` (converted 2026-09-18), where the narrowing costs
  * nothing at all: the column is already declared `.$type<RunState>()`, so `enumText` would change
  * no caller-facing type — `RunState` is `(typeof runState)[number]`, which is the union `enumText`
- * derives. Others are unconverted on `main` on that date, among them
- * `packages/fiscal-verifactu/src/schema/registros.ts`. So take the two reasons as the property and
- * the names as a dated reading.
+ * derives. Packages the rollout has not yet reached are unconverted on `main` on that date. So take
+ * the two reasons as the property and the names as a dated reading.
  *
  * Scope keeps `scheduled_runs.state` plain, like the identity pair above, but it is the only column
  * measured so far where none of the three COSTS — the spacing, the narrowing, the branding —
@@ -150,12 +150,32 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * composes a null arm around it".
  *
  * `units.hardware_unit` carries a reason worth stating in general: substituting there is schema-silent, but `enumText` NARROWS what a
- * caller may write. Measured 2026-09-17 with `tsc --noEmit` over two probe tables in the catalogue
- * package, one column declared each way — the `enumText` one refused a `string | null | undefined`
- * with `Type 'string' is not assignable to type '"g" | "kg" | "mg" | null | undefined'`, while the
- * `label()` control on the line above it compiled. So this pair is not a free substitution on an
- * existing column even when the DDL is identical: it is a caller-facing change the schema probe
- * cannot see.
+ * caller may write — SO LONG AS the values reach it in a const position. That condition was missing
+ * when this paragraph was first written, and without it the claim is false.
+ *
+ * Measured 2026-09-18 in the catalogue package, forcing `tsc --noEmit` to print each column's
+ * resolved data type by assigning it to `never`: `enumText("u", ["kg", "g", "mg"])` resolves to
+ * plain `string` — no narrowing at all — while `enumText("u", ["kg", "g", "mg"] as const)` and
+ * drizzle's own `text("u", { enum: ["kg", "g", "mg"] })` both resolve to `"g" | "kg" | "mg"`. The
+ * type parameter is inferred from a mutable array literal, which widens. The control for that probe
+ * is that the same file reported `TS2322` on a `const x: number = "a string"`, so it was being
+ * typechecked. The one caller in the tree, `drawer-opens.ts`, writes `as const`, so no column has
+ * lost its narrowing; what was wrong was only the sentence.
+ *
+ * A converter taking that reason therefore has to re-measure it per column WITH `as const`, and the
+ * answer is not the same everywhere. In `packages/fiscal-verifactu` (converted 2026-09-18) it comes
+ * back negative: all five of its checked text columns narrowed to `enumText(..., as const)` with
+ * their correct value sets left `pnpm -r typecheck` at exit 0, because the write path already hands
+ * each column its exact union. The control there was narrowing `registros_facturacion.entorno` to
+ * `["production"] as const` while the code still writes `preproduction`, which failed with `TS2322`
+ * at `packages/fiscal-verifactu/src/registro-row.ts:145`. So those five stay `label()` on the scope
+ * decision alone.
+ *
+ * Two shapes that package met which no value list can stand in for at all, both measured there:
+ * a constraint written as an EQUALITY rather than an `in (…)` list — `registros_tipo_huella_ck` is
+ * `= '01'`, and substituting the pair made the schema probe drop and re-add the constraint as
+ * `in ('01')` — and a constraint that is a PATTERN rather than a set, `registros_huella_ck`'s
+ * `~ '^[0-9A-F]{64}$'`, which has no values to list.
  */
 export const enumText = <T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
@@ -214,7 +234,7 @@ export const bigCount = (name: string) => bigint(name, { mode: "number" });
  * Free text.
  *
  * A fiscal amount held as `text` is NOT free text and must not become `label()`:
- * `packages/fiscal-verifactu/src/schema/registros.ts:86-96` keeps `cuota_total`/`importe_total` as
+ * `packages/fiscal-verifactu/src/schema/registros.ts:74-92` keeps `cuota_total`/`importe_total` as
  * `text` because the fiscal fingerprint hashes the stored bytes verbatim, so the stored bytes must
  * equal the hashed bytes.
  *

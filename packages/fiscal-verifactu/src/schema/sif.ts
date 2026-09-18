@@ -1,15 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  integer,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { nodes } from "@waitron/db";
+import { check, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
+import { count, id, label, nodes, table, ts } from "@waitron/db";
 
 /**
  * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación (findings §1). Append-mostly —
@@ -18,20 +9,20 @@ import { nodes } from "@waitron/db";
  * actually generated them. (Node-id rekey, 2026-08-03: the SIF is the node — #33 — so this moved
  * from till to node.)
  */
-export const registroSif = pgTable(
+export const registroSif = table(
   "registro_sif",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     // The node this SIF identity belongs to (node-id rekey, 2026-08-03: was `till_id`; the SIF IS
     // the node — #33). Plain one-argument FK.
-    nodeId: uuid("node_id")
+    nodeId: id("node_id")
       .notNull()
       .references(() => nodes.id),
-    nif: text("nif").notNull(),
-    idSistemaInformatico: text("id_sistema_informatico").notNull(),
-    numeroInstalacion: integer("numero_instalacion").notNull(),
-    registradoEn: timestamp("registrado_en", { withTimezone: true }).notNull().defaultNow(),
-    revocadoEn: timestamp("revocado_en", { withTimezone: true }),
+    nif: label("nif").notNull(),
+    idSistemaInformatico: label("id_sistema_informatico").notNull(),
+    numeroInstalacion: count("numero_instalacion").notNull(),
+    registradoEn: ts("registrado_en").notNull().defaultNow(),
+    revocadoEn: ts("revocado_en"),
   },
   // See cadenas.ts's identical comment: this extraConfig callback is invoked lazily, only by
   // `drizzle-kit generate` (in its own process) or a `drizzle(client, { schema })` wired to this
@@ -59,12 +50,12 @@ export const registroSif = pgTable(
  * One allocation counter per (NIF, IdSIF), independent of retained registro_sif rows.
  * Keeping the counter separate prevents allocation from restarting when identities are removed.
  */
-export const contadoresInstalacion = pgTable(
+export const contadoresInstalacion = table(
   "contadores_instalacion",
   {
-    nif: text("nif").notNull(),
-    idSistemaInformatico: text("id_sistema_informatico").notNull(),
-    proximoNumero: integer("proximo_numero").notNull().default(1),
+    nif: label("nif").notNull(),
+    idSistemaInformatico: label("id_sistema_informatico").notNull(),
+    proximoNumero: count("proximo_numero").notNull().default(1),
   },
   (t) => [primaryKey({ columns: [t.nif, t.idSistemaInformatico] })],
 );

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, integer, pgTable, timestamp } from "drizzle-orm/pg-core";
+import { check } from "drizzle-orm/pg-core";
+import { count, table, ts } from "@waitron/db";
 
 /**
  * Flow-control state for the obligado tributario this database belongs to. Holds when the NEXT
@@ -14,16 +15,16 @@ import { check, integer, pgTable, timestamp } from "drizzle-orm/pg-core";
  * against. Lazily created: no row means nothing has ever been sent, which reads as "may send now";
  * the drainer upserts one after the first response.
  */
-export const envioFlujo = pgTable(
+export const envioFlujo = table(
   "envio_flujo",
   {
-    id: integer("id").primaryKey().notNull().default(1),
+    id: count("id").primaryKey().notNull().default(1),
     // When the next envío may go. Persisted, never an in-memory timer.
-    proximoEnvioEn: timestamp("proximo_envio_en", { withTimezone: true }).notNull(),
+    proximoEnvioEn: ts("proximo_envio_en").notNull(),
     // The last TiempoEsperaEnvio AEAT returned. `\d{0,4}` in the schema → up to 9999; an integer
     // column holds it exactly, where baking it into a timestamptz would not make the seconds
     // re-readable.
-    tiempoEsperaSeg: integer("tiempo_espera_seg").notNull(),
+    tiempoEsperaSeg: count("tiempo_espera_seg").notNull(),
   },
   (t) => [check("envio_flujo_singleton_ck", sql`${t.id} = 1`)],
 );
