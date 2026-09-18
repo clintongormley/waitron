@@ -232,9 +232,10 @@ is_production() {
 # ~3 minutes for the app container to report healthy (setup mode is healthy on /setup-api/status).
 # Two test overrides, because a suite cannot afford either term of that product:
 # WAITRON_SH_MAX_HEALTH_TRIES cuts the try count, and WAITRON_SH_HEALTH_DELAY cuts the wait between
-# tries, so a test can keep the RETRYING and still finish in seconds. Both are overridden in every
-# case of scripts/waitron-sh.test.mjs, so the SHIPPED defaults below are pinned as text by
-# scripts/deploy-image-env.test.ts — nothing else would notice a typo in them.
+# tries, so a test can keep the RETRYING and still finish in seconds. The DELAY is overridden in every
+# case of scripts/waitron-sh.test.mjs, so no test can see the shipped 5 — it is pinned as text by
+# scripts/deploy-image-env.test.ts instead. The try count is left alone by most cases and two of them
+# assert the probe count, so a typo in it fails behaviourally as well as textually.
 wait_healthy() {
   local tries="${WAITRON_SH_MAX_HEALTH_TRIES:-36}"
   local delay="${WAITRON_SH_HEALTH_DELAY:-5}"

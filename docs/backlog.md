@@ -2443,11 +2443,14 @@ was completing normally. See B9 above, and `docs/developers/testing-guide.md`.
 two campaign runners and a MinIO container. The Vitest side was fixed; the SPAWN side was not. The
 script under test retries a health probe 36 times five seconds apart — about 175s against the suite's
 20s spawn timeout — and two cases did not pin the try count, so one probe returning anything but
-`healthy` cost the case five of its twenty seconds, and four misses in one run killed the child. Measured: 1s
-healthy, 6s with one missed probe, 15s never-healthy with the tries pinned to four; and six runs under
+`healthy` cost the case five of its twenty seconds, and enough of them in one run killed it — which on the
+measured baseline takes four, landing a tenth of a second past the bound. Never observed; it is the
+hypothesis this fix is built on. Measured by a review seat, counting probes: 0.692s healthy on the first probe (cold stubs), 5.090s
+when one probe answers empty first, 15.119s never-healthy with the tries pinned to four, 2.179s for
+the full 36 at the new delay; and six runs under
 36 busy-loop processes on an 18-core machine all passed, which is a failure to reproduce at one load
 level rather than a cause eliminated. Fixed
-by cutting the WAIT rather than the retrying (`WAITRON_SH_HEALTH_DELAY`), with three cases that leave
+by cutting the WAIT rather than the retrying (`WAITRON_SH_HEALTH_DELAY`), with two cases that leave
 the try count alone and assert the PROBE COUNT — the first version asserted only the give-up message,
 which one try satisfies just as well, and a review seat falsified it by pinning the tries to 1 and
 watching it still pass. The change reduces exposure rather than removing it: the same seat slowed each

@@ -227,12 +227,14 @@ describe("the waitron.sh box command", () => {
     expect(WAITRON_SH).toMatch(/WAITRON_DIR:-\/opt\/waitron/);
   });
 
-  // Both health-wait defaults are pinned as text because the guard suite overrides BOTH in every
-  // case (`scripts/waitron-sh.test.mjs`), so a typo in either shipped value would fail nothing: a box
-  // would give up in two seconds instead of three minutes and every test would still pass.
-  it("waits about three minutes for health, shipped", () => {
-    expect(WAITRON_SH).toMatch(/WAITRON_SH_MAX_HEALTH_TRIES:-36/);
-    expect(WAITRON_SH).toMatch(/WAITRON_SH_HEALTH_DELAY:-5/);
+  // The DELAY default is pinned here because `scripts/waitron-sh.test.mjs` overrides it in every
+  // case, so no behaviour anywhere would notice a typo: a box would give up in two seconds instead
+  // of three minutes and every test would still pass. The try count is pinned here too, though that
+  // suite also asserts it behaviourally. Closing braces are part of both patterns — without them
+  // `:-5` matches `:-50` and `:-36` matches `:-360`, which is the likeliest slip of all.
+  it("ships a health wait of 36 tries, five seconds apart", () => {
+    expect(WAITRON_SH).toMatch(/WAITRON_SH_MAX_HEALTH_TRIES:-36\}/);
+    expect(WAITRON_SH).toMatch(/WAITRON_SH_HEALTH_DELAY:-5\}/);
   });
 
   it("reports a script-prefixed error to stderr when misused", () => {
