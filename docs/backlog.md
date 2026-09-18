@@ -2992,7 +2992,7 @@ branch's commits rather than quietly rewritten. The practical lesson for the con
 count is not a receipt unless the command and the tree are beside it, and a correction deserves a
 reader who is not its author.
 
-**Task P7 — nothing joins the two database files any more (pull request #PR7).** The storage switch
+**Task P7 — nothing joins the two database files any more (pull request #426).** The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
 only be backed up or restored separately if no row in one points at a row in the other. Six such
 pointers existed, every one of them from a node's own table into the venue's: a till shift-login
