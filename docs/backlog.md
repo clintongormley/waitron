@@ -2363,7 +2363,34 @@ breaks, established with a control that fired first. The narrowing the second re
 happens, both columns being NOT NULL; it simply costs nothing today. So what keeps them is that
 rewriting an existing constraint is not what a conversion pull request does.
 
-What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then `workforce`,
+**`packages/workforce` is converted too, in the eighth pull request** — nine table files, nine
+tables, 86 columns, no schema change. It is the first package in the rollout with no VALUE-SET check
+constraint anywhere in it, so the `enumText`/`enumCheck` decision every earlier package had to make
+was simply not available here. It does have two text columns whose own value a check
+constrains — a hex pattern on `time_entries.entry_hash`, a length on `shift_templates.label` — and
+both stay bare, which is what the earlier conversions already do with that shape
+(`payments.card_last4` is one). What did change is the sentence in
+`packages/db/src/schema/columns.ts` describing which checked text columns stay `label()` and why: it
+claimed every one of them is held by one of the two reasons it records, and this package's two are
+held by a third, so it was narrowed to say that value-set checks are the group. Its six database-enum
+columns stay as they are, for the usual reason. Two things about it are worth knowing outside the
+plan. First, it uses BOTH timestamp modes — fifteen string-mode columns and one date-mode
+`workforce_chains.updated_at`, written with no mode at all, which is drizzle's default of date — so
+the mode had to be read off each line; `packages/db` is mixed the same way, while payments and
+identity are uniform. Second, this package holds a hash chain: `time_entries` is append-only and
+chained and `workforce_chains` is its head, and that chain is the working-time record, which a cold
+restore does NOT reset. It is being landed rather than left open like `fiscal-verifactu` because it is
+not the fiscal chain, and because two checkable properties hold: no column here is a number held as
+text (the three text columns holding hex digests are text before and after), and the digest in
+`packages/workforce/src/chain-hash.ts` is built from typed values, hashing the two instants as epoch
+milliseconds rather than as stored bytes. The column-by-column comparison that backs the whole
+conversion reports no change to any column's read mapping, and it was proved by mutating the one
+column the chain hashes — a mutation which also fails 33 of that package's tests outright, so the
+wrong helper on a hashed column is loud rather than silent. The one place it would be silent is
+`workforce_chains.updated_at`, which nothing reads or writes from JavaScript; that column now carries
+a comment saying so.
+
+What is left of P1b is `fiscal-verifactu` (converted, waiting on the owner) and then
 `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials` and `media`, one pull
 request each, and then the guard. `purchasing` and `reporting` are on the plan's step 2 list but
 have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import anywhere in their

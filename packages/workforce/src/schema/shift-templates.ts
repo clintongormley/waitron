@@ -1,16 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  integer,
-  pgTable,
-  smallint,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { locations } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/pg-core";
+import { count, id, label, locations, smallCount, table, tsString } from "@waitron/db";
 
 /**
  * A reusable shift SHAPE at a location — "Monday bar, 18:00–02:00" — from which concrete `shifts` are
@@ -24,25 +14,23 @@ import { locations } from "@waitron/db";
  * (`starts_minute > ends_minute`, an overnight bar shift), whose interpretation is the generator's,
  * not the row's.
  */
-export const shiftTemplates = pgTable(
+export const shiftTemplates = table(
   "shift_templates",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     /** The workplace the template's shifts are scheduled at. */
-    locationId: uuid("location_id").notNull(),
+    locationId: id("location_id").notNull(),
     /** A human label for the slot (e.g. "Evening bar"). */
-    label: text("label").notNull(),
+    label: label("label").notNull(),
     /** Day of week, 0–6. */
-    weekday: smallint("weekday").notNull(),
+    weekday: smallCount("weekday").notNull(),
     /** Start of the slot, minutes past local midnight, [0, 1440]. */
-    startsMinute: integer("starts_minute").notNull(),
+    startsMinute: count("starts_minute").notNull(),
     /** End of the slot, minutes past local midnight, [0, 1440]. */
-    endsMinute: integer("ends_minute").notNull(),
+    endsMinute: count("ends_minute").notNull(),
     /** The role the slot is for (bar, kitchen, …), free text; null when unspecified. */
-    role: text("role"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    role: label("role"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the

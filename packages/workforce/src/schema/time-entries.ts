@@ -1,18 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  check,
-  foreignKey,
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { locations, nodes, tills } from "@waitron/db";
+import { check, foreignKey, index, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { count, flag, id, label, locations, nodes, table, tills, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -57,61 +45,61 @@ export const workforceCorrectionStatus = pgEnum("workforce_correction_status", [
  * corrections across nodes and replaces the non-replicating `ingest_seq` the chain never covered
  * (spec §2.2). `sequence_no` is the chain position the tamper-evidence hash commits to.
  */
-export const timeEntries = pgTable(
+export const timeEntries = table(
   "time_entries",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
     /** The workplace the event was captured at — the site the Inspección scopes to. */
-    locationId: uuid("location_id").notNull(),
+    locationId: id("location_id").notNull(),
     /** The node whose chain this entry belongs to — stamped by the append, never by the device. Part
      * of the chain key (node, location) so a promoted cloud and a returning box each keep
      * their own chain (spec §2.1). */
-    nodeId: uuid("node_id").notNull(),
+    nodeId: id("node_id").notNull(),
     entryKind: workforceEntryKind("entry_kind").notNull(),
-    /** The trusted event instant. `mode: "string"` keeps the offset out of the value the way
-     * `sales.issued_at` does; the wall offset rides alongside in `event_offset_minutes`. */
-    eventAt: timestamp("event_at", { withTimezone: true, mode: "string" }).notNull(),
-    eventOffsetMinutes: integer("event_offset_minutes").notNull(),
+    /** The trusted event instant. `tsString`, like `sales.issuedAt`, keeps the offset out of the
+     * value; the wall offset rides alongside in `event_offset_minutes`. */
+    eventAt: tsString("event_at").notNull(),
+    eventOffsetMinutes: count("event_offset_minutes").notNull(),
     /** The till that captured the event, when one did — null for a manually recorded entry. */
-    capturedByTillId: uuid("captured_by_till_id"),
+    capturedByTillId: id("captured_by_till_id"),
     /** Who recorded the event. For a self-service clock-in this equals `person_id`; a supervisor
      * recording on someone's behalf differs, which is the attribution art. 34.9 requires. */
-    recordedByPersonId: uuid("recorded_by_person_id").notNull(),
+    recordedByPersonId: id("recorded_by_person_id").notNull(),
     /** The recording node's clock at append, whole seconds. Stamped by `appendToChain` (never a
      * device input like `event_at`), hashed, and clamped monotonic per chain against the head's
      * `last_recorded_at` (spec §4.1). See the table doc comment. */
-    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "string" }).notNull(),
+    recordedAt: tsString("recorded_at").notNull(),
     /** The entry this row corrects — a base clock event, or an earlier correction (a correction is
      * itself immutable and is superseded by another). Null on a base event, non-null on a
      * `correction`. Self-referential FK; the projection follows it to resolve the effective value. */
-    correctsEntryId: uuid("corrects_entry_id"),
+    correctsEntryId: id("corrects_entry_id"),
     /** Why the correction was made (art. 34.9's attributable-and-contestable requirement). Null on a
      * base event. */
-    correctionReason: text("correction_reason"),
+    correctionReason: label("correction_reason"),
     /** `requested` (no projection effect) or `approved` (supersedes its target). Null on a base
      * event. */
     correctionStatus: workforceCorrectionStatus("correction_status"),
     /** Who requested or approved the correction — the accountable actor, distinct from
      * `recorded_by_person_id` (the device operator) even when they are the same person. Null on a
      * base event. */
-    correctionActorId: uuid("correction_actor_id"),
+    correctionActorId: id("correction_actor_id"),
     // Slice 4 — the tamper-evidence hash chain (design §5). Assigned by `appendToChain`
     // (../chain.ts) under a row lock on `workforce_chains`, never by the device: one chain per
     // (node, location), one active writer per chain. IMMUTABLE like the rest of the row — the existing
     // REVOKE + `reject_mutation` trigger (drizzle/0001_workforce_baseline_sql.sql) already covers these
     // new columns, since they are written once at INSERT and the app holds no UPDATE.
     /** This entry's own hash — `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
-    entryHash: text("entry_hash").notNull(),
+    entryHash: label("entry_hash").notNull(),
     /** The predecessor's `entry_hash`; null on the genesis entry (hashed as empty). */
-    prevEntryHash: text("prev_entry_hash"),
+    prevEntryHash: label("prev_entry_hash"),
     /** The 1-based position within this (node, location) chain — `workforce_chains.sequence_no`
      * advanced by one. Contiguous and ours, and the position the tamper-evidence hash commits to. */
-    sequenceNo: integer("sequence_no").notNull(),
+    sequenceNo: count("sequence_no").notNull(),
     /** The genesis marker: exactly the first entry of a chain. NOT the mutable "current head" — that
      * is `workforce_chains.last_entry_id`. Named for the fiscal precedent's `primer_registro` shape
      * (first record), whose CHECK this mirrors below. */
-    isFirstEntry: boolean("is_first_entry").notNull(),
+    isFirstEntry: flag("is_first_entry").notNull(),
   },
   (t) => [
     // Array `foreignKey({...})` form throughout — see employments.ts for why the thunk form hurts

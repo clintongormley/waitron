@@ -96,10 +96,13 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * copying either shape, rather than looking for a rule here.
  *
  * This pair is for a NEW column. Every existing text column that already carried a hand-written
- * `check()` stays as `label()` beside its untouched constraint as the rollout reaches its package,
- * and the reason is NOT one reason for all of them. The two reasons below are the ones met so far;
- * the list of columns each covers grows with the rollout, so read it as a property and not as a
- * roll-call.
+ * `check()` LISTING ITS PERMITTED VALUES stays as `label()` beside its untouched constraint as the
+ * rollout reaches its package, and the reason is NOT one reason for all of them. The two reasons
+ * below are the ones met so far; the list of columns each covers grows with the rollout, so read it
+ * as a property and not as a roll-call. A checked text column whose check is NOT a value set — a
+ * pattern, a length, a range — is not in that group at all, because the substitution was never
+ * available there, and those columns carry no comment: `payments.card_last4` and `persons`'s
+ * length-checked columns are the shape.
  *
  * For three columns in THIS package it is measured. `enumCheck` joins its values with `", "`, so on
  * a constraint written without those spaces the substitution changes the DDL: made on

@@ -661,15 +661,18 @@ Three of them are named for what the column MEANS, matching the file's existing
 integer helpers are not, and that is on purpose. `smallCount` and `bigCount` spell the SQL WIDTH out
 in prose, because the width is the only thing that separates them from the `count` helper the file
 already has, and there is no one meaning they could be named after instead. The `smallint` columns in
-the tree are not counts of anything: `packages/workforce/src/schema/availability.ts:32` is
-`weekday: smallint("weekday").notNull()`, a day of the week, and
-`packages/db/src/schema/dining-tables.ts:59-62` hold `pos_x`, `pos_y` and `rotation` — a position on
-a floor plan and an angle. The `bigint` columns are no more alike than that:
-`packages/db/src/schema/catalogue.ts:32` is a catalogue version,
-`packages/db/src/schema/node-membership.ts:33` is a membership term and
+the tree are not counts of anything: `availability.weekday` in
+`packages/workforce/src/schema/availability.ts` is a day of the week, and `dining_tables`'s `pos_x`,
+`pos_y` and `rotation` in `packages/db/src/schema/dining-tables.ts` are a position on a floor plan
+and an angle. The `bigint` columns are no more alike than that: `catalogue.version` in
+`packages/db/src/schema/catalogue.ts` is a catalogue version, `node_membership.term` in
+`packages/db/src/schema/node-membership.ts` is a membership term and
 `webauthn_credentials.counter` in `packages/identity/src/schema/webauthn.ts` is a WebAuthn
-signature counter (named rather than numbered: the identity conversion moved it off line 34). Every line named here
-was opened and read on 2026-09-17. So the helper names the width and the call site keeps the meaning.
+signature counter. **Every site in this paragraph is named rather than numbered**, and that is a
+repair rather than a style: each was first cited by line number, and by 2026-09-18 four of the five
+had moved under a conversion — `packages/db`'s own for the two `dining_tables` positions and for
+both bigint sites, the workforce conversion for `availability.weekday`. Every one was re-opened and
+re-read on 2026-09-18. So the helper names the width and the call site keeps the meaning.
 
 **What each helper copies is a property to check, not a count to match.** The rule is: each helper
 emits exactly what the sites it replaces emit today, so read the spelling off the call sites rather
@@ -737,7 +740,7 @@ is the exact shape that has already cost this project three rounds of red CI: a 
 that breaks a sibling package's fixtures, which a per-task review of the `packages/db` diff and a
 typecheck scoped to the changed package both miss.
 
-- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18
+- [ ] **Step 2: Split the work by package** — `packages/db` finished 2026-09-17 (its table files, then its binary column); `packages/catalogue` finished 2026-09-17; `packages/payments` finished 2026-09-18; `packages/identity` finished 2026-09-18; `packages/workforce` finished 2026-09-18
 
 One pull request per package, in this order, so a conflict is confined: `packages/db`, then `catalogue`, `payments`, `fiscal-verifactu`, `identity`, `workforce`, `workforce-es`, `bookings`, `scheduler`, `venue-service`, `credentials`, `media`, `purchasing`, `reporting`.
 
@@ -1152,6 +1155,158 @@ reason (nothing in this package's tests walks those tables' extra-config callbac
 percentage falls because the conversion deletes covered continuation lines from the denominator.
 The whole package moves 94.99% to 94.97% the same way, and the thresholds (90/90/85/85) are met
 either way.
+
+**And the same report for `packages/workforce`, the first package in the rollout with no VALUE-SET
+check constraint anywhere in it.** Its nine table files declare nine tables holding 86 columns — 10 in
+`absences.ts`, 8 in `availability.ts`, 8 in `employments.ts`, 8 in `roster-versions.ts`, 9 in
+`shift-swaps.ts`, 8 in `shift-templates.ts`, 10 in `shifts.ts`, 18 in `time-entries.ts` and 7 in
+`workforce-chains.ts`. The column builders they used were `uuid`, `text`, `integer`, `smallint`,
+`boolean`, `date`, the two-decimal `numeric` and `timestamp`, every one of which has a vocabulary
+equivalent. There is no array column — `git grep -n '\.array()' 7ea9e9dd -- packages/workforce/src` exits 1 —
+and no `time`, `bigint`, `jsonb` or `bytea` column on either side of the diff:
+`for b in time bigint jsonb bytea; do git grep -c "\b$b(" 7ea9e9dd -- packages/workforce/src/schema;
+done` exits 1 on every one of the four, printing nothing. The base commit is named rather than written `HEAD`, because `HEAD` stops meaning the base
+tree the moment this lands.
+
+**This package uses BOTH timestamp modes, so the mode really does have to be read off each line.**
+It has sixteen timestamp columns; fifteen are string mode and one is not.
+`workforce_chains.updated_at` is written `timestamp("updated_at", { withTimezone: true })` with no
+mode at all, and drizzle's default for a timestamp is DATE mode, so it converts to `ts` while the
+other fifteen convert to `tsString`. It is the second mixed-mode package, `packages/db` being the
+first — its converted table files use both helpers, neither of them rarely. Both superlatives in
+this report were checked against the PARKED `packages/fiscal-verifactu` conversion as well as the
+landed ones, since that branch is converted even though it has not merged: it has value-set
+constraints, so workforce is still the first package with none of those, and all twelve of its
+timestamps are date mode, so it is uniform and workforce is still the second mixed one. _Stated as a property
+because the count was wrong the first time: this sentence said 37 `tsString` and 21 `ts`, counted
+with a glob that swept in `columns.test.ts`, which holds one call of each as a fixture. The run-it
+reviewer re-counted with the test files excluded and got 36 and 20._
+
+A package-wide assumption about the mode is what would get this wrong, and the step 4 probe could
+not catch it: the `ts`/`tsString` pair emits the same SQL type. The parity comparison below is what
+carries it, and the mutation that proves that comparison is exactly this substitution made in the
+wrong place.
+
+One thing the conversion did not absorb, and one carve-out that does not arise here at all.
+
+The thing it did not absorb is the six `pgEnum` columns — `absences.kind` and `absences.status`, `shift_swaps.status`,
+`roster_versions.status`, and `time_entries.entry_kind` and `time_entries.correction_status`, on six
+enum types declared in the same four files. `enumText` emits `text`, so pointing it at a database
+enum is a real schema change; those four files keep importing `pgEnum` from `drizzle-orm/pg-core`.
+
+The carve-out that does not arise is **the enum-shaped checked text column**, which is new: not one
+`check()` constraint in this package is a value set. The package DOES have two text columns whose own value a
+`check()` constrains — `time_entries.entry_hash` beside a hex pattern and `shift_templates.label`
+beside a `length(...) > 0` — and both stay bare `label()` with no comment, which is what
+`packages/payments` and `packages/identity` already do with the same shape. What the package does
+not have is the shape the `enumText`/`enumCheck` pair competes with.
+_An earlier version of this report said "no checked text column at all", which is a wider sentence
+than the experiment supports and than its own constraint list eight lines down; the convention
+reviewer caught it._ `git grep -n ' in (' 7ea9e9dd -- packages/workforce/src/schema`
+returns a single hit, and that hit is a line of prose in a comment in `shifts.ts`, not a constraint
+body. The constraints are range checks
+(`between 0 and 6`, `between -840 and 840`), ordering checks (`ends_on >= starts_on`), null-shape
+checks of the `(a is null) = (b is null)` family, a `length(...) > 0`, two `date_trunc('second', …)`
+whole-second checks and one hex pattern (`time_entries_entry_hash_ck`, `~ '^[0-9A-F]{64}$'`). None of
+them is a shape `enumCheck` could produce, so no `enumText`/`enumCheck` decision was available to
+make and none was made.
+
+**This package holds a hash chain, and that is the reason this report says more than the arithmetic.**
+`time_entries` is append-only and chained, `workforce_chains` is its head, and the chain is the
+working-time record — a legal duty, and NOT reset by a cold restore the way the fiscal chain is
+(`CLAUDE.md` §5). It is nevertheless not the FISCAL chain. That one is
+`registros_facturacion` and its head `cadenas`, whose table definitions are in
+`packages/fiscal-verifactu/src/schema/` — the package whose conversion was left open for the owner
+rather than landed — while the fingerprint over them, `computeHuella`, is in `packages/verifactu`
+(`packages/verifactu/src/huella.ts:99`), which is not on step 2's rollout list at all. _An earlier
+version of this sentence put all five of the fiscal core's pieces in `packages/fiscal-verifactu`;
+three of them are not there, and it was written by paraphrasing a rule rather than by following the
+call chain._ The workforce chain is a separate, generic one in a different package again, and step
+2's list above carries `workforce` with no carve-out. Two properties make the
+conversion safe to land rather than park, and both are checkable rather than argued:
+
+- **No column here is a number held as text.** That is the trap `packages/fiscal-verifactu` carries —
+  `cuota_total` and `importe_total` are `text` because the fiscal fingerprint hashes the stored bytes,
+  so `money()` would change what is hashed. Workforce's three text-typed hash columns
+  (`time_entries.entry_hash`, `time_entries.prev_entry_hash`, `workforce_chains.last_entry_hash`) hold
+  uppercase hex digests, and `label()` emits `text`, so they are text before and text after.
+- **The digest does not read stored bytes at all.** `packages/workforce/src/chain-hash.ts` builds its
+  canonical string from typed values, and hashes the two instants as epoch milliseconds —
+  `["EventAtMs", String(Date.parse(input.eventAt))]` at `chain-hash.ts:109` and the matching
+  `RecordedAtMs` at `:111`, with the comment on `eventAt` saying so. The parity comparison below shows
+  no column's read mapping moved at all, and **the wrong mode on the hashed column is caught loudly
+  rather than silently**: measured 2026-09-18 by making exactly that mistake, `event_at` pointed at
+  `ts` instead of `tsString` fails 33 of the 47 tests in `chain.test.ts`, `clocking.test.ts` and
+  `corrections.test.ts` with `TypeError: value.toISOString is not a function` — the date-mode write
+  mapper handed a string. The control is the same three suites plus `index.test.ts` on the converted
+  tree, 57 passing. So this is a measurement, not a claim of impossibility.
+
+Verified on 2026-09-18, each with a control. The step 4 probe ran BEFORE any edit as a baseline
+(`No schema changes, nothing to migrate`, exit 0, `diff -r` silent) and after the conversion (the
+same), and the NEGATIVE CONTROL was taken in the same worktree between them: moving
+`employments.contracted_minutes_per_week` from `integer` to `smallint` made the same command write
+`0002_probe.sql` and add a journal entry. A column-by-column comparison against the base commit,
+built on drizzle's own `getTableConfig` — comparing SQL type, `columnType`, nullability, primary key,
+defaults, enum values, uniqueness and the read mapping, keyed by TABLE as well as column name —
+reported **86 columns, 0 mismatches**, cross-checked against the probe's own per-table counts, which
+print 10/8/8/8/9/8/10/18/7 and sum to the same 86. It was proved by a mutation the probe is blind to,
+and the column chosen was the one that matters most here: `time_entries.event_at` moved from
+`tsString` to `ts`. The comparison named it (`PgTimestampString` → `PgTimestamp`, the read mapping
+going from the driver's string to a `Date`) while the probe, run on the same mutated tree, printed
+`No schema changes, nothing to migrate` at exit 0 with a silent `diff -r`. So on the one column the
+chain hashes, the acceptance check this plan prescribes would not have noticed the wrong helper.
+
+A line classification then established the property the counts cannot: **every line this branch
+changes in the nine files is an import line, a column declaration or one of its continuation lines,
+the one `pgTable(` → `table(` rename on each table-opening line, or one of the two comments the
+review rewrote or added.** Everything else — every other comment, `pgEnum` declaration, `check()` body, index,
+unique, foreign key, primary key and blank line — is byte-identical on both sides, with the one
+stated normalisation that `pgTable(` is rewritten to `table(` before comparing. The count of column
+DECLARATIONS is the same on both sides file by file (10/8/8/8/9/8/10/18/7, the third independent
+reading of the same 86), even though the conversion shortens multi-line declarations onto one line.
+Proved by mutation twice: respacing `employments_contracted_minutes_ck`'s body and reversing the
+column order of `shifts_person_starts_idx` were each reported as an unclassified difference, and
+each file was then restored from a saved copy rather than with `git checkout`. The classification was run again after
+the review's comments were added, against the base commit rather than the branch tip, and reported
+exactly those comment blocks and nothing else.
+
+**The two comments are the review's doing, and each replaces something worse.** In
+`time-entries.ts` the comment above `event_at` still explained the column in terms of
+`mode: "string"`, which the conversion had just deleted from the line below it — a receipt that
+outlived the code it described, which is this repository's dominant defect. It now names `tsString`.
+In `workforce-chains.ts` the one date-mode column gained a comment saying so, because the gap there
+is real and measured: swapping `updated_at` for `tsString` leaves the chain, clocking, corrections
+and index suites at 57 passing, so nothing in the tree catches that mistake at all — nothing reads
+or writes the column from JavaScript. The same swap on `event_at` fails 33 tests. That measurement
+stays HERE and not in the comment, which carries only the invariant.
+
+**Two MORE comments were added and then removed again, and the removal is the finding.** The first
+fix wave put a line above `time_entries.entry_hash` and `shift_templates.label` — this package's two
+text columns whose own value a `check()` constrains — saying they stay plain `label()` because the
+check is a pattern or a length rather than a value set, on the reasoning that every earlier
+conversion annotates a checked text column it leaves alone. The scoped re-read of that wave
+falsified the reasoning: the earlier conversions annotate only VALUE-SET columns, and a text column
+with a pattern or length check has been left bare all along — `payments.card_last4` is one
+(`packages/payments/src/schema/payments.ts`, its `length(...) = 4` check in the same file), and
+`packages/identity/src/schema/persons.ts` holds eight more. So the comments were not following a
+convention, they were extending one to a new class in a single package while leaving the same shape
+bare in two others. They went. What stayed is the narrowing of `columns.ts`'s own sentence, which
+had claimed EVERY checked text column stays `label()` for one of the two reasons it records: it now
+says value-set checks are the group, and names the pattern/length columns as the ones outside it
+carrying no comment. _The first version of that narrowing also called `packages/workforce` "the
+first package made entirely of those", which the same re-read falsified in three separate ways; a
+correction is a new claim and this one was wrong on its first attempt._ The `columns.ts` edit is a
+one-paragraph addition to the three-file conflict the identity conversion already priced for whoever
+rebases the parked fiscal branch.
+
+Behaviour was carried by `pnpm -r typecheck` (exit 0 for the whole workspace, which is what covers
+the sibling packages that read these tables) and `pnpm --filter @waitron/workforce test:coverage`
+(exit 0, 22 files, 303 tests, no test edited). That suite is where the chain's own behaviour is
+checked — `chain.test.ts`, `chain.concurrency.test.ts`, `corrections.test.ts`, `immutability.test.ts`
+and the real-PostgreSQL `restore-continuation.pg.test.ts` all ran unedited. The package's `src/schema`
+folder reads 100% on every measure after the conversion, and the package as a whole 99.88% statements
+/ 99.45% branches / 100% functions / 99.88% lines against thresholds of 90/90/85/85
+(`packages/workforce/vitest.config.ts:44`).
 
 - [ ] **Step 4: Prove nothing changed**
 

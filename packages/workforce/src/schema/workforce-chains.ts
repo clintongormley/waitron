@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { locations, nodes } from "@waitron/db";
+import { check, primaryKey } from "drizzle-orm/pg-core";
+import { count, id, label, locations, nodes, table, ts, tsString } from "@waitron/db";
 import { timeEntries } from "./time-entries.js";
 
 /**
@@ -15,20 +15,24 @@ import { timeEntries } from "./time-entries.js";
  * `prev_entry_hash`. `last_recorded_at` is the high-water mark that keeps `recorded_at` monotonic per
  * chain (spec §4.1); it is null exactly when the pointer is.
  */
-export const workforceChains = pgTable(
+export const workforceChains = table(
   "workforce_chains",
   {
-    nodeId: uuid("node_id")
+    nodeId: id("node_id")
       .notNull()
       .references(() => nodes.id),
-    locationId: uuid("location_id")
+    locationId: id("location_id")
       .notNull()
       .references(() => locations.id),
-    sequenceNo: integer("sequence_no").notNull().default(0),
-    lastEntryId: uuid("last_entry_id").references(() => timeEntries.id),
-    lastEntryHash: text("last_entry_hash"),
-    lastRecordedAt: timestamp("last_recorded_at", { withTimezone: true, mode: "string" }),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    sequenceNo: count("sequence_no").notNull().default(0),
+    lastEntryId: id("last_entry_id").references(() => timeEntries.id),
+    lastEntryHash: label("last_entry_hash"),
+    lastRecordedAt: tsString("last_recorded_at"),
+    // `ts`, not the `tsString` every other timestamp in this package uses: this column was declared
+    // without a mode, which is drizzle's date default. Nothing in the tree reads or writes it from
+    // JavaScript, so no test catches the wrong helper here — the measurement is in the P1b workforce
+    // report in docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md.
+    updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   // Drizzle stores this extraConfig callback lazily and runs it only when something walks the table's
   // full metadata. Unlike fiscal's `cadenas.ts`, this one IS exercised inside this package's own

@@ -1,4 +1,5 @@
-import { foreignKey, index, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index, pgEnum } from "drizzle-orm/pg-core";
+import { id, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { shifts } from "./shifts.js";
 
@@ -32,27 +33,25 @@ export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
  * (`requested_by_person` must OWN `from_shift`; only `to_person` may accept) is `requestSwap` /
  * `acceptSwap`'s, not the DB's.
  */
-export const shiftSwaps = pgTable(
+export const shiftSwaps = table(
   "shift_swaps",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().defaultRandom(),
     /** The person offering the swap — must own `from_shift` (`requestSwap` enforces it). */
-    requestedByPersonId: uuid("requested_by_person_id").notNull(),
+    requestedByPersonId: id("requested_by_person_id").notNull(),
     /** The shift being offered. */
-    fromShiftId: uuid("from_shift_id").notNull(),
+    fromShiftId: id("from_shift_id").notNull(),
     /** The person the shift is offered to — the only one who may accept it. */
-    toPersonId: uuid("to_person_id").notNull(),
+    toPersonId: id("to_person_id").notNull(),
     /** The shift offered in return, if any; null for a one-sided give-away. */
-    toShiftId: uuid("to_shift_id"),
+    toShiftId: id("to_shift_id"),
     status: shiftSwapStatus("status").notNull().default("requested"),
     /** The manager who decided this swap (approve/reject), recorded when the route supplies it; null
      * while the swap is still `requested`/`accepted`. Mirrors roster_versions.published_by_person_id. */
-    decidedByPersonId: uuid("decided_by_person_id"),
+    decidedByPersonId: id("decided_by_person_id"),
     /** When the swap was decided; null until it is. Mirrors roster_versions.published_at. */
-    decidedAt: timestamp("decided_at", { withTimezone: true, mode: "string" }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    decidedAt: tsString("decided_at"),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the

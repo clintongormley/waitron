@@ -1,16 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  foreignKey,
-  index,
-  integer,
-  numeric,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index } from "drizzle-orm/pg-core";
+import { count, day, id, label, money, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -27,23 +17,21 @@ import { persons } from "@waitron/identity";
  * no Slice-2 consumer — the collective-agreement figures live in `convenio_config` (D2, packages/workforce-es).
  * A D2 slice adds an English-named reference column then, if one is needed.
  */
-export const employments = pgTable(
+export const employments = table(
   "employments",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    personId: uuid("person_id").notNull(),
+    id: id("id").primaryKey().defaultRandom(),
+    personId: id("person_id").notNull(),
     /** Ordinary weekly working time, in minutes — the overtime baseline (art. 35.5). Minutes, not hours,
      * so the projection never carries a fractional-hour rounding error. */
-    contractedMinutesPerWeek: integer("contracted_minutes_per_week").notNull(),
-    contractType: text("contract_type").notNull(),
-    startDate: date("start_date").notNull(),
+    contractedMinutesPerWeek: count("contracted_minutes_per_week").notNull(),
+    contractType: label("contract_type").notNull(),
+    startDate: day("start_date").notNull(),
     /** Null while the employment is current; set on termination (the final-settlement boundary, D3). */
-    endDate: date("end_date"),
+    endDate: day("end_date"),
     /** Tenant currency, no currency column (single-currency-per-tenant convention, `sales.total`). */
-    payRate: numeric("pay_rate", { precision: 12, scale: 2 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .notNull()
-      .defaultNow(),
+    payRate: money("pay_rate").notNull(),
+    createdAt: tsString("created_at").notNull().defaultNow(),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
