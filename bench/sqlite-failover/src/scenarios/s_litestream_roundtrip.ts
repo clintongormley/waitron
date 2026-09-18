@@ -6,10 +6,9 @@
 // establishes litestream's behaviour on the pin (plan Task 6), so that a later scenario driving the
 // loop can read its own failure as being about the loop rather than about the tool.
 //
-// The generation names are spelled out as literals rather than built from `promotion.ts`, for the
-// reason S1 states: asking the code under test where it puts its keys would hold whatever it did.
-// They follow topology §2.2's shape all the same — `gen-<term>-<node-id>` — so the keys this
-// scenario writes sit in the same space a promotion's would.
+// Nothing here drives `promotion.ts`; the generation names below are literals that follow topology
+// §2.2's `gen-<term>-<node-id>` shape, so the keys this scenario writes sit in the same space a
+// promotion's would rather than in one of their own.
 import assert from "node:assert";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,8 +40,13 @@ const DAEMON_SALES_AFTER = 2;
 /** A generation no node in this scenario ever opens, so nothing is ever streamed to it. */
 const NEVER_STREAMED_PREFIX = `${VENUE}/gen-3-box-c`;
 
-/** How long the store is given to hold a write, before the wait is reported as a failure. */
-const STORE_DEADLINE_MS = 60_000;
+/**
+ * How long the store is given to hold a write, before the wait is reported as a failure. Several
+ * times `CHILD_TIMEOUT_MS` deliberately: a deadline equal to the bound on one restore is not an
+ * outer deadline, because a single stalled child would consume the whole window and the poll would
+ * get exactly one attempt.
+ */
+const STORE_DEADLINE_MS = 120_000;
 
 type RecordedRow = { secuencia: number; payload: string };
 
@@ -118,7 +122,7 @@ async function roundtripOneShot(
   const outPath = join(dir, "one-shot-restored.db");
   await restore(bin, config, dbPath, outPath);
 
-  const restored = rowsIn(outPath, ONE_SHOT_NODE);
+  const restored = rowsIn(outPath);
   // Row by row, not a count: three rows carrying the wrong payloads would satisfy a count
   // (`CLAUDE.md` §4 — "there is a test" is an unfinished sentence).
   assert.deepEqual(
@@ -206,15 +210,19 @@ async function waitForRows(args: {
     const outPath = join(dir, `daemon-${tag}-${attempts}.db`);
     try {
       await restore(bin, config, dbPath, outPath);
-      seen = rowsIn(outPath, DAEMON_NODE);
+      seen = rowsIn(outPath);
       if (seen.length >= expected.length) {
         assert.deepEqual(seen, expected, label);
         return { rows: seen.length, attempts };
       }
     } catch (error) {
-      // Nothing uploaded yet: the restore refuses with "no matching backup files available". A
-      // refusal here is the wait, not the answer — an assertion failure is not, so it is rethrown.
+      // Nothing uploaded yet: the restore refuses with "no matching backup files available", and a
+      // refusal of THAT kind is the wait rather than the answer. Two other kinds are not, and are
+      // rethrown: an assertion failure, and a restore that had to be KILLED at its bound — that one
+      // would otherwise be reported at the deadline as "the store never held the rows", naming
+      // replication for a failure that was really a child that stopped.
       if (error instanceof assert.AssertionError) throw error;
+      if (error instanceof Error && error.message.includes("was killed after")) throw error;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -273,9 +281,14 @@ function record(dbPath: string, nodeId: string, count: number, from = 0): Record
   }
 }
 
-/** The ledger rows a database on disk actually holds, read back rather than assumed. */
-function rowsIn(dbPath: string, nodeId: string): RecordedRow[] {
-  const node = openNode(nodeId, dbPath);
+/**
+ * EVERY ledger row a database on disk holds, read back rather than assumed — not one node's rows.
+ * The id below is only what the reading handle calls itself; it filters nothing, and each database
+ * in this scenario carries exactly one node's chain. Tasks 7 and 8 restore a generation into a node
+ * under a different id, which is where a reader would otherwise trust a parameter that does no work.
+ */
+function rowsIn(dbPath: string): RecordedRow[] {
+  const node = openNode("reader", dbPath);
   try {
     return node.all<RecordedRow>(`SELECT secuencia, payload FROM records ORDER BY secuencia`);
   } finally {

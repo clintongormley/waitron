@@ -24,7 +24,10 @@ export const LITESTREAM_VERSION = "0.5.17";
  * rig makes is a restore, and the recorded runs finish one in well under a second against a local
  * container. It is a bound on a stall, not a performance budget.
  */
-const CHILD_TIMEOUT_MS = 60_000;
+const CHILD_TIMEOUT_MS = 30_000;
+
+/** How long a `replicate` daemon is given to honour SIGTERM before it is killed outright. */
+const KILL_GRACE_MS = 5_000;
 
 /** `<package>/.bin/litestream` — where `setup:litestream` puts the downloaded binary. */
 export const BUNDLED_BIN = join(
@@ -118,11 +121,16 @@ export function writeConfig(opts: {
 /**
  * The long-running `litestream replicate` daemon.
  *
- * `kill()` sends SIGTERM and `exited` resolves with the exit code, so a caller can wait for the
- * child to be gone rather than for the signal to have been sent. Every child is also registered for
- * the parent's own exit (see `children` below): the scenario kills it in a `finally`, but a runner
- * that dies outside that `finally` would otherwise leave litestream streaming to a container nobody
- * is going to stop.
+ * `kill()` asks first and insists afterwards: SIGTERM, then SIGKILL if the child is still there a
+ * few seconds later, and `exited` settles either way. Asking first is deliberate — a daemon given
+ * SIGTERM flushes what it has to the store before exiting, which is the behaviour S0 and S3 will
+ * want — but asking alone is not a bound. Measured 2026-09-18 against a stub that declines SIGTERM
+ * (`trap '' TERM`): before this escalation, `exited` was still unsettled 20 seconds after `kill()`,
+ * and the scenario's `finally` awaits it before anything stops the MinIO container.
+ *
+ * Every child is also registered for the parent's own exit (see `children` below): the scenario
+ * kills it in a `finally`, but a runner that dies outside that `finally` would otherwise leave
+ * litestream streaming to a container nobody is going to stop.
  */
 export function replicate(
   bin: string,
@@ -145,24 +153,36 @@ export function replicate(
   child.stdout.on("data", collect);
   child.stderr.on("data", collect);
 
+  let settleExit: (code: number | null) => void = () => {};
   const exited = new Promise<number | null>((resolve) => {
-    child.on("close", (code) => {
+    settleExit = (code) => {
       children.delete(child);
+      resolve(code);
+    };
+    child.on("close", (code) => {
       // A daemon that died on its own explains why every later restore saw a short database; the
       // scenario's own failure message can only say that it did.
       if (!killed && code !== 0) console.error(`litestream replicate exited ${code}: ${log}`);
-      resolve(code);
+      settleExit(code);
     });
-    child.on("error", () => {
-      children.delete(child);
-      resolve(null);
-    });
+    child.on("error", () => settleExit(null));
   });
 
   return {
     kill() {
       killed = true;
       child.kill("SIGTERM");
+      const escalation = setTimeout(() => {
+        child.kill("SIGKILL");
+        // Settled here for the reason `run()` records: `close` fires when the stdio pipes close, not
+        // when the process dies, so a killed child whose own children hold those pipes never
+        // produces it. The pipes are destroyed too, or their open handles keep the event loop alive
+        // and the RUNNER never exits even though every promise has settled.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        settleExit(null);
+      }, KILL_GRACE_MS);
+      escalation.unref();
     },
     exited,
   };
@@ -255,7 +275,9 @@ function childEnv(config: string): NodeJS.ProcessEnv {
 }
 
 /**
- * Every child this module waits on is bounded, and the bound is here rather than at each caller.
+ * Every one-shot litestream call is bounded here rather than at each caller. (`replicate`'s daemon
+ * is deliberately not: it runs until the scenario kills it, and its own bound is the escalation in
+ * `kill()`.)
  *
  * A caller's own deadline cannot help: a loop that re-checks the clock each time round never gets
  * back to the check while it is awaiting a child that has stopped making progress. Measured
@@ -286,6 +308,11 @@ function run(
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGKILL");
+      // The pipes are destroyed as well as the child killed. A SIGKILL settles this promise but does
+      // not close a pipe a surviving grandchild still holds, and an open pipe handle keeps Node's
+      // event loop alive — so the scenario would report its verdict and the runner would never exit.
+      child.stdout.destroy();
+      child.stderr.destroy();
       // Settled here rather than waiting for `close`, which fires when the STDIO PIPES close, not
       // when the process dies — a killed child whose own grandchildren inherited those pipes keeps
       // them open and `close` never arrives. Measured 2026-09-18 against a stub whose `restore` is

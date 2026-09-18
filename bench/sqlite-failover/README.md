@@ -35,8 +35,10 @@ same calls would be a result attributed to a version that never ran.
 
 ### What the `LS` foundation check does and does not drive
 
-Each of its three parts was proved by mutation on 2026-09-18 (every mutation below was applied to
-`src/litestream.ts`, the scenario re-run, and the file restored):
+Each of its three parts was proved by mutation on 2026-09-18. Most of the mutations below were
+applied to `src/litestream.ts` and the scenario re-run; the last two were not — one was scoped to the
+control inside the scenario file, and one replaced the binary itself with a stub. Every file was
+restored afterwards.
 
 - a `syncOnce` that returns without spawning → the one-shot part fails on "uploaded nothing under
   venues/v1/gen-1-box-a", which is also what a `writeConfig` that ignores its `prefix` fails on;
