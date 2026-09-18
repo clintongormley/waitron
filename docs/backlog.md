@@ -2390,7 +2390,7 @@ wrong helper on a hashed column is loud rather than silent. The one place it wou
 `workforce_chains.updated_at`, which nothing reads or writes from JavaScript; that column now carries
 a comment saying so.
 
-**`packages/workforce-es` is the ninth pull request** — one table file, one table, 20 columns, no
+**`packages/workforce-es` is the ninth pull request (#402)** — one table file, one table, 20 columns, no
 schema change. It is the first package in the rollout with no `text` column at all, so the converted
 file calls `label()` nowhere; it is the second in a row with no `enumText`/`enumCheck` decision to
 make, for a different reason from `packages/workforce`'s (that one has text columns but no value-set
