@@ -5,8 +5,8 @@
  *
  * Every value the report below carries is a fact about MinIO on the tag `store.ts` pins, established
  * by running the probe; the claims about anything else name their source. Re-running this against
- * whichever store Waitron Cloud eventually picks is an obligation the results note (plan Task 10)
- * will record — that note does not exist yet.
+ * whichever store Waitron Cloud eventually picks is a standing obligation, recorded as one in
+ * `docs/research/2026-09-16-sqlite-failover-prototype.md`.
  */
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import type { PutObjectCommandOutput } from "@aws-sdk/client-s3";
@@ -18,8 +18,8 @@ const RACERS = 8;
 /**
  * What the store did with a compare-and-swap PUT. Three outcomes rather than a boolean because
  * "refused a stale ETag" and "we never got an answer" are different facts, and the results note
- * (plan Task 10) will transcribe this value: a boolean would let a reader take a store that errored
- * for a store that accepts stale ETags.
+ * transcribes this value: a boolean would let a reader take a store that errored for a store that
+ * accepts stale ETags.
  */
 export type IfMatchObservation = "refuses-stale" | "accepts-stale" | "not-established";
 

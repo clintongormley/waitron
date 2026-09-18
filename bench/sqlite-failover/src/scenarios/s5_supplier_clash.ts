@@ -19,8 +19,8 @@
 // apply turns out not to need, are in the README section "What S5 measures, and the savepoint it
 // does not need".
 //
-// Like S2 and unlike the rest, this scenario takes no `ScenarioContext`: the ship it models happens
-// between two in-memory SQLite databases, so it starts no MinIO container and opens no object store.
+// Like S2 and RUNNER, this scenario takes no `ScenarioContext`: the ship it models happens between
+// two in-memory SQLite databases, so it starts no MinIO container and opens no object store.
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {

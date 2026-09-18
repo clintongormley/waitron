@@ -289,7 +289,9 @@ throwaway rig that must not enter CI's test shards":
 
 - **`bench/sqlite-failover`** — a private workspace package (`"private": true`, `type: module`), with
   scripts `scenarios` (runs S0–S6, prints a per-scenario PASS/FAIL/MEASURED table, exits non-zero only
-  on a **critical** failure — §7), `setup:litestream` (added 2026-09-18: downloads the pinned litestream
+  on a **critical** failure — §7) *(2026-09-19, as landed: the table is TEN rows — a litestream
+  foundation check, a smoke check and a `RUNNER` self-check sit beside S0-S6 — and `--json` prints the
+  same run as one parseable document; see §8's note)*, `setup:litestream` (added 2026-09-18: downloads the pinned litestream
   release into a gitignored `.bin/`) and `typecheck`. **No `test` script and no `*.test.ts`**, so no CI
   job and no pre-push step ever runs a SCENARIO. That is not the same as CI never seeing the package:
   it stays a workspace member the shard filters and the root guard suite read by name, which is why it
@@ -320,7 +322,10 @@ exists to produce.
   is a *recorded outcome*, not a failing test to fix or a blocked item to retry. The runner records
   every scenario's PASS/FAIL/MEASURED in the results note and lands the note plus the rig.
 - **A critical-scenario failure STOPS the campaign.** If S0, S1, S2, S3 or S6 fails (the fiscal-safety
-  and restorability scenarios), the loop's premise is broken and continuing slice 1 would build on a
+  and restorability scenarios) *(2026-09-19, as landed: `RUNNER`, the runner's own self-check, is
+  marked critical too — for a different reason, that a wrong exit rule makes every other row's
+  reporting untrustworthy; and the runner has always treated a scenario that THROWS as critical
+  whatever its id)*, the loop's premise is broken and continuing slice 1 would build on a
   hole. The runner writes a loud summary to the campaign log and `touch`es the STOP sentinel, leaving
   the owner a `needs-owner-review` note — it does **not** grind on slice-1 items. *(2026-09-17, after
   S2 did exactly this: the stop is what the exit code buys, and the note is where the campaign hands
@@ -349,7 +354,17 @@ exists to produce.
   Part D and Part E's second half — measures and feeds the verdict instead of asserting, so the
   verdict is read off the measurement rather than off a passing assertion.)*
 - Run: `pnpm --filter @waitron/bench-sqlite-failover scenarios` (Docker up). Prints the table, writes
-  the results note's data, exits non-zero only on a critical failure.
+  the results note's data, exits non-zero only on a critical failure. *(2026-09-19, as landed: the
+  note is written and lives at `docs/research/2026-09-16-sqlite-failover-prototype.md`. Three things
+  this section and §6 now describe too narrowly. The runner's table is **ten** rows, not S0-S6: the
+  litestream foundation check, a smoke check and a `RUNNER` self-check sit beside them. "Writes the
+  results note's data" is a `--json` flag, which prints the same run as one parseable document
+  carrying the rows verbatim, the ids of the critical failures and the exit code. And the critical
+  set is §7's five **plus `RUNNER`** — a wrong exit rule makes every other row's reporting
+  untrustworthy, which is a different reason from the fiscal-safety one, and the runner already
+  treated any THROWING scenario as critical whatever its id. The gate's result: every critical row
+  PASSes but S2, whose FAIL is the gate's answer; `scenarios` exits 1 on a clean tree for that
+  reason.)*
 - Concurrency: the rig runs its own containers (a store, possibly Litestream) and several node
   processes; it must not be launched beside another session's Docker-heavy or browser run (`CLAUDE.md`
   §2, §4 — measured headroom, never a count). The campaign wrapper serialises firings, so within the

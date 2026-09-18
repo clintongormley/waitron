@@ -760,7 +760,23 @@ who raised this — it is a new measurement, and it must be taken against instan
 ### 12.2 The gate that stands: prove the failover loop end to end
 
 Unchanged, and not optional. Retiring §12.1 was a decision about cost; this one is about whether the
-mechanism works at all. Five of §13's risks name it as their check: 2 (the tail shipper's
+mechanism works at all.
+
+*(2026-09-19: this gate has been RUN. The rig is `bench/sqlite-failover` and the results are
+`docs/research/2026-09-16-sqlite-failover-prototype.md`. Every scenario named below passes or measures
+except the tail-ship one — risk 2 — which FAILS. **Read what fails carefully, because it is not the
+shape this section names:** the retried-in-full ship §12.2 asks about is SAFE, thirteen sales filed and
+none twice. What files a sale a second time is a hand-over RECOMPUTED against a refreshed view of the
+receiver, and one taken while the sender is part-way through filing — neither of which this section
+names. The results note reads that down against the real endpoint, which refuses a record it already
+holds. The store check below was run against MinIO only, so the obligation this section states — "on
+the actual store Waitron Cloud will use, and on any self-host target" — is NOT discharged and is
+carried forward as a standing obligation. Two further results for whoever reads this section before
+designing slice 2: risk 9 is stated as conditional on `wal_autocheckpoint = 0` and it is NOT — with an
+offline litestream attached, dropping that pragma changes nothing — and while a daemon is attached AND
+cannot reach its store, the log's space cannot be reclaimed at all, our own
+`PRAGMA wal_checkpoint(TRUNCATE)` blocking for seconds and moving nothing. A daemon that CAN reach the
+store checkpoints the log itself, so the log never grows that far.)* Five of §13's risks name it as their check: 2 (the tail shipper's
 double-submit), 6 (promotion discipline and generation naming), 8 (copy-up propagating deletions),
 9 (an offline stretch with `wal_autocheckpoint = 0`) and 11 (the store's conditional write).
 

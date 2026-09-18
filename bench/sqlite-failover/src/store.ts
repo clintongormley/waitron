@@ -5,9 +5,8 @@
  *
  * MinIO stands in for the production store, which is not chosen yet (spec §5), so what S6
  * (`store-cas.ts`) establishes about conditional writes is a fact about MinIO on the pin below.
- * Re-running that against whatever store Waitron Cloud picks is an obligation the results note,
- * `docs/research/2026-09-16-sqlite-failover-prototype.md` (plan Task 10), will record; that note does
- * not exist yet.
+ * Re-running that against whatever store Waitron Cloud picks is a standing obligation, recorded as
+ * one in `docs/research/2026-09-16-sqlite-failover-prototype.md`.
  */
 import {
   CreateBucketCommand,
