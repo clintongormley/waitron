@@ -177,11 +177,18 @@ export default async function copiedReplica({
         `same-lineage-stale=${sameLineage.stale} same-lineage-rows=${sameLineage.rows} same-lineage-additive="${sameLineage.outcome}"`,
     };
   } finally {
-    // The store is stopped FIRST, for the reason `s_smoke.ts` records: a throw ahead of `stop()`
-    // would leave the MinIO container running, and `pnpm reap` ignores a container younger than two
-    // hours, so nothing would clear it for the rest of the session.
-    await store.stop();
-    if (dir) rmSync(dir, { recursive: true, force: true });
+    try {
+      // The store is stopped FIRST, for the reason `s_smoke.ts` records: a throw ahead of `stop()`
+      // would leave the MinIO container running, and `pnpm reap` ignores a container younger than
+      // two hours, so nothing would clear it for the rest of the session.
+      await store.stop();
+    } finally {
+      // The order above is unchanged; what the nesting adds is that the directory goes EITHER WAY. A
+      // `stop()` that rejects would otherwise skip the removal, which is the shape
+      // `s4_offline_load.ts` carried until 2026-09-18 — injecting a rejecting `stop()` there left
+      // the temporary directory behind — and `s0_happy_loop.ts` states the rule.
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
   }
 }
 

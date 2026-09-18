@@ -686,12 +686,15 @@ quietly assumes finer granularity than Litestream gives.
   driven that load — 7500 sales with `wal_autocheckpoint = 0` and a Litestream daemon pointed at a
   closed port. **The latency half holds; the WAL half does not.** The commit did not slow as the WAL
   grew — p95 0.312ms and p99 0.436ms against the 150ms/400ms bars, the last modelled day's p95 below
-  the first's — but the WAL grew linearly at about 41KB a sale to 310MB, which is roughly 104 days of
-  offline trading per GiB at an assumed 250 sales a day: bounded by how long the box stays offline,
-  not by a size. The sentence about our own process is now measured rather than hypothetical: one
-  `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection took SECONDS — 6776.9ms to 12412.2ms
-  over ten runs — and came back `busy=1` with the WAL untouched while the daemon held the database,
-  against MILLISECONDS with the daemon killed (4.2ms to 48.6ms over ten). The gap is what
+  the first's — but the WAL grew to 310MB, about 41KB a sale averaged over the run, which is roughly
+  104 days of offline trading per GiB at an assumed 250 sales a day: bounded by how long the box
+  stays offline, not by a size. What that growth's SHAPE is stays open — S4 drives ONE load size, and
+  the only comparison this rig has run across sizes was run at a different SQLite page size, so
+  nothing here says the growth is linear. The sentence about our own process is now measured rather
+  than hypothetical: one `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection took SECONDS —
+  6776.9ms to 12412.2ms across the runs the README lists — and came back `busy=1` with the WAL
+  untouched while the daemon held the database, against MILLISECONDS with the daemon killed (4.2ms to
+  48.6ms across the runs listed there). The gap is what
   reproduced, and the pairs those runs allow span 139x to 2955x — two to three orders of magnitude;
   no single duration reproduced at all. Two
   narrowings. The sale taken straight after that blocked checkpoint still committed in 0.241ms on
@@ -838,10 +841,12 @@ From the discussion note §7, plus what the design added:
    would make the same-lineage half unsafe. §4.4 carries the detail.)*
 9. **A long offline stretch with `wal_autocheckpoint = 0`** could grow the WAL unbounded and put our own
    process on the sale path (§10 finding 8) — the prototype's multi-day offline check bounds it. *(2026-09-18, run: S4 measured both halves, and
-   they came out differently. The WAL does grow without a bound of its own — about 41KB a sale,
-   linear, roughly 104 offline days per GiB at an assumed 250 sales a day. "Our own process on the
+   they came out differently. The WAL does grow without a bound of its own — about 41KB a sale
+   averaged over the run, roughly 104 offline days per GiB at an assumed 250 sales a day; S4 drives
+   one load size, so it establishes nothing about the SHAPE of that growth. "Our own process on the
    sale path" landed narrower than the words suggest: an explicit checkpoint blocked for seconds —
-   6776.9ms to 12412.2ms over ten runs, and no single duration reproduced — while the sale
+   6776.9ms to 12412.2ms across the runs the README lists, and no single duration reproduced — while
+   the sale
    immediately after it took 0.241ms on the recorded run, and no sale was attempted during the
    block. The
    condition in this line is also not what drives the outcome — with an offline daemon attached the

@@ -494,7 +494,8 @@ PostgreSQL-only tests converted or deleted. Depends on every prepare item. **Own
    Litestream daemon pointed at a closed port: commit p50 0.128ms, p95 0.312ms, p99 0.436ms, max
    1.583ms on the recorded run, against the pglite bench's 150ms and 400ms bars, and the WAL grew
    about 41KB a sale to 310MB. Two limits on reading it: the percentiles move with the machine
-   (p95 0.297–0.333ms over five runs), and what was driven is the prototype's own five-table model
+   (p95 0.297–0.333ms across the offline-arm runs the README lists), and what was driven is the
+   prototype's own five-table model
    in SQLite, not this design's schema. `bench/sqlite-failover/README.md` → "What S4 measures, and
    what it does not".)*
 5. **`main` has no failover between slice 1 and slice 3** (§1). Accepted, because Waitron is

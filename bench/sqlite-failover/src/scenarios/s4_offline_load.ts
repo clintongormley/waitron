@@ -84,7 +84,9 @@ const MAX_P99_MS = 400;
  * The WAL ceiling, and it is a STATED ceiling and not a derived one. Nothing in this repository
  * records the appliance's partition size, so this is NOT a disk guarantee and must not be read as
  * one. What it bounds is an AVERAGE — peak WAL divided by `SALES`, over the whole run — and it sits
- * well above what a commit in this model's schema costs, about 41KB a sale on the recorded runs.
+ * well above what a commit in this model's schema costs — about 40.3KiB a sale on the recorded runs,
+ * which is 41,271 bytes. The measured cost is given in KiB deliberately, so that it and the 64
+ * below are the same unit: read as "41KB against 64KiB" the two are not comparable.
  *
  * It does NOT establish the SHAPE of that growth, and must not be read as doing so. Measured
  * 2026-09-18 on this rig with SQLite's page size set to 8192 and everything else identical: 2500
@@ -167,7 +169,12 @@ type Load = {
    * per sale, so it is what each arm actually COMMITTED as opposed to attempted.
    */
   rows: number;
-  /** Rounds whose idle pause left the main database file larger — where a checkpoint moves pages. */
+  /**
+   * Rounds that left the main database file larger — where a checkpoint moves pages TO. The window
+   * is the WHOLE round: the size is read at the top, before the round's sales, and compared after
+   * its idle pause. So it says a checkpoint happened somewhere in the round, not that it happened
+   * during the idle.
+   */
   checkpointRounds: number;
 };
 
@@ -213,12 +220,12 @@ export default async function offlineLoad({
   try {
     const offline = await runOfflineArm(litestream?.bin, dir);
 
-    // The plateau comparison below is satisfied by a control that did no work at all — a smaller
-    // peak is what it asks for — so what each arm COMMITTED is asserted first. Measured 2026-09-18,
-    // `recordSale` removed from the control arm alone, its daemon and pauses and readings left
-    // alone: the scenario still returned MEASURED with `breaches=none`, the empty control reading
-    // `peak-wal=16512 … store-keys=3 checkpoint-rounds=0/15 p95-ms=0`. Store keys do not catch it
-    // either — an empty database still produced three.
+    // Each arm is made to show what it COMMITTED, because the plateau comparison further down is
+    // satisfied for free by a control that did no work at all — a smaller peak is exactly what it
+    // asks for. Measured 2026-09-18, `recordSale` removed from the control arm alone, its daemon and
+    // pauses and readings left alone: the scenario still returned MEASURED with `breaches=none`, the
+    // empty control reading `peak-wal=16512 … store-keys=3 checkpoint-rounds=0/15 p95-ms=0`. Store
+    // keys do not catch it either — an empty database still produced three.
     assert.equal(
       offline.load.rows,
       SALES,
@@ -232,6 +239,18 @@ export default async function offlineLoad({
     if (litestream) {
       store = await startStore();
       control = await runControlArm(litestream.bin, store, dir);
+      // THE ORDER OF THESE THREE IS DELIBERATE — do not move a precondition above the comparison it
+      // guards. All three can be true at once on one broken run, and only the first to throw prints
+      // its message, so the order decides which sentence a reader sees. The plateau comparison goes
+      // first because it is the claim the whole control arm exists to test, and because the mutation
+      // recorded for it in the README — the control's daemon never started — makes all three fire
+      // together. Run both ways on 2026-09-18: with the checkpoint-rounds precondition ahead of it,
+      // that mutation printed the precondition's message and the plateau comparison and
+      // `PLATEAU_FACTOR` were left with no mutation reaching them at all.
+      assert.ok(
+        control.load.peakWalBytes * PLATEAU_FACTOR <= offline.load.peakWalBytes,
+        `with the store reachable the WAL plateaus: ${control.load.peakWalBytes} bytes against the offline arm's ${offline.load.peakWalBytes} for the same ${SALES} sales, which is under ${PLATEAU_FACTOR}x apart`,
+      );
       assert.equal(
         control.load.rows,
         SALES,
@@ -243,11 +262,7 @@ export default async function offlineLoad({
       // of 15 for the offline arm, so which way it falls is not close.
       assert.ok(
         control.load.checkpointRounds > 0,
-        `the control arm's idle left the database file larger in ${control.load.checkpointRounds} of ${ROUNDS} rounds, so nothing checkpointed and its peak of ${control.load.peakWalBytes} bytes is not a plateau`,
-      );
-      assert.ok(
-        control.load.peakWalBytes * PLATEAU_FACTOR <= offline.load.peakWalBytes,
-        `with the store reachable the WAL plateaus: ${control.load.peakWalBytes} bytes against the offline arm's ${offline.load.peakWalBytes} for the same ${SALES} sales, which is under ${PLATEAU_FACTOR}x apart`,
+        `the control arm's rounds left the main database file larger in ${control.load.checkpointRounds} of ${ROUNDS}, so nothing checkpointed and its peak of ${control.load.peakWalBytes} bytes is not a plateau`,
       );
     }
 
@@ -270,9 +285,10 @@ export default async function offlineLoad({
       title: "offline write load",
       // The verdict is read off the measurement rather than off a passing assertion, the way S2's
       // is — and a breached bar is a recorded caveat, never a stop (spec §7), so a BREACH is
-      // `critical: false`. A throw is the other path and it is not covered by that: the WAL floor,
-      // the plateau assertion, the pragma readbacks and the refusal probe all throw, and the runner
+      // `critical: false`. A THROW is the other path and it is not covered by that: the runner
       // records a scenario that throws as `critical: true` under its FILENAME (`src/scenarios.ts`).
+      // WHICH paths in this file can throw is listed once, in the README's S4 section, and is not
+      // repeated here: two copies of that list were written in one commit and neither was complete.
       verdict: breaches.length > 0 ? "FAIL" : "MEASURED",
       critical: false,
       detail:
@@ -396,8 +412,16 @@ async function runOfflineArm(bin: string | undefined, dir: string): Promise<Offl
     // destroys an SDK client nothing ever sent a command through, so nothing here survives process
     // exit. It is stopped because every other `Store` in the rig is stopped in a `finally`, and
     // because `unreachable-store.ts` wrote that `stop()` for this caller.
-    if (unreachableStore) await unreachableStore.stop();
-    node.close();
+    //
+    // It gets its own `finally` for the reason `s0_happy_loop.ts` writes down one level further in:
+    // a `stop()` that rejects would otherwise skip `node.close()` and replace whatever the `try`
+    // threw. The whole case for making this call is that it costs nothing, so it must not be able to
+    // cost the SQLite handle.
+    try {
+      if (unreachableStore) await unreachableStore.stop();
+    } finally {
+      node.close();
+    }
   }
 }
 
@@ -458,7 +482,9 @@ async function driveLoad(node: NodeDb, dbPath: string): Promise<Load> {
     await sleep(IDLE_MS);
     peakWalBytes = Math.max(peakWalBytes, walBytes(dbPath));
     // The main database file growing is where a checkpoint moves pages TO, so it is the cheapest
-    // evidence that one happened at all. It counts rounds and decides nothing.
+    // evidence that one happened at all. It counts rounds and decides nothing. `dbBefore` was read
+    // at the TOP of the round, so the window covers the round's sales as well as its idle — the
+    // attribution is not part of what is measured, and the message must not claim it.
     if (statSync(dbPath).size > dbBefore) checkpointRounds += 1;
   }
 

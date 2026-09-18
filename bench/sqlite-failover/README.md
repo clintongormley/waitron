@@ -582,10 +582,31 @@ S4 is the multi-day offline write load. It asks what a box does to its own WAL, 
 wait, while litestream cannot reach the store and `wal_autocheckpoint = 0` leaves nobody else to
 checkpoint — topology design §13's risk 9 and §10's finding 8. It is a MEASUREMENT (spec §7): its
 verdict is `MEASURED` unless a stated bar is breached, and a BREACH is `FAIL` with `critical: false`,
-which stops nothing. A THROW is the other path and it is not covered by that sentence: S4's WAL
-floor, its two committed-volume assertions, its checkpoint and plateau assertions and its pragma
-readbacks all throw, and the runner records a scenario that throws as a critical FAIL under its
-filename — so each of those does stop the run.
+which stops nothing. A THROW is the other path and it is not covered by that sentence: the runner
+records a scenario that throws as a critical FAIL under its FILENAME, so every path below does stop
+the run.
+
+**This is the one list of them.** `s4_offline_load.ts` points here rather than restating it: two
+lists of these paths were written inside a single commit, they disagreed, and both were short.
+
+- either arm, whenever a litestream daemon is started: `waitForAttach`'s deadline, 30 seconds with
+  no sidecar directory beside the database, which is a daemon that never attached;
+- either arm: the two pragma readbacks — `journal_mode` is `wal`, `wal_autocheckpoint` is 0;
+- the offline arm: `createUnreachableStore`'s refusal probe, which will not hand back an
+  "unreachable" store whose port accepted a connection;
+- the offline arm: the WAL floor, at least one SQLite page a sale;
+- the offline arm: it committed all 7500 `records` rows its load drives;
+- both arms together: the plateau comparison, `PLATEAU_FACTOR`;
+- the control arm: it committed the same 7500;
+- the control arm: at least one of its fifteen rounds checkpointed.
+
+The last three are listed in the order the file runs them, and that order is deliberate — only the
+first assertion to throw prints its message, and `s4_offline_load.ts` says why the plateau comparison
+goes ahead of its own two preconditions.
+
+A run without the pinned binary drops the daemon, the control arm and the container, so only three of
+those are reachable in it: the pragma readbacks, the WAL floor and the offline arm's row count — see
+"Without the pinned binary" below.
 
 **The volume mapping, and the assumption inside it.** `SALES_PER_DAY = 250` and `DAYS = 30`, so 7500
 sales. **250 a day is an ASSUMPTION and not a measurement** — nothing in this repository records the
@@ -613,7 +634,10 @@ day, and litestream documents no such number.
 - Peak WAL ≤ 64KiB a sale is a **stated ceiling and not a derived one**. Nothing in this repository
   records the appliance's partition size, so it is not a disk guarantee and must not be read as one.
   What it bounds is an AVERAGE: the run's peak WAL divided by its sale count, and it sits well above
-  what a commit costs in this model's schema (about 41KB a sale). It establishes **nothing about the
+  what a commit costs in this model's schema — about **40.3KiB** a sale, which is 41,271 bytes on the
+  recorded run. That figure is given in KiB so that it and the ceiling are the same unit: read as
+  "41KB against 64KiB" the two are not comparable, and elsewhere in this file the same quantity is
+  written 41KB in decimal. It establishes **nothing about the
   SHAPE of that growth**, and the earlier wording here — that a breach meant super-linear growth
   rather than growth — was falsified by running it. With SQLite's page size set to 8192 and
   everything else identical (2026-09-18), the same load gave 194,489,184 WAL bytes at 2500 sales,
@@ -632,15 +656,27 @@ passed by two to three orders of magnitude. The WAL reaches 309,531,512 bytes �
 
 **Which of these numbers move, measured rather than guessed.** The run above is one of several taken
 on this machine in this shape, by two people and a review seat, and they do not agree to the digit.
-The **per-sale WAL rate is the stable one**: 41,237, 41,271, 41,317, 41,347, 41,353, 41,379, 41,387,
-41,413 — eight runs spanning 176 bytes, which is 0.43% of the smallest, and that is why the ceiling
-is expressed per sale. The **latency percentiles move with the machine**: over five runs of the
-OFFLINE arm, p95 between 0.297ms and 0.333ms, p99 between 0.433ms and 0.528ms, max between 1.583ms
-and 3.015ms — two to three orders of magnitude clear of the 150ms and 400ms bars, and the max has no
-bar of its own. Every one of those figures is the OFFLINE arm's, which is the thing to check before
-quoting one: the control arm's percentiles are printed separately in the same row, and its 0.244ms
-p95 belongs to that arm and not to this range. The **reclaim timings move the most** and are treated
-below. Anything quoted here as a single number is one run's figure, not a property of the rig.
+The **per-sale WAL rate is the stable one**: 41,206, 41,237, 41,271, 41,317, 41,347, 41,352, 41,353,
+41,379, 41,387, 41,413 — ten figures spanning 207 bytes, which is 0.50% of the smallest, and that is
+why the ceiling is expressed per sale. That spread is itself a number to distrust: it was written
+here as "176 bytes, 0.43%" over nine figures and the very next run, 41,206, widened it. The
+**latency percentiles move with the machine**: over seven runs of the OFFLINE arm, p95 between
+0.297ms and 0.333ms, p99 between 0.433ms and 0.528ms, max between 1.583ms and 4.426ms — two to three
+orders of magnitude clear of the 150ms and 400ms bars, and the max has no bar of its own.
+
+**Ten against seven is not a counting slip: the two lists are not the same set of runs.** One of the
+three extra per-sale figures is identified — 41,413 came from the injected-stall mutation listed at
+the end of this section, which the first draft of this paragraph (commit `c593a58a`) labelled, with
+41,189, as "under two mutations that do not touch the write path". That run's p95 of 0.174ms and p99
+of 450.105ms describe the injected stall rather than this rig, so they are left out of the range
+above deliberately. The other two are NOT identified: the record does not say which run produced
+which figure, so the lists cannot be paired run by run and neither is a sample of the other. Read
+each as a spread and nothing more.
+
+Every one of those figures is the OFFLINE arm's, which is the thing to check before quoting one: the
+control arm's percentiles are printed separately in the same row, and its 0.244ms p95 belongs to that
+arm and not to this range. The **reclaim timings move the most** and are treated below. Anything
+quoted here as a single number is one run's figure, not a property of the rig.
 
 **The amplification is about 80x, and the spec's illustrative ceiling is NOT met.** After the control
 checkpoint completes, the database holds 3,862,528 bytes of the 310MB the WAL held. Spec §4's S4
@@ -666,18 +702,29 @@ SHAPE: with the daemon there, `busy=1`, `checkpointed=4` against a `log` of abou
 thousand (75,129 on the recorded row, and 75,020, 75,067 and 75,341 on three others), and a WAL file
 the same size afterwards as before; with the daemon gone, `busy=0` and a WAL truncated to zero.
 **The durations are not stable and an earlier draft of this section overstated them.** It said "11.7s
-to 12.5s … every time", which the run recorded above then falsified at 6.8s. Measured so far, ten
-runs of each: blocked, 6.8s / 7.3s / 8.0s / 8.2s / 8.2s / 11.7s / 11.9s / 12.0s / 12.4s / 12.4s
-(6776.9ms at the fastest, 12412.2ms at the slowest); unblocked, 4.2ms / 5.1ms / 7.5ms / 18.0ms /
-21.0ms / 21.7ms / 22.1ms / 23.9ms / 27.0ms / 48.6ms. Three entries in each list are a review seat's
-runs of this scenario on this machine, and the 21.7ms is the without-a-binary run recorded further
-down. So the honest
-statement is **seconds against milliseconds**, and the pairs those lists allow span 139x to 2955x —
-two to three orders of magnitude, not three, and not any particular number of seconds. What the three
-numbers in that row MEAN is SQLite's business and this rig has not established it: reading `log` as a
-count of frames is an interpretation, consistent with a frame being a page plus a 24-byte header
-(309,531,512 over 4096 + 24 is 75,129) but not established here. What is READ is `busy` and the file
-sizes either side.
+to 12.5s … every time", which the run recorded above then falsified at 6.8s. Measured so far: twelve
+BLOCKED durations — 6.8s / 7.3s / 7.8s / 7.8s / 8.0s / 8.2s / 8.2s / 11.7s / 11.9s / 12.0s / 12.4s /
+12.4s, 6776.9ms at the fastest and 12412.2ms at the slowest — and twelve UNBLOCKED ones — 4.2ms /
+5.1ms / 7.5ms / 14.9ms / 18.0ms / 21.0ms / 21.7ms / 22.1ms / 23.9ms / 26.8ms / 27.0ms / 48.6ms. Three
+entries in each list are a review seat's runs of this scenario on this machine.
+
+**Twelve and twelve is not twelve pairs**, and the two lists do not come from one set of runs: the
+21.7ms is the without-a-binary run recorded further down, which starts no offline daemon at all and
+so contributes an unblocked figure and no blocked one. At least thirteen runs sit behind the two
+lists, and which unblocked figure belongs with which blocked one is not recorded. So the honest
+statement is **seconds against milliseconds**. The pairs those lists ALLOW span 139x to 2955x — two
+to three orders of magnitude, not three, and not any particular number of seconds — but a pair taken
+from lists this loosely joined is a bound on the gap and not a measurement of it; the pairs that
+certainly come from ONE run are tighter — 903.6x on the run recorded above (6776.9ms against 7.5ms),
+and 521.9x and 291.1x on the two clean runs taken while this section was being corrected (7775.6ms
+against 14.9ms, 7801.2ms against 26.8ms). One decimal place, because 6776.9/7.5 is 903.59 and both
+"903x" and "904x" have been written for it.
+
+What the three numbers in that row MEAN is SQLite's business and this rig has not established it:
+reading `log` as a count of frames is an interpretation. It is an EXACT fit, which is worth stating
+and is still not evidence — a WAL frame is a page plus a 24-byte frame header and the WAL file
+carries a 32-byte header of its own, so 32 + 75,129 x (4096 + 24) is 309,531,512, the WAL byte count
+to the byte. What is READ is `busy` and the file sizes either side.
 
 **Two things that pair does not show.** It does not show what a SALE would have done during the
 seconds the checkpoint was blocked: this rig is one process and the checkpoint is synchronous, so no
@@ -768,8 +815,10 @@ counts stayed EQUAL to each other, which is what S3 asserts. That comparison was
 whole-suite runs taken from this branch.
 
 `offline-checkpoint-rounds=0/15` against the control's `checkpoint-rounds=15/15` is the pair to read
-first: it counts the rounds whose idle left the main database file larger, which is where a
-checkpoint moves pages to.
+first: it counts the rounds that left the main database file larger, which is where a checkpoint
+moves pages to. The window is the WHOLE round — the size is read at the top, before the round's five
+hundred sales, and compared again after the idle — so what it reports is that a checkpoint happened
+somewhere in the round, not that it happened during the idle.
 
 **The red was watched on the module import, not through the runner.** With the scenario written and
 `src/unreachable-store.ts` absent,
@@ -779,11 +828,15 @@ The runner reports a scenario that throws under its FILENAME with `error.message
 (`src/scenarios.ts`), so that is the string its row would have carried — read off the runner, not
 run.
 
-Every assertion and both bars were then put to mutation, each applied on its own and the scenario run
-whole, with the files restored from copies kept outside the repository afterwards (2026-09-18). The
-mutations that END IN A THROW — every one below except the stall and the deleted pragma — are
-reported by the runner as `s4_offline_load … FAIL critical=true` under the filename, not as an S4
-row:
+Every assertion in the throw list above except `waitForAttach`'s deadline was then put to mutation,
+along with the two latency bars, each mutation applied on its own and the scenario run whole, with
+the files restored from copies kept outside the repository afterwards (2026-09-18). Two things have
+NO mutation of their own, and naming them is cheaper than a completeness claim this list does not
+support: `waitForAttach`'s 30-second deadline, and the per-sale WAL CEILING — no mutation drove
+`wal-bytes-per-sale` over 64KiB through the scenario, though the 8192-byte page-size probe recorded
+above sat over that ceiling from end to end, at 77-78KB a sale. The mutations that END IN A THROW —
+every one below except the stall and the deleted pragma — are reported by the runner as
+`s4_offline_load … FAIL critical=true` under the filename, not as an S4 row:
 
 - **the `wal_autocheckpoint = 0` pragma and its readback deleted → NOTHING CHANGED**, and saying so
   is the point: `wal-bytes-per-sale=41189`, `offline-checkpoint-rounds=1/15`, verdict still MEASURED.
@@ -794,9 +847,36 @@ row:
   nothing here is measuring an offline WAL". So the floor precondition does bite, and it is what
   catches a checkpoint that happened;
 - **the control's daemon never started** → the plateau assertion fails: "with the store reachable the
-  WAL plateaus: 309659232 bytes against the offline arm's 310413192 for the same 7500 sales, which is
+  WAL plateaus: 309337872 bytes against the offline arm's 309350232 for the same 7500 sales, which is
   under 4x apart". Without the daemon nothing checkpoints, the two arms land on the same number, and
-  the control is what refuses that;
+  the control is what refuses that. Those bytes are from a re-run on 2026-09-18, after the control
+  arm's three assertions were put in the order the file now has. This mutation makes all THREE of the
+  control-arm assertions true at once and only the first to throw prints, so the order decides which
+  receipt exists — run as a control on 2026-09-18 with the previous commit's order restored and the
+  same mutation applied, what came back was NOT the plateau but "the control arm's rounds left the
+  main database file larger in 0 of 15, so nothing checkpointed and its peak of 309667472 bytes is
+  not a plateau". That is why the plateau comparison goes first. The earlier run of the same mutation
+  read 309659232 against 310413192 — the shape is what reproduces, not the digits;
+- **`recordSale` removed from the control arm alone**, its daemon and pauses and readings left alone →
+  "the control arm committed 0 rows in `records` against the offline arm's 7500, so the two arms did
+  not drive the same 7500-sale load". Before that assertion existed the same mutation returned
+  MEASURED with `breaches=none`: a control that sells nothing satisfies the plateau comparison for
+  free, because a smaller peak is exactly what the comparison asks for, and its `store-keys=3` does
+  not give it away either — an empty database still produced three. Re-run on 2026-09-18 with the
+  plateau comparison moved ahead of it, and it still reaches this assertion and prints this message:
+  the empty control's peak really does pass the comparison, so the reordering costs this receipt
+  nothing;
+- **each round driving one sale fewer than the load claims**, `driveLoad`'s inner loop started at 1
+  instead of 0 → "the offline arm committed 7485 rows in `records`, not the 7500 its load drives".
+  Fifteen missing sales out of 7500 leave the WAL floor untouched, so this is the assertion that
+  catches a load which quietly shrank, and it fires in the offline arm before the store is even
+  started;
+- **the checkpoint-detection window collapsed**, `dbBefore` read after the round's idle instead of at
+  the top of the round, so the comparison is a file against itself → "the control arm's rounds left
+  the main database file larger in 0 of 15, so nothing checkpointed and its peak of 21106792 bytes is
+  not a plateau". The control still plateaued and still committed 7500 rows, so the two assertions
+  ahead of this one passed and this is the message that came back — which is what makes it reachable
+  at all;
 - **the OFFLINE arm pointed at the REACHABLE store** → "the offline arm's WAL grew 2817 bytes a sale,
   under one page…". The floor fires first, before the plateau assertion gets a chance: 2817 x 7500 is
   21.1MB, which is the control's plateau, so the arm that was supposed to be offline had plateaued;

@@ -863,14 +863,16 @@ export default async function ({ startStore }) {
 >   every run taken.
 > - **A Part C was added, and it is the most decision-relevant thing here** — risk 9's own sentence,
 >   "put our own process on the sale path". One `PRAGMA wal_checkpoint(TRUNCATE)` from our own
->   connection took **seconds** with the offline daemon running — 6776.9ms to 12412.2ms across ten
->   runs — answered `busy=1` having moved `checkpointed=4` against a `log` of about seventy-five
->   thousand, and left the WAL untouched; with the daemon killed the same statement took
->   **milliseconds** — 4.2ms to 48.6ms across ten — and truncated it to zero. What reproduced in
->   every run that reached it is that SHAPE: the pairs those two lists allow span 139x to 2955x, two
->   to three orders of magnitude, and no particular duration reproduced at all — an earlier draft of
->   this note said "11.7-12.5s every time" and a later run at 6.8s falsified it. Both lists of ten
->   are in the README section this note names at the top. It decides nothing and feeds the detail,
+>   connection took **seconds** with the offline daemon running — 6776.9ms to 12412.2ms across the
+>   runs the README lists — answered `busy=1` having moved `checkpointed=4` against a `log` of about
+>   seventy-five thousand, and left the WAL untouched; with the daemon killed the same statement took
+>   **milliseconds** — 4.2ms to 48.6ms across the runs listed there — and truncated it to zero. What
+>   reproduced in every run that reached it is that SHAPE: the pairs those two lists allow span 139x
+>   to 2955x, two to three orders of magnitude, and no particular duration reproduced at all — an
+>   earlier draft of this note said "11.7-12.5s every time" and a later run at 6.8s falsified it.
+>   Both lists live in the README section this note names at the top, which also records that they
+>   are not drawn run-for-run from the same set — so the span is a bound on the gap, not a
+>   measurement of it. It decides nothing and feeds the detail,
 >   the way S3's Part C does.
 > - **Step 5's WAL ceiling is a STATED ceiling, and the spec's illustrative one is not met.** Spec §4
 >   S4 offers "a small multiple of the streamed data"; the measured amplification is about 80x

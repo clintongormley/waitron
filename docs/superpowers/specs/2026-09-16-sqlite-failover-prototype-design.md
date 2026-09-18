@@ -234,8 +234,9 @@ to satisfy it. The scenarios map one-to-one onto topology §12.2's obligations.
   at an 8192-byte SQLite page size grew linearly and sat over that ceiling throughout, so a breach
   can equally mean a wider page or a wider schema. The scenario prints
   `spec-small-multiple-ceiling=not-met` so
-  the substitution is visible in its own row. The latency bars held with three orders of magnitude to
-  spare. `bench/sqlite-failover/README.md` → "What S4 measures, and what it does not".)*
+  the substitution is visible in its own row. The latency bars held, two to three orders of magnitude
+  clear: 481x on p95 (0.312ms against 150ms) and 917x on p99 (0.436ms against 400ms) on the recorded
+  run. `bench/sqlite-failover/README.md` → "What S4 measures, and what it does not".)*
 - **Failure means:** a **recorded caveat**, not a stop — it constrains how long a box may run offline
   and whether a periodic local checkpoint is needed, which is slice-2 design input, not a foundation
   break.
