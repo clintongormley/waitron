@@ -89,7 +89,7 @@ describe("management session lifecycle", () => {
     // end up in different database files). Before that, the constraint refused this delete. Two nets
     // produce the refusal, so breaking it takes both: measured by mutation, the inner join alone can
     // be widened to a left join and this case still passes.
-    await suite.db.execute(sql`delete from persons where id = ${personId}`);
+    await run((tx) => tx.execute(sql`delete from persons where id = ${personId}`));
 
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
     expect(code).toBe("management_session.required");

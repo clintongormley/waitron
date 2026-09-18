@@ -3336,15 +3336,19 @@ pnpm vitest run scripts/two-file-foreign-keys.test.ts
 
 Expected: FAIL, naming the crossings found in step 1. If it passes on the first run, the guard is not reading what you think — check it against a deliberately added crossing before believing it.
 
+**What it did, 2026-09-19:** failed naming all six, each with its constraint name and its direction (`local -> state`), which is also how the enumeration in step 1 was checked for completeness — two readings, the same six.
+
 - [x] **Step 4: Prove the guard by deletion**
 
 Add a temporary crossing foreign key, confirm the guard fails, remove it. `CLAUDE.md` §4: prove a guard by deletion, and confirm the negative control fails for the reason you think.
+
+**Corrected 2026-09-19, and this one matters: a crossing key added in TypeScript alone does NOT fail the guard that was built.** It reads generated snapshots, so the control has to reach one. Two were run. (a) End to end: restore `join_requests`' key to `locations` in the table file, run `pnpm --filter @waitron/db db:generate`, and the guard fails with `packages/db/drizzle: join_requests_location_id_locations_id_fk — join_requests(location_id) -> locations [local -> state]`; then delete the generated migration and snapshot and restore the journal from `HEAD`. (b) Discovery: move one head snapshot aside — `packages/identity/drizzle/meta/0002_snapshot.json` — and two tests go red, the missing-snapshot refusal and the anchor, so a set that silently dropped out cannot pass. Neither control lives in the tree, which is why the guard also carries four `negative controls` cases that feed the judgement hand-built edges in both directions; those are what survive the branch.
 
 - [x] **Step 5: Resolve each crossing**
 
 Per the topology design's §2.1, resolve by moving the column or denormalising — not by weakening the classification. A `local` session row that needs a `state` config value carries a copy of the value, not a reference to it.
 
-**Corrected while building it, 2026-09-19.** None of the six edges was resolved either of those two ways, and no classification was weakened either. All six were a `local` row naming a venue row by id — a person, a till, a location — and an id is not a value that can be copied: the reference IS the payload. So the route taken was a third one: **drop the constraint, keep the column**, and name at each site what now establishes that the id points at a real row. Five of the six take their id from a row the request had already read; the sixth, `join_requests.location_id`, is configuration checked by nothing at insert time, and its refusal moves to accept, where `devices.location_id` still holds a key to `locations`. A reader of §2.1 should expect this route as well as the two it names.
+**Corrected while building it, 2026-09-19.** None of the six edges was resolved either of those two ways, and no classification was weakened either. All six were a `local` row naming a venue row by id — a person, a till, a location — and an id is not a value that can be copied: the reference IS the payload. So the route taken was a third one: **drop the constraint, keep the column**, and name at each site what now establishes that the id points at a real row. Five of the six take their id from a row the request had already read; the sixth, `join_requests.location_id`, is configuration checked by nothing at insert time, and its refusal moves to accept, where the accepted row — `devices` for a device, `print_agents` for an agent — still holds a key to `locations`. A reader of §2.1 should expect this route as well as the two it names.
 
 - [x] **Step 6: Run the guard and the full root project**
 
@@ -3352,11 +3356,13 @@ Per the topology design's §2.1, resolve by moving the column or denormalising �
 npx vitest run scripts/two-file-foreign-keys.test.ts && npx vitest run --coverage
 ```
 
-**Corrected 2026-09-19:** this said `pnpm test:coverage`, which at the repository root is
-`vitest run --coverage && pnpm -r test:coverage` — the whole workspace, which `CLAUDE.md` §2 says not
-to add solely to finish an item. The root project is what this step wants. What was actually run on
-this branch: the root project (45 files, 3154 tests), `pnpm --filter @waitron/identity test:coverage`,
-`pnpm --filter @waitron/db test:coverage`, twelve `apps/server` suites chosen for touching the six
+**Corrected 2026-09-19:** this said `pnpm test:coverage`, which at the repository root runs the whole
+workspace — verbatim from `package.json`, `vitest run --coverage && node
+scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2 test:coverage` — and
+`CLAUDE.md` §2 says not to add that solely to finish an item. The root project is what this step
+wants. What was actually run on this branch: the root project, `pnpm --filter @waitron/identity
+test:coverage`, `pnpm --filter @waitron/db test:coverage`, `pnpm --filter @waitron/sync-enrolment
+--filter @waitron/module test:coverage`, twelve `apps/server` suites chosen for touching the six
 tables or deleting a person, `pnpm -r typecheck`, `pnpm lint` and `pnpm format:check`.
 
 - [x] **Step 7: Commit**

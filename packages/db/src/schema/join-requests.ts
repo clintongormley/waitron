@@ -24,8 +24,8 @@ export const joinRequests = table("join_requests", {
   // -> `state` would cross the two database files (guard:
   // `scripts/two-file-foreign-keys.test.ts`). Unlike the identity tables, that id is configuration
   // rather than a row this request read, and nothing checks it exists when the row is written; a
-  // misconfigured venue is refused later, when accept copies it into `devices.location_id`, which
-  // does hold a key to `locations`.
+  // misconfigured venue is refused later, when accept copies it into the accepted row — `devices` for
+  // a device, `print_agents` for an agent — both of which do hold a key to `locations`.
   locationId: id("location_id").notNull(),
   kind: joinRequestKind("kind").notNull(),
   // The name the joiner asked for. A device accept copies it to `devices.label`, an agent accept to

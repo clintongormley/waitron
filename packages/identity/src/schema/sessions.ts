@@ -13,7 +13,8 @@ export const sessions = table(
     id: id("id").primaryKey().defaultRandom(),
     // Both name rows in the VENUE's tables and carry no foreign key: `local` -> `state` would cross
     // the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The person comes back
-    // from `verifyPersonCredential` and the till from the authenticated device's registration.
+    // from `verifyPersonCredential` and the till from the authenticated device's own registration
+    // (`apps/server/src/till-api.ts`, `device.tillId`).
     personId: id("person_id").notNull(),
     tillId: id("till_id").notNull(),
     openedAt: tsString("opened_at").notNull().defaultNow(),

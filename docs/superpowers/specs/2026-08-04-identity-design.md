@@ -133,6 +133,14 @@ can adopt the composite shape the repo prefers.
 > provides the tenant-consistency the composite target was meant to give (a cross-tenant person read
 > returns `undefined` → `authorization.not_permitted`), so the extra unique bought nothing. The original
 > assertion is left above for history; the shipped schema uses single-column FKs (see also §4.2).
+>
+> **Superseded again 2026-09-19 (slice 1 task P7):** `sessions.person_id` carries no foreign key at
+> all now. The storage switch puts `sessions` in `node.db` and `persons` in `venue.db`, and a key
+> across the two files would stop either being restored on its own, so the constraint was dropped and
+> the column kept. RLS is gone too (one tenant per database, 2026-09-05). What refuses a session whose
+> person is missing is the inner join in `packages/identity/src/authorize.ts`, pinned by a case in
+> `authorize.test.ts`. Rule and guard: `CLAUDE.md` §3 and
+> [conventions-data.md](../../developers/conventions-data.md).
 
 ---
 

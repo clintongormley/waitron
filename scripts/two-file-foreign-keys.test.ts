@@ -23,19 +23,24 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
  *
  * Three gaps, stated because a failing test can never restore a missing hedge:
  *
- * 1. **A key declared in TypeScript but not yet generated is invisible to it**, and nothing asserts
- *    that `db:generate` is a no-op — on 2026-09-19 `grep -rn "db:generate" .github .husky scripts
- *    package.json` found no such check. The trade is deliberate: an ungenerated key reaches no
- *    database, while a key still live in every migrated box would have passed a reading taken from
- *    the TypeScript the moment someone edited it — which is exactly the state the two `DROP
- *    CONSTRAINT` migrations beside this guard exist to leave behind.
+ * 1. **A key declared in TypeScript but not yet generated is invisible to it**, and nothing in the
+ *    tree regenerates a migration set and diffs it, so nothing catches the gap either: searched on
+ *    2026-09-19 for every file naming drizzle-kit across `packages`, `apps`, `scripts`, `.github`,
+ *    `.husky` and `deploy`, the only suites that came back are each package's
+ *    `schema-ownership.test.ts`, which assert which tables a set creates, never that a regeneration
+ *    is a no-op. The trade is deliberate: an ungenerated key reaches no database, while a key still
+ *    live in every migrated box would have passed a reading taken from the TypeScript the moment
+ *    someone edited it — which is exactly the state the two `DROP CONSTRAINT` migrations beside this
+ *    guard exist to leave behind.
  * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not change
  *    the snapshot — and there are such keys: read on 2026-09-19, scanning each
- *    `packages/<pkg>/drizzle/` directory's SQL for `ADD CONSTRAINT … FOREIGN KEY` net of every `DROP
- *    CONSTRAINT` finds MORE live keys than the snapshots hold. What that scan agrees with the
- *    snapshots about is the answer: no crossing edge, from either reading. Nothing keeps them
- *    agreeing. (The directory is written with a placeholder because a glob's closing `*` followed by
- *    a slash would end this comment.)
+ *    `packages/<pkg>/drizzle/` directory's SQL statement by statement, applying every `ADD
+ *    CONSTRAINT … FOREIGN KEY` and subtracting every `DROP CONSTRAINT` and `DROP TABLE`, ends with
+ *    MORE keys than the snapshots hold — the extras all declared in the hand-written `*_sql.sql`
+ *    files. What that scan agrees with the snapshots about is the answer: no crossing edge, and no
+ *    unclassified endpoint, from either reading. Nothing keeps them agreeing. (The directory is
+ *    written with a placeholder because a glob's closing `*` followed by a slash would end this
+ *    comment.)
  * 3. **It judges by the table NAME.** Two tables with the same physical name in different modules
  *    would be one node in this graph; `classification-complete.test.ts` is what forbids that.
  */
@@ -73,9 +78,9 @@ function migrationSets(): string[] {
 
 /**
  * The snapshot drizzle holds for a set's HEAD. `"empty"` is a set that declares no migrations at all
- * (`packages/fiscal-none` owns no tables); `"missing"` is a set whose journal names a head whose
- * snapshot is not on disk, which would drop that set out of the check below without saying so — the
- * case the suite refuses rather than skips.
+ * (`packages/fiscal-none` owns no tables); `"missing"` is a set with no journal at all, or one whose
+ * journal names a head whose snapshot is not on disk. Either would drop that set out of the check
+ * below without saying so, which is the case the suite refuses rather than skips.
  */
 type HeadSnapshot = { kind: "file"; path: string } | { kind: "empty" } | { kind: "missing" };
 
@@ -132,26 +137,30 @@ function declaredForeignKeys(): Edge[] {
   return edges;
 }
 
-// Read once, at collection: the root project declares no `testTimeout`, so every `it` runs under
-// vitest's 5s default, and this is work that belongs to neither test in particular.
-const edges = declaredForeignKeys();
-const classes = classOfTable();
+/**
+ * What the check below says about one edge: `null` when it is fine, a message when it is not. Lifted
+ * out of the test so the negative controls at the bottom can pin that it fires — an absence
+ * assertion passes just as well when the predicate underneath it has stopped working, which is why
+ * `no-tenant-column.test.ts` carries controls of its own.
+ */
+function violationOf(edge: Edge, classes: Map<string, string>): string | null {
+  const from = classes.get(edge.from);
+  const to = classes.get(edge.to);
+  const where = `${edge.set}: ${edge.constraint} — ${edge.from}(${edge.columns.join(", ")}) -> ${edge.to}`;
+  // An unclassified endpoint is a violation, not a skip: the crossing cannot be judged without both
+  // classes, and a filter would drop the edge and pass.
+  if (from === undefined || to === undefined) {
+    return `${where} [unclassified: ${from ?? edge.from}, ${to ?? edge.to}]`;
+  }
+  return fileOfClass(from) !== fileOfClass(to) ? `${where} [${from} -> ${to}]` : null;
+}
 
 describe("the two database files are independent", () => {
   it("has no foreign key crossing between them", () => {
-    const violations: string[] = [];
-    for (const edge of edges) {
-      const from = classes.get(edge.from);
-      const to = classes.get(edge.to);
-      const where = `${edge.set}: ${edge.constraint} — ${edge.from}(${edge.columns.join(", ")}) -> ${edge.to}`;
-      // An unclassified endpoint is a violation, not a skip: the crossing cannot be judged without
-      // both classes, and a filter would drop the edge and pass.
-      if (from === undefined || to === undefined) {
-        violations.push(`${where} [unclassified: ${from ?? edge.from}, ${to ?? edge.to}]`);
-      } else if (fileOfClass(from) !== fileOfClass(to)) {
-        violations.push(`${where} [${from} -> ${to}]`);
-      }
-    }
+    const classes = classOfTable();
+    const violations = declaredForeignKeys()
+      .map((edge) => violationOf(edge, classes))
+      .filter((violation) => violation !== null);
     expect(violations.sort()).toEqual([]);
   });
 
@@ -165,10 +174,47 @@ describe("the two database files are independent", () => {
   // matched no set — would leave the check above passing, which is what a fully resolved tree looks
   // like too. So pin that the scan really read the tree.
   it("reads a real foreign-key graph, not an empty one", () => {
+    const edges = declaredForeignKeys();
     const printed = edges.map((edge) => `${edge.from} -> ${edge.to}`);
     expect(printed).toContain("sale_lines -> sales");
     expect(printed).toContain("webauthn_credentials -> persons");
     expect(edges.length).toBeGreaterThanOrEqual(100);
     expect(new Set(edges.map((edge) => edge.set)).size).toBeGreaterThanOrEqual(6);
+  });
+});
+
+/**
+ * The check above asserts an absence, which passes exactly as well when the judgement underneath it
+ * has stopped working. These feed `violationOf` edges built by hand — the real classifications, a
+ * made-up constraint — so that both answers are pinned rather than one.
+ */
+describe("negative controls", () => {
+  const classes = classOfTable();
+  const edge = (from: string, to: string): Edge => ({
+    set: "control",
+    constraint: "control_fk",
+    from,
+    columns: ["control_id"],
+    to,
+  });
+
+  it("reports a key from a node's own table into the venue's", () => {
+    // `sessions` is `local` and `persons` is `state` — the shape this branch removed six of.
+    expect(violationOf(edge("sessions", "persons"), classes)).toContain("[local -> state]");
+  });
+
+  it("reports one in the other direction too", () => {
+    expect(violationOf(edge("persons", "sessions"), classes)).toContain("[state -> local]");
+  });
+
+  it("says nothing about a key that stays inside one file", () => {
+    // Both `state`: the keys this rule leaves alone.
+    expect(violationOf(edge("webauthn_credentials", "persons"), classes)).toBeNull();
+    // Both `local`.
+    expect(violationOf(edge("sessions", "management_sessions"), classes)).toBeNull();
+  });
+
+  it("reports an endpoint no module classifies, rather than skipping it", () => {
+    expect(violationOf(edge("sessions", "not_a_table"), classes)).toContain("unclassified");
   });
 });

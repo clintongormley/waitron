@@ -45,7 +45,8 @@ export async function authorize(
   // after the storage switch (`schema/sessions.ts`) — so the row is absent when no session is open
   // and, in principle, when a session's person row has been deleted. Both read as
   // `session.not_open`, which fails closed — pinned by a case in `authorize.test.ts` that deletes the
-  // person and expects the refusal. No non-test file deletes a person today.
+  // person and expects the refusal. No non-test file deletes a person today, by grep for both the
+  // drizzle and the raw-SQL form over `packages` and `apps`.
   const [row] = await tx
     .select({ personId: sessions.personId, role: persons.role })
     .from(sessions)

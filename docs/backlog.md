@@ -3005,8 +3005,8 @@ what those keys really bought was a refusal to write a row naming something that
 **Five of the six replace that refusal with the request path, and the sixth does not.** The five
 identity ones take their id from a row the request had already read. `join_requests.location_id` does
 not: it is the node's configured location, which comes from an environment variable and is checked by
-nothing when the row is written. A misconfigured venue is now refused one step later, at accept, where
-`devices.location_id` still holds a key to `locations`. Worth knowing before someone reads the five
+nothing when the row is written. A misconfigured venue is now refused one step later, at accept, where the
+accepted row — a device or a print agent — still holds a key to `locations`. Worth knowing before someone reads the five
 and assumes the sixth.
 
 A new check in the root test project, `scripts/two-file-foreign-keys.test.ts`, fails if a crossing key
