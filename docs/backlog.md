@@ -2936,10 +2936,11 @@ asserts the row the second wrote is gone, and with the helper's body changed to
 `resetPerTest: false` exactly that case fails and the other two stay green.
 
 **The conversion is under way**, one pull request per package, fewest calling files first;
-`packages/fiscal-none` was the first, LANDED as #423 on 2026-09-19, leaving 206 files to go. Which
-files those are is a grep rather than a list here, and it needs the exclusion that drops the four
-files allowed to name either helper — the grep pair is in `docs/developers/testing-guide.md`, and it
-lists FILES, not packages and not call sites.
+`packages/fiscal-none` was the first, LANDED as #423 on 2026-09-19. How many files are left is the
+grep pair in `docs/developers/testing-guide.md`, never a number written here — a number here went
+stale in one pull request, which is the whole reason #423 took it out and this sentence is the
+second attempt at the same paragraph. The pair needs the exclusion that drops the four files allowed
+to name either helper, and it lists FILES, not packages and not call sites.
 
 #423's own lesson was about prose, not code: three rounds of correction on four sentences, each
 round's correction wrong in a new way, and the third round's reader was itself wrong about one of

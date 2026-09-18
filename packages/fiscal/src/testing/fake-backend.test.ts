@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, decimal, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
 
@@ -32,7 +32,7 @@ function saleOn(node: typeof NODE_A, invoiceNumber: number): SaleForFiscalRecord
 
 // No migration set at all: the fake's own `fake_node_registrations`/`fake_fiscal_records` tables
 // are the only schema this suite touches, and `install` creates them.
-const suite = usePgliteDb({ migrations: [], setup: (db) => FakeFiscalBackend.install(db) });
+const suite = useVenueDb({ migrations: [], setup: (db) => FakeFiscalBackend.install(db) });
 
 beforeEach(async () => {
   await FakeFiscalBackend.truncate(suite.db);
