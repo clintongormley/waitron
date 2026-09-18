@@ -13,9 +13,9 @@ export const googleOidcStates = table(
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair.
     // The siblings that carry this comment are held by one of the two reasons in columns.ts;
     // neither holds here. Measured 2026-09-18: substituting leaves the generated schema identical,
-    // and no caller breaks today. The narrowing itself still happens -- this column is NOT NULL,
-    // which is the case where a bare value list does narrow the insert type -- so what keeps it a
-    // plain column is scope: rewriting a constraint is not a conversion's job. See enumText in
+    // and no caller breaks today. The narrowing itself still happens -- an inline value list
+    // narrows whatever the column's nullability -- so what keeps it a plain column is scope:
+    // rewriting a constraint is not a conversion's job. See enumText in
     // packages/db/src/schema/columns.ts.
     mode: label("mode").notNull(),
     stateHash: label("state_hash").notNull(),

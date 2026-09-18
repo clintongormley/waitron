@@ -106,6 +106,89 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
   });
 });
 
+/**
+ * Exact type equality. Both sides are compared invariantly — the two function types are only
+ * mutually assignable when `A` and `B` are the same type — so a widened `string` is NOT accepted
+ * where `"a" | "b"` is pinned. The controls in the first case below are what stop this degrading
+ * into plain assignability, which would make every pin here pass vacuously.
+ */
+type Exactly<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+/**
+ * Pins a type: the type argument has to be `true`, so a cell that does not match its pin fails to
+ * compile. `pnpm --filter @waitron/db typecheck` is what runs these — at runtime each call just
+ * hands its argument back.
+ */
+const pinType = <Pinned extends true>(pinned: Pinned): Pinned => pinned;
+
+/** The third spelling of the values: a separate variable, and the same variable written `as const`. */
+const VALUES_IN_A_VARIABLE = ["a", "b"];
+const VALUES_IN_A_CONST_VARIABLE = ["a", "b"] as const;
+
+const enumSpellings = table("enum_spellings", {
+  bareNullable: enumText("bare_nullable", ["a", "b"]),
+  bareNotNull: enumText("bare_not_null", ["a", "b"]).notNull(),
+  constNullable: enumText("const_nullable", ["a", "b"] as const),
+  constNotNull: enumText("const_not_null", ["a", "b"] as const).notNull(),
+  variableNullable: enumText("variable_nullable", VALUES_IN_A_VARIABLE),
+  variableNotNull: enumText("variable_not_null", VALUES_IN_A_VARIABLE).notNull(),
+  constVariableNullable: enumText("const_variable_nullable", VALUES_IN_A_CONST_VARIABLE),
+});
+
+type SpellingInsert = typeof enumSpellings.$inferInsert;
+
+/**
+ * One assertion per cell of the table recorded in `enumText`'s own note: three ways of spelling the
+ * values crossed with the column's nullability, plus the fourth spelling that is the way out of the
+ * one cell still wide. Pinning every cell rather than only the one that changed on 2026-09-18 is the
+ * point — the two that stay wide are the surviving trap, and a reader needs to be told which cells
+ * are which.
+ */
+describe("what a caller may write to an enumText column", () => {
+  it("narrows an inline array literal, with no `as const` at the call site", () => {
+    // The cell this item exists for. Before `enumText` took a `const` type parameter the nullable
+    // one was `string | null | undefined`: the narrowing silently vanished on exactly the spelling
+    // a caller reaches for first. Revert the `const` in columns.ts and this line stops compiling.
+    pinType<Exactly<SpellingInsert["bareNullable"], "a" | "b" | null | undefined>>(true);
+    pinType<Exactly<SpellingInsert["bareNotNull"], "a" | "b">>(true);
+
+    // Controls for `Exactly` itself, in both directions it could be wrong. Without them a helper
+    // that answered `true` for every pair would leave every pin in this describe asserting nothing.
+    // @ts-expect-error `string` is wider than the union, so these are not the same type
+    pinType<Exactly<string, "a" | "b">>(true);
+    // @ts-expect-error the nullable arms are part of the type, so these are not the same type
+    pinType<Exactly<"a" | "b" | null | undefined, "a" | "b">>(true);
+
+    expect(columnsOf(enumSpellings).bare_nullable.enumValues).toEqual(["a", "b"]);
+  });
+
+  it("keeps the narrowing a caller who writes `as const` already had", () => {
+    // Unchanged by the `const` type parameter, and the reason the four call sites in the tree kept
+    // their `as const`: it was never wrong, only no longer the only spelling that works.
+    pinType<Exactly<SpellingInsert["constNullable"], "a" | "b" | null | undefined>>(true);
+    pinType<Exactly<SpellingInsert["constNotNull"], "a" | "b">>(true);
+
+    expect(columnsOf(enumSpellings).const_nullable.enumValues).toEqual(["a", "b"]);
+  });
+
+  it("still widens to string when the values come from a variable", () => {
+    // The trap that survives. `const VALUES = ["a", "b"]` is widened to `string[]` at its own
+    // declaration, before `enumText` ever sees it, so there is no literal type left for a `const`
+    // type parameter to keep. Pinned rather than left unstated so nobody reads the case above as
+    // covering it.
+    pinType<Exactly<SpellingInsert["variableNullable"], string | null | undefined>>(true);
+    pinType<Exactly<SpellingInsert["variableNotNull"], string>>(true);
+
+    // The escape hatch, and the receipt for the sentence above: the SAME spelling at the call site,
+    // with `as const` moved onto the variable's own declaration, narrows. So what loses the values
+    // is the variable's declaration, not the call.
+    pinType<Exactly<SpellingInsert["constVariableNullable"], "a" | "b" | null | undefined>>(true);
+
+    expect(columnsOf(enumSpellings).variable_nullable.enumValues).toEqual(["a", "b"]);
+  });
+});
+
 describe("enumCheck derives the check constraint from the column's own values", () => {
   it("lists exactly the values the column was declared with", () => {
     expect(render(enumCheck(probe.kind))).toBe("\"probe\".\"kind\" in ('cash_sale', 'manual')");

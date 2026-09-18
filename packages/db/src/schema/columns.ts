@@ -155,23 +155,30 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * composes a null arm around it".
  *
  * `units.hardware_unit` carries a reason worth stating in general: substituting there is
- * schema-silent, but `enumText` NARROWS what a caller may write. **Whether it narrows depends on the
- * column, not only on how the values are written**, so measure it on the column in front of you.
+ * schema-silent, but `enumText` NARROWS what a caller may write. **Whether it narrows depends on
+ * where the values come from**, so measure it rather than reading it off the spelling.
  *
- * Measured 2026-09-18 in the catalogue package, all spellings in one file with a control that fired
- * (`const control: number = "a string"`), printing each column's INSERT type by assigning it to
- * `never`:
+ * The table below is what `columns.test.ts` pins, one compile-time case per cell. Reading it: the
+ * values written INLINE narrow whatever the column's nullability, and `as const` on top of an
+ * inline list changes nothing. A VARIABLE holding them never narrows — it is widened to `string[]`
+ * at its own declaration, before `enumText` sees it — unless the `as const` is on that declaration,
+ * which is the escape hatch and the receipt that the call site is not what loses them.
  *
  *                                        nullable column              .notNull() column
- *   enumText(n, ["a", "b"])              string | null | undefined    "a" | "b"
+ *   enumText(n, ["a", "b"])              "a" | "b" | null | undefined "a" | "b"
  *   enumText(n, ["a", "b"] as const)     "a" | "b" | null | undefined "a" | "b"
  *   enumText(n, VALUES)                  string | null | undefined    string
+ *   enumText(n, VALUES_AS_CONST)         "a" | "b" | null | undefined (not measured)
  *
- * (`VALUES` being a `const VALUES = ["a", "b"]` declared elsewhere.) So `as const` is the only
- * spelling that narrows in every case; a bare array literal narrows on a NOT NULL column and loses
- * it on a nullable one; a variable holding the array never narrows. The widening is not the type
- * parameter failing to infer — `enumText(n, ["a", "b"])._.data` on the builder itself is already
- * `"a" | "b"` — it happens on the nullable path afterwards.
+ * (`VALUES` being a `const VALUES = ["a", "b"]` declared elsewhere, `VALUES_AS_CONST` the same
+ * declaration written `as const`.) The top-left cell read `string | null | undefined` until
+ * 2026-09-18, when this helper took a `const` type parameter — so a bare array literal used to lose
+ * the narrowing on a nullable column, and `as const` was then the only spelling that worked
+ * everywhere. That one cell is all that moved: the variable cells read the same before and after,
+ * so the trap is narrower rather than gone — which is exactly what reverting the `const` shows, it
+ * fails the top-left pin and no other. The owner's decision, and the three attempts it took to
+ * state the old table correctly, are in the rollout's report in
+ * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`.
  *
  * The practical rule, because two earlier attempts at this sentence were both wrong in the
  * unsafe direction: **never conclude from the spelling that a substitution is caller-safe.** Take a
@@ -196,7 +203,7 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  *   `~ '^[0-9A-F]{64}$'`. Read off `enumText`'s signature and NOT measured: the helper takes a list
  *   of values, and a 64-character hex pattern has no list to hand it.
  */
-export const enumText = <T extends string>(name: string, values: readonly T[]) =>
+export const enumText = <const T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
 
 /**

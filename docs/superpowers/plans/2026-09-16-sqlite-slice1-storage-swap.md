@@ -929,7 +929,8 @@ That is caller-facing and the probe is blind to it.
 _Superseded 2026-09-18 as to its CONDITION, by the `packages/fiscal-verifactu` report further down
 this step: whether `enumText` narrows depends on the COLUMN as well as the spelling — `as const`
 narrows in every case, a bare array literal narrows on a NOT NULL column and loses it on a nullable
-one, and a variable holding the array never narrows. The fact this
+one, and a variable holding the array never narrows. (And that reading is itself dated: the `const`
+type parameter taken later the same day left only the variable case wide.) The fact this
 paragraph rests on — that the pair is not a free substitution on an existing column — stands._
 
 The second is the ARRAY column. `content_languages.languages` is `label("languages").array()`, and
@@ -994,9 +995,10 @@ already carrying `enumCheck`'s spacing.
 - `payment_policy_offline_mode_ck` is `${t.offlineMode} in ('accept_offline', 'cash_only')`, quoted
   from the file. It carries the `", "` spacing `enumCheck` emits, so substituting there would be
   schema-silent, and the reason for leaving it is the caller-facing one #397 measured: `enumText`
-  narrows what a caller may WRITE. _Read that with the 2026-09-18 correction further down this step:
-  whether it narrows depends on the column as well as the spelling, and a converter has to take
-  a control that actually reaches the column before reporting it either way._
+  narrows what a caller may WRITE. _Read that with the 2026-09-18 correction further down this step,
+  and with the `const` type parameter taken later that day, which left the values' ORIGIN as the
+  whole condition: inline they narrow, a variable holding them does not. A converter still has to
+  take a control that actually reaches the column before reporting it either way._
 - `payments_card_entry_mode_ck` is
   `${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
   also quoted from the file. Its values are written WITHOUT the `", "` spacing, so this is the
@@ -1166,6 +1168,14 @@ enumText(n, VALUES)                  string | null | undefined     string
 - a bare array literal narrows on a NOT NULL column and loses it on a nullable one;
 - a variable holding the array never narrows, nullable or not.
 
+_Dated note, 2026-09-18: the FIRST of those three no longer holds, because the owner took the `const`
+type parameter described at the end of this step. A bare array literal now narrows in both
+nullabilities, so `as const` at the call site is no longer the only spelling that works — the third
+bullet is untouched, and is the whole of the remaining trap. The table as it reads today, with every
+cell pinned by a compile-time case in `packages/db/src/schema/columns.test.ts`, is in `enumText`'s own
+note in `packages/db/src/schema/columns.ts`; read that rather than this one, which is the reading
+taken before the change._
+
 **And the type parameter is not what widens.** On the builder itself, before a table wraps it,
 `enumText(n, ["a", "b"])._.data` is already `"a" | "b"`. Attempt two's mechanism sentence — "`T` is
 inferred as `string`" — was therefore false, and the convention reviewer who traced TypeScript's own
@@ -1198,6 +1208,17 @@ nullable case but NOT the variable case, which stays `string` either way — mea
 seat. So it narrows the gap rather than removing it. It is not taken here, because this pull request
 is a package conversion and that is a change to the shared vocabulary's types; it is written up in
 `~/waitron-campaign/questions.md` for its own change.
+
+_Dated note, 2026-09-18: the owner chose to take it, and it landed in its own pull request once the
+P1b rollout was complete. Both halves of the paragraph above were reproduced on the tree before the
+change: the bare-literal nullable cell was the ONLY one of the six that moved, and the two variable
+cells read the same before and after. It is a type-level change and nothing else — `drizzle-kit
+generate` reported "No schema changes, nothing to migrate", and the JavaScript `tsc` emits for
+`columns.ts` is byte-for-byte identical with and without the `const`. Two receipts about the OLD
+behaviour are retired by it: the first bullet under the table above, and the sentence that the
+widening is not the type parameter failing to infer — that was true of the nullable path this change
+removed, and what widens the surviving variable case IS the type parameter, inferring `string` from
+an array its own declaration had already widened._
 
 Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
 (`No schema changes, nothing to migrate`, exit 0, `diff -r` silent) and again after (the same), and

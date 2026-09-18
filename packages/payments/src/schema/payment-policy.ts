@@ -16,9 +16,9 @@ export const paymentPolicy = table(
     id: count("id").primaryKey().notNull().default(1),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair:
     // that pair narrows the column's TypeScript type to the union of its values, which is a
-    // caller-facing change the schema probe cannot see. Whether it narrows depends on the column as
-    // well as on how the values are written — enumText's own note in
-    // packages/db/src/schema/columns.ts has the measured table, and says how to control for it.
+    // caller-facing change the schema probe cannot see. Whether it narrows depends on where the
+    // values come from — enumText's own note in packages/db/src/schema/columns.ts has the measured
+    // table, and says how to control for it.
     offlineMode: label("offline_mode").notNull(),
     offlineAmountCap: money("offline_amount_cap").notNull(),
     createdAt: tsString("created_at").notNull().defaultNow(),
