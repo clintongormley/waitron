@@ -2935,7 +2935,10 @@ storage switch replaces one function body instead of every call site. Its export
 asserts the row the second wrote is gone, and with the helper's body changed to
 `resetPerTest: false` exactly that case fails and the other two stay green.
 
-**No suite is converted yet.** Those are P2's remaining pull requests, one per package.
+**The conversion is under way**, one pull request per package, fewest calling files first;
+`packages/fiscal-none` was the first. Which files are still to go is a grep rather than a list here,
+and it needs the exclusion that drops the four files allowed to name either helper — the grep pair
+is in `docs/developers/testing-guide.md`, and it lists FILES, not packages and not call sites.
 
 **The part of P2 that is NOT a mechanical rename, found by this branch's review and worth carrying
 because the plan's step 5 does not reach it.** `usePgliteDb` is not the only door to a PGlite
@@ -2950,7 +2953,7 @@ plan now says so.
 
 Two more things left deliberately open. The house rule naming `useVenueDb`, and the guard that would
 enforce it, are NOT added yet — a rule with standing violations needs a guard and a guard cannot
-pass while 208 violations stand, so both land together in their own pull request after the last
+pass while the violations stand, so both land together in their own pull request after the last
 conversion, which is the shape the vocabulary rollout ended in (#414 last conversion, #416 the guard
 and the rule). And a converted suite that reads its accessor too early still gets the error
 `usePgliteDb: database not started`, naming a function its own file does not call; the cheapest fix

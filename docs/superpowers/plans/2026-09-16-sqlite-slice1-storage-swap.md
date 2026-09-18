@@ -2385,7 +2385,14 @@ Two earlier readings of these, both corrected here rather than quietly replaced.
 reported 209 and 219 and said they were measured on `b9bbe1d7`: they were measured on the branch,
 and they counted `venue-db.ts` — the one file whose whole purpose is to be the permitted caller — as
 a call site still to convert. On `b9bbe1d7` itself the same commands give 208 and 218, the same as
-the branch once the seam is excluded. And the run-it reviewer counted 205 over `*.test.ts` only,
+the branch once the seam is excluded. Both describe a tree with no package converted, and on the
+branch that converted `packages/fiscal-none` the same two commands give 207 and 217.
+
+Neither is the number to work from now. The exclusion printed above is one file too narrow: it also
+has to drop `lifecycle.test.ts` and `venue-db.test.ts`, the two helpers' contract tests, which are
+not work to convert either — `packages/db/src/testing/lifecycle.test.ts:26` is
+`describe("usePgliteDb")`. The corrected pair is in `docs/developers/testing-guide.md`, and on the
+same commit its first command gives 206. Re-run it rather than reading a number here. And the run-it reviewer counted 205 over `*.test.ts` only,
 which is the same property over a narrower scope and is unchanged by any of this.
 
 Do not treat any of these numbers as a completion target. **The property this task can actually
@@ -2520,6 +2527,33 @@ pnpm --filter @waitron/db test -- venue-db.test.ts
 Expected: PASS, all three.
 
 - [ ] **Step 5: Convert package by package**
+
+Order: by how many of a package's FILES call it, fewest first, so each pull request is a clean
+checkpoint. That is not the same as a call-site count: over the 206 files the command below
+selects, four packages hold more calls than files — `apps/server` 56 files / 58 calls,
+`packages/fiscal-verifactu` 25 / 27, `packages/db` 20 / 21, `packages/reporting` 13 / 14 (206 files
+and 212 calls in total, counted per file on the branch that converted `packages/fiscal-none`). All
+four divergences are at the heavy end, so today the two orders agree on which package is next; check
+that rather than assuming it.
+
+Re-measure rather than trusting a written order, and keep the exclusion: without it `packages/db`
+comes back carrying three files that are not yours to convert — `lifecycle.ts` and `venue-db.ts`,
+which define the two helpers, and `lifecycle.test.ts`, which is `usePgliteDb`'s own contract test
+(`packages/db/src/testing/lifecycle.test.ts:26` is `describe("usePgliteDb")`), so converting it
+would delete the coverage for the function being wrapped. The exclusion names a fourth,
+`venue-db.test.ts`, which this command never returns; it is there so the same expression serves the
+second command too. The plain list form of both commands, and what the
+exclusion drops, is in `docs/developers/testing-guide.md` under "A PGlite suite is being moved
+behind one helper"; this is the same first command grouped by package, run from the workspace root:
+
+```bash
+grep -rlE "usePgliteDb[(]" --include="*.ts" packages apps \
+  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)([.]test)?[.]ts$" \
+  | sed -E 's#^((packages|apps)/[^/]+)/.*#\1#' | sort | uniq -c | sort -n
+```
+
+For what is already DONE — the control in the other direction, which is why no list is kept here —
+run the guide's second command.
 
 One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — and note, corrected twice on 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are not alike and that neither correction licenses moving `describeEachTarget`.
 

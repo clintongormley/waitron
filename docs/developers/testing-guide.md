@@ -60,10 +60,35 @@ rejected. Suites sharing a database clean up in a `finally`, order-independent.
 same handle, same per-test reset — so that the planned SQLite switch replaces one function body
 instead of every call site (plan `2026-09-16-sqlite-slice1-storage-swap.md`, task P2).
 
-State of the rollout, so nobody reads more into this than it says: **no suite has been converted
-yet.** The suites that call `usePgliteDb` still call it directly, and they convert one package at a
-time. Note also that `usePgliteDb` is not the only door: some suites call `createPgliteDb`
-themselves, and `describeEachTarget`'s PGlite half is a third. Those are not a mechanical rename and
+State of the rollout, so nobody reads more into this than it says: **the conversion is under way,
+one package at a time**, so a suite you open may call either. Which files are left, and which are
+already done, are these two commands — not a list here, which would be stale by the next pull
+request. Run them from the workspace root; the paths they print are relative to it, and the second
+grep in each is anchored to that form:
+
+```bash
+# still to convert
+grep -rlE "usePgliteDb[(]" --include="*.ts" packages apps \
+  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)([.]test)?[.]ts$"
+
+# already converted
+grep -rlE "useVenueDb[(]" --include="*.ts" packages apps \
+  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)([.]test)?[.]ts$"
+```
+
+The second grep is the same in both, and it names the four files ALLOWED to name either helper:
+`lifecycle.ts` and `venue-db.ts`, which define them, and `lifecycle.test.ts` and `venue-db.test.ts`,
+which are their contract tests. Each command actually returns three of the four without it — the
+first returns everything but `venue-db.test.ts`, the second only the two `venue-db` files — and one
+shared expression covering all four is simpler than two. `lifecycle.test.ts` is the one that matters:
+`packages/db/src/testing/lifecycle.test.ts:26` is `describe("usePgliteDb")`, so converting it would
+delete the coverage for the function being wrapped.
+
+Both commands list FILES, not packages and not call sites, and not every file they list is a suite:
+on the commit that converted `packages/fiscal-none` the first returned 206 files, three of them
+shared fixtures under a package's `test/` directory. Note also that `usePgliteDb` is not the only
+door: some suites call `createPgliteDb` themselves, and `describeEachTarget`'s PGlite half is a
+third. Those are not a mechanical rename and
 are decided with the storage flip, not here.
 Until that finishes this is guidance for a converted package, not a rule — a rule with standing
 violations needs a guard, and a guard cannot pass while the violations stand. The house rule in
