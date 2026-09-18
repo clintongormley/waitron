@@ -68,6 +68,9 @@ export interface Product {
   /** The translated name a guest reads (locale → text), or null when the product has none. A blank
    * customer name falls back to `name`; `product-presentation.ts` owns that fallback. */
   customerName: Record<string, string> | null;
+  /** Whether the product is offered standalone (on a menu and the till grid). `false` means it is a
+   * full product that is only ever referenced from elsewhere, never sold on its own. */
+  soldAlone: boolean;
   unitId: string;
   unit: Unit;
   description: Record<string, string> | null;
@@ -99,6 +102,8 @@ export interface Product {
 export interface ProductEditorInput {
   name: string;
   customerName: Record<string, string> | null;
+  /** Offered standalone; defaults to `true` when the body omits it. */
+  soldAlone: boolean;
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;

@@ -26,6 +26,8 @@ beforeEach(async () => {
   input = {
     name: "Coffee",
     customerName: { en: "Coffee", es: "Café" },
+    // A non-default value so the canonical save/read round-trip proves sold_alone is actually persisted.
+    soldAlone: false,
     description: { en: "Freshly roasted" },
     kitchenName: "BAR COFFEE",
     unitId: setup.unit.id,

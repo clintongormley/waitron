@@ -56,6 +56,9 @@ export const products = table(
     unitPrice: money("unit_price").notNull(),
     vatClass: label("vat_class").notNull(),
     active: flag("active").notNull().default(true),
+    // A product with sold_alone = false is a full product (price, VAT, allergens, category, unit) that
+    // is only ever referenced from elsewhere, never offered standalone on a menu or the till grid.
+    soldAlone: flag("sold_alone").notNull().default(true),
     // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served by
     // apps/server's /media route), never bytes. Nullable: a product legitimately has no photo, and
     // null here just means "no picture" — unlike `allergens`' null, which is a PENDING state the

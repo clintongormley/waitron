@@ -123,6 +123,8 @@ export interface CreateProductInput {
   /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
    * a product that is not yet sellable at the till — atomic in the one insert, no follow-up patch. */
   active?: boolean;
+  /** Omitted leaves it offered standalone, mirroring the `products.sold_alone` column default. */
+  soldAlone?: boolean;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
   dietaryDeclarations?: DietaryLabel[];
@@ -149,6 +151,8 @@ export interface UpdateProductInput {
   image?: string | null;
   /** Toggle active/inactive through the edit route; omitted leaves it unchanged. */
   active?: boolean;
+  /** Toggle whether the product is offered standalone; omitted leaves it unchanged. */
+  soldAlone?: boolean;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
   dietaryDeclarations?: DietaryLabel[];
@@ -167,6 +171,7 @@ const PRODUCT_BASE_COLUMNS = {
   categoryId: products.categoryId,
   name: products.name,
   customerName: products.customerName,
+  soldAlone: products.soldAlone,
   pricingUnit: products.pricingUnit,
   unitPrice: products.unitPrice,
   vatClass: products.vatClass,
@@ -196,6 +201,7 @@ interface RawProduct {
   categoryId: string | null;
   name: string;
   customerName: Record<string, string> | null;
+  soldAlone: boolean;
   unitId: string | null;
   unitName: Record<string, string> | null;
   unitAbbreviation: Record<string, string> | null;
@@ -972,6 +978,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
       active: input.active ?? true,
+      soldAlone: input.soldAlone ?? true,
       manualAllergens: allergens,
       allergens: republish(allergens, null),
       dietOverride,

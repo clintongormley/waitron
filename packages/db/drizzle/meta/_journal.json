@@ -267,6 +267,13 @@
       "when": 1789582981275,
       "tag": "0037_normal_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789731444336,
+      "tag": "0038_huge_rattler",
+      "breakpoints": true
     }
   ]
 }

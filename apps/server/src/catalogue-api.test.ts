@@ -1090,6 +1090,92 @@ describe("mountCatalogueApi — products", () => {
     expect((await omitted.json()) as { active: boolean }).toMatchObject({ active: true });
   });
 
+  it("POST/PATCH /management-api/products carries soldAlone, defaulting to true and round-tripping", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Sold-alone catalogue");
+    // Explicit false is created as a referenced-only product and reads back false.
+    const referenced = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Solo ingrediente",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        soldAlone: false,
+      },
+    });
+    expect(referenced.status).toBe(201);
+    const referencedBody = (await referenced.json()) as { id: string; soldAlone: boolean };
+    expect(referencedBody).toMatchObject({ soldAlone: false });
+    const referencedId = referencedBody.id;
+    // Omitting soldAlone preserves the column default: a standalone product.
+    const omitted = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Vendible por defecto",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      },
+    });
+    expect(omitted.status).toBe(201);
+    expect((await omitted.json()) as { soldAlone: boolean }).toMatchObject({ soldAlone: true });
+    // PATCH flips it back on and the change lands.
+    const patched = await send(app, "PATCH", `/management-api/products/${referencedId}`, {
+      body: { soldAlone: true },
+    });
+    expect(patched.status).toBe(204);
+    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    const row = ((await list.json()) as { id: string; soldAlone: boolean }[]).find(
+      (r) => r.id === referencedId,
+    )!;
+    expect(row).toMatchObject({ soldAlone: true });
+  });
+
+  it.each([
+    ["POST", "/management-api/products"],
+    ["PATCH", "/management-api/products/:id"],
+  ] as const)(
+    "%s /management-api/products rejects a non-boolean soldAlone → management.request_invalid 400",
+    async (method, template) => {
+      const app = mountApp();
+      const catalogueId = await createCatalogueVia(app, `Bad-soldAlone ${method} catalogue`);
+      const created = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          name: "Base",
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+        },
+      });
+      const productId = ((await created.json()) as { id: string }).id;
+      const path = template.replace(":id", productId);
+      const body =
+        method === "POST"
+          ? {
+              catalogueId,
+              categoryId: null,
+              name: "Malformado",
+              pricingUnit: "each",
+              unitPrice: "1.00",
+              vatClass: "general",
+              soldAlone: 1,
+            }
+          : { soldAlone: 1 };
+      const res = await send(app, method, path, { body });
+      expect(res.status).toBe(400);
+      expect(
+        (await res.json()) as { error: { code: string; params: { field: string } } },
+      ).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "soldAlone" } },
+      });
+    },
+  );
+
   it("POST /management-api/products with a missing required field → management.request_invalid 400", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Missing-field catalogue");

@@ -961,6 +961,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         dietOverride?: unknown;
         image?: unknown;
         active?: unknown;
+        soldAlone?: unknown;
         optionGroupIds?: unknown;
         modifierIds?: unknown;
       }>(c);
@@ -995,6 +996,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.active !== undefined && typeof body.active !== "boolean") {
         throw new AppError("management.request_invalid", { field: "active" });
       }
+      if (body.soldAlone !== undefined && typeof body.soldAlone !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "soldAlone" });
+      }
       // The optional staff diet override (Task 4): SHAPE-screened here (object or null, like
       // `customerName`), then threaded raw to `createProduct`, whose `validateDietOverride` is the
       // authority on the label/contains-tag/disjointness content — exactly the posture `allergens`
@@ -1023,6 +1027,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           : { dietOverride: body.dietOverride as DietOverride | null }),
         ...(body.image === undefined ? {} : { image: body.image }),
         ...(body.active === undefined ? {} : { active: body.active }),
+        ...(body.soldAlone === undefined ? {} : { soldAlone: body.soldAlone }),
       };
       const created = await gated(sessionId, async (tx) => {
         if (customerName !== null) {
@@ -1059,6 +1064,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         dietOverride?: unknown;
         image?: unknown;
         active?: unknown;
+        soldAlone?: unknown;
         optionGroupIds?: unknown;
         modifierIds?: unknown;
       }>(c);
@@ -1113,6 +1119,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           throw new AppError("management.request_invalid", { field: "active" });
         }
         patch.active = body.active;
+      }
+      if (body.soldAlone !== undefined) {
+        if (typeof body.soldAlone !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "soldAlone" });
+        }
+        patch.soldAlone = body.soldAlone;
       }
       if (body.allergens !== undefined) {
         patch.allergens = body.allergens as ProductAllergens | null;

@@ -6,6 +6,7 @@ const categoryId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const input: ProductEditorInput = {
   name: "Coffee",
   customerName: { en: "Coffee", es: "Café" },
+  soldAlone: true,
   description: null,
   kitchenName: null,
   image: null,
@@ -23,6 +24,18 @@ const input: ProductEditorInput = {
 
 it("preserves explicit zero tax, unavailable and unreviewed rather than choosing defaults", () => {
   expect(parseProductEditorInput(input)).toEqual(input);
+});
+it("carries soldAlone through, defaulting to true when the body omits it", () => {
+  expect(parseProductEditorInput({ ...input, soldAlone: false }).soldAlone).toBe(false);
+  // A body with no soldAlone key at all exercises the absent-field default.
+  const noFlag: Record<string, unknown> = { ...input };
+  delete noFlag.soldAlone;
+  expect(parseProductEditorInput(noFlag).soldAlone).toBe(true);
+});
+it("rejects a non-boolean soldAlone", () => {
+  expect(() => parseProductEditorInput({ ...input, soldAlone: 1 })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
+  );
 });
 it("parses an explicit null unit as null (the Each option)", () => {
   expect(parseProductEditorInput({ ...input, unitId: null }).unitId).toBeNull();
