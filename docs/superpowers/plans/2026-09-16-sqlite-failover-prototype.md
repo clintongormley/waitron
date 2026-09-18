@@ -919,6 +919,46 @@ export default async function ({ startStore }) {
 
 ### Task 10: Results note + exit-code semantics + README finalisation
 
+> **2026-09-19, as landed.** The note is
+> [`docs/research/2026-09-16-sqlite-failover-prototype.md`](../../research/2026-09-16-sqlite-failover-prototype.md).
+> Four things about this task came out differently from the steps below, and each is recorded here
+> rather than in the note, which carries results and not process.
+>
+> - **Step 1's recorded run is four runs, not one.** The whole suite was run four times in succession
+>   — three printing the table, one with `--json`, the last on the exact tree this landed with — and
+>   the detail lines
+>   compared token by token, because a single run cannot tell a property of the rig from a number that
+>   moves. Every verdict was the same on every run. S0, S1, S2, S5, S6, LS and smoke were
+>   byte-identical across all four — `RUNNER` across three, the first run predating it; S3 moved in up
+>   to four tokens, all downstream of a wait on a real store listing; S4 moved in twenty-three of
+>   forty-five. The note says which are which. Exit status 1 on every run, S2 the only critical FAIL.
+> - **Step 3's self-check needed its own module.** `scenarios.ts` ends in a top-level `await main()`,
+>   so a scenario importing a VALUE from it runs the whole suite — measured with a `node:module` load
+>   hook, which printed `LOADED SCENARIO MODULE: s0_happy_loop.ts` and then s1, s2, s3, s4. The rule
+>   and both output shapes are therefore in `src/runner-contract.ts`, and `s_runner_contract.ts`
+>   drives them over a table of cases. The new row is `RUNNER`, and it is marked **critical** although
+>   it is not one of spec §7's five: a wrong exit rule makes every other row's reporting
+>   untrustworthy.
+> - **Two mutations went uncaught, and the fix is why the output choice takes an argument list.**
+>   With the `--json` flag read inside `main()`, cutting its wiring printed the table under `--json`
+>   and the self-check still reported PASS; with `formatTable` returning `""` the runner printed
+>   NOTHING and still exited 0, again PASS. Both were run before the change, not reasoned about.
+>   `render(argv, results)` now makes the choice and the scenario drives it both ways. The hedge that
+>   remains, stated because a failing test can never restore it: the one line handing the real
+>   `process.argv` to `render` is driven by nothing, and a scenario cannot reach it without spawning
+>   the runner.
+> - **S2's detail string was deliberately left as prose.** `docs/backlog.md` named this task as where
+>   that shape should be settled, because a JSON dump would be built from those strings. The dump
+>   carries each `detail` verbatim as a string and parses none of them, so the consequence that
+>   motivated the change does not arise — and re-wording the one negative result this gate produced
+>   would have rewritten its recorded run for no measurement. The suggestion stands for whoever picks
+>   the rig up next.
+>
+> Step 4 also retired four claims the note's existence made false — two comments in `src/store.ts`
+> and `src/store-cas.ts` saying the note "does not exist yet", and two README sentences written in
+> the future tense about what Task 10 would do.
+
+
 **Files:**
 - Create: `docs/research/2026-09-16-sqlite-failover-prototype.md`
 - Modify: `bench/sqlite-failover/src/scenarios.ts` (finalise the critical-exit rule and a `--json` dump used to fill the note)

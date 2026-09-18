@@ -1,25 +1,23 @@
 /**
  * The scenario runner: discovers every scenario in `src/scenarios/`, runs them one at a time, prints
- * a Markdown table, and exits non-zero only when a CRITICAL scenario failed.
+ * a Markdown table — or, with `--json`, one JSON document — and exits non-zero only when a CRITICAL
+ * scenario failed.
  *
  * A scenario is a measurement, not a build gate (spec §7): a FAIL is a recorded outcome, and only
  * the critical scenarios — S0, S1, S2, S3 and S6 — stop anything, plus any scenario that THROWS,
- * whatever its id (see the catch below).
+ * whatever its id. The rule itself is in `runner-contract.ts`, where `s_runner_contract.ts` drives
+ * it over a table of cases.
  */
 import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { criticalFailures, exitCodeFor, render, resultForThrow } from "./runner-contract.ts";
+import type { ScenarioResult } from "./runner-contract.ts";
 import { startStore } from "./store.ts";
 
-export type ScenarioContext = { startStore: typeof startStore };
+export type { ScenarioResult, Verdict } from "./runner-contract.ts";
 
-export type ScenarioResult = {
-  id: string;
-  title: string;
-  verdict: "PASS" | "FAIL" | "MEASURED" | "SKIPPED";
-  critical: boolean;
-  detail: string;
-};
+export type ScenarioContext = { startStore: typeof startStore };
 
 type Scenario = (ctx: ScenarioContext) => Promise<ScenarioResult>;
 
@@ -41,10 +39,6 @@ function discover(): string[] {
     .sort();
 }
 
-function cell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
-}
-
 async function main(): Promise<void> {
   const context: ScenarioContext = { startStore };
   const results: ScenarioResult[] = [];
@@ -58,34 +52,22 @@ async function main(): Promise<void> {
       };
       results.push(await module.default(context));
     } catch (error) {
-      // A scenario that threw never said what it would have claimed, so the runner cannot know
-      // whether its subject was critical — it is treated as critical so a broken harness is never
-      // quiet.
-      results.push({
-        id: file.replace(/\.ts$/, ""),
-        title: "threw",
-        verdict: "FAIL",
-        critical: true,
-        detail: error instanceof Error ? error.message : String(error),
-      });
+      results.push(resultForThrow(file, error));
     }
   }
 
-  console.log("\n| id | title | verdict | detail |");
-  console.log("| --- | --- | --- | --- |");
-  for (const result of results) {
-    console.log(
-      `| ${cell(result.id)} | ${cell(result.title)} | ${result.verdict} | ${cell(result.detail)} |`,
-    );
-  }
-  console.log("");
+  // Exactly one write to stdout, so the document a `--json` caller pipes is parseable whole. Which
+  // shape it is, is `render`'s decision and not this function's — `s_runner_contract.ts` drives it.
+  console.log(render(process.argv, results));
 
-  const criticalFailures = results.filter((r) => r.critical && r.verdict === "FAIL");
-  if (criticalFailures.length > 0) {
+  const exitCode = exitCodeFor(results);
+  if (exitCode !== 0) {
     console.error(
-      `CRITICAL failure: ${criticalFailures.map((r) => r.id).join(", ")} — see the table above.`,
+      `CRITICAL failure: ${criticalFailures(results)
+        .map((result) => result.id)
+        .join(", ")} — see the results above.`,
     );
-    process.exit(1);
+    process.exit(exitCode);
   }
 }
 

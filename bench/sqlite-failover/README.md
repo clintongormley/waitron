@@ -17,9 +17,17 @@ for the scenarios.
 ```bash
 export TESTCONTAINERS_RYUK_DISABLED=true
 pnpm --filter @waitron/bench-sqlite-failover setup:litestream   # once per checkout
-pnpm --filter @waitron/bench-sqlite-failover scenarios
+pnpm --filter @waitron/bench-sqlite-failover scenarios          # the Markdown table
+pnpm --filter @waitron/bench-sqlite-failover scenarios --json   # the same run, one JSON document
 pnpm --filter @waitron/bench-sqlite-failover typecheck
 ```
+
+**The results are written up in
+[`docs/research/2026-09-16-sqlite-failover-prototype.md`](../../docs/research/2026-09-16-sqlite-failover-prototype.md)**
+— what each scenario had to show, its recorded verdict, the control that makes that verdict a
+measurement, what the gate does not establish, and the obligations it leaves standing. That note is
+the product of this gate; this package is its reproducer, and the per-scenario sections below carry
+the mutations each scenario's assertions were proved by.
 
 Docker must be running: most scenarios start their own MinIO container via Testcontainers. S2 and
 S5 never do — each models its hand-over between two in-memory SQLite databases, so neither needs a
@@ -81,9 +89,10 @@ against a config `writeConfig` did not write (which would otherwise reach litest
 credentials and come back as a store error). A later task that needs one of them should pin it or
 delete it.
 
-**`scenarios` currently exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is
-FAIL — a recorded result, not a broken harness. See "What S2 measures, and what it does not" below. A
-later task reading its own run's exit code has to account for that.
+**`scenarios` exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is FAIL — a
+recorded result, not a broken harness. See "What S2 measures, and what it does not" below. Anything
+reading this rig's exit code has to account for that: a 1 here means "a critical scenario failed", and
+on this tree that scenario is S2 and it is expected.
 
 `TESTCONTAINERS_RYUK_DISABLED=true` is required locally (`CLAUDE.md` §4), and it turns off the reaper
 that would otherwise clean up after an interrupted run. Scenarios run one at a time and each that opens a store stops it
@@ -96,14 +105,69 @@ stranded container is still there. Stop it by hand, or reap later. Never a blank
 
 ## A scenario's verdict is a measurement, and the exit code says so
 
-`scenarios` prints one Markdown table — id, title, verdict, detail — and exits **non-zero only when a
-scenario marked `critical` has the verdict `FAIL`**. `MEASURED` and `SKIPPED` never fail the run, and
-neither does a non-critical `FAIL`: a scenario that fails is a recorded outcome, which is the answer
-this gate exists to produce (spec §7). The critical scenarios are S0, S1, S2, S3 and S6 (spec §7) — a
-failure in one of those means slice 2 would be building on a hole.
+`scenarios` prints one Markdown table — id, title, verdict, detail — or, with `--json`, one parseable
+JSON document carrying the same rows verbatim, the ids of the critical failures and the exit code (a
+piped run's own exit status is the pipeline's last command, not the runner's). Either way it exits
+**non-zero only when a scenario marked `critical` has the verdict `FAIL`**. `MEASURED` and `SKIPPED`
+never fail the run, and neither does a non-critical `FAIL`: a scenario that fails is a recorded
+outcome, which is the answer this gate exists to produce (spec §7). The critical scenarios are S0, S1,
+S2, S3 and S6 (spec §7) — a failure in one of those means slice 2 would be building on a hole — **plus
+`RUNNER`**, the runner's own self-check, which is critical for a different reason: a wrong exit rule
+makes every other row's reporting untrustworthy.
 
 A scenario that **throws** is recorded as a critical `FAIL` whatever it was going to claim, because a
 harness that broke mid-scenario never got as far as saying what it was measuring.
+
+A critical **`SKIPPED`** exits 0 deliberately: that scenario is UNPROVEN, which is a fact for the
+results note rather than a broken premise. S0 and S3 are the two that can report it — neither did on
+any run taken for the note — and each says in its own row that it is UNPROVEN until
+`setup:litestream` has been run.
+
+**The rule itself is in `src/runner-contract.ts`**, not in `main()`, and
+`src/scenarios/s_runner_contract.ts` drives it over a table of cases: see "What the `RUNNER` check
+drives, and the one thing it cannot" below.
+
+## What the `RUNNER` check drives, and the one thing it cannot
+
+`src/runner-contract.ts` holds everything the runner decides — which result sets fail a run, how a
+scenario that threw is recorded, and both output shapes — and `src/scenarios/s_runner_contract.ts`
+drives all of it over a table of cases. It starts no container, opens no store and touches no file,
+and runs in about 20ms.
+
+It is in its own module rather than in `scenarios.ts` because `scenarios.ts` ends in a top-level
+`await main()`: importing a VALUE from it runs the whole suite. Measured 2026-09-18 — a `node:module`
+load hook over `import('./src/scenarios.ts')` printed `LOADED SCENARIO MODULE: s0_happy_loop.ts` and
+then s1, s2, s3, s4, while importing a scenario, which takes only `import type` from `scenarios.ts`,
+resolved in 31ms and loaded nothing.
+
+Each of the following was applied to the production code on its own, the scenario re-run, and the file
+restored from a copy taken beforehand (2026-09-18). Each names the assertion that caught it:
+
+- exit non-zero on **any** FAIL → `a non-critical FAIL exits 0`;
+- exit non-zero on **any critical row whatever its verdict** → `a critical SKIPPED exits 0`;
+- always exit 0 → `a critical FAIL exits non-zero`;
+- `criticalFailures` returning nothing → `a critical FAIL exits non-zero`;
+- a scenario that threw recorded non-critical → `a scenario that threw is recorded critical whatever
+its id`;
+- `--json` emitting the Markdown table → `--json prints one parseable JSON document`;
+- the JSON dump losing its `exitCode` → `the --json dump reports the same exit code the runner exits
+with`;
+- the JSON dump blanking each row's detail → `the --json dump carries every row verbatim`;
+- `formatTable` returning an empty string → `the table prints a header, a separator and one row per
+scenario`;
+- the table's header renamed → `the table's header names the four columns the results note reads`;
+- the pipe escape dropped → `a pipe inside a cell is escaped`.
+
+**Two of those were uncaught first, and the fix is why the output choice takes an argument list.** With
+the `--json` flag read inside `main()`, cutting its wiring printed the table under `--json` and this
+scenario still reported PASS; and with `formatTable` returning `""` the runner printed **nothing** and
+still exited 0, again with a PASS on this row. Both were measured before the change, not reasoned
+about. `render(argv, results)` now makes the choice, and the scenario drives it both ways.
+
+**The hedge, stated because a failing test can never restore it:** what is still driven by nothing is
+the single line `console.log(render(process.argv, results))`. Everything the runner decides is behind
+`render`; handing it the real `process.argv` is not. A scenario cannot reach that without spawning the
+runner, which would run the whole suite.
 
 ## The pins, and why the results only hold on them
 
@@ -133,9 +197,9 @@ the failover loop, which is what S0, S3 and S4 are for — all three are in, and
 in its own section below. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
 their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
-— so the conditional-write result will be a fact about the mechanism, and re-running it against the
-real store is a standing obligation for the results note, `docs/research/2026-09-16-sqlite-failover-prototype.md`,
-which plan Task 10 writes (spec §5).
+— so the conditional-write result is a fact about the mechanism, and re-running it against the real
+store is a standing obligation, recorded as one in
+[the results note](../../docs/research/2026-09-16-sqlite-failover-prototype.md) (spec §5).
 
 ## What S0's loop covers, and what its Part C records
 
@@ -789,8 +853,8 @@ operation error S3: ListObjectsV2, exceeded maximum number of attempts, 10, … 
   either way.
 - **anything that turns on elapsed time.** The load is volume; thirty modelled days pass in half a
   minute.
-- **anything about the real ledger's cost per commit.** The ~41KB a sale is this rig's five-table
-  MODEL (`model.ts`) with its indexes at SQLite's default page size, not
+- **anything about the real ledger's cost per commit.** The ~41KB a sale is this rig's own MODEL
+  (`model.ts`) with its indexes at SQLite's default page size, not
   `packages/fiscal-verifactu`'s schema.
 - **that a LONGER offline stretch stays linear.** The run stops at 7500 sales; `offline-days-per-gib`
   extrapolates the measured rate and measures nothing beyond it.
@@ -902,7 +966,8 @@ The **product's** fence is a different primitive: `current.json` written only if
 unchanged (topology §5.1), which is compare-and-swap, and which is what the prototype spec's §4 S1
 describes. S6 records what the pinned store does with each. So S1's result is evidence that a
 refusal by the store stops a double promotion — it is not a measurement of the product's own
-conditional write, and the results note (plan Task 10) should say so in S1's row.
+conditional write. The results note says so under S1, together with the two parts of the spec's S1
+criterion this rig does not model.
 
 Spec §4 S1 also asks for two things this rig does not model, on top of the fence itself: the loser
 "commits no promotion, activates no seat, and fences" — the rig shows only that it writes nothing —
@@ -1273,8 +1338,8 @@ member, is in [ci-and-gates.md](../../docs/developers/ci-and-gates.md).
 
 The package's gate is `typecheck` + `pnpm format:check` + `pnpm lint`, plus those three root guards —
 `pnpm vitest run` at the root is part of this package's gate precisely because it reads the wiring
-above; the evidence that it works
-will be the recorded run in its results note, not a green CI job.
+above; the evidence that it works is the recorded run in
+[the results note](../../docs/research/2026-09-16-sqlite-failover-prototype.md), not a green CI job.
 
 ## What the model enforces, not just labels
 

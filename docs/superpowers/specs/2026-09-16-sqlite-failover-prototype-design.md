@@ -349,7 +349,17 @@ exists to produce.
   Part D and Part E's second half — measures and feeds the verdict instead of asserting, so the
   verdict is read off the measurement rather than off a passing assertion.)*
 - Run: `pnpm --filter @waitron/bench-sqlite-failover scenarios` (Docker up). Prints the table, writes
-  the results note's data, exits non-zero only on a critical failure.
+  the results note's data, exits non-zero only on a critical failure. *(2026-09-19, as landed: the
+  note is written and lives at `docs/research/2026-09-16-sqlite-failover-prototype.md`. Three things
+  this section and §6 now describe too narrowly. The runner's table is **ten** rows, not S0-S6: the
+  litestream foundation check, a smoke check and a `RUNNER` self-check sit beside them. "Writes the
+  results note's data" is a `--json` flag, which prints the same run as one parseable document
+  carrying the rows verbatim, the ids of the critical failures and the exit code. And the critical
+  set is §7's five **plus `RUNNER`** — a wrong exit rule makes every other row's reporting
+  untrustworthy, which is a different reason from the fiscal-safety one, and the runner already
+  treated any THROWING scenario as critical whatever its id. The gate's result: every critical row
+  PASSes but S2, whose FAIL is the gate's answer; `scenarios` exits 1 on a clean tree for that
+  reason.)*
 - Concurrency: the rig runs its own containers (a store, possibly Litestream) and several node
   processes; it must not be launched beside another session's Docker-heavy or browser run (`CLAUDE.md`
   §2, §4 — measured headroom, never a count). The campaign wrapper serialises firings, so within the
