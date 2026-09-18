@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -134,6 +135,21 @@ describe("authorize", () => {
 
     // The manager holds sale.void, so only the ended-session guard — checked first, before any role
     // lookup — can be the cause here.
+    const code = await codeOf(() =>
+      run((tx) => authorize(tx, { sessionId, permission: "sale.void" })),
+    );
+    expect(code).toBe("session.not_open");
+  });
+
+  it("throws session.not_open when the session's person row has been deleted", async () => {
+    const tillId = await seedTill(suite.db);
+    const managerId = await seedPerson(suite.db, "manager");
+    const sessionId = await openSession(suite.db, tillId, managerId);
+    // Reachable only since the storage switch dropped `sessions`' foreign key to `persons` (they end
+    // up in different database files). Before that, this delete was refused by the constraint.
+    await suite.db.execute(sql`delete from persons where id = ${managerId}`);
+
+    // The session is still open, so what refuses here is the inner join finding no person row.
     const code = await codeOf(() =>
       run((tx) => authorize(tx, { sessionId, permission: "sale.void" })),
     );

@@ -4,6 +4,11 @@
  * standby AND drained back from a returned box. `state` — what a manager configures plus live
  * service in flight: copied to a standby, never drained back. `local` — this node's own record of
  * what it is: not copied, not drained.
+ *
+ * The class also decides which DATABASE FILE a table lives in after the storage switch (`local` in
+ * `node.db`, the rest in `venue.db`), which is why a foreign key must not join a `local` table to a
+ * `ledger`/`state` one — guard: `scripts/two-file-foreign-keys.test.ts`, which reads drizzle's
+ * GENERATED snapshots, so a key only in hand-written migration SQL is outside it.
  */
 export type TableClass = "ledger" | "state" | "local";
 

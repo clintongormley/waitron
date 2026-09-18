@@ -3044,6 +3044,33 @@ branch's commits rather than quietly rewritten. The practical lesson for the con
 count is not a receipt unless the command and the tree are beside it, and a correction deserves a
 reader who is not its author.
 
+**Task P7 — nothing joins the two database files any more (pull request #426).** The storage switch
+puts everything the venue owns in one file and this node's own identity in another, and the two can
+only be backed up or restored separately if no row in one points at a row in the other. Six such
+pointers existed, every one of them from a node's own table into the venue's: a till shift-login
+named its person and its till, a dashboard session and a two-factor enrolment named their person, a
+Google sign-in ceremony named its person, and a pending ask-to-join named its venue. All six are gone
+from the schema; the columns stay and still hold the same ids, they are simply no longer enforced by
+the database. Nothing in the product ever deleted a person, a till or a venue — only tests do — so
+what those keys really bought was a refusal to write a row naming something that does not exist.
+
+**Five of the six replace that refusal with the request path, and the sixth does not.** The five
+identity ones take their id from a row the request had already read. `join_requests.location_id` does
+not: it is the node's configured location, which comes from an environment variable and is checked by
+nothing when the row is written. A misconfigured venue is now refused one step later, at accept, where the
+accepted row — a device or a print agent — still holds a key to `locations`. Worth knowing before someone reads the five
+and assumes the sixth.
+
+A new check in the root test project, `scripts/two-file-foreign-keys.test.ts`, fails if a crossing key
+appears. It reads drizzle's generated head snapshot per migration set rather than the TypeScript, so
+it carries none of the storage engine's types and the flip does not have to revisit it; the gap that
+buys, and the date the two readings were compared, are in the guard's own header. Two review seats
+rejected the first version — which read the TypeScript through a helper in `packages/db` — and the
+reasons are worth carrying: it would have gone vacuous at the flip (every table a `SQLiteTable`, the
+check passing over an empty graph), and its package discovery was a regex over each
+`drizzle.config.ts` that a seat defeated by changing one config's quote style, passing the guard with
+a real crossing key in the tree.
+
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
 already covers them. **The tag `pre-sqlite-migration` marks the last commit that predates any of this

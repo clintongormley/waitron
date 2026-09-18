@@ -43,7 +43,10 @@ export async function startManagementSession(
 }
 
 /**
- * Resolve a live session to its person + role, or throw. Missing/ended → `management_session.required`;
+ * Resolve a live session to its person + role, or throw. Missing, ended, or — since the storage
+ * switch dropped the foreign key to `persons` — pointing at a person row that is gone →
+ * `management_session.required` (two nets refuse that last one: the inner join finds nothing, and the
+ * status check below refuses a status that is not `active`);
  * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`;
  * a pending person → `management_session.required`.
  * On success it bumps `last_seen_at` (the sliding window) and returns the person's current role plus

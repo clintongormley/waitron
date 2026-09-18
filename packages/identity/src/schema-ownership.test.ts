@@ -19,9 +19,10 @@ const OWNED = [
   "webauthn_challenges",
 ];
 
-/** Every core table this package's schema files import to declare foreign keys. None of these may
- * ever appear in this package's generated SQL. sessions imports `tills` (which pulls in `locations`
- * transitively); only the tables named here as FK targets are asserted absent. */
+/** Core tables that must never appear in this package's generated SQL. Both were once imported here
+ * to declare a foreign key; no schema file in this package imports a core table today (the storage
+ * switch removed sessions' key to `tills`), and the list stays because what it guards against is a
+ * core table finding its way back into this snapshot, not the imports of any one moment. */
 const CORE = ["tenants", "tills"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));

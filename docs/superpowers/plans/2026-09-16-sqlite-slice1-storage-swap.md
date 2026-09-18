@@ -71,6 +71,7 @@ Items marked **owner review** touch the unrepairable fiscal core or the arithmet
 | `packages/db/src/job-claim.ts` | The shared claim-by-update helper that replaces `FOR UPDATE SKIP LOCKED`. |
 | `packages/db/src/constraint-target.ts` | Answers "which table and columns did this refusal name?", replacing constraint-name matching. |
 | `scripts/write-path-tables.test.ts` | The guard that replaces what grants enforce: a write path may not touch a table it has no business writing. |
+| `scripts/two-file-foreign-keys.test.ts` | Fails if a foreign key crosses between `venue.db` and `node.db`, read from each set's drizzle head snapshot. Created by P7, not by the flip — the flip's table below said otherwise until 2026-09-19. Carries no engine types, so F1 changes nothing here unless drizzle's SQLite snapshots name those fields differently. |
 
 **Created by the flip:**
 
@@ -81,7 +82,6 @@ Items marked **owner review** touch the unrepairable fiscal core or the arithmet
 | `packages/store/src/write-queue.ts` | Serialises write transactions. One writer at a time, matching the engine. |
 | `packages/store/src/append-only.ts` | Installs the `RAISE(ABORT)` triggers on every `ledger` table. |
 | `packages/store/src/archive.ts` | `VACUUM INTO`, replacing the `pg_dump` path. |
-| `scripts/two-file-foreign-keys.test.ts` | Fails if a foreign key crosses between `venue.db` and `node.db`. |
 
 **Deleted by the flip:** `packages/sync` entirely; `packages/db/src/change-listener.ts`; `packages/db/src/testing/{postgres,shared-container,two-node,two-node-wireguard,networked-postgres}.ts`; `apps/server/src/pg-restore.ts`; the role and grant provisioning in `packages/provisioning`; `scripts/append-only-enable-always.test.ts`.
 
@@ -3283,7 +3283,7 @@ change is re-run here and passes against the same recorded values."
 - Consumes: the classification lists each module contributes.
 - Produces: the guarantee F1's two-file split depends on.
 
-- [ ] **Step 1: Enumerate the crossings before writing any code**
+- [x] **Step 1: Enumerate the crossings before writing any code**
 
 The spec's §11 requires this list to exist before anything is changed.
 
@@ -3293,9 +3293,15 @@ grep -rn "references(" packages apps --include='*.ts' | grep -v node_modules | g
 
 For each foreign key, look up both tables' classifications. Write the crossing edges into the pull request description — table, referenced table, both classifications, and the resolution chosen.
 
-- [ ] **Step 2: Write the failing guard**
+- [x] **Step 2: Write the failing guard**
 
 Create `scripts/two-file-foreign-keys.test.ts`. It belongs in the ROOT Vitest project, which the ungated lint job and the hook run on every non-docs push (`CLAUDE.md` §4).
+
+**Corrected while building it, 2026-09-19.** There is no `scripts/classification-helpers.ts` and the sketch below should not be read as naming one. What was built reads **drizzle's own head snapshot per migration set** — `meta/_journal.json` names the head, and `tables[*].foreignKeys[*]` holds `tableFrom`, `tableTo` and `columnsFrom` — resolved with the same helper shape `scripts/no-tenant-column.test.ts` already uses. The classification comes from `ALL_MODULES`, as the sketch assumes.
+
+The first attempt read the TypeScript instead, through a helper in `packages/db` that called `getTableConfig` (the root project cannot import `drizzle-orm`: it is in no root dependency). Two review seats independently rejected that shape and both were right, so it is written down rather than quietly replaced. It put a second file naming `drizzle-orm/pg-core` inside the very directory task P1 exists to keep engine-free, and after F1 every table would have been a `SQLiteTable`, `is(exported, PgTable)` false for all of them, the crossing check passing over an empty graph. And it discovered packages by regex over each `drizzle.config.ts` — measured by the Codex seat, changing one config's quotes from double to single made the guard pass **with a real crossing key in the tree**. Reading generated artifacts removes both: no engine types, no discovery regex, and a set whose snapshot is missing is refused by name instead of skipped.
+
+What it trades, stated because it is a real gap and not a rounding of one: a foreign key declared in TypeScript but not yet generated is invisible, and nothing asserts `db:generate` is a no-op. The other direction was worse — a reading taken from the TypeScript passes the moment someone edits it, while the constraint is still live in every migrated database, which is exactly the state this task's two `DROP CONSTRAINT` migrations exist to leave behind.
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3322,7 +3328,7 @@ describe("the two database files are independent", () => {
 });
 ```
 
-- [ ] **Step 3: Run it and watch it fail with the real list**
+- [x] **Step 3: Run it and watch it fail with the real list**
 
 ```bash
 pnpm vitest run scripts/two-file-foreign-keys.test.ts
@@ -3330,21 +3336,36 @@ pnpm vitest run scripts/two-file-foreign-keys.test.ts
 
 Expected: FAIL, naming the crossings found in step 1. If it passes on the first run, the guard is not reading what you think — check it against a deliberately added crossing before believing it.
 
-- [ ] **Step 4: Prove the guard by deletion**
+**What it did, 2026-09-19:** failed naming all six, each with its constraint name and its direction (`local -> state`), which is also how the enumeration in step 1 was checked for completeness — two readings, the same six.
+
+- [x] **Step 4: Prove the guard by deletion**
 
 Add a temporary crossing foreign key, confirm the guard fails, remove it. `CLAUDE.md` §4: prove a guard by deletion, and confirm the negative control fails for the reason you think.
 
-- [ ] **Step 5: Resolve each crossing**
+**Corrected 2026-09-19, and this one matters: a crossing key added in TypeScript alone does NOT fail the guard that was built.** It reads generated snapshots, so the control has to reach one. Two were run. (a) End to end: restore `join_requests`' key to `locations` in the table file, run `pnpm --filter @waitron/db db:generate`, and the guard fails with `packages/db/drizzle: join_requests_location_id_locations_id_fk — join_requests(location_id) -> locations [local -> state]`; then delete the generated migration and snapshot and restore the journal from `HEAD`. (b) Discovery: move one head snapshot aside — `packages/identity/drizzle/meta/0002_snapshot.json` — and two tests go red, the missing-snapshot refusal and the anchor, so a set that silently dropped out cannot pass. Neither control lives in the tree, which is why the guard also carries four `negative controls` cases that feed the judgement hand-built edges in both directions; those are what survive the branch.
+
+- [x] **Step 5: Resolve each crossing**
 
 Per the topology design's §2.1, resolve by moving the column or denormalising — not by weakening the classification. A `local` session row that needs a `state` config value carries a copy of the value, not a reference to it.
 
-- [ ] **Step 6: Run the guard and the full root project**
+**Corrected while building it, 2026-09-19.** None of the six edges was resolved either of those two ways, and no classification was weakened either. All six were a `local` row naming a venue row by id — a person, a till, a location — and an id is not a value that can be copied: the reference IS the payload. So the route taken was a third one: **drop the constraint, keep the column**, and name at each site what now establishes that the id points at a real row. Five of the six take their id from a row the request had already read; the sixth, `join_requests.location_id`, is configuration checked by nothing at insert time, and its refusal moves to accept, where the accepted row — `devices` for a device, `print_agents` for an agent — still holds a key to `locations`. A reader of §2.1 should expect this route as well as the two it names.
+
+- [x] **Step 6: Run the guard and the full root project**
 
 ```bash
-pnpm vitest run scripts/two-file-foreign-keys.test.ts && pnpm test:coverage
+npx vitest run scripts/two-file-foreign-keys.test.ts && npx vitest run --coverage
 ```
 
-- [ ] **Step 7: Commit**
+**Corrected 2026-09-19:** this said `pnpm test:coverage`, which at the repository root runs the whole
+workspace — verbatim from `package.json`, `vitest run --coverage && node
+scripts/run-with-deadline.mjs 1200 -- pnpm -r --workspace-concurrency=2 test:coverage` — and
+`CLAUDE.md` §2 says not to add that solely to finish an item. The root project is what this step
+wants. What was actually run on this branch: the root project, `pnpm --filter @waitron/identity
+test:coverage`, `pnpm --filter @waitron/db test:coverage`, `pnpm --filter @waitron/sync-enrolment
+--filter @waitron/module test:coverage`, twelve `apps/server` suites chosen for touching the six
+tables or deleting a person, `pnpm -r typecheck`, `pnpm lint` and `pnpm format:check`.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git commit -s -m "Stop foreign keys crossing between the two database files

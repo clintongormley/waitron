@@ -233,6 +233,31 @@ exactly once) and `scripts/append-only-enable-always.test.ts` (every `reject_mut
 `ENABLE ALWAYS`); `packages/fiscal-verifactu`'s `inmutabilidad` suite still scans the triggers
 themselves. Run them after adding any table anywhere.
 
+## The class also chooses the database FILE, so no foreign key may join a `local` table to a `ledger`/`state` one
+
+The storage switch keeps every `local` table in `node.db` and the rest in `venue.db` (topology design
+§2.1), which is what lets a standby hold an exact copy of the venue without overwriting who it is. A
+key across the two files stops either being restored on its own, in either direction. Guard:
+`scripts/two-file-foreign-keys.test.ts`.
+
+**What it reads, and the two things it therefore cannot see.** It reads drizzle's own generated head
+snapshot for each migration set — `meta/_journal.json` names the head and `tables[*].foreignKeys[*]`
+holds the graph — so a key declared in TypeScript but not yet generated is invisible to it, and so is
+one added by hand-written migration SQL, because a custom migration leaves the snapshot alone. Both
+gaps are stated in the guard's own header with the date they were last compared. The reading was
+chosen over the TypeScript deliberately: a reading taken from the TypeScript passes the moment
+somebody edits a table file, while the constraint is still live in every migrated database, and it
+would have gone silently vacuous at the flip, when `PgTable` stops matching anything.
+
+**How the six that existed were resolved (task P7, 2026-09-19).** All six were a `local` row naming a
+venue row by id — a person, a till, a location — so neither of the two routes §2.1 named applied: an
+id is the payload, not a value that can be copied elsewhere. The constraint was dropped and the column
+kept, with what now establishes the id's target named at the column. Five take their id from a row the
+request had already read. The sixth, `join_requests.location_id`, is the node's configured location: it
+is checked by nothing when the row is written, and its refusal moved to accept, where the accepted row
+(`devices` or `print_agents`) still holds a key to `locations`. Never weaken a classification to make
+this guard pass — that is the one wrong answer §2.1 rules out.
+
 A table that ends up in one of those publications also needs a PRIMARY KEY, not a bare UNIQUE
 constraint: a published table with no replica identity accepts INSERTs and refuses UPDATEs, with
 `ERROR: 55000: cannot update table "t" because it does not have a replica identity and publishes
