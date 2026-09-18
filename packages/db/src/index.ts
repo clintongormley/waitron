@@ -4,7 +4,8 @@ export type { Database, Driver, Schema, Transaction } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
 // The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and
-// its names are listed by hand rather than starred. Guard: `schema/columns.test.ts`.
+// its names are listed by hand rather than starred. Guards: `schema/columns.test.ts` for what each
+// helper emits, `scripts/column-vocabulary.test.ts` for nobody else naming the engine's types.
 export {
   bigCount,
   binary,

@@ -4,8 +4,15 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Contract: `packages/db/src/schema/columns.ts` is the only file that names the storage engine's
- * column types. Every other file gets its columns from that vocabulary, so the SQLite switch
+ * column and table types. Every other file gets them from that vocabulary, so the SQLite switch
  * (task F1) replaces one file rather than every column declaration in the tree.
+ *
+ * It lives in the ROOT Vitest project rather than beside the vocabulary in `packages/db`, which is
+ * where the plan first put it, because CI expands a changed package to its DEPENDENTS: measured
+ * 2026-09-18, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` lists seven packages and
+ * `@waitron/db` is not among them, so a pull request adding a table file in `packages/bookings`
+ * would never have run the check meant to read it. The repo-root `vitest.config.ts` header carries
+ * the same reasoning and the 2026-08-01 measurements behind it.
  *
  * The forbidden set is DERIVED from the vocabulary's own `drizzle-orm/pg-core` import block rather
  * than written down here, because a list written down here is stale the moment a helper is added:
@@ -16,13 +23,16 @@ import { describe, expect, it } from "vitest";
  * — either the vocabulary owns the builder and the table files move onto it, or the helper is
  * written without the import — not a case to except quietly.
  *
- * `customType` is in the set deliberately, by the same reasoning rather than by omission. It is a
- * builder FACTORY, and the three hand-rolled `bytea` blocks the vocabulary's `binary` helper
- * replaced (in `print-jobs.ts`, `tenant-credentials.ts` and `images.ts`, all three now gone) were
- * each written with it. A table file calling `customType(` is doing the thing this guard exists to
- * stop, so the vocabulary is the one place it may be imported.
+ * Two names in that set are not column builders, and both are there deliberately rather than by
+ * omission. `customType` is a builder FACTORY: the three hand-rolled `bytea` blocks the
+ * vocabulary's `binary` helper replaced (in `print-jobs.ts`, `tenant-credentials.ts` and
+ * `images.ts`, all three now gone) were each written with it, so a table file calling `customType(`
+ * is doing the very thing this guard exists to stop. `pgTable` is the TABLE builder, and the
+ * vocabulary re-exports it as `table` — a table file naming `pgTable` directly is a file the
+ * SQLite switch would have to visit, which is what the whole rollout exists to avoid. Nothing
+ * outside the vocabulary imports either one today.
  *
- * Three gaps, stated here because a failing test can never restore a missing hedge:
+ * Four gaps, stated here because a failing test can never restore a missing hedge:
  *
  * 1. **It reads TEXT, not code.** It matches an import SPECIFIER, so a builder reached through a
  *    namespace import (`import * as pg from "drizzle-orm/pg-core"`, then `pg.text(…)`) is invisible
@@ -32,7 +42,17 @@ import { describe, expect, it } from "vitest";
  *    An import renamed on the way in (`text as t`) IS caught — the specifier still spells `text`.
  * 2. **It reads the import, not the call.** A file that imports nothing from the engine but builds
  *    a column some other way is not seen.
- * 3. **The allowance is a hand-written pair of file and builder.** It is scoped to the builder, not
+ * 3. **Its scope is `packages/` and `apps/`, and it includes their test files.** `bench/`,
+ *    `deploy/` and `scripts/` are outside it. A test that declares a probe table with a builder
+ *    imported straight from the engine IS reported, which is deliberate — a probe table is a table
+ *    — but it is a failure the next author will meet without warning. Four shapes of import are
+ *    also outside it, the first two of which a reader might assume are covered because named
+ *    re-exports ARE read: a star re-export (`export * from "drizzle-orm/pg-core"`), a dynamic
+ *    `await import(…)` or `require(…)`, a subpath (`drizzle-orm/pg-core/…`), and a side-effect
+ *    import. And the price of not requiring the word `import`, stated rather than papered over:
+ *    prose in a COMMENT shaped like `{ text } from "drizzle-orm/pg-core"` is reported as an
+ *    offender. Nothing in the tree trips it (checked 2026-09-18).
+ * 4. **The allowance is a hand-written pair of file and builder.** It is scoped to the builder, not
  *    the file, so a `numeric("cuota_total")` added to the same file later is still reported — but
  *    nothing stops a future entry being added to the list instead of fixing the file. The list
  *    shrinks; it does not grow.
@@ -41,7 +61,7 @@ import { describe, expect, it } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 const ROOTS = ["packages", "apps"];
 
-/** The vocabulary itself — the one file allowed to name the engine's column types. */
+/** The vocabulary itself — the one file allowed to name the engine's column and table types. */
 const VOCABULARY = "packages/db/src/schema/columns.ts";
 
 /**
@@ -60,10 +80,12 @@ const ALLOWED: ReadonlyArray<{ readonly file: string; readonly name: string }> =
 /**
  * Every `.ts` file under `dir`, discovered rather than listed.
  *
- * The `isFile()` check is not decoration: a failing browser test writes its screenshot into a
- * DIRECTORY named after the test file, so a tree walk that trusts the extension hands a directory
- * to `readFileSync` and the guard dies with `EISDIR` instead of reporting on the repository
- * (root `CLAUDE.md` §4).
+ * The shape to keep is that the DIRECTORY branch is taken first: a failing browser test writes its
+ * screenshot into a directory named after the test file, and a walk that dispatched on the
+ * extension would hand that directory to `readFileSync` and die with `EISDIR` instead of reporting
+ * on the repository (root `CLAUDE.md` §4). The `isFile()` call then only has to drop an entry
+ * `statSync` reports as neither file nor directory — a socket, a fifo, a device node. A symlink to
+ * a real source file is followed and kept, `statSync` being the dereferencing one.
  */
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];
@@ -85,19 +107,83 @@ function allSources(): string[] {
 }
 
 /**
+ * A block comment, written so it cannot match ACROSS two of them.
+ *
+ * The lazy `[\s\S]*?` this replaced could: one alternative swallowed several comments at once,
+ * which both allows a false match and backtracks exponentially when the pattern around it fails.
+ * Measured 2026-09-18 on the lazy form — a brace followed by N block comments and no `from` took
+ * 253ms at N=24, 1.25s at N=30 and 5.3s at N=32. The whole scan of the real tree takes ~75ms either
+ * way; this is about the shape being wrong, not about today's runtime.
+ */
+const BLOCK_COMMENT = String.raw`/\*(?:[^*]|\*(?!/))*\*/`;
+
+/** A line comment, up to and including its newline. */
+const LINE_COMMENT = String.raw`//[^\n]*\n`;
+
+/**
+ * Whitespace or a comment, between the tokens of an import statement.
+ *
+ * Written out because every one of these positions is a place a comment can sit and a pattern built
+ * from `\s` alone would stop matching — silently, which for a guard is the dangerous direction.
+ */
+const GAP = `(?:\\s|${BLOCK_COMMENT}|${LINE_COMMENT})*`;
+
+/**
+ * The text between an import's braces: names, commas, and comments that may themselves CONTAIN a
+ * brace.
+ *
+ * A plain `[^{}]*` is the version a review seat broke on 2026-09-18, by writing a closing brace
+ * INSIDE the comment: the capture ends there rather than at the real brace, nothing matches, and the
+ * offender is reported by nothing. Prettier leaves that shape byte-for-byte alone, so
+ * `format:check` does not undo it. Both halves of the trick — a `}` in the comment and a `{` in the
+ * comment — are controls below.
+ */
+const SPECIFIERS = `\\{((?:[^{}/]|${BLOCK_COMMENT}|${LINE_COMMENT})*)\\}`;
+
+/**
+ * An import (or re-export) of named bindings from the engine's module, in any of the shapes the
+ * tree can hold: wrapped over several lines by prettier, quoted either way, with comments between
+ * the tokens. It deliberately does not require the word `import`, so
+ * `export { text } from "drizzle-orm/pg-core"` is read too — a re-export smuggles a builder just as
+ * well as an import. The price of dropping that word is stated in the gap list: prose in a comment
+ * of the same shape would be reported (nothing in the tree trips it, checked 2026-09-18).
+ */
+const NAMED_FROM_PG_CORE = new RegExp(
+  SPECIFIERS + GAP + "from" + GAP + String.raw`["']drizzle-orm/pg-core["']`,
+  "g",
+);
+
+/**
+ * `source` with its comments removed. Used ONLY on the text between an import's braces, where there
+ * are no string or template literals to confuse it — running it over a whole file would need a
+ * scanner that knows about `"…"`, `` `…` `` and regex literals, and getting that wrong deletes real
+ * code and reports nothing.
+ */
+function withoutComments(source: string): string {
+  return source.replace(new RegExp(BLOCK_COMMENT, "g"), " ").replace(/\/\/[^\n]*/g, " ");
+}
+
+/**
  * The names a file imports from `drizzle-orm/pg-core`, as they are spelled in that module.
  *
- * `[^}]*` spans newlines, which is what makes this read an import block prettier has wrapped over
- * several lines. Both shapes are in the tree, the vocabulary's own among the wrapped ones, and a
- * pattern that stopped at the end of a line would silently read only the one-line ones — the
- * dangerous direction for a guard. A renamed import yields the IMPORTED name (`text as t` → `text`),
- * which is the name the rule is about.
+ * A renamed import yields the IMPORTED name (`text as t` → `text`), which is the name the rule is
+ * about. Comments inside the braces are removed first, and that is not hypothetical: a review seat
+ * on 2026-09-18 planted a block comment between the opening brace and the name, and an earlier
+ * version of this function read the whole thing — comment and name together — as the specifier,
+ * matched nothing, and let the offender through with the suite still reporting 14 passed. A second
+ * seat then broke the repair the same way with a brace INSIDE the comment; both shapes are controls
+ * below.
+ *
+ * Where a comment can sit, measured 2026-09-18 with `pnpm exec prettier --parser typescript`:
+ * prettier moves one written on either side of the braces to INSIDE them, so in a formatted tree —
+ * and `pnpm format:check` gates every push — that is the position that arises. One it leaves alone
+ * is between `from` and the module's name; the second `GAP` covers that, and a comment before the
+ * `import` keyword is outside the match entirely.
  */
 function importedFromPgCore(text: string): string[] {
-  const pattern = /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+"drizzle-orm\/pg-core"/g;
   const names: string[] = [];
-  for (const match of text.matchAll(pattern)) {
-    for (const specifier of match[1]!.split(",")) {
+  for (const match of text.matchAll(NAMED_FROM_PG_CORE)) {
+    for (const specifier of withoutComments(match[1]!).split(",")) {
       const imported = specifier
         .trim()
         .replace(/^type\s+/, "")
@@ -134,8 +220,8 @@ function offenders(files: readonly string[], forbidden: ReadonlySet<string>): st
   );
 }
 
-describe("the column vocabulary is the only place the engine's column types are named", () => {
-  it("no file outside the vocabulary imports a column builder from drizzle", () => {
+describe("the column vocabulary is the only place the engine's column and table types are named", () => {
+  it("no file outside the vocabulary imports a column or table builder from drizzle", () => {
     expect(offenders(allSources(), engineNames())).toEqual([]);
   });
 
@@ -163,7 +249,7 @@ describe("the column vocabulary is the only place the engine's column types are 
 });
 
 describe("negative controls", () => {
-  const FORBIDDEN = new Set(["text", "uuid", "numeric", "customType"]);
+  const FORBIDDEN = new Set(["text", "uuid", "numeric", "customType", "pgTable"]);
   const other = "packages/x/src/schema/x.ts";
   const report = (source: string, file = other) => offendingImports(file, source, FORBIDDEN);
 
@@ -197,6 +283,56 @@ describe("negative controls", () => {
 
   it("leaves a same-named import from the vocabulary alone", () => {
     expect(report(`import { label, table } from "./columns.js";`)).toEqual([]);
+  });
+
+  it("reports one hidden behind a comment inside the braces", () => {
+    // The shape a review seat planted on 2026-09-18 that an earlier version of the parser missed.
+    expect(
+      report(`import { /* keep the exact bytes */ text } from "drizzle-orm/pg-core";`),
+    ).toEqual([`${other} imports text`]);
+  });
+
+  it("reports one behind a comment that itself contains a closing brace", () => {
+    // The shape the second review seat broke the first repair with, on the same day.
+    expect(report(`import { /* } */ text } from "drizzle-orm/pg-core";`)).toEqual([
+      `${other} imports text`,
+    ]);
+  });
+
+  it("reports one behind a comment that itself contains an opening brace", () => {
+    expect(report(`import { /* { */ text } from "drizzle-orm/pg-core";`)).toEqual([
+      `${other} imports text`,
+    ]);
+  });
+
+  it("reports the table builder, which the vocabulary also owns", () => {
+    expect(report(`import { pgTable } from "drizzle-orm/pg-core";`)).toEqual([
+      `${other} imports pgTable`,
+    ]);
+  });
+
+  it("reports one with a comment between the brace and `from`", () => {
+    expect(report(`import { uuid } /* why */ from "drizzle-orm/pg-core";`)).toEqual([
+      `${other} imports uuid`,
+    ]);
+  });
+
+  it("reports one whose module specifier is single-quoted", () => {
+    expect(report(`import { text } from 'drizzle-orm/pg-core';`)).toEqual([
+      `${other} imports text`,
+    ]);
+  });
+
+  it("reports a type-only import of a builder", () => {
+    expect(report(`import type { text } from "drizzle-orm/pg-core";`)).toEqual([
+      `${other} imports text`,
+    ]);
+  });
+
+  it("reports a re-export, which smuggles a builder just as well", () => {
+    expect(report(`export { uuid } from "drizzle-orm/pg-core";`)).toEqual([
+      `${other} imports uuid`,
+    ]);
   });
 
   it("does not see a namespace import — gap 1, pinned rather than claimed", () => {

@@ -102,6 +102,7 @@ This task has two halves that land as **two pull requests**: P1a proves the voca
 - Modify (P1a): `packages/db/src/schema/drawer-opens.ts`
 - Modify (P1b): every remaining file that calls `pgTable(` (71 of them when this was written; 34 after `packages/db` and `packages/catalogue` landed, read on 2026-09-17)
 - Modify (P1b, its first step): `packages/db/src/index.ts` (export the vocabulary)
+- Create (P1b, its last step): `scripts/column-vocabulary.test.ts` (the guard)
 
 **Interfaces:**
 
@@ -453,10 +454,15 @@ check constraint at the flip, and that conversion carries a migration — it is 
 work. The mechanical part is already proven: `enumText` plus a `check()` is exactly the shape
 `drawer_opens.reason` already uses, and this item converted it.
 
-**One thing the guard in P1b step 5 will not see.** It reads TEXT, so a file that keeps importing
-`pgEnum` (every file declaring one must) still has a `drizzle-orm/pg-core` import line; the guard's
-second half looks for the column-builder names specifically, so an enum-declaring file passes. That
-is correct, but it means the guard proves "no raw column builder", never "fully converted".
+**One thing the guard in P1b step 5 will not see.** A file that keeps importing `pgEnum` (every file
+declaring one must) still has a `drizzle-orm/pg-core` import line, and it passes: the guard reports
+only the names the vocabulary itself imports, and `pgEnum` is not one of them. That is correct, but
+it means the guard proves "no raw column builder", never "fully converted". _Corrected 2026-09-18,
+when the guard shipped: this paragraph used to describe a two-part predicate — an import line plus a
+separate search for builder NAMES — that the shipped guard does not have; it makes one match, on the
+import specifier. The four later passages of this plan that mention this guard state only the
+conclusion, which still holds; the draft predicate is described once more, in the
+`packages/fiscal-verifactu` report, and is corrected there._
 
 **What `ts` could NOT hide: a timestamp's mode — and this is the finding to read twice.** `ts()` is
 hard-wired to `mode: "date"`, on the assumption written into this plan's own test comment that date
@@ -1071,8 +1077,12 @@ from drizzle.** `registros_facturacion`'s `cuota_total` and `importe_total` stay
 reason the paragraphs above step 3 give, so `registros.ts` still carries
 `import { check, index, text, uniqueIndex } from "drizzle-orm/pg-core"`. Step 5's guard predicate, as
 drafted, would report that file as an offender: it flags any file containing `table(` that imports
-`text` from `drizzle-orm/pg-core`. **Whoever writes the final pull request has to allow `text` IN THAT FILE — not the file, and not
-`text` everywhere.** A whole-file allowance would blind the guard to every other direct builder
+`text` from `drizzle-orm/pg-core`. **The final pull request has to allow `text` IN THAT FILE — not the file, and not
+`text` everywhere.** _Done 2026-09-18 in the final pull request, and the shipped guard differs from
+the draft described here: it matches the import SPECIFIER rather than a `table(` call, and the
+allowance is the single entry in `ALLOWED` in `scripts/column-vocabulary.test.ts`, scoped to `text`
+exactly as this paragraph asks. A control at the end of that file proves that a different builder in
+the same file is still reported._ A whole-file allowance would blind the guard to every other direct builder
 import in the repository's most fiscally sensitive schema file: a `numeric("cuota_total")` added there
 later would pass the guard that exists to catch exactly that. And dropping `text` from the predicate
 would blind it everywhere, which #397's reviewer already measured (a draft without `text` passed a
@@ -2291,16 +2301,21 @@ was decided:
   block — so the list this step warned would go stale does not exist. Measured while writing it:
   across `packages/` and `apps/`, exactly one file outside the vocabulary imports a column builder
   from `drizzle-orm/pg-core`, and it is `registros.ts`'s `text`. Everything else importing from that
-  module takes constraint, index or enum builders (`check`, `index`, `foreignKey`, `primaryKey`,
-  `unique`, `uniqueIndex`, `pgEnum`) or types, none of which the vocabulary owns.
+  module takes constraint, index and enum builders (`check`, `index`, `foreignKey`, `primaryKey`,
+  `unique`, `uniqueIndex`, `pgEnum`), drizzle's `alias`, the two client types
+  `packages/db/src/client.ts` takes (`PgDatabase`, `PgQueryResultHKT`), or test-only helpers and
+  types (`getTableConfig`, `PgTable`, `PgDialect`) — none of which the vocabulary owns.
 - `customType` is IN the forbidden set, which is the explicit decision this step asked for. All three
   hand-rolled `bytea` blocks the `binary` helper replaced were written with it, so a table file
   calling `customType(` is doing the thing the guard exists to stop.
 
-Proven by mutation, all three restored afterwards: a planted table file importing `uuid` was reported
-by name (`packages/db/src/schema/probe-offender.ts imports uuid`) and the suite went red; dropping the
-`registros.ts` allowance reported that file; blinding the import parser failed seven of the fourteen
-cases, so the controls bite rather than decorate. The known gap — a namespace import is invisible — is
+Proven by mutation, every one restored afterwards: a planted table file importing `uuid` was reported
+by name (`packages/db/src/schema/probe-offender.ts imports uuid`) and the suite went red; a second
+planted file whose import hid the builder behind a comment and used single quotes was reported the
+same way; dropping the `registros.ts` allowance reported that file; and blinding the import parser
+failed 15 of the suite's 22 cases, so the controls bite rather than decorate. Two review seats broke
+the parser in turn — a comment inside the braces, then a BRACE inside that comment — and each shape
+is now a control; the numbers here are as of the branch's final state. The known gap — a namespace import is invisible — is
 pinned as a control rather than only claimed, and stated in `CLAUDE.md` in the same line as the guard.
 
 - [x] **Step 6: Commit each package separately** — done 2026-09-18 with `packages/media`, the last package on step 2's list with anything to convert.

@@ -2392,7 +2392,8 @@ edit, which says the folder was not already out of date. That the probe can SEE 
 P1a's control, where a column's type was deliberately broken and the probe caught it while
 `drizzle-kit check` did not. Behaviour is a separate question the probe cannot answer, because it is
 blind to a timestamp's mode and to a caller-facing type: the workspace typecheck and the package's
-own 615 tests carried that half. The rest of P1b is the remaining packages, one pull request each.
+own 615 tests carried that half. The rest of P1b is the remaining packages, one pull request each,
+and then a final one for the guard and the house rule.
 
 One cost the plan now carries, and one correction to how it was first written down. The `binary`
 helper hands callers a `Uint8Array` where two of the three hand-rolled binary columns handed them a
@@ -2655,14 +2656,14 @@ have nothing to convert — no `pgTable(` and no `drizzle-orm/pg-core` import an
 `src`, checked 2026-09-18 — for the same reason `recipes` and `layouts` were struck off it: their
 tables live in `packages/db`. So the conversions are complete, and the rule is now written: the
 `CLAUDE.md` §3 entry names `packages/db/src/schema/columns.ts` as the only file that names the
-engine's column types, its receipt is in `docs/developers/conventions-data.md`, and
-`scripts/column-vocabulary.test.ts` enforces it. That also settles a dangling pointer, though read what it
-now rests on rather than assuming: since #393 `packages/db/src/index.ts` has cited "(CLAUDE.md §3)"
+engine's column and table types, its receipt is in `docs/developers/conventions-data.md`, and
+`scripts/column-vocabulary.test.ts` enforces it. That also retires a worry recorded here — the pointer was
+read as dangling, and reading what it rests on says it was not. Since #393 `packages/db/src/index.ts` has cited "(CLAUDE.md §3)"
 beside the vocabulary re-export, for the claim that another package reaches the vocabulary only
 through this barrel. §3 carried no rule about the vocabulary at all until now. It now names
-`columns.ts` as the only file that names the engine's column types; the "only through this barrel"
-half is covered by §3's separate rule that `@waitron/db`'s `exports` map is enumerated rather than a
-wildcard. #397's review found the dangling pointer and left it rather than widening that diff.
+`columns.ts` as the only file that names the engine's column and table types; the "only through
+this barrel" half is covered by §3's separate rule that `@waitron/db`'s `exports` map is enumerated rather than a
+wildcard. #397's review recorded the worry and left it rather than widening that diff.
 
 Three things about the guard worth knowing before changing it. It lives under `scripts/`, in the
 ROOT Vitest project, and NOT in `packages/db/src/schema/columns.test.ts` where the plan put it: CI
@@ -2673,8 +2674,8 @@ the same defect that moved the repo-wide guards out of `packages/db` on 2026-08-
 forbidden set from the vocabulary's own `drizzle-orm/pg-core` import block rather than from a list
 written into the guard, so adding a helper does not go stale, and `customType` is in that set
 deliberately — all three hand-rolled `bytea` blocks the `binary` helper replaced were written with
-it. And it is weaker than its name: it reads the IMPORT line as text, so a builder reached through
-`import * as pg from "drizzle-orm/pg-core"` is invisible to it, which is pinned as one of its own
+it. And it is weaker than its name: it reads the import or re-export line as text, so a builder reached
+through `import * as pg from "drizzle-orm/pg-core"` is invisible to it, which is pinned as one of its own
 controls rather than only claimed. One scoped exception survives, `text` in
 `packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the exact bytes
 hashed into the huella; a different builder in that same file is still reported.
