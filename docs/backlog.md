@@ -2992,6 +2992,21 @@ branch's commits rather than quietly rewritten. The practical lesson for the con
 count is not a receipt unless the command and the tree are beside it, and a correction deserves a
 reader who is not its author.
 
+**Task P7 — nothing joins the two database files any more (pull request #PR7).** The storage switch
+puts everything the venue owns in one file and this node's own identity in another, and the two can
+only be backed up or restored separately if no row in one points at a row in the other. Six such
+pointers existed, every one of them from a node's own table into the venue's: a till shift-login
+named its person and its till, a dashboard session and a two-factor enrolment named their person, a
+Google sign-in ceremony named its person, and a pending ask-to-join named its venue. All six are
+gone from the schema; the columns stay and still hold the same ids, they are simply no longer
+enforced by the database. Nothing in the product ever deleted a person, a till or a venue — only
+tests do — so the protection those keys gave was against inserting a row naming something that does
+not exist, and each of the six inserts takes its id from a row the request had already read. A new
+check in the root test project, `scripts/two-file-foreign-keys.test.ts`, fails if a new one appears.
+It reads the TypeScript schema, so a key written by hand in a migration is invisible to it; on
+2026-09-19 every crossing key in the tree was declared in TypeScript, checked by scanning the
+migration SQL as well, but nothing keeps those two readings agreeing.
+
 `packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
 from the rollout list, because the tables they read belong to `packages/db` and its conversion
 already covers them. **The tag `pre-sqlite-migration` marks the last commit that predates any of this

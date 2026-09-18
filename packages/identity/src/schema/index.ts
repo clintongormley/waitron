@@ -1,7 +1,9 @@
 // The Drizzle snapshot is built from THIS file's exports. Every name is written out explicitly —
-// never `export *`, and never a core table. sessions imports `tills` from @waitron/db for a
-// foreign key; a core table must NEVER be re-exported here or it lands in this package's snapshot
-// as a duplicate CREATE TABLE. schema-ownership.test.ts enforces this.
+// never `export *`, and never a core table: a core table re-exported here lands in this package's
+// snapshot as a duplicate CREATE TABLE. schema-ownership.test.ts enforces this. No schema file in
+// this package imports a core table any more — the storage switch removed the last one, which was
+// sessions' foreign key to `tills` — but the rule is about what is EXPORTED, so it stands either
+// way.
 export { persons, personStatus, personRole } from "./persons.js";
 export { totpEnrollments } from "./totp-enrollments.js";
 export { recoveryCodes } from "./recovery-codes.js";

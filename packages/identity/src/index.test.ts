@@ -37,19 +37,17 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
 });
 
 /**
- * Same mechanism for sessions — its FK/index block is in the lazy extraConfig callback, so this
- * both forces it to run and pins the names the generated baseline uses. sessions keys to the
- * TILL, not the node: the two FKs are to persons and tills.
+ * Same mechanism for sessions — its index block is in the lazy extraConfig callback, so this both
+ * forces it to run and pins what the generated baseline holds. It declares NO foreign key: sessions
+ * is `local` while persons and tills are `state`, so the storage switch puts them in separate files
+ * (topology design §2.1) and a key across the two would stop either being restored on its own.
  */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares sessions' primary key, its two foreign keys, and its open-session index", () => {
+  it("declares sessions' primary key and its open-session index, and no foreign key", () => {
     const config = getTableConfig(api.sessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
-
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("sessions_person_fk");
-    expect(fkNames).toContain("sessions_till_fk");
+    expect(config.foreignKeys).toEqual([]);
 
     const indexNames = config.indexes.map((i) => i.config.name);
     expect(indexNames).toContain("sessions_open_idx");
@@ -57,19 +55,17 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
 });
 
 /**
- * Same mechanism for management_sessions — its FK/index block is in the lazy extraConfig
- * callback, so this both forces it to run and pins the names the generated baseline references. A
- * management session belongs to a person (browser dashboard login), so its one FK is to persons —
- * no till.
+ * Same mechanism for management_sessions — its index block is in the lazy extraConfig callback, so
+ * this both forces it to run and pins what the generated baseline holds. A management session
+ * belongs to a person, but declares no foreign key to one, for the same file-split reason as
+ * sessions above.
  */
 describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares management_sessions' primary key, its one foreign key, and its open-session index", () => {
+  it("declares management_sessions' primary key and its open-session index, and no foreign key", () => {
     const config = getTableConfig(api.managementSessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
-
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(["management_sessions_person_fk"]);
+    expect(config.foreignKeys).toEqual([]);
 
     const indexNames = config.indexes.map((i) => i.config.name);
     expect(indexNames).toContain("management_sessions_open_idx");

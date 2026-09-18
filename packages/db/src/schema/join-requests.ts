@@ -1,6 +1,5 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 import { id, label, table, tsString } from "./columns.js";
-import { locations } from "./tenants.js";
 
 /** What an accepted request BECOMES. The two surfaces share one table because they need the same
  * columns and both models are core-set; the cross-surface decoy rule (design §1.2) is then one read
@@ -21,11 +20,11 @@ export const joinRequestKind = pgEnum("join_request_kind", ["device", "print_age
 export const joinRequests = table("join_requests", {
   id: id("id").primaryKey().defaultRandom(),
   // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked for,
-  // so a joiner says nothing about which venue it is joining.
-  locationId: id("location_id")
-    .notNull()
-    /* v8 ignore next */
-    .references(() => locations.id, { onDelete: "restrict" }),
+  // so a joiner says nothing about which venue it is joining. No foreign key to `locations`: this
+  // table is classified `local` and locations is `state`, so the storage switch puts them in
+  // different files and a key across the two would stop either being restored on its own (topology
+  // design §2.1). Guard: `scripts/two-file-foreign-keys.test.ts`.
+  locationId: id("location_id").notNull(),
   kind: joinRequestKind("kind").notNull(),
   // The name the joiner asked for. A device accept copies it to `devices.label`, an agent accept to
   // `print_agents.name`.

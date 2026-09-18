@@ -41,9 +41,11 @@ export async function authorize(
   args: { sessionId: string; permission: Permission; override?: Override },
 ): Promise<Authorization> {
   // One round-trip, not two: the open-session lookup and the operator's role are resolved by a
-  // single innerJoin. `sessions_person_fk` (restrict) guarantees a session cannot exist without its
-  // person, so the join matches whenever the session does
-  // — the row is absent ONLY when there is no open session, which is exactly `session.not_open`.
+  // single innerJoin. `sessions` carries no foreign key to `persons` — they live in different files
+  // after the storage switch (`schema/sessions.ts`) — so the row is absent when no session is open
+  // and, in principle, when a session's person row has been deleted. Both read as
+  // `session.not_open`, which fails closed. No non-test file deletes a person today; the two greps
+  // are in the pull request.
   const [row] = await tx
     .select({ personId: sessions.personId, role: persons.role })
     .from(sessions)

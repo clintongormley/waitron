@@ -71,6 +71,8 @@ Items marked **owner review** touch the unrepairable fiscal core or the arithmet
 | `packages/db/src/job-claim.ts` | The shared claim-by-update helper that replaces `FOR UPDATE SKIP LOCKED`. |
 | `packages/db/src/constraint-target.ts` | Answers "which table and columns did this refusal name?", replacing constraint-name matching. |
 | `scripts/write-path-tables.test.ts` | The guard that replaces what grants enforce: a write path may not touch a table it has no business writing. |
+| `packages/db/src/schema/foreign-keys.ts` | Reads the foreign keys a schema module declares, off the Drizzle table objects. Added by P7, which is where the reason for its home is written. |
+| `scripts/two-file-foreign-keys.test.ts` | Fails if a foreign key crosses between `venue.db` and `node.db`. Created by P7, not by the flip — the flip's table below said otherwise until 2026-09-19. |
 
 **Created by the flip:**
 
@@ -81,7 +83,6 @@ Items marked **owner review** touch the unrepairable fiscal core or the arithmet
 | `packages/store/src/write-queue.ts` | Serialises write transactions. One writer at a time, matching the engine. |
 | `packages/store/src/append-only.ts` | Installs the `RAISE(ABORT)` triggers on every `ledger` table. |
 | `packages/store/src/archive.ts` | `VACUUM INTO`, replacing the `pg_dump` path. |
-| `scripts/two-file-foreign-keys.test.ts` | Fails if a foreign key crosses between `venue.db` and `node.db`. |
 
 **Deleted by the flip:** `packages/sync` entirely; `packages/db/src/change-listener.ts`; `packages/db/src/testing/{postgres,shared-container,two-node,two-node-wireguard,networked-postgres}.ts`; `apps/server/src/pg-restore.ts`; the role and grant provisioning in `packages/provisioning`; `scripts/append-only-enable-always.test.ts`.
 
@@ -3276,6 +3277,7 @@ change is re-run here and passes against the same recorded values."
 **Files:**
 
 - Create: `scripts/two-file-foreign-keys.test.ts`
+- Create: `packages/db/src/schema/foreign-keys.ts` (added 2026-09-19 — the root project cannot import `drizzle-orm`; step 2 below says why)
 - Modify: whichever schema files hold a crossing edge
 
 **Interfaces:**
@@ -3283,7 +3285,7 @@ change is re-run here and passes against the same recorded values."
 - Consumes: the classification lists each module contributes.
 - Produces: the guarantee F1's two-file split depends on.
 
-- [ ] **Step 1: Enumerate the crossings before writing any code**
+- [x] **Step 1: Enumerate the crossings before writing any code**
 
 The spec's §11 requires this list to exist before anything is changed.
 
@@ -3293,9 +3295,11 @@ grep -rn "references(" packages apps --include='*.ts' | grep -v node_modules | g
 
 For each foreign key, look up both tables' classifications. Write the crossing edges into the pull request description — table, referenced table, both classifications, and the resolution chosen.
 
-- [ ] **Step 2: Write the failing guard**
+- [x] **Step 2: Write the failing guard**
 
 Create `scripts/two-file-foreign-keys.test.ts`. It belongs in the ROOT Vitest project, which the ungated lint job and the hook run on every non-docs push (`CLAUDE.md` §4).
+
+**Corrected while building it, 2026-09-19.** There is no `scripts/classification-helpers.ts` and the sketch below should not be read as naming one. Two things forced a different shape. The root project cannot import `drizzle-orm` — it is not a root dependency, and a root test that names it fails to resolve — so the part that reads Drizzle table objects lives in a package that already depends on it (`packages/db/src/schema/foreign-keys.ts`, `declaredForeignKeys`), and the root guard imports it by source path, exactly as `classification-complete.test.ts` imports `tablesCreatedBy` from `packages/sync-enrolment`. And the table set comes from each package's own `drizzle.config.ts` `schema:` entry point, the same file drizzle-kit builds its snapshot from, dynamically imported by the guard. The classification comes from `ALL_MODULES` as the sketch assumes.
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3322,7 +3326,7 @@ describe("the two database files are independent", () => {
 });
 ```
 
-- [ ] **Step 3: Run it and watch it fail with the real list**
+- [x] **Step 3: Run it and watch it fail with the real list**
 
 ```bash
 pnpm vitest run scripts/two-file-foreign-keys.test.ts
@@ -3330,21 +3334,21 @@ pnpm vitest run scripts/two-file-foreign-keys.test.ts
 
 Expected: FAIL, naming the crossings found in step 1. If it passes on the first run, the guard is not reading what you think — check it against a deliberately added crossing before believing it.
 
-- [ ] **Step 4: Prove the guard by deletion**
+- [x] **Step 4: Prove the guard by deletion**
 
 Add a temporary crossing foreign key, confirm the guard fails, remove it. `CLAUDE.md` §4: prove a guard by deletion, and confirm the negative control fails for the reason you think.
 
-- [ ] **Step 5: Resolve each crossing**
+- [x] **Step 5: Resolve each crossing**
 
 Per the topology design's §2.1, resolve by moving the column or denormalising — not by weakening the classification. A `local` session row that needs a `state` config value carries a copy of the value, not a reference to it.
 
-- [ ] **Step 6: Run the guard and the full root project**
+- [x] **Step 6: Run the guard and the full root project**
 
 ```bash
 pnpm vitest run scripts/two-file-foreign-keys.test.ts && pnpm test:coverage
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git commit -s -m "Stop foreign keys crossing between the two database files
