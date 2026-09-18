@@ -2521,6 +2521,10 @@ Expected: PASS, all three.
 
 - [ ] **Step 5: Convert package by package**
 
+Order: by call-site count, lightest first, so each pull request is a clean checkpoint. Re-measure
+rather than trusting a written order — `grep -rlE "\busePgliteDb\(" --include="*.ts" packages apps`
+grouped by package, run on the tree you are converting. **Converted so far:** `packages/fiscal-none`.
+
 One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — and note, corrected twice on 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are not alike and that neither correction licenses moving `describeEachTarget`.
 
 `useRealPostgres` names a real container deliberately. `describeEachTarget` is NOT a real-container helper: it registers BOTH targets (`const allTargets: Target[] = [pgliteTarget, postgresTarget()]`) and, on the default path, skips the postgres half when Docker is absent — with `REQUIRE_DOCKER=1` set it throws instead (`resolveTargets`).
