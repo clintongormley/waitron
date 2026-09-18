@@ -2942,6 +2942,13 @@ stale in one pull request, which is the whole reason #423 took it out and this s
 second attempt at the same paragraph. The pair needs the exclusion that drops the four files allowed
 to name either helper, and it lists FILES, not packages and not call sites.
 
+One follow-up the rollout found and did not take (#424): the spec
+`docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` carries "211 files" in six
+places — lines 81, 83, 450, 484, 487 and 548 — where #423's message said two. The dated pointer at
+line 85 covers the document's original reading, which is what the house rule asks of a historical
+document, but the other four sit in sections nothing in this rollout otherwise opens. Sweep them
+when something else takes that spec on.
+
 #423's own lesson was about prose, not code: three rounds of correction on four sentences, each
 round's correction wrong in a new way, and the third round's reader was itself wrong about one of
 them (it read 209 where the named commit gives 210, because the fix wave had removed the literal
