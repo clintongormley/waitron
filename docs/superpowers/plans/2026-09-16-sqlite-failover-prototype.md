@@ -49,7 +49,7 @@
 **The minimal schema (`model.ts`), each table commented as a model of its real counterpart:**
 
 ```sql
--- MODEL of registros_facturacion (packages/fiscal-verifactu/src/schema/registros.ts:23,142).
+-- MODEL of registros_facturacion (packages/fiscal-verifactu/src/schema/registros.ts:23,139).
 -- Append-only, hash-chained, keyed (node_id, secuencia). NOT the real ledger.
 CREATE TABLE records (
   node_id TEXT NOT NULL, secuencia INTEGER NOT NULL,

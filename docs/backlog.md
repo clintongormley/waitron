@@ -2331,8 +2331,8 @@ its four table files, 52 columns, with no schema change: every column builder th
 things it did not absorb, both written up in the plan. One text column keeps its hand-written
 `check()` constraint rather than moving to the `enumText`/`enumCheck` pair, because that pair
 narrows what a caller may write — measured with the typechecker, and invisible to the schema probe.
-(The condition on that reason was corrected on 2026-09-18, in the sixth pull request below: the
-narrowing happens when the values keep their literal types at the call site.)
+(The condition on that reason was established on 2026-09-18, in the sixth pull request below: whether
+the pair narrows depends on the column's nullability as well as on how the values are written.)
 And one column is an array, which the vocabulary has no helper for at all; there are five such
 columns in the tree — three more in `packages/db` and one in `packages/media` — and the flip has to
 convert every one of them whatever the vocabulary does.
@@ -2342,8 +2342,8 @@ columns, with no schema change. Its two carve-outs are the two the rollout keeps
 database enums, which `enumText` cannot stand in for because it emits `text`; and two text columns
 that keep their hand-written `check()` constraints — `payments.card_entry_mode` because its values
 are written without the spacing `enumCheck` emits, so substituting would change the schema, and
-`payment_policy.offline_mode` because the pair narrows what a caller may write (with the condition the
-sixth pull request below adds to that reason). This package met no
+`payment_policy.offline_mode` because the pair narrows what a caller may write (read with the
+condition the sixth pull request below establishes for that reason). This package met no
 shape the earlier ones had not. It is worth recording that the pull request first claimed otherwise
 — that `enumCheck` was structurally unable to express a nullable column's constraint — and that
 both reviewers falsified it by composing the thing and running it, one of them against PGlite. The

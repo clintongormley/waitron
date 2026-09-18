@@ -151,49 +151,46 @@ export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
  * composes a null arm around it".
  *
  * `units.hardware_unit` carries a reason worth stating in general: substituting there is
- * schema-silent, but `enumText` NARROWS what a caller may write — SO LONG AS the values reach it
- * still carrying their literal types. That condition was missing when this paragraph was first
- * written.
+ * schema-silent, but `enumText` NARROWS what a caller may write. **Whether it narrows depends on the
+ * column, not only on how the values are written**, so measure it on the column in front of you.
  *
- * Measured 2026-09-18 in the catalogue package, in one file with its own control, by forcing
- * `tsc --noEmit` to print each column's resolved data type through an assignment to `never`:
+ * Measured 2026-09-18 in the catalogue package, all spellings in one file with a control that fired
+ * (`const control: number = "a string"`), printing each column's INSERT type by assigning it to
+ * `never`:
  *
- *     enumText("u", ["kg", "g", "mg"])                      ->  string
- *     enumText("u", ["kg", "g", "mg"] as const)             ->  "g" | "kg" | "mg"
- *     enumText("u", ["kg", "g", "mg"] as ("kg"|"g"|"mg")[]) ->  "g" | "kg" | "mg"
- *     enumText<"kg" | "g" | "mg">("u", ["kg", "g", "mg"])   ->  "g" | "kg" | "mg"
- *     text("u", { enum: ["kg", "g", "mg"] })                ->  "g" | "kg" | "mg"
- *     enumText("u", VALUES)   // const VALUES = [...]       ->  string
+ *                                        nullable column              .notNull() column
+ *   enumText(n, ["a", "b"])              string | null | undefined    "a" | "b"
+ *   enumText(n, ["a", "b"] as const)     "a" | "b" | null | undefined "a" | "b"
+ *   enumText(n, VALUES)                  string | null | undefined    string
  *
- * So the narrowing form is anything that keeps the literal types — `as const`, an annotation, or an
- * explicit type argument — and what loses them is a bare array literal or a variable holding one,
- * where `T` is inferred as `string`. The control is that the same file reported `TS2322` on a
- * `const x: number = "a string"`, so it was being typechecked; without it, three silences looked
- * like evidence. Every `enumText` call in this repository passes its values in a narrowing form
- * (`drawer-opens.ts`, and three in `columns.test.ts`), so no column has ever lost its narrowing —
- * what was missing was the sentence's condition. The earlier receipt quoted a real compiler message
- * and did not record its probe's source, so the two readings cannot be reconciled; this one states
- * its spellings.
+ * (`VALUES` being a `const VALUES = ["a", "b"]` declared elsewhere.) So `as const` is the only
+ * spelling that narrows in every case; a bare array literal narrows on a NOT NULL column and loses
+ * it on a nullable one; a variable holding the array never narrows. The widening is not the type
+ * parameter failing to infer — `enumText(n, ["a", "b"])._.data` on the builder itself is already
+ * `"a" | "b"` — it happens on the nullable path afterwards.
  *
- * **A converter taking that reason has to re-measure it per column, in the narrowing form, and
- * needs a control that reaches the column.** The receipt for `packages/fiscal-verifactu` is in that
- * task's report in `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`; its short
- * form is that four of its five checked text columns can take the pair with no caller breaking, and
- * the fifth, `acks.state`, is a column the typechecker cannot see at all — so they stay `label()`
- * on the scope decision.
+ * The practical rule, because two earlier attempts at this sentence were both wrong in the
+ * unsafe direction: **never conclude from the spelling that a substitution is caller-safe.** Take a
+ * control that reaches the column — narrow it to a set the code does not write and watch the
+ * typechecker fail — and if that control passes, the typechecker cannot see that column and you have
+ * measured nothing.
+ *
+ * Per-package receipts live in the rollout's report in
+ * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, not here. Its short form for
+ * `packages/fiscal-verifactu`: four of its five checked text columns take the pair with no caller
+ * breaking, and the fifth, `acks.state`, is a column the typechecker cannot see at all.
  *
  * Two shapes that package met which the pair does not reach, and they are NOT the same kind of
  * reason:
  *
  * - **A constraint written as an EQUALITY** rather than an `in (…)` list.
- *   `registros_tipo_huella_ck` is `= '01'`. `in ('01')` accepts exactly the same values — run
- *   against PGlite for `'01'`, `'02'`, `''` and NULL by the run-it reviewer on 2026-09-18, which is
- *   whose measurement that is — so this is the DDL reason already
- *   recorded above and not a new one: substituting made the schema probe drop and re-add the
- *   constraint as `in ('01')`.
+ *   `registros_tipo_huella_ck` is `= '01'`, and a singleton list accepts exactly the same values —
+ *   run against PGlite for `'01'`, `'02'`, `''` and NULL by the run-it reviewer on 2026-09-18. So the
+ *   reason is the same one the DDL reasons above share, that the GENERATED TEXT changes:
+ *   substituting made the schema probe drop and re-add the constraint as `in ('01')`.
  * - **A constraint that is a PATTERN rather than a set**, `registros_huella_ck`'s
- *   `~ '^[0-9A-F]{64}$'`. This one is read off the signature rather than measured: `enumText` takes
- *   a list of values, and a 64-character hex pattern has no list to hand it.
+ *   `~ '^[0-9A-F]{64}$'`. Read off `enumText`'s signature and NOT measured: the helper takes a list
+ *   of values, and a 64-character hex pattern has no list to hand it.
  */
 export const enumText = <T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
@@ -252,7 +249,7 @@ export const bigCount = (name: string) => bigint(name, { mode: "number" });
  * Free text.
  *
  * A fiscal amount held as `text` is NOT free text and must not become `label()`:
- * `packages/fiscal-verifactu/src/schema/registros.ts:74-92` keeps `cuota_total`/`importe_total` as
+ * `packages/fiscal-verifactu/src/schema/registros.ts:74-89` keeps `cuota_total`/`importe_total` as
  * `text` because the fiscal fingerprint hashes the stored bytes verbatim, so the stored bytes must
  * equal the hashed bytes.
  *
