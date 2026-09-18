@@ -930,7 +930,7 @@ _Superseded 2026-09-18 as to its CONDITION, by the `packages/fiscal-verifactu` r
 this step: whether `enumText` narrows depends on the COLUMN as well as the spelling — `as const`
 narrows in every case, a bare array literal narrows on a NOT NULL column and loses it on a nullable
 one, and a variable holding the array never narrows. (And that reading is itself dated: the `const`
-type parameter taken later the same day left only the variable case wide.) The fact this
+type parameter taken later the same day left only the UNANNOTATED-variable case wide.) The fact this
 paragraph rests on — that the pair is not a free substitution on an existing column — stands._
 
 The second is the ARRAY column. `content_languages.languages` is `label("languages").array()`, and
@@ -997,7 +997,8 @@ already carrying `enumCheck`'s spacing.
   schema-silent, and the reason for leaving it is the caller-facing one #397 measured: `enumText`
   narrows what a caller may WRITE. _Read that with the 2026-09-18 correction further down this step,
   and with the `const` type parameter taken later that day, which left the values' ORIGIN as the
-  whole condition: inline they narrow, a variable holding them does not. A converter still has to
+  whole condition: written inline they narrow, and held in an UNANNOTATED variable they do not —
+  `as const` or a `("a" | "b")[]` annotation on that declaration narrows. A converter still has to
   take a control that actually reaches the column before reporting it either way._
 - `payments_card_entry_mode_ck` is
   `${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
@@ -1168,13 +1169,16 @@ enumText(n, VALUES)                  string | null | undefined     string
 - a bare array literal narrows on a NOT NULL column and loses it on a nullable one;
 - a variable holding the array never narrows, nullable or not.
 
-_Dated note, 2026-09-18: the FIRST of those three no longer holds, because the owner took the `const`
-type parameter described at the end of this step. A bare array literal now narrows in both
-nullabilities, so `as const` at the call site is no longer the only spelling that works — the third
-bullet is untouched, and is the whole of the remaining trap. The table as it reads today, with every
-cell pinned by a compile-time case in `packages/db/src/schema/columns.test.ts`, is in `enumText`'s own
-note in `packages/db/src/schema/columns.ts`; read that rather than this one, which is the reading
-taken before the change._
+_Dated note, 2026-09-18: the FIRST TWO of those three no longer hold, because the owner took the
+`const` type parameter described at the end of this step. A bare array literal now narrows in both
+nullabilities, so it no longer loses the narrowing on a nullable column (bullet two) and `as const`
+at the call site is no longer the only spelling that works (bullet one). The third bullet is
+untouched, and is the whole of the remaining trap — with one qualification it never stated: what
+loses the values is an UNANNOTATED variable declaration, so a declaration written `as const`, or
+annotated `("a" | "b")[]`, narrows. The table as it reads today, every cell pinned by a compile-time
+case in `packages/db/src/schema/columns.test.ts`, is in `enumText`'s own note in
+`packages/db/src/schema/columns.ts`; read that rather than this one, which is the reading taken
+before the change._
 
 **And the type parameter is not what widens.** On the builder itself, before a table wraps it,
 `enumText(n, ["a", "b"])._.data` is already `"a" | "b"`. Attempt two's mechanism sentence — "`T` is
@@ -1199,8 +1203,11 @@ on all four. The rule that survives is procedural rather than syntactic: **never
 spelling that a substitution is caller-safe.** Take a control that reaches the column, and if the
 control passes, the typechecker cannot see that column and you have measured nothing.
 
-All four `enumText` calls in the repository pass their values `as const` (`drawer-opens.ts:44` and
-three in `columns.test.ts`), so no column in the tree has ever lost its narrowing. What was wrong was
+The repository has ONE production `enumText` call, `drawer-opens.ts:44`, and it passes its values
+`as const` — so no production column has ever lost its narrowing. (Counted 2026-09-18 with
+`grep -rn "enumText(" packages apps scripts --include="*.ts"`: twelve calls, eleven of them probe
+tables in `columns.test.ts`, four of those deliberately written without `as const` because they are
+what pins the wide cells of the table.) What was wrong was
 only the sentence — and this plan, `docs/backlog.md` and two sibling schema comments had inherited it.
 
 A one-word change, a `const` type parameter (`<const T extends string>`), closes the bare-literal
@@ -1214,11 +1221,12 @@ P1b rollout was complete. Both halves of the paragraph above were reproduced on 
 change: the bare-literal nullable cell was the ONLY one of the six that moved, and the two variable
 cells read the same before and after. It is a type-level change and nothing else — `drizzle-kit
 generate` reported "No schema changes, nothing to migrate", and the JavaScript `tsc` emits for
-`columns.ts` is byte-for-byte identical with and without the `const`. Two receipts about the OLD
-behaviour are retired by it: the first bullet under the table above, and the sentence that the
-widening is not the type parameter failing to infer — that was true of the nullable path this change
-removed, and what widens the surviving variable case IS the type parameter, inferring `string` from
-an array its own declaration had already widened._
+`columns.ts` is byte-for-byte identical with and without the `const`. What it retires above — the first two bullets under the table above, and the closing half of
+the paragraph below them, "the widening happens later, on the nullable path", which is the path this
+change removed. That paragraph's OTHER half, that the type parameter is not what widens, still
+stands: in the surviving case an unannotated `const VALUES = ["a", "b"]` is already `string[]`
+before `enumText` is called, so `T` has no literal types left to infer. The declaration is the
+cause, the type parameter the carrier._
 
 Verified on 2026-09-18, each with a control. The step 4 probe was run BEFORE any edit as a baseline
 (`No schema changes, nothing to migrate`, exit 0, `diff -r` silent) and again after (the same), and
@@ -1314,7 +1322,10 @@ outside a conversion pull request.
   type, so the narrowing itself still happens. (That property was measured on the
   `packages/fiscal-verifactu` branch, whose `columns.ts` note carries the full spelling-by-
   nullability table; until that pull request lands, this sentence is the only statement of it on
-  `main`.) What was measured HERE is only that nothing in the tree today writes either column
+  `main`.) _Dated note, 2026-09-18: the conclusion stands, its REASON is retired. The `const` type
+  parameter taken later that day made a bare value list narrow whatever the nullability, so
+  `.notNull()` is no longer what does it, and the table in `columns.ts` is now keyed on where the
+  values come from rather than on the column._ What was measured HERE is only that nothing in the tree today writes either column
   through a wider type. Narrowing
   each column to a set the code does not write — `mode` to `["login"]`, dropping `link`, and
   `purpose` to `["invitation", "password_reset"]`, dropping `email_change` — made

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, expectTypeOf, it } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
 import { PgDialect, check, getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -106,25 +106,10 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
   });
 });
 
-/**
- * Exact type equality. Both sides are compared invariantly — the two function types are only
- * mutually assignable when `A` and `B` are the same type — so a widened `string` is NOT accepted
- * where `"a" | "b"` is pinned. The controls in the first case below are what stop this degrading
- * into plain assignability, which would make every pin here pass vacuously.
- */
-type Exactly<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-
-/**
- * Pins a type: the type argument has to be `true`, so a cell that does not match its pin fails to
- * compile. `pnpm --filter @waitron/db typecheck` is what runs these — at runtime each call just
- * hands its argument back.
- */
-const pinType = <Pinned extends true>(pinned: Pinned): Pinned => pinned;
-
 /** The third spelling of the values: a separate variable, and the same variable written `as const`. */
 const VALUES_IN_A_VARIABLE = ["a", "b"];
 const VALUES_IN_A_CONST_VARIABLE = ["a", "b"] as const;
+const VALUES_IN_AN_ANNOTATED_VARIABLE: ("a" | "b")[] = ["a", "b"];
 
 const enumSpellings = table("enum_spellings", {
   bareNullable: enumText("bare_nullable", ["a", "b"]),
@@ -134,58 +119,79 @@ const enumSpellings = table("enum_spellings", {
   variableNullable: enumText("variable_nullable", VALUES_IN_A_VARIABLE),
   variableNotNull: enumText("variable_not_null", VALUES_IN_A_VARIABLE).notNull(),
   constVariableNullable: enumText("const_variable_nullable", VALUES_IN_A_CONST_VARIABLE),
+  constVariableNotNull: enumText("const_variable_not_null", VALUES_IN_A_CONST_VARIABLE).notNull(),
+  annotatedVariableNullable: enumText(
+    "annotated_variable_nullable",
+    VALUES_IN_AN_ANNOTATED_VARIABLE,
+  ),
+  annotatedVariableNotNull: enumText(
+    "annotated_variable_not_null",
+    VALUES_IN_AN_ANNOTATED_VARIABLE,
+  ).notNull(),
 });
 
 type SpellingInsert = typeof enumSpellings.$inferInsert;
 
 /**
- * One assertion per cell of the table recorded in `enumText`'s own note: three ways of spelling the
- * values crossed with the column's nullability, plus the fourth spelling that is the way out of the
- * one cell still wide. Pinning every cell rather than only the one that changed on 2026-09-18 is the
- * point — the two that stay wide are the surviving trap, and a reader needs to be told which cells
- * are which.
+ * What a caller may WRITE to an `enumText` column: one case per cell of the table in that helper's
+ * own note, four ways of spelling the values crossed with the column's nullability, plus the
+ * annotated declaration that note names as the second way out of the one spelling still wide.
+ *
+ * These are COMPILE-TIME cases. `expectTypeOf` puts a mismatch inside a type argument's constraint,
+ * so `pnpm --filter @waitron/db typecheck` is what runs them — vitest's typecheck mode is off in
+ * this repository and these do not need it, which is worth knowing before you go looking for the
+ * config that would make them run in the suite. Nothing here can be checked at runtime: a `const`
+ * type parameter is erased, so the single `expect` closing each case is incidental, there to keep
+ * the body from being a no-op.
  */
 describe("what a caller may write to an enumText column", () => {
+  const c = columnsOf(enumSpellings);
+
   it("narrows an inline array literal, with no `as const` at the call site", () => {
-    // The cell this item exists for. Before `enumText` took a `const` type parameter the nullable
-    // one was `string | null | undefined`: the narrowing silently vanished on exactly the spelling
-    // a caller reaches for first. Revert the `const` in columns.ts and this line stops compiling.
-    pinType<Exactly<SpellingInsert["bareNullable"], "a" | "b" | null | undefined>>(true);
-    pinType<Exactly<SpellingInsert["bareNotNull"], "a" | "b">>(true);
+    // Revert the `const` type parameter on enumText and the first of these stops compiling — the
+    // only one of the ten cases in this describe that does, which is how the rest establish that
+    // the one word moved this cell and nothing else.
+    expectTypeOf<SpellingInsert["bareNullable"]>().toEqualTypeOf<"a" | "b" | null | undefined>();
+    expectTypeOf<SpellingInsert["bareNotNull"]>().toEqualTypeOf<"a" | "b">();
 
-    // Controls for `Exactly` itself, in both directions it could be wrong. Without them a helper
-    // that answered `true` for every pair would leave every pin in this describe asserting nothing.
-    // @ts-expect-error `string` is wider than the union, so these are not the same type
-    pinType<Exactly<string, "a" | "b">>(true);
-    // @ts-expect-error the nullable arms are part of the type, so these are not the same type
-    pinType<Exactly<"a" | "b" | null | undefined, "a" | "b">>(true);
+    // A control on the pins themselves, because a pin that cannot fail proves nothing: this one is
+    // deliberately wrong, and it is pinned closed from both sides. Delete the directive and
+    // typecheck fails on the pin (`Type 'string' does not satisfy the constraint`); make the pin
+    // right and it fails as an unused directive. There is no spelling of it that passes quietly.
+    // @ts-expect-error `bareNotNull` is the union of its values, not plain `string`
+    expectTypeOf<SpellingInsert["bareNotNull"]>().toEqualTypeOf<string>();
 
-    expect(columnsOf(enumSpellings).bare_nullable.enumValues).toEqual(["a", "b"]);
+    expect(c.bare_nullable.enumValues).toEqual(["a", "b"]);
   });
 
   it("keeps the narrowing a caller who writes `as const` already had", () => {
-    // Unchanged by the `const` type parameter, and the reason the four call sites in the tree kept
-    // their `as const`: it was never wrong, only no longer the only spelling that works.
-    pinType<Exactly<SpellingInsert["constNullable"], "a" | "b" | null | undefined>>(true);
-    pinType<Exactly<SpellingInsert["constNotNull"], "a" | "b">>(true);
+    // `as const` on an inline list is not wrong, it is just no longer the only spelling that works.
+    expectTypeOf<SpellingInsert["constNullable"]>().toEqualTypeOf<"a" | "b" | null | undefined>();
+    expectTypeOf<SpellingInsert["constNotNull"]>().toEqualTypeOf<"a" | "b">();
 
-    expect(columnsOf(enumSpellings).const_nullable.enumValues).toEqual(["a", "b"]);
+    expect(c.const_nullable.enumValues).toEqual(["a", "b"]);
   });
 
-  it("still widens to string when the values come from a variable", () => {
-    // The trap that survives. `const VALUES = ["a", "b"]` is widened to `string[]` at its own
-    // declaration, before `enumText` ever sees it, so there is no literal type left for a `const`
-    // type parameter to keep. Pinned rather than left unstated so nobody reads the case above as
-    // covering it.
-    pinType<Exactly<SpellingInsert["variableNullable"], string | null | undefined>>(true);
-    pinType<Exactly<SpellingInsert["variableNotNull"], string>>(true);
+  it("still widens to string when the values come from an unannotated variable", () => {
+    // The trap that survives. An unannotated `const VALUES = ["a", "b"]` is widened to `string[]`
+    // at its own declaration, before `enumText` ever sees it, so there is no literal type left for
+    // a `const` type parameter to keep.
+    expectTypeOf<SpellingInsert["variableNullable"]>().toEqualTypeOf<string | null | undefined>();
+    expectTypeOf<SpellingInsert["variableNotNull"]>().toEqualTypeOf<string>();
 
-    // The escape hatch, and the receipt for the sentence above: the SAME spelling at the call site,
-    // with `as const` moved onto the variable's own declaration, narrows. So what loses the values
-    // is the variable's declaration, not the call.
-    pinType<Exactly<SpellingInsert["constVariableNullable"], "a" | "b" | null | undefined>>(true);
+    // The two ways out, and the receipt for the sentence above: the same spelling at the call site,
+    // with the declaration written `as const` or annotated. So it is the declaration that loses the
+    // values, not the call, and UNANNOTATED is the condition rather than "a variable".
+    expectTypeOf<SpellingInsert["constVariableNullable"]>().toEqualTypeOf<
+      "a" | "b" | null | undefined
+    >();
+    expectTypeOf<SpellingInsert["constVariableNotNull"]>().toEqualTypeOf<"a" | "b">();
+    expectTypeOf<SpellingInsert["annotatedVariableNullable"]>().toEqualTypeOf<
+      "a" | "b" | null | undefined
+    >();
+    expectTypeOf<SpellingInsert["annotatedVariableNotNull"]>().toEqualTypeOf<"a" | "b">();
 
-    expect(columnsOf(enumSpellings).variable_nullable.enumValues).toEqual(["a", "b"]);
+    expect(c.variable_nullable.enumValues).toEqual(["a", "b"]);
   });
 });
 

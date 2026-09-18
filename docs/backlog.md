@@ -2421,8 +2421,11 @@ its four table files, 52 columns, with no schema change: every column builder th
 things it did not absorb, both written up in the plan. One text column keeps its hand-written
 `check()` constraint rather than moving to the `enumText`/`enumCheck` pair, because that pair
 narrows what a caller may write — measured with the typechecker, and invisible to the schema probe.
-(The condition on that reason was established on 2026-09-18, in the sixth pull request below: whether
-the pair narrows depends on the column's nullability as well as on how the values are written.)
+(The condition on that reason was established on 2026-09-18, in the sixth pull request below, and
+NARROWED later the same day when `enumText` took a `const` type parameter: what decides whether the
+pair narrows is where the values come from. Written inline at the call they always narrow; held in
+an unannotated variable they never do. The live table, every cell pinned by a compile-time case, is
+in `enumText`'s own note in `packages/db/src/schema/columns.ts`.)
 And one column is an array, which the vocabulary has no helper for at all; there are five such
 columns in the tree — three more in `packages/db` and one in `packages/media` — and the flip has to
 convert every one of them whatever the vocabulary does.
@@ -2433,7 +2436,8 @@ database enums, which `enumText` cannot stand in for because it emits `text`; an
 that keep their hand-written `check()` constraints — `payments.card_entry_mode` because its values
 are written without the spacing `enumCheck` emits, so substituting would change the schema, and
 `payment_policy.offline_mode` because the pair narrows what a caller may write (read with the
-condition the sixth pull request below establishes for that reason). This package met no
+condition above, as the `const` type parameter of 2026-09-18 left it: a converter here would write
+the values inline, and inline always narrows). This package met no
 shape the earlier ones had not. It is worth recording that the pull request first claimed otherwise
 — that `enumCheck` was structurally unable to express a nullable column's constraint — and that
 both reviewers falsified it by composing the thing and running it, one of them against PGlite. The
@@ -2455,7 +2459,8 @@ constraints (`google_oidc_states.mode`, `management_account_actions.purpose`) st
 `label()` columns held by SCOPE alone. Neither of the two recorded reasons refuses the substitution
 there — making it in full left the generated schema identical, and no caller of either column
 breaks, established with a control that fired first. The narrowing the second reason is about still
-happens, both columns being NOT NULL; it simply costs nothing today. So what keeps them is that
+happens — a converter would write the values inline, and since the `const` type parameter of
+2026-09-18 inline narrows whatever the nullability; it simply costs nothing today. So what keeps them is that
 rewriting an existing constraint is not what a conversion pull request does.
 
 **`packages/workforce` is converted too, in the eighth pull request (#401)** — nine table files, nine
