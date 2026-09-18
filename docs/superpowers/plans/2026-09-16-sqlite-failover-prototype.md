@@ -472,6 +472,53 @@ export default async function ({ startStore }) {
 
 - [ ] **Step 6: Gate + commit** — `git commit -s -m "feat(bench): litestream foundation — resolve pinned binary, config, stream, restore"`.
 
+> **As landed, 2026-09-18.** Everything below was measured on this machine against the pin
+> (litestream v0.5.17 darwin-arm64, node v26.7.0, the pinned MinIO image), not read off
+> documentation. Tasks 7, 8 and 9 drive this code, so read it before writing them.
+>
+> - **Litestream 0.5 is not 0.3, and the interface above describes 0.3's config.** The config takes a
+>   singular `replica:` OBJECT holding a URL, not a `replicas:` list with `endpoint`/`bucket`/`path`
+>   keys. What runs is
+>   `replica: { url: s3://<bucket>/<prefix>?endpoint=…&region=…&force-path-style=true }`, with the
+>   credentials named as `${VAR}` and supplied in the child's environment (expansion is on unless
+>   `-no-expand-env` is passed). `force-path-style=true` was measured NOT to be required against a
+>   `http://localhost:<port>` endpoint — the same sync without it also wrote its object — and is kept
+>   only because no non-localhost endpoint has been tried.
+> - **`syncOnce` is `litestream replicate -once`**, which syncs everything and exits 0. The `sync`
+>   subcommand this plan hints at is a different thing: its help asks for a control socket, so it
+>   talks to a daemon that is already running.
+> - **`syncInterval` was NOT implemented** — nothing drives it, and the daemon part of the scenario
+>   waits on an observed effect rather than on a configured interval. `writeConfig` instead takes a
+>   required `configPath`, because the caller chooses where the file goes. `replicate` returns
+>   `{ kill(), exited }` rather than a raw `ChildProcess`, so a caller can wait for the child to be
+>   GONE rather than for the signal to have been sent.
+> - **The scenario is larger than the snippet above, and the extra parts are the measurement.** The
+>   snippet restores while the source database is still on disk, where a `restore` that merely copied
+>   the file beside it would return exactly the same rows — measured: with `restore` replaced by
+>   `copyFileSync` and the source left in place, the whole scenario reports PASS. As landed it deletes
+>   the source first, compares the restored rows one by one rather than counting them, drives a
+>   `replicate` daemon, and carries a control in which a prefix nothing streamed must yield no
+>   database.
+> - **A daemon part that writes immediately after spawning measures nothing.** With `replicate`
+>   mutated to spawn the one-shot, an earlier shape of that part reported PASS with all four rows: the
+>   one-shot syncs a few hundred milliseconds in, by which time the extra inserts have landed. It
+>   waits for the first sync to be VISIBLE before writing again; the mutation then fails at the
+>   deadline having seen 2 of 4.
+>
+> Four facts Tasks 7-9 will need, none of them things to re-derive:
+>
+> - **`restore` refuses a NON-EMPTY output path** — `Error: cannot restore, output path already
+>   exists and is not empty: …. Use -force to overwrite`, before any store call. An EMPTY file there
+>   is fine, and litestream removes it itself if the restore then fails. Nothing here passes `-force`.
+> - **A restore with the source database absent returns every row**, which is what makes a restore
+>   evidence about the STORE rather than about the file next door.
+> - **litestream logs to STDOUT**, not stderr (its bundled `etc/litestream.yml` documents
+>   `logging.stderr` as defaulting to false; measured — one `replicate -once` gave 7 lines on stdout
+>   and 0 on stderr). Errors from `restore` DO go to stderr, including a real store failure
+>   (`NoSuchBucket`, exit 1, nothing on stdout).
+> - **No WAL pragma is needed first.** A database in `openNode`'s default `delete` journal mode
+>   replicated and restored fine, and litestream switched it to `wal` itself.
+
 ---
 
 ### Task 7: S0 — the happy loop end to end

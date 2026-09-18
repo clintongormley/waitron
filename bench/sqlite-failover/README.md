@@ -16,6 +16,7 @@ for the scenarios.
 
 ```bash
 export TESTCONTAINERS_RYUK_DISABLED=true
+pnpm --filter @waitron/bench-sqlite-failover setup:litestream   # once per checkout
 pnpm --filter @waitron/bench-sqlite-failover scenarios
 pnpm --filter @waitron/bench-sqlite-failover typecheck
 ```
@@ -23,6 +24,42 @@ pnpm --filter @waitron/bench-sqlite-failover typecheck
 Docker must be running: every scenario but S2 and S5 starts its own MinIO container via
 Testcontainers. Those two need no container and no store — each models its hand-over between two
 in-memory SQLite databases.
+
+`setup:litestream` downloads the pinned litestream release into the gitignored `.bin/` for this
+host's platform. Nothing else installs it, so the scenarios that drive litestream report SKIPPED
+until it has been run. `resolveLitestream()` (`src/litestream.ts`) also accepts `$LITESTREAM_BIN` or
+a `litestream` on `PATH`, and takes **only** the pinned version from any of the three — every result
+this rig records about litestream is a measurement on that pin, so a different build answering the
+same calls would be a result attributed to a version that never ran.
+
+### What the `LS` foundation check does and does not drive
+
+Each of its three parts was proved by mutation on 2026-09-18 (every mutation below was applied to
+`src/litestream.ts`, the scenario re-run, and the file restored):
+
+- a `syncOnce` that returns without spawning → the one-shot part fails on "uploaded nothing under
+  venues/v1/gen-1-box-a", which is also what a `writeConfig` that ignores its `prefix` fails on;
+- a `restore` that copies the database beside it instead of reading the store → the one-shot part
+  fails on the copy's `ENOENT`, because that part deletes the source first. With the deletion
+  removed as well, the whole scenario reports PASS — so that deletion is the only thing separating
+  "read the store" from "copied the file next door";
+- a `restore` that corrupts one payload after a successful restore → the one-shot part fails, so the
+  comparison is of contents and not of a row count;
+- a `replicate` that spawns the one-shot instead of the daemon → the daemon part fails at its
+  deadline having seen 2 of 4 rows. **An earlier shape of that part passed under this mutation**: it
+  wrote the extra rows immediately after spawning, and a one-shot syncs late enough to pick them up,
+  so both answers looked alike. Waiting for the first sync to be visible before writing again is
+  what fixed it;
+- a `restore` that leaves a partial file behind when litestream refuses → the control fails on "a
+  refused restore writes no database". Pre-creating an EMPTY file does not fail it, because
+  litestream removes an empty output file itself.
+
+Two lines in `src/litestream.ts` are driven by no scenario, and are here because the failure they
+prevent is silent rather than because anything measured them: the `process.on("exit")` sweep that
+kills a `replicate` child the scenario's `finally` never reached, and `childEnv`'s refusal to spawn
+against a config `writeConfig` did not write (which would otherwise reach litestream with empty
+credentials and come back as a store error). A later task that needs either one should pin it or
+delete it.
 
 **`scenarios` currently exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is
 FAIL — a recorded result, not a broken harness. See "What S2 measures, and what it does not" below. A
@@ -56,13 +93,21 @@ harness that broke mid-scenario never got as far as saying what it was measuring
   The registry is quay.io because Docker Hub refuses this image anonymously:
   `docker pull minio/minio:RELEASE.2025-09-07T16-13-09Z` →
   `Error response from daemon: pull access denied for minio/minio, repository does not exist or may require 'docker login'`.
-- **Litestream:** `v0.5.17` (arrives with this rig's later tasks).
+- **Litestream:** `v0.5.17`, downloaded by `setup:litestream` from the GitHub release for that tag.
+  The asset is matched on its full name, never a substring: the release lists both
+  `litestream-0.5.17-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.17-darwin-arm64.tar.gz`
+  (a different artefact), so `includes("darwin-arm64")` matches two. Only darwin/arm64 has been
+  downloaded and run.
 
 The rig **establishes** external behaviour by observing it rather than asserting it: what MinIO's
 conditional write does (S6, plan Task 2) and how Litestream lays out and restores a replica (plan
 Task 6) are each measured on these exact versions. S6's half has been run —
 `pnpm --filter @waitron/bench-sqlite-failover scenarios`, 2026-09-17, →
-`create-only=true if-match=refuses-stale race=1/8 unfenced=8/8`. The Litestream half has not. A different
+`create-only=true if-match=refuses-stale race=1/8 unfenced=8/8`. The Litestream half has been run too
+— same command, 2026-09-18, the `LS` row →
+`v0.5.17 one-shot: keys=1 restored=3; daemon: restored=4 (first sync seen after 3 restore(s), the later rows after 3); control(nothing streamed): refused`.
+That is the foundation check only (find the binary, config, stream, restore); it claims nothing about
+the failover loop, which is what S0, S3 and S4 are for. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
 their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
 — so the conditional-write result will be a fact about the mechanism, and re-running it against the
