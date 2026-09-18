@@ -24,7 +24,8 @@ pnpm --filter @waitron/bench-sqlite-failover typecheck
 Docker must be running: most scenarios start their own MinIO container via Testcontainers. S2 and
 S5 never do — each models its hand-over between two in-memory SQLite databases, so neither needs a
 container or a store. `LS` starts one only once `setup:litestream` has been run: without the pinned
-binary it reports SKIPPED before it reaches the store.
+binary it reports SKIPPED before it reaches the store. S0 does the same, and starts ONE container
+when it does run: its three runs of the loop share that store and are kept apart by term.
 
 `setup:litestream` downloads the pinned litestream release into the gitignored `.bin/` for this
 host's platform. Nothing else installs it, so the scenarios that drive litestream report SKIPPED
@@ -123,12 +124,196 @@ SKIPPED, then `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sq
 scenarios`, 2026-09-18, the `LS` row →
 `version=0.5.17 one-shot-keys=1 one-shot-restored=3 daemon-restored=4 first-sync-restores=3 after-write-restores=3 control-refused="litestream restore exited 1: Error: no matching backup files available"`.
 That is the foundation check only (find the binary, config, stream, restore); it claims nothing about
-the failover loop, which is what S0, S3 and S4 are for. A different
+the failover loop, which is what S0, S3 and S4 are for — S0 is in, and its recorded run is in its own
+section below. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
 their verdicts. MinIO is also not the store the product will run — Waitron Cloud has not chosen one
 — so the conditional-write result will be a fact about the mechanism, and re-running it against the
 real store is a standing obligation for the results note, `docs/research/2026-09-16-sqlite-failover-prototype.md`,
 which plan Task 10 writes (spec §5).
+
+## What S0's loop covers, and what its Part C records
+
+S0 runs the whole loop three times against the real litestream binary, driving it by **one-shot
+syncs**: a box sells four times, syncs to its own generation (`venues/v1/gen-1-box-a` in Part A),
+files those four itself, sells twice more and dies before the next sync; the cloud restores that
+generation, takes the next term up (2 in Part A), sells once for itself and drains; the box comes back, reads `current.json`, sees the higher term and ships
+its tail instead of selling. The three runs differ by two flags — does the box ship its tail, and do
+the box's own filings reach the store before it dies.
+
+**S0 never starts the streaming daemon.** Every upload it makes is `syncOnce`; `replicate`, the
+long-running mode the product would run, is driven by the `LS` foundation check and by nothing else
+in this rig. That is why "the box dies before the next sync" is a scripted step here: under the
+daemon it would be a timing window, and S0 measures nothing about that window.
+
+**The three parts share ONE store and are separated by TERM**, the way `s1_double_promotion`
+separates its fenced race from its control. Box terms 1, 3 and 5 name the generation each part's box
+streams to; cloud terms 2, 4 and 6 name the generation each part's cloud opens and the create-only
+claim key its promotion takes; so no two parts share a generation prefix or a claim. The one key all
+three write is `venues/v1/current.json`, which carries no term and which `promote` overwrites every
+time — each part reads it back only after its own promotion, so a later part's pointer never reaches
+an earlier one. What the single store trades away: with a
+store per part, a part that reached for another part's prefix would find nothing and fail on the
+restore, while here it finds a real generation. What makes a wrong prefix loud instead is that each
+part checks what the receiver holds against the rows its OWN box wrote, and `recordSale` puts a
+fresh uuid in every payload. Which assertion does that work differs by part, and both were run on
+2026-09-18: with Part B's restore pointed at Part A's generation it fails on "the records the stream
+carried match the box's own rows", printing both sets of payloads; with Part C's pointed there it
+fails on "the cloud holds box-a:1, which neither node in this run wrote" — the attribution check,
+not Part C's verbatim comparison, which walks repeats selected by identity and finds none in that
+state. Each of those is the assertion that fires FIRST, not the only one that would: run again with
+Part C's attribution check deleted and its restore still pointed at Part A's generation, Part C
+failed instead on "box-a:5 links to the record before it", because the ship then grafts its own
+tail onto another part's chain.
+
+**Part A is the loop, and it is what the verdict is read off.** It asserts, in this order: every
+chain on the cloud verifies (secuencias 1..N with no gap, each `huella_anterior` the row before it,
+each huella the hash of its own payload); the cloud holds box-a's 1..6 with the contents box-a wrote
+them with, compared field by field against box-a's own rows; the cloud's own chain is one record
+carrying the huella its own write returned; every `records` row on the cloud sits under the node that
+WROTE it, judged by the payload, which carries the sale's uuid; every record was handed to the
+tax-agency stub exactly once across all three drains of the run; and `current.json`, read back from
+the store, names that part's own term and generation — term 2 and `gen-2-cloud-1` for Part A.
+
+Two things it does NOT establish, stated because a reader will assume them. **"Exactly once" is a
+claim about the SUBMIT ledger and not about the table**: `records` is keyed `(node_id, secuencia)`,
+so it could not hold a row twice however the loop behaved. And **nothing here fences box-a**: it
+reads the higher term and ships because the scenario has it ship, not because anything would stop it
+selling.
+
+**Part B is the control**, the identical loop with the ship left out. The cloud must end up holding
+box-a 1..4 and not the tail, and Part A's own comparison must be what refuses that state — the
+control drives that same function and requires it to throw, rather than asserting "5 and 6 are
+missing" in words of its own, which would stay green if Part A's comparison had stopped checking
+anything. Without a control at all, "the restore plus the ship gave us 1..6" is unfalsifiable: a
+restore that had somehow carried 5 and 6 would look exactly like a ship that worked.
+
+**Part C is a MEASUREMENT and decides nothing.** It leaves out the sync that would carry box-a's
+filing state to the store, which is the route "What S2 measures, and what it does not" describes and
+says S2 does not drive: the box files records 1..4 and dies before that `envios` update syncs, so the
+promoted cloud restores them `pendiente` and files them a second time. Measured, 2026-09-18: **four
+records — `box-a:1` to `box-a:4`** — each a verbatim same-identity copy, same node, same secuencia,
+same huella, same payload as the row box-a filed, which the scenario asserts row by row. That is what
+makes it the shape the owner has already read down — a duplicate a real AEAT refuses with error 3000,
+which our drain reads as filed — rather than a new danger, and it is why the number is recorded
+instead of failing S0. That reading is the section "What the FAIL means against the real system
+(owner review, 2026-09-17)". Part A is its control: the same code path with one flag different
+re-files nothing, and a mutation flipping that flag back on in Part C took the count from four to
+zero and its first drain from `[box-a:1..4, cloud-1:1]` to `[cloud-1:1]`.
+
+**Part C also runs Part A's attribution check, and that is the assertion holding the sentence above.**
+The repeats it walks are selected BY IDENTITY — the ids the cloud filed that the box had filed too —
+so a duplicate payload filed under a DIFFERENT node id is not among them and neither the identity
+count nor the verbatim comparison would see it. Measured 2026-09-18: an extra row carrying `box-a:1`'s
+payload inserted as `box-c:1`, its huella recomputed so its own chain verifies, with a `pendiente`
+submission, before the cloud's first drain. With the attribution check taken out of Part C the whole
+scenario reported PASS, its first drain reading
+`[box-a:1,box-a:2,box-a:3,box-a:4,box-c:1,cloud-1:1]`; with the check in, Part C fails on "the cloud
+filed box-a:1's record as box-c:1".
+
+**Part A was never watched to fail first.** The commit that wrote it records that it passed on its
+first run, and it passed again on the first run after the restructure this section describes. The
+mutations below stand in for that red. Each was applied on its own, the runner run whole with
+`TESTCONTAINERS_RYUK_DISABLED=true node src/scenarios.ts` from `bench/sqlite-failover` on 2026-09-18,
+and every file restored afterwards. A scenario that throws is reported by the runner as a critical
+FAIL under its filename, which is why these read `s0_happy_loop` rather than `S0`:
+
+- `syncOnce` made to return without spawning (in `src/litestream.ts`) → "the box's sync uploaded
+  nothing under venues/v1/gen-1-box-a";
+- the box's two tail sales recorded BEFORE its own drain → "the box files its own first four records
+  before it dies", printing `box-a:5` and `box-a:6` as the extra entries;
+- the tail loop made to write one row while `TAIL_SALES` still says two → "the box wrote six records
+  before it died". Changing `TAIL_SALES` itself does NOT drive that assertion — it reads the same
+  constant, so a run with one tail sale passes — which is why the mutation breaks the write instead;
+- Part B's cloud term set to Part A's, so its promotion claims a key that already exists → "the cloud
+  takes the venue for the higher term";
+- the cloud's term set to the box's own → "the returning box reads a term above its own, so it ships
+  rather than selling";
+- the ship deleted → "the cloud holds box-a's records 1..6 exactly as box-a wrote them", printing 5
+  and 6 as the rows the cloud lacks;
+- the ship given BACK to Part B's control → "without the ship the cloud holds only the records the
+  stream carried", so the control is not green by construction;
+- Part B's restore pointed at Part A's generation → "the records the stream carried match the box's
+  own rows"; the same done to Part C → "the cloud holds box-a:1, which neither node in this run
+  wrote" — the single store's trade, above;
+- one shipped record's payload corrupted on the way in → "box-a:5's huella is the hash of its own
+  payload". The chain check runs before the field-by-field comparison, so it is the one that fires;
+- one shipped record's `huella_anterior` rewritten → "box-a:5 links to the record before it";
+- the ship made to leave out the first tail record → "box-a's chain runs 1..N with no gap (at
+  position 5)";
+- an EXTRA row under a third node id carrying box-a:6's payload, its huella recomputed so its own
+  chain verifies, added to Part A's cloud → "the cloud filed box-a:6's record as box-c:1". The chain
+  check, the 1..6 comparison and the own-chain check all passed on that state, which is what the
+  attribution check is for. With an invented payload instead of box-a's → "the cloud holds box-c:1,
+  which neither node in this run wrote";
+- the cloud selling twice → "the cloud holds exactly the one record it wrote for itself";
+- the huella captured at the cloud's own write replaced → "the cloud's record carries the huella its
+  own write returned";
+- the cloud promoted into the next term up with the expectation left where it was → "current.json
+  names the cloud's term and generation", printing `gen-3-cloud-1` against `gen-2-cloud-1`;
+- the returning box draining AFTER it ships → "every record was handed to the tax agency exactly once
+  across the whole run", printing `box-a:5` and `box-a:6` twice. **That order is what doubles them**:
+  the same drain placed BEFORE the ship leaves Part A green, because `diffTail` ships each row's
+  `estado` and `applyTail` adopts a terminal state under terminal-state-wins, so the cloud takes those
+  two rows as already filed and its second drain files nothing —
+  `happy-cloud-second-drain=[] happy-submissions=7 happy-distinct=7`;
+- the submit stub keeping one entry per identity instead of every call → **Part A still passes**, and
+  it is fair to say so rather than claim the exactly-once check caught it: Part A has no repeats to
+  drop, so that ledger reads the same either way. What fails is Part C, on "the cloud's drain files
+  exactly the records it was holding pending" — the assertion both parts run;
+- Part C's missing sync given back → the whole scenario passes with `lag-refiled=0`,
+  `lag-cloud-first-drain=[cloud-1:1]` and `lag-refiled-shape=no-repeat-to-compare`, which is what
+  makes Part C's four a difference in the loop's state rather than in what was asserted. That last
+  key is derived from the comparison rather than printed as a literal, and this run is what shows
+  it: written as a constant it would have gone on reporting `verbatim-same-identity` over an empty
+  set, and would keep reporting it on the day the protocol changes and the count reaches zero.
+
+Some assertions in the file have no mutation of their own, and saying which is cheaper than implying
+otherwise:
+
+- "the database holds at least one chain to verify" — by the time any assertion runs, the cloud has
+  recorded its own sale, so no mutation of the loop's inputs leaves that database empty without an
+  earlier assertion firing first; the line guards a later caller handing this helper an empty
+  database;
+- two lines of the cloud's own-chain check — "starts at secuencia 1" and "has no predecessor". The
+  cloud records exactly one sale, so a mutation giving it a different first record fails the length
+  assertion above them first. Its LAST line is not in this list and was wrongly put here at first:
+  "the cloud's sale was its chain's first" reads the secuencia `recordSale` RETURNED, not a row, so
+  a write that inserts normally and reports the wrong number passes every line above it. Run
+  2026-09-18 — `{ ...recordSale(cloud, 5000), secuencia: 2 }` → "the cloud's sale was its chain's
+  first";
+- "Part A's 1..6 comparison refuses the state the control produces" — no state satisfies Part B's
+  1..4 check and leaves this one failing; what it guards is that comparison quietly becoming a no-op;
+- Part C's verbatim comparison, and the `the cloud filed …, which the box never wrote` guard beside
+  it. The repeats are selected as an intersection with the box's own drain, so the lookup cannot
+  miss; and the cloud's copies of records 1..4 come from restoring the box's own database, which the
+  tail ship never touches (they sit at or below the watermark), so making one differ needs an UPDATE
+  — the one thing `records` refuses (`s_smoke`).
+
+The SKIPPED path was run again after the restructure, because a critical scenario that quietly starts
+a container while claiming it was skipped is the failure that would hide. With `.bin/litestream` moved
+aside and no `litestream` on `PATH` (`command -v litestream` finds none on this host), the scenario
+was called directly from a throwaway file with a `startStore` that throws if it is ever reached, and
+returned `S0 SKIPPED true litestream v0.5.17 not found; … — S0 is UNPROVEN until then`. The control in
+the other direction — the same call with the binary back — printed `THREW PROBE: startStore was
+called`. That detail string is also what keeps the row honest: the runner prints id, title, verdict
+and detail, and reads `critical` only when a verdict is FAIL, so the flag does no work on a SKIPPED
+row.
+
+S0's recorded run — `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
+@waitron/bench-sqlite-failover scenarios`, 2026-09-18:
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S0 | the happy failover loop, end to end | PASS | version=0.5.17 happy-box-a-filed=[box-a:1,box-a:2,box-a:3,box-a:4] happy-cloud-first-drain=[cloud-1:1] happy-cloud-second-drain=[box-a:5,box-a:6] happy-submissions=7 happy-distinct=7 happy-refiled=0 happy-current={term:2,node:cloud-1,gen:gen-2-cloud-1} control-ship=off control-held=box-a:1..4 control-refused="the cloud holds box-a's records 1..6 exactly as box-a wrote them" lag-sync-after-drain=off lag-refiled=4 lag-refiled-ids=[box-a:1,box-a:2,box-a:3,box-a:4] lag-refiled-shape=verbatim-same-identity lag-cloud-first-drain=[box-a:1,box-a:2,box-a:3,box-a:4,cloud-1:1] |
+```
+
+That run's exit code is 1, and S0 is not why: S2 is the critical FAIL the runner reports.
+
+What S0 leaves for the tasks after it: nothing streams the CLOUD's own generation anywhere, so a
+node that restores `gen-2-cloud-1` and follows the pointer is plan Task 8's, and the promotion here
+writes the pointer and a generation marker and no database.
 
 ## What S1's fence is, and what it is not
 
@@ -202,9 +387,10 @@ Litestream stream carries
 `envios` at whatever state each row had when it was streamed, so a sender that files a record and
 dies before that update streams leaves the promoted receiver holding it `pendiente`. The tail ship
 sends what the receiver LACKS, so it never corrects that row. Against the real endpoint that is one
-refused duplicate submission per such row. This rig does not measure it: S2 models the receiver's
-stale copy as coming from an earlier partial ship, and S0 (plan Task 7) is where the stream is
-driven.
+refused duplicate submission per such row. S2 does not measure it — it models the receiver's stale
+copy as coming from an earlier partial ship. **S0's Part C now drives it with the real litestream
+binary, by one-shot syncs** — not by the streaming daemon, which only the `LS` check starts — and
+measured four such rows in one run: see "What S0's loop covers, and what its Part C records" above.
 
 **On the first follow-up this section first named — "make the stub answer a repeat the way AEAT
 does" — a second look on 2026-09-17 found it would measure nothing, and it is dropped.** A stub that

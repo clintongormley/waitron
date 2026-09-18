@@ -544,6 +544,91 @@ export default async function ({ startStore }) {
 
 ### Task 7: S0 — the happy loop end to end
 
+> **2026-09-18, as landed (revised the same day after review).** The scenario is ONE parametrised
+> loop run THREE times, rather than the single sequence step 1 describes. Two flags separate the runs
+> — does the returning box ship its tail, and do its own filings reach the store before it dies — and
+> everything below follows from that shape. The three runs share ONE MinIO store and are kept apart
+> by TERM, the way `s1_double_promotion.ts` keeps its control off its fenced race: box terms 1, 3 and
+> 5 name the generation each run's box streams to, cloud terms 2, 4 and 6 name the generation each
+> run's cloud opens and the create-only claim key it takes. Each run still gets its own temp
+> directory. `bench/sqlite-failover/README.md` → "What S0's loop covers, and what its Part C records"
+> carries the recorded run, the mutation list and the messages each mutation produced, including the
+> two that show what the shared store costs: with one part's restore pointed at another part's
+> generation, what refuses it is the check that part makes against its OWN box's rows — the
+> field-by-field comparison in Part B, the attribution check in Part C.
+>
+> - **Litestream is driven by ONE-SHOT syncs here, never by the daemon.** Every upload S0 makes is
+>   `syncOnce`; nothing in it calls `replicate`, which stays the `LS` foundation check's alone. So
+>   "the box dies before the next sync" is a scripted step rather than the timing window it would be
+>   under the daemon, and S0 is no evidence about that window. The 2026-09-17 note below asks for the
+>   REAL stream rather than a modelled ship, and that is what a one-shot gives: a real litestream
+>   upload and a real restore. The daemon is still owed by whichever task needs it.
+> - **Step 1's step 5 says "box-a returns fenced"; the landed scenario models no fence at all.**
+>   Box-a reads the higher term from `current.json` and ships because the scenario has it ship —
+>   nothing would have stopped it selling. The file's header says so, and a fenced node that cannot
+>   sell is left to a later task.
+> - **The verdict string is a `key=value` list, not prose** (`docs/backlog.md` records that shape as
+>   settled for what Task 10 parses). Every number and identity the first version printed as a
+>   sentence is still there, under a key: `happy-*` for Part A, `control-*` for Part B, `lag-*` for
+>   Part C. The two flag keys read the flags rather than restating them, so a run with a flag flipped
+>   cannot print the other one's label.
+> - **Step 1's sequence has no control, and a scenario without one is incomplete** (this plan's
+>   Global Constraints). Part B is it: the identical loop with the ship left out, where the cloud must
+>   end up holding box-a 1..4 and not the tail. It drives Part A's OWN comparison over that state and
+>   requires it to throw, rather than asserting "5 and 6 are missing" in words of its own — which
+>   would stay green if Part A's comparison had stopped checking anything. Run with the ship handed
+>   back to the control, it fails on "without the ship the cloud holds only the records the stream
+>   carried", so it is not green by construction.
+> - **Step 2 — "run, watch it fail" — did not happen, and saying otherwise would be inventing a red.**
+>   Part A passed on its first run: there was no production code to add, the whole task being a
+>   scenario over interfaces Tasks 1-6 landed. What stands in for it is the mutation list in the
+>   README section named at the top of this note, each mutation applied on its own and the runner run
+>   whole with `TESTCONTAINERS_RYUK_DISABLED=true node src/scenarios.ts` from `bench/sqlite-failover`
+>   on 2026-09-18, each making one named assertion the one that failed. **Not every assertion in the
+>   file has a mutation**, and the README names the ones that do not and why — among them the cloud's
+>   own-chain lines below the first, which the length assertion above them reaches first. Two results
+>   the README reports as they came out: the attribution check fires only on a row under a THIRD node
+>   id (the sharper assertions reach every other state first), and a submit stub that keeps one entry
+>   per identity leaves Part A green, Part C being what catches it.
+> - **The question the 2026-09-17 note below poses is answered, and the answer is Part C.** The same
+>   shape S2 found DOES arise here, by the stream-lag route that note names: with no sync after the
+>   box files its own records, the promoted cloud restores them `pendiente` and files them a second
+>   time. Measured: four records, `box-a:1` to `box-a:4`, each a verbatim same-identity copy — same
+>   node, same secuencia, same huella, same payload as the row the box filed, asserted row by row.
+>   **Part C does not decide S0's verdict**, which Parts A and B do: it is the duplicate a real AEAT
+>   refuses with error 3000 and our drain reads as filed, which the owner has already read down
+>   (README → "What the FAIL means against the real system"), and the model's stub would score it as a
+>   double it is not. Part A is its control — the same code path, one flag different, zero re-filings
+>   — and flipping Part C's flag to match Part A took the count from four to zero. **Part C runs Part
+>   A's attribution check too**, because the repeats it counts are selected BY IDENTITY and so cannot
+>   see a duplicate filed under a different node id: with an extra row carrying `box-a:1`'s payload
+>   inserted as `box-c:1` before the cloud's first drain, the scenario reported PASS without that
+>   check and fails on "the cloud filed box-a:1's record as box-c:1" with it.
+> - **Step 1's assertion list grew three items and an order.** `assertChainsVerify` also checks that
+>   each chain's secuencias run 1..N with no gap, not only that the huella links hold. The chain check
+>   runs FIRST, so a corrupted payload is reported as a broken chain rather than as a content
+>   mismatch. And both Part A and Part C assert that the cloud's drain files exactly the rows the
+>   cloud itself held `pendiente` in the instant before it drained — a statement about the drain that
+>   is true either way, which is what makes Part C's number a difference in the loop's state rather
+>   than in what was asserted.
+> - **"Exactly once" is measured on the SUBMIT LEDGER, not on the table.** `records` is keyed
+>   `(node_id, secuencia)`, so it could not hold a row twice however the loop behaved; the ledger the
+>   tax-agency stub writes is the only place the claim has any content. It is compared as a sorted
+>   list, never counted.
+> - **The SKIPPED path starts no container, and that was run rather than read.** With
+>   `.bin/litestream` moved aside and no `litestream` on `PATH`, the scenario was called directly with
+>   a `startStore` that throws if it is reached: it returned `SKIPPED … S0 is UNPROVEN until then`.
+>   The control — the same call with the binary back — printed `THREW PROBE: startStore was called`.
+> - **Nothing streams the cloud's own generation**, and no node here follows `current.json` to restore
+>   from it: `promote` writes the pointer and a generation marker, and Part A reads the pointer back
+>   to check it. A node restoring `gen-2-cloud-1` is Task 8's.
+> - **No rig behaviour changed for this task.** `model.ts`, `promotion.ts`, `store.ts` and
+>   `scenarios.ts` are untouched. Outside the new scenario the change edits four things and nothing
+>   else: the package README (its S0 section, and one corrected sentence in its S2 one), a COMMENT in
+>   `litestream.ts` whose receipt for asking a daemon to stop nicely named S0 as a future user of a
+>   daemon S0 turns out never to start, this note, and a dated pointer in the topology design (§5.2)
+>   for what Part A now runs of its streamed-`envios` assumption.
+
 > **2026-09-17, from Task 4.** S2 measured a second tax-agency filing arising whenever a receiver
 > holds a record whose submission state it never learns about, and its drain claims across every
 > chain with no node filter. The steps below put records on a cloud that then drains them, so

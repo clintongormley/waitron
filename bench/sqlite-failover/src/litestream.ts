@@ -123,10 +123,15 @@ export function writeConfig(opts: {
  *
  * `kill()` asks first and insists afterwards: SIGTERM, then SIGKILL if the child is still there a
  * few seconds later, and `exited` settles either way. Asking first is deliberate — a daemon given
- * SIGTERM flushes what it has to the store before exiting, which is the behaviour S0 and S3 will
- * want — but asking alone is not a bound. Measured 2026-09-18 against a stub that declines SIGTERM
- * (`trap '' TERM`): before this escalation, `exited` was still unsettled 20 seconds after `kill()`,
- * and the scenario's `finally` awaits it before anything stops the MinIO container.
+ * SIGTERM flushes what it has to the store before exiting, which a scenario reading the store AFTER
+ * stopping a daemon would want — but asking alone is not a bound. Measured 2026-09-18 against a stub
+ * that declines SIGTERM (`trap '' TERM`): before this escalation, `exited` was still unsettled 20
+ * seconds after `kill()`, and the scenario's `finally` awaits it before anything stops the MinIO
+ * container.
+ *
+ * No scenario needs that flush today: `s_litestream_roundtrip` is this function's only caller and
+ * makes its last read before killing its daemon, and S0 (`s0_happy_loop.ts`) uses only `syncOnce`
+ * and `restore`, and starts no daemon.
  *
  * Every child is also registered for the parent's own exit (see `children` below): the scenario
  * kills it in a `finally`, but a runner that dies outside that `finally` would otherwise leave
