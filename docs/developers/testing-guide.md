@@ -88,6 +88,82 @@ outer `maxForks: 4`, and `packages/media/vitest.config.ts`, which still has proj
 `maxForks: 2` on its outer config with none inside a project. The test-load design records the live
 process and database probes.
 
+## Vitest's per-test timeout does not bound a blocking child — it fails healthy runs that outlast it.
+
+It is tempting to read a suite's two timeouts as one overriding the other. They do different things,
+and the experiment separates them. Under Vitest's default per-test timeout of 5000ms, with no
+`testTimeout` set:
+
+- a child given `timeout: 9000` that sleeps 30s is still killed at **9004ms**, and `spawnSync`
+  returns `status: null`, `signal: "SIGTERM"`, `error.code: "ETIMEDOUT"`. Vitest does not shorten
+  the spawn timeout and cannot interrupt a blocking `spawnSync` at all;
+- the test that then asserts on that result FAILS WITH ITS OWN ASSERTION — the reported error is
+  `expected null to be +0`, not Vitest's timeout. A test that throws reports its throw;
+- but a child that sleeps 7s and exits **0** — a healthy run, merely slow — is reported as
+  `Test timed out in 5000ms`. A test that would have PASSED reports Vitest's timeout.
+
+So the failure mode is precisely this: **a run that completes normally is failed for its duration
+alone.** Nothing is lost about a genuine hang; what is lost is the healthy slow run. (Measured
+2026-09-18 on an 18-core Mac. The earlier wording here — that a larger spawn timeout is "capped" or
+"unreachable" — was wrong, and was corrected after a review ran the control above.
+`scripts/ci-workflow.test.mjs` had the mechanism right first, and records that an earlier version of
+its own comment had it wrong.)
+
+What a bound has to clear, then, is the longest a healthy TEST can take: the SUM of every wait it
+performs plus whatever untimed work sits between them. The largest single wait is only one term.
+A tempting shortcut — "set the bound above the spawn timeout and no healthy run can be failed" — is
+false, and the control is cheap: two healthy 4s waits, each well inside its own 6s spawn timeout,
+failed against a 7s bound. `scripts/pre-push.test.mjs` is the case in this repo, with a test that
+invokes the hook three times and a `git()` helper that spawns with no timeout at all; its bound comes
+from measuring its cases, not from its spawn timeout. Where a suite's every case makes exactly one
+bounded call — `scripts/waitron-sh.test.mjs` and `scripts/main-tag-guard.test.mjs` — the shortcut
+does hold, and each says so in its own comment rather than relying on a general rule.
+
+`scripts/ci-workflow.test.mjs` paid for this first, on PRs #128 and #129: a cold CI runner with no
+warm pnpm store ran its sequential `pnpm ls` spawns at **at least** ~3.3x their warm time (a floor,
+derived from their crossing the 5s default, not a measurement of the cold run) and crossed the
+default. The lesson did not travel — sibling suites carried the same shape until 2026-09-18:
+`scripts/waitron-sh.test.mjs` (20s spawn timeout), `scripts/pre-push.test.mjs` (15s) and
+`scripts/main-tag-guard.test.mjs` (30s).
+
+What made waitron-sh the one that actually failed was its margin. Its `install <ref>` case takes
+~1.3s on an idle host and **4518ms** with the machine driven to load average 66 — CPU burners on
+every core plus a loop writing and executing fresh small executables — which is under the old 5000ms
+ceiling by under half a second. Nothing in that suite touches Docker: `docker` is a stub on `PATH`.
+
+Where the second goes is worth knowing before optimising it. Executing a freshly written file costs
+about 120ms against about 12ms to execute the same file again — six distinct fresh files as the
+control, so it is per file and not a one-off warm-up; an independent rerun on a loaded host measured
+144–199ms against 5.9–16.1ms. The cause looks like macOS's first-execution check of a new
+executable, but that is the likely explanation and not something these runs establish: no `spctl` or
+`syspolicyd` observation was taken. Each of waitron-sh's cases builds a fresh sandbox of five or six
+stubs, so it pays that cost per test, and reusing the stubs across cases measured 168–209ms per
+fixture against 1463–1689ms. The same reuse does NOT pay off everywhere: applied to
+`scripts/pre-push.test.mjs`, whose fixtures are dominated by real `git` work rather than stubs, a
+review measured 10.59s against 12.61s. `docs/backlog.md` → B9 carries it as work to measure.
+
+Raising the bound widens the tolerance; it does not make a suite unfailable. A review deliberately
+built a case that ran 31708ms and it failed against the new 30000ms bound, correctly.
+
+Guard: `scripts/spawn-timeout-budget.test.ts`. It is weaker than its name in three ways its own
+header states: it reads TEXT, so a timeout from an env var or built in a helper is invisible; it
+works per FILE, taking the largest bound anywhere; and it compares that bound against the largest
+SINGLE wait, which the paragraph above shows is necessary and not sufficient. It also cannot tell
+code from strings, so a number inside a fixture string counts as though it were code — the guard is
+its own example, since `budgets()` run over it reports numbers taken from its own test fixtures while
+the suite performs no wait at all. It reads only `scripts/`: a package suite can take its bound from
+its package's `vitest.config.ts`, which this never opens, and 22 of the 48 configs under `packages/`
+and `apps/` set no `testTimeout` at all (counted 2026-09-18), so that scope is a real gap rather than
+a reasoned exemption. It counts every `timeout:` option as a wait, not only `spawnSync`'s —
+`expect.poll` and `vi.waitFor` are bounded by the same clock.
+
+The one design choice worth knowing before trusting it in a gate: **a bound it cannot evaluate makes
+it decline to judge the file, not accuse it.** A guard that fails a correct file stops every push, so
+where precise reading fails — a bound written as an expression, a per-case bound past a regex literal
+or on a template-table `it.each`, a number after some other callback — it goes quiet instead. That is
+a deliberate hole, and its detector block has a case for each of those shapes recording the decline,
+alongside cases for what it does read and what it is blind to.
+
 ## Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.
 
 Testcontainers 12's `withNetworkAliases()` also attaches the default bridge. On this Docker Desktop

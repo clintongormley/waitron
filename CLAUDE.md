@@ -410,6 +410,15 @@ container or browser test** — most of these rules exist because a test passed 
 - **Vitest 3's fork limit belongs on the outer config, even with projects.** Moving `maxForks` inside
   a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which
   pins only fiscal-verifactu's and media's configs.
+- **A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs**, and that timeout
+  defaults to 5s. It does not shorten a `spawnSync` timeout or interrupt a blocking child — the kill
+  still fires — it fails the test for its duration alone. Set the bound above the longest a healthy
+  test can take, which is the SUM of its waits plus its untimed work, not the largest one. Cost: root
+  guard suites declaring 15–30s spawn timeouts ran under 5s, and `scripts/waitron-sh.test.mjs`
+  failed on a loaded machine while behaving normally — that case measures ~1.3s idle and 4518ms
+  under load, against the 5000ms default. Guard: `scripts/spawn-timeout-budget.test.ts`, weaker than
+  its name in several ways its header states — it reads TEXT, cannot tell code from strings, checks
+  only the largest SINGLE wait, and reads only `scripts/`.
 - **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a socket dir out of
   Docker Desktop's VM gives `ECONNREFUSED` on macOS.
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
