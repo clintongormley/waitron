@@ -21,9 +21,10 @@ pnpm --filter @waitron/bench-sqlite-failover scenarios
 pnpm --filter @waitron/bench-sqlite-failover typecheck
 ```
 
-Docker must be running: every scenario but S2 and S5 starts its own MinIO container via
-Testcontainers. Those two need no container and no store — each models its hand-over between two
-in-memory SQLite databases.
+Docker must be running: most scenarios start their own MinIO container via Testcontainers. S2 and
+S5 never do — each models its hand-over between two in-memory SQLite databases, so neither needs a
+container or a store. `LS` starts one only once `setup:litestream` has been run: without the pinned
+binary it reports SKIPPED before it reaches the store.
 
 `setup:litestream` downloads the pinned litestream release into the gitignored `.bin/` for this
 host's platform. Nothing else installs it, so the scenarios that drive litestream report SKIPPED
@@ -52,13 +53,24 @@ Each of its three parts was proved by mutation on 2026-09-18 (every mutation bel
   what fixed it;
 - a `restore` that leaves a partial file behind when litestream refuses → the control fails on "a
   refused restore writes no database". Pre-creating an EMPTY file does not fail it, because
-  litestream removes an empty output file itself.
+  litestream removes an empty output file itself;
+- a `restore` that rejects for an unrelated reason (`spawn ENOENT`) in the control only → the control
+  fails on "the refusal is litestream's missing-backup answer, not a failure to run it". **An earlier
+  shape of the control passed under this mutation**, because it accepted any non-empty error message:
+  a litestream that could not be run at all was recorded as a litestream that refused. It now matches
+  the missing-backup words and prints them in the verdict;
+- a stub binary whose `restore` sleeps → the scenario fails at its deadline instead of hanging. **An
+  earlier shape had no bound at all**: the 60-second poll was still unsettled at 65 seconds and the
+  scenario's cleanup had not run, so the MinIO container stayed up too. Each litestream call now
+  carries its own timeout and kills its child, and it settles on the timeout rather than waiting for
+  the child's `close` event — that event fires when the stdio pipes close, so a killed child whose own
+  children inherited them never produces it.
 
-Two lines in `src/litestream.ts` are driven by no scenario, and are here because the failure they
+Parts of `src/litestream.ts` are driven by no scenario, and are there because the failure they
 prevent is silent rather than because anything measured them: the `process.on("exit")` sweep that
 kills a `replicate` child the scenario's `finally` never reached, and `childEnv`'s refusal to spawn
 against a config `writeConfig` did not write (which would otherwise reach litestream with empty
-credentials and come back as a store error). A later task that needs either one should pin it or
+credentials and come back as a store error). A later task that needs one of them should pin it or
 delete it.
 
 **`scenarios` currently exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is
@@ -104,8 +116,10 @@ conditional write does (S6, plan Task 2) and how Litestream lays out and restore
 Task 6) are each measured on these exact versions. S6's half has been run —
 `pnpm --filter @waitron/bench-sqlite-failover scenarios`, 2026-09-17, →
 `create-only=true if-match=refuses-stale race=1/8 unfenced=8/8`. The Litestream half has been run too
-— same command, 2026-09-18, the `LS` row →
-`v0.5.17 one-shot: keys=1 restored=3; daemon: restored=4 (first sync seen after 3 restore(s), the later rows after 3); control(nothing streamed): refused`.
+— `pnpm --filter @waitron/bench-sqlite-failover setup:litestream` first, without which the row is
+SKIPPED, then `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover
+scenarios`, 2026-09-18, the `LS` row →
+`version=0.5.17 one-shot-keys=1 one-shot-restored=3 daemon-restored=4 first-sync-restores=3 after-write-restores=3 control-refused="litestream restore exited 1: Error: no matching backup files available"`.
 That is the foundation check only (find the binary, config, stream, restore); it claims nothing about
 the failover loop, which is what S0, S3 and S4 are for. A different
 version is a different measurement, so a version bump will re-run the scenarios rather than inherit
@@ -471,9 +485,10 @@ That run's exit code is 1, and S5 is not why: S2 is the critical FAIL the runner
 Three independent reasons. The first was run in this worktree; the second and third were read off the
 package and the root config, and are marked as such — they are not measurements:
 
-1. The package defines no `test` script — only `scenarios` and `typecheck`. Root `pnpm test` ends in
-   `pnpm -r test`, which skips a workspace member that has no such script instead of failing on it:
-   `pnpm -r --filter @waitron/bench-sqlite-failover test` prints nothing and exits 0.
+1. The package defines no `test` script — only `scenarios`, `setup:litestream` and `typecheck`. Root
+   `pnpm test` ends in `pnpm -r test`, which skips a workspace member that has no such script instead
+   of failing on it: `pnpm -r --filter @waitron/bench-sqlite-failover test` prints nothing and
+   exits 0.
 2. Read, not run: the package contains no `*.test.ts` file, so a `test` script added by reflex later
    would find nothing for Vitest's default include pattern to match.
 3. Read, not run: root `pnpm test` also runs `vitest run` at the repository root first, whose

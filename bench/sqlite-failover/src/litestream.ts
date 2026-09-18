@@ -1,10 +1,14 @@
 /**
  * Driving the real litestream binary: find it, point it at a store, stream, and restore.
  *
- * Everything here is a fact about the PIN below and nothing wider. Litestream 0.5 is not 0.3 — the
- * config takes a singular `replica:` object where 0.3 took a `replicas:` list, and the replica is
- * given as a URL — so a reader arriving from 0.3's documentation will find the shape here
- * unfamiliar. The receipts for each choice sit beside it.
+ * Everything here is a fact about the PIN below and nothing wider. The config shape this module
+ * writes — a singular `replica:` object holding a URL — is the one litestream 0.5's own bundled
+ * sample documents (`etc/litestream.yml` in the release tarball), and it is the shape every
+ * measurement in this file was taken on. It is NOT the only shape the pin accepts: 0.3's plural
+ * `replicas:` list with separate `type`/`bucket`/`path`/`endpoint`/`region` keys was also given to
+ * this binary on 2026-09-18 and it replicated and restored just as well. So a reader arriving from
+ * 0.3's documentation will find this unfamiliar, not wrong. The receipts for each choice sit beside
+ * it.
  */
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
@@ -14,6 +18,13 @@ import type { Store } from "./store.ts";
 
 /** The pinned release. `litestream version` prints exactly this, with no `v`, on stdout. */
 export const LITESTREAM_VERSION = "0.5.17";
+
+/**
+ * How long any one litestream call may take before it is killed. Generous: the slowest call this
+ * rig makes is a restore, and the recorded runs finish one in well under a second against a local
+ * container. It is a bound on a stall, not a performance budget.
+ */
+const CHILD_TIMEOUT_MS = 60_000;
 
 /** `<package>/.bin/litestream` — where `setup:litestream` puts the downloaded binary. */
 export const BUNDLED_BIN = join(
@@ -28,9 +39,11 @@ export const BUNDLED_BIN = join(
  * default (its `-no-expand-env` flag turns that off), so the yaml names these and the spawn supplies
  * the values, and no credential is written to a file.
  *
- * One consequence of expansion being on: a `$` anywhere in a value would be expanded too. The
- * store's credentials are fixed ASCII constants (`src/store.ts`), so that case does not arise here —
- * which is a statement about this rig's credentials, not about what litestream would do with others.
+ * Expansion is of the YAML TEXT, not of what the environment supplies for it. Measured 2026-09-18
+ * against a MinIO whose own root password was the literal `waitron$NOT_SET_ANYWHERE`, handed to the
+ * child under these variable names: the one-shot sync completed and its object was written, so the
+ * `$NOT_SET_ANYWHERE` inside the value was passed through rather than expanded to nothing. What was
+ * NOT tested is a `$` written directly into the config file, which is the thing expansion is for.
  */
 const ENV_ACCESS_KEY_ID = "WAITRON_BENCH_ACCESS_KEY_ID";
 const ENV_SECRET_ACCESS_KEY = "WAITRON_BENCH_SECRET_ACCESS_KEY";
@@ -54,7 +67,9 @@ export async function resolveLitestream(): Promise<{ bin: string; version: strin
   const candidates = [process.env.LITESTREAM_BIN, BUNDLED_BIN, "litestream"];
   for (const bin of candidates) {
     if (!bin) continue;
-    const probe = await run(bin, ["version"], {});
+    // A short bound of its own: a candidate that does not answer `version` promptly is not the
+    // pinned binary, and the lookup walks a list.
+    const probe = await run(bin, ["version"], { timeoutMs: 10_000 });
     if (probe.code !== 0) continue;
     const version = probe.stdout.trim();
     if (version === LITESTREAM_VERSION) return { bin, version };
@@ -154,7 +169,7 @@ export function replicate(
 }
 
 /**
- * Rebuild `dbName`'s replica into `outPath`. Writes `-shm`/`-wal` sidecars beside `outPath` too.
+ * Rebuild `dbName`'s replica into `outPath`.
  *
  * `dbName` is the database's path as the config names it, not a file that has to exist: restoring
  * with the source moved away returned every row (measured 2026-09-18), which is what makes a restore
@@ -172,6 +187,10 @@ export function replicate(
  * `outPath` is fine and litestream removes it when the restore then fails, while a NON-EMPTY one is
  * refused before any store call — `Error: cannot restore, output path already exists and is not
  * empty: …. Use -force to overwrite`. Nothing here passes `-force`.
+ *
+ * A successful restore writes `outPath` and nothing else. The `-shm`/`-wal` sidecars that appear
+ * beside it are SQLite's, created when something opens the result: measured 2026-09-18, a listing
+ * taken between the restore and the first open showed neither file, and both after.
  */
 export async function restore(
   bin: string,
@@ -182,6 +201,11 @@ export async function restore(
   const result = await run(bin, ["restore", "-config", config, "-o", outPath, dbName], {
     env: childEnv(config),
   });
+  if (result.timedOut) {
+    throw new Error(
+      `litestream restore was killed after ${CHILD_TIMEOUT_MS}ms: ${result.stderr.trim()}`,
+    );
+  }
   if (result.code !== 0) {
     throw new Error(`litestream restore exited ${result.code}: ${result.stderr.trim()}`);
   }
@@ -199,6 +223,11 @@ export async function syncOnce(bin: string, config: string): Promise<void> {
   const result = await run(bin, ["replicate", "-once", "-config", config], {
     env: childEnv(config),
   });
+  if (result.timedOut) {
+    throw new Error(
+      `litestream replicate -once was killed after ${CHILD_TIMEOUT_MS}ms: ${result.stderr.trim()}`,
+    );
+  }
   if (result.code !== 0) {
     throw new Error(`litestream replicate -once exited ${result.code}: ${result.stderr.trim()}`);
   }
@@ -225,11 +254,24 @@ function childEnv(config: string): NodeJS.ProcessEnv {
   };
 }
 
+/**
+ * Every child this module waits on is bounded, and the bound is here rather than at each caller.
+ *
+ * A caller's own deadline cannot help: a loop that re-checks the clock each time round never gets
+ * back to the check while it is awaiting a child that has stopped making progress. Measured
+ * 2026-09-18 with a stub binary whose `restore` runs `sleep 100000` — before this timeout, the
+ * scenario's 60-second poll was still unsettled at 65 seconds and its `finally` had not run, so the
+ * MinIO container stayed up as well. `CLAUDE.md` §4 states the rule a Vitest timer paid for: use an
+ * outer deadline.
+ *
+ * SIGKILL rather than SIGTERM, because the child being killed is one that has already failed to
+ * finish in time and a signal it can decline is not a bound.
+ */
 function run(
   bin: string,
   args: string[],
-  options: { env?: NodeJS.ProcessEnv },
-): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  options: { env?: NodeJS.ProcessEnv; timeoutMs?: number },
+): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   return new Promise((resolve) => {
     const child = spawn(bin, args, {
       env: options.env ?? process.env,
@@ -237,16 +279,38 @@ function run(
     });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
     child.stdout.on("data", (chunk: Buffer) => (stdout = tail(stdout + chunk.toString())));
     child.stderr.on("data", (chunk: Buffer) => (stderr = tail(stderr + chunk.toString())));
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+      // Settled here rather than waiting for `close`, which fires when the STDIO PIPES close, not
+      // when the process dies — a killed child whose own grandchildren inherited those pipes keeps
+      // them open and `close` never arrives. Measured 2026-09-18 against a stub whose `restore` is
+      // `sleep 100000`: killing it and waiting for `close` left the promise unsettled at 65s, the
+      // same reading as having no timeout at all.
+      settle({ code: null, stdout, stderr });
+    }, options.timeoutMs ?? CHILD_TIMEOUT_MS);
+
+    function settle(result: { code: number | null; stdout: string; stderr: string }): void {
+      clearTimeout(timer);
+      resolve({ ...result, timedOut });
+    }
     // A missing binary is an `error` event, not a non-zero exit, and `resolveLitestream` walks a
     // list of candidates most of which are expected to be absent.
-    child.on("error", (error) => resolve({ code: null, stdout, stderr: error.message }));
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
+    child.on("error", (error) => settle({ code: null, stdout, stderr: error.message }));
+    child.on("close", (code) => settle({ code, stdout, stderr }));
   });
 }
 
-/** Keep the last 8 KiB: enough for litestream's refusal line, bounded for a daemon that logs on. */
+/**
+ * Keep the last 8192 string units — enough for litestream's refusal line, bounded for a daemon that
+ * logs on. String units, not bytes: `length` counts UTF-16 units, so a log full of multi-byte
+ * characters is retained at several times that in bytes. The point is that it is bounded, not what
+ * the bound is in bytes.
+ */
 function tail(text: string): string {
   return text.length > 8192 ? text.slice(-8192) : text;
 }
