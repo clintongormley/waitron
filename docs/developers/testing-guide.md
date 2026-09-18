@@ -49,16 +49,25 @@ target (see the rule further down this file), and nothing here changes the concu
 ## Don't own a database in a suite — let a helper own it.
 
 `usePgliteDb` / `useRealPostgres` (`@waitron/db/testing/lifecycle.js`) register their own hooks and
-return an accessor that throws before setup. **A new PGlite suite asks through `useVenueDb`
-(`@waitron/db/testing/venue-db.js`) instead**, which forwards to `usePgliteDb` unchanged so that the
-storage switch lands in one function body; existing suites move over one package at a time (plan
-`2026-09-16-sqlite-slice1-storage-swap.md`, task P2 step 5), so most of them still call
-`usePgliteDb` directly today. Nothing guards this yet — the rule belongs in `CLAUDE.md` with a
-guard beside it, and both land with the last conversion pull request, once there are no standing
-violations left for the guard to trip over. Raw `beforeAll`/`afterAll` only when the suite
+return an accessor that throws before setup. Raw `beforeAll`/`afterAll` only when the suite
 legitimately builds its own resource, and then guarded (`if (db !== undefined) await db.close()`) —
 enforced by `scripts/guarded-teardowns.test.ts`, whose header records why an ESLint rule was
 rejected. Suites sharing a database clean up in a `finally`, order-independent.
+
+## A PGlite suite is being moved behind one helper, and it is not the rule yet.
+
+`useVenueDb` (`@waitron/db/testing/venue-db.js`) forwards to `usePgliteDb` unchanged — same options,
+same handle, same per-test reset — so that the planned SQLite switch replaces one function body
+instead of every call site (plan `2026-09-16-sqlite-slice1-storage-swap.md`, task P2).
+
+State of the rollout, so nobody reads more into this than it says: **no suite has moved yet.** Every
+existing PGlite suite still calls `usePgliteDb` directly, and they convert one package at a time.
+Until that finishes this is guidance for a converted package, not a rule — a rule with standing
+violations needs a guard, and a guard cannot pass while the violations stand. The house rule in
+`CLAUDE.md` and the guard that enforces it therefore land TOGETHER, in their own pull request AFTER
+the last conversion. That is the shape the column-vocabulary rollout ended in: #414 was the last
+conversion, and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together
+afterwards.
 
 **Containers and Docker**
 

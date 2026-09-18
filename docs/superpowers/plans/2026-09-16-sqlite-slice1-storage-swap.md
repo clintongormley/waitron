@@ -121,7 +121,7 @@ This task has two halves that land as **two pull requests**: P1a proves the voca
 
 ### P1a — prove the vocabulary on one module
 
-- [x] **Step 1: Write the failing test** — done 2026-09-18, in the pull request that adds the helper (the three cases, with the reset-disabled control).
+- [ ] **Step 1: Write the failing test**
 
 Create `packages/db/src/schema/columns.test.ts`. It asserts the generated DDL, not the builder's shape — a test that only checks the helper returns *something* would pass with every helper wrong.
 
@@ -165,7 +165,7 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
 });
 ```
 
-- [x] **Step 2: Run it and watch it fail** — done 2026-09-18, in the pull request that adds the helper (`Cannot find module './venue-db.js'`).
+- [ ] **Step 2: Run it and watch it fail**
 
 ```bash
 pnpm --filter @waitron/db test -- columns.test.ts
@@ -264,7 +264,7 @@ export const label = (name: string) => text(name);
 export const table = pgTable;
 ```
 
-- [x] **Step 4: Run the test and watch it pass** — done 2026-09-18, in the pull request that adds the helper (3 passed).
+- [ ] **Step 4: Run the test and watch it pass**
 
 ```bash
 pnpm --filter @waitron/db test -- columns.test.ts
@@ -2381,8 +2381,16 @@ grep -rlE "\b(usePgliteDb|useRealPostgres|describeEachTarget)\(" --include="*.ts
 ```
 
 The run-it reviewer counted 205 for the first of those, over `*.test.ts` only — the same property,
-a narrower scope. Do not treat any of these numbers as a completion target; the property is that no
-file outside `packages/db/src/testing/` names the PGlite driver.
+a narrower scope.
+
+Do not treat any of these numbers as a completion target. **The property this task can actually
+reach is: no TEST SUITE calls `usePgliteDb` directly — only `venue-db.ts` does.** It is deliberately
+narrower than "no file names the PGlite driver", which was the first attempt at stating it and is
+unsatisfiable: measured the same day, `grep -rln "createPgliteDb" --include="*.ts" packages apps`
+outside `packages/db/src/testing/` returns 27 files, among them `packages/db/src/client.ts`, which
+is where the driver is named ON PURPOSE (it is the only file importing `@electric-sql/pglite`),
+`packages/db/src/index.ts` which re-exports it, and several `apps/server/scripts/*-demo.ts`. Step 5
+converts none of those and is not meant to.
 
 **Files:**
 
@@ -2394,14 +2402,14 @@ file outside `packages/db/src/testing/` names the PGlite driver.
   is a new line in it, exactly like `./testing/lifecycle.js` beside it. Receipt that the entry works:
   `createRequire` rooted at `packages/catalogue/package.json` resolves
   `@waitron/db/testing/venue-db.js` to `packages/db/src/testing/venue-db.ts`.
-- Modify: the 211 files that call the three existing helpers — one pull request per package
+- Modify: the files that call the three existing helpers — one pull request per package. (No count here on purpose; the paragraph above gives the commands and the scopes they measure.)
 
 **Interfaces:**
 
 - Consumes: `usePgliteDb(options: PgliteSuiteOptions): PgliteSuite` from `packages/db/src/testing/lifecycle.ts`
 - Produces, consumed by F1: `useVenueDb(options: VenueDbOptions): VenueDb`, where `VenueDb` has a readonly `db: Database`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test** — done 2026-09-18, in the pull request that adds the helper: three cases, the third of them the one that discriminates.
 
 Create `packages/db/src/testing/venue-db.test.ts`:
 
@@ -2456,7 +2464,7 @@ a reset that never happened as a pass.
 (`expected { n: 1 } to deeply equal { n: 0 }`) and the first two stay green — which is this
 paragraph's claim, measured rather than asserted.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail** — done 2026-09-18: `Cannot find module './venue-db.js'`.
 
 ```bash
 pnpm --filter @waitron/db test -- venue-db.test.ts
@@ -2464,28 +2472,31 @@ pnpm --filter @waitron/db test -- venue-db.test.ts
 
 Expected: FAIL — `Cannot find module './venue-db.js'`.
 
-- [x] **Step 3: Write the helper** — done 2026-09-18, in the pull request that adds the helper (`packages/db/src/testing/venue-db.ts`).
+- [x] **Step 3: Write the helper** — done 2026-09-18: `packages/db/src/testing/venue-db.ts`.
 
 Create `packages/db/src/testing/venue-db.ts`:
 
 ```ts
 import { usePgliteDb, type PgliteSuiteOptions, type PgliteSuite } from "./lifecycle.js";
 
-/**
- * The one way a suite asks for a venue database.
- *
- * Today it is PGlite. The SQLite switch replaces this body and nothing else, which is why every
- * suite goes through it rather than naming a driver.
- */
 export type VenueDbOptions = PgliteSuiteOptions;
 export type VenueDb = PgliteSuite;
 
+/**
+ * The seam a PGlite suite asks for its database through, so that the storage switch changes one
+ * function body rather than every call site.
+ *
+ * (The doc comment sits on the FUNCTION, not above the type aliases — every sibling helper in this
+ * directory documents the function. And it does not say this is "the one way" a suite asks: that
+ * sentence was in this sketch, and it is false until step 5's conversions land. The shipped
+ * wording is in `packages/db/src/testing/venue-db.ts`; read that rather than this sketch.)
+ */
 export function useVenueDb(options: VenueDbOptions): VenueDb {
   return usePgliteDb(options);
 }
 ```
 
-- [ ] **Step 4: Run the test and watch it pass**
+- [x] **Step 4: Run the test and watch it pass** — done 2026-09-18: 3 passed.
 
 ```bash
 pnpm --filter @waitron/db test -- venue-db.test.ts
@@ -2495,7 +2506,11 @@ Expected: PASS, all three.
 
 - [ ] **Step 5: Convert package by package**
 
-One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — and note, corrected 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are NOT alike. `useRealPostgres` names a real container deliberately. `describeEachTarget` registers BOTH targets (`const allTargets: Target[] = [pgliteTarget, postgresTarget()]`) and skips the postgres half when Docker is absent, so its PGlite half is exactly the kind of thing this helper routes. Both are still left alone here, but for different reasons, and F1 decides each one's fate as part of the 66-test disposition (task F1 step 24).
+One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — and note, corrected twice on 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are not alike and that neither correction licenses moving `describeEachTarget`.
+
+`useRealPostgres` names a real container deliberately. `describeEachTarget` is NOT a real-container helper: it registers BOTH targets (`const allTargets: Target[] = [pgliteTarget, postgresTarget()]`) and, on the default path, skips the postgres half when Docker is absent — with `REQUIRE_DOCKER=1` set it throws instead (`resolveTargets`).
+
+But its PGlite half is still not a candidate for this helper, and the first correction said it was. `pgliteTarget.create()` boots a FRESH WASM cluster PER TEST, called from each test's own `beforeEach`; `usePgliteDb` hands out ONE database per SUITE with a per-test TRUNCATE. Those are different isolation contracts, and `Target`'s own doc comment argues for the per-test one at length — including that there is deliberately no `target.db` accessor. Routing that half through here would change what the harness guarantees, so it is F1's question, as part of the 66-test disposition (task F1 step 24), not a mechanical conversion.
 
 - [ ] **Step 6: Verify each package**
 
@@ -2509,7 +2524,7 @@ pnpm --filter <package> test:coverage
 git commit -s -m "Ask for a test database through one helper in <package>
 
 Same PGlite database as before. The SQLite switch replaces the helper's body
-rather than 211 call sites."
+rather than every call site."
 ```
 
 ---
@@ -4098,9 +4113,14 @@ The accessor's "read before the hook ran" error is thrown by `usePgliteDb` and s
 accessor names itself the same way). A suite converted by P2 never calls that function, so the name
 in the message is already not one its file contains — and after this step it names a driver that no
 longer exists, which is the opposite of what that loud throw is for. P2 did not fix it because the
-only fixes are changing `usePgliteDb`'s signature — a helper hundreds of files call — or wrapping
-the handle, and P2's whole claim is that the handle is the same object. Fix it here, where the body
-changes anyway. `lifecycle.test.ts` matches only `/not started/i`, so its cases stay green.
+cheapest fix is to stop naming a function at all — `"test database not started: the accessor was
+read before beforeAll ran"` at `lifecycle.ts`'s throw site changes no signature, wraps nothing and
+leaves the handle identical. (The note first claimed the only two fixes were changing
+`usePgliteDb`'s signature or wrapping the handle. That was an impossibility claim with a
+counterexample, found by the fix wave's own reviewer; CLAUDE.md §1.) P2 left it because the message
+belongs to `usePgliteDb`, not to the seam, and this step replaces that body anyway.
+`lifecycle.test.ts` matches only `/not started/i` — three occurrences, checked — so its cases stay
+green under any of these wordings.
 
 - [ ] **Step 25: Work through the 66 PostgreSQL-only tests, one at a time**
 

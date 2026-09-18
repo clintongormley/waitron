@@ -7,17 +7,15 @@ export type VenueDb = PgliteSuite;
  * The seam a PGlite suite asks for its database through, so that the storage switch changes one
  * function body rather than every call site.
  *
- * It forwards to {@link usePgliteDb} unchanged — same options, same handle, same per-test reset.
- * Suites move onto it one package at a time (plan task P2 step 5,
- * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`), so this is not yet the only
- * door: until that rollout finishes most suites still call `usePgliteDb` directly.
+ * It forwards to {@link usePgliteDb} unchanged: same options, same handle, same per-test reset.
+ * No suite has moved onto it yet — every existing suite still calls `usePgliteDb` directly, and
+ * they convert a package at a time (plan task P2 step 5).
  *
- * It is NOT the seam for a real container. `useRealPostgres` names one deliberately. And
- * `describeEachTarget` is not a real-container helper either — it registers BOTH targets, PGlite
- * and postgres, and skips the postgres half when Docker is absent (`harness.ts`,
- * `const allTargets: Target[] = [pgliteTarget, postgresTarget()]`), so its PGlite half is the kind
- * of thing this helper could route. Whether either moves is task F1's decision, recorded in the
- * plan, not a property of this function.
+ * It is NOT the seam for a real container, and it is not the seam for `describeEachTarget` either.
+ * `useRealPostgres` names a container deliberately. `describeEachTarget` is a dual-target harness
+ * whose PGlite half hands out a fresh cluster PER TEST, where this helper hands out one database
+ * per SUITE with a per-test truncate — a different isolation contract, argued for in `Target`'s own
+ * doc comment in `harness.ts`. Whether either moves is task F1's question, not this function's.
  */
 export function useVenueDb(options: VenueDbOptions): VenueDb {
   return usePgliteDb(options);

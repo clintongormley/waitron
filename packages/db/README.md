@@ -26,9 +26,11 @@ contention. Set `TESTCONTAINERS_RYUK_DISABLED=true` for local container runs.
 
 ## Test setup
 
-A PGlite suite asks for its database through `useVenueDb` (`./src/testing/venue-db.ts`), which
-forwards to `usePgliteDb` unchanged; the storage switch replaces that one body rather than every
-call site. Most suites still call `usePgliteDb` directly and move over a package at a time.
+`useVenueDb` (`./src/testing/venue-db.ts`) forwards to `usePgliteDb` unchanged, so the planned
+SQLite switch replaces that one body rather than every call site (plan
+`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P2). No suite has moved onto
+it yet — every PGlite suite still calls `usePgliteDb` directly, and they convert a package at a
+time.
 
 Keep `testTimeout: 30_000` in `vitest.config.ts` for the PGlite-backed tests; do not replace it
 with the usual 5 s default. Setup hooks have a separate `hookTimeout: 120_000` budget for booting
