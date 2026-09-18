@@ -49,6 +49,7 @@ const product: Product = {
   categoryIds: ["food", "drink"],
   primaryCategoryId: "food",
   active: true,
+  soldAlone: true,
   variants: [],
 };
 function apiFixture() {

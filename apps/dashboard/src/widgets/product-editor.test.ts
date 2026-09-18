@@ -26,6 +26,7 @@ const product: ProductEditorDraft = {
   unitId: unit.id,
   unitPrice: "9.00",
   available: true,
+  soldAlone: true,
   vatClass: "reduced",
   variants: [],
   categoryIds: [],

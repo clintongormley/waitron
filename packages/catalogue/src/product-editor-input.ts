@@ -66,8 +66,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
   const body = object(value, "product");
   const name = requiredText(body.name, "name");
   const customerName = nullableTranslations(body.customerName, "customerName");
-  // Absent means "offered standalone" (the column default); a present value must be a real boolean.
-  const soldAlone = body.soldAlone === undefined ? true : boolean(body.soldAlone, "soldAlone");
+  const soldAlone = boolean(body.soldAlone, "soldAlone");
   const description =
     body.description === null ? null : translations(body.description, "description");
   const unitId = nullableId(body.unitId, "unitId");

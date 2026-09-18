@@ -25,12 +25,21 @@ const input: ProductEditorInput = {
 it("preserves explicit zero tax, unavailable and unreviewed rather than choosing defaults", () => {
   expect(parseProductEditorInput(input)).toEqual(input);
 });
-it("carries soldAlone through, defaulting to true when the body omits it", () => {
+it("carries soldAlone through but requires it in the body, exactly like available", () => {
   expect(parseProductEditorInput({ ...input, soldAlone: false }).soldAlone).toBe(false);
-  // A body with no soldAlone key at all exercises the absent-field default.
+  // An absent soldAlone is refused rather than defaulted, mirroring the available-absent case below.
   const noFlag: Record<string, unknown> = { ...input };
   delete noFlag.soldAlone;
-  expect(parseProductEditorInput(noFlag).soldAlone).toBe(true);
+  expect(() => parseProductEditorInput(noFlag)).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
+  );
+});
+it("refuses an absent available, the sibling required boolean", () => {
+  const noAvailable: Record<string, unknown> = { ...input };
+  delete noAvailable.available;
+  expect(() => parseProductEditorInput(noAvailable)).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "available" } }),
+  );
 });
 it("rejects a non-boolean soldAlone", () => {
   expect(() => parseProductEditorInput({ ...input, soldAlone: 1 })).toThrow(

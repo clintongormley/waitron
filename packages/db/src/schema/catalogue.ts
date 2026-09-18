@@ -56,8 +56,9 @@ export const products = table(
     unitPrice: money("unit_price").notNull(),
     vatClass: label("vat_class").notNull(),
     active: flag("active").notNull().default(true),
-    // A product with sold_alone = false is a full product (price, VAT, allergens, category, unit) that
-    // is only ever referenced from elsewhere, never offered standalone on a menu or the till grid.
+    // Whether this product may be sold on its own. sold_alone = false marks a full product (price, VAT,
+    // allergens, category, unit) intended only to be referenced from elsewhere rather than offered
+    // standalone; the menu and till selection is what enforces that (a later slice).
     soldAlone: flag("sold_alone").notNull().default(true),
     // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served by
     // apps/server's /media route), never bytes. Nullable: a product legitimately has no photo, and

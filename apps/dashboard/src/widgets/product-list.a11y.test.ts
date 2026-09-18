@@ -32,6 +32,7 @@ const products: Product[] = [
     unitPrice: "8.50",
     vatClass: "reduced",
     active: true,
+    soldAlone: true,
     allergens: null,
     dietOverride: null,
     manualAllergens: null,
@@ -56,6 +57,7 @@ const products: Product[] = [
     unitPrice: "2.00",
     vatClass: "general",
     active: false,
+    soldAlone: true,
     allergens: {},
     dietOverride: null,
     manualAllergens: {},
@@ -80,6 +82,7 @@ const products: Product[] = [
     unitPrice: "15.00",
     vatClass: "super_reduced",
     active: true,
+    soldAlone: true,
     allergens: {
       gluten: { presence: "contains", source: "trigo" },
       milk: { presence: "contains" },

@@ -820,6 +820,7 @@ describe("mountCatalogueApi — products", () => {
       unitId,
       unitPrice: "2.00",
       available: true,
+      soldAlone: true,
       vatClass: "general",
       variants: [
         {
@@ -923,6 +924,7 @@ describe("mountCatalogueApi — products", () => {
       unitId,
       unitPrice: "2.00",
       available: true,
+      soldAlone: true,
       vatClass: "general",
       variants: [],
       categoryIds: [],
