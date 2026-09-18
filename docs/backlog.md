@@ -2616,7 +2616,7 @@ instrument's object-tag half cannot tell a `Buffer` from a `Uint8Array` either, 
 `String(...)` half discriminates, a `Buffer` stringifying as its utf-8 decoding and a `Uint8Array`
 as a comma-joined list.
 
-**`packages/media` is the fourteenth pull request** — one table file, two tables, nine columns, no
+**`packages/media` is the fourteenth pull request (#414)** — one table file, two tables, nine columns, no
 schema change, and it deletes the LAST hand-rolled `bytea` block in the tree. `grep -rn customType
 packages apps --include="*.ts"` now matches no file but `packages/db/src/schema/columns.ts` and
 `columns.test.ts`, where the one match is prose. That receipt is deliberately stated at FILE
