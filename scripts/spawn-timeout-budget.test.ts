@@ -1,8 +1,22 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
+// A test may wait only as long as its per-test timeout allows, whatever the wait's own limit says.
+//
+// The name of this file says `spawn`, which is where the lesson was paid for, but the rule is about
+// WAITS generally: `spawnSync`'s `timeout` under `scripts/`, and `expect.poll` / `vi.waitFor` under
+// `packages/` and `apps/`, where nothing spawns at all. All three are bounded by the same clock.
+//
 // Vitest's per-test timeout when a suite sets none.
 //
 // WHAT GOES WRONG WITHOUT A RAISED BOUND, stated as the experiment shows it rather than as it is
@@ -20,6 +34,11 @@ import { describe, expect, it } from "vitest";
 // suite's bound is still a judgement about that suite; this only catches the bounds that cannot
 // possibly be right.
 const VITEST_DEFAULT_TEST_TIMEOUT_MS = 5000;
+// …except in browser mode, where it is three times larger. From Vitest's own resolver:
+// `resolved.testTimeout ??= resolved.browser.enabled ? 15e3 : 5e3`. Taking 5000 for a browser
+// project would hand four packages here a bound a third of their real one and accuse a correct file
+// the first time anyone wrote a 5-15s wait in one.
+const VITEST_DEFAULT_BROWSER_TEST_TIMEOUT_MS = 15_000;
 
 const SCRIPTS = import.meta.dirname;
 
@@ -154,15 +173,18 @@ function callArguments(source: string, open: number) {
  *  2. It reads TEXT, and does not know code from strings. A timeout from an environment variable,
  *     imported, or computed in a helper resolves to nothing; a number inside a FIXTURE STRING counts
  *     as though it were code. This file is its own example — `budgets()` run over it reports numbers
- *     that come from the fixture sources below, and this suite performs no wait at all.
+ *     that come from the fixture sources below, and this suite performs no wait at all. Ordinary
+ *     code counts too: `packages/db/src/testing/harness.docker.test.ts` has a `timeout: 10_000`
+ *     inside a `toHaveBeenCalledExactlyOnceWith(…)` — an assertion ABOUT a mocked call, waiting for
+ *     nothing — and this reads it as a wait.
  *  3. It is per FILE, not per test. It takes the LARGEST bound anywhere in the file, so a suite that
  *     raises the bound on its slow cases and waits a long time in an untouched one still passes.
  *  4. A bound it cannot evaluate makes it DECLINE to judge the file rather than accuse it, because a
  *     false accusation stops every push. So an unreadable bound is a hole, deliberately.
- *  5. It reads only `scripts/`. A package suite's bound can come from its package's
- *     `vitest.config.ts`, which this never opens — and 22 of the 48 configs under `packages/` and
- *     `apps/` set no `testTimeout` at all (counted 2026-09-18), so that is a real gap and not a
- *     reasoned exemption.
+ *  5. Under `packages/` and `apps/` it must ask the package's Vitest configuration for the bound,
+ *     because a file there rarely sets one; where that configuration cannot be resolved — two
+ *     matching projects disagreeing, an `include` glob this guard does not model — it declines, so
+ *     those files are unchecked.
  */
 export function budgets(rawSource: string) {
   const source = withoutComments(rawSource);
@@ -210,18 +232,159 @@ export function budgets(rawSource: string) {
   return { declared: Math.max(0, ...declared), bound: Math.max(0, ...bounds), unreadable };
 }
 
-/** Every suite the root Vitest project collects — which includes nested directories. */
+const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "coverage", "drizzle", ".turbo"]);
+
+/** Every suite under a directory, nested ones included. */
 function suitesUnder(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     // A failing browser run leaves a screenshot DIRECTORY named `*.test.ts`; reading one throws
     // EISDIR and this guard would look broken rather than report a finding (CLAUDE.md §4).
-    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : suitesUnder(path);
+    if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : suitesUnder(path);
     return entry.isFile() && /\.test\.(mjs|ts)$/.test(entry.name) ? [path] : [];
   });
 }
 
-const suites = suitesUnder(SCRIPTS).map((path) => relative(SCRIPTS, path));
+const REPO = join(SCRIPTS, "..");
+
+/**
+ * A GLOB, restricted on purpose. It models a literal path, `*` (within one segment) and `**`
+ * (across segments) — the shapes this repository's Vitest configs actually use — and returns
+ * undefined for anything else, including `?`, a character class, a brace list and a negation.
+ * Undefined means the caller cannot resolve the file and must decline, never that the glob failed
+ * to match: a matcher that quietly guesses would accuse a correct file.
+ */
+function globToRegExp(glob: string): RegExp | undefined {
+  if (/[?[\]!()+@]/.test(glob)) return undefined;
+  const literal = (text: string) => text.replace(/[.^$+|\\]/g, "\\$&");
+  let pattern = "";
+  let index = 0;
+  while (index < glob.length) {
+    if (glob.startsWith("**/", index)) {
+      pattern += "(?:.*/)?";
+      index += 3;
+    } else if (glob.startsWith("**", index)) {
+      pattern += ".*";
+      index += 2;
+    } else if (glob[index] === "*") {
+      pattern += "[^/]*";
+      index += 1;
+    } else if (glob[index] === "{") {
+      // A brace list, which Vitest's own `configDefaults.exclude` is full of — every project that
+      // spreads it would otherwise be unresolvable, and that was 60 files.
+      const close = glob.indexOf("}", index);
+      if (close === -1) return undefined;
+      const alternatives = glob.slice(index + 1, close).split(",");
+      if (alternatives.some((alternative) => /[*{}]/.test(alternative))) return undefined;
+      pattern += `(?:${alternatives.map(literal).join("|")})`;
+      index = close + 1;
+    } else {
+      pattern += literal(glob[index]!);
+      index += 1;
+    }
+  }
+  return new RegExp(`^${pattern}$`);
+}
+
+/** True / false / undefined, where undefined means "cannot tell" and the caller declines. */
+function globsMatch(globs: unknown, path: string): boolean | undefined {
+  if (globs === undefined) return undefined;
+  const list = Array.isArray(globs) ? globs : [globs];
+  let matched = false;
+  for (const glob of list) {
+    if (typeof glob !== "string") return undefined;
+    const expression = globToRegExp(glob);
+    if (expression === undefined) return undefined;
+    if (expression.test(path)) matched = true;
+  }
+  return matched;
+}
+
+/**
+ * The per-test bound a package's Vitest configuration gives one of its test files, or undefined when
+ * that cannot be established — a project whose `include` uses a glob shape `globToRegExp` does not
+ * model, two projects matching the same file with different bounds, or no project matching it at all.
+ *
+ * The configs are IMPORTED rather than read as text, which is how `scripts/fiscal-test-budget.test.ts`
+ * reads its own. Note a trap: a `testTimeout` sitting beside `projects` at the top level is INERT for
+ * a project run unless the project sets `extends: true` — `packages/media/vitest.config.ts` has one,
+ * and taking it would report 30000 for a browser project that actually runs at Vitest's default.
+ */
+function boundFromConfig(config: unknown, relativePath: string): number | undefined {
+  const test = (config as { test?: Record<string, unknown> } | undefined)?.test;
+  if (test === undefined) return undefined;
+  const browserOf = (settings: Record<string, unknown> | undefined) =>
+    (settings?.browser as { enabled?: boolean } | undefined)?.enabled === true;
+  const fallback = (settings: Record<string, unknown> | undefined) =>
+    browserOf(settings) ? VITEST_DEFAULT_BROWSER_TEST_TIMEOUT_MS : VITEST_DEFAULT_TEST_TIMEOUT_MS;
+
+  const projects = test.projects as
+    { extends?: unknown; test?: Record<string, unknown> }[] | undefined;
+  if (projects === undefined) {
+    return typeof test.testTimeout === "number" ? test.testTimeout : fallback(test);
+  }
+  const bounds = new Set<number>();
+  for (const project of projects) {
+    const settings = project?.test;
+    if (settings === undefined) return undefined;
+    // No `include` means Vitest's default one, which matches every `*.test.*` — and every path this
+    // guard asks about is a test file, so such a project matches.
+    const included =
+      settings.include === undefined ? true : globsMatch(settings.include, relativePath);
+    if (included === undefined) return undefined;
+    if (!included) continue;
+    const excluded =
+      settings.exclude === undefined ? false : globsMatch(settings.exclude, relativePath);
+    if (excluded === undefined) return undefined;
+    if (excluded) continue;
+    // `extends: true` is the other half of the top-level rule: without it the top-level
+    // `testTimeout` is inert for the project, with it the project inherits it.
+    const inherits = project.extends === true;
+    if (typeof settings.testTimeout === "number") bounds.add(settings.testTimeout);
+    else if (inherits && typeof test.testTimeout === "number") bounds.add(test.testTimeout);
+    else
+      bounds.add(
+        browserOf(settings) || (inherits && browserOf(test))
+          ? VITEST_DEFAULT_BROWSER_TEST_TIMEOUT_MS
+          : VITEST_DEFAULT_TEST_TIMEOUT_MS,
+      );
+  }
+  return bounds.size === 1 ? [...bounds][0] : undefined;
+}
+
+/**
+ * The Vitest configuration that runs a given test file, and the package it belongs to.
+ *
+ * A package usually has one `vitest.config.ts`. Three have a SECOND config for suites their main one
+ * excludes, and each is keyed by a filename suffix rather than a directory — `vitest.preprod.config.ts`
+ * runs `*.preprod.test.ts`, `vitest.sandbox.config.ts` runs `*.sandbox.test.ts`. So the suffix picks
+ * the config; a file whose suffix names a config that does not exist belongs to the main one.
+ */
+function configFor(file: string): { root: string; config: string } | undefined {
+  let directory = dirname(file);
+  while (directory.startsWith(REPO) && directory !== REPO) {
+    const main = join(directory, "vitest.config.ts");
+    if (existsSync(main)) {
+      const suffix = basename(file).match(/\.(\w+)\.test\.[cm]?[jt]sx?$/)?.[1];
+      const special =
+        suffix === undefined ? undefined : join(directory, `vitest.${suffix}.config.ts`);
+      return {
+        root: directory,
+        config: special !== undefined && existsSync(special) ? special : main,
+      };
+    }
+    directory = dirname(directory);
+  }
+  return undefined;
+}
+
+const scriptSuites = suitesUnder(SCRIPTS).map((path) => relative(SCRIPTS, path));
+const packageSuites = ["packages", "apps"]
+  .map((area) => join(REPO, area))
+  .filter((area) => existsSync(area))
+  .flatMap((area) => suitesUnder(area))
+  .map((path) => relative(REPO, path));
+const suites = scriptSuites;
 
 /** A readable verdict, for the detector cases below. */
 const u = (declared: number, bound: number) => ({ declared, bound, unreadable: false });
@@ -251,6 +414,246 @@ describe("the root guard suites", () => {
         `the bound above ${declared}ms — file-wide with vi.setConfig({ testTimeout }), or on the ` +
         `waiting case with it(name, fn, ms).`,
     ).toBeGreaterThan(declared);
+  });
+});
+
+// Suites under `packages/` and `apps/`. These are a different shape from the root guards: none of
+// them spawns anything, so every wait here is an `expect.poll` or a `vi.waitFor`, bounded by the
+// same per-test clock. And a file rarely carries its own bound — it inherits one from its package's
+// `vitest.config.ts`, which is why that config has to be read. Without it this check would invent
+// failures for every package suite that relies on its config, which is most of them.
+describe("the package and app suites", () => {
+  const configCache = new Map<string, Promise<unknown>>();
+  // A config that throws on import — one needing an env var, one importing something unbuilt —
+  // must not take the whole gate down with a module-resolution error. Decline that package instead.
+  const loadConfig = (path: string) => {
+    if (!configCache.has(path)) {
+      configCache.set(
+        path,
+        import(/* @vite-ignore */ path).catch(() => undefined),
+      );
+    }
+    return configCache.get(path)!;
+  };
+
+  it("finds them", () => {
+    expect(packageSuites.length).toBeGreaterThan(500);
+  });
+
+  it("finds one that waits longer than Vitest's default, so this is not vacuous", () => {
+    const longest = packageSuites.map(
+      (name) => budgets(readFileSync(join(REPO, name), "utf8")).declared,
+    );
+    expect(Math.max(...longest)).toBeGreaterThanOrEqual(VITEST_DEFAULT_TEST_TIMEOUT_MS);
+  });
+
+  // ONE case over ~1100 files rather than `it.each` over them, and NOT for speed: a review measured
+  // the two shapes 0.23s apart in a full root run, so the earlier claim here that a case per file
+  // cost 20 seconds was wrong — it compared two different trees under load. The reason is what the
+  // check is: one uniform question asked of every file, which names at most a handful, against 1100
+  // test records that would name every file whether or not it was even judged.
+  // `scripts/guarded-teardowns.test.ts` aggregates its scan for the same reason. The cost is real —
+  // `it.each` would give a per-file test name and a per-file failure for free — so the `compared`
+  // floor below stands in for the per-file visibility this gives up.
+  it("every package and app suite can use the timeout it declares", async () => {
+    const violations: string[] = [];
+    let compared = 0;
+    for (const name of packageSuites) {
+      const file = join(REPO, name);
+      const { declared, bound, unreadable } = budgets(readFileSync(file, "utf8"));
+      if (declared < VITEST_DEFAULT_TEST_TIMEOUT_MS) continue;
+
+      const located = configFor(file);
+      if (located === undefined) continue; // no config governs it; nothing to compare against
+      const configured = boundFromConfig(
+        ((await loadConfig(located.config)) as { default?: unknown }).default,
+        relative(located.root, file),
+      );
+      // Ambiguous configuration — two projects matching with different bounds, an `include` glob
+      // this guard does not model — is not a missing bound. Decline, as with an unreadable in-file
+      // one.
+      if (configured === undefined) continue;
+
+      // The LARGEST bound that could reach any case in the file — the config's, or a bigger one the
+      // file sets on a case. Not "the file's if it has one": an `it(name, fn, ms)` on some other
+      // case can be SMALLER than the config's value, and taking it would report a bound that
+      // governs a different test entirely. Weakness 3 again, staying on the permissive side.
+      const effective = Math.max(bound, configured);
+      // The config's value is readable even where the in-file reader gave up, so it clears the
+      // unreadable decline rather than being defeated by it. That matters here: the files that wait
+      // longest carry a `beforeAll(fn, ms)` hook timeout, which is exactly what trips that net.
+      // The policy, stated once and applied here: never accuse a file whose bound this reader could
+      // not evaluate. `unreadable` means the in-file reader gave up, so the only number left is the
+      // config's — and if that does not clear the wait, the honest answer is "cannot tell", not
+      // "too small". 48 package files are already unreadable, because a `beforeAll(fn, ms)` hook
+      // timeout trips the sign-of-bound net.
+      if (unreadable && effective <= declared) continue;
+      compared += 1;
+      if (effective > declared) continue;
+
+      violations.push(
+        `${name} waits up to ${declared}ms, but the largest per-test bound that reaches it is ` +
+          `${effective}ms (${bound > configured ? "set in the file" : `from ${relative(REPO, located.config)}`}).`,
+      );
+    }
+    // Non-vacuity, end to end: if the config plumbing broke — the import interop changing,
+    // `configFor` stopping at the wrong directory, a config growing an `exclude` the matcher cannot
+    // read — every file would quietly decline and this case would still report no violations.
+    expect(
+      compared,
+      "the config lookup resolved nothing, so this checked no file at all",
+    ).toBeGreaterThanOrEqual(10);
+    expect(
+      violations,
+      "A run that legitimately takes longer than its bound is failed although it completed " +
+        "normally. Raise the bound above the wait — on the waiting case with it(name, fn, ms), or " +
+        "for the whole package in its vitest config:\n  " +
+        violations.join("\n  "),
+    ).toEqual([]);
+  });
+});
+
+// The configuration resolver's own cases. Everything above decides whether ~1100 package suites
+// pass a check that runs on every push, so a resolver that silently returned the wrong number — or
+// the right number for the wrong reason — would be invisible without these.
+describe("the configuration resolver", () => {
+  const cfg = (test: unknown) => ({ test });
+
+  it("reads a plain testTimeout", () => {
+    expect(boundFromConfig(cfg({ testTimeout: 30_000 }), "src/a.test.ts")).toBe(30_000);
+  });
+
+  it("treats a config that sets none as Vitest's default", () => {
+    expect(boundFromConfig(cfg({}), "src/a.test.ts")).toBe(VITEST_DEFAULT_TEST_TIMEOUT_MS);
+  });
+
+  it("takes the value of the ONE project whose include matches", () => {
+    const config = cfg({
+      projects: [
+        {
+          test: {
+            include: ["src/**/*.test.ts"],
+            exclude: ["src/dashboard/**"],
+            testTimeout: 30_000,
+          },
+        },
+        { test: { include: ["src/dashboard/**/*.test.ts"] } },
+      ],
+    });
+    expect(boundFromConfig(config, "src/thing.test.ts")).toBe(30_000);
+    // The browser project sets none, so that file runs at the default — NOT at the other project's
+    // 30s. Getting this backwards would hand a dashboard suite a bound it does not have.
+    expect(boundFromConfig(config, "src/dashboard/thing.test.ts")).toBe(
+      VITEST_DEFAULT_TEST_TIMEOUT_MS,
+    );
+  });
+
+  it("IGNORES a testTimeout sitting beside projects, which Vitest does not apply to them", () => {
+    // `packages/media/vitest.config.ts` has exactly this shape. Reading the top-level value would
+    // report 30s for a browser project that actually runs at Vitest's default.
+    const config = cfg({
+      testTimeout: 30_000,
+      projects: [{ test: { include: ["src/dashboard/**/*.test.ts"] } }],
+    });
+    expect(boundFromConfig(config, "src/dashboard/a.test.ts")).toBe(VITEST_DEFAULT_TEST_TIMEOUT_MS);
+  });
+
+  it("declines when two matching projects disagree, rather than picking one", () => {
+    const config = cfg({
+      projects: [
+        { test: { include: ["src/**/*.test.ts"], testTimeout: 30_000 } },
+        { test: { include: ["src/**/*.test.ts"], testTimeout: 120_000 } },
+      ],
+    });
+    expect(boundFromConfig(config, "src/a.test.ts")).toBeUndefined();
+  });
+
+  it("declines when no project matches, and when an include uses a glob it does not model", () => {
+    expect(
+      boundFromConfig(
+        cfg({ projects: [{ test: { include: ["src/dashboard/**"] } }] }),
+        "src/a.test.ts",
+      ),
+    ).toBeUndefined();
+    expect(
+      boundFromConfig(
+        cfg({ projects: [{ test: { include: ["src/?.test.ts"] } }] }),
+        "src/a.test.ts",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("gives a BROWSER project Vitest's larger default, not 5s", () => {
+    // `resolved.testTimeout ??= resolved.browser.enabled ? 15e3 : 5e3`. Reading 5000 here would
+    // accuse a correct browser suite the moment one waited between 5 and 15 seconds.
+    expect(boundFromConfig(cfg({ browser: { enabled: true } }), "src/a.test.ts")).toBe(15_000);
+    expect(
+      boundFromConfig(
+        cfg({ projects: [{ test: { browser: { enabled: true } } }] }),
+        "src/a.test.ts",
+      ),
+    ).toBe(15_000);
+    // An explicit value still wins over the default.
+    expect(
+      boundFromConfig(
+        cfg({ projects: [{ test: { browser: { enabled: true }, testTimeout: 40_000 } }] }),
+        "src/a.test.ts",
+      ),
+    ).toBe(40_000);
+  });
+
+  it("lets a project with extends: true inherit the top level, which is the other half of the rule", () => {
+    const config = cfg({ testTimeout: 30_000, projects: [{ extends: true, test: {} }] });
+    expect(boundFromConfig(config, "src/a.test.ts")).toBe(30_000);
+    // Without `extends`, the same top-level value is inert — the case above this one.
+    expect(
+      boundFromConfig(cfg({ testTimeout: 30_000, projects: [{ test: {} }] }), "src/a.test.ts"),
+    ).toBe(VITEST_DEFAULT_TEST_TIMEOUT_MS);
+    // Inherited browser mode raises the DEFAULT too, where no explicit value is set either side.
+    expect(
+      boundFromConfig(
+        cfg({ browser: { enabled: true }, projects: [{ extends: true, test: {} }] }),
+        "src/a.test.ts",
+      ),
+    ).toBe(15_000);
+  });
+
+  it("treats a project with no include as matching, because Vitest's default include does", () => {
+    expect(
+      boundFromConfig(cfg({ projects: [{ test: { testTimeout: 20_000 } }] }), "src/a.test.ts"),
+    ).toBe(20_000);
+  });
+
+  it("models the brace lists Vitest's own configDefaults.exclude is full of", () => {
+    // Every project spreading `configDefaults.exclude` carries `**/.{idea,git,…}/**` and
+    // `**/{karma,rollup,…}.config.*`. Rejecting braces made 60 real files unresolvable.
+    expect(globsMatch(["**/.{idea,git,cache}/**"], ".git/x.test.ts")).toBe(true);
+    expect(globsMatch(["**/.{idea,git,cache}/**"], "src/x.test.ts")).toBe(false);
+    expect(globsMatch(["**/{karma,vitest}.config.*"], "vitest.config.ts")).toBe(true);
+    expect(globsMatch(["**/{karma,vitest}.config.*"], "src/a.test.ts")).toBe(false);
+    // Still undefined for a brace it cannot expand safely.
+    expect(globsMatch(["src/{a,*b}/x.test.ts"], "src/a/x.test.ts")).toBeUndefined();
+  });
+
+  it("models only the glob shapes it claims to", () => {
+    expect(globsMatch(["src/**/*.test.ts"], "src/deep/nested/a.test.ts")).toBe(true);
+    expect(globsMatch(["src/**/*.test.ts"], "src/a.test.ts")).toBe(true);
+    expect(globsMatch(["src/*.test.ts"], "src/deep/a.test.ts")).toBe(false);
+    expect(globsMatch(["src/dashboard/**/*.test.ts"], "src/other/a.test.ts")).toBe(false);
+    // Unsupported shapes are UNDEFINED — "cannot tell" — never a false `false`, which would read as
+    // "no project matches" and silently change the answer.
+    expect(globsMatch(["src/?.test.ts"], "src/a.test.ts")).toBeUndefined();
+    expect(globsMatch(["!src/a.test.ts"], "src/a.test.ts")).toBeUndefined();
+    expect(globsMatch(undefined, "src/a.test.ts")).toBeUndefined();
+    expect(globsMatch([42], "src/a.test.ts")).toBeUndefined();
+  });
+
+  it("routes a suffixed suite to the config named for that suffix", () => {
+    // `apps/server/vitest.preprod.config.ts` runs `*.preprod.test.ts`; the main config excludes it.
+    const preprod = configFor(join(REPO, "apps/server/src/aeat.preprod.test.ts"));
+    expect(preprod?.config).toBe(join(REPO, "apps/server/vitest.preprod.config.ts"));
+    const ordinary = configFor(join(REPO, "apps/server/src/working-order.test.ts"));
+    expect(ordinary?.config).toBe(join(REPO, "apps/server/vitest.config.ts"));
   });
 });
 

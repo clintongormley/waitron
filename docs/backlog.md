@@ -1779,6 +1779,22 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **The spawn-timeout guard now covers `packages/` and `apps/` — LANDED (2026-09-18).** It read only
+  `scripts/` when it arrived in #407, which was recorded at the time as a real gap rather than a
+  reasoned exemption: 22 of the 48 main Vitest configs under `packages/` and `apps/` (three more are suffixed) set no `testTimeout`
+  at all. Extending it meant teaching it to resolve a bound from a package's config, because a test
+  file there almost never sets its own — measured while doing it, ignoring the config would have
+  invented failures for 11 files. It found one real defect (`packages/db/src/testing/two-node.test.ts`
+  polled for 30s inside a test the package bounded at 30s, so the poll could never report its own
+  timeout and a merely-slow run failed), and a hand-read of the same files found a second the guard
+  structurally cannot catch: `packages/db/src/change-feed-replication.pg.test.ts` made five waits
+  summing to 33s in a case bounded at 30s. Both fixed here.
+
+  **Still open, and the guard cannot close it:** it compares a bound against the LARGEST SINGLE wait,
+  never the sum, so a case that waits several times can still outlast a bound that passes this check.
+  The sum is what caught the change-feed case, and only by reading. If that shape recurs, the answer
+  is probably a runtime check rather than a text reader.
+
 - **Reuse the stub executables in the root guard suites — LANDED (2026-09-18).** The follow-up from
   #407. `scripts/waitron-sh.test.mjs` and `scripts/main-tag-guard.test.mjs` now build their stub bins
   once per FILE and pass what each case varies through environment variables, rather than writing a
