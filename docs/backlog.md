@@ -2549,7 +2549,8 @@ two of them, one NOT NULL and one nullable. The nullable one also put the compos
 `columns.ts` through drizzle-kit's own generator for the first time, and the emitted migration
 carries the values inline as the note says it should.
 
-**`packages/credentials` is the thirteenth pull request** — one table file, one table, six columns,
+**`packages/credentials` is the thirteenth pull request (#413)** — one table file, one table, six
+columns,
 no schema change, and the second conversion in the rollout that changes what a CALLER is handed
 rather than only what the schema says. `print_jobs.payload` was the first; over the nine
 conversions in between, `git show --name-only` lists exactly one `.ts` file outside a `src/schema/`
