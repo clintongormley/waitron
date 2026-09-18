@@ -21,6 +21,8 @@ export default defineConfig({
     // multi-fork branch coverage identical to the count — 1619/1637 = 98.9% at maxForks 4, 98.9%
     // (1620/1638) at 18 forks — where an under-merge would drop `covered` while `total` held, the
     // opposite direction. Local wall-clock 48.6s → 24.9s at 4 forks.
+    // A shard can exit 1 with every test passing, on a worker RPC timeout that no config can raise:
+    // docs/developers/ci-and-gates.md → "A shard can exit 1 with every one of its tests passing".
     poolOptions: { forks: { maxForks: 4 } },
     // Boots ONE shared container with a `manifest` template migrated through apps/server's
     // production path; the converted real-Postgres suites clone it via `useTemplateDb` instead of

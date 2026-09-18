@@ -121,6 +121,10 @@ hook, or how tests are scheduled:
   publishing asks `scripts/main-tag-guard.sh` before moving `:main`. Guards:
   `scripts/ci-workflow.test.mjs` (reads ci.yml as TEXT, and sees no other workflow) and
   `scripts/main-tag-guard.test.mjs`.
+- **A shard can exit 1 with every one of its tests passing.** Vitest's worker-to-main reporting call
+  has a sixty-second timeout that no config key or environment variable in this repository can raise,
+  and it fails the shard on its own. Read the shard's test counts before reading the diff. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
 - **The GHA cache is a shared per-repository budget and this repo sits AT it.** Name the entries a new

@@ -77,6 +77,42 @@ jobs, the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
 package's test-file count.
 
+### A shard can exit 1 with every one of its tests passing
+
+Seen once, on PR #414's first run (run 35355113501, job 105632564989, `test-server (3)`). The shard
+printed `Test Files 87 passed (87)` and `Tests 1313 passed (1313)`, then `Errors 1 error`:
+
+```
+Error: [vitest-worker]: Timeout calling "onTaskUpdate"
+ ❯ Object.onTimeoutError  node_modules/.../vitest/dist/chunks/rpc.-pEldfrD.js
+ ❯ Timeout._onTimeout     node_modules/.../vitest/dist/chunks/index.B521nVV-.js
+```
+
+It still exited 1, which failed the aggregate `ci` job. **`onTaskUpdate` is not a test.** It is the
+call a test worker makes to tell the main process a test finished, and the message says the main
+process did not answer it for a full minute.
+
+**The timeout is sixty seconds and nothing in this repository can change it.** Read out of the
+installed vitest (3.2.7) rather than the documentation: the worker builds that channel in
+`dist/chunks/rpc.-pEldfrD.js`, which passes a `timeout` only if its caller supplies one; the fork
+pool's caller is `dist/workers/forks.js` → `createForksRpcOptions(v8)`, which supplies none; so it
+falls back to birpc's `DEFAULT_TIMEOUT = 6e4` in `dist/chunks/index.B521nVV-.js`. Grepping the whole
+`dist` tree for `process.env.VITEST_` finds only `MAX_FORKS`, `MIN_FORKS`, `MAX_THREADS`,
+`MIN_THREADS`, `POOL_ID`, `WORKER_ID`, `VM_POOL` and `SKIP_INSTALL_CHECKS` — there is no environment
+override, and no config key reaches it. Raising it would mean carrying a patched dependency.
+
+**What this entry does NOT establish:** why the main process went quiet for a minute. It was not
+reproduced deliberately, and the re-run that passed is evidence rather than proof — the second run
+(35356264571) was on a head differing from the first only in prose, and all three `test-server`
+shards passed. The shard runs four test workers plus the main process on a four-vCPU runner with a
+PostgreSQL container alongside, so starvation is the obvious suspect and remains unmeasured.
+
+**What to do when you meet it.** Read the shard's own counts first: every test passing plus this one
+error is not a code regression, so do not go hunting in the diff. Re-run the shard. If it starts
+recurring, the two levers are lightening what that shard does per tick (its four workers on four
+vCPUs) or patching vitest — both changes to CI machinery, and both wanting a measurement first,
+because neither has one today.
+
 ### CI does not run every check on every push
 
 The `changes` job skips the expensive `code`-gated jobs when every changed path is inert —
