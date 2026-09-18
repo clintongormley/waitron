@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_NONE_MIGRATIONS } from "./migrations.js";
 
 // The de-risk probe for the whole feature: prove an empty drizzle migration set applies as a no-op
-// on top of core. The helper runs the migrations in a beforeAll, so reaching a test body at all
+// on top of core. useVenueDb runs the migrations in a beforeAll, so reaching a test body at all
 // means the empty set applied without a drizzle error.
 const suite = useVenueDb({
   // Core first — nothing enforces cross-package ordering, so it is explicit here.

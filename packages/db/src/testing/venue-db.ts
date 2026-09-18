@@ -9,10 +9,12 @@ export type VenueDb = PgliteSuite;
  *
  * It forwards to {@link usePgliteDb} unchanged: same options, same handle, same per-test reset.
  * Suites are moving onto it a package at a time (plan task P2 step 5), so until that rollout
- * finishes some still call `usePgliteDb` directly; `git grep -l "usePgliteDb("` answers which,
- * where a list here would be stale by the next pull request. Some suites reach PGlite without
- * `usePgliteDb` at all, through `createPgliteDb` or `describeEachTarget`; that conversion is not
- * mechanical and is task F1's, not step 5's.
+ * finishes some still call `usePgliteDb` directly. Which ones is a grep rather than a list here,
+ * because a list would be stale by the next pull request; the command is in
+ * `docs/developers/testing-guide.md`, under "A PGlite suite is being moved behind one helper", and
+ * it carries the exclusion that keeps this file, `lifecycle.ts` and both their contract tests out
+ * of the answer. Some suites reach PGlite without `usePgliteDb` at all, through `createPgliteDb`
+ * or `describeEachTarget`; that conversion is not mechanical and is task F1's, not step 5's.
  *
  * It is NOT the seam for a real container, and it is not the seam for `describeEachTarget` either.
  * `useRealPostgres` names a container deliberately. `describeEachTarget` is a dual-target harness

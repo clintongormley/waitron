@@ -82,6 +82,12 @@ of rewriting 795 lines spread across 72 files.
 or `describeEachTarget`. Collapse those behind one neutral helper first and the flip changes one
 function body rather than 211 files.
 
+> 2026-09-19: the number 211 is this document's original reading and was never reproduced. The plan
+> re-measured it with the commands beside it (task P2, "The count in this paragraph used to read
+> '211 files'"), and the current pair, with what it excludes and why, is in
+> `docs/developers/testing-guide.md` under "A PGlite suite is being moved behind one helper". The
+> argument above does not turn on the number.
+
 Both are mechanical, reviewable, and independently valuable: they put the engine's vocabulary in one
 place, which is where it should have been anyway.
 

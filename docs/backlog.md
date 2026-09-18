@@ -2935,9 +2935,10 @@ storage switch replaces one function body instead of every call site. Its export
 asserts the row the second wrote is gone, and with the helper's body changed to
 `resetPerTest: false` exactly that case fails and the other two stay green.
 
-**The conversion is under way**, one pull request per package, lightest first by call-site count.
-Which packages are still to go is `git grep -l "usePgliteDb("` over `packages/` and `apps/`, not a
-list here.
+**The conversion is under way**, one pull request per package, fewest calling files first;
+`packages/fiscal-none` was the first. Which files are still to go is a grep rather than a list here,
+and it needs the exclusion that drops the four files allowed to name either helper — the grep pair
+is in `docs/developers/testing-guide.md`, and it lists FILES, not packages and not call sites.
 
 **The part of P2 that is NOT a mechanical rename, found by this branch's review and worth carrying
 because the plan's step 5 does not reach it.** `usePgliteDb` is not the only door to a PGlite
