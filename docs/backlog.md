@@ -1780,7 +1780,7 @@ image constraints under *Detail → Box image*.
 ### B9. CI and test infra
 
 - **Reuse the stub executables in `scripts/waitron-sh.test.mjs` — open (2026-09-18).** Found while fixing
-  that suite's flakiness; the flake itself is fixed, and this is the leftover. Each of its cases
+  that suite's flakiness; the flake itself landed in #407, and this is the leftover. Each of its cases
   builds a fresh sandbox of five or six stub executables, and executing a freshly written file costs
   about 120ms against about 12ms to execute the same file again (six distinct fresh files as the
   control; an independent rerun on a loaded host measured 144–199ms against 5.9–16.1ms). The likely
@@ -2315,7 +2315,7 @@ failing statement, not the transaction, and the probe has a control that prints 
 dated note in the plan. One thing S5 does not check, stated so nobody assumes it does: the branch
 that absorbs a row whose id the receiver holds under a DIFFERENT supplier and number is driven by no
 scenario — the package README says which line and why.
-**One flake found while landing S5 — FIXED 2026-09-18.** `scripts/waitron-sh.test.mjs` →
+**One flake found while landing S5 — FIXED in #407 (2026-09-18).** `scripts/waitron-sh.test.mjs` →
 "builds both images from the git context and records them in .env" failed twice under load and
 passed four runs out of four on its own. The guess recorded here at the time was wrong in two ways
 worth keeping: the case builds no Docker images (`docker` is a stub on `PATH`, and nothing in that
