@@ -2252,9 +2252,22 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype is no longer parked: since 2026-09-17 it is being built alongside slice 1, one task per
-PR. Five of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
+PR. Six of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
 a conditional write), S1 (a double promotion fenced by one, #392), S2 (one sale submitted to the
-tax agency twice, #395) and S5 (a supplier invoice number typed on both machines, #406). S1's caveat, which the results
+tax agency twice, #395), S5 (a supplier invoice number typed on both machines, #406) and the
+litestream foundation the last three scenarios stand on (#411). **That sixth one unblocks S0, S3 and
+S4, which are the rest of the queue**: it can find the pinned binary, point it at the store, upload a
+database, keep streaming one as it is written, and rebuild it from the store afterwards. Four things
+it measured that those three will otherwise re-derive: restoring refuses a non-empty output file
+unless forced, and writes no SQLite sidecar files of its own; a restore works with the source
+database absent, which is what makes it evidence about the store; litestream writes its ordinary log
+to standard output and its errors to standard error; and no write-ahead-log setting is needed first,
+because litestream switches the database itself. The plan's Task 6 carries all of it in a dated note
+directly under its heading, including the two places the plan's own interface description was wrong
+for this version. Left behind deliberately: the wrapper's streaming daemon is bounded only by the
+scenario killing it, and one branch of the module — the sweep that kills a stray daemon if the
+runner dies, and the refusal to run against a configuration file it did not write — is driven by no
+scenario; the package README names both and says a later task should pin them or delete them. S1's caveat, which the results
 note must carry: the rig's fence is a per-term key claimed create-only, where the product's is
 `current.json` written only if its version is unchanged, so S1 is evidence that a refusal by the
 store stops a double promotion and not a measurement of the product's own conditional write. The
