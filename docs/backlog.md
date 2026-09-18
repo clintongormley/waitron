@@ -2331,12 +2331,19 @@ streaming, no store and no promotion (§12.2 carries the risk-to-slice table). S
 [spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md) and
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md) and is the work in progress; the
 prototype is no longer parked: since 2026-09-17 it is being built alongside slice 1, one task per
-PR. Nine of its ten tasks are in — the `bench/sqlite-failover` harness, S6 (what the store does with
-a conditional write), S1 (a double promotion fenced by one, #392), S2 (one sale submitted to the
-tax agency twice, #395), S5 (a supplier invoice number typed on both machines, #406), the
-litestream foundation the last three scenarios stand on (#411), S0, the whole failover loop end
-to end (#415), S3, a replica copied between two places in the store (#417), and S4, a multi-day
-offline write load (#422). **Task 10, the write-up, is the rest of the queue.** What the litestream
+PR. **ALL TEN TASKS ARE IN AND THE GATE IS DONE** — the `bench/sqlite-failover` harness, S6 (what the
+store does with a conditional write), S1 (a double promotion fenced by one, #392), S2 (one sale
+submitted to the tax agency twice, #395), S5 (a supplier invoice number typed on both machines,
+#406), the litestream foundation the last three scenarios stand on (#411), S0, the whole failover
+loop end to end (#415), S3, a replica copied between two places in the store (#417), S4, a multi-day
+offline write load (#422), and the write-up (#425). **The gate's product is
+[the results note](research/2026-09-16-sqlite-failover-prototype.md)** — read that rather than
+re-deriving any of this. Its answer: the loop holds everywhere but S2, which is the gate's recorded
+negative result, and it carries the pins every result depends on, what the gate does NOT establish,
+and the obligations it leaves standing. The topology design's §12.2, where this gate is defined, now
+carries a dated note saying it has been run and what it found — including that what FAILS is not the
+shape §12.2 names (the retried-in-full ship it asks about is safe; a recomputed hand-over and one
+taken mid-filing are what file twice). What the litestream
 foundation gave those scenarios: it can find the pinned binary, point it at
 the store, upload a database, keep streaming one as it is written, and rebuild it from the store
 afterwards. Four things
@@ -2399,17 +2406,21 @@ it on 2026-09-18, so tasks 6-10 are being built again.
 Three suggestions from S2's review were deliberately not taken, and they belong to whoever picks the
 rig up next: the scenario inlines its node ids where its siblings hoist them to named constants; one
 of its reads reaches past the `NodeDb` helper and casts twice because that helper has no `all`; and
-its verdict string is English prose where every sibling prints a terse `key=value` list. The last one
-is the one with a consequence — Task 10 builds a JSON dump from those strings, so that is where the
-shape should be settled, and changing it earlier would invalidate the recorded run quoted in the
-package README without a fresh measurement. S5 closed the second of those three: `NodeDb` now has an
+its verdict string is English prose where every sibling prints a terse `key=value` list. **That last
+one was expected to have a consequence and does not** (#425, 2026-09-19): the `--json` dump carries
+each `detail` verbatim as a string and parses NONE of them, so nothing was built from those strings
+and S2's prose costs nothing mechanical. It was therefore left as measured, since re-wording the
+gate's one negative result would have rewritten its recorded run for no measurement. The suggestion
+stands for whoever picks the rig up next, now on readability alone. S5 closed the second of those three: `NodeDb` now has an
 `all`, and only S2 still casts twice. Task 6 settled the first and third for its OWN scenario only
 (2026-09-18): the litestream foundation check hoists its node ids and prints a terse `key=value`
 verdict, and the README quote was re-measured in the same change rather than left to drift. S0 did
 the same (#415, 2026-09-18) after review caught it printing prose, and re-measured its own README
 quote. **S2 is now the only scenario still printing prose and still inlining its ids**, so the
-suggestion stands for it alone, and the shape Task 10 has to parse is settled: `key=value` — S3
-(#417) prints one too, with every free-text value quoted after review caught one that was not.
+suggestion stands for it alone. The house shape is `key=value` — S3 (#417) prints one, with every
+free-text value quoted after review caught one that was not, and `RUNNER` (#425) does too — but
+**Task 10 parses nothing**, so the shape is a readability convention rather than a contract. `smoke`
+also still prints prose, which #425 recorded when it counted them.
 **S0 is in (#415), verdict PASS, and it is critical.** The box streams, files its own sales, sells
 again and dies; the cloud rebuilds from the store, takes a higher term and sells for itself; the box
 returns, sees the higher term and hands over its unsent sales. What S0 pins: the cloud ends holding
@@ -2499,12 +2510,53 @@ hoped to bound the log by changing that setting has nothing to change.
 
 **What S4 does not establish**, so the write-up does not have to re-derive it: anything that turns on
 elapsed time (the load is volume — thirty modelled days pass in half a minute); the real ledger's
-cost per commit, since this is the rig's five-table model and not `packages/fiscal-verifactu`'s
-schema; that a longer offline stretch stays linear, which needs a comparison across load sizes the
+cost per commit, since this is the rig's own model and not `packages/fiscal-verifactu`'s schema
+(#425 corrected a "five-table" count in two places — `model.ts` creates six); that a longer offline stretch stays linear, which needs a comparison across load sizes the
 scenario does not drive; and a disk budget, because nothing here records the appliance's partition
 size. Also left open: 250 sales a day is an ASSUMPTION — nothing in this repository records the
 deli's real ticket count — so every figure is reported per sale for rescaling, and a real figure
 would be worth having.
+
+**THE GATE IS DONE (#425, 2026-09-19) AND HERE IS WHAT IT LEFT OPEN.** The results note carries all of
+it with its receipts; this is the index, so a fresh session does not have to read the note to know
+what it owns.
+
+- **Re-run the store's conditional-write check against the real store** when Waitron Cloud picks one,
+  and against any self-host target the product claims to support. Every store result in the note is
+  MinIO's. Topology §12.2 explicitly demands this one against the actual store, so the gate is NOT
+  discharged on that point, and an older S3-compatible target may lack the conditional write — without
+  it the promotion tie-break is unsafe (risk 11).
+- **Build the restart reset** — already this backlog's, restated because the gate's S0 confirmed its
+  shape: a node must, on restart and before it files anything, reset every sale it inherited in the
+  "being filed right now" state, with no five-minute wait. Written into topology §5.2, not built.
+- **Bounding the offline write-ahead log is an open design question, and the lever risk 9 names is not
+  one.** Measured: while a litestream daemon is attached AND cannot reach its store, the log's space
+  cannot be reclaimed at all — our own `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds, moves
+  almost nothing and shrinks nothing — and dropping `wal_autocheckpoint = 0` changes nothing either,
+  because SQLite's own automatic checkpoint is refused the same way. A daemon that CAN reach the store
+  checkpoints the log itself. So whatever bounds that log has to stop or detach the daemon, and doing
+  that on the sale path is what risk 9 forbids.
+- **The cloud's own generation and the store pointer are UNOWNED.** Nothing streams a promoted node's
+  generation and no scenario restores by following `current.json`. S0 handed the case to S3; S3 did
+  not take it and neither did S4.
+- **250 sales a day is still an assumption** nothing in this repository measures, so the days-per-GiB
+  figure rescales but does not hold.
+- **Three of the rig's scenarios have no mutation receipts** — S1, S6 and `smoke` — so what drives
+  their assertions is written down nowhere. And the runner's own `main()` is driven by nothing: which
+  files count as scenarios, the argument hand-off, the stderr summary, and the process exit status.
+  Two of those four were measured to be silently breakable.
+- **Two branches of the litestream wrapper are driven by no scenario** (the stray-daemon sweep, and
+  the refusal to run against a config it did not write). A later task should pin them or delete them.
+
+**And the lesson that got worse, not better, on the last task.** #425 is three lines of production
+code and a document, and it produced **23 review findings across three passes** — a run-it seat, a
+convention reviewer, and a third pass over the fixes those two produced. The third pass found the
+fixes' own headline sentences to be false AGAIN, which is now five items running: a corrected mutation
+receipt that named an assertion which could not have fired, a hedge that was too narrow twice in a
+row, a claim about the fiscal drain checked at the parser instead of down the call chain, and three
+different counts of the same thing in one wave. **A prose-heavy fix wave needs the third read, and
+the numbers in a correction need re-running rather than re-reading.** It is the same shape #421 paid
+for with nine false claims over three lines of code.
 
 **What the review cost, and the lesson that keeps repeating.** Three numbers in this branch's own
 CORRECTIONS were falsified by later runs — a duration range, a frame count, and a percentage twice —
