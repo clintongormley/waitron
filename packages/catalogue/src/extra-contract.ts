@@ -141,12 +141,16 @@ export interface MenuExtraPublication {
  * uuid-and-lower-case `id`, the boolean `bool`, the unknown-key `keys` and the shared
  * {@link extraPrice}. Parsed by hand inside the write path instead, two of those checks were simply
  * absent: a `listId` that was not a uuid reached PostgreSQL as `22P02`, and a non-boolean
- * `available` went straight to the column. Run through that same drizzle insert on PGlite 0.5.8
- * (PostgreSQL 18.3): the NUMBER `1` stored true and `0` stored false, silently; `"banana"` and `{}`
- * came back from the driver as `Invalid input for boolean type` carrying no SQLSTATE and no field an
- * editor could read; and the STRING `"false"` stored FALSE, because PostgreSQL's own boolean parser
- * reads the text. So what {@link bool} adds is a refusal with a field path where there was either a
- * silent coercion or a fieldless driver error.
+ * `available` went straight to the column. Run through that same drizzle insert on PGlite 0.5.8:
+ * the NUMBER `1` stored true and `0` stored false, silently; `"banana"` and `{}` came back as
+ * `Invalid input for boolean type` carrying no SQLSTATE and no field an editor could read; and the
+ * STRING `"false"` stored FALSE. All three are the DRIVER's doing rather than the server's — drizzle
+ * declares no `mapToDriverValue` for a boolean column, so the raw value reaches PGlite's own
+ * parameter serializer, which maps `true/t/yes/y/on/1` and `false/f/no/n/off/0` to `t`/`f` before
+ * anything is sent and throws a plain `Error` for the rest, which is why there is no SQLSTATE. Under
+ * `pg` on a real backend the bad value reaches the server instead and comes back as `22P02`. So what
+ * {@link bool} adds is a refusal with a field path where there was either a silent coercion or an
+ * error with nothing an editor could put beside an input.
  *
  * The two duplicates a body can carry are refused here as well, because neither has a unique index
  * behind it that would name the offending position: one list published twice, and one product

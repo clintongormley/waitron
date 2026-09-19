@@ -114,9 +114,10 @@ export async function readMenuExtras(
       // An item that has to borrow its product's price and cannot is left out of the menu view: it
       // cannot be priced, so it cannot be sold. It narrows the LIST as well, which reaches further
       // than one item: if every item goes this way and the list is active with `minPicks` of 1 or
-      // more, `validateExtraSelections` (extra-contract.ts) answers it with `extras.limit_exceeded`
-      // whatever the diner picks, so the DISH becomes unorderable once the order path calls that
-      // function (the plan's Task 7; nothing calls it today). And an active list with no items is a
+      // more, `validateExtraSelections` (extra-contract.ts) refuses it either way — picking nothing
+      // falls under `minPicks` as `extras.limit_exceeded`, and any pick names a product the narrowed
+      // list no longer offers, which is `extras.invalid` — so the DISH becomes unorderable once the
+      // order path calls that function (the plan's Task 7; nothing calls it today). And an active list with no items is a
       // shape `parseExtraListInput` refuses outright, so this projection can hand back one the
       // authoring contract treats as impossible. `extra_list_items_product_fk` is ON DELETE RESTRICT
       // (schema/extras.ts), which forbids that state at any ONE instant — but the items above and

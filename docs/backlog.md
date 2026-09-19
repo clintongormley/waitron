@@ -489,10 +489,9 @@ the authoring and order-time rules, the reads and writes, and the price rule —
 the list item's, else the product's own, with VAT always the product's. An extras list names
 PRODUCTS, so an item on it owns no price, VAT, allergens, photo or name of its own. **The plan's
 Task 5 — the per-menu publication, `menu_item_extra_lists` and `menu_item_extra_items` with
-`setMenuItemExtraLists` and the menu projection `readMenuExtras` — is written and under review on the
-branch `feat/modifiers-menu-extras`, with no pull request open yet**; put its number in this
-sentence when it lands, and read _What the per-menu publication (the plan's Task 5) left behind_
-below as describing that branch rather than `main`. No screen shows either kind of list yet, and
+`setMenuItemExtraLists` and the menu projection `readMenuExtras` — is open as #452 and not yet
+merged**; read _What the per-menu publication (the plan's Task 5) left behind_ below as describing
+that pull request rather than `main` until it lands. No screen shows either kind of list yet, and
 nothing serves extras over the API — that is the plan's Task 6.
 
 What option lists left open, none of it taken in #436 or #445:

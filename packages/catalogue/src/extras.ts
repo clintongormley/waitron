@@ -228,7 +228,7 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
  * the one thing that tracks an item by its PRODUCT instead is cleaned up separately
  * ({@link dropStaleMenuOverrides}), and
  * the design has an open order's child line point at the PRODUCT rather than back at the item
- * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4) — a path Task 8 of the plan
+ * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4) — a path Task 7 of the plan
  * builds, so today there is nothing at all on the order side to check.
  *
  * EVERY item of the list is deleted and the body's are inserted fresh, each under the id the body
@@ -386,7 +386,7 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
   // rather than read off the clauses, by "takes the publication and its overrides with it when the
   // list is deleted" (extra-projection.test.ts). There is no open-order check, because the design
   // has an open order's child line carry the product rather than the list (spec §3.5, §3.4) — and
-  // that order path is Task 8 of the plan, unbuilt today.
+  // that order path is Task 7 of the plan, unbuilt today.
   await tx.delete(extraLists).where(eq(extraLists.id, extraListId));
 }
 

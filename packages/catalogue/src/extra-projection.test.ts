@@ -686,8 +686,9 @@ describe("publishing on a menu offer as the non-superuser application role", () 
 
       // DELETE on `menu_item_extra_items`, walked as its own step because nothing else here
       // reaches it: dropping bacon from the LIST makes `dropStaleMenuOverrides` (extras.ts) issue a
-      // delete on that table under this role, and `dropStaleMenuOverrides` is the only place in the
-      // tree that deletes from it.
+      // delete on that table under this role, and that is the only place in this PACKAGE that
+      // deletes from it. The configuration-transfer import clears the whole table too
+      // (apps/server/src/configuration-transfer.ts), but as the table owner, so it walks no grant.
       await updateExtraList(
         tx,
         list.id,
