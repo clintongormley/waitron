@@ -452,11 +452,14 @@ container by pointing the admin URL at a dead port.
 
 ## Testing
 
-Three suites need a real Postgres container — `src/instance-apply.pg.test.ts`,
-`src/instance-state.test.ts` and `src/venue-apply.pg.test.ts`: `instance` creates databases and
-roles and reads `pg_roles` attributes, none of which PGlite's bundled single-superuser server can
-reproduce. Everything else — the planner, the formatter, the whole CLI — is a pure function, an
-injected-IO call, or a PGlite suite.
+Five suites need a real Postgres container — `src/instance-apply.pg.test.ts`,
+`src/instance-state.test.ts`, `src/venue-apply.pg.test.ts`, `src/venue-apply.race.pg.test.ts` and
+`src/schema-ahead.pg.test.ts`, which is every caller of `startBarePostgres`. Each states its own
+reason on its first line, and they are not one reason — read the headers rather than pairing these
+off against the list above: ownership and role refusals that need a connection which is not a
+superuser, PostgreSQL role and database attributes, drizzle's journal semantics against real
+Postgres, and two connections that genuinely overlap. Everything else — the planner, the formatter,
+the whole CLI — is a pure function, an injected-IO call, or a PGlite suite.
 
 ```bash
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/provisioning test:coverage

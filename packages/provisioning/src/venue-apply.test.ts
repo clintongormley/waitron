@@ -4,7 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { CapabilityFlag } from "@waitron/layouts";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
 
@@ -17,7 +17,7 @@ import { applyVenue } from "./venue-apply.js";
 // 0014 capture migration needs): applyVenue
 // now seeds an admin `persons` row, so identity's set has to be migrated here too. (`persons` no
 // longer has a foreign key onto `tenants` — the column it used to carry is gone.)
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
 });
 
@@ -212,7 +212,7 @@ describe("applyVenue", () => {
     // PGlite, not the real-container sibling. CLAUDE.md §4 sends a suite to real PostgreSQL for
     // privileges, triggers as the deployment role, or concurrency; none applies here. The insert is
     // made by the OWNER of `persons` on both targets, so no grant separates them, and PGlite runs the
-    // real migration manifest (see the suite's `usePgliteDb` options), so the nullable columns and
+    // real migration manifest (see the suite's `useVenueDb` options), so the nullable columns and
     // their `is null or length > 0` checks are the real ones — a value this test stores is a value
     // the shipped schema accepts. A distinct tenant, because seed-admin is idempotent per tenant and
     // the suite shares one database.

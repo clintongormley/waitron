@@ -5,7 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -35,7 +35,7 @@ import { applyVenue } from "./venue-apply.js";
  * `persons` row, so identity's set has to be migrated here too. (`persons` no longer has a foreign
  * key onto `tenants` — the column it used to carry is gone.)
  */
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
 });
 
