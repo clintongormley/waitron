@@ -2116,6 +2116,29 @@ latest minor or patch release; two loose ends came with it.
   say only that it is the version the measurement was taken on. Re-running it needs the container,
   because the socket cannot be bind-mounted out of Docker Desktop's VM on macOS (`CLAUDE.md` §4).
 
+**Left behind by the esbuild upgrade (#439, 2026-09-19).** The four packages that build bundles
+moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
+
+- **Three older esbuild copies stay in the tree, and they are not ours to move.** `vite` declares
+  `^0.25.0` and `drizzle-kit` declares `^0.25.4`, so both resolve 0.25.12, and `drizzle-kit` also
+  pulls the deprecated `@esbuild-kit/esm-loader`, which carries esbuild **0.18.20**. Those ranges
+  belong to those packages: the only way to move them is to upgrade vite and drizzle-kit. The vite 8
+  item in the dependency lane will move one of the three; nothing currently planned moves the
+  0.18.20 copy, and `pnpm install` warns about the package that brings it on every run.
+- **The bundles are checked by comparison, and the comparison is a thing you have to remember to
+  do.** What established this upgrade was safe was building all twelve bundles on both versions and
+  diffing the bytes — not the test suites, which run against TypeScript source and cannot see a
+  bundler change. CI's `bundle-smoke` job runs five assertions over two of the twelve bundles, so it
+  would catch a bundle that no longer boots, but not a bundle whose contents quietly changed shape.
+  If a future bundler bump wants the same receipt, the method is: build, stash the twelve outputs,
+  bump, rebuild, `cmp` each pair, and account for every difference class before accepting it.
+
+One note for the next 0.x dependency bump, because it cost three review rounds here: esbuild ships
+breaking changes in minor releases, which is documented and was read — but the release that actually
+changed this repository's output was **0.27.1, a patch**. Reading the majors and the releases marked
+breaking is not enough on a 0.x dependency; the whole range has to be read, and a paraphrase of it
+does not belong in a commit message when the byte comparison is the real evidence.
+
 **Correctness:**
 
 1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
