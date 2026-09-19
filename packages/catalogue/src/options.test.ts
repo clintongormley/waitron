@@ -23,9 +23,11 @@ import {
 // including the grants walkthrough at the foot of this file, which assumes app_user with
 // `asAppUser` and is enforced from there (CLAUDE.md §4). What needs a container is the concurrent
 // save, and that lives in options.pg.test.ts.
-// Nothing is seeded: with no `content_languages` row, `readContentLanguages` falls back to the
-// language passed in (packages/catalogue/src/content-languages.ts), and `useVenueDb` empties every
-// data table after each test on its own (packages/db/src/testing/lifecycle.ts:132,148-151).
+// Nothing is seeded at the suite level: with no `content_languages` row, `readContentLanguages`
+// falls back to the language passed in (packages/catalogue/src/content-languages.ts), and
+// `useVenueDb` empties every data table after each test on its own
+// (packages/db/src/testing/lifecycle.ts:132,148-151). One test seeds the taxpayer row for itself,
+// because it is the only one that creates products, and it says so where it does it.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -303,7 +305,7 @@ describe("option list CRUD", () => {
   it("names the products carrying the list, and the menu offers of those dishes", async () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
     // The only test in this file that needs the taxpayer row, because it is the only one that
-    // creates products and a menu; `usePgliteDb` empties the table again afterwards.
+    // creates products and a menu; `useVenueDb` empties the table again afterwards.
     await seedTenant(fx.db);
     const dishes = await run(async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Deli" });

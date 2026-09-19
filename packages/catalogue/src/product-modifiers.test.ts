@@ -9,7 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
@@ -21,7 +21,7 @@ import { readProductModifiers, writeProductModifiers } from "./product-modifiers
 // the lighter target that still runs the real migrations (CLAUDE.md §4). The one part of this file
 // that does depend on a role is the grants walkthrough at the foot, and PGlite enforces grants once
 // `asAppUser` makes the session assume the role, so that needs no container either.
-const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
 
@@ -29,7 +29,7 @@ const UNKNOWN_ID = "99999999-9999-4999-8999-999999999999";
 
 /**
  * Two dishes, two products an extras list offers, and two lists of each kind, re-made per test:
- * `usePgliteDb` empties every data table after each test, so the ids are minted fresh each time.
+ * `useVenueDb` empties every data table after each test, so the ids are minted fresh each time.
  * Every fixture carries DIFFERENT text so a read that picks up the wrong row is visible
  * (CLAUDE.md §4). Products are created with `unitId: null` and `categoryId: null` so nothing else
  * points at them, which is what lets the product-delete case below name the one key it is about.
