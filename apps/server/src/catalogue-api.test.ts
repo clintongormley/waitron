@@ -6,6 +6,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import type { OptionList } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -2319,6 +2320,198 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
     );
     expect(absent.status).toBe(404);
     expect(await absent.json()).toMatchObject({ error: { code: "modifier.not_found" } });
+  });
+});
+
+/**
+ * Option lists over the management API. What the CRUD itself does is proven in the catalogue package
+ * (`packages/catalogue/src/options.test.ts`); what is proven HERE is the request/response boundary —
+ * the status codes, the `{ optionList }` / `{ optionLists }` envelopes, the uuid screen and the
+ * permission gate.
+ */
+describe("mountCatalogueApi — option lists", () => {
+  // Every describe in this file shares one database (`resetPerTest: false`), so a content-language
+  // configuration another describe left behind would decide what `createOptionList` demands of the
+  // customer-facing name maps below. Emptying the table puts `readContentLanguages` on the mounted
+  // venue locale, `es` — the one language every map here fills. Insurance, not a repair: measured,
+  // the file still passes with this `beforeEach` deleted.
+  beforeEach(async () => {
+    await suite.db.execute(sql`delete from content_languages`);
+  });
+
+  /**
+   * Staff, customer-facing and kitchen name are DIFFERENT text at both levels, so a response reading
+   * the wrong one of the three cannot pass these assertions (CLAUDE.md §3).
+   */
+  const doneness = () => ({
+    name: "Punto de la carne",
+    customerName: { es: "¿Cómo la quiere?" },
+    kitchenName: "PTO",
+    labels: [
+      { name: "Poco hecho", customerName: { es: "Poco hecha" }, kitchenName: "POCO" },
+      { name: "Al punto", customerName: { es: "En su punto" }, kitchenName: "PUNTO" },
+    ],
+  });
+
+  async function createListVia(app: Hono, body: Record<string, unknown>): Promise<OptionList> {
+    const res = await send(app, "POST", "/management-api/modifiers/options", { body });
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { optionList: OptionList }).optionList;
+  }
+
+  it("POST creates a list (201) carrying all three names, with the labels in body order", async () => {
+    const list = await createListVia(mountApp(), doneness());
+    expect(list).toMatchObject({
+      name: "Punto de la carne",
+      customerName: { es: "¿Cómo la quiere?" },
+      kitchenName: "PTO",
+      defaultLabelId: null,
+      active: true,
+    });
+    expect(list.labels.map((label) => label.name)).toEqual(["Poco hecho", "Al punto"]);
+    expect(list.labels[0]).toMatchObject({
+      customerName: { es: "Poco hecha" },
+      kitchenName: "POCO",
+      available: true,
+    });
+  });
+
+  it("GET /management-api/modifiers/options lists them", async () => {
+    const app = mountApp();
+    const list = await createListVia(app, { ...doneness(), name: "Lista listada" });
+    const res = await send(app, "GET", "/management-api/modifiers/options");
+    expect(res.status).toBe(200);
+    const { optionLists } = (await res.json()) as { optionLists: OptionList[] };
+    expect(optionLists.find((row) => row.id === list.id)).toMatchObject({
+      name: "Lista listada",
+      labels: [{ name: "Poco hecho" }, { name: "Al punto" }],
+    });
+  });
+
+  it("GET /management-api/modifiers/options/:id reads one back", async () => {
+    const app = mountApp();
+    const list = await createListVia(app, { ...doneness(), name: "Lista leída" });
+    const res = await send(app, "GET", `/management-api/modifiers/options/${list.id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      optionList: {
+        id: list.id,
+        name: "Lista leída",
+        kitchenName: "PTO",
+        labels: [{ name: "Poco hecho" }, { name: "Al punto" }],
+      },
+    });
+  });
+
+  it("PATCH replaces the list — a relabel and a reorder come back in the new order", async () => {
+    const app = mountApp();
+    const list = await createListVia(app, { ...doneness(), name: "Lista reordenada" });
+    const [first, second] = list.labels;
+    const res = await send(app, "PATCH", `/management-api/modifiers/options/${list.id}`, {
+      body: {
+        name: "Lista reordenada y renombrada",
+        customerName: { es: "¿Al punto?" },
+        kitchenName: "PTO2",
+        labels: [
+          {
+            id: second!.id,
+            name: "Al punto",
+            customerName: { es: "En su punto" },
+            kitchenName: "PUNTO",
+          },
+          {
+            id: first!.id,
+            name: "Muy poco hecho",
+            customerName: { es: "Casi cruda" },
+            kitchenName: "AZUL",
+          },
+        ],
+      },
+    });
+    expect(res.status).toBe(200);
+    const { optionList } = (await res.json()) as { optionList: OptionList };
+    expect(optionList.name).toBe("Lista reordenada y renombrada");
+    expect(optionList.labels.map((label) => [label.id, label.name])).toEqual([
+      [second!.id, "Al punto"],
+      [first!.id, "Muy poco hecho"],
+    ]);
+  });
+
+  it("DELETE answers { ok: true } and the list is then gone", async () => {
+    const app = mountApp();
+    const list = await createListVia(app, { ...doneness(), name: "Lista borrada" });
+    const res = await send(app, "DELETE", `/management-api/modifiers/options/${list.id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    const gone = await send(app, "GET", `/management-api/modifiers/options/${list.id}`);
+    expect(gone.status).toBe(404);
+    expect(await gone.json()).toMatchObject({ error: { code: "options.not_found" } });
+  });
+
+  it("refuses an invalid body with 400 and the domain code, naming the field", async () => {
+    const app = mountApp();
+    for (const [body, field] of [
+      [{ name: "   ", labels: [{ name: "Poco hecho" }] }, "name"],
+      // An ACTIVE list with no available label cannot be answered, so the contract refuses it.
+      [{ name: "Sin etiquetas", labels: [] }, "labels"],
+      [{ name: "Clave de más", labels: [{ name: "Poco hecho" }], nope: 1 }, "optionList.nope"],
+    ] as const) {
+      const res = await send(app, "POST", "/management-api/modifiers/options", { body });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "options.invalid", params: { field } },
+      });
+    }
+  });
+
+  it("gates every option-list route and refuses an id naming no list", async () => {
+    const app = mountApp();
+    const list = await createListVia(app, { ...doneness(), name: "Lista vigilada" });
+    const collection = "/management-api/modifiers/options";
+    const path = `${collection}/${list.id}`;
+    // Every gated route, as [method, path, body] — the table shape `print-api.test.ts`'s gate suite
+    // uses. Each route is checked BOTH ways, so a route missing one of the two refusals cannot hide
+    // behind a sibling that has it.
+    const routes: ["GET" | "POST" | "PATCH" | "DELETE", string, unknown?][] = [
+      ["GET", collection],
+      ["POST", collection, doneness()],
+      ["GET", path],
+      ["PATCH", path, doneness()],
+      ["DELETE", path],
+      ["GET", `${path}/dependants`],
+    ];
+    for (const [method, routePath, body] of routes) {
+      for (const [cookie, status, code] of [
+        [null, 401, "management_session.required"],
+        [staffCookie, 403, "authorization.not_permitted"],
+      ] as const) {
+        const res = await send(app, method, routePath, {
+          cookie,
+          ...(body === undefined ? {} : { body }),
+        });
+        expect(res.status, `${method} ${routePath}`).toBe(status);
+        expect(await res.json()).toMatchObject({ error: { code } });
+      }
+    }
+    for (const malformed of [`${collection}/not-a-uuid`, `${collection}/not-a-uuid/dependants`]) {
+      const res = await send(app, "GET", malformed);
+      expect(res.status, malformed).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    }
+    const absentId = "22222222-2222-4222-8222-222222222222";
+    const absent = await send(app, "GET", `${collection}/${absentId}`);
+    expect(absent.status).toBe(404);
+    expect(await absent.json()).toMatchObject({
+      error: { code: "options.not_found", params: { optionListId: absentId } },
+    });
+  });
+
+  it("previews what deleting a list would touch", async () => {
+    const app = mountApp();
+    const list = await createListVia(app, { ...doneness(), name: "Lista con dependientes" });
+    const res = await send(app, "GET", `/management-api/modifiers/options/${list.id}/dependants`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ dependants: { products: [], menus: [] } });
   });
 });
 
