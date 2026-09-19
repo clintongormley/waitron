@@ -228,6 +228,17 @@ PGlite (`usePgliteDb` with `[CORE_MIGRATIONS, FISCAL_MIGRATIONS]`), seeded via t
 run inside `withTenant` + `asAppUser` so RLS is exercised as the app role — the shape
 `list-outstanding-sales.test.ts` uses.
 
+> **2026-09-19 — that paragraph has gone stale in more than one place.** The clause this rollout
+> owns: `packages/core/src/list-outstanding-sales.test.ts` takes its database from `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`), not `usePgliteDb`; the new helper forwards to the old one
+> unchanged (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Two clauses it does not own,
+> named so nobody follows them: that suite migrates `[CORE_MIGRATIONS]` alone, not
+> `[CORE_MIGRATIONS, FISCAL_MIGRATIONS]` (`packages/core/src/list-outstanding-sales.test.ts:16`);
+> and `withTenant` went with the tenant column
+> (`docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`), so the RLS shape this paragraph
+> describes is not what the file does today. The cases listed below were not re-checked here.
+
 Cases:
 
 - multi-rate VAT (e.g. 21% + 10%) → one `VatRateLine` each, correct base and cuota;

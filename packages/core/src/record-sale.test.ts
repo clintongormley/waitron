@@ -33,7 +33,7 @@ import {
   tenders,
   withTransaction,
 } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
@@ -43,10 +43,10 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
-// PGlite boots a WASM PostgreSQL and then runs @waitron/db's own migrations, which is
-// comfortably past Vitest's 5s default. The explicit hook timeout is not padding — without it
-// this suite fails intermittently on a cold machine and passes on a warm one, which is the worst
-// possible failure signature.
+// `timeoutMs` restates the 60s the helper applies by default and passes to its own `beforeAll`
+// (`packages/db/src/testing/lifecycle.ts:22`, used at :146), so dropping it would change no bound.
+// An argument to a hook replaces `vitest.config.ts`'s `hookTimeout` rather than narrowing it
+// (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`), so this line is what governs the boot.
 //
 // **Deviation from the brief.** The brief's `beforeAll` ran BOTH `@waitron/db`'s migrations and
 // `@waitron/fiscal-verifactu`'s (`FISCAL_MIGRATIONS`). This suite never touches a module's own
@@ -57,7 +57,7 @@ let seriesId: SeriesId;
 // boundary zone's `files` glob is `packages/core/**/*.ts`, with no `*.test.ts` carve-out) would
 // trip the very generic-layer boundary this task was asked to re-verify. Runs core migrations
 // only.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   // Not in the brief at all: `FakeFiscalBackend.recordSale`/`registerNode`/`checkIntegrity` read
   // and write `fake_node_registrations`/`fake_fiscal_records`, and nothing creates those tables

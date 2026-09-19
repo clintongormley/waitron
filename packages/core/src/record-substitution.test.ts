@@ -18,7 +18,7 @@ import {
   sales,
   withTransaction,
 } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSubstitutionInput } from "./record-substitution.js";
@@ -39,7 +39,7 @@ let voidSessionId: string;
 // ticket, a wrong-node series) that a superuser backend exercises just as well as a non-superuser
 // one. `sale.not_found` and `sale.series_not_found` are asserted below for a genuinely ABSENT
 // row, which is what those codes mean here — the same shape record-correction.test.ts uses.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordSubstitution/checkIntegrity read and write

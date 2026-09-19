@@ -16,7 +16,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   findIncident,
   listHandledIncidents,
@@ -35,10 +35,10 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
-// PGlite boots a WASM PostgreSQL and then runs @waitron/db's own migrations, well past Vitest's
-// 5s default hook timeout — mirrors record-sale.test.ts's identical setup for the identical
-// reason.
-const suite = usePgliteDb({
+// `timeoutMs` restates the 60s the helper applies by default
+// (`packages/db/src/testing/lifecycle.ts:22`) and replaces `vitest.config.ts`'s `hookTimeout` — the
+// same as record-sale.test.ts, which carries the pointer to the receipt.
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
