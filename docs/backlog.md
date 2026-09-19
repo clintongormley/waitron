@@ -498,12 +498,14 @@ yet, and nothing serves extras over the API — that is the plan's Task 6.
 
 What option lists left open, none of it taken in #436 or #445:
 
-- **`dependants` returns a `menus` list that can only ever be filled indirectly.** An options list
-  has no per-menu publication row at all, so the menus a delete would touch are the ones showing a
-  dish that carries the list. Nothing computes that yet; the attachment table it needs arrives with
-  the plan's Task 6. **Next action:** whoever builds Task 6 fills both sides through one shared
-  predicate, so the delete preview and any future refusal cannot drift — the modifier code it
-  replaces already learned that lesson (`openOrderUse` in `packages/catalogue/src/modifiers.ts`).
+- **`dependants` now fills both of its sides, and both of them through `product_modifiers`.** An
+  options list has no per-menu publication row at all, so `optionListDependants`
+  (`packages/catalogue/src/options.ts`) reads the products that carry the list, then walks the same
+  attachment rows on to `menu_items` for the menus. The two queries repeat the same `option_list_id`
+  condition rather than sharing one predicate; nothing can drift from it yet, because
+  `options.in_use` is still thrown by nothing. **Next action:** whoever writes a refusal that uses
+  the same condition shares it then — the modifier code this replaces already learned that lesson
+  (`openOrderUse` in `packages/catalogue/src/modifiers.ts`).
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
   registered because a shipped code is never removed.
@@ -573,11 +575,11 @@ What extras lists left open, and what #449 found on the way:
   and `max` takes a check constraint over them, selects them unqualified and aggregates `min(min)` /
   `max(max)`. The spelling stands — it reads better — and a dated pointer now sits on the design
   document saying only the reason was wrong.
-- **An extras list's `dependants` now fills its `menus` side and still returns `products` empty.**
-  The plan's Task 5 added the per-menu publication row, which options lists do not have, so
+- **An extras list's `dependants` fills its two sides from two different tables.** The plan's
+  Task 5 added the per-menu publication row, which options lists do not have, so
   `extraListDependants` (`packages/catalogue/src/extras.ts`) reads the menus a delete would touch
-  straight out of `menu_item_extra_lists` rather than reaching them through the products. The
-  `products` side stays empty until the plan's Task 6 adds the product attachment table.
+  straight out of `menu_item_extra_lists` rather than reaching them through the products, and the
+  products out of `product_modifiers`. Its options twin has only the one table to read.
 - **`extras.in_use` is registered and nothing throws it**, the same posture as `options.in_use`.
 
 - **A save reaches the database once per submitted label.** The read that finds which list each
@@ -588,12 +590,13 @@ What extras lists left open, and what #449 found on the way:
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 
-- **`readProductExtras` and the product-attachment check both moved to Task 6.** Neither can be built
-  before `product_modifiers` exists, because nothing in the tree joins a product to an extras list
-  today. That is why `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) publishes a list on
-  a menu offer without checking the dish's product carries it, where the options sibling
-  `setMenuItemOptionGroups` checks against `product_option_groups`. Task 6 now carries a step for
-  each, and a dated note on Task 5 in the plan says the same.
+- **`readProductExtras` and the product-attachment check both moved to Task 6, and both have
+  landed there.** `readProductExtras` (`packages/catalogue/src/extra-projection.ts`) reads the
+  extras lists a PRODUCT itself carries, with no menu offer in the question, and
+  `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) now refuses to publish a list the
+  dish's product does not carry — the check its options sibling `setMenuItemOptionGroups` makes
+  against `product_option_groups`. Both read `product_modifiers`, which Task 6 added. The dated note
+  on Task 5 in the plan describes the gap as it was, and stays as history.
 - **Two review findings deliberately not taken, both of them structural.** Splitting the publication
   write path out of `packages/catalogue/src/extras.ts` into a module of its own, and moving
   `resolveExtraPrice` from there into `extra-contract.ts` beside the price parsing it belongs with.

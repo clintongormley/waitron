@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { optionLabels, optionLists } from "./schema/options.js";
+import { productModifiers } from "./schema/extras.js";
+import { menuItems } from "./schema/menu.js";
 import {
   parseOptionListInput,
   type OptionLabel,
@@ -266,23 +268,47 @@ export interface OptionListDependants {
 }
 
 /**
- * What deleting this list would touch — the preview a delete confirmation reads.
+ * What deleting this list would touch — the preview a delete confirmation reads. Both sides are
+ * detached by the delete rather than blocking it: `product_modifiers_option_list_fk` is
+ * ON DELETE CASCADE (drizzle/0010_product_modifiers.sql:12), and an order line carries the chosen
+ * names as text and points at nothing here (spec
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3).
  *
- * The two sides are not the same kind of thing. A PRODUCT holds the list, through the attachment
- * table Task 6 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` adds. A MENU only
- * shows a dish that holds it — options lists have no per-menu row at all
- * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.2), so `menus` is reached
- * through the products, never queried directly.
+ * The two sides are not the same kind of thing. A PRODUCT holds the list, through
+ * `product_modifiers` (spec §5). A MENU only shows a dish that holds it — options lists have no
+ * per-menu row at all (spec §2.2) — so `menus` walks the same attachment rows on to `menu_items`
+ * rather than having a table of its own to read, which is where it differs from the extras twin
+ * (`extraListDependants`, extras.ts). Both are one query, and the second names each offer by the
+ * staff name of the product that dish is, exactly as that twin does.
  *
- * Both sides are empty today because nothing can hold a list yet. Receipt, over the generated
- * migrations: `grep -rn 'REFERENCES "public"."option_l' --include='*.sql' packages apps` returns one
- * line, `option_labels`' own key into `option_lists` (drizzle/0002_option_lists.sql:21). No other
- * table has a key into either of these two.
+ * Receipt for "no other table points at an options list", over the generated migrations:
+ * `grep -rn 'REFERENCES "public"."option_l' --include='*.sql' packages apps` returns two lines,
+ * `option_labels`' own key into `option_lists` (drizzle/0002_option_lists.sql:21) and
+ * `product_modifiers`' (drizzle/0010_product_modifiers.sql:12).
+ *
+ * The products come back alphabetical by staff name with the id breaking a tie, so a confirmation
+ * dialog reads in a fixed order whichever ids were minted; the menus in offer-id order, as the
+ * extras twin's do. An INACTIVE menu offer is listed like any other — deleting the list detaches
+ * it either way.
  */
 export async function optionListDependants(
   tx: Transaction,
   optionListId: string,
 ): Promise<OptionListDependants> {
   await assertOptionList(tx, optionListId);
-  return { products: [], menus: [] };
+  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
+  const carrying = await tx
+    .select({ id: products.id, name: products.name })
+    .from(productModifiers)
+    .innerJoin(products, eq(products.id, productModifiers.productId))
+    .where(eq(productModifiers.optionListId, optionListId))
+    .orderBy(products.name, products.id);
+  const menus = await tx
+    .select({ id: menuItems.id, name: products.name })
+    .from(productModifiers)
+    .innerJoin(menuItems, eq(menuItems.productId, productModifiers.productId))
+    .innerJoin(products, eq(products.id, menuItems.productId))
+    .where(eq(productModifiers.optionListId, optionListId))
+    .orderBy(menuItems.id);
+  return { products: carrying, menus };
 }

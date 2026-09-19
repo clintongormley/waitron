@@ -2,21 +2,81 @@ import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
+import { readProductModifiers } from "./product-modifiers.js";
 import type { ExtraList, ExtraListItem } from "./extra-contract.js";
 
 /**
- * A list item as one menu offer sells it. The one difference from {@link ExtraListItem} is the
+ * A list item with its price already settled. The one difference from {@link ExtraListItem} is that
  * price: there it is nullable, meaning "inherit", and here it is always a string, because the
  * inheritance has been resolved. A till or a menu screen has no way to resolve it — the fallback
- * chain ends at the product's `unit_price`, which is not on the item — so the projection must.
+ * chain ends at the product's `unit_price`, which is not on the item — so a projection must.
  */
-export type MenuExtraListItem = Omit<ExtraListItem, "price"> & { price: string };
+export type ResolvedExtraListItem = Omit<ExtraListItem, "price"> & { price: string };
 
-/** A published list with its items resolved and narrowed for this menu offer. */
-export type MenuExtraList = Omit<ExtraList, "items"> & { items: MenuExtraListItem[] };
+/** A list with every item priced — what both projections in this file hand back. */
+export type ResolvedExtraList = Omit<ExtraList, "items"> & { items: ResolvedExtraListItem[] };
 
 const key = (menuItemId: string, listId: string, productId: string) =>
   `${menuItemId}\u0000${listId}\u0000${productId}`;
+
+/**
+ * One item still to be priced, with the menu price that outranks its own — null when there is no
+ * menu offer in the question at all, which is the product read's case.
+ */
+type Candidate = { item: ExtraListItem; menuPrice: string | null };
+
+/**
+ * The `unit_price` of every product an item still has to borrow one from, and no others: only an
+ * item with no menu price AND no price of its own ever reaches the product's row
+ * (`resolveExtraPrice`, extras.ts). ONE query whatever the number of candidates, and none when
+ * nothing has to borrow.
+ */
+async function borrowedUnitPrices(
+  tx: Transaction,
+  candidates: Candidate[],
+): Promise<Map<string, { unitPrice: string }>> {
+  const named = [
+    ...new Set(
+      candidates.flatMap(({ item, menuPrice }) =>
+        menuPrice === null && item.price === null ? [item.productId] : [],
+      ),
+    ),
+  ];
+  if (named.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: products.id, unitPrice: products.unitPrice })
+    .from(products)
+    .where(inArray(products.id, named));
+  return new Map(rows.map((product) => [product.id, { unitPrice: product.unitPrice }]));
+}
+
+/**
+ * The candidates that can be priced, in the order they came in.
+ *
+ * An item that has to borrow its product's price and cannot is left out: it cannot be priced, so it
+ * cannot be sold. It narrows the LIST as well, which reaches further than one item: if every item
+ * goes this way and the list is active with `minPicks` of 1 or more, `validateExtraSelections`
+ * (extra-contract.ts) refuses it either way — picking nothing falls under `minPicks` as
+ * `extras.limit_exceeded`, and any pick names a product the narrowed list no longer offers, which
+ * is `extras.invalid` — so the DISH becomes unorderable once the order path calls that function
+ * (the plan's Task 7; nothing calls it today). And an active list with no items is a shape
+ * `parseExtraListInput` refuses outright, so these projections can hand back one the authoring
+ * contract treats as impossible. `extra_list_items_product_fk` is ON DELETE RESTRICT
+ * (schema/extras.ts), which forbids that state at any ONE instant — but the items and the products
+ * are read by two statements with a read-committed snapshot each, so another transaction can drop
+ * the item from the list and then delete the product in between. Seen that way, on a real backend,
+ * by "leaves out a list item whose product disappears between the menu view's two reads"
+ * (extras.pg.test.ts).
+ */
+function priceItems(
+  candidates: Candidate[],
+  unitPrices: Map<string, { unitPrice: string }>,
+): ResolvedExtraListItem[] {
+  return candidates.flatMap(({ item, menuPrice }): ResolvedExtraListItem[] => {
+    const price = resolveExtraPrice(item, unitPrices.get(item.productId), menuPrice);
+    return price === undefined ? [] : [{ ...item, price }];
+  });
+}
 
 /**
  * What each menu offer publishes: its extras lists in `display_order`, each narrowed and repriced
@@ -41,8 +101,8 @@ const key = (menuItemId: string, listId: string, productId: string) =>
 export async function readMenuExtras(
   tx: Transaction,
   menuItemIds: string[],
-): Promise<Map<string, MenuExtraList[]>> {
-  const result = new Map<string, MenuExtraList[]>();
+): Promise<Map<string, ResolvedExtraList[]>> {
+  const result = new Map<string, ResolvedExtraList[]>();
   if (menuItemIds.length === 0) return result;
   const publications = await tx
     .select({
@@ -78,7 +138,7 @@ export async function readMenuExtras(
   const offered = publications.flatMap((publication) => {
     const definition = definitions.get(publication.listId);
     if (definition === undefined) return [];
-    const items = definition.items.flatMap((item) => {
+    const items = definition.items.flatMap((item): Candidate[] => {
       const override = overrides.get(key(publication.menuItemId, definition.id, item.productId));
       if (override?.available === false) return [];
       return [{ item, menuPrice: override?.price ?? null }];
@@ -86,51 +146,87 @@ export async function readMenuExtras(
     return [{ menuItemId: publication.menuItemId, definition, items }];
   });
 
-  // Only an item with no menu price AND no price of its own ever reaches the product's
-  // `unit_price` (`resolveExtraPrice`, extras.ts), so those are the only products read — not every
-  // product every published list names.
-  const named = [
-    ...new Set(
-      offered.flatMap(({ items }) =>
-        items.flatMap(({ item, menuPrice }) =>
-          menuPrice === null && item.price === null ? [item.productId] : [],
-        ),
-      ),
-    ),
-  ];
-  const productRows =
-    named.length === 0
-      ? []
-      : await tx
-          .select({ id: products.id, unitPrice: products.unitPrice })
-          .from(products)
-          .where(inArray(products.id, named));
-  const unitPrices = new Map(
-    productRows.map((product) => [product.id, { unitPrice: product.unitPrice }]),
+  const unitPrices = await borrowedUnitPrices(
+    tx,
+    offered.flatMap(({ items }) => items),
   );
-
   for (const { menuItemId, definition, items } of offered) {
-    const priced = items.flatMap(({ item, menuPrice }): MenuExtraListItem[] => {
-      // An item that has to borrow its product's price and cannot is left out of the menu view: it
-      // cannot be priced, so it cannot be sold. It narrows the LIST as well, which reaches further
-      // than one item: if every item goes this way and the list is active with `minPicks` of 1 or
-      // more, `validateExtraSelections` (extra-contract.ts) refuses it either way — picking nothing
-      // falls under `minPicks` as `extras.limit_exceeded`, and any pick names a product the narrowed
-      // list no longer offers, which is `extras.invalid` — so the DISH becomes unorderable once the
-      // order path calls that function (the plan's Task 7; nothing calls it today). And an active list with no items is a
-      // shape `parseExtraListInput` refuses outright, so this projection can hand back one the
-      // authoring contract treats as impossible. `extra_list_items_product_fk` is ON DELETE RESTRICT
-      // (schema/extras.ts), which forbids that state at any ONE instant — but the items above and
-      // the products here are two statements with a read-committed snapshot each, so another
-      // transaction can drop the item from the list and then delete the product in between. Seen
-      // that way, on a real backend, by "leaves out a list item whose product disappears between
-      // the menu view's two reads" (extras.pg.test.ts).
-      const price = resolveExtraPrice(item, unitPrices.get(item.productId), menuPrice);
-      return price === undefined ? [] : [{ ...item, price }];
-    });
     const held = result.get(menuItemId) ?? [];
-    held.push({ ...definition, items: priced });
+    held.push({ ...definition, items: priceItems(items, unitPrices) });
     result.set(menuItemId, held);
+  }
+  return result;
+}
+
+/**
+ * What each PRODUCT itself carries: the extras lists attached to it in `product_modifiers`, in the
+ * product's own attachment order, each item priced from the list item and then from the product
+ * (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.3, minus the menu step —
+ * no menu offer is involved in this read at all, so an offer's overrides and withdrawals are
+ * invisible here).
+ *
+ * The value is the same {@link ResolvedExtraList} the menu read returns, rather than a type of its
+ * own with identical members: the difference between the two reads is where a price came from, not
+ * what the caller is handed, and two names for one shape would let the halves drift apart while
+ * both claimed to be "a list with its prices resolved".
+ *
+ * Keyed by product id in the LOWER-CASED form the uuid column hands back, whatever case the caller
+ * asked in, so a caller holding an upper-cased id has to lower-case it before looking one up — the
+ * same rule `readProductModifiers` (product-modifiers.ts) states, because this map's keys are that
+ * map's keys.
+ *
+ * A product carrying no extras list has no entry, and an OPTIONS list attached to the same product
+ * is not this function's business — it is dropped here and read by the options path instead.
+ *
+ * An INACTIVE list is returned rather than dropped, for the reason {@link readMenuExtras} gives:
+ * the `active` flag is what `validateExtraSelections` (extra-contract.ts) reads to answer only the
+ * active lists of the set it is handed. An item nothing can price is left out, for the reason
+ * {@link priceItems} gives.
+ *
+ * A bounded number of queries whatever the number of products: the attachments, the lists, their
+ * items, and the products whose own price an item still has to borrow — four, one fewer than the
+ * menu read, which also reads the offer's overrides.
+ */
+export async function readProductExtras(
+  tx: Transaction,
+  productIds: string[],
+): Promise<Map<string, ResolvedExtraList[]>> {
+  const result = new Map<string, ResolvedExtraList[]>();
+  const attachments = await readProductModifiers(tx, productIds);
+  const carried = [...attachments].flatMap(([productId, refs]) =>
+    refs.flatMap((ref) => (ref.kind === "extras" ? [{ productId, listId: ref.id }] : [])),
+  );
+  if (carried.length === 0) return result;
+
+  const lists = await readExtraListsByIds(tx, [...new Set(carried.map((each) => each.listId))]);
+  const definitions = new Map(lists.map((list) => [list.id, list]));
+
+  // An attachment whose list has no definition is skipped, exactly as an unmatched publication is
+  // in {@link readMenuExtras} and for the same reason: the attachments and the lists are two
+  // statements, each with its own read-committed snapshot, so a list deleted between them leaves
+  // an attachment row with nothing to project.
+  const offered = carried.flatMap(({ productId, listId }) => {
+    const definition = definitions.get(listId);
+    if (definition === undefined) return [];
+    // No menu row is consulted, so every item's menu price is absent and the chain starts at the
+    // list item's own price.
+    return [
+      {
+        productId,
+        definition,
+        items: definition.items.map((item): Candidate => ({ item, menuPrice: null })),
+      },
+    ];
+  });
+
+  const unitPrices = await borrowedUnitPrices(
+    tx,
+    offered.flatMap(({ items }) => items),
+  );
+  for (const { productId, definition, items } of offered) {
+    const held = result.get(productId) ?? [];
+    held.push({ ...definition, items: priceItems(items, unitPrices) });
+    result.set(productId, held);
   }
   return result;
 }

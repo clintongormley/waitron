@@ -3,7 +3,10 @@ import { sql } from "drizzle-orm";
 import { asAppUser, captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
+import { createCatalogue, createMenuItem, createMenuSection, createProduct } from "./operations.js";
+import { writeProductModifiers } from "./product-modifiers.js";
 import { CATALOGUE_CLASSIFICATION } from "./classification.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import {
@@ -295,6 +298,52 @@ describe("option list CRUD", () => {
       products: [],
       menus: [],
     });
+  });
+
+  it("names the products carrying the list, and the menu offers of those dishes", async () => {
+    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    // The only test in this file that needs the taxpayer row, because it is the only one that
+    // creates products and a menu; `usePgliteDb` empties the table again afterwards.
+    await seedTenant(fx.db);
+    const dishes = await run(async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: "Deli" });
+      const section = await createMenuSection(tx, { menuId: catalogue.id, name: { en: "Mains" } });
+      const made: Record<string, string> = {};
+      for (const name of ["steak", "burger", "chips"]) {
+        const product = await createProduct(tx, {
+          catalogueId: catalogue.id,
+          categoryId: null,
+          name,
+          unitId: null,
+          unitPrice: "12.00",
+          vatClass: "reduced",
+        });
+        made[name] = product.id;
+        // The steak and the burger carry the list; the chips do not.
+        if (name !== "chips")
+          await writeProductModifiers(tx, product.id, [{ kind: "options", id: created.id }]);
+      }
+      // The steak and the chips are on the menu; the burger is not. So a `menus` side that listed
+      // every offer, or every carrying product, gets a different answer from the one below.
+      for (const name of ["steak", "chips"])
+        made[`${name}Offer`] = (
+          await createMenuItem(tx, {
+            menuId: catalogue.id,
+            productId: made[name]!,
+            sectionId: section.id,
+            grossPrice: "12.00",
+          })
+        ).id;
+      return made;
+    });
+
+    const dependants = await run((tx) => optionListDependants(tx, created.id));
+
+    expect(dependants.products).toEqual([
+      { id: dishes.burger, name: "burger" },
+      { id: dishes.steak, name: "steak" },
+    ]);
+    expect(dependants.menus).toEqual([{ id: dishes.steakOffer, name: "steak" }]);
   });
 
   it("refuses to read an id that names no list", async () => {

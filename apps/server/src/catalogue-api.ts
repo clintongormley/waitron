@@ -209,10 +209,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "options.not_found": 404,
   // 409 rather than the default 400 because the body was fine and the stored state refused it — the
   // shape the sibling `modifier.in_use` above has. NOTHING throws it, and the design may never give
-  // it one: a list delete is DESIGNED to cascade its product attachments rather than refuse (there
-  // are none yet — `product_modifiers` arrives with the plan's Task 6, and `deleteOptionList`
-  // cascades only labels today), which `packages/catalogue/src/errors.ts` states on the code
-  // itself, citing spec
+  // it one: a list delete is DESIGNED to cascade its product attachments rather than refuse — and
+  // `product_modifiers_option_list_fk` is what does that cascading
+  // (packages/catalogue/drizzle/0010_product_modifiers.sql:12) — which
+  // `packages/catalogue/src/errors.ts` states on the code itself, citing spec
   // `2026-09-18-one-product-model-design.md` §2.3. Mapped because Task 3 of the plan names it.
   "options.in_use": 409,
 };

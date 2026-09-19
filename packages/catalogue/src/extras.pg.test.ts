@@ -4,7 +4,8 @@ import { asAppUser, withTransaction, type Database, type Transaction } from "@wa
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { createCatalogue, createMenuItem, createMenuSection, createProduct } from "./operations.js";
 import { createExtraList, getExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
-import { readMenuExtras, type MenuExtraList } from "./extra-projection.js";
+import { readMenuExtras, type ResolvedExtraList } from "./extra-projection.js";
+import { writeProductModifiers } from "./product-modifiers.js";
 
 // Every test here but one needs two things in flight at once — two saves, a save against a list
 // edit, or a read against a delete — and PGlite serialises every query onto its single backend, so
@@ -46,6 +47,8 @@ function refusalCode(reason: unknown): unknown {
 const breads: { sourdough: string; rye: string } = { sourdough: "", rye: "" };
 /** The one menu offer the publication tests save against — a sandwich, in one section. */
 let offer = "";
+/** The sandwich itself. `setMenuItemExtraLists` refuses a list this product does not carry. */
+let dish = "";
 
 /**
  * How many backends on THIS database are blocked on a heavyweight lock. The publication tests read
@@ -91,18 +94,20 @@ beforeEach(async () => {
       });
       breads[key as keyof typeof breads] = product.id;
     }
-    const dish = await createProduct(tx, {
-      catalogueId: catalogue.id,
-      categoryId: null,
-      name: "sandwich",
-      unitId: null,
-      unitPrice: "7.00",
-      vatClass: "reduced",
-    });
+    dish = (
+      await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "sandwich",
+        unitId: null,
+        unitPrice: "7.00",
+        vatClass: "reduced",
+      })
+    ).id;
     const section = await createMenuSection(tx, { menuId: catalogue.id, name: { en: "Mains" } });
     const menuItem = await createMenuItem(tx, {
       menuId: catalogue.id,
-      productId: dish.id,
+      productId: dish,
       sectionId: section.id,
       grossPrice: "7.00",
     });
@@ -302,6 +307,9 @@ it("does not keep a menu price for a product the list stopped offering while it 
       { name: "Bread", items: [{ productId: breads.sourdough }, { productId: breads.rye }] },
       "en",
     );
+    // The sandwich has to carry the list before a menu offer may publish it
+    // (`assertProductCarries`, extras.ts).
+    await writeProductModifiers(tx, dish, [{ kind: "extras", id: created.id }]);
     await setMenuItemExtraLists(tx, offer, [{ listId: created.id, items: [] }]);
     return created;
   });
@@ -387,13 +395,16 @@ it("leaves out a list item whose product disappears between the menu view's two 
       },
       "en",
     );
+    // The sandwich has to carry the list before a menu offer may publish it
+    // (`assertProductCarries`, extras.ts).
+    await writeProductModifiers(tx, dish, [{ kind: "extras", id: created.id }]);
     await setMenuItemExtraLists(tx, offer, [{ listId: created.id, items: [] }]);
     return created;
   });
 
   const [reader, writer] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let removing: Promise<unknown> | undefined;
-  let reading: Promise<Map<string, MenuExtraList[]>> | undefined;
+  let reading: Promise<Map<string, ResolvedExtraList[]>> | undefined;
   try {
     // `readMenuExtras` reads the list's items and the products they name in two separate
     // statements, and `withTransaction` names no isolation level, so each takes its own

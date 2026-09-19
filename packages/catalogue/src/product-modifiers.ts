@@ -38,10 +38,11 @@ const normalise = (value: string) => value.toLowerCase();
  *
  * The keys, and every list id in the values, are the LOWER-CASED form the uuid columns hand back,
  * whatever case the caller asked in — so a caller holding an upper-cased product id has to
- * lower-case it before looking one up. Nothing calls this yet (2026-09-19); when Task 6 Step 4 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` wires it into the product read,
- * the id will have come from the database or from a contract that already lower-cases it (`id` in
- * extra-contract.ts).
+ * lower-case it before looking one up. Its one caller outside the tests is `readProductExtras`
+ * (extra-projection.ts), which hands those keys on as its own; when Task 6 Step 4 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` wires it into the product read as
+ * well, the id will have come from the database or from a contract that already lower-cases it
+ * (`id` in extra-contract.ts).
  *
  * A product with NO attachments has no entry at all — not an empty array. Callers read `?? []`, so
  * either would work for them; "leaves a product with no attachments out of the map entirely"

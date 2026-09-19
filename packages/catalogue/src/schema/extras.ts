@@ -91,12 +91,14 @@ export const extraListItems = table(
  * keyed by list rather than by option group. The row says only "this offer publishes this list, in
  * this position"; what the list offers is the list's own rows, narrowed and repriced below.
  *
- * It differs from the option-group sibling in one way that matters: THAT one's authoring operation
- * checks the dish's product actually carries the group, and this one's cannot. `product_option_groups`
- * exists and the extras equivalent does not, so `setMenuItemExtraLists`
- * (packages/catalogue/src/extras.ts) has nothing to read; Task 6 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` creates the table and adds the
- * check. */
+ * A row is written only for a list the dish's PRODUCT carries in `product_modifiers` (below in this
+ * file): `setMenuItemExtraLists` (packages/catalogue/src/extras.ts) refuses the rest, the check its
+ * option-group sibling `setMenuItemOptionGroups` (packages/catalogue/src/operations.ts) makes
+ * against `product_option_groups`. Nothing HOLDS that afterwards — there is no key between the two
+ * tables, and detaching the list from the product leaves this row where it is. Read over the tree
+ * rather than measured: `grep -rn 'delete(menuItemExtraLists' --include='*.ts' packages apps`
+ * returns one line, `setMenuItemExtraLists`' own delete of the offer it is rewriting, and the only
+ * other way a row leaves is the two ON DELETE CASCADE keys below. */
 export const menuItemExtraLists = table(
   "menu_item_extra_lists",
   {
