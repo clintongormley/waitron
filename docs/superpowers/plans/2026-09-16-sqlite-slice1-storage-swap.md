@@ -2366,8 +2366,9 @@ migration folder and diffing that against the real one found no difference."
 **Runner:** autonomous. **Depends on:** nothing.
 
 The suites that need a database pick one by naming the driver themselves, through `usePgliteDb`,
-`useRealPostgres` or `describeEachTarget`. Put one helper in front of them so the flip changes one
-function body.
+`useRealPostgres`, `useTemplateDb` or `describeEachTarget`. Put one helper in front of them so the
+flip changes one function body. Only the first of those four is this task's; `useTemplateDb` was
+missing from this enumeration until 2026-09-19 and has its own paragraph below the counts.
 
 **The count in this paragraph used to read "211 files", and a count is a receipt that goes stale
 (CLAUDE.md §7). Measured 2026-09-18**, with the commands, because the answer depends entirely on the
@@ -2395,6 +2396,20 @@ not work to convert either — `packages/db/src/testing/lifecycle.test.ts:26` is
 same commit its first command gives 206. Re-run it rather than reading a number here — every one
 of these numbers falls by one each time a package lands, and each is the reading on the commit named
 beside it, nothing more.
+
+**`useTemplateDb` is the fourth helper, and it was missing from this task's enumeration until the
+`packages/media` conversion met it (2026-09-19).** A converter meets it nearly as often as the
+helper being replaced: on `61b5016e`, 179 files call it against 202 still calling `usePgliteDb`
+— 200 once that branch's two land
+(`grep -rlE "useTemplateDb[(]" --include="*.ts" packages apps | wc -l`, and step 5's own command for
+the other; these fall the same way every count here does). It hands back a REAL PostgreSQL database
+— "instead of booting and migrating a container per file, it CLONES a pre-migrated template database
+from the shared container" and "hands back the SAME `{ pg, admin }` shape" (its own doc comment,
+`packages/db/src/testing/lifecycle.ts`) — so routing it through the PGlite seam would delete the
+real-PostgreSQL coverage it exists for. That coverage is wider than grants and concurrency, measured
+over the four suites in `packages/media`: grants and races in `images.pg.test.ts` and
+`routes.pg.test.ts`, accent collation in `name-sort.pg.test.ts`, and full-text stemming and ranking
+in `search.pg.test.ts`.
 
 Three scopes appear in this paragraph and they are easy to mix up, which has already happened once
 here. Over `*.ts` with the four-file exclusion, a tree with nothing converted gives 207. The run-it
@@ -2564,7 +2579,7 @@ grep -rlE "usePgliteDb[(]" --include="*.ts" packages apps \
 For what is already DONE — the control in the other direction, which is why no list is kept here —
 run the guide's second command.
 
-One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres` and `describeEachTarget` alone** — and note, corrected twice on 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are not alike and that neither correction licenses moving `describeEachTarget`.
+One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix the import. **Leave `useRealPostgres`, `useTemplateDb` and `describeEachTarget` alone** — and note, corrected twice on 2026-09-18 by following the call chain into `packages/db/src/testing/harness.ts` rather than reading this line, that the two are not alike and that neither correction licenses moving `describeEachTarget`.
 
 `useRealPostgres` names a real container deliberately. `describeEachTarget` is NOT a real-container helper: it registers BOTH targets (`const allTargets: Target[] = [pgliteTarget, postgresTarget()]`) and, on the default path, skips the postgres half when Docker is absent — with `REQUIRE_DOCKER=1` set it throws instead (`resolveTargets`).
 
