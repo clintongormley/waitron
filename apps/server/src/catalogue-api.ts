@@ -53,7 +53,6 @@ import {
   listProducts,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
-  setProductOptionGroups,
   renameCatalogue,
   updateOptionGroup,
   updateOptionGroupItem,
@@ -65,6 +64,8 @@ import {
   type MenuVariant,
   readProductEditor,
   saveProductEditor,
+  writeProductModifiers,
+  type ProductModifierRef,
   type CreateOptionGroupInput,
   type CreateOptionGroupItemInput,
   type DietOverride,
@@ -339,30 +340,52 @@ function screenDietOverride(value: unknown): void {
 }
 
 /**
- * Screen an OPTIONAL ordered `optionGroupIds` attach list on the product POST/PATCH body, returning it.
- * Absent stays `undefined` (the attach set is left untouched); present must be an ARRAY of uuid-shaped
- * STRINGS — a non-array or a non-string element is `management.request_invalid` naming the field, and a
- * string that is not uuid-shaped is `shared.invalid_id` (as `requireUuidParam`, so a malformed id never
- * reaches the `uuid` column → `22P02` → opaque 500). Existence + tenant-consistency of each id is the
- * `product_option_groups` FK's job, not this shape screen's.
+ * Screen the OPTIONAL ordered `modifiers` attach list on the product POST/PATCH body, returning it.
+ * Absent stays `undefined` (the product's attachments are left untouched); present must be an ARRAY
+ * of `{ kind: "extras" | "options", id }` objects, in the order a diner is offered them.
  *
- * DUPLICATES are collapsed here, first-occurrence order preserved: two copies of one id would otherwise
- * both reach `setProductOptionGroups`' insert and collide on the `(product_id, group_id)` PK → an opaque
- * 500. A repeated attach carries no meaning (the list is a set of groups in display order), so the second
- * copy is dropped rather than rejected.
+ * A non-array, a non-object entry, an unknown or missing `kind` and a non-string `id` are all
+ * `management.request_invalid` naming `modifiers` — the split Task 1 made, where the server's screen
+ * throws the REQUEST code and the catalogue's own parser throws the DOMAIN code
+ * (`parseProductEditorInput`, packages/catalogue/src/product-editor-input.ts, throws
+ * `product.invalid`). A string that is not uuid-shaped is `shared.invalid_id` instead, exactly as
+ * `requireUuidParam` treats a path id and for the same reason: it would otherwise reach the `uuid`
+ * column as a `22P02` driver error, which this surface's STATUS map has nothing for, so it would
+ * surface as an opaque 500.
+ *
+ * DUPLICATES are NOT collapsed here, unlike the `optionGroupIds` screen this replaces. That screen
+ * collapsed them because two copies of one id would otherwise collide on the
+ * `(product_id, group_id)` primary key and surface as a 500. `writeProductModifiers`
+ * (packages/catalogue/src/product-modifiers.ts) refuses a repeat itself, as `product.invalid`
+ * naming the entry, which the STATUS map already maps to 400 — so the 500 this guarded against
+ * cannot happen, and the caller is told rather than quietly saved something it did not send.
+ *
+ * Whether each id names a real list is `writeProductModifiers`' check, not this shape screen's.
  */
-function parseOptionGroupIds(value: unknown): string[] | undefined {
+function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined {
   if (value === undefined) return undefined;
-  if (!Array.isArray(value)) {
-    throw new AppError("management.request_invalid", { field: "optionGroupIds" });
-  }
-  for (const id of value) {
-    if (typeof id !== "string") {
-      throw new AppError("management.request_invalid", { field: "optionGroupIds" });
-    }
-    if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind: "OptionGroupId", value: id });
-  }
-  return [...new Set(value as string[])];
+  const invalid = () => new AppError("management.request_invalid", { field: "modifiers" });
+  if (!Array.isArray(value)) throw invalid();
+  return value.map((entry): ProductModifierRef => {
+    if (!isPlainObject(entry)) throw invalid();
+    const { kind, id } = entry as { kind?: unknown; id?: unknown };
+    if (kind !== "extras" && kind !== "options") throw invalid();
+    if (typeof id !== "string") throw invalid();
+    if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind: "ModifierListId", value: id });
+    return { kind, id };
+  });
+}
+
+/**
+ * Refuse a product body still carrying one of the two fields the ordered `modifiers` list replaced,
+ * naming the field the caller sent so it knows which of its own fields went away. Ignoring it would
+ * save a product with NO attachments and answer 201/204, the one outcome a caller on the old
+ * contract could not tell from having worked.
+ */
+function refuseLegacyAttachFields(body: Record<string, unknown>): void {
+  for (const legacy of ["modifierIds", "optionGroupIds"])
+    if (body[legacy] !== undefined)
+      throw new AppError("management.request_invalid", { field: legacy });
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
@@ -1056,8 +1079,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         soldAlone?: unknown;
-        optionGroupIds?: unknown;
+        modifiers?: unknown;
+        // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
         modifierIds?: unknown;
+        optionGroupIds?: unknown;
       }>(c);
       if (typeof body.catalogueId !== "string") {
         throw new AppError("management.request_invalid", { field: "catalogueId" });
@@ -1098,13 +1123,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // authority on the label/contains-tag/disjointness content — exactly the posture `allergens`
       // takes with `validateAllergens`.
       screenDietOverride(body.dietOverride);
-      // The optional ordered attach set (Task 11): screened here (array of uuid-shaped strings) and
-      // applied in the SAME transaction as the create, so a product and its option groups land atomically.
-      if (body.modifierIds !== undefined && body.optionGroupIds !== undefined)
-        throw new AppError("modifier.invalid", { field: "modifierIds" });
-      const optionGroupIds = parseOptionGroupIds(
-        body.modifierIds === undefined ? body.optionGroupIds : body.modifierIds,
-      );
+      // The optional ordered attach list: screened here and applied in the SAME transaction as the
+      // create, so a product and its extras/options lists land atomically.
+      refuseLegacyAttachFields(body);
+      const modifiers = parseProductModifiers(body.modifiers);
       const input = {
         catalogueId: body.catalogueId,
         categoryId: body.categoryId,
@@ -1128,10 +1150,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           await validateContentTranslations(tx, customerName, deps.venueLocale ?? FALLBACK_LOCALE);
         }
         const product = await createProduct(tx, input);
-        if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, product.id, optionGroupIds);
+        if (modifiers !== undefined) {
+          await writeProductModifiers(tx, product.id, modifiers);
         }
-        return { ...product, modifierIds: optionGroupIds ?? [] };
+        return { ...product, modifiers: modifiers ?? [] };
       });
       return c.json(created, 201);
     }),
@@ -1159,8 +1181,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         soldAlone?: unknown;
-        optionGroupIds?: unknown;
+        modifiers?: unknown;
+        // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
         modifierIds?: unknown;
+        optionGroupIds?: unknown;
       }>(c);
       const patch: UpdateProductInput = {};
       if (body.name !== undefined) {
@@ -1230,15 +1254,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         screenDietOverride(body.dietOverride);
         patch.dietOverride = body.dietOverride as DietOverride | null;
       }
-      // The optional ordered attach set (Task 11): a full replace when present, applied in the SAME
-      // transaction as the field update. Absent leaves the product's attached groups untouched; `[]`
-      // detaches them all. An empty `patch` alongside a present `optionGroupIds` is fine — `updateProduct`
+      // The optional ordered attach list: a full replace when present, applied in the SAME
+      // transaction as the field update. Absent leaves the product's attachments untouched; `[]`
+      // detaches them all. An empty `patch` alongside a present `modifiers` is fine — `updateProduct`
       // always bumps `updatedAt`, so its `.set()` is never empty.
-      if (body.modifierIds !== undefined && body.optionGroupIds !== undefined)
-        throw new AppError("modifier.invalid", { field: "modifierIds" });
-      const optionGroupIds = parseOptionGroupIds(
-        body.modifierIds === undefined ? body.optionGroupIds : body.modifierIds,
-      );
+      refuseLegacyAttachFields(body);
+      const modifiers = parseProductModifiers(body.modifiers);
       await gated(sessionId, async (tx) => {
         await assertOwned(tx, "products", productId);
         // A customer-facing name is optional: absent or wholly blank, the staff name is what a
@@ -1251,8 +1272,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
         await updateProduct(tx, productId, patch);
-        if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, productId, optionGroupIds);
+        if (modifiers !== undefined) {
+          await writeProductModifiers(tx, productId, modifiers);
         }
       });
       return c.body(null, 204);
@@ -1260,10 +1281,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   // ── Product ↔ option-group attach read-back ──────────────────────────────────────────────────────
-  // The ids of the option groups attached to a product, in per-attachment `sort` order — the read-back
-  // Task 12's product form uses to show which groups are attached and in what order (it cross-references
-  // GET /management-api/option-groups for the names). The attach itself is carried on the product
-  // POST/PATCH body above; this is the read half. `:id` screened as a uuid (→ shared.invalid_id).
+  // The ids of the option groups attached to a product, in per-attachment `sort` order (a caller
+  // cross-references GET /management-api/option-groups for the names). There is no WRITE half any
+  // more (2026-09-19): the product POST/PATCH body carries the ordered `modifiers` list and writes
+  // `product_modifiers`, so nothing a client can send fills `product_option_groups`. This read goes
+  // with those tables in Task 13 of
+  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+  // `:id` screened as a uuid (→ shared.invalid_id).
   app.get("/management-api/products/:id/option-groups", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

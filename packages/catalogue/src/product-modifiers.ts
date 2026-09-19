@@ -4,17 +4,13 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { extraLists, productModifiers } from "./schema/extras.js";
 import { optionLists } from "./schema/options.js";
+import type { ProductModifierRef } from "./product-types.js";
 import "./errors.js";
 
-/**
- * One entry in a product's ordered attachment list: an extras list or an options list, never both
- * (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §5). The `id` is the LIST's
- * id, not the attachment row's — the row's own key is a surrogate nothing outside this file names.
- */
-export interface ProductModifierRef {
-  kind: "extras" | "options";
-  id: string;
-}
+// The shape itself lives in `product-types.ts` with the other wire shapes, because the dashboard
+// imports it and this file imports drizzle and `@waitron/db`. Re-exported so `product-modifiers.js`
+// stays the import path it was.
+export type { ProductModifierRef } from "./product-types.js";
 
 /**
  * A uuid column compares either case in SQL and hands its value back LOWER-CASED, so an id that
@@ -38,11 +34,9 @@ const normalise = (value: string) => value.toLowerCase();
  *
  * The keys, and every list id in the values, are the LOWER-CASED form the uuid columns hand back,
  * whatever case the caller asked in — so a caller holding an upper-cased product id has to
- * lower-case it before looking one up. Its one caller outside the tests is `readProductExtras`
- * (extra-projection.ts), which hands those keys on as its own; when Task 6 Step 4 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` wires it into the product read as
- * well, the id will have come from the database or from a contract that already lower-cases it
- * (`id` in extra-contract.ts).
+ * lower-case it before looking one up. `readProductEditor` (product-editor.ts) does exactly that;
+ * `readProductExtras` (extra-projection.ts) hands the keys on as its own, and `listProducts`
+ * (operations.ts) looks up ids that came straight out of the database and are lower-cased already.
  *
  * A product with NO attachments has no entry at all — not an empty array. Callers read `?? []`, so
  * either would work for them; "leaves a product with no attachments out of the map entirely"
@@ -96,10 +90,10 @@ export async function readProductModifiers(
  * because the two kinds live in two tables, and a kind the body does not use is not read at all.
  *
  * What this does NOT check is the product: an unknown `productId` reaches
- * `product_modifiers_product_fk` and surfaces as a `23503` driver error. The plan has the
- * attachments written in the same transaction as the product row itself (Task 6 Step 4), so no
- * editor path should be able to send one — but that is a statement about a caller that does not
- * exist yet, and it is worth re-checking when one does.
+ * `product_modifiers_product_fk` and surfaces as a `23503` driver error. Neither caller can send
+ * one: `saveProductEditor` (product-editor.ts) passes the id it just created or just locked, and
+ * the product routes (`apps/server/src/catalogue-api.ts`) pass the id `createProduct` returned or
+ * one `assertOwned` has already resolved, all inside the one transaction.
  */
 async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Promise<void> {
   const seen = new Set<string>();
@@ -138,15 +132,16 @@ async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Pro
  * are minted fresh each time — an attachment row's `id` is a surrogate nothing outside this file
  * holds, so losing it costs nothing.
  *
- * What this does NOT do is serialise two saves of the same product, and no caller supplies that
- * today either: `updateProduct` (operations.ts) takes no row lock on the product, and
- * `lockProduct` — the `select … for update` that would give one — is taken only by
- * `setProductVariants` (variants.ts:108) and `setMenuVariants` (variants.ts:189). A delete
- * cannot see another transaction's uncommitted inserts, so two overlapping saves of one product
- * can collide on `product_modifiers_product_extra_uq` or its options twin and surface as an opaque
- * `23505` — the shape measured one table over and written up on `lockExtraList` (extras.ts). Not
- * measured here, and not fixed here: whoever wires this into the product write (plan Task 6 Step 4)
- * decides whether to take the product's row lock first.
+ * What this does NOT do is serialise two saves of the same product — a delete cannot see another
+ * transaction's uncommitted inserts, so two overlapping saves could otherwise collide on
+ * `product_modifiers_product_extra_uq` or its options twin and surface as an opaque `23505`, the
+ * shape measured one table over and written up on `lockExtraList` (extras.ts). What stands between
+ * that and a caller is the PRODUCT row: both callers write it first in the same transaction —
+ * `saveProductEditor` (product-editor.ts) takes `select … for update` on an existing product, and
+ * the `PATCH` route's `updateProduct` (operations.ts) issues an `UPDATE` on it — and a created
+ * product is a row no second writer can have named yet. NOT MEASURED: no test here races two
+ * writers, and PGlite cannot show one (every query serialises onto its one backend, CLAUDE.md §4),
+ * so this is read off the call chain, not off a run.
  */
 export async function writeProductModifiers(
   tx: Transaction,

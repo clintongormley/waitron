@@ -5,7 +5,7 @@ import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import type { ProductVariantInput } from "./variants.js";
 import type { VatClass } from "./pricing.js";
-import type { ProductEditorInput } from "./product-types.js";
+import type { ProductEditorInput, ProductModifierRef } from "./product-types.js";
 export type { ProductEditorInput } from "./product-types.js";
 import "./errors.js";
 
@@ -37,6 +37,38 @@ function ids(value: unknown, field: string): string[] {
   const values = value.map((value) => id(value, field));
   if (new Set(values).size !== values.length) invalid(field);
   return values;
+}
+/**
+ * The product's ordered attachment list: each entry names one list and which KIND of list it is, and
+ * the array's order is the order a diner is offered them. Ids are lower-cased by {@link id}, so a
+ * duplicate that differs only in case is still a duplicate — the same normalisation
+ * `writeProductModifiers` (product-modifiers.ts) applies before it writes.
+ *
+ * A repeated (kind, id) pair is refused rather than collapsed: the list is ordered, so a caller who
+ * sent the same list twice meant something this model cannot express, and the write side refuses it
+ * too (`assertRefsExist`, product-modifiers.ts). The same id under the two DIFFERENT kinds is two
+ * different lists and is allowed.
+ *
+ * Refusals name the entry (`modifiers.0.kind`), not the whole field, which is how the sibling
+ * `variants` screen below reports and what `assertRefsExist` throws when the ids are checked against
+ * the stored lists. Only a problem with the array ITSELF names the bare field.
+ *
+ * What this does NOT check is that the ids name real lists — that needs the transaction, and it is
+ * `assertRefsExist`'s job at write time.
+ */
+function modifiers(value: unknown, field: string): ProductModifierRef[] {
+  if (!Array.isArray(value)) invalid(field);
+  const seen = new Set<string>();
+  return value.map((entry, index): ProductModifierRef => {
+    const at = `${field}.${index}`;
+    const ref = object(entry, at);
+    if (ref.kind !== "extras" && ref.kind !== "options") invalid(`${at}.kind`);
+    const listId = id(ref.id, `${at}.id`);
+    const key = `${ref.kind}\u0000${listId}`;
+    if (seen.has(key)) invalid(`${at}.id`);
+    seen.add(key);
+    return { kind: ref.kind, id: listId };
+  });
 }
 function price(value: unknown, field: string): string {
   if (typeof value !== "string" || !isProductPrice(value)) invalid(field);
@@ -71,7 +103,12 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
     body.description === null ? null : translations(body.description, "description");
   const unitId = nullableId(body.unitId, "unitId");
   const categoryIds = ids(body.categoryIds, "categoryIds");
-  const modifierIds = ids(body.modifierIds, "modifierIds");
+  // The two fields the ordered `modifiers` list replaced. A body carrying either is refused rather
+  // than having it ignored: ignoring would save a product with NO attachments and report success,
+  // the one outcome a caller still on the old contract could not tell from having worked.
+  for (const legacy of ["modifierIds", "optionGroupIds"] as const)
+    if (body[legacy] !== undefined) invalid(legacy);
+  const attachments = modifiers(body.modifiers, "modifiers");
   const primaryCategoryId =
     body.primaryCategoryId === null ? null : id(body.primaryCategoryId, "primaryCategoryId");
   if (
@@ -131,7 +168,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
     variants,
     categoryIds,
     primaryCategoryId,
-    modifierIds,
+    modifiers: attachments,
     allergens,
     dietaryDeclarations: validateDietaryDeclarations(body.dietaryDeclarations),
   };

@@ -55,11 +55,13 @@ The response includes the normalized definition:
 }
 ```
 
-Product POST/PATCH accepts ordered `modifierIds`. Product lists return the ordered IDs, including
-unavailable attachments. The existing `optionGroupIds` field and group/item endpoints remain for
-the combined catalogue screen, which the Products integration removes. They address the same
-`option_groups` and `option_group_items`, not another definition store. The old group cap maps into
-`maxTotalQuantity`. Do not send both attachment fields in one request.
+Product POST/PATCH no longer carries `modifierIds` or `optionGroupIds` (2026-09-19). A body sending
+either is refused, naming that field. What it carries instead is one ordered `modifiers` list, each
+entry `{ "kind": "extras" | "options", "id": "<list id>" }`, written to `product_modifiers`; product
+lists and the editor read return the same shape, in the same order. Attaching an option GROUP has no
+request body at all any more — the group/item endpoints still exist and still read
+`option_groups`/`option_group_items`, and they go with those tables when the old model is removed.
+The old group cap maps into `maxTotalQuantity`.
 
 `dashboard-modifier-form` in `apps/dashboard/src/widgets/modifier-form.ts` accepts `open`, `busy`,
 `locales: string[]`, `value: Modifier | null` and `fieldErrors: Record<string, string>`. It emits

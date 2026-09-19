@@ -181,7 +181,9 @@ events are gone.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `categoryIds`,
-`primaryCategoryId`, `modifierIds`, the allergen and dietary declarations, and `variants` — each
+`primaryCategoryId`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
+`options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
+dietary declarations, and `variants` — each
 variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice` and `available`, plus
 `id` when it already exists. A customer-facing name whose every entry is blank parses to `null`, so
 "I typed spaces" and "I left it empty" store identically.

@@ -440,13 +440,13 @@ choice availability still win.
 
 What it left open:
 
-- **Two ways to attach a modifier to a product still exist side by side — half closed by #345.**
-  The combined catalogue editor that was the reason for keeping the old door is gone. The door itself
-  is not: `apps/server/src/catalogue-api.ts` still accepts `optionGroupIds` as an alternative to the
-  canonical ordered `modifierIds`, still rejects a request that sends both, and still writes the same
-  underlying tables either way. Nothing in the dashboard sends the old field any more. **Next action:**
-  delete the `optionGroupIds` branch from the product POST/PATCH handler and its parser, confirm no
-  other caller sends it, and drop the mutual-exclusion check with it.
+- **Two ways to attach a modifier to a product — CLOSED, 2026-09-19.** Both `optionGroupIds` and
+  `modifierIds` are gone from the product POST/PATCH body and from the editor body; a request sending
+  either is refused, naming the field. What replaced them is one ordered `modifiers` list of
+  `{ kind, id }`, written to `product_modifiers`
+  (`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, Task 6 Step 4). The old
+  `product_option_groups` table and the code reading it survive until Task 13 of that plan, but
+  nothing writes them through a route any more.
 - **Catalogue rows created before this migration keep their old caps, and nothing upgrades them.**
   The old per-group `max_select` limit does not become the new `maxTotalQuantity` cap. Following the
   repo's no-backfill rule, the fix is to recreate disposable pre-production catalogue data under the

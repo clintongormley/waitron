@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
-import { assignCatalogueToLocation, listAvailableProducts } from "@waitron/catalogue";
+import {
+  assignCatalogueToLocation,
+  createOptionList,
+  listAvailableProducts,
+  setProductOptionGroups,
+} from "@waitron/catalogue";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -361,10 +366,18 @@ describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", (
       pricingUnit: "each",
       unitPrice: "18.00",
       vatClass: "general",
-      optionGroupIds: [groupId],
     });
     expect(prodRes.status).toBe(201);
     const productId = ((await prodRes.json()) as { id: string }).id;
+    // No request body attaches an option GROUP any more — the product body carries the ordered
+    // `modifiers` list and writes `product_modifiers` — so the attach this till read is about goes in
+    // directly, with the session assuming `app_user` so the table grants still apply.
+    // `product_option_groups`, the till read of it, and this test go in Task 13 of
+    // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+    await withTransaction(suite.admin, async (tx) => {
+      await asAppUser(tx);
+      await setProductOptionGroups(tx, productId, [groupId]);
+    });
 
     // Read the attach back through the authoring route.
     const attached = await send(
@@ -512,22 +525,31 @@ describe("canonical modifier routes", () => {
   });
 });
 
-it("accepts ordered modifierIds in the product contract and reads them back", async () => {
+it("accepts an ordered modifiers list in the product contract and reads it back", async () => {
+  // The same round trip the flat `modifierIds` had, re-aimed at the ordered `modifiers` list. Two
+  // OPTIONS lists rather than two text modifiers. The product write goes through the ROUTE, which
+  // opens its own `app_user` transaction, so `product_modifiers`' grants are what carry it.
   const venue = await setupVenue();
   const app = mountApp();
   const cookie = venue.managerCookie;
-  const modifierIds: string[] = [];
-  for (const label of ["First", "Second"]) {
-    const response = await send(app, "POST", "/management-api/modifiers", cookie, {
-      type: "text",
-      name: { es: label },
-    });
-    modifierIds.push(((await response.json()) as { modifier: { id: string } }).modifier.id);
-  }
   const menuResponse = await send(app, "POST", "/management-api/catalogues", cookie, {
     name: "Menu",
   });
   const menu = (await menuResponse.json()) as { id: string };
+  const listIds = await withTransaction(suite.admin, async (tx) => {
+    await asAppUser(tx);
+    const ids: string[] = [];
+    for (const label of ["First", "Second"]) {
+      const list = await createOptionList(
+        tx,
+        { name: label, labels: [{ name: `${label} label` }] },
+        LOCALE,
+      );
+      ids.push(list.id);
+    }
+    return ids;
+  });
+  const modifiers = listIds.map((id) => ({ kind: "options", id }));
   const create = await send(app, "POST", "/management-api/products", cookie, {
     catalogueId: menu.id,
     categoryId: null,
@@ -535,19 +557,19 @@ it("accepts ordered modifierIds in the product contract and reads them back", as
     pricingUnit: "each",
     unitPrice: "5.00",
     vatClass: "reduced",
-    modifierIds,
+    modifiers,
   });
   expect(create.status).toBe(201);
-  const product = (await create.json()) as { id: string; modifierIds: string[] };
-  expect(product.modifierIds).toEqual(modifierIds);
-  const ordered = [...modifierIds].reverse();
+  const product = (await create.json()) as { id: string; modifiers: unknown };
+  expect(product.modifiers).toEqual(modifiers);
+  const ordered = [...modifiers].reverse();
   expect(
     (
       await send(app, "PATCH", `/management-api/products/${product.id}`, cookie, {
-        modifierIds: ordered,
+        modifiers: ordered,
       })
     ).status,
   ).toBe(204);
   const list = await send(app, "GET", `/management-api/catalogues/${menu.id}/products`, cookie);
-  expect(await list.json()).toMatchObject([{ id: product.id, modifierIds: ordered }]);
+  expect(await list.json()).toMatchObject([{ id: product.id, modifiers: ordered }]);
 });

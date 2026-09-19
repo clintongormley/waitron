@@ -1,4 +1,13 @@
-import { readMenuModifiers, readProductModifiers } from "./modifier-projection.js";
+// TWO different functions share the name `readProductModifiers`, so both are aliased here and
+// neither is imported bare. `readLegacyProductModifiers` reads the OLD `product_option_groups`
+// attachments as `Modifier` definitions for the till; `readProductAttachments` reads the NEW
+// `product_modifiers` table as `{ kind, id }` refs. The old one goes in Task 13 of
+// `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+import {
+  readMenuModifiers,
+  readProductModifiers as readLegacyProductModifiers,
+} from "./modifier-projection.js";
+import { readProductModifiers as readProductAttachments } from "./product-modifiers.js";
 import type { Modifier } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
 import { isModifierPrice } from "./modifier-limits.js";
@@ -245,6 +254,7 @@ function toProduct(
     ...product,
     categoryIds,
     primaryCategoryId: row.categoryId,
+    modifiers: [],
     modifierIds: [],
     unit,
     unitId: unit.id,
@@ -1048,12 +1058,18 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
       ),
     )
     .orderBy(productVariants.displayOrder, productVariants.id);
+  // ONE query for every product read, never one per product (CLAUDE.md §3).
+  const modifiers = await readProductAttachments(
+    tx,
+    rows.map((row) => row.id),
+  );
   return rows.map((row) => ({
     ...toProduct(
       row,
       row.categoryIds,
       variantRows.filter((variant) => variant.productId === row.id),
     ),
+    modifiers: modifiers.get(row.id) ?? [],
     modifierIds: attachments
       .filter((attachment) => attachment.productId === row.id)
       .map((attachment) => attachment.groupId),
@@ -1455,7 +1471,9 @@ export async function listAvailableProducts(
   }
 
   const modifiersByProduct =
-    rows.length === 0 ? new Map<string, Modifier[]>() : await readProductModifiers(tx, productIds);
+    rows.length === 0
+      ? new Map<string, Modifier[]>()
+      : await readLegacyProductModifiers(tx, productIds);
 
   // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
@@ -1772,6 +1790,12 @@ export async function updateOptionGroupItem(
 /**
  * Fully replace the product's option groups with `groupIds`. Delete the existing attachments,
  * then insert each id with `sort` equal to its list index; an empty list detaches everything.
+ *
+ * NO ROUTE reaches this any more (2026-09-19): the product body carries the ordered `modifiers`
+ * list and writes `product_modifiers` through `writeProductModifiers` (product-modifiers.ts). It
+ * stays, with the tables it writes, until Task 13 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them; the callers left
+ * are tests setting up the old model's reads.
  * The caller's transaction keeps replacement atomic, and the foreign keys reject a product or
  * group reference that names no row.
  */
@@ -1815,8 +1839,9 @@ export async function setProductOptionGroups(
   );
 }
 
-/** The option group ids attached to a product, in per-attachment `sort` order — the read-back the
- * product form (Task 12) uses to show which groups are attached and in what order. */
+/** The option group ids attached to a product, in per-attachment `sort` order. Its one caller is
+ * `GET /management-api/products/:id/option-groups`; the product FORM reads the newer `modifiers`
+ * list instead, and both this and the route go with the old tables (see `setProductOptionGroups`). */
 export async function listProductOptionGroupIds(
   tx: Transaction,
   productId: string,
