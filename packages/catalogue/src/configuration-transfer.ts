@@ -19,5 +19,10 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "option_labels" },
     { name: "extra_lists" },
     { name: "extra_list_items" },
+    // A menu offer's extras publication, after both parents it names — the menu item above and the
+    // list two lines up — and its per-item overrides after the publication itself, the same order
+    // `menu_item_option_groups`/`menu_item_options` take.
+    { name: "menu_item_extra_lists" },
+    { name: "menu_item_extra_items" },
   ],
 } as const;

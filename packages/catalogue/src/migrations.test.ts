@@ -35,6 +35,8 @@ const TABLES = [
   "option_labels",
   "extra_lists",
   "extra_list_items",
+  "menu_item_extra_lists",
+  "menu_item_extra_items",
 ];
 
 const tableList = () =>
@@ -77,6 +79,17 @@ describe("the catalogue migration set carries no tenant column", () => {
       extra_lists_picks_ck:
         "CHECK (((min_picks >= 0) AND ((max_picks IS NULL) OR (max_picks >= min_picks))))",
       extra_lists_pkey: "PRIMARY KEY (id)",
+      menu_item_extra_items_list_fk:
+        "FOREIGN KEY (menu_item_id, list_id) REFERENCES menu_item_extra_lists(menu_item_id, list_id) ON DELETE CASCADE",
+      menu_item_extra_items_pk: "PRIMARY KEY (menu_item_id, list_id, product_id)",
+      menu_item_extra_items_price_ck: "CHECK ((price >= (0)::numeric))",
+      menu_item_extra_items_product_fk:
+        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
+      menu_item_extra_lists_item_fk:
+        "FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE",
+      menu_item_extra_lists_list_fk:
+        "FOREIGN KEY (list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
+      menu_item_extra_lists_pk: "PRIMARY KEY (menu_item_id, list_id)",
       menu_item_option_groups_group_fk:
         "FOREIGN KEY (group_id) REFERENCES option_groups(id) ON DELETE CASCADE",
       menu_item_option_groups_item_fk:

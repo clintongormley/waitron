@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { extraListItems, extraLists } from "./schema/extras.js";
+import { menuItems } from "./schema/menu.js";
 import {
+  extraListItems,
+  extraLists,
+  menuItemExtraItems,
+  menuItemExtraLists,
+} from "./schema/extras.js";
+import {
+  extraPrice,
   parseExtraListInput,
   type ExtraList,
   type ExtraListItem,
@@ -52,13 +59,9 @@ const itemColumns = {
   price: extraListItems.price,
 };
 
-export async function listExtraLists(tx: Transaction): Promise<ExtraList[]> {
-  const lists = await tx
-    .select(listColumns)
-    .from(extraLists)
-    .orderBy(extraLists.sort, extraLists.id);
+/** One query for every list's items, never one per list, whatever the number of lists. */
+async function withItems(tx: Transaction, lists: Omit<ExtraList, "items">[]): Promise<ExtraList[]> {
   if (lists.length === 0) return [];
-  // One query for every list's items, never one per list.
   const rows = await tx
     .select({ listId: extraListItems.listId, ...itemColumns })
     .from(extraListItems)
@@ -77,6 +80,32 @@ export async function listExtraLists(tx: Transaction): Promise<ExtraList[]> {
     grouped.set(listId, held);
   }
   return lists.map((list) => ({ ...list, items: grouped.get(list.id) ?? [] }));
+}
+
+export async function listExtraLists(tx: Transaction): Promise<ExtraList[]> {
+  const lists = await tx
+    .select(listColumns)
+    .from(extraLists)
+    .orderBy(extraLists.sort, extraLists.id);
+  return withItems(tx, lists);
+}
+
+/**
+ * The named lists, in the order {@link listExtraLists} returns them, each with its items. Two
+ * queries whatever the number of ids — the menu projection (extra-projection.ts) wants exactly the
+ * lists one menu publishes rather than the whole catalogue's.
+ */
+export async function readExtraListsByIds(
+  tx: Transaction,
+  extraListIds: string[],
+): Promise<ExtraList[]> {
+  if (extraListIds.length === 0) return [];
+  const lists = await tx
+    .select(listColumns)
+    .from(extraLists)
+    .where(inArray(extraLists.id, extraListIds))
+    .orderBy(extraLists.sort, extraLists.id);
+  return withItems(tx, lists);
 }
 
 export async function getExtraList(tx: Transaction, extraListId: string): Promise<ExtraList> {
@@ -270,6 +299,36 @@ async function writeItems(
       .returning({ id: extraListItems.id });
     if (!inserted.length) throw new AppError("extras.invalid", { field: `items.${sort}.id` });
   }
+  await dropStaleMenuOverrides(tx, extraListId, input);
+}
+
+/**
+ * Remove the per-menu overrides of products this list no longer offers. A menu offer's override row
+ * (`menu_item_extra_items`) names its product directly and carries no foreign key into
+ * `extra_list_items` — a cascading key there would erase every menu-level price each time a manager
+ * saved the list, because the save above deletes and re-inserts every item (schema/extras.ts). So
+ * the cleanup is this statement instead: without it, dropping a product from a list and adding it
+ * back again would resurrect a price the manager last set against an offer that no longer exists.
+ *
+ * `notInArray` with an EMPTY array is `sql`true``, not a statement that matches nothing
+ * (drizzle-orm 0.45.2, sql/expressions/conditions.js:82-88), so an emptied list correctly loses all
+ * of its overrides rather than keeping them. Both cases are covered by
+ * "a menu override whose product leaves the list" (extra-projection.test.ts).
+ */
+async function dropStaleMenuOverrides(
+  tx: Transaction,
+  extraListId: string,
+  input: ExtraListInput,
+): Promise<void> {
+  await tx.delete(menuItemExtraItems).where(
+    and(
+      eq(menuItemExtraItems.listId, extraListId),
+      notInArray(
+        menuItemExtraItems.productId,
+        input.items.map((item) => item.productId),
+      ),
+    ),
+  );
 }
 
 /**
@@ -317,11 +376,186 @@ export async function updateExtraList(
 
 export async function deleteExtraList(tx: Transaction, extraListId: string): Promise<void> {
   await lockExtraList(tx, extraListId);
-  // The items go with it through `extra_list_items_list_fk` ... ON DELETE CASCADE
-  // (drizzle/0004_extra_lists.sql:24). There is no open-order check, because the design has an open
-  // order's child line carry the product rather than the list (spec §3.5, §3.4) — and that order
-  // path is Task 8 of the plan, unbuilt today.
+  // Three sets of rows go with it, all by ON DELETE CASCADE: the list's items through
+  // `extra_list_items_list_fk` (drizzle/0004_extra_lists.sql:24), every menu offer's publication of
+  // it through `menu_item_extra_lists_list_fk` and, under those, each offer's per-item overrides
+  // through `menu_item_extra_items_list_fk` (drizzle/0008_menu_extra_publication.sql:17,21). Run
+  // rather than read off the clauses, by "takes the publication and its overrides with it when the
+  // list is deleted" (extra-projection.test.ts). There is no open-order check, because the design
+  // has an open order's child line carry the product rather than the list (spec §3.5, §3.4) — and
+  // that order path is Task 8 of the plan, unbuilt today.
   await tx.delete(extraLists).where(eq(extraLists.id, extraListId));
+}
+
+/** One published list as a body sends it, normalised: ids lower-cased, prices in the stored shape,
+ * and each item carrying the field path a refusal about it should name. */
+interface Publication {
+  listId: string;
+  items: { productId: string; price: string | null; available: boolean; field: string }[];
+}
+
+/**
+ * Lower-case every id the caller sent and refuse the two duplicates a body can carry: one list
+ * published twice, and one product overridden twice within a list. Touches no database.
+ *
+ * The lower-casing is not cosmetic. A `uuid` column accepts either case and hands its value back
+ * lower-cased, so an upper-cased id finds its row in SQL and then fails every comparison made in
+ * JavaScript against a stored value — which is how `updateExtraList` once classified a list's own
+ * items as another list's. Same normalisation the authoring contract applies to what a body sends
+ * (`id` in extra-contract.ts).
+ */
+function normalisePublications(
+  lists: {
+    listId: string;
+    items: { productId: string; price?: string | null; available?: boolean }[];
+  }[],
+): Publication[] {
+  const seenLists = new Set<string>();
+  return lists.map((list, index) => {
+    const listId = list.listId.toLowerCase();
+    if (seenLists.has(listId))
+      throw new AppError("extras.invalid", { field: `lists.${index}.listId` });
+    seenLists.add(listId);
+    const seenProducts = new Set<string>();
+    const items = list.items.map((item, at) => {
+      const field = `lists.${index}.items.${at}`;
+      const productId = item.productId.toLowerCase();
+      if (seenProducts.has(productId))
+        throw new AppError("extras.invalid", { field: `${field}.productId` });
+      seenProducts.add(productId);
+      // The same body that decides a list item's own price, so the two prices a diner can be
+      // charged cannot drift apart (`extraPrice`, extra-contract.ts).
+      return {
+        productId,
+        price: extraPrice(item.price, `${field}.price`),
+        available: item.available ?? true,
+        field,
+      };
+    });
+    return { listId, items };
+  });
+}
+
+/** Every published list exists. ONE query for the whole body, never one per list. */
+async function assertPublishedListsExist(
+  tx: Transaction,
+  publications: Publication[],
+): Promise<void> {
+  if (publications.length === 0) return;
+  const rows = await tx
+    .select({ id: extraLists.id })
+    .from(extraLists)
+    .where(
+      inArray(
+        extraLists.id,
+        publications.map((publication) => publication.listId),
+      ),
+    );
+  const held = new Set(rows.map((row) => row.id));
+  const missing = publications.find((publication) => !held.has(publication.listId));
+  if (missing) throw new AppError("extras.not_found", { extraListId: missing.listId });
+}
+
+/**
+ * Every overridden product is one its list actually offers. Refused here as `extras.invalid` with
+ * the item's own position, so an editor can put the message beside the input; left to the database
+ * there is nothing to refuse it at all, because a menu row carries no key into `extra_list_items`
+ * (schema/extras.ts) — it would simply be ignored by the menu view for ever.
+ *
+ * ONE grouped query for the whole body, never one per list (CLAUDE.md §3).
+ */
+async function assertProductsOffered(tx: Transaction, publications: Publication[]): Promise<void> {
+  const overriding = publications.filter((publication) => publication.items.length > 0);
+  if (overriding.length === 0) return;
+  const rows = await tx
+    .select({ listId: extraListItems.listId, productId: extraListItems.productId })
+    .from(extraListItems)
+    .where(
+      inArray(
+        extraListItems.listId,
+        overriding.map((publication) => publication.listId),
+      ),
+    );
+  const offered = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const held = offered.get(row.listId) ?? new Set<string>();
+    held.add(row.productId);
+    offered.set(row.listId, held);
+  }
+  for (const publication of overriding) {
+    const held = offered.get(publication.listId) ?? new Set<string>();
+    const stray = publication.items.find((item) => !held.has(item.productId));
+    if (stray) throw new AppError("extras.invalid", { field: `${stray.field}.productId` });
+  }
+}
+
+/**
+ * Replace what one menu offer publishes: which extras lists it carries, in which order, and how it
+ * narrows and reprices each one (spec
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2). `display_order` is the
+ * position in `lists`, so the order the editor sent is the order the menu reads back.
+ *
+ * **An item row is an OVERRIDE, not a publication.** A list item with no row here is offered on this
+ * menu at its own resolved price; a row replaces that price when it carries one, and withdraws the
+ * item when `available` is false. That is the opposite of `menu_item_options`, where a choice is
+ * offered only if a row exists (`projectModifier`, modifier-projection.ts). Two reasons it differs:
+ * the row carries an explicit `available` flag, which `menu_item_options` has no column for, so
+ * narrowing has its own place and row presence does not have to carry it; and §3.2 says a menu offer
+ * MAY narrow and reprice, so an offer that narrows nothing offers the whole list.
+ *
+ * **Nothing here checks that the dish's product carries the list.** `setMenuItemOptionGroups`
+ * (operations.ts) makes the equivalent check against `product_option_groups`; the extras equivalent
+ * needs `product_modifiers`, which Task 6 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` creates — there is no table today
+ * that attaches an extras list to a product, so the check has nothing to read. Task 6 adds it.
+ *
+ * The existence read takes the menu offer's ROW LOCK, so two saves of the SAME offer run one after
+ * the other rather than overlapping. Not measured here; what was measured is the same delete-then-
+ * insert shape one table over, where unserialised saves collided with `23505` ({@link lockExtraList}
+ * and extras.pg.test.ts). This is a `select … for update` on a row both saves must read — the row
+ * lock this file already takes on a list, not an advisory lock, which spec §7 bars from new code.
+ */
+export async function setMenuItemExtraLists(
+  tx: Transaction,
+  menuItemId: string,
+  lists: {
+    listId: string;
+    items: { productId: string; price?: string | null; available?: boolean }[];
+  }[],
+): Promise<void> {
+  const offerId = menuItemId.toLowerCase();
+  const [offer] = await tx
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(eq(menuItems.id, offerId))
+    .for("update");
+  if (offer === undefined) throw new AppError("menu_item.not_found", { menuItemId });
+  const publications = normalisePublications(lists);
+  await assertPublishedListsExist(tx, publications);
+  await assertProductsOffered(tx, publications);
+
+  // The offer's item rows go with its list rows, through `menu_item_extra_items_list_fk`
+  // (drizzle/0008_menu_extra_publication.sql:17), so this one delete clears both tables for this
+  // offer and no row the body keeps can collide with a row it is replacing.
+  await tx.delete(menuItemExtraLists).where(eq(menuItemExtraLists.menuItemId, offerId));
+  if (publications.length === 0) return;
+  await tx.insert(menuItemExtraLists).values(
+    publications.map((publication, displayOrder) => ({
+      menuItemId: offerId,
+      listId: publication.listId,
+      displayOrder,
+    })),
+  );
+  const items = publications.flatMap((publication) =>
+    publication.items.map((item) => ({
+      menuItemId: offerId,
+      listId: publication.listId,
+      productId: item.productId,
+      price: item.price,
+      available: item.available,
+    })),
+  );
+  if (items.length > 0) await tx.insert(menuItemExtraItems).values(items);
 }
 
 export interface ExtraListDependants {
@@ -330,23 +564,32 @@ export interface ExtraListDependants {
 }
 
 /**
- * What deleting this list would touch — the preview a delete confirmation reads.
+ * What deleting this list would touch — the preview a delete confirmation reads. Both sides are
+ * detached by the delete rather than blocking it, and no order is consulted: an open order's child
+ * line points at the PRODUCT, not at the list
+ * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.5, §3.4).
  *
- * The two sides are not the same kind of thing. A PRODUCT holds the list, through the attachment
- * table Task 6 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` adds. A MENU
- * publishes it in its own right, through the per-menu tables Task 5 adds
- * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2) — unlike an options list,
- * which has no per-menu row at all.
+ * The two sides are not the same kind of thing. A MENU publishes the list in its own right, through
+ * `menu_item_extra_lists` (§3.2) — unlike an options list, which has no per-menu row at all. A
+ * publication has no name of its own, so it is identified by the menu ITEM's id and the staff name
+ * of the product that dish is, exactly as `modifierDependants` (modifiers.ts) identifies one.
  *
- * Both sides are empty today because nothing can hold a list yet. Receipt, over the generated
- * migrations: `grep -rn 'REFERENCES "public"."extra_l' --include='*.sql' packages apps` returns one
- * line, `extra_list_items`' own key into `extra_lists` (drizzle/0004_extra_lists.sql:24). No other
- * table has a key into either of these two.
+ * `products` is empty because nothing attaches a list to a product yet: the attachment table
+ * `product_modifiers` arrives with Task 6 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, whose Step 3 says
+ * `extraListDependants` then reads products through it.
  */
 export async function extraListDependants(
   tx: Transaction,
   extraListId: string,
 ): Promise<ExtraListDependants> {
   await assertExtraList(tx, extraListId);
-  return { products: [], menus: [] };
+  const menus = await tx
+    .select({ id: menuItems.id, name: products.name })
+    .from(menuItemExtraLists)
+    .innerJoin(menuItems, eq(menuItems.id, menuItemExtraLists.menuItemId))
+    .innerJoin(products, eq(products.id, menuItems.productId))
+    .where(eq(menuItemExtraLists.listId, extraListId))
+    .orderBy(menuItems.id);
+  return { products: [], menus };
 }

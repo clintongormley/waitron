@@ -475,6 +475,17 @@ expect((await readProductExtras(tx, [productId])).get(productId)![0].items).toHa
 
 - [ ] **Step 4: Run and commit** — after `pnpm --filter @waitron/catalogue typecheck && pnpm --filter @waitron/catalogue lint && pnpm format:check`, `git commit -s -m "Publish extra lists per menu with per-offer prices"`.
 
+**2026-09-19, while doing Task 5:** `readProductExtras` moved to Task 6, and the interfaces above are
+left as written rather than rewritten. It cannot be built here: a product holds its extras lists
+through `product_modifiers`, and Task 6 Step 3 is what creates that table. Checked, not assumed —
+`grep -rn 'REFERENCES "public"."extra_l' --include='*.sql' packages apps` finds two keys into
+`extra_lists`, `extra_list_items`' own and `menu_item_extra_lists`', and nothing at all joins a
+product to a list. What Task 5 shipped is `readMenuExtras` in
+`packages/catalogue/src/extra-projection.ts`, plus `setMenuItemExtraLists` in
+`packages/catalogue/src/extras.ts`. The same gap leaves `setMenuItemExtraLists` unable to check that
+the dish's product carries the list it publishes — the check `setMenuItemOptionGroups` makes against
+`product_option_groups` — and that is Task 6's too; both are steps below.
+
 ---
 
 ## Task 6: Extras — API routes; `product_modifiers` attachment; product read/write
@@ -516,6 +527,17 @@ expect((await readProductExtras(tx, [productId])).get(productId)![0].items).toHa
       regenerate + commit the catalogue migration (as Task 4 Step 3b) before the `product-modifiers.test.ts`
       runs. `deleteExtraList`/`deleteOptionList` now cascade their rows here (complete the Task 2/4
       cascades). `extraListDependants`/`optionListDependants` now read products through this table.
+
+- [ ] **Step 3a: `readProductExtras(tx, productIds)`** in `packages/catalogue/src/extra-projection.ts`,
+      beside `readMenuExtras` — a product's own extras lists, read through `product_modifiers`, each
+      item priced from the list item and then the product (no menu row is involved). Deferred from
+      Task 5, which had no table to read.
+
+- [ ] **Step 3b: The attachment check in `setMenuItemExtraLists`** (`packages/catalogue/src/extras.ts`)
+      — refuse publishing a list the offer's product does not carry, reading `product_modifiers`, the
+      way `setMenuItemOptionGroups` (`packages/catalogue/src/operations.ts`) reads
+      `product_option_groups`. Its doc comment says today that no such check happens; update it in the
+      same change, and add the refusal's test to `extra-projection.test.ts`.
 
 - [ ] **Step 4: Replace `modifierIds` in the product body** — in `product-editor-input.ts`, remove the
       `screenOptionGroupIds`/`modifierIds` screen, add a `modifiers` screen validating an ordered array of

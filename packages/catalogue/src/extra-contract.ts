@@ -112,8 +112,13 @@ function id(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) invalid(field);
   return value.toLowerCase();
 }
-/** A price in the product-price shape, normalised to two decimals; null means "inherit". */
-function price(value: unknown, field: string): string | null {
+/**
+ * A price in the product-price shape, normalised to two decimals; null means "inherit". Exported
+ * because the same rule decides a list item's price here and a MENU offer's override of it
+ * (`setMenuItemExtraLists`, extras.ts): one body, so the two prices a diner can be charged cannot
+ * drift apart.
+ */
+export function extraPrice(value: unknown, field: string): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string" || !isProductPrice(value)) invalid(field);
   return toScale(decimal(value), 2);
@@ -164,7 +169,7 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
       maxQuantity:
         item.maxQuantity === undefined ? 1 : whole(item.maxQuantity, `${field}.maxQuantity`, 1),
       preselected: bool(item.preselected, `${field}.preselected`, false),
-      price: price(item.price, `${field}.price`),
+      price: extraPrice(item.price, `${field}.price`),
     };
   });
   // An active list is asked on every order of a dish carrying it, and there is nothing to answer it
