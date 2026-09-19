@@ -1,6 +1,6 @@
 /**
  * The password of a connection string, masked, in the two positions the installed parser
- * (`pg-connection-string@2.14.0`, which `pg@8.22.0` resolves) actually reads one from:
+ * (`pg-connection-string@2.14.0`, which `pg@8.23.0` resolves) actually reads one from:
  *
  *   `scheme://user:secret@host`              → `scheme://user:***@host`
  *   `scheme://user@host/db?password=secret`  → `?password=***`

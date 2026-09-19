@@ -2144,6 +2144,15 @@ turns out to need a design moves to its track.
   while running #378 for real: the red banner is there on a clean first load of the
   login page, before anyone types anything. It predates that branch — the swallow list it comes from
   is on `main`.
+  2026-09-19: the browser moved and the refusal did not, so the version is not the cause. Playwright
+  1.63 ships Chromium 153.0.8010.12 (build 1243) where 1.61 shipped 149.0.7827.55 (build 1228) —
+  the same major as the installed Chrome this entry contrasts it with. Probed in that new build,
+  headless, over `http://localhost` so the page is a secure context:
+  `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` returns `false`, and a
+  `navigator.credentials.get` with an empty `allowCredentials` still throws
+  `NotSupportedError: Resident credentials or empty 'allowCredentials' lists are not supported`.
+  What the headless browser lacks is a platform authenticator, which no version bump supplies, so
+  expect the banner to still be there. The screen itself has not been re-opened on the new build.
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled

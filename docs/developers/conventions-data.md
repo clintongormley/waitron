@@ -341,7 +341,8 @@ the first finishes, so starting them together saves nothing. Measured with `pg@8
 under `Promise.all` and 214 ms through two clients (Codex measured 411 ms and 203 ms on the same
 branch). The installed driver also
 warns: _"Calling client.query() when the client is already executing a query is deprecated and will
-be removed in pg@9.0"_ (`node_modules/.pnpm/pg@8.22.0/node_modules/pg/lib/client.js:36`). In that run
+be removed in pg@9.0"_ (`node_modules/.pnpm/pg@8.23.0/node_modules/pg/lib/client.js:36`, and the
+same text at line 36 of the `pg@8.22.0` that run used). In that run
 the warning printed for three queries started together and not for two, because it fires only when
 a query is already waiting behind the running one. `computeDailyClose`
 (`packages/reporting/src/daily-close.ts`) started three this way until 2026-09-14.
@@ -376,7 +377,7 @@ real venue is live; add its replacement in the same change.
 
 ## An empty connection string is a valid connection string
 
-`new Client({ connectionString: "" })` resolves to localhost with every default (`pg@8.22.0`).
+`new Client({ connectionString: "" })` resolves to localhost with every default (`pg@8.23.0`).
 Anything reading a URL from env or a prompt refuses `""` explicitly (`isUnset`);
 `waitron-provision instance` would otherwise have stamped whatever answered on localhost.
 

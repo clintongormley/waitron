@@ -854,7 +854,7 @@ async function resolveLocales(supplied: string[] | undefined, deps: CliDeps): Pr
  * **An empty answer is refused, not returned.** The env var was already guarded for `""`; the
  * prompt's answer was not, and `bin.ts`'s `ask` returns `""` deliberately for an exhausted stdin or
  * a Ctrl+D. `pg` treats an empty connection string as no connection string at all rather than as an
- * error — run against this repo's `pg@8.22.0`, `new Client({ connectionString: "" })` resolved to
+ * error — run against this repo's `pg@8.23.0`, `new Client({ connectionString: "" })` resolved to
  * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0` builds
  * its clients with `new this.Client(this.options)` (`index.js:241`) from the same options — so
  * `instance` would have created, migrated and STAMPED a database on whatever cluster answers there.
@@ -862,10 +862,12 @@ async function resolveLocales(supplied: string[] | undefined, deps: CliDeps): Pr
  *
  * **A string that is not a URL is refused too**, and this is the ONE place that decides it, for
  * both commands and both sources. `pg` accepts forms `new URL` rejects — measured, not assumed:
- * inside a `postgres:18-alpine` container (PostgreSQL 18.4) with this repo's `pg@8.22.0`, the
+ * inside a `postgres:18-alpine` container (PostgreSQL 18.4) with `pg@8.22.0`, the
  * connection string `/var/run/postgresql` parsed to `{host:"/var/run/postgresql",port:5432}`,
  * `connect()` succeeded and `select inet_server_addr() is null` returned `t`, while
- * `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. Every
+ * `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. The parse
+ * half still holds on the installed `pg@8.23.0` — same `{host,port}`, same `new URL` throw — but
+ * the container half, the socket connect, has not been re-run since. Every
  * consumer of this string after this function re-points it with `new URL` — `withState`'s
  * `withDatabase`, the migrator's URL in `instance-apply.ts`, `roleUri` for each printed connection
  * string, `describeAdmin` for the plan summary — so a form only `pg` accepts is a form this tool
