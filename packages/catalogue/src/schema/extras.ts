@@ -113,6 +113,10 @@ export const menuItemExtraLists = table(
       foreignColumns: [extraLists.id],
       name: "menu_item_extra_lists_list_fk",
     }).onDelete("cascade"),
+    // The primary key leads with `menu_item_id`, so nothing here answers a filter on `list_id`
+    // alone: `extraListDependants` (packages/catalogue/src/extras.ts) asks exactly that, and so does
+    // the cascade from `extra_lists` when a list is deleted.
+    index("menu_item_extra_lists_list_idx").on(t.listId),
   ],
 );
 
@@ -146,13 +150,19 @@ export const menuItemExtraItems = table(
       foreignColumns: [menuItemExtraLists.menuItemId, menuItemExtraLists.listId],
       name: "menu_item_extra_items_list_fk",
     }).onDelete("cascade"),
+    // A product an offer still prices cannot be removed: `restrict`, as `extra_list_items_product_fk`
+    // above and `menu_items_product_fk` (schema/menu.ts) are.
     foreignKey({
       columns: [t.productId],
       foreignColumns: [products.id],
       name: "menu_item_extra_items_product_fk",
-    }).onDelete("cascade"),
+    }).onDelete("restrict"),
     // A published price becomes a sale line and so reaches a fiscal record; this is the same
     // database backstop `extra_list_items_price_ck` carries above.
     check("menu_item_extra_items_price_ck", sql`${t.price} >= 0`),
+    // The primary key leads with `menu_item_id`, so nothing here answers a filter on `list_id`
+    // alone: `dropStaleMenuOverrides` (packages/catalogue/src/extras.ts) deletes on `list_id` every
+    // time a manager saves an extras list.
+    index("menu_item_extra_items_list_product_idx").on(t.listId, t.productId),
   ],
 );

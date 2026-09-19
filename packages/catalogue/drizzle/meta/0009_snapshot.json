@@ -1,6 +1,6 @@
 {
-  "id": "d4469922-2bab-4961-a59f-1476ae7352a4",
-  "prevId": "0b921206-0517-4000-9bd5-f69f826f8250",
+  "id": "67ef028a-658c-41df-bb73-439f695ae884",
+  "prevId": "3ff55d3d-b5a0-462c-97bd-5e611b796138",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1345,7 +1345,29 @@
           "default": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "menu_item_extra_items_list_product_idx": {
+          "name": "menu_item_extra_items_list_product_idx",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "product_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "menu_item_extra_items_list_fk": {
           "name": "menu_item_extra_items_list_fk",
@@ -1373,7 +1395,7 @@
             "id"
           ],
           "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "restrict"
         }
       },
       "compositePrimaryKeys": {
@@ -1420,7 +1442,23 @@
           "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "menu_item_extra_lists_list_idx": {
+          "name": "menu_item_extra_lists_list_idx",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "menu_item_extra_lists_item_fk": {
           "name": "menu_item_extra_lists_item_fk",

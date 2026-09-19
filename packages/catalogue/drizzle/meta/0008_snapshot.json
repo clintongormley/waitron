@@ -1,5 +1,5 @@
 {
-  "id": "0b921206-0517-4000-9bd5-f69f826f8250",
+  "id": "3ff55d3d-b5a0-462c-97bd-5e611b796138",
   "prevId": "684a2162-fd4c-4ed8-b58e-4bd57fe509c1",
   "version": "7",
   "dialect": "postgresql",
@@ -1345,7 +1345,29 @@
           "default": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "menu_item_extra_items_list_product_idx": {
+          "name": "menu_item_extra_items_list_product_idx",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "product_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "menu_item_extra_items_list_fk": {
           "name": "menu_item_extra_items_list_fk",
@@ -1372,7 +1394,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -1420,7 +1442,23 @@
           "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "menu_item_extra_lists_list_idx": {
+          "name": "menu_item_extra_lists_list_idx",
+          "columns": [
+            {
+              "expression": "list_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "menu_item_extra_lists_item_fk": {
           "name": "menu_item_extra_lists_item_fk",

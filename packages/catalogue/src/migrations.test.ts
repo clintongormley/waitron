@@ -84,7 +84,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_item_extra_items_pk: "PRIMARY KEY (menu_item_id, list_id, product_id)",
       menu_item_extra_items_price_ck: "CHECK ((price >= (0)::numeric))",
       menu_item_extra_items_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
+        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
       menu_item_extra_lists_item_fk:
         "FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE",
       menu_item_extra_lists_list_fk:
@@ -157,6 +157,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       category_details_parent_idx: "parent_id",
       extra_list_items_list_product_uq: "list_id, product_id",
       extra_list_items_list_sort_idx: "list_id, sort",
+      menu_item_extra_items_list_product_idx: "list_id, product_id",
+      menu_item_extra_lists_list_idx: "list_id",
       menu_items_menu_order_idx: "menu_id, display_order",
       menu_sections_menu_order_idx: "menu_id, display_order",
       option_labels_list_sort_idx: "list_id, sort",

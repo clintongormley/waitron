@@ -207,7 +207,8 @@ declare module "@waitron/shared" {
      */
     "extras.translation_required": { field: string; language: string };
     /**
-     * A product cannot be removed while something still names it — an extras list item today.
+     * A product cannot be removed while something still names it — an extras list item, or one menu
+     * offer's repriced copy of that item, today.
      * Registered ahead of a thrower: no route deletes a product, and nothing outside test fixtures
      * deletes a `products` row, so there is no path to refuse from. Searched on 2026-09-19:
      * `grep -rn 'app\.delete(' apps/server/src --include="*.ts"` lists every DELETE route and none
@@ -216,7 +217,8 @@ declare module "@waitron/shared" {
      * fixtures, and the comments — this one among them — that quote the commands. The dashboard's
      * `#deleteProduct` (apps/dashboard/src/screens/catalogue-screen.ts) sets `available: false`
      * through the product editor rather than deleting anything. What refuses today is the database:
-     * `extra_list_items.product_id` is `ON DELETE RESTRICT` (schema/extras.ts).
+     * `extra_list_items.product_id` and `menu_item_extra_items.product_id` are both
+     * `ON DELETE RESTRICT` (schema/extras.ts).
      */
     "product.in_use": { productId: string; dependency: string };
   }
