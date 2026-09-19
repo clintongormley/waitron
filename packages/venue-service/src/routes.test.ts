@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS, createCatalogue, createCategory } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, type Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
@@ -20,7 +20,7 @@ import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [
     CORE_MIGRATIONS,
     CATALOGUE_MIGRATIONS,

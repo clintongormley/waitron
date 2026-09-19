@@ -3,13 +3,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import { captureError, CORE_MIGRATIONS, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 // PGlite applies the same migration files PostgreSQL does; these cases read the catalog and a few
 // foreign-key refusals, with no role or concurrency dimension.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
   timeoutMs: 60_000,
 });
