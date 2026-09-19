@@ -11,9 +11,9 @@ import { menuItems } from "./menu.js";
  * technical necessity: bare `min` and `max` are legal column names. Measured on PGlite 0.5.8
  * (PostgreSQL 18.3) — a table declared with `min integer not null default 0, max integer` took a
  * `check (min >= 0 and (max is null or max >= min))`, refused a bad row with `23514`, selected both
- * columns unqualified and aggregated them as `min(min)` / `max(max)`. Tasks 5, 6 and 11 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` add the per-menu publication, the
- * product attachment and the dashboard editor. */
+ * columns unqualified and aggregated them as `min(min)` / `max(max)`. The per-menu publication is
+ * below in this file; the product attachment and the dashboard editor are Tasks 6 and 11 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. */
 export const extraLists = table(
   "extra_lists",
   {
@@ -88,9 +88,14 @@ export const extraListItems = table(
 
 /** An extras list published on one menu offer, the `menu_item_option_groups` shape (schema/menu.ts)
  * keyed by list rather than by option group. The row says only "this offer publishes this list, in
- * this position"; what the list offers is the list's own rows, narrowed and repriced below. That the
- * dish's product actually carries the list is checked by the authoring operation, as it is for
- * option groups. */
+ * this position"; what the list offers is the list's own rows, narrowed and repriced below.
+ *
+ * It differs from the option-group sibling in one way that matters: THAT one's authoring operation
+ * checks the dish's product actually carries the group, and this one's cannot. `product_option_groups`
+ * exists and the extras equivalent does not, so `setMenuItemExtraLists`
+ * (packages/catalogue/src/extras.ts) has nothing to read; Task 6 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` creates the table and adds the
+ * check. */
 export const menuItemExtraLists = table(
   "menu_item_extra_lists",
   {

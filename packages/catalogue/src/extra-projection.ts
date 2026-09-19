@@ -30,12 +30,9 @@ const key = (menuItemId: string, listId: string, productId: string) =>
  * read by nothing here, which is the other half of that table's missing foreign key
  * (schema/extras.ts).
  *
- * An INACTIVE list is returned rather than dropped, with its `active` flag. The option path does
- * not settle the question: `listModifiers` (modifiers.ts:41-45) reports every group as
- * `available: true` whatever `option_groups.active` holds, so it neither drops an inactive
- * definition nor hands the caller a flag to act on. This does hand one over, because there is
- * already a consumer for it — `validateExtraSelections` (extra-contract.ts:199) answers only the
- * ACTIVE lists of the set it is given.
+ * An INACTIVE list is returned rather than dropped, carrying its `active` flag, because there is a
+ * consumer for that flag: `validateExtraSelections` (extra-contract.ts) answers only the ACTIVE
+ * lists of the set it is handed.
  *
  * A bounded number of queries whatever the number of menu items: the publications, the lists, their
  * items, this offer's overrides, and the products whose own price an item still has to borrow.

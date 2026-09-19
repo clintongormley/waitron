@@ -172,10 +172,16 @@ declare module "@waitron/shared" {
      * put the refusal beside the input that caused it. It also covers a structurally bad ORDER-time
      * selection body — not an array, an unknown key, a non-string id, a pick naming a product the
      * list does not carry, or an answer for a list that was never offered — where `field` names the
-     * offending path in that body (`"extraSelections"`, `"listId"`, `"productId"`). A CLIENT request
-     * fault. Thrown by `parseExtraListInput` / `validateExtraSelections` (extra-contract.ts), and by
-     * `assertProductsExist` / `writeItems` (extras.ts), which refuse an item naming no `products` row
-     * and an item id another list, or another transaction, already holds.
+     * offending path in that body (`"extraSelections"`, `"listId"`, `"productId"`). And it covers a
+     * malformed PER-MENU publication body — not an array, an unknown key, a bad list or product id,
+     * one list published twice, one product overridden twice within a list, a malformed price, or a
+     * non-boolean `available` — where `field` is that body's own dotted path, rooted at `"lists"`
+     * (`"lists.0.listId"`, `"lists.0.items.1.productId"`). A CLIENT request fault.
+     *
+     * Thrown by `parseExtraListInput`, `parseMenuExtraPublications` and `validateExtraSelections`
+     * (extra-contract.ts); and by `assertProductsExist`, `writeItems` and `assertProductsOffered`
+     * (extras.ts), which refuse an item naming no `products` row, an item id another list or another
+     * transaction already holds, and a menu override naming a product its list does not offer.
      */
     "extras.invalid": { field: string };
     /** An extras list id names no list. */

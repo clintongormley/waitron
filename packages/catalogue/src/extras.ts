@@ -206,9 +206,8 @@ function listValues(input: ExtraListInput) {
  * `extra_list_items_list_product_uq` already make for the one-offer-per-product rule.
  *
  * ONE grouped read for the whole body, never one per item (CLAUDE.md §3). The set comparison is a
- * plain string match because both sides are lower-cased: the contract's `id`
- * (extra-contract.ts) lower-cases what the body sent, and a `uuid` column hands its value back
- * lower-cased whatever case it was written in.
+ * plain string match because both sides are already lower-cased — see the contract's `id`
+ * (extra-contract.ts) for why that holds.
  */
 async function assertProductsExist(tx: Transaction, input: ExtraListInput): Promise<void> {
   const named = [...new Set(input.items.map((item) => item.productId))];
@@ -224,7 +223,10 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
 
 /**
  * Replaces the list's items with the body's, in the body's order. An item the body omits is removed:
- * nothing outside these two tables names an extras list item (see {@link extraListDependants}), and
+ * no foreign key anywhere references `extra_list_items` (2026-09-19,
+ * `grep -rn 'REFERENCES "public"."extra_list_items"' --include='*.sql' packages apps` finds nothing),
+ * the one thing that tracks an item by its PRODUCT instead is cleaned up separately
+ * ({@link dropStaleMenuOverrides}), and
  * the design has an open order's child line point at the PRODUCT rather than back at the item
  * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4) — a path Task 8 of the plan
  * builds, so today there is nothing at all on the order side to check.
@@ -300,12 +302,12 @@ async function writeItems(
 }
 
 /**
- * Remove the per-menu overrides of products this list no longer offers. A menu offer's override row
- * (`menu_item_extra_items`) names its product directly and carries no foreign key into
- * `extra_list_items` — a cascading key there would erase every menu-level price each time a manager
- * saved the list, because the save above deletes and re-inserts every item (schema/extras.ts). So
- * the cleanup is this statement instead: without it, dropping a product from a list and adding it
- * back again would resurrect a price the manager last set against an offer that no longer exists.
+ * Remove the per-menu overrides of products this list no longer offers. Nothing in the database does
+ * it: a menu offer's override row (`menu_item_extra_items`) names its product directly and
+ * deliberately carries no foreign key into `extra_list_items`, for the reason stated where that
+ * table is declared (schema/extras.ts). Without this statement, dropping a product from a list and
+ * adding it back again would resurrect a price the manager last set against an offer that no longer
+ * exists.
  *
  * `notInArray` with an EMPTY array is `sql`true``, not a statement that matches nothing
  * (drizzle-orm 0.45.2, sql/expressions/conditions.js:82-88), so an emptied list correctly loses all
@@ -355,11 +357,11 @@ export async function updateExtraList(
   fallbackLanguage: string,
 ): Promise<ExtraList> {
   const input = parseExtraListInput(value);
-  // Lower-cased once, here, and used from here on. A `uuid` column compares either case and hands
-  // its value back lower-cased, so an upper-cased id finds the list in SQL but does not match the
-  // stored `list_id` that `writeItems` compares in JavaScript — which classified every one of the
-  // list's own items as another list's. Same normalisation the contract's `id` applies to what a
-  // body sends (extra-contract.ts).
+  // The caller's own id does not come through the contract, so it is normalised here and used from
+  // here on: `writeItems` compares it in JavaScript against a stored `list_id`, so an upper-cased id
+  // finds the list in SQL and then matches none of the list's own items — the regression is pinned by
+  // "treats a list's own items as its own when the list id arrives in upper case" (extras.test.ts).
+  // Why lower case is the comparable form is stated on the contract's `id` (extra-contract.ts).
   const extraListId = callerListId.toLowerCase();
   // The list has to exist before its name is worth checking, or updating an id that names nothing
   // reports a translation problem for a list that is not there.
@@ -377,8 +379,9 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
   await lockExtraList(tx, extraListId);
   // Three sets of rows go with it, all by ON DELETE CASCADE: the list's items through
   // `extra_list_items_list_fk` (drizzle/0004_extra_lists.sql:24), every menu offer's publication of
-  // it through `menu_item_extra_lists_list_fk` and, under those, each offer's per-item overrides
-  // through `menu_item_extra_items_list_fk` (drizzle/0008_menu_extra_publication.sql:17,21). Run
+  // it through `menu_item_extra_lists_list_fk` (drizzle/0008_menu_extra_publication.sql:21) and,
+  // under those, each offer's per-item overrides through `menu_item_extra_items_list_fk`
+  // (drizzle/0008_menu_extra_publication.sql:18). Run
   // rather than read off the clauses, by "takes the publication and its overrides with it when the
   // list is deleted" (extra-projection.test.ts). There is no open-order check, because the design
   // has an open order's child line carry the product rather than the list (spec §3.5, §3.4) — and
@@ -463,19 +466,15 @@ async function assertProductsOffered(
  * narrowing has its own place and row presence does not have to carry it; and §3.2 says a menu offer
  * MAY narrow and reprice, so an offer that narrows nothing offers the whole list.
  *
- * **Nothing here checks that the dish's product carries the list.** `setMenuItemOptionGroups`
- * (operations.ts) makes the equivalent check against `product_option_groups`; the extras equivalent
- * needs `product_modifiers`, which Task 6 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` creates — there is no table today
- * that attaches an extras list to a product, so the check has nothing to read. Task 6 adds it.
+ * **Nothing here checks that the dish's product carries the list** — the check
+ * `setMenuItemOptionGroups` (operations.ts) makes against `product_option_groups` — because no table
+ * attaches an extras list to a product yet. Task 6 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` adds both.
  *
  * The existence read takes the menu offer's ROW LOCK, so two saves of the SAME offer run one after
- * the other rather than overlapping. Not measured here; what was measured is the same delete-then-
- * insert shape one table over, where unserialised saves collided with `23505` ({@link lockExtraList}
- * and extras.pg.test.ts). This is a `select … for update` on a row both saves must read — the row
- * lock this file already takes on a list, not an advisory lock, which spec §7 bars from new code.
- * The lists published are locked next, in id order, and {@link lockPublishedLists} states why that
- * order is the one to take them in.
+ * the other rather than overlapping. NOT measured on this path: the receipt is for the same
+ * delete-then-insert shape one table over, and it is on {@link lockExtraList}. The lists published
+ * are locked next, in id order, for the reason {@link lockPublishedLists} gives.
  */
 export async function setMenuItemExtraLists(
   tx: Transaction,
@@ -494,7 +493,7 @@ export async function setMenuItemExtraLists(
   await assertProductsOffered(tx, publications);
 
   // The offer's item rows go with its list rows, through `menu_item_extra_items_list_fk`
-  // (drizzle/0008_menu_extra_publication.sql:17), so this one delete clears both tables for this
+  // (drizzle/0008_menu_extra_publication.sql:18), so this one delete clears both tables for this
   // offer and no row the body keeps can collide with a row it is replacing.
   await tx.delete(menuItemExtraLists).where(eq(menuItemExtraLists.menuItemId, offerId));
   if (publications.length === 0) return;

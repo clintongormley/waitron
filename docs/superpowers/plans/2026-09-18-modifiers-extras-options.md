@@ -486,6 +486,23 @@ product to a list. What Task 5 shipped is `readMenuExtras` in
 the dish's product carries the list it publishes — the check `setMenuItemOptionGroups` makes against
 `product_option_groups` — and that is Task 6's too; both are steps below.
 
+**The same day, the same task — what Step 1 and Step 3 above say about unpublished items is the
+opposite of what shipped, and the steps are left as written.** Read the code, not those two lines. A
+`menu_item_extra_items` row is an OVERRIDE, not a publication: a list item with NO row is offered on
+the menu at its own resolved price, and a row either replaces that price or, with `available: false`,
+withdraws the item. So "drops unpublished items" and "unpublished item is dropped from the menu view"
+describe a rule `readMenuExtras` (`packages/catalogue/src/extra-projection.ts`) does not have.
+(`available: false` is how an OFFER withdraws an item; the projection also leaves out an item it
+cannot price at all, which is a different thing.) Two reasons it went the other way. First, the table
+the design gave this path carries an explicit `available` flag (spec
+`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2), where `menu_item_options` has
+no such column — so `readMenuModifiers` (`packages/catalogue/src/modifier-projection.ts`) has only
+row presence to narrow with, and here narrowing has a column of its own and does not have to be
+inferred from a row existing. Second, §3.2 says a menu offer **may** narrow and reprice, so an offer
+that narrows nothing is one that offers the whole list, where under the step's reading an offer would
+have to re-list every item it wanted to keep. `setMenuItemExtraLists`
+(`packages/catalogue/src/extras.ts`) carries the same statement in its own doc comment.
+
 ---
 
 ## Task 6: Extras — API routes; `product_modifiers` attachment; product read/write
