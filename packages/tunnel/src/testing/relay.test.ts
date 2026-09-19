@@ -10,7 +10,7 @@ afterEach(async () => {
 });
 
 const readFrame = (s: Socket): Promise<ReturnType<typeof decodeFrame>> =>
-  new Promise((res) => s.once("data", (d) => res(decodeFrame(d))));
+  new Promise((res) => s.once("data", (d: Buffer) => res(decodeFrame(d))));
 
 const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
 
@@ -23,7 +23,7 @@ const closed = (s: Socket): Promise<void> => new Promise((res) => s.once("close"
 function echoAfterGo(box: Socket): void {
   let buf: Buffer = Buffer.alloc(0);
   let live = false;
-  box.on("data", (d) => {
+  box.on("data", (d: Buffer) => {
     if (live) {
       box.write(d);
       return;
@@ -71,7 +71,7 @@ describe("createRelayStandin", () => {
     const box = connect(relay.boxPort, "127.0.0.1");
     box.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
     await readFrame(box); // ack
-    box.on("data", (d) => {
+    box.on("data", (d: Buffer) => {
       const r = decodeFrame(d);
       if (r && r.frame.t === "go") {
         if (r.rest.length) box.write(r.rest); // echo any leftover

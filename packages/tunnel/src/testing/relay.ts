@@ -157,7 +157,10 @@ export function createRelayStandin(opts: RelayStandinOptions): Promise<RelayStan
     // only ever saw ciphertext. Attach both handlers synchronously so no chunk is dropped between
     // `go` and the splice (Node will not emit the next 'data' until the current handler returns).
     box.write(encodeFrame({ t: "go" }));
-    client.on("data", (d) => {
+    // The event type admits `string` for every socket; only one with an encoding set produces
+    // it, and nothing sets one here — so the chunk is narrowed for `seen`, which holds Buffers.
+    // The `box` handler below writes the chunk straight out and needs no narrowing.
+    client.on("data", (d: Buffer) => {
       seen.push(d);
       box.write(d);
     });
