@@ -386,6 +386,32 @@ const packageSuites = ["packages", "apps"]
   .map((path) => relative(REPO, path));
 const suites = scriptSuites;
 
+/**
+ * One read and one parse per package suite, shared by the two cases below that walk the whole set.
+ * They asked the same question of the same ~1100 files twice, and the file's own rule is what that
+ * cost: the non-vacuity case timed out at Vitest's 5000ms default during a full root run under load
+ * (`pnpm vitest run --coverage`, 46 files in parallel), while measuring 1.4s for the whole FILE run
+ * on its own — the exact shape this suite exists to catch, in this suite. Reading once is the part
+ * that removes work; the bounds the two cases now declare are the part that makes a slow machine
+ * survivable.
+ */
+const budgetCache = new Map<string, ReturnType<typeof budgets>>();
+const packageBudgets = (name: string) => {
+  const held = budgetCache.get(name);
+  if (held !== undefined) return held;
+  const read = budgets(readFileSync(join(REPO, name), "utf8"));
+  budgetCache.set(name, read);
+  return read;
+};
+
+/**
+ * Above the longest a healthy walk of every package and app suite can take, not above the time it
+ * takes on an idle machine. Measured on this tree: the whole file runs in 1.4s of test time idle,
+ * and the non-vacuity case alone exceeded 5000ms inside a loaded full root run. Thirty seconds is
+ * the bound the root guard suites already use for their own spawning cases.
+ */
+const SCAN_BOUND_MS = 30_000;
+
 /** A readable verdict, for the detector cases below. */
 const u = (declared: number, bound: number) => ({ declared, bound, unreadable: false });
 
@@ -466,12 +492,14 @@ describe("the package and app suites", () => {
     expect(packageSuites.length).toBeGreaterThan(500);
   });
 
-  it("finds one that waits longer than Vitest's default, so this is not vacuous", () => {
-    const longest = packageSuites.map(
-      (name) => budgets(readFileSync(join(REPO, name), "utf8")).declared,
-    );
-    expect(Math.max(...longest)).toBeGreaterThanOrEqual(VITEST_DEFAULT_TEST_TIMEOUT_MS);
-  });
+  it(
+    "finds one that waits longer than Vitest's default, so this is not vacuous",
+    () => {
+      const longest = packageSuites.map((name) => packageBudgets(name).declared);
+      expect(Math.max(...longest)).toBeGreaterThanOrEqual(VITEST_DEFAULT_TEST_TIMEOUT_MS);
+    },
+    SCAN_BOUND_MS,
+  );
 
   // ONE case over ~1100 files rather than `it.each` over them, and NOT for speed: a review measured
   // the two shapes 0.23s apart in a full root run, so the earlier claim here that a case per file
@@ -482,64 +510,68 @@ describe("the package and app suites", () => {
   // `it.each` would give a per-file test name and a per-file failure for free — so the violation
   // message below names every file it accuses, and the case records what it compared so that an
   // aggregate which judged nothing fails instead of reporting an empty violation list.
-  it("every package and app suite can use the timeout it declares", async () => {
-    const violations: string[] = [];
-    // The files this scan actually compared a bound against, so the case can assert on its own
-    // work rather than on a second resolution done beside it.
-    const compared: string[] = [];
-    for (const name of packageSuites) {
-      const file = join(REPO, name);
-      const { declared, bound, unreadable } = budgets(readFileSync(file, "utf8"));
-      if (declared < VITEST_DEFAULT_TEST_TIMEOUT_MS) continue;
+  it(
+    "every package and app suite can use the timeout it declares",
+    async () => {
+      const violations: string[] = [];
+      // The files this scan actually compared a bound against, so the case can assert on its own
+      // work rather than on a second resolution done beside it.
+      const compared: string[] = [];
+      for (const name of packageSuites) {
+        const file = join(REPO, name);
+        const { declared, bound, unreadable } = packageBudgets(name);
+        if (declared < VITEST_DEFAULT_TEST_TIMEOUT_MS) continue;
 
-      // Undefined is every decline at once: no config governs the file, its config would not
-      // import, or the resolver will not read that configuration. None of those is a missing
-      // bound, and accusing a file on one of them would fail a gate every push runs.
-      const resolution = await resolvedBound(file);
-      if (resolution === undefined) continue;
-      compared.push(name);
-      const configured = resolution.bound;
+        // Undefined is every decline at once: no config governs the file, its config would not
+        // import, or the resolver will not read that configuration. None of those is a missing
+        // bound, and accusing a file on one of them would fail a gate every push runs.
+        const resolution = await resolvedBound(file);
+        if (resolution === undefined) continue;
+        compared.push(name);
+        const configured = resolution.bound;
 
-      // The LARGEST bound that could reach any case in the file — the config's, or a bigger one the
-      // file sets on a case. Not "the file's if it has one": an `it(name, fn, ms)` on some other
-      // case can be SMALLER than the config's value, and taking it would report a bound that
-      // governs a different test entirely. Weakness 3 again, staying on the permissive side.
-      const effective = Math.max(bound, configured);
-      // The config's value is readable even where the in-file reader gave up, so it clears the
-      // unreadable decline rather than being defeated by it. That matters here: the files that wait
-      // longest carry a `beforeAll(fn, ms)` hook timeout, which is exactly what trips that net.
-      // The policy, stated once and applied here: never accuse a file whose bound this reader could
-      // not evaluate. `unreadable` means the in-file reader gave up, so the only number left is the
-      // config's — and if that does not clear the wait, the honest answer is "cannot tell", not
-      // "too small". 48 package files are already unreadable, because a `beforeAll(fn, ms)` hook
-      // timeout trips the sign-of-bound net.
-      if (unreadable && effective <= declared) continue;
-      if (effective > declared) continue;
+        // The LARGEST bound that could reach any case in the file — the config's, or a bigger one the
+        // file sets on a case. Not "the file's if it has one": an `it(name, fn, ms)` on some other
+        // case can be SMALLER than the config's value, and taking it would report a bound that
+        // governs a different test entirely. Weakness 3 again, staying on the permissive side.
+        const effective = Math.max(bound, configured);
+        // The config's value is readable even where the in-file reader gave up, so it clears the
+        // unreadable decline rather than being defeated by it. That matters here: the files that wait
+        // longest carry a `beforeAll(fn, ms)` hook timeout, which is exactly what trips that net.
+        // The policy, stated once and applied here: never accuse a file whose bound this reader could
+        // not evaluate. `unreadable` means the in-file reader gave up, so the only number left is the
+        // config's — and if that does not clear the wait, the honest answer is "cannot tell", not
+        // "too small". 48 package files are already unreadable, because a `beforeAll(fn, ms)` hook
+        // timeout trips the sign-of-bound net.
+        if (unreadable && effective <= declared) continue;
+        if (effective > declared) continue;
 
-      violations.push(
-        `${name} waits up to ${declared}ms, but the largest per-test bound that reaches it is ` +
-          `${effective}ms (${bound > configured ? "set in the file" : `from ${relative(REPO, resolution.config)}`}).`,
-      );
-    }
-    // Non-vacuity, asserted from THIS case's own results: an empty list means the loop resolved a
-    // bound for no file at all, so it reported no violations because it judged nothing, not because
-    // every file is fine. Non-emptiness rather than a floor — a floor would fall, and have to be
-    // re-cut, whenever an unrelated suite that happened to declare a long wait was deleted.
-    expect(
-      compared,
-      "The scan compared a bound for NO file. Either no package suite declares a wait at or above " +
-        "Vitest's default any more, or the config lookup broke and every file declined. In that " +
-        "state this case passes with an empty violation list however wrong the bounds are, which " +
-        "is exactly what it is here to refuse.",
-    ).not.toEqual([]);
-    expect(
-      violations,
-      "A run that legitimately takes longer than its bound is failed although it completed " +
-        "normally. Raise the bound above the wait — on the waiting case with it(name, fn, ms), or " +
-        "for the whole package in its vitest config:\n  " +
-        violations.join("\n  "),
-    ).toEqual([]);
-  });
+        violations.push(
+          `${name} waits up to ${declared}ms, but the largest per-test bound that reaches it is ` +
+            `${effective}ms (${bound > configured ? "set in the file" : `from ${relative(REPO, resolution.config)}`}).`,
+        );
+      }
+      // Non-vacuity, asserted from THIS case's own results: an empty list means the loop resolved a
+      // bound for no file at all, so it reported no violations because it judged nothing, not because
+      // every file is fine. Non-emptiness rather than a floor — a floor would fall, and have to be
+      // re-cut, whenever an unrelated suite that happened to declare a long wait was deleted.
+      expect(
+        compared,
+        "The scan compared a bound for NO file. Either no package suite declares a wait at or above " +
+          "Vitest's default any more, or the config lookup broke and every file declined. In that " +
+          "state this case passes with an empty violation list however wrong the bounds are, which " +
+          "is exactly what it is here to refuse.",
+      ).not.toEqual([]);
+      expect(
+        violations,
+        "A run that legitimately takes longer than its bound is failed although it completed " +
+          "normally. Raise the bound above the wait — on the waiting case with it(name, fn, ms), or " +
+          "for the whole package in its vitest config:\n  " +
+          violations.join("\n  "),
+      ).toEqual([]);
+    },
+    SCAN_BOUND_MS,
+  );
 
   // The other half of non-vacuity, covering a break the case above cannot see. `configFor` walks up
   // from the file it is given, so a lookup can stop resolving under `packages/` while still
