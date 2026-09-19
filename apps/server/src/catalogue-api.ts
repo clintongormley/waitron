@@ -49,6 +49,12 @@ import {
   updateOptionList,
   deleteOptionList,
   optionListDependants,
+  listExtraLists,
+  getExtraList,
+  createExtraList,
+  updateExtraList,
+  deleteExtraList,
+  extraListDependants,
   listProductOptionGroupIds,
   listProducts,
   removeCatalogueFromLocation,
@@ -216,6 +222,41 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `packages/catalogue/src/errors.ts` states on the code itself, citing spec
   // `2026-09-18-one-product-model-design.md` §2.3. Mapped because Task 3 of the plan names it.
   "options.in_use": 409,
+  // Extras lists (`packages/catalogue/src/extras.ts`). `extras.invalid` reaches here from more than
+  // one place — `parseExtraListInput` (extra-contract.ts) on a malformed authoring body, and
+  // `assertProductsExist` / `writeItems` (extras.ts) on an item naming no `products` row or reusing
+  // an item id another list holds; `extras.translation_required` from `validateNames` (extras.ts),
+  // when the customer-facing name map has no text in the venue's default content language. Both are
+  // CLIENT request faults → 400. Listed explicitly as the house style requires; the `?? 400` default
+  // (`packages/server-kit/src/error-boundary.ts:57`) already covers them.
+  "extras.invalid": 400,
+  "extras.translation_required": 400,
+  // An id naming no list: `getExtraList` on the single read, `lockExtraList` on the update and the
+  // delete, `assertExtraList` on the dependants preview (all extras.ts). The default would make this
+  // a 400, so this entry is what makes it a 404.
+  "extras.not_found": 404,
+  // 409 rather than the default 400 because the body was fine and the stored state refused it — the
+  // shape the sibling `modifier.in_use` above has. NOTHING throws it, here or anywhere: deleting a
+  // list is DESIGNED to cascade its product attachments and its menu publications rather than refuse
+  // them, which `packages/catalogue/src/errors.ts` states on the code itself, citing spec
+  // `2026-09-18-one-product-model-design.md` §3.5. Mapped because Task 6 of the plan names it, as
+  // `options.in_use` above is mapped for Task 3.
+  "extras.in_use": 409,
+  // An order line answering an extras list with too few picks, too many, or a quantity above one
+  // item's cap — thrown by `validateExtraSelections` (extra-contract.ts). NO ROUTE ON THIS SURFACE
+  // raises it: a management route takes an authoring body, never a diner's picks, and
+  // `grep -rn validateExtraSelections apps packages --include="*.ts"` on 2026-09-20 found no
+  // production caller anywhere — the order path that will call it is Task 7 of the plan. Mapped at
+  // 400, which is also what the default would give: it is a CLIENT request fault, the caller having
+  // sent a selection the list's own published counts refuse.
+  "extras.limit_exceeded": 400,
+  // `product.in_use` is DELIBERATELY ABSENT, though Task 6 of the plan names it beside the `extras.*`
+  // codes. No route here can raise it: nothing in the tree throws it
+  // (`grep -rn product.in_use apps packages --include="*.ts"` on 2026-09-20 finds only its
+  // declaration in `packages/catalogue/src/errors.ts`), and no route on this surface or any other
+  // deletes a product (`grep -rn "app.delete(" apps/server/src --include="*.ts"`, same date, lists
+  // every DELETE route and none of them is a product). An entry would claim a catalogue route can
+  // answer with it.
 };
 
 // The one error boundary every catalogue route wraps its handler in — the shared `createErrorBoundary`
@@ -536,6 +577,73 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const id = requireUuidParam(c.req.param("id"), "OptionListId");
       const dependants = await gated(requireManagementSession(c), (tx) =>
         optionListDependants(tx, id),
+      );
+      return c.json({ dependants });
+    }),
+  );
+
+  // Extras lists sit UNDER `/management-api/modifiers` for the reason the option-list block above
+  // does: a dish's one attachment list holds either kind, and the path segment is the discriminator.
+  //
+  // This block MUST stay registered ahead of the `/management-api/modifiers/:id` block below — the
+  // hazard the option-list block above carries, for the same reason: `:id` swallows the literal
+  // `extras`, so the COLLECTION read is the one at risk and it answers 400 `shared.invalid_id`
+  // instead of 200. Measured by moving this block after that one and re-running the file
+  // (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red — "GET
+  // /management-api/modifiers/extras lists them" with `expected 400 to be 200`, and the gate case
+  // with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks for a
+  // session.
+  app.get("/management-api/modifiers/extras", (c) =>
+    run(c, log, async () => {
+      const extraLists = await gated(requireManagementSession(c), (tx) => listExtraLists(tx));
+      return c.json({ extraLists });
+    }),
+  );
+  app.post("/management-api/modifiers/extras", (c) =>
+    run(c, log, async () => {
+      // Session before body, as the option-list sibling above does: an unauthenticated request is
+      // then refused without its payload being read at all.
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const extraList = await gated(sessionId, (tx) =>
+        createExtraList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
+      return c.json({ extraList }, 201);
+    }),
+  );
+  app.get("/management-api/modifiers/extras/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
+      const extraList = await gated(requireManagementSession(c), (tx) => getExtraList(tx, id));
+      return c.json({ extraList });
+    }),
+  );
+  app.patch("/management-api/modifiers/extras/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const extraList = await gated(sessionId, (tx) =>
+        updateExtraList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
+      return c.json({ extraList });
+    }),
+  );
+  app.delete("/management-api/modifiers/extras/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
+      await gated(requireManagementSession(c), (tx) => deleteExtraList(tx, id));
+      return c.json({ ok: true });
+    }),
+  );
+  // What deleting this list would touch — the preview a delete confirmation reads: the products
+  // carrying it and the menu offers publishing it. Both are detached by the delete rather than
+  // blocking it, so this is information, never a refusal.
+  app.get("/management-api/modifiers/extras/:id/dependants", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
+      const dependants = await gated(requireManagementSession(c), (tx) =>
+        extraListDependants(tx, id),
       );
       return c.json({ dependants });
     }),

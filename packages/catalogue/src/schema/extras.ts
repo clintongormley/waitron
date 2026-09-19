@@ -97,8 +97,9 @@ export const extraListItems = table(
  * against `product_option_groups`. Nothing HOLDS that afterwards — there is no key between the two
  * tables, and detaching the list from the product leaves this row where it is. Read over the tree
  * rather than measured: `grep -rn 'delete(menuItemExtraLists' --include='*.ts' packages apps`
- * returns one line, `setMenuItemExtraLists`' own delete of the offer it is rewriting, and the only
- * other way a row leaves is the two ON DELETE CASCADE keys below. */
+ * returns two lines, one of them this comment quoting the command; the other is
+ * `setMenuItemExtraLists`' own delete of the offer it is rewriting. The only other way a row leaves
+ * is the two ON DELETE CASCADE keys below. */
 export const menuItemExtraLists = table(
   "menu_item_extra_lists",
   {

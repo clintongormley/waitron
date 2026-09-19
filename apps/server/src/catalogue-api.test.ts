@@ -5,8 +5,8 @@ import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS, createExtraList, setProductOptionGroups } from "@waitron/catalogue";
-import type { OptionList } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, setProductOptionGroups } from "@waitron/catalogue";
+import type { ExtraList, OptionList } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -2119,9 +2119,6 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
   // id, written to `product_modifiers`. The cases below are the old ones re-aimed at that contract,
   // plus the two the old field had no equivalent of: a mixed ordered list, and the legacy fields'
   // refusal.
-  //
-  // There are no extras ROUTES yet (a later slice adds them), so an extras list is made through the
-  // catalogue package against the same database the routes use.
   async function createOptionsListVia(
     app: Hono,
     body: Record<string, unknown>,
@@ -2131,12 +2128,17 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
     return ((await res.json()) as { optionList: OptionList }).optionList;
   }
 
-  async function createExtrasListVia(app: Hono, catalogueId: string, name: string) {
+  async function createExtrasListVia(
+    app: Hono,
+    catalogueId: string,
+    name: string,
+  ): Promise<ExtraList> {
     const productId = await createProductVia(app, catalogueId);
-    return withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
-      return createExtraList(tx, { name, items: [{ productId }] }, "es");
+    const res = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name, items: [{ productId }] },
     });
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { extraList: ExtraList }).extraList;
   }
 
   /** The product's attachment list as the catalogue read hands it back. */
@@ -2584,6 +2586,294 @@ describe("mountCatalogueApi — option lists", () => {
     const res = await send(app, "GET", `/management-api/modifiers/options/${list.id}/dependants`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ dependants: { products: [], menus: [] } });
+  });
+});
+
+/**
+ * Extras lists over the management API. What the CRUD itself does is proven in the catalogue package
+ * (`packages/catalogue/src/extras.test.ts`); what is proven HERE is the request/response boundary —
+ * the status codes, the `{ extraList }` / `{ extraLists }` envelopes, the uuid screen, the venue's
+ * fallback language reaching the write, and the permission gate. The sibling suite for option lists
+ * is directly above.
+ */
+describe("mountCatalogueApi — extras lists", () => {
+  // The same shared-database insurance the option-list block above takes, and for the same reason:
+  // a content-language configuration another describe left behind would decide what
+  // `createExtraList` demands of the customer-facing name map. Emptying the table puts
+  // `readContentLanguages` on the mounted venue locale.
+  beforeEach(async () => {
+    await suite.db.execute(sql`delete from content_languages`);
+  });
+
+  /** Two products a list can offer. Each gets a catalogue of its own; only the ids matter here. */
+  async function twoProducts(app: Hono): Promise<[string, string]> {
+    return [
+      await createNamedProductVia(app, `Alioli ${crypto.randomUUID()}`),
+      await createNamedProductVia(app, `Brava ${crypto.randomUUID()}`),
+    ];
+  }
+
+  /**
+   * Staff, customer-facing and kitchen name are DIFFERENT text, so a response reading the wrong one
+   * of the three cannot pass these assertions (CLAUDE.md §3). The two items differ in every field a
+   * response could confuse — quantity cap, preselection and price — for the same reason.
+   */
+  const sauces = (productIds: string[]) => ({
+    name: "Salsas",
+    customerName: { es: "¿Alguna salsa?" },
+    kitchenName: "SALSA",
+    minPicks: 0,
+    maxPicks: 2,
+    items: productIds.map((productId, index) => ({
+      productId,
+      maxQuantity: index + 1,
+      preselected: index === 0,
+      price: index === 0 ? "0.50" : null,
+    })),
+  });
+
+  async function createListVia(app: Hono, body: Record<string, unknown>): Promise<ExtraList> {
+    const res = await send(app, "POST", "/management-api/modifiers/extras", { body });
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { extraList: ExtraList }).extraList;
+  }
+
+  it("POST creates a list (201) with all three names, its bounds and its items in body order", async () => {
+    const app = mountApp();
+    const [alioli, brava] = await twoProducts(app);
+    const list = await createListVia(app, sauces([alioli, brava]));
+    expect(list).toMatchObject({
+      name: "Salsas",
+      customerName: { es: "¿Alguna salsa?" },
+      kitchenName: "SALSA",
+      minPicks: 0,
+      maxPicks: 2,
+      active: true,
+    });
+    expect(
+      list.items.map((item) => [item.productId, item.maxQuantity, item.preselected, item.price]),
+    ).toEqual([
+      [alioli, 1, true, "0.50"],
+      [brava, 2, false, null],
+    ]);
+  });
+
+  it("GET /management-api/modifiers/extras lists them", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista listada" });
+    const res = await send(app, "GET", "/management-api/modifiers/extras");
+    expect(res.status).toBe(200);
+    const { extraLists } = (await res.json()) as { extraLists: ExtraList[] };
+    expect(extraLists.find((row) => row.id === list.id)).toMatchObject({
+      name: "Lista listada",
+      kitchenName: "SALSA",
+      items: [{ productId: alioli, price: "0.50" }],
+    });
+  });
+
+  it("GET /management-api/modifiers/extras/:id reads one back", async () => {
+    const app = mountApp();
+    const [alioli, brava] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli, brava]), name: "Lista leída" });
+    const res = await send(app, "GET", `/management-api/modifiers/extras/${list.id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      extraList: {
+        id: list.id,
+        name: "Lista leída",
+        customerName: { es: "¿Alguna salsa?" },
+        kitchenName: "SALSA",
+        items: [{ productId: alioli }, { productId: brava }],
+      },
+    });
+  });
+
+  it("PATCH replaces the list — a rename, a reorder and a reprice come back in the new order", async () => {
+    const app = mountApp();
+    const [alioli, brava] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli, brava]), name: "Lista reordenada" });
+    const [first, second] = list.items;
+    const res = await send(app, "PATCH", `/management-api/modifiers/extras/${list.id}`, {
+      body: {
+        name: "Lista reordenada y renombrada",
+        customerName: { es: "¿Dos salsas?" },
+        kitchenName: "SALSA2",
+        minPicks: 1,
+        maxPicks: 3,
+        items: [
+          { id: second!.id, productId: brava, maxQuantity: 4, preselected: true, price: "1.25" },
+          { id: first!.id, productId: alioli, maxQuantity: 1, preselected: false, price: null },
+        ],
+      },
+    });
+    expect(res.status).toBe(200);
+    const { extraList } = (await res.json()) as { extraList: ExtraList };
+    expect(extraList).toMatchObject({
+      name: "Lista reordenada y renombrada",
+      customerName: { es: "¿Dos salsas?" },
+      kitchenName: "SALSA2",
+      minPicks: 1,
+      maxPicks: 3,
+    });
+    expect(extraList.items.map((item) => [item.id, item.productId, item.price])).toEqual([
+      [second!.id, brava, "1.25"],
+      [first!.id, alioli, null],
+    ]);
+  });
+
+  it("DELETE answers { ok: true } and the list is then gone", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista borrada" });
+    const res = await send(app, "DELETE", `/management-api/modifiers/extras/${list.id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    const gone = await send(app, "GET", `/management-api/modifiers/extras/${list.id}`);
+    expect(gone.status).toBe(404);
+    expect(await gone.json()).toMatchObject({ error: { code: "extras.not_found" } });
+  });
+
+  it("refuses an invalid body with 400 and the domain code, naming the field", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const item = { productId: alioli };
+    for (const [body, field] of [
+      [{ name: "   ", items: [item] }, "name"],
+      // An ACTIVE list with no product cannot be answered, so the contract refuses it.
+      [{ name: "Sin productos", items: [] }, "items"],
+      // The cap below the floor: the contract names the cap, the field a manager just raised.
+      [{ name: "Tope al revés", minPicks: 2, maxPicks: 1, items: [item] }, "maxPicks"],
+      [{ name: "Clave de más", items: [item], nope: 1 }, "extraList.nope"],
+      [{ name: "Producto inventado", items: [{ productId: "no-es-uuid" }] }, "items.0.productId"],
+    ] as const) {
+      const res = await send(app, "POST", "/management-api/modifiers/extras", { body });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "extras.invalid", params: { field } },
+      });
+    }
+  });
+
+  /**
+   * The VENUE's fallback language decides which language a customer-facing name must carry, so the
+   * mount here is `fr-FR` and nothing else in the file is: a route passing `FALLBACK_LOCALE`
+   * (`en-GB`) or nothing at all would report the gap as `en`, and a route passing the mounted
+   * `es-ES` of every other test would find no gap in an `es` map and answer 201.
+   */
+  it("reports a missing customer-facing name in the venue's own language, on create and on update", async () => {
+    const app = mountApp("fr-FR");
+    const [alioli] = await twoProducts(app);
+    const refused = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: sauces([alioli]),
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: {
+        code: "extras.translation_required",
+        params: { field: "customerName", language: "fr" },
+      },
+    });
+    const list = await createListVia(app, {
+      ...sauces([alioli]),
+      customerName: { fr: "Une sauce ?" },
+    });
+    const patched = await send(app, "PATCH", `/management-api/modifiers/extras/${list.id}`, {
+      body: sauces([alioli]),
+    });
+    expect(patched.status).toBe(400);
+    expect(await patched.json()).toMatchObject({
+      error: {
+        code: "extras.translation_required",
+        params: { field: "customerName", language: "fr" },
+      },
+    });
+  });
+
+  it("gates every extras-list route and refuses an id naming no list", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista vigilada" });
+    const collection = "/management-api/modifiers/extras";
+    const path = `${collection}/${list.id}`;
+    // Every gated route, as [method, path, body] — the table the option-list block above uses. Each
+    // route is checked BOTH ways, so a route missing one of the two refusals cannot hide behind a
+    // sibling that has it.
+    const routes: ["GET" | "POST" | "PATCH" | "DELETE", string, unknown?][] = [
+      ["GET", collection],
+      ["POST", collection, sauces([alioli])],
+      ["GET", path],
+      ["PATCH", path, sauces([alioli])],
+      ["DELETE", path],
+      ["GET", `${path}/dependants`],
+    ];
+    for (const [method, routePath, body] of routes) {
+      for (const [cookie, status, code] of [
+        [null, 401, "management_session.required"],
+        [staffCookie, 403, "authorization.not_permitted"],
+      ] as const) {
+        const res = await send(app, method, routePath, {
+          cookie,
+          ...(body === undefined ? {} : { body }),
+        });
+        expect(res.status, `${method} ${routePath}`).toBe(status);
+        expect(await res.json()).toMatchObject({ error: { code } });
+      }
+    }
+    const malformed = `${collection}/not-a-uuid`;
+    for (const [method, routePath, body] of [
+      ["GET", malformed],
+      ["PATCH", malformed, sauces([alioli])],
+      ["DELETE", malformed],
+      ["GET", `${malformed}/dependants`],
+    ] as ["GET" | "PATCH" | "DELETE", string, unknown?][]) {
+      const res = await send(app, method, routePath, {
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(res.status, `${method} ${routePath}`).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    }
+    // A well-formed id naming no list, on each of the four `:id` routes — the read reaches
+    // `getExtraList`, the update and the delete reach `lockExtraList`, the preview reaches
+    // `assertExtraList`, and all four must answer 404 rather than the boundary's 400 default. The
+    // PATCH body is a VALID one, or the contract would refuse it before the list is looked up.
+    const absentId = "33333333-3333-4333-8333-333333333333";
+    const absentPath = `${collection}/${absentId}`;
+    for (const [method, routePath, body] of [
+      ["GET", absentPath],
+      ["PATCH", absentPath, sauces([alioli])],
+      ["DELETE", absentPath],
+      ["GET", `${absentPath}/dependants`],
+    ] as ["GET" | "PATCH" | "DELETE", string, unknown?][]) {
+      const absent = await send(app, method, routePath, {
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(absent.status, `${method} ${routePath}`).toBe(404);
+      expect(await absent.json()).toMatchObject({
+        error: { code: "extras.not_found", params: { extraListId: absentId } },
+      });
+    }
+  });
+
+  it("previews what deleting a list would touch — the products carrying it", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista con dependientes" });
+    const catalogueId = await createCatalogueVia(app, "Menú con extras");
+    const productId = await createProductVia(app, catalogueId);
+    const attached = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { modifiers: [{ kind: "extras", id: list.id }] },
+    });
+    expect(attached.status).toBe(204);
+    const res = await send(
+      app,
+      "GET",
+      `${`/management-api/modifiers/extras/${list.id}`}/dependants`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      dependants: { products: [{ id: productId, name: "Producto con opciones" }], menus: [] },
+    });
   });
 });
 

@@ -509,19 +509,21 @@ What option lists left open, none of it taken in #436 or #445:
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
   registered because a shipped code is never removed.
-- **The six option-list route handlers duplicate the six `/management-api/modifiers` ones, and Task 6
-  will make a third copy.** A review asked for a shared mount helper in `catalogue-api.ts` (the file
-  already has the pattern in `mountCourseVerb`, `apps/server/src/till-api.ts`). #445 did NOT take it:
-  the `/management-api/modifiers` block is meant to be REPLACED by the options and extras routes
-  (spec §11), so a helper extracted across it now would be undone. **Next action:** whoever builds
-  Task 6 extracts it then, when extras adds the second surviving copy, rather than writing a third
-  copy by hand.
+- **There are now THREE copies of the same six route handlers in `catalogue-api.ts`** — the old
+  `/management-api/modifiers` block, the option-list block and, since Task 6 Step 5, the extras-list
+  block. A review on #445 asked for a shared mount helper (the file already has the pattern in
+  `mountCourseVerb`, `apps/server/src/till-api.ts`) and expected Task 6 to extract it. Task 6 Step 5
+  did NOT: its brief specified the six routes one by one as a mirror of the option block, and
+  extracting a helper would have rewritten the option block on the same branch. **Next action:**
+  extract the helper across the option and extras blocks, which are the two copies the spec keeps.
 - **Nothing schedules the deletion of the old `/management-api/modifiers` routes.** Spec §11 says the
   options and extras routes replace them, but no task in the plan lists `apps/server/src/catalogue-api.ts`
   as a file it deletes from — Task 13's file list does not name it. Until that is fixed, the old
-  routes survive the plan, and so does the ordering requirement #445 had to comment on (the options
-  routes must be registered ahead of `/management-api/modifiers/:id`, or `:id` swallows the literal
-  word `options`). **Next action:** add the route removal to Task 13, or state that the old routes stay.
+  routes survive the plan, and so does the ordering requirement #445 had to comment on: BOTH the
+  option-list block and the extras-list block must be registered ahead of
+  `/management-api/modifiers/:id`, or `:id` swallows the literal word `options` or `extras` and the
+  collection read answers 400 instead of 200. Each block carries its own measurement of that.
+  **Next action:** add the route removal to Task 13, or state that the old routes stay.
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
   bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
@@ -600,9 +602,10 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
 - **Two review findings deliberately not taken, both of them structural.** Splitting the publication
   write path out of `packages/catalogue/src/extras.ts` into a module of its own, and moving
   `resolveExtraPrice` from there into `extra-contract.ts` beside the price parsing it belongs with.
-  Both were declined as churn on a branch about to land, and Task 6 adds the extras routes and the
-  attachment check to that same file, which reshapes it anyway. **Next action:** whoever builds Task 6
-  settles the file's shape then, with the routes in front of them.
+  Both were declined as churn on a branch about to land. Task 6 has since added the attachment check
+  to that file, and the extras ROUTES went where the option ones live
+  (`apps/server/src/catalogue-api.ts`), so the file was not reshaped after all. **Next action:**
+  still open — settle whether the publication write path and `resolveExtraPrice` move.
 - **`setMenuItemExtraLists` keeps its membership check as its own query rather than a `LEFT JOIN`.**
   A review asked for the join. Not taken: `assertProductsOffered` reads `extra_list_items` for only
   the lists the body actually overrides, and a join hung off the publication rows would read the
