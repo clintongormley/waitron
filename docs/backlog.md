@@ -3220,6 +3220,36 @@ the `afterEach` reset (`lifecycle.ts:148`) or a suite's own `beforeEach`, never 
 which takes about a second. State the failing case first: if `hookTimeout` bounded the boot, every
 run would die in `beforeAll` before a single test ran.
 
+**`packages/printing` converted, LANDED as #435 on 2026-09-19** (main `e024d14b`) — the eighth
+package of the rollout, three test files and three calls. It found a SECOND shape of false
+`hookTimeout` claim, unrelated to the one above, and the two must not be confused. The three twins
+named above are wrong about which setting bounds the PGlite boot. Printing's config was wrong about
+something else: it said `hookTimeout` "stays generous mainly for globalSetup's own image pull on a
+cold CI runner", and vitest does not bound `globalSetup` by `hookTimeout` at all. Under
+`--hookTimeout=50` most of the package still runs, and a temporary timer inside
+`packages/printing/src/testing/global-setup.ts` printed 1368ms for a setup a 50ms ceiling would have
+killed. **The three twins are NOT twins of that one** — each of them states printing's fact
+correctly on its very next line ("The container boot/image pull runs in globalSetup, outside
+hookTimeout."), so the sweep still owed on them is the narrower one described above.
+
+**Three measurement traps from #435, each of which cost a review round.** First, the pass/fail count
+under `--hookTimeout=50` is even less of a receipt than the paragraph above says: thirteen runs of
+one package on one machine gave failed-file counts from 1 to 5 of 13. Second, a run under that
+ceiling ALSO prints failures that are not timeouts — `database "clone_NNNNN_1" already exists`
+(SQLSTATE `42P04`), because the killed `beforeAll` created a template clone the killed `afterAll`
+never dropped and the clone counter restarts per file. Report what the command prints, or the next
+reader thinks they have found an unrelated bug. Third, `docker images` cannot show that an image was
+cached BEFORE a run rather than pulled during it — both answers look alike;
+`docker image inspect <image> --format '{{.Metadata.LastTagTime}}'` is the one that discriminates.
+
+**The bare-name grep trap recurred on #435**, one conversion after #431 recorded it, and in the same
+place: the commit message claimed `grep -rn usePgliteDb <package>` exits 1, while the branch's own
+rewritten `vitest.config.ts` comment is a line that grep returns. A round-three reader then caught
+the correction quoting a LINE NUMBER for that comment which the branch's later edits had already
+moved. The rule that survives both: a conversion states the CALL-form grep
+(`grep -rnE "usePgliteDb[(]"`), never the bare name, and does not number a line in a file it is
+still editing.
+
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
 only be backed up or restored separately if no row in one points at a row in the other. Six such
