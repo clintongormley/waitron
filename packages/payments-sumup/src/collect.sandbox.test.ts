@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   decimal,
   tillId as brandTillId,
@@ -29,7 +29,7 @@ const configured = Boolean(API_KEY && MERCHANT_CODE && READER_ID);
 const d = configured ? describe : describe.skip;
 
 d("SumUp live sandbox: collect against the paired Solo", () => {
-  const pg = usePgliteDb({
+  const pg = useVenueDb({
     migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
     timeoutMs: 120_000,
   });

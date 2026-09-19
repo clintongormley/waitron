@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { setup } from "./testing/setup.js";
@@ -68,7 +68,7 @@ describe("SumUp card details mapping", () => {
 // window). Whether the same writes land as a non-superuser app_user member is sumup.test.ts's
 // question, which needs real Postgres (CLAUDE.md §4). Nothing here depends on the role or on
 // concurrency. `setup` is shared with `reverse.test.ts` (`./testing/setup.ts`).
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });
