@@ -3925,6 +3925,15 @@ that slice 3 has to restore:
   `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header; whatever replaces the initial copy
   in slice 3 has to close this.
 
+- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
+  wizard's copy was made honest rather than the option removed — `apps/setup`'s role, connect and done
+  screens now say plainly that joining does not work in this version and that the box ends up holding
+  none of the restaurant's data, with no till and no dashboard, and the done screen no longer offers a
+  reload button that would have landed on a bare 404. But the option is still there and the flow still
+  runs, so an operator can still spend a box on it. Removing or disabling it until slice 3 lands the
+  replacement is a product call, not a wording one, so #443 left it alone. Whoever takes it should
+  decide for `apps/setup/src/screens/mode-screen.ts`'s mirror card and the `role-screen` card together.
+
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
   box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.
 - **The membership chart grows without bound.** It APPENDS while `MAX_NODES = 8` (`packages/membership/src/verify.ts`) makes every verifier
