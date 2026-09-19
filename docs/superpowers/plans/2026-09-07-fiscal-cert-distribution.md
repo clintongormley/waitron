@@ -439,6 +439,8 @@ describe("fiscal-cert core (real PG)", () => {
 
 (Adapt `useRealPostgres`/`pg.ctx()` to the exact shape `packages/credentials/src/store.test.ts` uses to obtain `{ db, ring, tenantId }`; that test is the reference for seeding a tenant row and a key ring against the credentials schema.)
 
+> **2026-09-19 — read that file rather than this plan's description of it.** This plan points at `packages/credentials/src/store.test.ts` three times: the comment on `useRealPostgres()` in the sketch above, this parenthetical, and the placeholder scan near the end. What all three say about that file has moved on. It is a PGlite suite — it takes its database from `useVenueDb` (`@waitron/db/testing/venue-db.js`), which is where every PGlite suite in the credentials package now asks for one — and it neither calls `useRealPostgres` nor has a `tenantId` to seed, the tenant column having been dropped in #378 on 2026-09-16, under the 2026-09-14 spec. It builds its key rings in process with `loadKeyRing`. What it is still a reference for is exercising the credential store against the credentials schema. Whether this plan's own container sketch keeps `useRealPostgres` is the executor's call: `useVenueDb` is deliberately not a seam for a real container.
+
 - [ ] **Step 2: Run it and watch it fail**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test -- fiscal-cert.test`
