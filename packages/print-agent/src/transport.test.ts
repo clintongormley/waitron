@@ -57,7 +57,7 @@ describe("NetworkTcpTransport", () => {
     let resolveEnded!: (b: Buffer) => void;
     const firstConnectionEnded = new Promise<Buffer>((resolve) => (resolveEnded = resolve));
     const server = net.createServer((socket) => {
-      socket.on("data", (chunk) => chunks.push(chunk));
+      socket.on("data", (chunk: Buffer) => chunks.push(chunk));
       socket.on("end", () => resolveEnded(Buffer.concat(chunks)));
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

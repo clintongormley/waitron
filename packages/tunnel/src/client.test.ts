@@ -25,7 +25,7 @@ afterEach(async () => {
 
 it("splices a client request down to the local service and back", async () => {
   local = createServer((s: Socket) =>
-    s.on("data", (d) => s.write(Buffer.concat([Buffer.from("echo:"), d]))),
+    s.on("data", (d: Buffer) => s.write(Buffer.concat([Buffer.from("echo:"), d]))),
   );
   const localPort = await new Promise<number>((r) =>
     local!.listen(0, () => r((local!.address() as { port: number }).port)),
@@ -56,7 +56,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
   it("feeds the post-`go` leftover to the local service before piping (the splice-leftover trap)", async () => {
     // Echo server: prefixes "echo:" so we can see the leftover bytes made the round trip.
     local = createServer((s: Socket) =>
-      s.on("data", (d) => s.write(Buffer.concat([Buffer.from("echo:"), d]))),
+      s.on("data", (d: Buffer) => s.write(Buffer.concat([Buffer.from("echo:"), d]))),
     );
     const localPort = await new Promise<number>((r) =>
       local!.listen(0, () => r((local!.address() as AddressInfo).port)),

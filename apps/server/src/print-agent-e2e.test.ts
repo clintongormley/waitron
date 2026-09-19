@@ -106,7 +106,7 @@ async function startLoopbackPrinter(): Promise<LoopbackPrinter> {
   });
   const server = net.createServer((socket) => {
     const chunks: Buffer[] = [];
-    socket.on("data", (chunk) => chunks.push(chunk));
+    socket.on("data", (chunk: Buffer) => chunks.push(chunk));
     // The agent's NetworkTcpTransport half-closes after flushing, so `end` marks the full payload in.
     socket.on("end", () => resolveBytes(Buffer.concat(chunks)));
   });

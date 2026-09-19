@@ -87,7 +87,7 @@ describe("runTunnelClient resilience", () => {
     scripted = await scriptRelay((box) => {
       // Widened to `Buffer` so it accepts decodeFrame's `rest` (a `subarray` view), as in client.ts.
       let buf: Buffer = Buffer.alloc(0);
-      box.on("data", (d) => {
+      box.on("data", (d: Buffer) => {
         buf = Buffer.concat([buf, d]);
         for (;;) {
           let r: ReturnType<typeof decodeFrame>;
