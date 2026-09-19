@@ -3588,7 +3588,14 @@ rewriting history. The scope gap is general: the guide's pair and the plan's ste
 DID look. #423 ran `git grep -l 'usePgliteDb(' c54dee74` unscoped and got 243 files, 34 of them
 markdown, that plan among them; nothing read the markdown half for what a document SAYS about a
 converted file. **The remaining conversions should run one unscoped search over `docs/` for the
-converted package's test paths before landing.**
+converted package's test paths before landing** — and must not narrow it by PROXIMITY, which is how
+the `packages/core` conversion (#451) missed the strongest designation it owed a pointer. That sweep
+intersected "names a converted file" with "names `usePgliteDb`" and read only where the two fell
+within four lines of each other; `docs/superpowers/plans/2026-08-03-invoice-first-settlement.md`
+names `list-outstanding-sales.test.ts` in a step heading and prints the `usePgliteDb` import and call
+in the fenced block below it, fifteen lines away before that conversion put a pointer between them.
+A step names its file in a heading and sketches it in a block that can be any length, so the unit is
+the document, not a window. The convention review caught it; the sweep did not.
 
 **And the measurement trap inside that correction, which is CLAUDE.md §1's "both answers look
 alike" in a new dress.** The obvious probe is to set `hookTimeout: 50` and see the suites still pass.
