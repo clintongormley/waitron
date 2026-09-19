@@ -3748,16 +3748,17 @@ deciding what the sentence should say about both halves — which is why it is h
 
 **THAT PHRASE-GREP IS NOT THE SIZE OF THE PROBLEM, and #438's review rounds are what showed it.** It
 finds ONE wording. Six more `vitest.config.ts` files stated the same claim in other words when this
-was written; four do now, `packages/credentials` having been corrected by #440 and
-`packages/scheduler` by its own conversion. The count is not the point — the METHOD is, because two
+was written; three do now — `packages/credentials` was corrected by #440, `packages/scheduler` and
+`packages/workforce` each by their own conversion. The count is not the point — the METHOD is, because two
 successive corrections inside #438 got this wrong in opposite directions. Read each config against its own package and ask where the boot
 actually sits:
 
 - False for the same reason (every PGlite boot in the package goes through `usePgliteDb`, so
   `hookTimeout` bounds none of them — `grep -rlE "createPgliteDb|describeEachTarget" --include="*.ts"
-  packages/<pkg>` exits 1): `packages/workforce/vitest.config.ts:13-14` and
-  `packages/reporting/vitest.config.ts:15-16`. `packages/credentials`'s was the third; the
-  conversion of that package corrected it, in the same way #438 corrected `packages/workforce-es`'s.
+  packages/<pkg>` exits 1): `packages/reporting/vitest.config.ts:15-16`.
+  `packages/credentials`'s was one of these; the conversion of that package corrected it, in the
+  same way #438 corrected `packages/workforce-es`'s and the `packages/workforce` conversion
+  corrected its own.
 - ALSO false, and this is where the first correction went wrong: `packages/payments/vitest.config.ts:14`
   and `packages/scheduler`'s, the latter corrected while converting scheduler. That grep returns a file
   for each of the two, which a draft took as a reason to spare them both — but the one out-of-helper
@@ -4001,6 +4002,76 @@ statements / lines / functions / branches (`scripts/coverage-thresholds.test.ts`
 positionally, as a first draft of this branch's message did, and a PASSING run reads as a branch
 failure — 87.02% branches against what looks like a 90 bar and is really 85. Write each number beside
 its own bar.
+
+**`packages/workforce` converted (2026-09-20)** — nine test files, nine calls, plus the
+`vitest.config.ts` comment the list above named as carrying this rollout's false `hookTimeout`
+claim until this change took it out of that list. Four things to carry.
+
+**First, a package holding BOTH a `useTemplateDb` suite and a `useVenueDb` one gets the
+`--hookTimeout=50` positive control for free**, with no scratch suite to write. One run of
+`src/immutability.test.ts` and `src/absences.test.ts` under that ceiling killed `useTemplateDb`'s
+`beforeAll` (`packages/db/src/testing/lifecycle.ts:422`) — so the ceiling was in force — while all
+ten of the absences tests passed; `timeoutMs: 50` on that same absences call then killed its own
+`beforeAll` (`lifecycle.ts:139`). Both directions, two real suites, one command.
+
+**Second, a throw control and the `migrations: []` control answer different questions**, and a
+conversion owes the second whatever else it runs. Both were run here and both discriminated:
+making the seam's body throw, and forwarding `migrations: []` from it, each failed exactly the nine
+converted files and left the package's other thirteen passing, while
+`packages/db/src/testing/lifecycle.test.ts` — which calls the old helper directly — passed all 29 of
+its tests under the empty-migrations mutation. The difference is what each one can claim. A throw
+fires before any option is read, so it shows only that these call sites reach the seam; that the
+seam passes a caller's OPTIONS through is what the empty list shows, which is why #448 made that
+pair the general control. Run the pair; a throw is an extra, not a substitute.
+
+**Third, the two documents this branch owed a pointer were both found by the PATH grep**, and one is
+a designation of the #440 shape rather than a mention: `docs/superpowers/plans/2026-08-04-identity.md`
+step 15 tells the reader to edit "every workforce test's `usePgliteDb({ migrations: [...] })` list".
+The same paragraph extends that instruction to `packages/workforce-es`, converted back at #438 and
+never pointered here, so one stale instruction can outlive several conversions — a pointer covers
+the paragraph, not the package that happens to be in hand.
+
+**Fourth, a "MUST run on real Postgres" written into a plan was falsified by running it**, and the
+falsification came from the review seat, not the branch. `docs/superpowers/plans/2026-08-02-workforce.md`
+§7 says the role-revocation floor must use a container "or it is theatre", because PGlite's
+superuser can `DISABLE TRIGGER` and bypasses RLS. Pointed at the hermetic helper instead, with
+nothing changed but the handle it reads, all seven cases of
+`packages/workforce/src/immutability.test.ts` still pass — the refused `UPDATE`/`DELETE` and the
+`WT001` trigger refusals included. That agrees with `CLAUDE.md` §4, which already says PGlite
+enforces a grant once the session assumes the role; the plan's sentence predates it and nobody had
+run it. Nothing moved here — where a real-PostgreSQL suite belongs after the storage switch is task
+F1's disposition, not a conversion's — but the next reader of that bullet should know the reason
+given for the container is not the reason that holds.
+
+**And that conversion did NOT sweep the same reason out of the package it was converting**, which
+is worth knowing before someone assumes it did. Three places in `packages/workforce` still give it,
+in two files: `src/immutability.test.ts:10-11`, and `src/testing/global-setup.ts:46-47` and
+`:57-58`, the last of them inside the message thrown when the shared container will not start. The
+conversion commits no edit to either file. #431 is the precedent for leaving them, and it gives
+BOTH halves: "the two places this branch already had open stop making the claim, and the third …
+is left as it was", and "rewriting it needs the real reason established, not guessed". Do not
+confuse that with the rule about a stray MENTION of the helper's name belonging to the final pull
+request (the "One exception to 'defer the sweep'" paragraph above): a different rule about a
+different thing — #431 swept its own package's cousin of this claim out of a README and a
+`vitest.config.ts`, neither of which carries a converted call.
+
+**What the replacement wording should say is not settled, and the obvious candidate does not
+survive a reading of the suite.** `CLAUDE.md` §4 says a PGlite session can step back out with
+`reset role`, "so it cannot prove code is confined to a role" — which states a necessity, not a
+sufficiency. What would prove confinement is a non-superuser LOGIN connection, which real
+PostgreSQL supplies and PGlite does not; this package already creates one for its concurrency
+suites (`workforce_clock_probe`, `packages/workforce/src/testing/global-setup.ts:65-68`), and these
+seven cases take none of it. They run on the clone's SUPERUSER handle (`suite.admin`) and assume
+the role inside the transaction: four through `asAppUser` (`packages/db/src/testing/roles.ts`,
+whose body is `set local role app_user`) and three with that statement written inline
+(`immutability.test.ts:90`, `:110` and `:137`). That is §4's "who the session made itself", not
+"who CONNECTED", on both targets. So whoever fixes these three places has to establish what the
+container buys this suite before writing it down, and the answer may be nothing.
+
+The same method has already felled this claim's cousin in `packages/provisioning` — a different
+claim (creating roles and databases, not grants), falsified by a different experiment (running
+`create role` and `create database` against PGlite directly), standing in three different KINDS of
+file, one of the three still standing on purpose (recorded above).
 
 Which package is NEXT is the plan's step-5 command run on the tree you are converting, never a name
 written here.

@@ -1,5 +1,5 @@
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
@@ -26,7 +26,7 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 // (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`), not this
 // suite's. PGlite connects as a superuser holding every grant, so no withTransaction/asAppUser wrapper is
 // needed here.
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -11,7 +11,7 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 const WRITERS = 20;
 
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 

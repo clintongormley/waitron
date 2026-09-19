@@ -5,7 +5,7 @@ import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   insertAbsence,
   insertAvailability,
@@ -17,7 +17,7 @@ import {
   seedPerson,
 } from "../test/fixtures.js";
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   // Core first (shifts point at its `locations`, `tills` and `nodes`), then identity (persons —
   // employments/time_entries FK it), then workforce. Ordering across packages is the runtime's job
