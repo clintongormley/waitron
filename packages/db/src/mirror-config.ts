@@ -12,9 +12,11 @@ export interface MirrorConnection {
   relayUrl: string;
   boxHostname: string;
   boxCaPem: string;
-  // The nodeId of the PRIMARY this mirror pulls from — its sync ORIGIN, distinct from this node's
+  // The nodeId of the PRIMARY this mirror was adopted from — its ORIGIN, distinct from this node's
   // OWN identity (`config.till.nodeId`). Written owner-role at adopt (the primary's nodeId); read at
-  // mirror boot to drive the pull peer's origin. See the schema doc on `origin_node_id`.
+  // mirror boot into `boot.ts`'s `dataNodeId`, which scopes the node-scoped read paths (report-api's
+  // per-till and fiscal reports) to the id the venue's rows carry. See the schema doc on
+  // `origin_node_id`.
   originNodeId: string;
 }
 

@@ -436,6 +436,32 @@ describe("the package and app suites", () => {
     return configCache.get(path)!;
   };
 
+  /**
+   * The per-test bound a file's own package configuration gives it, with the config it came from —
+   * or undefined when no bound can be established: no vitest config above the file, a config that
+   * fails to import, a configuration the resolver declines to read (two projects disagreeing, an
+   * `include` glob it does not model, no project matching at all). They differ in cause and not in
+   * consequence, so they arrive as one value, and it means: do not judge this file.
+   *
+   * ONE copy, called by the scan below AND by the anchored cases after it, because an anchor with
+   * its own copy of these steps proves only that ITS copy works. On the draft where each anchor
+   * repeated the lookup, dropping the `.default` unwrap from the scan's copy left the scan comparing
+   * no file and every case in this file green. Against the shared shape it does not: delete
+   * `?.default` here and the scan's non-empty `compared` assertion fails AND both anchors fail with
+   * it (measured 2026-09-19).
+   */
+  const resolvedBound = async (
+    file: string,
+  ): Promise<{ config: string; bound: number } | undefined> => {
+    const located = configFor(file);
+    if (located === undefined) return undefined;
+    const bound = boundFromConfig(
+      ((await loadConfig(located.config)) as { default?: unknown } | undefined)?.default,
+      relative(located.root, file),
+    );
+    return bound === undefined ? undefined : { config: located.config, bound };
+  };
+
   it("finds them", () => {
     expect(packageSuites.length).toBeGreaterThan(500);
   });
@@ -453,26 +479,26 @@ describe("the package and app suites", () => {
   // check is: one uniform question asked of every file, which names at most a handful, against 1100
   // test records that would name every file whether or not it was even judged.
   // `scripts/guarded-teardowns.test.ts` aggregates its scan for the same reason. The cost is real —
-  // `it.each` would give a per-file test name and a per-file failure for free — so the `compared`
-  // floor below stands in for the per-file visibility this gives up.
+  // `it.each` would give a per-file test name and a per-file failure for free — so the violation
+  // message below names every file it accuses, and the case records what it compared so that an
+  // aggregate which judged nothing fails instead of reporting an empty violation list.
   it("every package and app suite can use the timeout it declares", async () => {
     const violations: string[] = [];
-    let compared = 0;
+    // The files this scan actually compared a bound against, so the case can assert on its own
+    // work rather than on a second resolution done beside it.
+    const compared: string[] = [];
     for (const name of packageSuites) {
       const file = join(REPO, name);
       const { declared, bound, unreadable } = budgets(readFileSync(file, "utf8"));
       if (declared < VITEST_DEFAULT_TEST_TIMEOUT_MS) continue;
 
-      const located = configFor(file);
-      if (located === undefined) continue; // no config governs it; nothing to compare against
-      const configured = boundFromConfig(
-        ((await loadConfig(located.config)) as { default?: unknown }).default,
-        relative(located.root, file),
-      );
-      // Ambiguous configuration — two projects matching with different bounds, an `include` glob
-      // this guard does not model — is not a missing bound. Decline, as with an unreadable in-file
-      // one.
-      if (configured === undefined) continue;
+      // Undefined is every decline at once: no config governs the file, its config would not
+      // import, or the resolver will not read that configuration. None of those is a missing
+      // bound, and accusing a file on one of them would fail a gate every push runs.
+      const resolution = await resolvedBound(file);
+      if (resolution === undefined) continue;
+      compared.push(name);
+      const configured = resolution.bound;
 
       // The LARGEST bound that could reach any case in the file — the config's, or a bigger one the
       // file sets on a case. Not "the file's if it has one": an `it(name, fn, ms)` on some other
@@ -488,21 +514,24 @@ describe("the package and app suites", () => {
       // "too small". 48 package files are already unreadable, because a `beforeAll(fn, ms)` hook
       // timeout trips the sign-of-bound net.
       if (unreadable && effective <= declared) continue;
-      compared += 1;
       if (effective > declared) continue;
 
       violations.push(
         `${name} waits up to ${declared}ms, but the largest per-test bound that reaches it is ` +
-          `${effective}ms (${bound > configured ? "set in the file" : `from ${relative(REPO, located.config)}`}).`,
+          `${effective}ms (${bound > configured ? "set in the file" : `from ${relative(REPO, resolution.config)}`}).`,
       );
     }
-    // Non-vacuity, end to end: if the config plumbing broke — the import interop changing,
-    // `configFor` stopping at the wrong directory, a config growing an `exclude` the matcher cannot
-    // read — every file would quietly decline and this case would still report no violations.
+    // Non-vacuity, asserted from THIS case's own results: an empty list means the loop resolved a
+    // bound for no file at all, so it reported no violations because it judged nothing, not because
+    // every file is fine. Non-emptiness rather than a floor — a floor would fall, and have to be
+    // re-cut, whenever an unrelated suite that happened to declare a long wait was deleted.
     expect(
       compared,
-      "the config lookup resolved nothing, so this checked no file at all",
-    ).toBeGreaterThanOrEqual(10);
+      "The scan compared a bound for NO file. Either no package suite declares a wait at or above " +
+        "Vitest's default any more, or the config lookup broke and every file declined. In that " +
+        "state this case passes with an empty violation list however wrong the bounds are, which " +
+        "is exactly what it is here to refuse.",
+    ).not.toEqual([]);
     expect(
       violations,
       "A run that legitimately takes longer than its bound is failed although it completed " +
@@ -511,6 +540,48 @@ describe("the package and app suites", () => {
         violations.join("\n  "),
     ).toEqual([]);
   });
+
+  // The other half of non-vacuity, covering a break the case above cannot see. `configFor` walks up
+  // from the file it is given, so a lookup can stop resolving under `packages/` while still
+  // resolving under `apps/` — and the scan's list stays non-empty on the root that still works, so
+  // it passes. Hence ONE ANCHOR PER ROOT. Both files are guards CLAUDE.md §3 names, so neither is
+  // deleted casually. `packages/ui` does run in browser mode, and its anchor resolves through
+  // `fallback()`'s browser arm — but it proves nothing about that arm's VALUE, because it asserts
+  // only that a number came back. Measured 2026-09-19: make that arm return
+  // VITEST_DEFAULT_TEST_TIMEOUT_MS and the `packages/ui` anchor still passes, with "gives a BROWSER
+  // project Vitest's larger default, not 5s" the ONLY failing case. The constant has a second read
+  // site in the project branch below `fallback()`, so setting the CONSTANT to 5000 instead fails
+  // that case AND "lets a project with extends: true inherit the top level"; both anchors stay green
+  // either way. The value is pinned by those resolver cases, never by an anchor.
+  //
+  // These run the SAME `resolvedBound` the scan runs, not a second copy of it: an anchor with its
+  // own copy of the lookup stays green while the scan's copy is broken.
+  //
+  // Neither anchor is itself judged by the scan — measured, neither declares a wait at or above
+  // Vitest's default — so neither appears in the list the scan compared, and nothing here asserts
+  // that it does.
+  //
+  // WHAT NEITHER HALF COVERS: a lookup that breaks for ONE package other than these two. The
+  // scan's list stays non-empty while any other package still resolves, and both anchors sit
+  // elsewhere, so such a break passes unseen.
+  it.each(["apps/server/src/working-order.test.ts", "packages/ui/src/no-hardcoded-chrome.test.ts"])(
+    "resolves a bound for %s, so the scan above is not declining everything",
+    async (name) => {
+      const file = join(REPO, name);
+      expect(existsSync(file), `${name} is gone — this case needs a file that still exists`).toBe(
+        true,
+      );
+
+      const resolution = await resolvedBound(file);
+      expect(
+        resolution?.bound,
+        `no per-test bound resolved for ${name}: either no vitest config sits above it, its ` +
+          `config would not import, or the configuration is one this guard declines to read. ` +
+          `Every file under that config would decline, and the scan above would report no ` +
+          `violations having compared nothing.`,
+      ).toBeTypeOf("number");
+    },
+  );
 });
 
 // The configuration resolver's own cases. Everything above decides whether ~1100 package suites

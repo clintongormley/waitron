@@ -2,7 +2,6 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import type { SlotDrain } from "@waitron/sync";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -19,16 +18,6 @@ export type BoxRetireDeps = {
   /** THIS (departing) node — the node that becomes `evicted`, the eviction document's signer, and
    * what the identity-key read the mint performs is keyed on. */
   nodeId: string;
-  /** The native slot-drain reader (the same slot box-status's `disposal` surface reads), or `undefined`
-   * when the held document names no carrier — which retireSelf refuses as `node.retire_no_carrier`. */
-  readSlotDrain: (() => Promise<SlotDrain>) | undefined;
-  /** The fence-LSN watermark this node recorded when it fenced (Ruling C2), or `null` for a dead box —
-   * the drain guard `isDrained(d, fenceLsn) && !d.active`; a `null` refuses fail-safe as not_drained. */
-  fenceLsn: string | null;
-  /** The carrier node id captured at BOOT that `readSlotDrain` keys on — retireSelf refuses
-   * (`node.retire_carrier_changed`) if the fresh held chart names a different serving-primary, because a
-   * fenced node does not restart on a carrier change. `undefined` exactly when `readSlotDrain` is. */
-  carrierNodeId: string | undefined;
 };
 
 /**
@@ -38,9 +27,8 @@ export type BoxRetireDeps = {
  * `system.manage` with `authorization.not_permitted` (403). `retireSelf`'s ordered refusals are
  * client-visible conflicts with the node's current membership standing, so each maps to 409 — an
  * UNMAPPED AppError would fall through to the boundary's 400 default, which is the wrong shape for a
- * "your node is not in a retirable state" answer. `node.retire_carrier_changed` is likewise a 409: the
- * carrier moved since boot, so the box must be restarted before it can retire. Any other thrown value is
- * a server fault the boundary answers with an opaque 500.
+ * "your node is not in a retirable state" answer. Any other thrown value is a server fault the boundary
+ * answers with an opaque 500.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -49,18 +37,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "node.retire_not_fenced": 409,
   "node.retire_no_carrier": 409,
-  "node.retire_carrier_changed": 409,
-  "node.retire_carrier_attached": 409,
-  "node.retire_not_drained": 409,
   "node.retire_superseded": 409,
 };
 
 /**
- * Registers `POST /api/box/retire` on the shared trading app — the management action a fully-drained
- * fenced node self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
+ * Registers `POST /api/box/retire` on the shared trading app — the management action a fenced node
+ * self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
  * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
  * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it), then
- * `retireSelf` runs on the app pool. `retireSelf` owns all retire SEMANTICS — the four ordered refusals,
+ * `retireSelf` runs on the app pool. `retireSelf` owns all retire SEMANTICS — the ordered refusals,
  * idempotency, the abort-before-write mint; this route is only the auth + status-mapping glue.
  *
  * `"box-retire.failed"` is a LOG TAG only (the boundary's `tag`), NOT a registered error code — matching
@@ -83,9 +68,6 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
         appDb: deps.appDb,
         ring: deps.ring,
         nodeId: deps.nodeId,
-        readSlotDrain: deps.readSlotDrain,
-        fenceLsn: deps.fenceLsn,
-        carrierNodeId: deps.carrierNodeId,
         log,
       });
       return c.json(result, 200);

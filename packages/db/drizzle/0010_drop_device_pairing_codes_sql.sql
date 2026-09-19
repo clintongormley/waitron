@@ -2,8 +2,10 @@
 -- reads or writes this table any more — `apps/server/src/device.ts` lost its mint/verify/redeem verbs
 -- and `device-api.ts` its three routes in the same commit. Dropped rather than left dormant because an
 -- unused table still carries grants and a classification row. NOT a publication membership: it was
--- classified `local`, and a `local` table is in neither publication
--- (`packages/sync/src/publications.ts`).
+-- classified `local` in `packages/db/src/classification.ts`'s `CORE_CLASSIFICATION` (that row went
+-- with the table in the same commit), and a `local` table was in neither of the two PostgreSQL
+-- publications a node held at the time of this drop — replication that was itself deleted on
+-- 2026-09-19, so there is no publication left to be in.
 --
 -- Safe to DROP outright: no other table ever pointed AT it, and its own mint-time binding FKs went with
 -- their columns. Receipt — `grep -rn 'device_pairing_codes' packages apps scripts` (excluding the

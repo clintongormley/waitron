@@ -50,10 +50,11 @@ unfiltered `main` run, not a wrong hook.
 ## Coverage thresholds are split by package
 
 Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` in `verifactu`,
-`fiscal-verifactu`, `core`, `db`, `sync` and `payments` — the fiscal core and the data-layer
+`fiscal-verifactu`, `core`, `db` and `payments` — the fiscal core and the data-layer
 foundations — and the `90/90/85/85` floor in every other package, browser packages included. The
-six are the owner's list, not a rule that derives them (`apps/server` holds the AEAT transport and
-sits at the floor).
+list is the owner's, not a rule that derives it (`apps/server` holds the AEAT transport and
+sits at the floor). `sync` was on it until that package was deleted on 2026-09-19;
+`scripts/coverage-thresholds.test.ts` is what the list is pinned against.
 
 The root project keeps the high bar: its coverage table is the root `scripts/*.mjs` plus the
 vocabulary module, two of them the classifiers that decide what CI and the hook run.
@@ -71,8 +72,8 @@ Before calling a package green, verify its CI coverage result on the current hea
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way file shards each with a `-merge` job that enforces the thresholds on
 the merged blob (#216), plus `test-fiscal-verifactu`, dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-venue-service`,
-`test-payments-stripe`, `test-payments-sumup`) and `test-replication`
-jobs, the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
+`test-payments-stripe`, `test-payments-sumup`),
+the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
 package's test-file count.

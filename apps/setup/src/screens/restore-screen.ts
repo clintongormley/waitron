@@ -8,7 +8,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchRestoreRequested, dispatchSetupGoto } from "../events.js";
 
-/** Collects the encrypted backup and recovery key for a cold restore on a fresh box. */
+/**
+ * Collects the encrypted backup and recovery key for a cold restore on a fresh box. The warning and
+ * the confirmation below ask about any server that is still RUNNING, never about "a primary or a
+ * mirror": a mirror holds none of the venue's rows, and an adopted one cannot even finish joining
+ * (`apps/server/src/finish-adoption.ts`'s `PendingAdoption` header), so naming a mirror as a place
+ * newer data might live would send the operator looking somewhere it cannot be.
+ */
 @customElement("setup-restore-screen")
 export class SetupRestoreScreen extends LitElement {
   static override styles = [
@@ -47,7 +53,7 @@ export class SetupRestoreScreen extends LitElement {
     return html`
       <h1>Restore from backup</h1>
       <p>
-        Use cold recovery only when no primary or mirror with newer restaurant data is available.
+        Use cold recovery only when no other server is still running with newer restaurant data.
       </p>
       <label class="field">
         Backup file <span aria-hidden="true">*</span>
@@ -110,7 +116,7 @@ export class SetupRestoreScreen extends LitElement {
       </label>
       <label class="field">
         <input
-          name="no-surviving-peer"
+          name="no-running-server"
           type="checkbox"
           required
           aria-invalid=${this.showError && !this.acknowledged ? "true" : "false"}
@@ -121,19 +127,19 @@ export class SetupRestoreScreen extends LitElement {
             this.acknowledged = (event.currentTarget as HTMLInputElement).checked;
           }}
         />
-        I confirm no usable primary or mirror has newer restaurant data.
+        I confirm no other running server has newer restaurant data.
         <wt-help-tooltip aria-label="Help with recovery confirmation"
-          >Check all existing servers before restoring. A backup may be older than a surviving
-          primary or mirror.</wt-help-tooltip
+          >Check every other server this restaurant still has before restoring. A backup may be
+          older than a server that is still running.</wt-help-tooltip
         >
       </label>
-      ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">Confirm that no usable primary or mirror has newer data.</p>` : nothing}
+      ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">Confirm that no other running server has newer data.</p>` : nothing}
       ${
         this.showError
           ? html`<wt-form-error-summary
               data-test="error"
               heading="There is a problem with this form"
-              .errors=${[this.artifact === undefined ? "Choose a backup file." : "", this.recoveryKey === "" ? "Enter the recovery key." : "", !this.acknowledged ? "Confirm that no usable primary or mirror has newer data." : ""].filter(Boolean)}
+              .errors=${[this.artifact === undefined ? "Choose a backup file." : "", this.recoveryKey === "" ? "Enter the recovery key." : "", !this.acknowledged ? "Confirm that no other running server has newer data." : ""].filter(Boolean)}
             ></wt-form-error-summary>`
           : this.errorMessage === undefined
             ? html``

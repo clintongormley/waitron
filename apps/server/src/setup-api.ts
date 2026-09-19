@@ -88,10 +88,9 @@ export interface SetupDeps {
    * document right after `establishIdentity` seals the identity key. A fresh primary signs its own
    * single-node org chart (design §6 R1), so a document exists before any promotion needs to bump one.
    * Optional like the other provision deps so an unwired box refuses via the deps gate. Provision path
-   * only — a mirror inherits the primary's document at adoption and refreshes it at boot via the
-   * membership reconciliation fetch (`GET /management-api/membership` → `persistNodeMembershipIfNewer`),
-   * NOT the `packages/sync` replication lane (`node_membership` is not enrolled there), and mints
-   * none. */
+   * only — a mirror mints none. `node_membership` is classified `local` ("this node's membership
+   * record; not copied", packages/db/src/classification.ts), so it is not a table any node-to-node copy
+   * carries. */
   seedMembership?: (nodeId: string) => Promise<void>;
   /** `writeTradingEnv(stateDir, …)` bound in boot: persists `<stateDir>/trading.env` so the next boot
    * enters trading mode. */
@@ -512,7 +511,9 @@ function directError(
  *   - `POST /setup-api/provision` → the PRIMARY-box path (slice 2b): mints the venue on this box and
  *     restarts it into trading mode. Gated on `deps.provision` being wired (`503 setup.not_ready`).
  *   - `POST /setup-api/adopt` → the MIRROR-box path (C2b): fetches the primary's bundle server-side,
- *     adopts the venue into this box, and restarts into mirror mode. Gated on `deps.adopt` the same way.
+ *     adopts the venue into this box, and restarts it. The restart does NOT reach a working mirror on
+ *     this tree — see `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header. Gated on
+ *     `deps.adopt` the same way.
  *   - a root catch-all `GET *` → either the built setup wizard (via `mountSpa`, when `deps.setupAppDir`
  *     is configured — slice 2c) or, absent that, the inline `SETUP_PLACEHOLDER_HTML` shell
  *     (`text/html`, `no-cache`). Either way it is registered LAST, so it only answers paths nothing
@@ -793,7 +794,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   // POST /setup-api/adopt — the MIRROR-side sibling of provision (C2b Task 9). Fetches the primary's
   // bundle server-side, adopts the venue into this box's own database, seals the token + persists
-  // `trading.env`, then restarts into mirror mode. It REUSES provision's one-shot latch (the same
+  // `trading.env`, then restarts. The box does NOT come back a working mirror — it parks in
+  // adoption-pending for good, and `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header
+  // says why. It REUSES provision's one-shot latch (the same
   // `provisioning` closure variable): a box is set up EITHER as a primary (provision) OR as a mirror
   // (adopt), never both, so a start of either action must latch out a concurrent start of the other —
   // the same "one unrecoverable first-boot action" guard, expressed once. Registered BEFORE the

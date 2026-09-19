@@ -1,8 +1,11 @@
 -- The pairing code is gone: a print agent now enrols via join-and-accept (`join_requests` + an admin
 -- accept), so nothing reads or writes this table any more — the mint/verify/redeem verbs that used it
 -- are removed in the same slice. Dropped rather than left dormant because an unused table still carries
--- grants and a classification row. NOT a publication membership: it was classified `local`, and a
--- `local` table is in neither publication (`packages/sync/src/publications.ts`).
+-- grants and a classification row. NOT a publication membership: it was classified `local` in
+-- `packages/db/src/classification.ts`'s `CORE_CLASSIFICATION` (that row went with the table in the
+-- same commit), and a `local` table was in neither of the two PostgreSQL publications a node held at
+-- the time of this drop — replication that was itself deleted on 2026-09-19, so there is no
+-- publication left to be in.
 --
 -- Safe to DROP outright: no other table ever pointed AT it, and its own scope FKs (tenant_id,
 -- location_id) go with their columns. Receipt — `grep -rn 'print_agent_pairing' packages apps scripts`

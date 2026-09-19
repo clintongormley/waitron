@@ -18,13 +18,13 @@ describe("tablesForPublication", () => {
     classify("tenants", "state", "r"),
     classify("deployment", "local", "r"),
   ];
-  it("returns only the ledger tables for the ledger publication", () => {
+  it("returns only the ledger tables for the ledger class", () => {
     expect(tablesForPublication(set, "ledger").sort()).toEqual(["payments", "sales"]);
   });
-  it("returns only the state tables for the state publication", () => {
+  it("returns only the state tables for the state class", () => {
     expect(tablesForPublication(set, "state")).toEqual(["tenants"]);
   });
-  it("excludes local tables from both publications", () => {
+  it("never returns a local table, for either class", () => {
     expect(tablesForPublication(set, "ledger")).not.toContain("deployment");
     expect(tablesForPublication(set, "state")).not.toContain("deployment");
   });

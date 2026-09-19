@@ -1,11 +1,9 @@
-import { createPostgresDb, readFenceLsn, readNodeMembership, type Database } from "@waitron/db";
+import { createPostgresDb, readNodeMembership, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { readSlotDrain, subscriptionName, type SlotDrain } from "@waitron/sync";
 import { INSTANCE_MIGRATOR_ROLE, withDatabase, withRole } from "@waitron/provisioning";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { servingPrimaryNodeId } from "@waitron/membership";
 import { DEFAULT_STATE_ROOT } from "./boot.js";
-import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
+import { deploymentEnvironment, resolveConfigDir } from "./config.js";
 import { dropAndCreateDatabase } from "./db-wipe.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
@@ -16,55 +14,43 @@ import "./errors.js";
 
 type Env = NodeJS.ProcessEnv;
 
-/** The comparable target a libpq URL names, for the `DATABASE_URL` vs `WAITRON_MIGRATIONS_DATABASE_URL`
- * same-database check and to derive the target db NAME the wipe recreates. `null` when the string is not
- * a standard URL or names no database in its path — either way uncomparable, which on this irreversible
- * path must refuse (fail closed). The port defaults to libpq's `5432` so an explicit `:5432` and an
- * omitted port compare equal. Username/password are NOT compared — the app pool and the migrator
- * legitimately connect as different roles to the same database. */
-function parseDbTarget(url: string): { host: string; port: string; database: string } | null {
+/** The database NAME `DATABASE_URL` points at — what the wipe drops and recreates. `null` when the
+ * string is not a standard URL or names no database in its path; on this irreversible path that must
+ * refuse (fail closed) rather than guess. */
+function parseDbName(url: string): string | null {
   try {
-    const u = new URL(url);
-    const database = u.pathname.replace(/^\//, "");
-    if (database === "") return null;
-    return { host: u.hostname, port: u.port || "5432", database };
+    const database = new URL(url).pathname.replace(/^\//, "");
+    return database === "" ? null : database;
   } catch {
     return null;
   }
 }
 
 /**
- * `waitron-rejoin rejoin [--accept-loss]` — WIPE this fenced, fully-drained ex-primary's local database,
- * recreate + re-migrate it migrator-owned, and clear `trading.env` so the next boot enters SETUP mode and
- * the operator re-adopts from the connect screen (spec §4). There is NO artifact restore (Ruling I3): the
- * tail is already on the carrier, and the wiped box re-adopts the carrier's baseline natively. The wipe's
- * `DROP DATABASE … WITH (FORCE)` reclaims the target's INACTIVE replication slot for free (probe F), so
- * rejoin does no slot drop of its own.
+ * `waitron-rejoin rejoin [--accept-loss]` — WIPE this fenced ex-primary's local database, recreate +
+ * re-migrate it migrator-owned, and clear `trading.env` so the next boot enters SETUP mode and the
+ * operator re-adopts from the connect screen (spec §4). There is NO artifact restore (Ruling I3).
  *
- * The drain guard (Ruling C2) is the fence-LSN watermark: `confirmed_flush_lsn >= deployment.fence_lsn`
- * AND the carrier's subscription slot no longer `active`, both monotone. A DEAD box that cannot prove its
- * drain (no fence LSN, or the carrier unreachable) takes `--accept-loss`: the operator forces the wipe,
- * accepting any un-shipped tail (spec §4.2 step 2).
+ * `--accept-loss` waives nothing today — see `RejoinDeps.acceptLoss`; the drain confirmation it used to
+ * waive went with the PostgreSQL replication machinery. The flag still records the operator's explicit
+ * acknowledgement in the log.
  *
  * Secrets and privileged connection strings come from the environment, NEVER argv (they leak into `ps`),
  * and each fails CLOSED on an empty value via `isUnset` — "an empty connection string is a valid
  * connection string" (CLAUDE.md §3). Env contract:
- *  - `DATABASE_URL` — the app pool. The pre-wipe `node_membership` read (whose result keys the drain
- *    reader on the carrier AND is threaded into `rejoinAsSecondary`) and the `deployment.fence_lsn` read.
- *    Its path names the TARGET database the wipe recreates. Closed by `closePreWipe` before the FORCE drop.
- *  - `WAITRON_MIGRATIONS_DATABASE_URL` — the migrator/owner pool. Reads the carrier's slot on this node
- *    (`pg_replication_slots`, unmasked to a non-superuser, probe B). MUST name the same host+port+database
- *    as `DATABASE_URL`, or the slot read and the guards would inspect a different db than the one wiped.
+ *  - `DATABASE_URL` — the app pool. The pre-wipe `node_membership` read threaded into
+ *    `rejoinAsSecondary`. Its path names the TARGET database the wipe recreates, so the guards and the
+ *    wipe always inspect one database. Closed by `closePreWipe` before the FORCE drop.
  *  - `WAITRON_MAINTENANCE_DATABASE_URL` — a `createdb createrole` admin connected to a DIFFERENT
  *    (maintenance) database. The wipe DROPs as the migrator-owner via `withRole` (probe F) and CREATEs as
  *    this plain admin holding CREATEDB, which the migrator lacks (probe A).
  *  - `WAITRON_TILL_*_ID` — via `tryLoadTillConfig` → the node's `nodeId`. Absent = an
  *    unprovisioned box, which `rejoin` is a misuse of.
  *  - `WAITRON_STATE_DIR` / `WAITRON_ENV` — the state dir whose `trading.env` is cleared, and the target
- *    environment (names the publication/subscription and gates `deploymentEnvironment`).
+ *    environment (gates `deploymentEnvironment`).
  *
  * Returns a process exit code: 0 on success, 1 on an expected failure (a missing/empty env var, an
- * unprovisioned box, an invalid `WAITRON_ENV`, mismatched target URLs, or ANY error out of the
+ * unprovisioned box, an invalid `WAITRON_ENV`, or ANY error out of the
  * orchestrator — a `rejoin.*` `AppError` reported by code, anything else reported generically), 2 on a
  * usage error. The orchestrator's error is NEVER rethrown and its `.message` is NEVER printed:
  * `bin-rejoin.ts`'s `.then(process.exit)` has no `.catch`, so a raw rejection here would dump a message
@@ -98,14 +84,7 @@ export async function runRejoin(deps: {
 
   const appDbUrl = deps.env.DATABASE_URL;
   if (isUnset(appDbUrl)) {
-    deps.out("DATABASE_URL must be set to the app pool for the pre-wipe membership + fence read");
-    return 1;
-  }
-  const migrationsUrl = deps.env.WAITRON_MIGRATIONS_DATABASE_URL;
-  if (isUnset(migrationsUrl)) {
-    deps.out(
-      "WAITRON_MIGRATIONS_DATABASE_URL must be set to the migrator/owner pool for the slot read",
-    );
+    deps.out("DATABASE_URL must be set to the app pool for the pre-wipe membership read");
     return 1;
   }
   const maintenanceUrl = deps.env.WAITRON_MAINTENANCE_DATABASE_URL;
@@ -116,29 +95,14 @@ export async function runRejoin(deps: {
     return 1;
   }
 
-  // TARGET INVARIANT: `DATABASE_URL` (the guards + fence read) and `WAITRON_MIGRATIONS_DATABASE_URL` (the
-  // slot read, and the db the wipe recreates) MUST name the same database, or the guards and slot vouch
-  // for one db while another is dropped. Fail CLOSED on an unparseable URL. `WAITRON_MAINTENANCE_DATABASE_URL`
-  // deliberately names a DIFFERENT db on the same server, so it is not compared.
-  const appTarget = parseDbTarget(appDbUrl);
-  const migrationsTarget = parseDbTarget(migrationsUrl);
-  if (appTarget === null || migrationsTarget === null) {
-    deps.out(
-      "DATABASE_URL and WAITRON_MIGRATIONS_DATABASE_URL must be standard libpq URLs naming a target database",
-    );
+  // The db the wipe drops and recreates is the one the guards read — both come from `DATABASE_URL`.
+  // Fail CLOSED on an unparseable URL rather than guess a name on an irreversible path.
+  // `WAITRON_MAINTENANCE_DATABASE_URL` deliberately names a DIFFERENT db on the same server.
+  const dbName = parseDbName(appDbUrl);
+  if (dbName === null) {
+    deps.out("DATABASE_URL must be a standard libpq URL naming a target database");
     return 1;
   }
-  if (
-    appTarget.host !== migrationsTarget.host ||
-    appTarget.port !== migrationsTarget.port ||
-    appTarget.database !== migrationsTarget.database
-  ) {
-    deps.out(
-      "DATABASE_URL and WAITRON_MIGRATIONS_DATABASE_URL must name the same host, port and database",
-    );
-    return 1;
-  }
-  const dbName = appTarget.database;
 
   let till: ReturnType<typeof tryLoadTillConfig>;
   try {
@@ -154,9 +118,10 @@ export async function runRejoin(deps: {
   }
   const cfg = till;
 
-  let environment: DeploymentEnvironment;
+  // Validated, not kept: an unreadable or wrong `WAITRON_ENV` must refuse before the wipe, even though
+  // nothing on this path now needs the value itself.
   try {
-    environment = deploymentEnvironment(deps.env);
+    deploymentEnvironment(deps.env);
   } catch (err) {
     return reportCode((err as AppError).code);
   }
@@ -174,56 +139,35 @@ export async function runRejoin(deps: {
       applyMigrations(connectionString, migrationOptionsFor(manifestSets(), null)));
   const rejoin = deps.rejoin ?? rejoinAsSecondary;
 
-  // Open the pre-wipe pools and read the held chart + fence LSN ONCE. The held document is BOTH what keys
-  // the slot reader on the carrier AND what `rejoinAsSecondary` runs its standing guards against. A `pg`
-  // connect/read failure can carry the connection string, so report it GENERICALLY here rather than
-  // letting it reject raw. `appDb` is closed if a later open/read fails, so a half-open set does not leak.
+  // Open the app pool and read the held chart ONCE — the chart `rejoinAsSecondary` runs its standing
+  // guards against. A `pg` connect/read failure can carry the connection string, so report it
+  // GENERICALLY here rather than letting it reject raw.
   let appDb: Database;
-  let migrationsDb: Database;
   let held: Awaited<ReturnType<typeof readNodeMembership>>;
-  let fenceLsn: string | null;
   try {
     appDb = await connect(appDbUrl);
   } catch {
     return failGeneric();
   }
   try {
-    migrationsDb = await connect(migrationsUrl);
+    held = await readNodeMembership(appDb);
   } catch {
     await appDb.close();
     return failGeneric();
   }
-  try {
-    held = await readNodeMembership(appDb);
-    fenceLsn = await readFenceLsn(appDb);
-  } catch {
-    await Promise.all([appDb.close(), migrationsDb.close()]);
-    return failGeneric();
-  }
-
-  // The carrier keys the slot reader on this node's publisher-side slot (named by the carrier, C1). A
-  // held chart with no serving-primary → no reader → `rejoin.no_carrier`, which `--accept-loss` does
-  // NOT waive (it waives only the drain guards, `carrier_attached`/`not_drained`).
-  const carrierNodeId = held === null ? undefined : servingPrimaryNodeId(held);
-  const readSlotDrainReader: (() => Promise<SlotDrain>) | undefined =
-    carrierNodeId === undefined
-      ? undefined
-      : () => readSlotDrain(migrationsDb, subscriptionName(environment, carrierNodeId));
 
   let poolsClosed = false;
   const rejoinDeps: RejoinDeps = {
     held,
     nodeId: cfg.nodeId,
-    readSlotDrain: readSlotDrainReader,
-    fenceLsn,
     acceptLoss,
     closePreWipe: () =>
-      Promise.all([appDb.close(), migrationsDb.close()]).then(() => {
+      appDb.close().then(() => {
         poolsClosed = true;
       }),
-    // The whole wipe (Ruling I3 / probe F): DROP as the migrator-owner (reclaims the inactive slot),
-    // CREATE as the plain maintenance admin holding CREATEDB, re-migrate the fresh db migrator-owned, then
-    // clear trading.env so the next boot enters setup mode. No slot drop, no migrator→repl grant.
+    // The whole wipe (Ruling I3 / probe F): DROP as the migrator-owner, CREATE as the plain maintenance
+    // admin holding CREATEDB, re-migrate the fresh db migrator-owned, then clear trading.env so the next
+    // boot enters setup mode.
     wipeDatabase: async () => {
       const dropAs = await connect(withRole(maintenanceUrl, INSTANCE_MIGRATOR_ROLE));
       const createAs = await connect(maintenanceUrl);
@@ -255,9 +199,9 @@ export async function runRejoin(deps: {
     // NEVER echoes `.message`: a failed migrate (bad perms, full disk) could carry the admin string.
     return failGeneric();
   } finally {
-    // On a guard refusal the orchestrator throws before `closePreWipe`, so the two pre-wipe pools are
-    // still open — close them here (idempotent via `poolsClosed`, so the success/wipe path never
-    // double-closes across the FORCE drop).
-    if (!poolsClosed) await Promise.all([appDb.close(), migrationsDb.close()]).catch(() => {});
+    // On a guard refusal the orchestrator throws before `closePreWipe`, so the pre-wipe pool is still
+    // open — close it here (idempotent via `poolsClosed`, so the success/wipe path never double-closes
+    // across the FORCE drop).
+    if (!poolsClosed) await appDb.close().catch(() => {});
   }
 }

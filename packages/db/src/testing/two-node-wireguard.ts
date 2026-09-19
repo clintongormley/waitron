@@ -11,10 +11,9 @@ export type { StartedNetwork } from "./two-node.js";
  * A two-node PostgreSQL cluster whose nodes reach each other ONLY across a WireGuard tunnel — the
  * local stand-in for a box and its cloud twin talking over an untrusted network. The sibling
  * {@link import("./two-node.js")} fixture lets each node dial the other by its Docker DNS name,
- * a trusted, zero-latency LAN; this one puts a real encrypted WireGuard link in the path so the
- * transport a cloud standby actually runs over is exercised, without a cloud. The mechanism the
- * suites on top of it lean on is written up in
- * `docs/superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md`.
+ * a trusted, zero-latency LAN; this one puts a real encrypted WireGuard link in the path, so a
+ * suite can be run over an untrusted network without a cloud. Its one consumer outside this file is
+ * `packages/db/src/change-feed-replication.pg.test.ts`.
  *
  * Each node runs its own `wg0` interface (a kernel WireGuard device — `NET_ADMIN` is the only extra
  * capability, no privileged container and no `/dev/net/tun`, verified on `postgres:18-alpine`). The
@@ -67,8 +66,8 @@ export interface StartedWireguardNode {
 }
 
 export interface TwoNodeWireguardOptions {
-  /** Applies every migration set each node needs. Defaults to a no-op — consumers that need a schema
-   * (the replication suites) provision each node themselves AS the migrator afterward. */
+  /** Applies every migration set each node needs. Defaults to a no-op — a consumer that needs a
+   * schema provisions each node itself AS the migrator afterward. */
   migrate?(uri: string): Promise<void>;
   /** When Docker is unavailable, a truthy value makes the failure loud rather than letting the raw
    * container-start error surface. The caller normally gates the suite on `dockerAvailable()`. */

@@ -370,12 +370,13 @@ declare module "@waitron/shared" {
       sqlState: string | null;
     };
     /** A database `instance` would migrate is owned by a role other than `waitron_migrator`. Refused
-     * rather than adopted: native logical replication needs the publication-creating role
-     * (`waitron_migrator`) to own every published table, so `instance` creates the database `OWNER
-     * waitron_migrator` and migrates AS that role (a session `SET ROLE` over the admin's
-     * credentials). A pre-existing database owned by someone else cannot be made to satisfy that by
-     * granting — ownership is fixed at CREATE (owner decision 2026-09-07, never `REASSIGN OWNED`) —
-     * so the developer drops it and re-runs (`wa-wt reset`; nothing is deployed, CLAUDE.md §3).
+     * rather than adopted: `instance` creates the database `OWNER waitron_migrator` and migrates AS
+     * that role (a session `SET ROLE` over the admin's credentials), because a plain admin connection
+     * to a migrator-owned database cannot even `CREATE TABLE` in `public` — `42501`, asserted against
+     * a real server by `instance-apply.pg.test.ts`'s C5 case. A pre-existing database owned by someone
+     * else cannot be made to satisfy that by granting — ownership is fixed at CREATE (owner decision
+     * 2026-09-07, never `REASSIGN OWNED`) — so the developer drops it and re-runs (`wa-wt reset`;
+     * nothing is deployed, CLAUDE.md §3).
      *
      * Raised in TWO places for the same fact: the pure planner refuses an existing wrongly-owned
      * database before spending an action, and `verifyGrants` (instance-apply.ts) reads
@@ -402,11 +403,5 @@ declare module "@waitron/shared" {
      * reinstall, never an automatic repair.
      */
     "provisioning.database_ahead": { set: string; unknownMigrations: string[] };
-    /** The instance is not set up for native logical replication. `missing` lists each unmet
-     * precondition in words (`wal_level is not logical`, `replication role missing`,
-     * `migrator lacks pg_create_subscription`, …) — the box image / operator runs the bootstrap
-     * (`replication-bootstrap.ts`), and this refusal says what it has not yet done. `provisioning.*`
-     * because it is a fact about standing a deployment up; labels only, never a secret. */
-    "provisioning.replication_not_ready": { missing: string[] };
   }
 }

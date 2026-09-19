@@ -3,16 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
-import type { SignedMembershipDocument } from "@waitron/membership";
 import { describe, expect, it, vi } from "vitest";
 import type { RejoinDeps, RejoinResult } from "./rejoin.js";
 import { runRejoin } from "./rejoin-command.js";
 
-// DATABASE_URL and WAITRON_MIGRATIONS_DATABASE_URL name the SAME host+port+database (the target
-// invariant) — differing only in the connecting role, which is not compared. The maintenance URL names
-// a DIFFERENT db on the same server (the wipe cannot drop the db it is connected to).
+// The maintenance URL names a DIFFERENT db on the same server (the wipe cannot drop the db it is
+// connected to); `DATABASE_URL`'s path names the target the wipe recreates.
 const APP_URL = "postgres://app@localhost/app_db";
-const MIGRATIONS_URL = "postgres://waitron_migrator@localhost/app_db";
 const MAINTENANCE_URL = "postgres://admin:hunter2@localhost/postgres";
 const STATE_DIR = mkdtempSync(join(tmpdir(), "rejoin-cmd-"));
 
@@ -23,7 +20,6 @@ const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base: Record<string, string | undefined> = {
   DATABASE_URL: APP_URL,
-  WAITRON_MIGRATIONS_DATABASE_URL: MIGRATIONS_URL,
   WAITRON_MAINTENANCE_DATABASE_URL: MAINTENANCE_URL,
   WAITRON_STATE_DIR: STATE_DIR,
   WAITRON_TILL_TILL_ID: TILL,
@@ -32,9 +28,9 @@ const base: Record<string, string | undefined> = {
   WAITRON_TILL_LOCATION_ID: LOCATION,
 };
 
-// A minimal fake `Database`: `readNodeMembership` + `readFenceLsn` each run a `to_regclass` existence
-// probe then a value read. By default every probe returns `{ exists: false }` → no held document, null
-// fence LSN → `carrier` undefined (the common test path). `close` is a spy so pool-close can be asserted.
+// A minimal fake `Database`: `readNodeMembership` runs a `to_regclass` existence probe then a value
+// read. By default the probe returns `{ exists: false }` → no held document (the common test path).
+// `close` is a spy so pool-close can be asserted.
 function fakeDb(execute?: Database["execute"]): Database {
   return {
     execute: execute ?? (vi.fn(async () => ({ rows: [{ exists: false }] })) as never),
@@ -87,36 +83,17 @@ describe("waitron-rejoin rejoin", () => {
     expect(out).toEqual([expect.stringMatching(/DATABASE_URL/)]);
   });
 
-  it("refuses an empty WAITRON_MIGRATIONS_DATABASE_URL (fail closed)", async () => {
-    const { code, out } = await run({ WAITRON_MIGRATIONS_DATABASE_URL: "" });
-    expect(code).toBe(1);
-    expect(out).toEqual([expect.stringMatching(/WAITRON_MIGRATIONS_DATABASE_URL/)]);
-  });
-
   it("refuses an empty WAITRON_MAINTENANCE_DATABASE_URL (fail closed)", async () => {
     const { code, out } = await run({ WAITRON_MAINTENANCE_DATABASE_URL: "" });
     expect(code).toBe(1);
     expect(out).toEqual([expect.stringMatching(/WAITRON_MAINTENANCE_DATABASE_URL/)]);
   });
 
-  it("refuses when DATABASE_URL and WAITRON_MIGRATIONS_DATABASE_URL name different databases, opening no pool", async () => {
-    const connect = vi.fn(async () => fakeDb());
-    const rejoin = vi.fn(HAPPY_REJOIN);
-    const { code, out } = await run(
-      { WAITRON_MIGRATIONS_DATABASE_URL: "postgres://waitron_migrator@localhost/OTHER_db" },
-      { connect, rejoin },
-    );
-    expect(code).toBe(1);
-    expect(out.join("\n")).toMatch(/same host, port and database/);
-    expect(connect).not.toHaveBeenCalled();
-    expect(rejoin).not.toHaveBeenCalled();
-  });
-
   it("refuses (fail closed) when DATABASE_URL cannot be parsed as a standard URL", async () => {
     const connect = vi.fn(async () => fakeDb());
     const { code, out } = await run({ DATABASE_URL: "not a url" }, { connect });
     expect(code).toBe(1);
-    expect(out.join("\n")).toMatch(/standard libpq URLs/);
+    expect(out.join("\n")).toMatch(/DATABASE_URL must be a standard libpq URL/);
     expect(connect).not.toHaveBeenCalled();
   });
 
@@ -163,58 +140,6 @@ describe("waitron-rejoin rejoin", () => {
     expect(received?.acceptLoss).toBe(true);
   });
 
-  it("passes acceptLoss:false and no slot reader when the held chart names no carrier", async () => {
-    let received: RejoinDeps | undefined;
-    const { code } = await run(
-      {},
-      {
-        rejoin: async (d): Promise<RejoinResult> => {
-          received = d;
-          return { wiped: true as const, carrierNodeId: "carrier-x" };
-        },
-      },
-    );
-    expect(code).toBe(0);
-    expect(received?.acceptLoss).toBe(false);
-    expect(received?.nodeId).toBe(NODE);
-    // No held document (existence probe false) → no carrier → no slot reader.
-    expect(received?.readSlotDrain).toBeUndefined();
-    expect(received?.fenceLsn).toBeNull();
-  });
-
-  it("wires a carrier-keyed slot reader and the fence LSN when the held chart names a serving-primary", async () => {
-    // appDb execute sequence: readNodeMembership (exists true, then the document) then readFenceLsn
-    // (exists true, then the fence_lsn). The reader is then defined (carrier present).
-    const held: SignedMembershipDocument = {
-      body: {
-        term: 1,
-        nodes: [{ nodeId: "carrier-1", contactUrl: "", standing: "serving-primary" }],
-      },
-    } as unknown as SignedMembershipDocument;
-    const execute = vi
-      .fn()
-      .mockResolvedValueOnce({ rows: [{ exists: true }] })
-      .mockResolvedValueOnce({ rows: [{ document: held }] })
-      .mockResolvedValueOnce({ rows: [{ exists: true }] })
-      .mockResolvedValueOnce({
-        rows: [{ fence_lsn: "0/1500000" }],
-      }) as unknown as Database["execute"];
-    let received: RejoinDeps | undefined;
-    const { code } = await run(
-      {},
-      {
-        connect: async (url) => (url === APP_URL ? fakeDb(execute) : fakeDb()),
-        rejoin: async (d): Promise<RejoinResult> => {
-          received = d;
-          return { wiped: true as const, carrierNodeId: "carrier-1" };
-        },
-      },
-    );
-    expect(code).toBe(0);
-    expect(received?.readSlotDrain).toBeDefined();
-    expect(received?.fenceLsn).toBe("0/1500000");
-  });
-
   it("drives the real wipe closure: drop+create on two handles then re-migrate, leaking no secret", async () => {
     const connected: string[] = [];
     const migrated: string[] = [];
@@ -253,12 +178,12 @@ describe("waitron-rejoin rejoin", () => {
       {},
       {
         rejoin: async () => {
-          throw new AppError("rejoin.not_drained", {});
+          throw new AppError("rejoin.no_carrier", {});
         },
       },
     );
     expect(code).toBe(1);
-    expect(out.join("\n")).toContain("rejoin.not_drained");
+    expect(out.join("\n")).toContain("rejoin.no_carrier");
   });
 
   it("reports an out-of-namespace AppError generically, never rethrown", async () => {
@@ -291,7 +216,7 @@ describe("waitron-rejoin rejoin", () => {
     expect(out).toEqual(["rejoin failed"]);
   });
 
-  it("closes both pre-wipe pools when a guard rejects (no connection leak)", async () => {
+  it("closes the pre-wipe pool when a guard rejects (no connection leak)", async () => {
     const opened: Database[] = [];
     const connect = async (): Promise<Database> => {
       const db = fakeDb();
@@ -308,7 +233,7 @@ describe("waitron-rejoin rejoin", () => {
       },
     );
     expect(code).toBe(1);
-    expect(opened).toHaveLength(2); // appDb + migrationsDb; the wipe's handles are never opened
+    expect(opened).toHaveLength(1); // the app pool alone; the wipe's handles are never opened
     for (const db of opened) expect(db.close).toHaveBeenCalledTimes(1);
   });
 
@@ -327,26 +252,7 @@ describe("waitron-rejoin rejoin", () => {
     expect(out.join("\n")).not.toContain("app_db");
   });
 
-  it("reports generically and closes the app pool when opening the migrations pool fails", async () => {
-    const appClose = vi.fn(async () => {});
-    const { code, out } = await run(
-      {},
-      {
-        connect: async (url) => {
-          if (url === MIGRATIONS_URL) throw new Error(`connect ECONNREFUSED ${MIGRATIONS_URL}`);
-          return {
-            execute: vi.fn(async () => ({ rows: [] })),
-            close: appClose,
-          } as unknown as Database;
-        },
-      },
-    );
-    expect(code).toBe(1);
-    expect(out).toEqual(["rejoin failed"]);
-    expect(appClose).toHaveBeenCalledOnce();
-  });
-
-  it("reports generically and closes both pools when the membership/fence read fails", async () => {
+  it("reports generically and closes the pool when the membership read fails", async () => {
     const close = vi.fn(async () => {});
     const throwingRead = vi.fn(async () => {
       throw new Error("relation node_membership read failed");
@@ -359,6 +265,6 @@ describe("waitron-rejoin rejoin", () => {
     );
     expect(code).toBe(1);
     expect(out).toEqual(["rejoin failed"]);
-    expect(close).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

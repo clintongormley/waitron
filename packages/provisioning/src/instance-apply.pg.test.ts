@@ -114,9 +114,11 @@ describe("applyInstance against a blank container", () => {
       expect(after.roles.waitron_app?.createRole).toBe(false);
       expect(after.roles.waitron_app?.memberOf).toEqual(["app_user"]);
 
-      // The whole point of the swap: the migrator owns the database AND every table in it — which is
-      // what `CREATE PUBLICATION … FOR TABLE` requires. Read the owner of the database and of every
-      // public table back, not implied by non-throwing SQL.
+      // The point of this step: the migrator owns the database AND every table in it. WHY it is
+      // arranged that way — and that the original reason died with the replication — is in
+      // `docs/developers/conventions-data.md`, "migrates AS the migrator"; do not restate it here.
+      // What this case checks is the arrangement itself: read the owner of the database and of every
+      // public table back, rather than inferring it from SQL that did not throw.
       expect(after.databaseOwner).toBe("waitron_migrator");
       const dbOwner = await admin.execute<{ owner: string }>(
         sql`select pg_get_userbyid(datdba) as owner from pg_database where datname = ${DATABASE}`,
@@ -213,8 +215,9 @@ describe("applyInstance against a blank container", () => {
   });
 
   it("refuses a database owned by someone other than the migrator", async () => {
-    // Ownership is fixed at CREATE (owner decision 2026-09-07): a database owned by an admin cannot
-    // be adopted for replication. Read its real owner back and refuse.
+    // Ownership is fixed at CREATE (owner decision 2026-09-07) and cannot be corrected afterwards by
+    // this path, so a database owned by an admin is refused. Read its real owner back rather than
+    // assuming the name implies the owner.
     const foreign = "waitron_foreign_suite";
     await admin.execute(sql.raw(`create database ${quoteIdent(foreign)}`));
     try {

@@ -1446,7 +1446,8 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
 });
 
 // The mirror-side sibling of `/setup-api/provision` (C2b Task 9): fetch the primary's bundle
-// server-side, adopt the venue, then restart into mirror mode. It REUSES the same one-shot latch, the
+// server-side, adopt the venue, then restart (into adoption-pending, not a working mirror — see
+// `apps/server/src/finish-adoption.ts`). It REUSES the same one-shot latch, the
 // same deps gate + `setup.not_ready`/`setup.already_provisioning` refusals, and the same
 // deferred-restart shape provision uses — these tests copy those tests' shape.
 const PRIMARY_URL = "https://primary.example";

@@ -242,7 +242,7 @@ export interface CatalogueSummary {
   id: string;
   name: string;
   active: boolean;
-  /** The sync-seam version, created at 1 (bumped by a future replication task). */
+  /** The sync-seam version. Created at 1; nothing in the tree bumps it today. */
   version: number;
 }
 

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
-import type { SubscriptionStatus } from "@waitron/sync";
 import {
   PENDING_ADOPTION_FILE,
   readPendingAdoption,
@@ -34,26 +33,9 @@ const PENDING: PendingAdoption = {
   originNodeId: "77777777-7777-4777-8777-777777777777",
 };
 
-function status(tablesTotal: number, tablesReady: number): SubscriptionStatus {
-  return {
-    name: "sub",
-    exists: true,
-    enabled: true,
-    publications: [],
-    workerUp: true,
-    receivedLsn: null,
-    latestEndLsn: null,
-    applyErrorCount: 0,
-    syncErrorCount: 0,
-    tablesTotal,
-    tablesReady,
-  };
-}
-
 const dummyDb = {} as Database;
 const dummyRing = {} as KeyRing;
 const noop = (): void => {};
-const immediateSleep = (): Promise<void> => Promise.resolve();
 
 describe("writePendingAdoption / readPendingAdoption", () => {
   it("round-trips the pending record and writes it 0600", async () => {
@@ -71,138 +53,88 @@ describe("writePendingAdoption / readPendingAdoption", () => {
 });
 
 describe("runFinishAdoption", () => {
-  it("polls until every table is ready, then establishes, ensures the viewer, and unlinks the file", async () => {
+  it("establishes the reserved identity, ensures the viewer, and unlinks the file", async () => {
     const dir = await tempDir();
     await writePendingAdoption(dir, PENDING);
-    // Not-ready twice (initial copy still running), then ready.
-    const statuses = [status(3, 1), status(3, 2), status(3, 3)];
-    let read = 0;
     let established: unknown;
+    let viewerCalls = 0;
     await runFinishAdoption({
-      replicationDb: dummyDb,
+      ownerDb: dummyDb,
       ring: dummyRing,
       stateDir: dir,
-      environment: "preproduction",
       modules: [],
-      readStatus: () => Promise.resolve(statuses[read++]!),
       establish: (args) => {
         established = args;
-        return Promise.resolve();
-      },
-      ensureViewer: () => Promise.resolve(),
-      sleep: immediateSleep,
-      log: noop as never,
-      signal: new AbortController().signal,
-    });
-    expect(read).toBe(3); // two not-ready polls + the ready one
-    expect(established).toMatchObject({ standby: PENDING.standby });
-    expect(await readPendingAdoption(dir)).toBeNull(); // file unlinked
-  });
-
-  it("subscribes to the standby's own subscription name (C1)", async () => {
-    const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
-    let subName: string | undefined;
-    await runFinishAdoption({
-      replicationDb: dummyDb,
-      ring: dummyRing,
-      stateDir: dir,
-      environment: "preproduction",
-      modules: [],
-      readStatus: (name) => {
-        subName = name;
-        return Promise.resolve(status(1, 1));
-      },
-      establish: () => Promise.resolve(),
-      ensureViewer: () => Promise.resolve(),
-      sleep: immediateSleep,
-      log: noop as never,
-      signal: new AbortController().signal,
-    });
-    expect(subName).toBe(`waitron_preproduction_sub_${STANDBY_NODE_ID.replace(/-/g, "")}`);
-  });
-
-  it("returns immediately when there is no pending file (nothing to finish)", async () => {
-    const dir = await tempDir();
-    let establishCalls = 0;
-    await runFinishAdoption({
-      replicationDb: dummyDb,
-      ring: dummyRing,
-      stateDir: dir,
-      environment: "preproduction",
-      modules: [],
-      readStatus: () => Promise.resolve(status(1, 1)),
-      establish: () => {
-        establishCalls += 1;
-        return Promise.resolve();
-      },
-      ensureViewer: () => Promise.resolve(),
-      sleep: immediateSleep,
-      log: noop as never,
-      signal: new AbortController().signal,
-    });
-    expect(establishCalls).toBe(0);
-  });
-
-  it("logs establish_failed and keeps the file when establish throws, then retries and succeeds", async () => {
-    const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
-    let establishCalls = 0;
-    let viewerCalls = 0;
-    const events: string[] = [];
-    await runFinishAdoption({
-      replicationDb: dummyDb,
-      ring: dummyRing,
-      stateDir: dir,
-      environment: "preproduction",
-      modules: [],
-      readStatus: () => Promise.resolve(status(1, 1)),
-      establish: () => {
-        establishCalls += 1;
-        if (establishCalls === 1) return Promise.reject(new Error("copy still settling"));
         return Promise.resolve();
       },
       ensureViewer: () => {
         viewerCalls += 1;
         return Promise.resolve();
       },
-      sleep: immediateSleep,
-      log: ((_l: string, event: string) => events.push(event)) as never,
-      signal: new AbortController().signal,
+      log: noop as never,
     });
-    expect(establishCalls).toBe(2); // failed once, retried, succeeded
+    expect(established).toMatchObject({ standby: PENDING.standby });
     expect(viewerCalls).toBe(1);
-    expect(events).toContain("adoption.establish_failed");
-    expect(await readPendingAdoption(dir)).toBeNull(); // eventually unlinked
+    expect(await readPendingAdoption(dir)).toBeNull(); // file unlinked
   });
 
-  it("returns without establishing when aborted mid-poll (the copy has not finished)", async () => {
+  it("returns immediately when there is no pending file (nothing to finish)", async () => {
     const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
-    const controller = new AbortController();
     let establishCalls = 0;
     await runFinishAdoption({
-      replicationDb: dummyDb,
+      ownerDb: dummyDb,
       ring: dummyRing,
       stateDir: dir,
-      environment: "preproduction",
       modules: [],
-      readStatus: () => Promise.resolve(status(3, 1)), // never ready
       establish: () => {
         establishCalls += 1;
         return Promise.resolve();
       },
       ensureViewer: () => Promise.resolve(),
-      // Abort during the first inter-poll sleep; the loop's top-of-tick check then returns.
-      sleep: () => {
-        controller.abort();
-        return Promise.resolve();
-      },
       log: noop as never,
-      signal: controller.signal,
     });
     expect(establishCalls).toBe(0);
-    // The file is deliberately KEPT — a later boot re-enters the adoption-pending mode and retries.
+  });
+
+  it("logs establish_failed and KEEPS the file when establish throws, so the next boot retries", async () => {
+    const dir = await tempDir();
+    await writePendingAdoption(dir, PENDING);
+    let viewerCalls = 0;
+    const events: string[] = [];
+    await runFinishAdoption({
+      ownerDb: dummyDb,
+      ring: dummyRing,
+      stateDir: dir,
+      modules: [],
+      establish: () => Promise.reject(new Error("no tenant row yet")),
+      ensureViewer: () => {
+        viewerCalls += 1;
+        return Promise.resolve();
+      },
+      log: ((_l: string, event: string) => events.push(event)) as never,
+    });
+    expect(events).toContain("adoption.establish_failed");
+    // The viewer never ran (establish comes first) and the latch survives.
+    expect(viewerCalls).toBe(0);
+    expect(await readFile(join(dir, PENDING_ADOPTION_FILE), "utf8")).not.toBe("");
+  });
+
+  it("KEEPS the file when the viewer step throws after a successful establish", async () => {
+    // The order matters: establish, then the viewer, then the unlink. A viewer failure must leave the
+    // latch in place — deleting the unlink's position and clearing the file first would fail this.
+    const dir = await tempDir();
+    await writePendingAdoption(dir, PENDING);
+    const events: string[] = [];
+    await runFinishAdoption({
+      ownerDb: dummyDb,
+      ring: dummyRing,
+      stateDir: dir,
+      modules: [],
+      establish: () => Promise.resolve(),
+      ensureViewer: () => Promise.reject(new Error("persons insert failed")),
+      log: ((_l: string, event: string) => events.push(event)) as never,
+    });
+    expect(events).toContain("adoption.establish_failed");
     expect(await readFile(join(dir, PENDING_ADOPTION_FILE), "utf8")).not.toBe("");
   });
 });

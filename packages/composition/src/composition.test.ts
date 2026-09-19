@@ -71,7 +71,7 @@ describe("ALL_MODULES backup contribution", () => {
     expect(fiscal.backup?.restore).toBe(FISCAL_RESTORE);
   });
 
-  it("image bytes belong to replicated database state", () => {
+  it("image bytes belong to classified database state, not non-DB state", () => {
     const core = ALL_MODULES.find((m) => m.name === "core");
     expect(core?.backup?.nonDbState).toBeUndefined();
     expect(

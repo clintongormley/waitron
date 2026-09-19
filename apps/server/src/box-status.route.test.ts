@@ -16,10 +16,8 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 
-// Exercise box-status authorization and chain reads on PostgreSQL with manager login. The native
-// replication/disposal cells are covered by the sibling real-PG suites (box-status.replication.test.ts,
-// box-status.disposal.test.ts) that seed actual slots; here the slot/subscription readers are absent, so
-// replication reads `configured:false` — this suite is about the auth gate and the chain read.
+// Exercise box-status authorization and chain reads on PostgreSQL with manager login. This suite is
+// about the auth gate and the chain read.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
@@ -125,9 +123,6 @@ function buildApp(
       health: createHealthState(opts.now),
       now: () => opts.now,
       tlsCertPath: opts.tlsCertPath,
-      readReplicationSlots: undefined,
-      readReplicationSubscription: undefined,
-      readDisposal: undefined,
       readBackup: opts.readBackup,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
@@ -176,7 +171,6 @@ describe("GET /api/box/status (real postgres)", () => {
     expect(body.singletonRole).toBe("primary");
     expect(body.environment).toBe("preproduction");
     expect(body.cert).toEqual({ available: false }); // tlsCertPath undefined
-    expect(body.replication).toEqual({ configured: false }); // no slot/subscription reader wired here
     expect(body.backup).toEqual({ configured: false });
     expect(body.configConflicts).toBeUndefined(); // the config-conflict cell was removed (swap S4)
     expect(body.time.source).toMatch(/timedatectl|unavailable/);

@@ -91,8 +91,8 @@ export function planInstance(
     });
   }
   // Ownership is fixed at CREATE (owner decision 2026-09-07, never `REASSIGN OWNED`): a database
-  // owned by anyone but the migrator cannot be made to satisfy replication by granting, so it is
-  // refused rather than adopted. `databaseExists` implies `databaseOwner` is set.
+  // owned by anyone but the migrator cannot be put right by granting, so it is refused rather than
+  // adopted. `databaseExists` implies `databaseOwner` is set.
   if (state.databaseExists && state.databaseOwner !== INSTANCE_MIGRATOR_ROLE) {
     throw new AppError("provisioning.database_not_owned", {
       database: request.database,

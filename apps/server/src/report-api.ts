@@ -33,9 +33,9 @@ import { requirePeriod } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**
- * Reporting dependencies include the tenant and data node. On a mirror the data
- * node is the replicated origin. Per-node reports use it; the overview and modelo
- * 303 aggregate the tenant's nodes.
+ * Reporting dependencies include the tenant and data node. On a mirror the data node is the ORIGIN
+ * recorded in `mirror_config` — the primary it was adopted from, not the mirror's own id. Per-node
+ * reports use it; the overview and modelo 303 aggregate the tenant's nodes.
  */
 export interface ReportApiDeps {
   db: Database;
@@ -121,10 +121,11 @@ export async function resolveVenueClock(
   const row = rows[0];
   /* v8 ignore start */
   if (row === undefined) {
-    // Expected-unreachable: the node row (own on a primary, the replicated origin on a mirror) is
-    // always present, and `nodes.location_id` (NOT NULL, FK to locations.id — 0015_nodes) guarantees
-    // its location row (mirrors the modelo 303 route's whoami-style tenant guard). A misconfigured
-    // node becomes an opaque 500 via `run`.
+    // Expected-unreachable on a primary: its own node row is always present, and `nodes.location_id`
+    // (NOT NULL, FK to locations.id — 0015_nodes) guarantees its location row (mirrors the modelo 303
+    // route's whoami-style tenant guard). On a mirror the row is the configured origin's, present only
+    // once the mirror holds the venue's rows — nothing brings them today (`mirror-bundle.ts`'s header).
+    // Either way a node with no row becomes an opaque 500 via `run`.
     throw new Error(`report-api: no node/location row for ${nodeId}`);
   }
   /* v8 ignore stop */

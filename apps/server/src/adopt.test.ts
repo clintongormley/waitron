@@ -18,14 +18,7 @@ import {
 import { type RealPostgres } from "@waitron/db/testing/postgres.js";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
-import { REPLICATION_ROLE } from "@waitron/provisioning";
-import { publicationName, subscriptionName, type SubscriptionStatus } from "@waitron/sync";
-import {
-  adoptFromPrimary,
-  type AdoptCredential,
-  type PersistTradingArgs,
-  type ReplicationVerbs,
-} from "./adopt.js";
+import { adoptFromPrimary, type AdoptCredential, type PersistTradingArgs } from "./adopt.js";
 import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { PendingAdoption } from "./finish-adoption.js";
@@ -33,9 +26,7 @@ import { verifyBreakGlass } from "./break-glass.js";
 
 // Real Postgres, not PGlite: adopt stamps `deployment`, writes `mirror_config` and mints the
 // break-glass verifier on the OWNER connection while the read-back / foreign-tenant guard run as the
-// same owner — a two-role split PGlite's superuser-only connection cannot model. The native
-// subscription itself is driven through the injected `replication` seam, so no replication-ready
-// container / live publisher is needed to prove the ORDER and CLEANUP. CLAUDE.md §4.
+// same owner — a two-role split PGlite's superuser-only connection cannot model. CLAUDE.md §4.
 
 // The four ids the mirror mirrors — a hand-built `AdoptResult` (adopt inserts no rows any more, so no
 // venue provisioning is needed here). A fixed set is enough: adopt never reads these back from the DB.
@@ -68,64 +59,10 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     boxHostname: "waitron.local",
     boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
     relayUrl: "https://relay.test:9000/",
-    replication: {
-      host: "primary.internal",
-      port: 5432,
-      database: "waitron_pp",
-      password: "s3cr3t-pw",
-    },
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     reservedIdentity: RESERVED,
     moduleOverrides: {},
     ...over,
-  };
-}
-
-// A recording replication seam. `readStatusResult` is what `readStatus` returns (default: one table
-// copied, so adopt proceeds); `onCreate` lets a test make `create` populate the status differently.
-function recordingReplication(opts?: { readStatusResult?: Partial<SubscriptionStatus> }): {
-  verbs: ReplicationVerbs;
-  calls: string[];
-  createOpts: unknown[];
-} {
-  const calls: string[] = [];
-  const createOpts: unknown[] = [];
-  const status = (name: string): SubscriptionStatus => ({
-    name,
-    exists: true,
-    enabled: false,
-    publications: [],
-    workerUp: false,
-    receivedLsn: null,
-    latestEndLsn: null,
-    applyErrorCount: 0,
-    syncErrorCount: 0,
-    tablesTotal: 1,
-    tablesReady: 0,
-    ...opts?.readStatusResult,
-  });
-  return {
-    calls,
-    createOpts,
-    verbs: {
-      assertReady: async () => {
-        calls.push("assertReady");
-      },
-      create: async (_db, o) => {
-        calls.push("create");
-        createOpts.push(o);
-      },
-      readStatus: async (_db, name) => {
-        calls.push("readStatus");
-        return status(name);
-      },
-      enable: async () => {
-        calls.push("enable");
-      },
-      drop: async () => {
-        calls.push("drop");
-      },
-    },
   };
 }
 
@@ -163,9 +100,8 @@ afterEach(async () => {
   if (dir !== undefined) await rm(dir, { recursive: true, force: true });
 });
 
-/** Build the AdoptDeps for a run, with an injectable replication seam + capture buffers. */
+/** Build the AdoptDeps for a run, with capture buffers. */
 function deps(
-  replication: ReplicationVerbs,
   extra: {
     persistTrading?: (a: PersistTradingArgs) => Promise<void>;
     persistModuleConfig?: (c: ModuleConfig) => Promise<void>;
@@ -179,7 +115,6 @@ function deps(
 ) {
   return {
     ownerDb: mirrorAdmin,
-    replicationDb: mirrorAdmin,
     advertisedOrigin: ADVERTISED_ORIGIN,
     environment: extra.environment ?? ("preproduction" as const),
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
@@ -189,19 +124,17 @@ function deps(
     databaseUrl: "postgres://app@mirror/db",
     migrationsDatabaseUrl: "postgres://owner@mirror/db",
     database: "mirror_db",
-    replication,
   };
 }
 
-describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", () => {
-  it("creates a disabled copy subscription, commits config, then enables — in that order", async () => {
-    const rep = recordingReplication();
+describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
+  it("stamps the mirror, writes its config and returns the break-glass secret", async () => {
     const persistedTrading: PersistTradingArgs[] = [];
     const persistedModules: ModuleConfig[] = [];
     let capturedStandby: { nodeId: string; publicKey: string; contactUrl: string } | undefined;
 
     const result = await adoptFromPrimary(
-      deps(rep.verbs, {
+      deps({
         persistTrading: async (a) => {
           persistedTrading.push(a);
         },
@@ -215,33 +148,6 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
       }),
       REQ,
     );
-
-    // ORDER: readiness → create (disabled) → status → enable, with enable STRICTLY AFTER the config
-    // writes (the status read sits before the try/catch, enable after it). Deletion-proof: move
-    // `enable` before the config commit and this order fails.
-    expect(rep.calls).toEqual(["assertReady", "create", "readStatus", "enable"]);
-
-    // The subscription was created DISABLED, copying, naming both publications, dialling the primary's
-    // replication credential as REPLICATION_ROLE.
-    const created = rep.createOpts[0] as {
-      name: string;
-      conninfo: string;
-      publications: readonly string[];
-      copyData: boolean;
-      enabled: boolean;
-    };
-    expect(created.name).toBe(subscriptionName("preproduction", capturedStandby!.nodeId));
-    expect(created.copyData).toBe(true);
-    expect(created.enabled).toBe(false);
-    expect([...created.publications].sort()).toEqual(
-      [
-        publicationName("preproduction", "ledger"),
-        publicationName("preproduction", "state"),
-      ].sort(),
-    );
-    expect(created.conninfo).toContain(`user='${REPLICATION_ROLE}'`);
-    expect(created.conninfo).toContain("password='s3cr3t-pw'");
-    expect(created.conninfo).toContain("dbname='waitron_pp'");
 
     // The mirror is stamped + flipped, mirror_config written with the PRIMARY's node as the origin.
     expect(await readDeploymentEnvironment(mirrorAdmin)).toBe("preproduction");
@@ -273,7 +179,7 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
   it("writes the pending-adoption latch (dormant identity for the boot finish worker)", async () => {
     let capturedStandby: { nodeId: string; publicKey: string } | undefined;
     await adoptFromPrimary(
-      deps(recordingReplication().verbs, {
+      deps({
         fetchBundle: async (_u, _c, s) => {
           capturedStandby = s;
           return makeBundle();
@@ -301,7 +207,7 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
   it("threads this node's advertised origin to the primary as the standby's contactUrl", async () => {
     let capturedStandby: { contactUrl: string } | undefined;
     await adoptFromPrimary(
-      deps(recordingReplication().verbs, {
+      deps({
         fetchBundle: async (_u, _c, s) => {
           capturedStandby = s;
           return makeBundle();
@@ -312,11 +218,10 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
     expect(capturedStandby!.contactUrl).toBe(ADVERTISED_ORIGIN);
   });
 
-  it("refuses a bundle for a DIFFERENT environment before any subscription or stamp", async () => {
-    const rep = recordingReplication();
+  it("refuses a bundle for a DIFFERENT environment before any stamp", async () => {
     let tradingPersisted = false;
     const error = await adoptFromPrimary(
-      deps(rep.verbs, {
+      deps({
         environment: "preproduction",
         persistTrading: async () => {
           tradingPersisted = true;
@@ -330,115 +235,52 @@ describe("adoptFromPrimary (native-subscription mirror adopt, real Postgres)", (
       expected: "preproduction",
       actual: "production",
     });
-    // Nothing ran: no subscription created, nothing stamped, no trading persisted.
-    expect(rep.calls).toEqual([]);
+    // Nothing ran: nothing stamped, no trading persisted.
     expect(tradingPersisted).toBe(false);
     expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
   });
 
-  it("drops the subscription and throws sync.publication_missing when nothing is copied (probe C)", async () => {
-    // A wrong publication name only WARNs on the publisher and copies nothing, so `tablesTotal === 0`.
-    const rep = recordingReplication({ readStatusResult: { tablesTotal: 0 } });
-    let tradingPersisted = false;
-    const error = await adoptFromPrimary(
-      deps(rep.verbs, {
-        persistTrading: async () => {
-          tradingPersisted = true;
-        },
-      }),
-      REQ,
-    ).catch((e: unknown) => e);
-    expect(isAppError(error) && error.code).toBe("sync.publication_missing");
-    // The dead subscription was DROPPED, the mirror was never stamped, and enable never ran.
-    expect(rep.calls).toEqual(["assertReady", "create", "readStatus", "drop"]);
-    expect(tradingPersisted).toBe(false);
-    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
-  });
-
-  it("drops the subscription when readStatus itself throws (status-seam cleanup guard)", async () => {
-    // The status read must sit INSIDE the cleanup guard: a status seam that throws AFTER `create`
-    // (a lost connection to the mirror mid-read) would otherwise leave the subscription — and its
-    // publisher-side slot retaining WAL — orphaned. Deletion-proof: move the status read back OUTSIDE
-    // the try/catch in adopt.ts and `drop` disappears (the created subscription is left behind).
-    const rep = recordingReplication();
-    const boom = new Error("status connection lost");
-    const verbs: ReplicationVerbs = {
-      ...rep.verbs,
-      readStatus: async () => {
-        rep.calls.push("readStatus");
-        throw boom;
-      },
-    };
-    const error = await adoptFromPrimary(deps(verbs), REQ).catch((e: unknown) => e);
-    expect(error).toBe(boom);
-    // The subscription created before the status read was DROPPED even though the read threw, and it
-    // was never enabled.
-    expect(rep.calls).toEqual(["assertReady", "create", "readStatus", "drop"]);
-    expect(rep.calls).not.toContain("enable");
-  });
-
-  it("drops the subscription when a config write throws mid-orchestration (cleanup guard)", async () => {
-    const rep = recordingReplication();
-    const boom = new Error("disk full");
-    const error = await adoptFromPrimary(
-      deps(rep.verbs, {
-        persistTrading: async () => {
-          throw boom;
-        },
-      }),
-      REQ,
-    ).catch((e: unknown) => e);
-    expect(error).toBe(boom);
-    // The subscription created before the commit was DROPPED; it was never enabled. Deletion-proof:
-    // remove the try/catch drop in adopt.ts and `drop` disappears (an orphan subscription is left).
-    expect(rep.calls).toEqual(["assertReady", "create", "readStatus", "drop"]);
-    expect(rep.calls).not.toContain("enable");
-  });
-
-  it("refuses a FOREIGN tenant before any subscription (§5, one tenant per database)", async () => {
+  it("refuses a FOREIGN tenant before any mutation (§5, one tenant per database)", async () => {
     // Seed a DIFFERENT tenant into the mirror, then adopt a bundle for our tenant identity: refused.
     await mirrorAdmin.execute(
       sql`insert into tenants (id, country, tax_id, legal_name)
           values (1, 'ES', '99999999R', 'Incumbent SL')`,
     );
-    const rep = recordingReplication();
-    const error = await adoptFromPrimary(deps(rep.verbs), REQ).catch((e: unknown) => e);
+    const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
-    // Refused before any replication verb (the foreign-tenant guard precedes `assertReady`).
-    expect(rep.calls).toEqual([]);
+    // Refused before any mutation: the database carries no deployment stamp.
+    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
   });
 
-  it("refuses a same-tenant venue before native copy", async () => {
+  it("refuses a same-tenant venue before any mutation", async () => {
     await mirrorAdmin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name)
       values (1, 'ES', '80000001K', 'Incumbent SL')`);
     await mirrorAdmin.execute(sql`
       insert into locations (name, invoice_locales, operation_description)
       values ('Existing venue', array['en-GB'], 'Hospitality')`);
-    const rep = recordingReplication();
-    const error = await adoptFromPrimary(deps(rep.verbs), REQ).catch((e: unknown) => e);
+    const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
-    expect(rep.calls).toEqual([]);
+    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
   });
 
-  it("refuses (fail-closed) a bundle naming an unknown module, before any subscription", async () => {
-    const rep = recordingReplication();
+  it("refuses (fail-closed) a bundle naming an unknown module, before any mutation", async () => {
     const error = await adoptFromPrimary(
-      deps(rep.verbs, {
+      deps({
         fetchBundle: async () => makeBundle({ moduleOverrides: { "no-such": false } }),
       }),
       REQ,
     ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("module.config_unknown");
-    // Validated up-front, before any replication verb ran.
-    expect(rep.calls).toEqual([]);
+    // Validated up-front, before any mutation.
+    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
   });
 
   it("bootstraps the mirror's module set from the bundle overrides", async () => {
     const toggleable = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
     let persisted: ModuleConfig | undefined;
     await adoptFromPrimary(
-      deps(recordingReplication().verbs, {
+      deps({
         persistModuleConfig: async (c) => {
           persisted = c;
         },

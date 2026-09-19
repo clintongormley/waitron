@@ -79,7 +79,7 @@ wide margin. This section stays in full deliberately: it applies to every change
   the PR thread, with at most a one-line pointer. Thin on touch; do not sweep. Cost: comment lines
   measured 43–48% of non-test source in four packages, nearly all narrative, which doubles the tokens
   of every read and goes stale exactly the way this section documents (`apps/server`, `packages/db`,
-  `packages/core`, `packages/sync`).
+  `packages/core`).
 
 ---
 
@@ -97,7 +97,7 @@ Unknown ranges keep the full local gate, including workspace typechecking. See
 [ci-and-gates.md](docs/developers/ci-and-gates.md) for commands and scope details.
 
 **Coverage thresholds** are split (owner decision 2026-09-05): `98/98/98/95` in `verifactu`,
-`fiscal-verifactu`, `core`, `db`, `sync` and `payments`; the `90/90/85/85` floor everywhere else,
+`fiscal-verifactu`, `core`, `db` and `payments`; the `90/90/85/85` floor everywhere else,
 browser packages included. Which package holds which bar is pinned by
 `scripts/coverage-thresholds.test.ts`.
 
@@ -269,9 +269,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   (root project, reads text)
   — shrink its allowlist, never grow it. `@waitron/dashboard-modules` is the browser-side twin.
 - **A test-only dependency closes a workspace dependency loop as surely as a runtime one.** A suite
-  needing packages from both ends of a loop goes in a package nothing depends on
-  (`packages/replication-tests`). Guard: `scripts/workspace-cycles.test.ts` — it reads each
-  `package.json`, not pnpm's own graph.
+  needing packages from both ends of a loop goes in a package nothing depends on. Guard:
+  `scripts/workspace-cycles.test.ts` — it reads each `package.json`, not pnpm's own graph.
 - **A new product domain lands as a MODULE, not as new code in the core**, filling the contract seats;
   generic code never learns it exists.
 - **A country pack is a browser-safe preset over modules, not a module.** Packs name contribution ids
@@ -336,11 +335,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   huella hashed. Guard: `scripts/column-vocabulary.test.ts`, weaker than its name — it reads the
   IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
-  list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — the
-  replication apply worker skips ordinary triggers. No policies, no RLS: one tenant per database.
-  Guards, on a new table: `scripts/classification-complete.test.ts`,
-  `scripts/append-only-enable-always.test.ts`. Nothing guards the next rule: a PUBLISHED table needs
-  a primary key, not just a UNIQUE, or Postgres refuses its UPDATEs (`55000`). `product_units` paid.
+  list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — a replication
+  apply worker skips ordinary triggers. No PRODUCT code replicates today (2026-09-19) — some test
+  suites still do, named in [testing-guide.md](docs/developers/testing-guide.md) — and the flag stays
+  anyway; why, and what does not carry into the replacement, in
+  [conventions-data.md](docs/developers/conventions-data.md). No policies, no RLS: one tenant per
+  database. Guards, on a new table: `scripts/classification-complete.test.ts`,
+  `scripts/append-only-enable-always.test.ts`.
 - **The class also chooses the database FILE, so no foreign key may join a `local` table to a
   `ledger`/`state` one, in either direction.** A `local` row that needs a venue row keeps the plain id
   and names, at the column, what establishes the target exists — or that nothing does, and where the
@@ -349,13 +350,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   in hand-written migration SQL, is invisible to it. Cost of the shape it replaced: six such keys
   existed and nothing would have failed at the flip; see
   [conventions-data.md](docs/developers/conventions-data.md).
-- **The two publications a node holds are created by the table OWNER, and the replication role is a
-  bootstrap the app provisioner only verifies** (`assertReplicationReady`). A subscription's
-  connection string carries a password, so its statement is never logged and a failure throws only a
-  SQLSTATE.
 - **`waitron-provision instance` migrates AS the migrator, via a `role=` session option, never as a
-  plain admin** — `CREATE PUBLICATION … FOR TABLE` is owner-only, so every table must be
-  migrator-owned. Any new provisioning path that creates schema carries `withRole`.
+  plain admin** — the database is created `OWNER waitron_migrator`, and a plain admin connection to
+  such a database cannot even `CREATE TABLE` in `public` (`42501`), so the migrate has to run as the
+  migrator and every table it creates is migrator-owned. Receipt, run against a real server:
+  `packages/provisioning/src/instance-apply.pg.test.ts` (C5). Any new provisioning path that creates
+  schema carries `withRole`.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: an FK `REFERENCES`, and a
   trigger executing a function owned by a different migration set. Both exist today — `workforce` and
   `fiscal-verifactu` run append-only `reject_mutation()` triggers, and that function is owned by
@@ -432,10 +432,6 @@ container or browser test** — most of these rules exist because a test passed 
   never a retry as proof of repair.
 - **A recurrent real-PG stall needs a retained log and a live database snapshot.** Locate the stalled
   operation before assigning its cause to resource contention.
-- **After `ALTER SUBSCRIPTION … SET PUBLICATION` widens a subscription, wait for an apply worker
-  started after a clock reading taken just before the ALTER, then write on the publisher.** The ALTER
-  returns first; a write in that window was lost, not delayed (10 / 10 with the worker paused). See
-  [testing-guide.md](docs/developers/testing-guide.md).
 - **Vitest 3's fork limit belongs on the outer config, even with projects.** Moving `maxForks` inside
   a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which
   pins only fiscal-verifactu's and media's configs.
@@ -448,7 +444,7 @@ container or browser test** — most of these rules exist because a test passed 
   under load, against the 5000ms default. **Under `packages/` and `apps/` the bound usually comes from
   the package's `vitest.config.ts`, not the file** — and an `expect.poll` or `vi.waitFor` is a wait
   like any other. Guard: `scripts/spawn-timeout-budget.test.ts`, weaker than its name in several ways
-  its header states — it reads TEXT, cannot tell code from strings, checks only the largest SINGLE
+  its comments state — it reads TEXT, cannot tell code from strings, checks only the largest SINGLE
   wait, and declines wherever a bound or a config cannot be resolved rather than risk failing a
   correct file.
 - **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included.** Getting the
@@ -554,11 +550,13 @@ Adding a new real-PG test package: the shared-container pattern and its knobs ar
 - **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
   and the internet are never on the sale path of whichever node is primary: records chain locally and
   the outbox drains later; a card falls back to 4G, a standalone terminal or cash. What a till DOES
-  need is the one node accepting sales — the on-site box when the internet is down; a promoted cloud
-  when the box is dead (which needs the internet); box-down AND internet-down together is no failover,
-  the MVP's accepted case (`docs/backlog.md` → _MVP for go-live_). The till follows the primary and
-  never chooses (`2026-09-05-till-reroute-design.md` §2); only the primary sells. Fiscal submission is
-  an outbox, never inline.
+  need is the one node accepting sales. INTENDED: the on-site box when the internet is down, a
+  promoted cloud when the box is dead (which needs the internet), box-down AND internet-down together
+  being no failover — the MVP's accepted case. TODAY there is none of it: a venue has ONE node and no
+  failover at all until slice 3 (2026-09-19, `docs/backlog.md` → _Replication, membership & failover —
+  residuals_). The till follows the primary and never chooses
+  (`2026-09-05-till-reroute-design.md` §2); only the primary sells. Fiscal submission is an outbox,
+  never inline.
 - **`registros_facturacion` is immutable**: `REVOKE ALL`, an append-only trigger, and a
   TRUNCATE-blocking trigger. Do not work around them; a value written wrong there stays wrong.
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
@@ -571,8 +569,11 @@ Adding a new real-PG test package: the shared-container pattern and its knobs ar
   the node's invoice series and opens disjoint ones, and writes the box's identity only after that
   commits — `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`. UNLIKE the
   fiscal chain, the working-time chain is NOT reset on a cold restore — it continues from the backup's
-  head, and a fork with a surviving copy surfaces as a loud drain stall, because the fiscal reset
-  exists to mint a fresh SIF for AEAT and the working-time record has no equivalent.
+  head, because the fiscal reset exists to mint a fresh SIF for AEAT and the working-time record has
+  no equivalent. A survivor's forked row is refused by the chain-position unique index
+  (`time_entries_chain_position_uq`, SQLSTATE `23505`) however it reaches the database; nothing
+  carries rows between nodes today. Guard:
+  `packages/workforce/src/restore-continuation.pg.test.ts`.
 
 ---
 

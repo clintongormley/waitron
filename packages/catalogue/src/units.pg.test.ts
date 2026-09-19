@@ -36,7 +36,7 @@ async function product(id: string | null = null): Promise<string> {
   ).rows[0]!.id;
 }
 
-it("changes a product's unit even while product_units publishes updates for replication", async () => {
+it("changes a product's unit even while product_units is in a publication", async () => {
   await seedTenant(suite.admin);
   const productId = await product();
   const each = await app(suite.admin, (tx) =>
@@ -46,8 +46,9 @@ it("changes a product's unit even while product_units publishes updates for repl
     createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
   await app(suite.admin, (tx) => assignProductUnit(tx, productId, each.id));
-  // Reproduce production: the table publishes UPDATEs. Without a replica identity (its primary key)
-  // Postgres refuses the reassignment upsert's UPDATE — the defect this guards against.
+  // Put the table in a publication HERE — nothing in the tree does it today. Without a replica
+  // identity (its primary key) Postgres then refuses the reassignment upsert's UPDATE, which is the
+  // defect this guards against.
   await suite.admin.execute(
     sql`create publication test_product_units_updates for table product_units`,
   );

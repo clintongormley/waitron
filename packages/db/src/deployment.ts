@@ -68,9 +68,12 @@ export async function stampDeployment(
   await db.insert(deployment).values({ id: 1, environment });
 }
 
-/** Which role this database plays — a `primary` writes and originates; a `mirror` pulls + applies and
- * serves read-only (C2a design §3). Narrowed to the two-value union for the same reason
- * `DeploymentEnvironment` is: an unrepresentable value is a `tsc` error, not a runtime CHECK violation. */
+/** Which role this database plays — a `primary` writes and originates; a `mirror` holds no singleton
+ * duties and boots behind a read-only gate, its node-scoped reads pointed at the primary it was
+ * adopted from (`mirror_config.origin_node_id`). Nothing copies a venue's rows onto a mirror, and no
+ * adopted mirror reaches that boot today (`apps/server/src/finish-adoption.ts`'s `PendingAdoption`
+ * header). Narrowed to the two-value union for the same reason `DeploymentEnvironment` is: an
+ * unrepresentable value is a `tsc` error, not a runtime CHECK violation. */
 export type DeploymentMode = "primary" | "mirror";
 
 /** The role this database plays, or `"primary"` when nothing has been stamped — an unstamped database
@@ -196,39 +199,6 @@ export async function setSingletonRoleTx(tx: Transaction, role: SingletonRole): 
   if (result.rows.length === 0) {
     throw new AppError("deployment.not_stamped", {});
   }
-}
-
-/**
- * The fence-LSN watermark this node recorded when it entered its read-only fence (swap S4, Ruling C2),
- * as a `pg_lsn` text value (`0/1523AB8`), or `null` when unset — a node that never fenced, and every
- * primary. The `!active && confirmed_flush_lsn >= fence_lsn` drain guard reads this; a `null` here is
- * NOT drainable and takes the operator's `--accept-loss` path (spec §4.2). Same `to_regclass` probe
- * (not a caught undefined-table error) the axis readers use, for the same transaction-poisoning reason:
- * an unstamped or pre-table database reads `null`. `fence_lsn::text` so the wire value is the LSN text.
- */
-export async function readFenceLsn(db: Database | Transaction): Promise<string | null> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.deployment') is not null as exists`,
-  );
-  if (present.rows[0]?.exists !== true) return null;
-  const rows = await db.execute<{ fence_lsn: string | null }>(
-    sql`select fence_lsn::text as fence_lsn from deployment where id = 1`,
-  );
-  return rows.rows[0]?.fence_lsn ?? null;
-}
-
-/**
- * Records (or, with `null`, clears) the fence-LSN watermark on the singleton `deployment` row, on a
- * caller-provided transaction so the capture commits atomically with the state change that enters or
- * leaves the fence (CLAUDE.md §3): the boot demote sets it in the SAME transaction it demotes the
- * singleton axis; the mirror promote clears it (un-fence) in the SAME transaction as the PONR. An
- * OWNER-role write (app_user holds no UPDATE on deployment), like the other axis setters. `lsn` is a
- * `pg_lsn` text value bound and cast to `pg_lsn`; `null` unsets the column. Requires the singleton
- * row (stamp first) — on an unstamped database the UPDATE is a silent 0-row no-op, which never happens
- * for a node reaching a fence transition.
- */
-export async function setFenceLsnTx(tx: Transaction, lsn: string | null): Promise<void> {
-  await tx.execute(sql`update deployment set fence_lsn = ${lsn}::pg_lsn where id = 1`);
 }
 
 /** The stored scrypt verifier of the offline break-glass secret, or `null` when unset — a node

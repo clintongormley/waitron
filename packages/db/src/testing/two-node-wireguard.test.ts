@@ -264,9 +264,7 @@ describe("startRealWireguardNode", () => {
 // network. The tunnel addresses (10.99.0.x) live ONLY on each node's `wg0` interface, so a
 // connection that lands on a peer's `tunnelHost` proves the traffic crossed the tunnel — the Docker
 // network alias would be a different address entirely. This fixture is the local stand-in for the
-// box↔cloud link the cloud standby runs over (the replication that rides it is written up in
-// `docs/superpowers/specs/2026-09-05-native-replication-post-rls-prototype-findings.md`, which used
-// plain TCP; the encrypted WireGuard transport is what this fixture adds).
+// box↔cloud link, and what it adds over its plain sibling is the encrypted WireGuard transport.
 describe.runIf(dockerAvailable())("two-node WireGuard fixture", () => {
   let cluster: TwoNodeWireguardCluster;
 

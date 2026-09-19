@@ -83,25 +83,21 @@ mounts modules without naming one, exactly as generic provisioning does not.
 pnpm counts `devDependencies` when it looks for a loop, and prints "There are cyclic workspace
 dependencies" on every install. Two test-only links made one: `@waitron/migrations` listed twelve
 modules to compare their journal table names with the manifest, while those modules used
-`@waitron/migrations` in their own tests; and `@waitron/sync`'s replication suites used
-`@waitron/provisioning`, which reaches `@waitron/sync` again through `@waitron/composition`. The
-journal-table test moved to `packages/composition/src/composition.test.ts`, and the real-database
-replication suites — `sync`'s three and `fiscal-verifactu`'s fidelity suite — moved to
-`packages/replication-tests`, which no package depends on. Their node fixture, which `apps/server`'s
-replication test also uses and which imports nothing from `@waitron/sync`, moved to
-`packages/provisioning/src/testing/replication-node.ts`. Receipt, 2026-09-13:
+`@waitron/migrations` in their own tests; and the PostgreSQL replication suites in `@waitron/sync`
+used `@waitron/provisioning`, which reached `@waitron/sync` again through `@waitron/composition`. The
+journal-table test moved to `packages/composition/src/composition.test.ts`, and the replication suites
+moved to a package nothing depends on. Receipt, 2026-09-13:
 `scripts/workspace-cycles.test.ts` listed the ten-package loop before the move; on the finished tree
-it passes, fails again when `@waitron/provisioning` is added back to `sync`'s `devDependencies`, and
-`pnpm install` prints no loop warning.
+it passed, failed again when `@waitron/provisioning` was added back to `sync`'s `devDependencies`, and
+`pnpm install` printed no loop warning.
+
+The two packages named in that receipt — `@waitron/sync` and the replication-test package — were both
+deleted with the PostgreSQL failover machinery on 2026-09-19, so the loop they closed no longer exists.
+The RULE and the guard stand: any future test that needs packages from both ends of a loop needs the
+same home.
 
 The guard reads each member's `package.json` rather than asking pnpm for its graph, and counts every
 dependency whose name is another workspace member.
-
-The English-only vocabulary guard (`scripts/english-only.test.ts`) scans `packages/replication-tests`
-like any other generic package. Its fidelity suite chains real Spanish fiscal records, so that one
-file is exempted by exact name (`FISCAL_FIDELITY_FIXTURES` in `packages/db/src/english-only.ts`) — a
-narrower exemption than provisioning's whole-package test skip; the package's three other suites carry
-no Spanish and are scanned normally.
 
 ## A command name is declared under `waitron.commands`, never `bin`
 
@@ -257,8 +253,26 @@ all is what the grants refuse one operation at a time (`docs/backlog.md` → B9)
 
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`
 
-The replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what
-those triggers exist to refuse. No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
+A replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what
+those triggers exist to refuse. `ENABLE ALWAYS` is kept although the PostgreSQL replication that
+motivated it was removed on 2026-09-19, for the plain reason that the tree still stores everything in
+PostgreSQL until the storage switch lands: the flag is a live setting on a live trigger, and its guard
+still runs on every push.
+
+Do not read that as a prediction about the replacement — the design this branch points at says the
+opposite. `docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md` lists `ENABLE
+ALWAYS` triggers in §8.1, *Deleted* — the subsection of §8, *What the repo deletes, keeps, adds* —
+giving as the reason "the follower is our own restore, not a replication apply worker"; §4 states the
+mechanism behind that — "a mirror is not a database that receives rows. It is a place the stream
+lands, plus optionally a follower that keeps a local read-only copy warm". What §8.2 KEEPS is the
+classification, "now also choosing the file". So the CLASS carries into the replacement and the flag
+does not, and §8.1 sends their guards the same two ways: it names `append-only-enable-always` among
+the guards it deletes alongside the flag. That is a statement about the storage switch and not about
+today — both halves are guarded on every non-docs push right now, the flag by
+`scripts/append-only-enable-always.test.ts` and the class by
+`scripts/classification-complete.test.ts` and `scripts/two-file-foreign-keys.test.ts`.
+
+No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce this on every non-docs push:
 `scripts/classification-complete.test.ts` (every table in every module's `drizzle/` is classified
 exactly once) and `scripts/append-only-enable-always.test.ts` (every `reject_mutation` trigger is
@@ -290,8 +304,9 @@ is checked by nothing when the row is written, and its refusal moved to accept, 
 (`devices` or `print_agents`) still holds a key to `locations`. Never weaken a classification to make
 this guard pass — that is the one wrong answer §2.1 rules out.
 
-A table that ends up in one of those publications also needs a PRIMARY KEY, not a bare UNIQUE
-constraint: a published table with no replica identity accepts INSERTs and refuses UPDATEs, with
+HISTORICAL, kept for the mechanism it records: while `ledger`/`state` tables were PUBLISHED for
+PostgreSQL logical replication (removed 2026-09-19), such a table also needed a PRIMARY KEY, not a
+bare UNIQUE constraint. A published table with no replica identity accepts INSERTs and refuses UPDATEs, with
 `ERROR: 55000: cannot update table "t" because it does not have a replica identity and publishes
 updates`. Reproduced on a real PostgreSQL server on 2026-09-13 — `create table t (a int, b int,
 unique (a, b)); create publication p for table t; insert; update` gives the error above, and the same
@@ -303,28 +318,65 @@ No guard covers this: the defect passed every existing test because no test publ
 per-table check would have to read each module's `_CLASSIFICATION` list against its schema file's
 primary keys.
 
-## The two publications a node holds are created by the table OWNER, and the replication role is a bootstrap the app provisioner only verifies
-
-`waitron_migrator` creates `waitron_<env>_ledger` / `_state` from the module classification
-(`@waitron/sync`). A SUPERUSER/box-image bootstrap holds the rest, each on its own role SHAPE:
-`waitron_repl` is a `LOGIN REPLICATION` role; the migrator (`waitron_migrator`) is granted
-`pg_create_subscription`; and `wal_level=logical` / `track_commit_timestamp=on` are restart-required
-CLUSTER settings held by no role (the box image's `postgresql.conf`). The app performs none of it —
-`assertReplicationReady` (`provisioning.replication_not_ready`) verifies it instead. A subscription's
-connection string carries the `waitron_repl` password, so its statement is never logged and a failure
-throws only a SQLSTATE (`sync.subscription_failed`), like `CREATE ROLE`; `sqlStateOf` lives in
-`@waitron/shared`. Pointer:
-`docs/superpowers/specs/2026-09-05-outbox-to-native-replication-swap-design.md` §2.2/§3.
-
 ## `waitron-provision instance` migrates AS the migrator, via a `role=` session option, never as a plain admin
 
-The migrator (`waitron_migrator`) OWNS the instance's database, and native replication's
-`CREATE PUBLICATION … FOR TABLE` is owner-only, so every table must be migrator-owned: a plain admin
-connection to a migrator-owned database cannot even `CREATE TABLE` in `public` (probe A —
-`permission denied for schema public`). Any new provisioning path that creates schema carries
-`withRole(uri, waitron_migrator)` (`@waitron/provisioning`); `apps/server/scripts/dev-setup.ts` does
-the same on the shared dev `postgres` database, granting the migrator the CREATE privileges db
-ownership would otherwise confer. Receipt: `feat/outbox-swap-s4-s5`, probe A.
+The arrangement: `instance` creates the database `OWNER waitron_migrator`
+(`packages/provisioning/src/instance-plan.ts` emits the `create-database` action with that owner, and
+`packages/provisioning/src/instance-apply.ts` runs `create database … owner …`), runs the migrate over
+a connection carrying `options=-c role=waitron_migrator`, and refuses a database owned by anyone else
+(`provisioning.database_not_owned`). Every table the migrate creates is migrator-owned as a
+CONSEQUENCE of those two choices, not as a separate step.
+
+**The reason the migrator was chosen over the admin is gone, and nothing has replaced it.**
+`git log -S "owner waitron_migrator"` names `e82588f3` (#280, 2026-09-08) as the commit that put the
+clause into the `create database` statement; its two other hits are the S2 plan document and a
+`packages/sync` test fixture, plus this branch's own deletion. That diff replaces a bare
+`create database <name>` with the `owner` form, and the comment it adds gives the reason as logical
+replication's `CREATE PUBLICATION … FOR TABLE`, which CLAUDE.md §3 records as owner-only. The same
+commit deletes the two plan actions that had reached the same ability by grant —
+`grant-database-create` and `grant-schema-create`, which before #280 handed the migrator CREATE on the
+database and CREATE WITH GRANT OPTION on schema `public` while the ADMIN created the database, owned
+it and ran the migrate (`git show e82588f3^:packages/provisioning/src/instance-plan.ts` for the
+grants; the `case "migrate"` comment in
+`git show e82588f3^:packages/provisioning/src/instance-apply.ts` for the admin — "Migrate with the
+admin connection string … that admin just created the database and owns it"). So replication is
+exactly why this changed. The failover deletion of 2026-09-19 (`8faa3033`) then took the last
+`CREATE PUBLICATION` out of shipped code:
+`grep -rniE "create (publication|subscription)" packages apps` now matches only test suites — two
+real-PostgreSQL ones in `packages/db`, and `packages/catalogue/src/units.pg.test.ts`, which creates
+its publication on its own container for the stated reason that "nothing in the tree does it today".
+
+**What holds the arrangement in place today** — three things, none of them "it could not be otherwise":
+
+- The refusal is a POLICY, not something PostgreSQL forces. `instance` does not try to re-own a
+  database it finds; it refuses it (owner decision 2026-09-07, recorded at the refusal in
+  `packages/provisioning/src/instance-plan.ts`). Do not restate that decision the way its own comment
+  does — "ownership is fixed at CREATE" overstates it. Measured on PostgreSQL 18.6,
+  `alter database probe_db owner to waitron_migrator` SUCCEEDS when the role running it owns the
+  database and is a member of the target role, which is the shape of this tool's own admin on a
+  database it created; the control, the same statement from a `createdb createrole` role that does
+  NOT own the database, fails `must be owner of database probe_db`. The arrangement could be undone
+  in place. Nobody has decided to.
+- Ownership is how the migrator gets CREATE on the database and on schema `public`, which is why the
+  plan carries no CREATE grant at all (`REQUIREMENTS` in
+  `packages/provisioning/src/instance-plan.ts`; `packages/provisioning/src/instance-plan.test.ts`
+  pins that a plan contains neither deleted action). The grant-based alternative is not hypothetical
+  — it is what `apps/server/scripts/dev-setup.ts` does on the shared dev `postgres` database, which
+  the migrator does not own.
+- Callers depend on the consequence: on a migrator-owned `public` a plain admin connection is refused
+  `CREATE TABLE` with `42501`, which is why any new provisioning path that creates schema carries
+  `withRole(uri, waitron_migrator)` (`@waitron/provisioning`). Live receipt:
+  `packages/provisioning/src/instance-apply.pg.test.ts`, "lets the migrator, but not a plain admin,
+  write the migrator-owned schema (C5)" — it runs both halves against a real server and asserts
+  `42501` for the admin. The message text, `permission denied for schema public`, was read off probe A
+  in `docs/superpowers/plans/2026-09-07-outbox-swap-s4-s5-promotion-and-deletion.md`.
+
+Two justifications that do NOT hold. The first was this section's own text until 2026-09-19: that
+`42501` is not the reason for the ownership. The database being migrator-owned is a choice this tool
+makes and the refusal is its consequence, so offering the refusal as the cause argues in a circle.
+The second: saying the migrations issue their own grants from that ownership does not establish it
+either — an admin that had created the tables would own them and could grant just as well, so that
+sentence leaves out the part that makes it the migrator.
 
 ## A module/migration dependency graph has TWO kinds of cross-set edge
 

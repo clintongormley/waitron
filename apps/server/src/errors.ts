@@ -116,11 +116,11 @@ declare module "@waitron/shared" {
      */
     "node.not_found": { id: string };
     /**
-     * A write reached a node running as a read-only MIRROR. The mirror serves the dashboard read-only
-     * and pulls + applies a primary's rows; it refuses every non-GET at the HTTP layer (the read-only
-     * gate, `read-only-gate.ts`), because `deployment.mode = 'mirror'`. `node.*`, not `server.*`: it is a
+     * A write reached a node running as a read-only MIRROR. A mirror serves the dashboard read-only and
+     * refuses every non-GET at the HTTP layer (the read-only gate, `read-only-gate.ts`), because
+     * `deployment.mode = 'mirror'`. `node.*`, not `server.*`: it is a
      * fact about the node's role in the topology, not about the process. No params — the refusal names no
-     * row, so a log line leaks nothing (the `sync.*`/`tunnel.*` discipline). Cleared by promotion
+     * row, so a log line leaks nothing. Cleared by promotion
      * (`deployment.mode = 'primary'`), read live so no restart is needed.
      */
     "node.read_only": Record<string, never>;
@@ -133,7 +133,7 @@ declare module "@waitron/shared" {
      * fenced boot is a STATE, not a crash — `reconcileMembershipOnBoot` persists the superseding
      * document and boot then runs the same read-only posture a mirror or a rejoin-fenced node runs.
      * `node.*`, not `server.*`: it is a fact about the node's role in the topology, not the process. No
-     * params — the refusal names no row, the `sync.*`/`tunnel.*` no-leak discipline.
+     * params — the refusal names no row, the `node.read_only` no-leak discipline.
      */
     "node.membership_superseded_on_boot": Record<string, never>;
     /** `POST /api/node/enrol-self` reached from a non-loopback address. On-node self-enrol is a
@@ -141,8 +141,14 @@ declare module "@waitron/shared" {
      * read its vault, so enrolling a loopback caller grants nothing new; a LAN caller must not.
      * Mapped to HTTP 403 by node-enrol-api.ts's local STATUS map, not here. */
     "node.enrol_not_local": Record<string, never>;
-    /** This node cannot self-enrol a print agent because it is not the primary — only the primary can
-     * write `print_agents` (a mirror's DB is a read-only subscriber). The defensive refusal for a non-primary node the read-only gate does not cover — a real mirror's POST is refused earlier with `node.read_only` (spec §5).
+    /** This node cannot self-enrol a print agent because it is not the primary: the route refuses
+     * unless its `isPrimary` dep is true (`node-enrol-api.ts`). The defensive refusal for a non-primary
+     * node the read-only gate does not cover — a real mirror's POST is refused earlier with
+     * `node.read_only`, because that gate refuses every non-GET at the HTTP layer (spec §5). It is NOT
+     * "a mirror refuses every write": the gate reads the HTTP VERB, so an internal SQL write inside a
+     * GET handler still runs on a mirror — `read-only-gate.ts`'s own header names the management-session
+     * keepalive, and boot's own `if (isMirror)` branch calls `ensureMirrorViewer`, which upserts a
+     * viewer person and its ambient session.
      * Mapped to HTTP 409 by node-enrol-api.ts's local STATUS map, not here. */
     "node.enrol_unavailable": Record<string, never>;
     /**
@@ -195,26 +201,6 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
-     * The superuser replication bootstrap failed on the node's own database — the full
-     * `replicationBootstrapStatements` array on a cluster with no `waitron_repl`, or the
-     * `replicationRepairStatements` re-run that restores a lost prerequisite under a surviving one.
-     * Only the SQLSTATE survives: the full array's first statement embeds the generated
-     * `waitron_repl` password, and both Drizzle's wrapped failure and PostgreSQL's own message quote
-     * the failing statement back verbatim — the rule `provisioning.role_creation_failed` follows for
-     * `CREATE ROLE`. (The re-grant carries no credential; it shares the classification so there is
-     * one path, not because it needs the withholding.) Five characters of `[0-9A-Z]` — `null` when
-     * the failure carried none — cannot be the credential this withholds, and `42501` (this login is
-     * not a superuser) and `42710` (something already exists) want different responses and read
-     * identically without it.
-     *
-     * `provisioning.*`, not `server.*`, though it is thrown from this host: the DOMAIN CONCEPT is
-     * the cluster's provisioning, and `server.*` is reserved for facts about the process itself
-     * (CLAUDE.md §3). Its siblings are `provisioning.role_creation_failed` and
-     * `provisioning.replication_not_ready`; declaring a non-`server.*` code here follows
-     * `deployment.environment_mismatch` below. Never renamed once shipped.
-     */
-    "provisioning.replication_bootstrap_failed": { sqlState: string | null };
-    /**
      * The cluster never accepted a connection within the entrypoint's bounded wait
      * (`waitForPostgres`, `node-entry.ts`) — the container's database is down, still starting, or
      * reachable at a different address.
@@ -222,14 +208,12 @@ declare module "@waitron/shared" {
      * `attempts` is the only param, and the driver's caught value is deliberately dropped: a `pg`
      * connection failure's `.message` can embed the host and the connection string it was built
      * from, and this code's whole audience is the recovery page, which renders it to an
-     * unauthenticated operator. The same withholding `provisioning.replication_bootstrap_failed`
-     * above and `server.shutdown_failed` both apply to their own caught values.
+     * unauthenticated operator. `server.shutdown_failed` applies the same withholding to its own
+     * caught value.
      *
      * `provisioning.*`, not `server.*`, though it is thrown from this host: the DOMAIN CONCEPT is
      * the cluster this node provisions, and `server.*` is reserved for facts about the process
-     * itself (CLAUDE.md §3) — the classification
-     * `provisioning.replication_bootstrap_failed` above records for the same reason. Never renamed
-     * once shipped.
+     * itself (CLAUDE.md §3). Never renamed once shipped.
      */
     "provisioning.database_unreachable": { attempts: number };
     /**
@@ -240,8 +224,7 @@ declare module "@waitron/shared" {
      * above from the same function, so the two live in the same registry. Nothing constructs it with
      * params today: it is a CLASSIFICATION of an already-thrown driver error, and the page renders
      * fixed text keyed on the code alone. `sqlState` is declared because it is the one fact a future
-     * thrower would carry and a shipped code's params cannot be widened later, and `string | null`
-     * copies `provisioning.replication_bootstrap_failed` above — the only sibling with this param.
+     * thrower would carry and a shipped code's params cannot be widened later.
      * `provisioning.database_unreachable`, the other code `classifyBootFailure` returns, carries no
      * `sqlState` field at all — it reports `attempts` — so it is not a precedent for this shape: one
      * of its two paths is a socket failure, which has no SQLSTATE to carry.
@@ -1337,83 +1320,26 @@ declare module "@waitron/shared" {
      */
     "promotion.break_glass_invalid": Record<string, never>;
     /**
-     * A mirror→primary promote reached its point-of-no-return and committed, but the follow-on
-     * subscription NARROW (spec §4.2 step 3 — narrow the promoted node's own subscription to the ledger
-     * publication so the drain window re-copies no state) FAILED. LOG-ONLY, never thrown-and-caught out
-     * of the promote: the node is ALREADY the primary, so a narrow failure must NOT undo the promotion —
-     * boot's `ensureReplicationShape` re-narrows on the next boot (the self-heal). `code` is the
-     * `codeOf`-classified failure (a `sync.*` SQLSTATE code, never a raw driver message that could carry
-     * the subscription conninfo password). `promotion.*` names the DOMAIN CONCEPT, never the throwing
-     * package — the rule `promotion.fence_not_attested` gives. Never renamed once shipped.
-     */
-    "promotion.narrow_failed": { code: string };
-    /**
      * `retireSelf` (retire/evict R3) was invoked on a node that is NOT fenced — a node with a
      * `serving-primary`/`serving-secondary` standing in the held chart, a node ABSENT from the chart,
      * or a node holding no membership document at all. Only a fenced (`sell-only`) node leaves for
      * good; a serving node is still trading and is not retirable (design fact (ii)'s "N/A (serving)"
      * distinction). Refused BEFORE any write. `node.*`, not `server.*`: it is a fact about this node's
      * role/state in the topology, the same rule `node.read_only` gives — never about the process. No
-     * params: the refusal names no row, so a log line leaks nothing (the `sync.*`/`tunnel.*`
-     * no-leak discipline `node.read_only` follows). Never renamed once shipped.
+     * params: the refusal names no row, so a log line leaks nothing (the `node.read_only` no-leak
+     * discipline). Never renamed once shipped.
      */
     "node.retire_not_fenced": Record<string, never>;
     /**
      * `retireSelf` found the node fenced (`sell-only`) but its held document names no serving-primary
-     * CARRIER — so there is no survivor to carry its replication tail forward and no way to confirm
-     * its drain. Refused FAIL-SAFE (design fact (ii)'s "fenced, undrainable (no carrier)", DISTINCT
-     * from `node.retire_not_fenced`): signalled to this action by an `undefined` drain-progress reader,
-     * which the caller passes exactly when the held chart has no carrier to point the disposal read at.
+     * CARRIER — so there is no survivor to carry the venue forward and nothing for this node to hand
+     * over to. Refused FAIL-SAFE (design fact (ii)'s "fenced, undrainable (no carrier)", DISTINCT from
+     * `node.retire_not_fenced`): checked directly against the held chart (`servingPrimaryNodeId`).
      * `node.*`, not `server.*`: it is a fact about this node's state in the topology (`node.read_only`'s
      * rule). No params — the refusal names no row (the `node.read_only` no-leak discipline). Never
      * renamed once shipped.
      */
     "node.retire_no_carrier": Record<string, never>;
-    /**
-     * `retireSelf` measured the drain guard against the carrier captured at BOOT
-     * (`servingPrimaryNodeId` of the held document at boot, baked into the injected drain reader), but
-     * the held chart re-read at request time now names a DIFFERENT serving-primary (or none). A fenced
-     * node does NOT restart on a carrier change (`shouldFenceRestart` is false once `bootFenced`), so its
-     * drain reader still keys on the stale boot carrier's cursor — a `drained:true` it returns proves the
-     * tail reached the OLD carrier, not the current survivor. The node must be RESTARTED to re-measure
-     * against the current carrier before it can safely retire. Refused FAIL-SAFE: never evict a node
-     * whose own-origin tail may not have reached the current survivor, or those rows are lost with it
-     * (design §5.1; CLAUDE.md §5 unrecoverable-invariant). Node ids are topology facts already in the
-     * served membership document — not secrets — so they are named for operator diagnosis, mirroring
-     * `promotion.membership_superseded`'s diagnostic params. `currentCarrierNodeId` is `null` when the
-     * held chart names no serving-primary. `node.*` names the domain concept — a fact about this node's
-     * state in the topology; never renamed once shipped.
-     */
-    "node.retire_carrier_changed": {
-      boundCarrierNodeId: string;
-      currentCarrierNodeId: string | null;
-    };
-    /**
-     * `retireSelf` found the node fenced with a carrier, but the carrier's subscription slot on this
-     * node is still `active` — the carrier has NOT yet disabled its subscription, so the drain window
-     * is not closed and this node's tail may still be advancing. Refused until the carrier detaches
-     * (the `!active` half of the fence-LSN drain guard, Ruling C2 / spec §4.2 step 4). DISTINCT from
-     * `node.retire_not_drained` (the slot is inactive but has not flushed past the fence LSN): a live
-     * carrier is a different state from a lagging one, and folding them would lose the diagnosis. No
-     * params — the refusal names no row (`node.read_only`'s no-leak discipline). `node.*`, not
-     * `server.*`: a fact about this node's state in the topology. Never renamed once shipped.
-     */
-    "node.retire_carrier_attached": Record<string, never>;
-    /**
-     * `retireSelf` found the node fenced with a detached (inactive) carrier slot, but the carrier's
-     * `confirmed_flush_lsn` has NOT yet passed the fence LSN this node recorded — its own-origin WAL
-     * tail is not fully applied on the carrier. Refused until the drain completes — a node must not
-     * leave the chart while rows it originated are still un-shipped, or they would be lost with it. The
-     * gate is the fence-LSN watermark (Ruling C2, spec §4.1): `confirmed_flush_lsn >= fence_lsn`
-     * (recorded when the box entered its read-only fence) AND the carrier's subscription slot no longer
-     * `active` — both monotone, so a fenced box that keeps writing session WAL cannot decay the compare.
-     * `retainedBytes` (the slot's un-drained WAL, `pg_wal_lsn_diff(current, restart_lsn)`, `null` when
-     * the slot is absent) and `walStatus` (`reserved`/`extended`/`lost`/null) are the operator's drain
-     * diagnostics — neither a secret, both catalog facts already visible to any role (probe B). `node.*`,
-     * not `server.*`: a fact about this node's state in the topology (`node.read_only`'s rule). Never
-     * renamed once shipped.
-     */
-    "node.retire_not_drained": { retainedBytes: string | null; walStatus: string | null };
     /**
      * `retireSelf` minted a `sell-only → evicted` document at term N+1 over the held term N, but a
      * concurrent gossip-adopt had already landed a document at term ≥ N+1 by the time the term-guarded
@@ -1439,49 +1365,24 @@ declare module "@waitron/shared" {
     "rejoin.not_fenced": Record<string, never>;
     /**
      * `rejoinAsSecondary` found the node fenced but the held document names no serving-primary CARRIER —
-     * so there is no survivor to have drained onto and to stream from after the restore. Refused
-     * FAIL-SAFE (DISTINCT from `rejoin.not_fenced`): signalled to this action by an `undefined`
-     * drain-progress reader, which the caller passes exactly when the held chart has no carrier to point
-     * the disposal read at. `rejoin.*`, not `server.*`: a fact about this node's state in the topology
+     * so there is no survivor to re-adopt from after the wipe. Refused FAIL-SAFE (DISTINCT from
+     * `rejoin.not_fenced`): checked directly against the held chart
+     * (`servingPrimaryNodeId`). `rejoin.*`, not `server.*`: a fact about this node's state in the topology
      * (`node.retire_no_carrier`'s rule). No params — the refusal names no row (the `node.read_only`
      * no-leak discipline). Never renamed once shipped.
      */
     "rejoin.no_carrier": Record<string, never>;
     /**
-     * `rejoinAsSecondary` found the node fenced with a carrier, but the carrier's subscription slot on
-     * this node is still `active` — the carrier has NOT yet disabled its subscription, so the drain
-     * window is not closed. Refused BEFORE the IRREVERSIBLE wipe (the `!active` half of the fence-LSN
-     * drain guard, Ruling C2 / spec §4.2 step 4). DISTINCT from `rejoin.not_drained` (the slot is
-     * inactive but has not flushed past the fence LSN): a live carrier is a different state from a
-     * lagging one. `rejoin.*`, not `server.*`: a fact about this node's state in the topology. No params
-     * — the refusal names no row (`node.read_only`'s no-leak discipline). Never renamed once shipped.
-     */
-    "rejoin.carrier_attached": Record<string, never>;
-    /**
-     * `rejoinAsSecondary` found the node fenced with a detached (inactive) carrier slot, but the
-     * carrier's `confirmed_flush_lsn` has NOT yet passed the fence LSN this node recorded. Refused
-     * BEFORE the IRREVERSIBLE wipe — a node must not be wiped while rows it originated are still
-     * un-shipped, or they would be lost with the wipe (CLAUDE.md §5 unrecoverable-invariant). The gate
-     * is the fence-LSN watermark (Ruling C2, spec §4.1): `confirmed_flush_lsn >= fence_lsn` AND the
-     * carrier's subscription slot no longer `active`, both monotone — the same rule
-     * `node.retire_not_drained` gives. A dead box (no fence LSN) cannot prove its drain and takes the
-     * operator's `--accept-loss` path instead. `rejoin.*`, not `server.*`: a fact about this node's
-     * state in the topology. No params — the refusal names no row (`node.read_only`'s no-leak
-     * discipline). Never renamed once shipped.
-     */
-    "rejoin.not_drained": Record<string, never>;
-    /**
      * A mirror could not be assembled because the PRIMARY it was pointed at has no stamped environment
-     * (sync cloud-mirror C2b — the read-only mirror pulls + applies a primary's rows, the topology
-     * `node.read_only` describes). The operator's assemble flow asks the primary for a bundle; a primary
+     * (sync cloud-mirror C2b — the read-only mirror topology `node.read_only` describes). The operator's assemble flow asks the primary for a bundle; a primary
      * whose `deployment` row carries no environment has never been provisioned, so there is nothing to
      * mirror and the assemble is refused BEFORE any bundle fetch or apply. A primary-side PRECONDITION,
      * so it is reported to the operator as HTTP 409 (the resource is not in a state that can serve the
      * request) by the assemble route's local STATUS map in a later C2b task, not here — the same
      * declare-here / status-in-route split every code in this file follows.
      *
-     * NO params: the refusal names no row, so a log line leaks nothing — the same `sync.*`/`tunnel.*`
-     * no-leak discipline `node.read_only` follows, and there is nothing non-secret to carry beyond the
+     * NO params: the refusal names no row, so a log line leaks nothing — the same no-leak
+     * discipline `node.read_only` follows, and there is nothing non-secret to carry beyond the
      * code (the fix is to provision the primary first). `mirror.*` names the DOMAIN CONCEPT — a read-only
      * mirror node — never the throwing package (`tenant.not_found`'s note above gives the rule); `server.*`
      * is reserved for facts about the process itself, and "the primary is not provisioned" is a fact about
@@ -1490,10 +1391,9 @@ declare module "@waitron/shared" {
     "mirror.not_provisioned": Record<string, never>;
     /**
      * A mirror was pointed at a primary whose deployment environment does not match this box's own
-     * (swap step 4). Adopt copies the primary's fiscal chain natively, and one database serves exactly
-     * one environment (CLAUDE.md §5, the one-database-per-environment invariant) — a preproduction
-     * mirror can never hold a production venue's series, or a production sale would leave a permanent
-     * hole. Refused BEFORE any subscription is created or any row stamped. `expected` is this box's
+     * One database serves exactly one environment (CLAUDE.md §5, the one-database-per-environment
+     * invariant) — a preproduction mirror can never hold a production venue's series, or a production
+     * sale would leave a permanent hole. Refused BEFORE adopt writes anything. `expected` is this box's
      * environment, `actual` the primary's — both two-valued config facts already in the host's own
      * configuration (`production`/`preproduction`), never secrets, the same shape
      * `deployment.environment_mismatch` carries. `mirror.*` names the DOMAIN CONCEPT — the read-only
@@ -1509,7 +1409,7 @@ declare module "@waitron/shared" {
      * PRECONDITION on a well-formed request, reported to the operator as HTTP 400 by the bundle route's
      * local STATUS map in a later C2b task, not here (the declare-here / status-in-route split).
      *
-     * NO params: the refusal names no row, the same `sync.*`/`tunnel.*` no-leak discipline
+     * NO params: the refusal names no row, the same no-leak discipline
      * `mirror.not_provisioned`/`node.read_only` follow; the relay endpoint is infrastructure config, not
      * echoed, and the fix is to configure the relay. `mirror.*` names the DOMAIN CONCEPT — a read-only
      * mirror node — never the throwing package (`tenant.not_found`'s note gives the rule). Never renamed
@@ -1530,7 +1430,7 @@ declare module "@waitron/shared" {
      * rule §1's error-code conventions give).
      *
      * NO params: the request is refused by shape and names no row, so a log line leaks nothing — the
-     * same `sync.*`/`tunnel.*` no-leak discipline `mirror.no_relay`/`node.read_only` follow, and the
+     * same no-leak discipline `mirror.no_relay`/`node.read_only` follow, and the
      * standby's key is not echoed. `mirror.*` names the DOMAIN CONCEPT — here the cloud-mirror
      * adoption handshake, specifically the standby identity a bundle request must carry for the primary
      * to reserve + endorse — never the throwing package (`tenant.not_found`'s note above gives the
@@ -1687,7 +1587,7 @@ declare module "@waitron/shared" {
      * `mirror.bundle_fetch_failed` (a well-formed request whose UPSTREAM primary then failed, a 502).
      *
      * NO params: the URL is attacker-controlled and is NEVER echoed — it can carry a credential in its
-     * userinfo or an internal host that a log line would leak — the same `sync.*`/`tunnel.*` no-leak
+     * userinfo or an internal host that a log line would leak — the same no-leak
      * discipline `mirror.bundle_fetch_failed`/`node.read_only` follow. `mirror.*` names the DOMAIN CONCEPT
      * — a read-only mirror node — never the throwing package (`tenant.not_found`'s note gives the rule);
      * `server.*` is reserved for facts about the process itself, and "the primary URL is invalid" is a

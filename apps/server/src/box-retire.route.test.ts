@@ -8,7 +8,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
-import type { SlotDrain } from "@waitron/sync";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
@@ -27,21 +26,9 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-// The carrier a fenced node drains onto — named `serving-primary` in the held chart so a fenced self
-// document has a carrier (the happy-path shape retireSelf accepts).
+// The carrier that carries the venue forward — named `serving-primary` in the held chart so a fenced
+// self document has a carrier (the happy-path shape retireSelf accepts).
 const CARRIER_NODE_ID = "88888888-8888-4888-8888-888888888888";
-
-// The fence LSN this node recorded when it fenced, and a drained SlotDrain (slot detached, its
-// confirmed_flush past the fence LSN) — the happy-path shape retireSelf accepts (Ruling C2).
-const FENCE_LSN = "0/1500000";
-const DRAINED: SlotDrain = {
-  exists: true,
-  active: false,
-  walStatus: "reserved",
-  confirmedFlushLsn: "0/1500000",
-  currentWalLsn: "0/1600000",
-  retainedBytes: 0n,
-};
 
 const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
@@ -100,13 +87,7 @@ async function setupTenant(): Promise<{ nodeId: string }> {
 
 /** A Hono app carrying the management API (for its login route) plus the box-retire route under test.
  * Both surfaces share the owner db + tenant, so a cookie minted on one resolves on the other. */
-function buildApp(
-  nodeId: string,
-  readSlotDrain: (() => Promise<SlotDrain>) | undefined,
-  // The boot carrier retireSelf checks the fresh held chart against; matches the seeded serving-primary
-  // on the happy path, `undefined` (bound to `readSlotDrain`) on the refusal-before-carrier paths.
-  carrierNodeId: string | undefined = undefined,
-): Hono {
+function buildApp(nodeId: string): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -125,9 +106,6 @@ function buildApp(
       appDb: suite.admin,
       ring: RING,
       nodeId,
-      readSlotDrain,
-      fenceLsn: FENCE_LSN,
-      carrierNodeId,
     },
     () => {},
   );
@@ -165,7 +143,7 @@ describe("POST /api/box/retire (real postgres)", () => {
     // Establish the node identity so the mint on the happy path has a key to sign with; harmless to
     // the refusal paths, which return before any mint.
     await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, nodeId);
-    managerCookie = await login(buildApp(nodeId, undefined), MANAGER_EMAIL);
+    managerCookie = await login(buildApp(nodeId), MANAGER_EMAIL);
   });
 
   it("401s without a management session", async () => {
@@ -174,7 +152,7 @@ describe("POST /api/box/retire (real postgres)", () => {
       suite.admin,
       membershipDoc(5, [{ nodeId, contactUrl: "", standing: "serving-primary" }]),
     );
-    const app = buildApp(nodeId, undefined);
+    const app = buildApp(nodeId);
     const res = await app.request("/api/box/retire", { method: "POST" });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
@@ -187,7 +165,7 @@ describe("POST /api/box/retire (real postgres)", () => {
       suite.admin,
       membershipDoc(5, [{ nodeId, contactUrl: "", standing: "serving-primary" }]),
     );
-    const app = buildApp(nodeId, undefined);
+    const app = buildApp(nodeId);
     const res = await app.request("/api/box/retire", {
       method: "POST",
       headers: { cookie: managerCookie },
@@ -196,9 +174,9 @@ describe("POST /api/box/retire (real postgres)", () => {
     expect(await res.json()).toMatchObject({ error: { code: "node.retire_not_fenced" } });
   });
 
-  it("200 evicts a fully-drained fenced node and flips self to evicted", async () => {
-    // A held term-5 chart marking THIS node sell-only (the fence) AND the carrier serving-primary. With
-    // an injected `drained:true` progress, retireSelf mints the eviction and persists it term-guarded.
+  it("200 evicts a fenced node with a carrier and flips self to evicted", async () => {
+    // A held term-5 chart marking THIS node sell-only (the fence) AND the carrier serving-primary —
+    // retireSelf mints the eviction and persists it term-guarded.
     await writeNodeMembership(
       suite.admin,
       membershipDoc(5, [
@@ -206,11 +184,7 @@ describe("POST /api/box/retire (real postgres)", () => {
         { nodeId: CARRIER_NODE_ID, contactUrl: "https://carrier", standing: "serving-primary" },
       ]),
     );
-    const app = buildApp(
-      nodeId,
-      () => Promise.resolve(DRAINED),
-      CARRIER_NODE_ID, // the boot carrier matches the held serving-primary → freshness guard passes
-    );
+    const app = buildApp(nodeId);
     const res = await app.request("/api/box/retire", {
       method: "POST",
       headers: { cookie: managerCookie },

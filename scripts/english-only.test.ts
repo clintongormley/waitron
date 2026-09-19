@@ -21,14 +21,12 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import {
-  FISCAL_FIDELITY_FIXTURES,
   GENERIC_PACKAGES,
   I18N_CATALOGUES,
   PACKAGES_ROOT,
   SELF,
   SPANISH_WORDS,
   findSpanish,
-  isFidelityExempt,
   readSource,
   sourceFilesIn,
 } from "../packages/db/src/english-only.js";
@@ -114,7 +112,6 @@ describe("configuration", () => {
       "identity",
       "catalogue",
       "media",
-      "sync",
       "tunnel",
       "membership",
       "module",
@@ -125,7 +122,6 @@ describe("configuration", () => {
       "print-agent",
       "diagnostics",
       "sync-enrolment",
-      "replication-tests",
       "composition",
       "fiscal-none",
       "provisioning",
@@ -226,84 +222,6 @@ describe("configuration", () => {
     expect(findSpanish("const nombreLector = 1;", FORBIDDEN).map((v) => v.word)).toEqual([
       "nombre",
     ]);
-  });
-
-  it("exempts only the fiscal-fidelity suite by exact name, keeping its three siblings in scope", () => {
-    // A by-NAME exemption, narrower than provisioning's whole-package test skip: the fidelity suite
-    // is the only replication-tests file that names Spanish fiscal tables, so only it is dropped.
-    expect([...FISCAL_FIDELITY_FIXTURES]).toEqual(["replication-fidelity.pg.test.ts"]);
-    const names = sourceFilesIn("replication-tests").map((file) => file.split("/").pop());
-    expect(names).not.toContain("replication-fidelity.pg.test.ts");
-    expect(names).toEqual(
-      expect.arrayContaining([
-        "replication-over-tunnel.pg.test.ts",
-        "replication-provision.pg.test.ts",
-        "replication-subscribe.pg.test.ts",
-      ]),
-    );
-  });
-
-  it("exempts ONLY the exact fidelity basename, not a differently-prefixed file ending in the same suffix", () => {
-    // Control (§4): the exemption is by exact BASENAME, not `endsWith`, so a differently-prefixed file
-    // that merely ENDS with `replication-fidelity.pg.test.ts` — a different suite sharing the suffix —
-    // is NOT dropped from the scan. Proven on the exemption predicate directly, with no file written
-    // into the real `replication-tests/src`: that directory is read whole, in parallel, by the other
-    // repo-level tree scanners (module-seams and its siblings), and a transient control file there
-    // raced them into an ENOENT. Against the old `endsWith` match the decoy would be exempt and the
-    // second assertion would be true.
-    expect(isFidelityExempt("replication-tests", "replication-fidelity.pg.test.ts")).toBe(true);
-    expect(isFidelityExempt("replication-tests", "other-replication-fidelity.pg.test.ts")).toBe(
-      false,
-    );
-    // The exemption is scoped to replication-tests; the same basename in another package is not exempt.
-    expect(isFidelityExempt("db", "replication-fidelity.pg.test.ts")).toBe(false);
-    // And a scanned decoy's Spanish really is caught, so "not exempt" means "flagged".
-    expect(findSpanish("export const nombre = 1;\n", FORBIDDEN).map((v) => v.word)).toContain(
-      "nombre",
-    );
-  });
-
-  it("would flag the fidelity suite's fiscal Spanish if scanned, so the pass is the exemption", () => {
-    // Prove-by-construction, mirroring the catalogue test above: the fidelity suite really does carry
-    // forbidden vocabulary (`registros_facturacion`, `cadenas`, `huella`, …), so its absence from the
-    // tree scan is DUE TO the exclusion, not because the words slipped the assembled forbidden set.
-    const fidelity = join(
-      PACKAGES_ROOT,
-      "replication-tests",
-      "src",
-      "replication-fidelity.pg.test.ts",
-    );
-    expect(existsSync(fidelity)).toBe(true);
-    expect(findSpanish(readSource(fidelity), FORBIDDEN).length).toBeGreaterThan(0);
-  });
-
-  it("catches a Spanish word in a NON-exempt replication-tests file (the package is really scanned)", () => {
-    // Control (§4): a non-exempt source file in replication-tests would be discovered by the scan and
-    // its Spanish flagged. Proven WITHOUT writing into the real `replication-tests/src` — that
-    // directory is read whole, in parallel, by the other repo-level tree scanners (module-seams and
-    // siblings), and a transient control file there raced them into an ENOENT. The three facts that
-    // together establish the claim, each deterministic:
-    //   (1) replication-tests is in the scan set, so the tree scan visits it — remove it from
-    //       GENERIC_PACKAGES and this line fails, exactly the removal the old control guarded against;
-    expect(GENERIC_PACKAGES).toContain("replication-tests");
-    //   (2) an ordinary control basename is NOT dropped there by the fidelity exemption;
-    expect(isFidelityExempt("replication-tests", "__english-only-control__.ts")).toBe(false);
-    //   (3) sourceFilesIn really discovers a non-exempt `.ts` file and findSpanish flags its Spanish —
-    //       exercised on a temp dir OUTSIDE packages/, driven by a relative package path the same way
-    //       the screenshot-directory test above drives the scanner.
-    const fixture = mkdtempSync(join(tmpdir(), "waitron-vocabulary-"));
-    try {
-      const source = join(fixture, "src");
-      mkdirSync(source, { recursive: true });
-      const control = join(source, "__english-only-control__.ts");
-      writeFileSync(control, "export const nombre = 1;\n");
-      const files = sourceFilesIn(relative(PACKAGES_ROOT, fixture));
-      expect(files).toContain(control);
-      const violations = files.flatMap((file) => findSpanish(readSource(file), FORBIDDEN));
-      expect(violations.map((v) => v.word)).toContain("nombre");
-    } finally {
-      rmSync(fixture, { recursive: true, force: true });
-    }
   });
 
   it("cannot reach this suite, so it needs no exemption", () => {

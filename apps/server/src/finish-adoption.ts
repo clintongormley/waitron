@@ -1,27 +1,36 @@
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { readSubscriptionStatus, subscriptionName, type SubscriptionStatus } from "@waitron/sync";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { writeFileAtomic } from "./fs-atomic.js";
-import { realSleep } from "./loop.js";
 import { establishReservedStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
 import { ensureMirrorViewer } from "./mirror-session.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
-import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 
 /** The file under `<stateDir>` a mirror writes at adopt and clears once its identity is established. */
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 
 /**
- * The full standby identity + reservation an adopted mirror must finish establishing AFTER its native
- * initial copy completes (derived fact 1 / C6): a native COPY cannot coexist with pre-inserted rows,
- * so adopt no longer scaffolds the tenant; the mirror boots into an empty database while the copy
- * runs, and `runFinishAdoption` seals this identity once every `pg_subscription_rel` row reaches `r`.
- * Persisted on disk (not the DB) because the DB it targets is still being copied.
+ * The full standby identity + reservation an adopted mirror records at adopt for a boot to establish.
+ * Persisted on disk, not in the database, because the identity it describes has no row there.
+ *
+ * THAT STEP CANNOT SUCCEED TODAY — this is the one place that says why; everything else about
+ * adoption points here. `establishReservedStandbyIdentity` (`reserved-identity.ts`) inserts the
+ * standby's `nodes` row, whose NOT NULL `location_id` references `locations`
+ * (`nodes_location_id_locations_id_fk`), and an adopted mirror holds no `locations` row:
+ * `adoptFromPrimary` refuses to run unless that table is EMPTY (`assertNoOperationalVenue`,
+ * `packages/provisioning/src/tenant-guard.ts`), neither it nor the adoption-pending boot path inserts
+ * one, nothing copies the primary's rows here, and the only `locations` insert anywhere else in the
+ * tree — `applyVenue`'s, `packages/provisioning/src/venue-apply.ts` — is reached only by a
+ * venue-provisioning run (the rest are test fixtures and demo scripts seeding their own in-memory
+ * PGlite). Measured: that
+ * establish against a migrated but empty database throws SQLSTATE 23503 naming the constraint and
+ * rolls back, leaving zero `nodes` rows. `runFinishAdoption` therefore logs
+ * `adoption.establish_failed` and keeps this latch, and an adopted mirror stays adoption-pending until
+ * a replacement copy mechanism lands (`docs/backlog.md` → *Replication, membership & failover*).
  */
 export interface PendingAdoption {
   locationId: string;
@@ -68,68 +77,51 @@ type EstablishArgs = {
   reserved: ReservedIdentity;
 };
 
-const ADOPTION_POLL_MS = 2000;
-
 /**
- * The boot-time finish worker for an adoption-pending mirror (C6). While the pending file exists, it
- * polls the mirror's OWN subscription (`subscriptionName(env, standby.nodeId)` — named after the
- * SUBSCRIBER, C1) until every table has finished its initial copy
- * (`tablesTotal > 0 && tablesReady === tablesTotal`). Then it establishes the reserved identity
- * (idempotent) with THIS node's enabled module set, ensures the ambient mirror viewer, unlinks the
- * file and logs `adoption.established`. A throw in any tick is logged (`adoption.establish_failed`)
- * and retried next tick — the file is kept until the whole step succeeds. Abortable: on `signal`
- * the loop returns without establishing (a later boot re-enters adoption-pending mode and retries).
+ * The boot-time finish worker for an adoption-pending mirror. If the pending file exists it attempts
+ * the reserved identity (idempotent) with THIS node's enabled module set, then the ambient mirror
+ * viewer, then unlinks the file and logs `adoption.established`. A throw is logged
+ * (`adoption.establish_failed`) and the file is LEFT in place, so the next boot re-enters
+ * adoption-pending mode and retries the whole step — which is what every boot of an adopted mirror
+ * does today, for the reason in `PendingAdoption`'s header above.
  */
 export async function runFinishAdoption(deps: {
-  replicationDb: Database;
+  ownerDb: Database;
   ring: KeyRing;
   stateDir: string;
-  environment: DeploymentEnvironment;
   modules: readonly WaitronModule[];
-  readStatus?: (name: string) => Promise<SubscriptionStatus>;
   establish?: (args: EstablishArgs) => Promise<void>;
   ensureViewer?: () => Promise<void>;
-  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   log: Logger;
-  signal: AbortSignal;
 }): Promise<void> {
-  const readStatus =
-    deps.readStatus ?? ((name) => readSubscriptionStatus(deps.replicationDb, name));
   const establish =
     deps.establish ??
-    ((args) =>
-      establishReservedStandbyIdentity({ ownerDb: deps.replicationDb, ring: deps.ring }, args));
-  const ensureViewer = deps.ensureViewer ?? (() => ensureMirrorViewer(deps.replicationDb));
-  const sleep = deps.sleep ?? realSleep;
+    ((args) => establishReservedStandbyIdentity({ ownerDb: deps.ownerDb, ring: deps.ring }, args));
+  const ensureViewer = deps.ensureViewer ?? (() => ensureMirrorViewer(deps.ownerDb));
 
-  while (!deps.signal.aborted) {
-    const pending = await readPendingAdoption(deps.stateDir);
-    if (pending === null) return; // established (file unlinked) or never pending — nothing to finish.
-    try {
-      const status = await readStatus(subscriptionName(deps.environment, pending.standby.nodeId));
-      if (status.tablesTotal > 0 && status.tablesReady === status.tablesTotal) {
-        // establish FIRST (its inserts FK to the now-copied tenant/location rows), then the ambient
-        // viewer (its `persons` insert FKs to the same tenant), then clear the latch — order matters:
-        // the file must survive a throw in either step so the next boot retries.
-        await establish({
-          locationId: pending.locationId,
-          standby: pending.standby,
-          nodeName: pending.nodeName,
-          filingModule: pending.filingModule,
-          taxModule: pending.taxModule,
-          modules: deps.modules,
-          reserved: pending.reserved,
-        });
-        await ensureViewer();
-        await rm(pendingPath(deps.stateDir), { force: true });
-        deps.log("info", "adoption.established", { nodeId: pending.standby.nodeId });
-        return;
-      }
-    } catch (error) {
-      // The copy may still be settling, or a transient DB fault — never fatal here: log and retry the
-      // whole tick. The file is untouched, so a re-read next tick picks it up again.
-      deps.log("error", "adoption.establish_failed", { code: codeOf(error) });
-    }
-    await sleep(ADOPTION_POLL_MS, deps.signal);
+  const pending = await readPendingAdoption(deps.stateDir);
+  if (pending === null) return; // established (file unlinked) or never pending — nothing to finish.
+  try {
+    // establish FIRST (its inserts FK to the venue's rows), then the ambient viewer, then clear the
+    // latch — order matters: the file must survive a throw in either step so the next boot retries.
+    // The viewer is NOT what blocks a mirror: `ensureMirrorViewer` run against a migrated but empty
+    // database succeeds (measured), and `persons` declares no foreign key at all
+    // (`packages/identity/drizzle/0000_identity_baseline.sql`).
+    await establish({
+      locationId: pending.locationId,
+      standby: pending.standby,
+      nodeName: pending.nodeName,
+      filingModule: pending.filingModule,
+      taxModule: pending.taxModule,
+      modules: deps.modules,
+      reserved: pending.reserved,
+    });
+    await ensureViewer();
+    await rm(pendingPath(deps.stateDir), { force: true });
+    deps.log("info", "adoption.established", { nodeId: pending.standby.nodeId });
+  } catch (error) {
+    // Never fatal here: log and leave the latch file, so the next boot re-enters adoption-pending
+    // mode and retries the whole step.
+    deps.log("error", "adoption.establish_failed", { code: codeOf(error) });
   }
 }

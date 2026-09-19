@@ -9,7 +9,7 @@ import type { Database, Transaction } from "@waitron/db";
 // Column shapes are the current migrated schema (the one taxpayer row keyed 1, vat_breakdown on
 // sales, node-keyed series/sif/registro).
 
-/** Deployment-environment stamp carried on a registro (never HASHED, but replicated verbatim). */
+/** Deployment-environment stamp carried on a registro (stored verbatim, never HASHED — CLAUDE.md §5). */
 export type Entorno = "production" | "preproduction";
 
 /** The FK closure a `registros_facturacion` row hangs off. */
@@ -142,7 +142,7 @@ export interface RegistroOptions {
    * insert (the ledger is append-only, so it cannot be re-captured under its own id).
    */
   id?: string;
-  /** deployment environment stamped on the row — replicated verbatim (never hashed). Default "production". */
+  /** deployment environment stamped on the row — stored verbatim, never hashed. Default "production". */
   entorno?: Entorno;
   /** The 64-char huella. Default `"F".repeat(64)`. */
   huella?: string;

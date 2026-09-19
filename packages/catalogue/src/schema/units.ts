@@ -42,8 +42,10 @@ export const productUnits = table(
     unitId: id("unit_id").notNull(),
   },
   (t) => [
-    // A PRIMARY KEY, not a bare UNIQUE: this table publishes for replication, and Postgres refuses to
-    // UPDATE (the upsert that changes a product's unit) a published table with no replica identity.
+    // A PRIMARY KEY on `product_id` alone, not a bare UNIQUE: one unit per product, and the key
+    // doubles as the table's REPLICA IDENTITY, without which Postgres refuses to UPDATE (the upsert
+    // that changes a product's unit) a table that is in a publication. Nothing in the tree publishes
+    // this table today; `units.pg.test.ts` creates a publication itself to exercise that path.
     primaryKey({ columns: [t.productId] }),
     foreignKey({
       columns: [t.productId],

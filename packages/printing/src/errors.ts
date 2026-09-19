@@ -1,5 +1,5 @@
 // A bare side-effect import so TypeScript augments the real "@waitron/shared" module rather than
-// declaring a fresh ambient one — the idiom packages/purchasing, packages/layouts, packages/sync use.
+// declaring a fresh ambient one — the idiom packages/purchasing and packages/layouts use.
 import "@waitron/shared";
 
 /**

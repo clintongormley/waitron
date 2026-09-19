@@ -279,14 +279,13 @@ export const OWN_SHARD_PACKAGES = [
   FISCAL_VERIFACTU_PACKAGE,
   "@waitron/bookings",
   "@waitron/media",
-  "@waitron/replication-tests",
   PAYMENTS_STRIPE_PACKAGE,
   PAYMENTS_SUMUP_PACKAGE,
 ];
 
 /**
  * The remaining workspace members partition into two bins. Each CI bin runs at most two
- * package processes; browser and replication workloads have dedicated runners above.
+ * package processes; browser and other heavy workloads have dedicated runners above.
  * The workflow subtracts the other bin and OWN_SHARD_PACKAGES from pnpm's resolved scope.
  * ci-workflow.test.mjs runs those filters against the real workspace and checks that every
  * test package is selected exactly once. Add each new package to one bin or its own shard.
@@ -308,7 +307,6 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/shared",
   "@waitron/server-kit",
   "@waitron/dashboard-modules",
-  "@waitron/sync",
 ];
 
 export const LIGHT_B_PACKAGES = [
@@ -414,7 +412,6 @@ export const SCOPE_GATES = [
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
   { output: "bookings", covers: membership("@waitron/bookings") },
   { output: "media", covers: membership("@waitron/media") },
-  { output: "replication", covers: membership("@waitron/replication-tests") },
   { output: "payments_stripe", covers: membership(PAYMENTS_STRIPE_PACKAGE) },
   { output: "payments_sumup", covers: membership(PAYMENTS_SUMUP_PACKAGE) },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },

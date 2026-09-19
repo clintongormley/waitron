@@ -5,13 +5,14 @@ import { PACKAGES_WITHOUT_TESTS } from "./changed-scope.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
- * The coverage bar is split in two (owner decision 2026-09-05, Track A item 1): six packages — the
- * fiscal core and the data-layer foundations everything else builds on — hold 98/98/98/95, and
- * every other package holds the 90/90/85/85 floor. The six are the owner's list, not a rule that
- * derives them (`apps/server` holds the AEAT transport and sits at the floor). The root project
- * holds the high bar too: its coverage table is the root `scripts/*.mjs` plus the vocabulary
- * module, and two of those scripts are the classifiers that decide what CI and the pre-push hook
- * run, whose failure mode is a scoped run that selects nothing and reports success (CLAUDE.md §2).
+ * The coverage bar is split in two (owner decision 2026-09-05, Track A item 1): the fiscal core and
+ * the data-layer foundations everything else builds on hold 98/98/98/95, and every other package
+ * holds the 90/90/85/85 floor. Which packages those are is the owner's list, not a rule that
+ * derives them (`apps/server` holds the AEAT transport and sits at the floor); `HIGH_BAR_PACKAGES`
+ * below is that list. The root project holds the high bar too: its coverage table is the root
+ * `scripts/*.mjs` plus the vocabulary module, and two of those scripts are the classifiers that
+ * decide what CI and the pre-push hook run, whose failure mode is a scoped run that selects nothing
+ * and reports success (CLAUDE.md §2).
  *
  * Which package holds which bar is a decision no per-package suite can check — a package's own
  * config decides whether its tests run at all — so this guard pins it from the root project
@@ -43,7 +44,6 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/fiscal-verifactu",
   "@waitron/core",
   "@waitron/db",
-  "@waitron/sync",
   "@waitron/payments",
 ];
 

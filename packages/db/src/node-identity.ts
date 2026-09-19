@@ -31,7 +31,14 @@ export function setNodePublicKey(db: Database, nodeId: string, publicKey: string
  * The node's membership trust anchors (design §4): every `nodes` row's `{ id → public_key }`, skipping
  * the keyless ones (bare fixtures, a not-yet-stamped node). Read as the app role under `withTransaction`
  * (app_user holds SELECT on `nodes`). Boot reads this into `membershipTrustSet`: a fresh primary gets
- * `{ self }`; a cloud mirror gets `{ primary }` from the node row `adoptVenue` replicated.
+ * `{ self }`. A cloud mirror gets an EMPTY set, because nothing creates a `nodes` row on it today:
+ * `adoptFromPrimary` inserts no venue rows and the bundle carries none (`apps/server/src/adopt.ts`),
+ * the initial copy that used to bring the primary's rows across was the deleted PostgreSQL
+ * replication, and the standby's OWN row — the one `establishReservedStandbyIdentity` inserts through
+ * `insertReservedNodeTx`, carrying the STANDBY's public key, never the primary's — cannot be inserted
+ * without the venue's `locations` row it foreign-keys to (`nodes_location_id_locations_id_fk`,
+ * `drizzle/0000_db_baseline.sql`), which the mirror does not have either;
+ * `apps/server/src/finish-adoption.ts` keeps its latch file and retries that step on every boot.
  */
 export function readMembershipTrustSet(db: Database): Promise<TrustSet> {
   return withTransaction(db, async (tx) => {

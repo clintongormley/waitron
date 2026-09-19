@@ -23,8 +23,8 @@ const suite = useTemplateDb({ template: "manifest" });
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// This node's id — carried on the recipe deps `cfg` shape (a recipe write UPDATEs `products`). Any
-// valid uuid serves; the id is not otherwise exercised here.
+// The uuid handed to `mountRecipeApi`'s `cfg.nodeId`. No route reads it (`recipe-api.ts`'s
+// `RecipeApiDeps` doc), so any valid uuid serves.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
@@ -115,8 +115,9 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** One Hono app per venue — `mountRecipeApi` binds ONE node via `cfg.nodeId`, so each venue's
- * routes need their own app (mirrors `purchasing-api.pg.test.ts`). */
+/** A Hono app with the recipe routes mounted — the same per-suite shape
+ * `purchasing-api.pg.test.ts` uses. `mountRecipeApi` reads `cfg.nodeId` in no route
+ * (`recipe-api.ts`'s `RecipeApiDeps` doc), so the app is bound to nothing but `db`. */
 function mountApp(): Hono {
   const app = new Hono();
   mountRecipeApi(app, { db: suite.admin, cfg: { nodeId: NODE_ID } }, noopLog);

@@ -1,15 +1,12 @@
 // The PRIMARY side of the cloud-mirror adopt flow (design §10). `assembleMirrorBundle` reads the
 // venue's tenant identity + the designated node's descriptor, reserves the standby's dormant
-// identity, and returns a `MirrorBundle` the endpoint serves. Since swap step 4 the mirror no longer
-// pulls an outbox: it establishes a NATIVE subscription (initial COPY of every published table), so
-// the bundle carries the primary's replication CONNECTION (the `waitron_repl` credential + advertise
-// address) instead of a per-peer sync token, and no longer carries the venue's parent ROWS — the
-// COPY brings those.
+// identity, and returns a `MirrorBundle` the endpoint serves. The bundle carries IDENTITY and DIAL
+// details only — it carries no per-peer credential and none of the venue's parent ROWS. How a mirror
+// obtains the venue's data is an open question: the PostgreSQL replication that used to answer it is
+// deleted and its replacement has not landed.
 //
 // The deployment holds one tenant per database. The tenant row and the designated node row are
-// selected by id; `app_user` holds SELECT on both in the core baseline. The replication password
-// rides the bundle in PLAINTEXT and is returned ONCE; it is SECRET and never logged (the old
-// syncToken discipline).
+// selected by id; `app_user` holds SELECT on both in the core baseline.
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
@@ -24,7 +21,6 @@ import {
 import { endorseKey, type Endorsement } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
-import type { ReplicationConfig } from "./config.js";
 import { enabledModules, serializeModuleConfig } from "@waitron/module";
 import { caCertPath } from "./box-secrets.js";
 import { readModuleConfig } from "./module-config.js";
@@ -47,14 +43,12 @@ export interface ReservedIdentity {
 }
 
 /**
- * Everything the mirror needs to adopt this venue and establish a native subscription to the primary.
- * `designated` are the four ids the primary till was provisioned with (`config.till.*`), so the
- * mirror knows which node/tenant it mirrors; the venue's parent rows are NOT carried — the native
- * initial COPY brings them (swap step 4). `tenant` is the venue's `(country, taxId)` identity, for the
+ * Everything the mirror needs to adopt this venue's IDENTITY. `designated` are the four ids the primary
+ * till was provisioned with (`config.till.*`), so the mirror knows which node/tenant it mirrors; the
+ * venue's parent rows are NOT carried. `tenant` is the venue's `(country, taxId)` identity, for the
  * mirror-side foreign-tenant + environment guards. `primaryNode` is the designated node's descriptor
- * (name + filing/tax modules), the shape the reserved standby identity mirrors. `replication` is the
- * primary's `waitron_repl` connection the mirror's `CREATE SUBSCRIPTION` dials — SECRET, returned once.
- * `reservedIdentity` is the standby's dormant identity the primary reserves + endorses (design §6 R2).
+ * (name + filing/tax modules), the shape the reserved standby identity mirrors. `reservedIdentity` is
+ * the standby's dormant identity the primary reserves + endorses (design §6 R2).
  */
 export interface MirrorBundle {
   designated: AdoptResult;
@@ -66,13 +60,6 @@ export interface MirrorBundle {
   boxHostname: string;
   boxCaPem: string;
   relayUrl: string;
-  /**
-   * The primary's native-replication CONNECTION the mirror's subscription dials: the advertise
-   * host/port, the database name, and the `waitron_repl` password. The `user` is the well-known
-   * `REPLICATION_ROLE` and is not carried. SECRET in whole (the password) — returned exactly once in
-   * the bundle response and NEVER logged, the discipline the sync token held before it.
-   */
-  replication: { host: string; port: number; database: string; password: string };
   /** Venue-wide key for encrypted account factors; transferred only inside this authenticated bundle. */
   accountKey: string;
   reservedIdentity: ReservedIdentity;
@@ -97,9 +84,7 @@ export interface MirrorBundle {
  * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
  * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the four ids
  * the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
- * `relayUrl`/`boxHostname` are the box's dial-in. `replication` is this primary's own
- * native-replication credential + advertise address (`config.replication`); `database` is the name of
- * the primary's database, so a subscription's conninfo names the right dbname to COPY from.
+ * `relayUrl`/`boxHostname` are the box's dial-in.
  */
 export interface AssembleDeps {
   appDb: Database;
@@ -109,10 +94,6 @@ export interface AssembleDeps {
   boxHostname: string;
   designated: AdoptResult;
   standby: { nodeId: string; publicKey: string };
-  /** This primary's own `waitron_repl` credential + advertise address (`config.replication`). */
-  replication: ReplicationConfig;
-  /** The name of the primary's database, dialled in a subscription's conninfo `dbname`. */
-  database: string;
   accountKey: string;
   /** The box's WireGuard public key (swap S2); the box image supplies it in S7, absent in dev/fixture. */
   wireguardPublicKey?: string;
@@ -120,10 +101,9 @@ export interface AssembleDeps {
 
 /**
  * Assemble the mirror bundle: the venue's tenant + designated-node identity, the deployment
- * environment, the box's CA + dial details, the primary's replication connection, and the reserved
- * standby identity. Throws `mirror.not_provisioned` if the database carries no deployment stamp (there
- * is nothing to mirror). No token is minted and no parent rows travel — the mirror's native initial
- * COPY brings the venue data, and the bundle's `replication` connection is what its subscription dials.
+ * environment, the box's CA + dial details, and the reserved standby identity. Throws
+ * `mirror.not_provisioned` if the database carries no deployment stamp (there is nothing to mirror).
+ * No credential is minted and no parent rows travel.
  */
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
@@ -201,12 +181,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     boxHostname: deps.boxHostname,
     boxCaPem,
     relayUrl: deps.relayUrl,
-    replication: {
-      host: deps.replication.advertiseHost,
-      port: deps.replication.advertisePort,
-      database: deps.database,
-      password: deps.replication.password,
-    },
     accountKey: deps.accountKey,
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),

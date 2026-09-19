@@ -308,6 +308,14 @@ export class SetupApp extends LitElement {
   @state() private breakGlassSecret?: string;
 
   /**
+   * True once a `POST /setup-api/adopt` has SUCCEEDED — the `done` screen's signal that it is on the
+   * mirror path, where none of the trading copy applies (`done-screen.ts`'s `mirrorJoin`). Kept apart
+   * from {@link SetupApp.breakGlassSecret}, which is mirror-only today too but is a value to display
+   * rather than a statement about which path ran.
+   */
+  @state() private mirrorJoin = false;
+
+  /**
    * The mapped failure message shown ON the `provisioning` screen for the codes that stay there (the
    * two fiscal 409s, `already_provisioning`, `not_ready`, `provision_failed`). `undefined` while a
    * POST is in flight (the screen then shows the in-flight state) or before one is attempted.
@@ -602,8 +610,11 @@ export class SetupApp extends LitElement {
    * `provision-requested`, which the shell assembles from its draft). The credential is forwarded
    * VERBATIM to `SetupApi.adopt` — the structured `{ personId, password, totp? }` object, never
    * re-shaped and never persisted to the shell's draft (a mirror files nothing; the password is not
-   * kept). Success takes the box down for its restart into mirror mode, so `done` is where the reload
-   * happens; a failure is mapped by {@link SetupApp.#mapAdoptError}.
+   * kept). Success takes the box down for a restart it does not come back from as a working mirror:
+   * `adoptFromPrimary` only records a latch for a later boot to finish (`apps/server/src/adopt.ts`),
+   * and no boot can — `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header is the one place
+   * that says why. So `done` is where the operator is TOLD that, rather than where a reload is
+   * offered; a failure is mapped by {@link SetupApp.#mapAdoptError}.
    *
    * The `isConnected` guards mirror {@link SetupApp.#onProvisionRequested}: a teardown mid-request must
    * not write state onto a detached element.
@@ -621,6 +632,7 @@ export class SetupApp extends LitElement {
       // Capture the break-glass secret before advancing: the adopt response carries it ONCE (spec
       // §4.2), so the `done` screen must show it to the operator to record before the box restarts.
       this.breakGlassSecret = outcome.breakGlassSecret;
+      this.mirrorJoin = true;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected) return;
@@ -701,8 +713,13 @@ export class SetupApp extends LitElement {
    * - The double-setup 409s (`setup.already_provisioned` / `deployment.already_stamped`) and the
    *   concurrent-setup 409 (`setup.already_provisioning`) are TERMINAL — re-submitting is meaningless
    *   or unrecoverable (CLAUDE.md §5), so they land on the `provisioning` screen with a reload action
-   *   and NO retry, exactly as {@link SetupApp.#mapProvisionError} does. The reload for an
-   *   already-set-up mirror opens the read-only DASHBOARD (a mirror serves no till). Of the three,
+   *   and NO retry, exactly as {@link SetupApp.#mapProvisionError} does. The reload label here says
+   *   only "Reload", because nothing on this arm is a box that has adopted: a box that HAS adopted
+   *   serves no `/setup-api/*` at all (`apps/server/src/boot.ts` returns from its adoption-pending
+   *   branch above the mounts), so its adopt would 404 into the generic branch below. What this arm
+   *   IS is a box still in setup mode whose database was already stamped for a DIFFERENT environment
+   *   (`stampDeployment`, `packages/db/src/deployment.ts`), and a reload of a setup-mode box reopens
+   *   this wizard — which is all the label now promises. Of the three,
    *   only two are reachable from an adopt today: `deployment.already_stamped` (the adopt path stamps
    *   the environment — `adoptFromPrimary` → `stampDeployment`, `apps/server/src/adopt.ts`) and
    *   `setup.already_provisioning` (the shared concurrent-setup guard). `setup.already_provisioned` is
@@ -731,7 +748,7 @@ export class SetupApp extends LitElement {
       case "deployment.already_stamped":
         this.provisionMessage = "This server is already set up.";
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload to open the dashboard";
+        this.provisionReloadLabel = "Reload";
         return;
       default:
         this.connectError = ADOPT_ERROR_MESSAGES[code] ?? ADOPT_GENERIC_ERROR;
@@ -781,8 +798,8 @@ export class SetupApp extends LitElement {
    * retry flag + terminal reload label; `done` takes the `api` to poll during the restart, the
    * `draft.mode` (see the `case "done"` comment below) to label the result and gate its first-run backup
    * nudge, and — on the mirror path — the once-only `breakGlassSecret` to surface for the operator to
-   * record. All are passed as properties, since neither an api nor a draft object can travel as an
-   * attribute.
+   * record plus the `mirrorJoin` flag that selects its copy. All are passed as properties, since
+   * neither an api nor a draft object can travel as an attribute.
    */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
@@ -867,14 +884,16 @@ export class SetupApp extends LitElement {
         // (`WAITRON_ENV=dev`, `apps/server/src/config.ts`'s `isDevMode`) — that flag governs the dev
         // per-tab device switcher and is never set on a box an operator runs this wizard against.
         // The wizard's own DEMO/LIVE choice (`draft.mode`, mode-screen.ts) is what "demo mode" means
-        // here: a demo box is reversible in practice and is the one the nudge is meant to skip. A
-        // mirror-provisioned box collects no `mode` (the connect flow skips `mode`/`admin`/`venue`/
-        // `cert`/`review` entirely) — `undefined` reads as not-demo, so the nudge shows, matching a
-        // mirror being a real standby box rather than a disposable one.
+        // here: a demo box is reversible in practice and is the one the nudge is meant to skip. An
+        // adopting box collects no `mode` at all (the connect flow skips `mode`/`admin`/`venue`/
+        // `cert`/`review` entirely), so `undefined` reads as not-demo — which is why the nudge is
+        // gated on `mirrorJoin` in the screen itself and not on this value: a box that cannot finish
+        // joining serves no dashboard to set backups up in.
         return html`<setup-done-screen
           data-test="screen-done"
           .api=${this.api}
           .breakGlassSecret=${this.breakGlassSecret}
+          .mirrorJoin=${this.mirrorJoin}
           .onboardingIntent=${this.draft.mode}
         ></setup-done-screen>`;
       default:

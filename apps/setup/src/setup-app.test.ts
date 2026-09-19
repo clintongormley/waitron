@@ -1181,8 +1181,12 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
   });
 
+  // The reload label must promise nothing: this arm is a setup-mode box whose database was stamped
+  // for another environment, and a reload of a setup-mode box reopens this wizard — it does not open a
+  // dashboard (a box that has adopted serves none, and never reaches this arm at all — see
+  // `#mapAdoptError`). The `not.toContain("dashboard")` is the point of the assertion, not decoration.
   it.each(["setup.already_provisioned", "deployment.already_stamped"])(
-    "maps the fiscal 409 %s on adopt to 'already set up' with a dashboard reload and NO retry",
+    "maps the fiscal 409 %s on adopt to 'already set up' with a bare reload and NO retry",
     async (code) => {
       const adopt = vi.fn().mockRejectedValue({ code, params: {} });
       const el = await mountSetupApp(stubApi({ adopt }));
@@ -1191,9 +1195,9 @@ describe("setup-app", () => {
       expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
       const host = await screenHost(el, "provisioning");
       expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
-      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain(
-        "open the dashboard",
-      );
+      const reload = host.shadowRoot!.querySelector("[data-test=reload]");
+      expect(reload?.textContent?.trim()).toBe("Reload");
+      expect(reload?.textContent).not.toContain("dashboard");
     },
   );
 

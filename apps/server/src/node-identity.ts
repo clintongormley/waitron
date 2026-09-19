@@ -11,8 +11,8 @@ export const NODE_KEY_PURPOSE = "membership.node_key";
  * ONE tenant transaction seal the PRIVATE half in the box vault under `membership.node_key` and stamp
  * the PUBLIC half on `nodes.public_key` — the trust anchor boot reads (readMembershipTrustSet). Called
  * ONLY on the fresh-primary provision path (setup-api provision handler, beside the provisioning-secret seal): a cloud
- * mirror runs as the primary's nodeId and never signs, so it seals no key and inherits the primary's
- * anchor through the node row adoptVenue replicates.
+ * mirror runs as the primary's nodeId and never signs, so it seals no key. Its anchor would be the
+ * primary's `nodes` row — nothing carries that row to a mirror today (`mirror-bundle.ts`'s header).
  *
  * The deployment holds one tenant per database. The seal and the stamp are ONE logical change —
  * the private key and its matching public key must land together or not at all — so they share a

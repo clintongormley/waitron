@@ -231,10 +231,10 @@ beforeAll(async () => {
   await suite.admin.execute(
     sql.raw(`grant select on all tables in schema public to ${PROBE_ROLE}`),
   );
-  // Make `PROBE_ROLE` the OWNER of every public table on this clone, so `ensureReplicationShape`'s
-  // boot-time `CREATE PUBLICATION … FOR TABLE …` (owner-only for a non-superuser — prototype finding 1)
-  // succeeds as the migrator connection, exactly as production does: the real migrator OWNS its tables
-  // (Probe A), where this shared template was migrated by the container superuser. Ownership is set at
+  // Make `PROBE_ROLE` the OWNER of every public table on this clone, so the boot-time owner DDL
+  // (the live change feed's triggers) succeeds as the migrator connection, exactly as production does:
+  // the real migrator OWNS its tables (Probe A), where this shared template was migrated by the
+  // container superuser. Ownership is set at
   // fixture setup with `ALTER TABLE … OWNER TO` (not `REASSIGN OWNED`), and does not change what
   // `app_user` (the pool's SET ROLE) may do, so the grant-enforcement assertions below are unaffected.
   await suite.admin.execute(

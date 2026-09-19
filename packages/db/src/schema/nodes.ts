@@ -35,9 +35,10 @@ export const nodes = table("nodes", {
   // The node's Ed25519 identity PUBLIC key (base64 SPKI DER), the membership trust anchor (design
   // §4). Nullable like filing_module/tax_module above: pre-production, and bare-node fixtures carry
   // none — a keyless node is simply not a trust anchor (readMembershipTrustSet filters nulls). The
-  // PRIVATE half is sealed in the vault (apps/server/node-identity.ts), never here. This column rides
-  // adoptVenue's verbatim node-row copy, so a mirror inherits the primary's anchor with no bundle
-  // change. Set owner-role at provision (setNodePublicKey); app_user holds SELECT only.
+  // PRIVATE half is sealed in the vault (apps/server/node-identity.ts), never here. Nothing carries
+  // the primary's nodes row to a mirror today: the bundle carries identity and dial details only
+  // (mirror-bundle.ts's header), and the row copy that used to went with the deleted replication.
+  // Set owner-role at provision (setNodePublicKey); app_user holds SELECT only.
   publicKey: label("public_key"),
   // The primary's ENDORSEMENT of this node's public_key (design §4/§6 R2): a signed
   // (nodeId, publicKey, endorsedBy, signature) vouching that lets other members trust a document

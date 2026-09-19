@@ -611,14 +611,18 @@ What it left open:
   table with `55000` — the fix gave it a primary key, now created by
   `packages/catalogue/drizzle/0000_catalogue_baseline.sql`. The design doc's older deletion paragraph is marked superseded rather than rewritten.
   LANDED #350 (2026-09-13).
-- **Nothing checks that a table shared by replication has a primary key.** #350 found
-  `product_units` publishing its rows with only a unique constraint, which makes Postgres refuse every
-  UPDATE to it (`55000`), and the in-memory test database does not enforce that, so no test noticed.
-  `CLAUDE.md` §3 now states the rule and says outright that no guard enforces it. Nobody has checked
-  whether any other published table has the same shape. **Next action:** a root guard beside
-  `scripts/classification-complete.test.ts` that migrates every set and fails on any published table
-  without a primary key — proven by removing `product_units`' primary key from
-  `packages/catalogue/drizzle/0000_catalogue_baseline.sql` and watching it fail.
+- **Nothing checks that a table shared by replication has a primary key — SUPERSEDED 2026-09-19.**
+  #350 found `product_units` publishing its rows with only a unique constraint, which makes Postgres
+  refuse every UPDATE to it (`55000`), and the in-memory test database does not enforce that, so no
+  test noticed. Nothing publishes a table any more: the PostgreSQL logical replication that created
+  the publications was deleted on 2026-09-19 with the rest of the failover machinery, the `CLAUDE.md`
+  §3 sentence this item cited went with it, and the measurement is kept as a HISTORICAL paragraph in
+  [conventions-data.md](developers/conventions-data.md). The guard this item asked for is NOT work
+  today — do not build it. The requirement returns only if the replacement failover publishes tables,
+  which the topology design says it does not
+  ([spec](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) §4: a mirror "is a place
+  the stream lands", not a database that receives rows). `product_units` keeps the primary key #350
+  gave it.
 
 **The integrated product editor — LANDED #345 (2026-09-13), and the overhaul is complete.** The
 dashboard now has one Products list and one editor, replacing the old combined catalogue screen. A
@@ -1049,16 +1053,27 @@ rather than sweep. One pass, whenever somebody has the file open anyway.
 
 The same shape, from a different deletion: the outbox removal (#280) deleted
 `apps/server/src/sync-origin.test.ts`, and comments across the tree still describe the capture-origin
-machinery it proved. Some name the deleted file outright as where the proof lives (`recipe-api.ts`
-also cites `packages/sync/drizzle/0000_sync_baseline.sql`, which the same PR deleted); the rest
+machinery it proved. Some name the deleted file outright as where the proof lives —
+`apps/server/src/me-api.test.ts` and `packages/payments/src/reconcile.test.ts` both do; the rest
 describe a "sync-origin node id" threaded so that enrolled writes capture a real origin, which no
-trigger does any more. The scope is every comment that still treats a captured origin as something
-the application records. Neither obvious grep bounds it on its own: some comments cite the deleted
-suite obliquely rather than by filename, so searching for `sync-origin.test.ts` finds only part of
-them, while searching for "sync origin" also returns the MIRROR's sync origin — the primary's node id
-a replica pulls from — which is a live concept and must not be swept. All of them are on `main`
-today, so they predate #378; found while reviewing that branch. Same treatment as
-above — one pass, not a sweep.
+trigger does any more (`packages/payments-stripe`'s provider and device suites head their fixtures
+that way, and `packages/payments/src/testing/fake-reconciler.ts` in passing). The scope is every
+comment that still treats a captured origin as something the application records.
+
+Neither obvious grep bounds it on its own: some comments cite the deleted suite obliquely rather than
+by filename, so searching for `sync-origin.test.ts` finds only part of them, while searching for the
+words "sync origin" also reaches a DIFFERENT and still-live thing — the mirror's own origin node id,
+the `origin_node_id` column declared in `packages/db/src/schema/mirror-config.ts`, which is written
+when a box is adopted as a mirror and is what that mirror's node-scoped reads resolve against. That
+column is outside this item and must not be swept with the capture-origin comments; what its own
+comment should say now that nothing replicates belongs with the column, not here.
+
+One instance is already gone, which is how this paragraph got smaller: the 2026-09-19 failover
+deletion rewrote `apps/server/src/recipe-api.ts`'s header, which used to name
+`packages/sync/drizzle/0000_sync_baseline.sql` (deleted by #280) and now records that `cfg.nodeId` is
+read by no route in the file and that no write path takes an origin. The rest were on `main`
+unchanged when this was written, so they predate #378; found while reviewing that branch. Same
+treatment as above — one pass, not a sweep.
 
 ### A1a. A foreign business customer needs an identifier-type decision
 
@@ -2044,24 +2059,24 @@ image constraints under *Detail → Box image*.
   insert and an update of `tenants`, an insert of `nodes`, an update of `deployment` and a delete
   from `mirror_config` each returned exactly that in PGlite after `asAppUser`. Left standing rather
   than corrected in passing, because moving a suite off its container is the decision above.
-- **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`);
-  if it flakes on `test-server` it needs a `--shard`-compatible isolation. The step (4) flake seen on
-  2026-09-14 matches a race instead (forcing that race reproduced the same symptom), fixed in #361 by
-  waiting for the subscriber's apply worker to restart after the widen (receipt in
-  [testing-guide.md](developers/testing-guide.md)). Isolation remains a guess for any other flake in
-  that file.
+- **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`)
+  — CLOSED 2026-09-19: `apps/server/src/replication-arc.e2e.test.ts` was deleted with the PostgreSQL
+  failover machinery, so this cannot recur in that file. Kept for the shape: the step (4) flake seen
+  on 2026-09-14 was a race, not isolation (forcing that race reproduced the same symptom), fixed in
+  #361 by waiting for the subscriber's apply worker to restart after the widen; what is left of that
+  receipt is a pointer in [testing-guide.md](developers/testing-guide.md). The deletion changes
+  nothing about vitest itself — `projects` and `--shard` are as incompatible as they were.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; `mutation-verifactu` is the next critical-path
   candidate; rebalance `LIGHT_A/B_PACKAGES` when one light shard dominates.
 - **Dependency loop removed — LANDED #348 (2026-09-13).** `pnpm install` no longer warns about
   cyclic workspace dependencies; `scripts/workspace-cycles.test.ts` fails if a loop returns. Of the
   four things the review raised and that PR did not take, two are now done on
-  `chore/test-guards-tidy` (the English-only guard scans `packages/replication-tests`, and the root
-  coverage-`include` comment now describes the rule instead of listing files); these two remain:
-  - `packages/replication-tests` carries a coverage bar that cannot fail: it holds only test files, so
-    coverage measures nothing and reads 0% while exiting 0. The literal exists because
-    `scripts/coverage-thresholds.test.ts` requires one of every tested package. Fix if a second
-    test-only package appears: teach that guard (and CI's `runnable` check) about test-only packages.
+  `chore/test-guards-tidy` (the English-only guard scanned the replication-test package, and the root
+  coverage-`include` comment now describes the rule instead of listing files). A third went away on
+  2026-09-19: the test-only package that carried a coverage bar it could never fail was deleted with
+  the PostgreSQL failover machinery, so nothing needs teaching about test-only packages until a second
+  one appears. This one remains:
   - The loop guard reports the whole group of packages in a loop, not a path through it, so a failure
     does not say which link to cut. Optional: print one cycle path alongside the group.
 - **A hung real-PG suite leaks its cluster containers** and `pnpm reap` only removes labelled ones
@@ -2453,14 +2468,15 @@ not get lost.
 
 ### The on-prem mirror
 
-The mechanism is native Postgres logical replication (#280); the membership, promotion and rejoin arc
-is complete (#197–#272); the two-node WireGuard fixture exists (#275). What remains, largest first:
+**2026-09-19: the PostgreSQL logical-replication mechanism described below was DELETED (slice 1, task
+P8).** Read this section as a list of requirements the replacement must meet, not as work outstanding
+on code that exists. The membership, promotion and rejoin arc (#197–#272) and the two-node WireGuard
+fixture (#275) are still in the tree. What remains, largest first:
 
-- **Status, alarms and the operator surface for native replication** — numbers and alarms off
-  `pg_stat_subscription` / `pg_stat_subscription_stats` / `pg_replication_slots.wal_status`; the SKIP
-  runbook for a stalled subscription; a management route for the post-drain disable of a narrowed
-  subscription; the standby-first migration check; **orphaned-slot reclamation** (`dropReplicationSlot`
-  is tested and has no caller).
+- **Status, alarms and the operator surface for replication.** The PostgreSQL version of this — numbers
+  and alarms off `pg_stat_subscription` / `pg_replication_slots.wal_status`, the SKIP runbook, the
+  post-drain disable route, orphaned-slot reclamation — went with the machinery. The REQUIREMENT
+  stands: an operator needs to see whether the standby is keeping up, and to be alarmed when it is not.
 - **Fiscal-certificate distribution — landed #279, reverted #281; rebuild on the asynchronous adopt.**
   Open design question: how the dormant certificate is protected when the seal must happen after the
   initial COPY ([design](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
@@ -2479,9 +2495,10 @@ is complete (#197–#272); the two-node WireGuard fixture exists (#275). What re
   re-encrypt, mirror fidelity, split-brain on the promoted side, the till UX for a timed-out card.
 
 **A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted
-changes in `packages/sync`) was designed on the application outbox that #280 deleted; the fiscal
-ledger now replicates as `ledger`-classified tables. Superseded — remove it once the owner confirms
-nothing in its uncommitted diff is wanted.
+changes in `packages/sync`) was designed on the application outbox that #280 deleted, and the
+replication it was rewritten against went too (2026-09-19); the `ledger` classification of the fiscal
+tables survives both. Superseded twice over — remove it once the owner confirms nothing in its
+uncommitted diff is wanted.
 
 ### The cloud primary — back burner, docs only
 
@@ -3618,8 +3635,10 @@ partial scope; the detail for a live thread is in its track.
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 
-**Cross-cutting infra:** replication (native Postgres logical replication since #280) · membership,
-promotion and rejoin (the arc is complete) · backup and restore (BR-1..BR-4 plus the wizard) · SIF
+**Cross-cutting infra:** replication (native Postgres logical replication, #280 — DELETED 2026-09-19;
+no node replicates to another until slices 3–5 rebuild failover) · membership, promotion and rejoin
+(the arc was completed on PostgreSQL, #197–#272; what the deletion took out of it is under
+*Replication, membership & failover — residuals*) · backup and restore (BR-1..BR-4 plus the wizard) · SIF
 topology (`#33`, `node_id` re-key) · the module system (#212–#262; country packs #292) · the printing
 subsystem (`@waitron/printing` plus the db-free `@waitron/print-agent`, #282–#335) · the layout
 designer and device profiles (#194–#234, #246, #269) · CI and test infra (scoped CI, pre-push hook,
@@ -3826,9 +3845,25 @@ today); generalise archive entry routing off declared source ids when a second n
   user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
   the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
   are still to measure.
-- **The box image carries the replication cluster settings and the WireGuard link:** `wal_level=logical`,
-  `track_commit_timestamp=on`, `max_slot_wal_keep_size`, the `waitron_repl` bootstrap, and `pg_hba`
-  admitting it only from the peer's WireGuard address.
+- **The box image carries the WireGuard link.** It also still carries the PostgreSQL replication
+  cluster settings (`wal_level=logical`, `track_commit_timestamp=on`, `max_slot_wal_keep_size`) in
+  `deploy/compose.yml`; nothing reads them since 2026-09-19 and they are removed with the storage
+  switch rather than on their own. The `waitron_repl` bootstrap and its `pg_hba` entry went with the
+  machinery. **Dropping the three is not the free tidy-up it looks like.** A cluster that still holds
+  a logical replication slot REFUSES to start once `wal_level` falls below logical:
+  `FATAL: logical replication slot "leftover" exists, but "wal_level" < "logical"`, measured on
+  2026-09-19 on a throwaway `postgres:18-alpine` volume — slot created, container recreated on the
+  same volume without the flags, exit code 1. The control in the other direction, on the same volume:
+  drop the slot, restart without the flags, and it comes up clean, reports `replica` / `off`, and its
+  publication is still there. A box that ever had a standby adopted against it holds such a slot — the
+  deleted `CREATE SUBSCRIPTION` passed no `create_slot` option
+  (`git show dbe5dff4:packages/sync/src/subscriptions.ts`, line 47), and replaying that statement
+  shape on PostgreSQL 18 the same day left a `pgoutput` slot on the publisher's database — and
+  `deploy/waitron.sh` rewrites the installed `compose.yml` from the ref on every install
+  (`deploy/waitron.sh`, "wrote compose.yml from ${ref}"), so the change would reach that box as an
+  unbootable database. The development cluster was checked the same day and holds no slots at all, so
+  a dev restart is safe. Whoever removes these decides first whether any real box has been through an
+  adopt cycle, and if so drops the leftover slot (`pg_drop_replication_slot`) before the upgrade.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Later kiosk options, none built: Chromium `--kiosk` in the box image, Fully Kiosk resale for
@@ -3842,11 +3877,53 @@ today); generalise archive entry routing off declared source ids when a second n
 
 ### Replication, membership & failover — residuals (Afterwards)
 
-**Mechanism (since #280):** every module classifies its tables `ledger` / `state` / `local`; the
-table owner creates the `_ledger`/`_state` publications; a standby subscribes over the box↔cloud link;
-promotion and return run on `pg_replication_slots` with the fence-LSN drain watermark; settings are
-primary-wins by construction. A standby holds its full dormant identity from JOIN and promotion never
-mints a chain.
+**Mechanism as built on PostgreSQL (since #280, DELETED 2026-09-19 — see the note below):** every
+module classifies its tables `ledger` / `state` / `local`; the table owner creates the
+`_ledger`/`_state` publications; a standby subscribes over the box↔cloud link; promotion and return
+run on `pg_replication_slots` with the fence-LSN drain watermark; settings are primary-wins by
+construction. A standby holds its full dormant identity from JOIN and promotion never mints a chain.
+
+**2026-09-19 — that code is no longer in the tree (slice 1, task P8).** `packages/sync` and the request
+paths built on publications, subscriptions and the fence-LSN watermark were deleted, because slices 3
+and 4 rebuild failover on a different mechanism
+([the topology design](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)) and none of
+that machinery survives the change; keeping it compiling in the meantime would mean carrying code that
+does nothing for several slices. **From here until slice 3 a venue has ONE node and no failover at
+all.** The "MVP for go-live" requirement of two boxes plus cloud failover is met by slices 3–5, not
+before, and it is accepted for exactly as long as Waitron is pre-production. What stayed, because none
+of it depends on how PostgreSQL replicates: `packages/membership` whole (documents, signing,
+canonicalisation, verification, trust), node enrolment and its rate limiting
+(`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
+`ledger` / `state` / `local` classification — which after the flip chooses which database FILE a table
+lives in. Read the residuals below as requirements for what failover is rebuilt INTO, not as
+descriptions of code that exists today.
+
+Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
+that slice 3 has to restore:
+
+- **`retireSelf` and `rejoinAsSecondary` lost their drain confirmations.** Both used to prove, before
+  an irreversible step, that every row this node originated had reached the carrier — the fence-LSN
+  watermark against the carrier's replication slot. `node.retire_carrier_changed`,
+  `node.retire_carrier_attached`, `node.retire_not_drained`, `rejoin.carrier_attached` and
+  `rejoin.not_drained` were deleted with it. What survives is membership-only: `retire_not_fenced`,
+  `retire_no_carrier` (now a direct `servingPrimaryNodeId` check), `retire_superseded`,
+  `rejoin.not_fenced` and `rejoin.no_carrier`. So a fenced node can now self-evict, and a returned box
+  can now be wiped, without any proof its tail was carried forward.
+- **`rejoin --accept-loss` waives nothing today.** The flag and its `rejoin.accept_loss` warning are
+  kept so the operator's acknowledgement survives the switch, but the drain confirmation it used to
+  waive is gone.
+- **Adopt copies no data, and an adopted mirror can no longer leave adoption-pending.** Adopt stamps
+  the mirror's identity and config and writes the finish-adoption latch; the initial COPY that used to
+  bring the venue's rows went with the subscription. `runFinishAdoption` now tries to establish the
+  reserved identity on every boot instead of polling for a copy to finish — and that attempt cannot
+  succeed, because the standby's own `nodes` row references a `locations` row the mirror does not have
+  and nothing supplies. Measured on a migrated but empty database: SQLSTATE 23503 on
+  `nodes_location_id_locations_id_fk`, rolled back, latch kept. **Operator-visible consequence:** a box
+  that adopts stays in adoption-pending boot for good — `/api/box/status` keeps answering
+  `adoption: pending`, no mirror session or node-scoped read path is ever mounted, and each boot logs
+  `adoption.establish_failed`. The full account is in
+  `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header; whatever replaces the initial copy
+  in slice 3 has to close this.
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
   box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.

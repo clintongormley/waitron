@@ -7,8 +7,8 @@ import { tablesCreatedBy } from "../packages/sync-enrolment/src/migration-tables
 
 /**
  * Every table a module's migrations CREATE is classified `ledger`/`state`/`local` (swap spec §2.1)
- * exactly once — tree-wide. The two publication table-lists derive from that classification, so a
- * table left unclassified silently vanishes from replication and a phantom classification points at
+ * exactly once — tree-wide. The class decides which DATABASE FILE a table lives in after the storage
+ * switch, so a table left unclassified has no stated home and a phantom classification points at
  * nothing; a table classified twice (within or across modules) is ambiguous. This is the net for all
  * three (the per-package tests and `modules.test.ts`'s dedup are earlier checkpoints).
  *

@@ -7,9 +7,29 @@ import { assertIdentifier } from "./identifiers.js";
 export const INSTANCE_ROLES = ["waitron_migrator", "waitron_app"] as const;
 export type InstanceRole = (typeof INSTANCE_ROLES)[number];
 
-/** The migrator — `INSTANCE_ROLES[0]` by construction. It OWNS every table (native logical replication
- * needs one owner) and holds `pg_create_subscription`; the many call sites that reach for the migrator
- * name it through this constant rather than re-deriving `INSTANCE_ROLES[0]` each time. */
+/** The migrator — `INSTANCE_ROLES[0]` by construction. It OWNS the database and every table in it:
+ * `planInstance` emits `create database … owner waitron_migrator` and the migrate then runs AS the
+ * migrator.
+ *
+ * The reason for choosing the migrator over the admin is GONE. #280 made the database migrator-owned
+ * so that logical replication's owner-only `CREATE PUBLICATION … FOR TABLE` would work; the failover
+ * deletion of 2026-09-19 took the last of those statements out of shipped code —
+ * `grep -rniE "create (publication|subscription)" packages apps` matches only container test suites,
+ * each of which publishes on its own container as that container's superuser. No replacement reason
+ * has been written down — not here, and not in the topic file that states the rule
+ * (`docs/developers/conventions-data.md`, "migrates AS the migrator"). What holds the arrangement in
+ * place is a policy rather than a constraint: `instance` refuses a database owned by anyone else
+ * (`provisioning.database_not_owned`, instance-plan.ts). PostgreSQL itself does not force it —
+ * measured on 18.6, `ALTER DATABASE … OWNER TO` succeeds for an owning admin who is a member of the
+ * target role, and refuses only a role that does not own the database —
+ * and that callers depend on its consequence: a plain admin connection is refused `CREATE TABLE` in
+ * a migrator-owned `public` with `42501`, while the migrator's own connection succeeds and its table
+ * comes out migrator-owned (both halves asserted against a real server by the C5 case in
+ * `packages/provisioning/src/instance-apply.pg.test.ts`), which is why a provisioning path that
+ * creates schema carries `withRole` (CLAUDE.md §3).
+ *
+ * The many call sites that reach for the migrator name it through this constant rather than
+ * re-deriving `INSTANCE_ROLES[0]` each time. */
 export const INSTANCE_MIGRATOR_ROLE: InstanceRole = INSTANCE_ROLES[0];
 
 /**
@@ -53,9 +73,11 @@ export interface InstanceState {
   database: string;
   databaseExists: boolean;
   /** The role that OWNS the database (`pg_get_userbyid(pg_database.datdba)`), or `null` when the
-   * database does not exist. Native logical replication needs `waitron_migrator` to own every table,
-   * so `instance` refuses a database owned by anyone else (instance-plan.ts) — ownership is fixed at
-   * CREATE and cannot be granted into place. */
+   * database does not exist. Read because `instance` refuses a database owned by anyone but the
+   * migrator (instance-plan.ts) — a policy, not something PostgreSQL forces; `ALTER DATABASE …
+   * OWNER TO` would work for an owning admin.
+   * Table ownership follows from it, since the migrate runs as the migrator. Why the migrator owns
+   * it at all — and what is left of that reason — is on `INSTANCE_MIGRATOR_ROLE` above. */
   databaseOwner: string | null;
   /** Roles are CLUSTER-global, so these are readable from the admin connection whether or not the
    * database exists. That asymmetry with `inside` is why the two are separate fields. */

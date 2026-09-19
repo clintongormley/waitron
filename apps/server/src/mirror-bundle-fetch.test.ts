@@ -24,12 +24,6 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   boxHostname: "waitron.local",
   boxCaPem: "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
   relayUrl: "https://relay.example/abc",
-  replication: {
-    host: "primary.internal",
-    port: 5432,
-    database: "waitron_pp",
-    password: "repl-pw",
-  },
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
     modules: {
@@ -102,7 +96,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     // The body parsed back to the exact bundle the primary served — including a scalar field read, so
     // this is a real MirrorBundle and not merely a deep-equal on opaque JSON.
     expect(bundle).toEqual(SAMPLE_BUNDLE);
-    expect(bundle.replication.password).toBe("repl-pw");
+    expect(bundle.boxHostname).toBe("waitron.local");
     // The request the fetcher made: a POST to the primary's mirror-bundle path carrying the credential
     // OBJECT plus the standby identity, serialised as the JSON body. The primary authenticates the
     // credential fields, reserves + endorses the standby from `standbyNodeId`/`standbyPublicKey`

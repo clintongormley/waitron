@@ -7,10 +7,10 @@
 // (`retainDays`, measured off each artifact's own key stamp). The loop takes an immediate first dump
 // on start, then waits to the schedule's next fire (`nextFireMs`) — sleeping in <=1h chunks so a
 // clock/NTP jump is caught within ~1h (the fire instant is computed once per cycle, so a tz/cutover
-// config change takes effect at the next fire, not mid-wait). It MIRRORS `packages/sync/src/retention.ts`'s
-// `runRetentionSweep`: a wedged pg_dump or an unreachable backend is logged and swallowed and must
-// never kill the loop and, with it, the box's only backup duty; an abort mid-tick is a cancellation,
-// not a `backup.failed`.
+// config change takes effect at the next fire, not mid-wait). A wedged pg_dump or an unreachable
+// backend is logged and swallowed and must never kill the loop and, with it, the box's only backup
+// duty; an abort mid-tick is a cancellation, not a `backup.failed`. Same containment the box's main
+// loop uses — `runLoop` logs `pass.threw` and goes around again rather than exiting (`loop.ts`).
 //
 // A per-destination fault that THROWS (a bad backend, a full disk, a network fault) is caught, logged
 // as `backup.destination_failed`, and does NOT stop the remaining destinations — a throwing backend
@@ -20,10 +20,13 @@
 // A destination that HANGS rather than throws (an unresponsive mount, a stalled network write) is NOT
 // abandoned mid-tick in v1: `Promise.allSettled` waits for every backend to settle, so a wedged `put`
 // stalls the whole tick and teardown's `await backupWorker` blocks with it. This is the same
-// between-ticks abort model the sibling sync/tunnel/retention sweep workers use — abort is checked at
-// tick boundaries, not inside an in-flight backend call. An abort-aware per-destination timeout is a
-// follow-on for when a network-latency backend (s3/sftp) lands; the only backend today is local-fs,
-// where a `put` does not hang. It is deliberately NOT implemented here.
+// between-ticks abort model the box's main loop uses — `runLoop` reads `deps.signal.aborted` in its
+// `while` condition, again once the pass has returned, and hands the signal to `sleep` (`loop.ts`), so
+// an abort cuts the WAIT short and never reaches a pass already running. Same shape here: every abort
+// read in `runBackupSweep` sits between ticks, and `backend.put` below is handed no signal at all. An
+// abort-aware per-destination timeout is a follow-on for when a network-latency backend (s3/sftp)
+// lands; the only backend today is local-fs, where a `put` does not hang. It is deliberately NOT
+// implemented here.
 
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";

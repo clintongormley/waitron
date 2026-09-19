@@ -1,5 +1,5 @@
 import { ALL_MODULES } from "@waitron/composition";
-import { tablesForPublication, type ClassifiedTable } from "@waitron/sync";
+import type { ClassifiedTable } from "@waitron/sync-enrolment";
 import { selectVenueService } from "@waitron/module";
 import type {
   AlertEventClaim,
@@ -36,18 +36,11 @@ export const ALL_MODULE_PERMISSIONS: readonly ModulePermission[] = ALL_MODULES.f
   (m) => m.permissions ?? [],
 );
 
-/** Swap S1: every module's table classification, in ALL_MODULES order. The two publication table
- * lists below are derived from it; native replication publishes those tables. */
+/** Every module's table classification, in ALL_MODULES order. The class decides which database file
+ * a table lives in (`ledger`/`state` together, `local` apart), which is why no foreign key may cross
+ * between the two. */
 export const ALL_CLASSIFICATIONS: readonly ClassifiedTable[] = ALL_MODULES.flatMap(
   (m) => m.classification ?? [],
-);
-export const LEDGER_PUBLICATION_TABLES: readonly string[] = tablesForPublication(
-  ALL_CLASSIFICATIONS,
-  "ledger",
-);
-export const STATE_PUBLICATION_TABLES: readonly string[] = tablesForPublication(
-  ALL_CLASSIFICATIONS,
-  "state",
 );
 
 /** Every module's incident-code claims. Read from ALL_MODULES: an incident recorded while a module

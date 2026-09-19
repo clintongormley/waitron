@@ -14,15 +14,15 @@ export function standingOf(
 }
 
 /**
- * Whether a standing fences a node OUT OF SERVING (design §3): `sell-only` (fenced, still a
- * replication source until its tail drains) and `evicted` (drained, retired) are fenced;
+ * Whether a standing fences a node OUT OF SERVING (design §3): `sell-only` (fenced, still a member)
+ * and `evicted` (retired, gone for good) are fenced;
  * `serving-primary` and `serving-secondary` both serve (a serving-secondary sells, holds no
  * singletons). An `undefined` standing — a node ABSENT from the chart — is NOT fenced: promotion's
  * `nextStandings` preserves every node and demotes the outgoing primary to `sell-only` rather than
  * dropping it (standings.ts), so a node that was ever in the chart stays in it; fencing an unnamed
  * node on an incomplete chart would be the wrong direction. `evicted` is produced by `evictNode`
- * (standings.ts), the retire/evict decommission path, once a fenced `sell-only` node has fully
- * drained its replication tail.
+ * (standings.ts), the retire/evict decommission path, when a fenced `sell-only` node retires ITSELF
+ * (`apps/server/src/retire.ts`).
  */
 export function isFencedStanding(
   standing: NodeStanding | undefined,
@@ -32,8 +32,9 @@ export function isFencedStanding(
 
 /**
  * The nodeId of the node holding `serving-primary` in a document — the current primary, i.e. the
- * CARRIER a returned/fenced node drains its tail onto (parent design §5.1's "the node that will carry
- * the partition forward", 2026-09-04 note). `undefined` when no node serves as primary (an incomplete
+ * CARRIER a retiring node hands the venue to (parent design §5.1's "the node that will carry
+ * the partition forward", 2026-09-04 note); `retireSelf` refuses `node.retire_no_carrier` when there
+ * is none. `undefined` when no node serves as primary (an incomplete
  * or all-fenced chart). At most one node holds serving-primary (the singleton), so the first match is
  * it. A pure lookup over `document.body.nodes` — no verification: the held document was verified when
  * adopted (membership-adopt.ts) or self-signed at promotion.

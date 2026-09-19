@@ -88,7 +88,7 @@ export interface Catalogue {
   id: string;
   name: string;
   active: boolean;
-  /** The sync seam, bumped by a future replication task; created at 1. */
+  /** The sync seam. Created at 1; nothing in the tree bumps it today. */
   version: number;
 }
 

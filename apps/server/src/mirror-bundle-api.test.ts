@@ -24,7 +24,6 @@ import {
 } from "@waitron/membership";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
-import type { ReplicationConfig } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -37,15 +36,6 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
-
-// This primary's own native-replication credential + advertise address (swap step 4), carried in the
-// bundle so a mirror's subscription can dial it as `waitron_repl`.
-const REPLICATION: ReplicationConfig = {
-  password: "repl-pw-xyz",
-  advertiseHost: "primary.internal",
-  advertisePort: 6543,
-};
-const PRIMARY_DATABASE = "waitron_pp";
 
 // The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — a fixed test ring, exactly
 // as node-identity.test.ts uses. The primary seals its identity key under this ring, and the endpoint
@@ -150,16 +140,8 @@ async function seedStaff(): Promise<string> {
   });
 }
 
-/** Mount the endpoint on a fresh Hono app with the given relay wiring and (optional) logger.
- * `withReplication` (default true) wires the valid credential; the 503 test passes `false` to leave
- * replication unconfigured. (A boolean, not a defaulted `ReplicationConfig | undefined` param — a
- * default value applies to an explicit `undefined` argument, which would defeat the 503 case.) */
-function mountApp(
-  designated: AdoptResult,
-  relayUrl: string | undefined,
-  log?: Logger,
-  withReplication = true,
-): Hono {
+/** Mount the endpoint on a fresh Hono app with the given relay wiring and (optional) logger. */
+function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: Logger): Hono {
   const app = new Hono();
   mountMirrorBundleApi(
     app,
@@ -170,8 +152,6 @@ function mountApp(
       relayUrl,
       boxHostname: "waitron.local",
       designated,
-      replication: withReplication ? REPLICATION : undefined,
-      database: PRIMARY_DATABASE,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
     },
     log,
@@ -228,10 +208,9 @@ afterAll(async () => {
 });
 
 describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)", () => {
-  it("returns a bundle carrying the replication connection for an authorised admin credential", async () => {
+  it("returns a bundle carrying the venue identity for an authorised admin credential", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    // A log spy: the replication password + the credential must NEVER reach the log (the sync.*
-    // no-secret discipline).
+    // A log spy: the credential must NEVER reach the log (the no-secret discipline).
     const lines: string[] = [];
     const log: Logger = (level, event, fields) =>
       lines.push(JSON.stringify({ level, event, fields }));
@@ -246,7 +225,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     const bundle = (await res.json()) as {
       tenant: { country: string; taxId: string };
       primaryNode: { name: string };
-      replication: { host: string; port: number; database: string; password: string };
       relayUrl: string;
       boxHostname: string;
     };
@@ -256,35 +234,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     // The relay coordinates round-trip verbatim as a FULL https URL.
     expect(bundle.relayUrl).toBe("https://relay.example:9000/");
     expect(bundle.boxHostname).toBe("waitron.local");
-    // The replication connection the mirror subscribes with — advertise host/port, the primary's
-    // database name, and the `waitron_repl` password (the secret that must travel, but never log).
-    expect(bundle.replication).toEqual({
-      host: "primary.internal",
-      port: 6543,
-      database: "waitron_pp",
-      password: "repl-pw-xyz",
-    });
-    // Neither the replication password nor the credential appears in any log line.
+    // The credential never appears in any log line.
     for (const line of lines) {
-      expect(line).not.toContain("repl-pw-xyz");
       expect(line).not.toContain(ADMIN_PASSWORD);
     }
-  });
-
-  it("refuses with 503 server.config_missing when replication is unconfigured", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    // A primary with no `waitron_repl` credential configured cannot mint a subscribable bundle.
-    const app = mountApp(designated, "https://relay.example:9000/", undefined, false);
-
-    const res = await post(app, {
-      personId: adminPersonId,
-      password: ADMIN_PASSWORD,
-      ...validStandby(),
-    });
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { error: { code: string; params: { variable: string } } };
-    expect(body.error.code).toBe("server.config_missing");
-    expect(body.error.params.variable).toBe("WAITRON_REPLICATION_PASSWORD");
   });
 
   it("appends the standby to the membership document with its contactUrl, term bumped, signed by the primary", async () => {

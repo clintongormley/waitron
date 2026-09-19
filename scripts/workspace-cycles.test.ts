@@ -8,8 +8,7 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * dependency kind when it looks for a loop, so a test-only (`devDependencies`) link closes one as
  * surely as a runtime link, and `pnpm install` prints "There are cyclic workspace dependencies".
  * A test that needs packages from both ends of such a loop belongs in a package nothing else
- * depends on — `packages/replication-tests` for the replication suites, whose node fixture lives in
- * `packages/provisioning/src/testing/replication-node.ts`.
+ * depends on, so that its own dependencies close nothing.
  *
  * Reads each member's `package.json` rather than pnpm's own graph, and counts a dependency as a link
  * when its name is another workspace member, whatever its version range.

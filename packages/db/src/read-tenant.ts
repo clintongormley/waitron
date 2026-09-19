@@ -25,7 +25,7 @@ export interface Tenant {
  * back to its default, and the report and dashboard routes treat it as a configuration fault and
  * throw. Deciding here would take that choice away from all of them. `null` rather than
  * `undefined` because that is what every other exported reader in this package signals absence with
- * (`readDeploymentEnvironment`, `readFenceLsn`, `readBreakGlassVerifier`, `readMirrorConfig`,
+ * (`readDeploymentEnvironment`, `readBreakGlassVerifier`, `readMirrorConfig`,
  * `readNodeMembership`, `readNodeEndorsement`).
  */
 export async function readTenant(tx: Transaction): Promise<Tenant | null> {

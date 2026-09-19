@@ -12,11 +12,15 @@ import type { SetupApi } from "../api/client.js";
 export const BACKUP_SETUP_URL = "/manage/backup";
 
 /**
- * The wizard's final screen. A successful provision returns `{ restarting: true }` and the box then
- * SIGTERMs and comes back in TRADING mode, where the origin root serves the till and the
- * `/setup-api/*` routes no longer exist (`apps/server/src/setup-api.ts`). So this screen cannot get a
- * further success response — it announces the restart and RECONNECTS by polling `GET /setup-api/status`
- * until the setup route stops answering, then offers a reload into the till.
+ * The wizard's final screen, shared by three outcomes that are NOT the same. A successful provision or
+ * restore returns `{ restarting: true }` and the box then SIGTERMs and comes back in TRADING mode,
+ * where the origin root serves the till and the `/setup-api/*` routes no longer exist
+ * (`apps/server/src/setup-api.ts`). So this screen cannot get a further success response — it
+ * announces the restart and RECONNECTS by polling `GET /setup-api/status` until the setup route stops
+ * answering, then offers a reload into the till.
+ *
+ * A successful ADOPT restarts the same way and comes back somewhere else entirely, so it gets its own
+ * copy rather than a reworded version of the trading one — see {@link SetupDoneScreen.mirrorJoin}.
  *
  * The restart window produces EXPECTED fetch failures that must never be surfaced as errors, and the
  * distinction is the whole job of {@link SetupDoneScreen.#pollOnce}:
@@ -60,7 +64,13 @@ export class SetupDoneScreen extends LitElement {
         font-size: 1.1rem;
         word-break: break-all;
         user-select: all;
-        background: var(--wt-color-surface-sunken, #f1f5f9);
+        /* --wt-color-surface-sunken is not a token this design system defines (see
+           packages/ui/src/tokens/colors.css), so the hardcoded light fallback that stood here
+           painted in BOTH themes: axe measured the code against the dark theme's text at a contrast
+           of 1.06, i.e. the operator's one-and-only break-glass code was unreadable. */
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        border: 1px solid var(--wt-color-border);
         border-radius: 0.375rem;
       }
       .backup-nudge {
@@ -101,6 +111,20 @@ export class SetupDoneScreen extends LitElement {
    * `undefined` on the primary provision path, which mints no secret and shows no panel.
    */
   @property({ attribute: false }) breakGlassSecret?: string;
+
+  /**
+   * True when this screen was reached by the MIRROR path (a successful `POST /setup-api/adopt`), set
+   * by the shell. Everything the trading copy below promises is false on that path: the box restarts
+   * and fails to establish its own node identity, on that boot and on every boot after it, so it never
+   * reaches the branch of `apps/server/src/boot.ts` that mounts the till and dashboard front-ends, the
+   * promote route the break-glass secret is for, or this wizard.
+   * `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header is the one place that says why.
+   *
+   * A separate flag rather than a `breakGlassSecret !== undefined` test: the secret is mirror-only too
+   * today, but it is a value to display, not a statement about which path ran, and a mirror path that
+   * stopped minting one would silently flip this screen back to promising a till.
+   */
+  @property({ type: Boolean }) mirrorJoin = false;
 
   /** The selected setup journey. Its label stays visible here, and Demo suppresses the backup nudge. */
   @property() onboardingIntent?: "demo" | "prepare" | "live";
@@ -160,6 +184,36 @@ export class SetupDoneScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    return this.mirrorJoin ? this.#renderJoinStalled() : this.#renderTrading();
+  }
+
+  /**
+   * The break-glass panel, rendered on whichever path supplied a secret. Its own copy is path-aware
+   * because what the secret is FOR differs: on a box that trades it is the offline promote fallback;
+   * on an adopted box the promote route is never mounted, so there is nothing to use it on.
+   */
+  #breakGlass(): TemplateResult | null {
+    if (this.breakGlassSecret === undefined) return null;
+    return html`<div class="break-glass" data-test="break-glass">
+      <h2>Save your break-glass code now</h2>
+      <p class="break-glass-warning" data-test="break-glass-warning">
+        Write this down and store it offline. It is shown once and will not be shown again.
+        ${
+          this.mirrorJoin
+            ? html`It was meant to let this server take over if the primary server could not be
+              reached. It cannot do that in this version, because this server does not finish
+              joining — so keep the code, but do not count on it.`
+            : html`You need it to promote this server if the primary is unreachable.`
+        }
+      </p>
+      <code class="break-glass-secret" data-test="break-glass-secret"
+        >${this.breakGlassSecret}</code
+      >
+    </div>`;
+  }
+
+  /** The provision and restore outcome: the box really does come back trading. */
+  #renderTrading(): TemplateResult {
     return html`
       <h1>Setup complete</h1>
       ${
@@ -179,20 +233,7 @@ export class SetupDoneScreen extends LitElement {
           <li><a href=${`http://${this.hostname}:9110`}>Print agent</a></li>
         </ul>
       </div>
-      ${
-        this.breakGlassSecret !== undefined
-          ? html`<div class="break-glass" data-test="break-glass">
-              <h2>Save your break-glass code now</h2>
-              <p class="break-glass-warning" data-test="break-glass-warning">
-                Write this down and store it offline. It is shown once and will not be shown again.
-                You need it to promote this server if the primary is unreachable.
-              </p>
-              <code class="break-glass-secret" data-test="break-glass-secret"
-                >${this.breakGlassSecret}</code
-              >
-            </div>`
-          : null
-      }
+      ${this.#breakGlass()}
       ${
         this.onboardingIntent === "demo"
           ? nothing
@@ -214,6 +255,34 @@ export class SetupDoneScreen extends LitElement {
           : html`<p class="status" data-test="status">
               Waiting for the server to come back online…
             </p>`
+      }
+    `;
+  }
+
+  /**
+   * The mirror outcome. No links, no backup nudge and no reload: the box this wizard is talking to
+   * comes back serving none of those, so every one of them would send the operator somewhere that is
+   * not there. The poll still runs — it is how this screen knows the restart has happened — it just
+   * reports it instead of offering a way in.
+   */
+  #renderJoinStalled(): TemplateResult {
+    return html`
+      <h1>This server did not join</h1>
+      <p>
+        The sign-in to the restaurant's primary worked and this server is restarting. It will not
+        come back able to do anything: it stops part-way through joining, and it will not get any
+        further however many times you restart it. It holds none of the restaurant's information, it
+        has no till and no dashboard, and it cannot sell or file anything.
+      </p>
+      ${this.#breakGlass()}
+      ${
+        this.ready
+          ? html`<p class="status" data-test="status">
+              The server has restarted, and this setup wizard is gone from it — reloading this page
+              will not bring anything up, and there is nothing else on the server to open. Nothing
+              on this page can fix that: tell whoever installed this server.
+            </p>`
+          : html`<p class="status" data-test="status">Waiting for the server to restart…</p>`
       }
     `;
   }

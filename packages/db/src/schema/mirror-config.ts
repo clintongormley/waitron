@@ -23,9 +23,10 @@ export const mirrorConfig = table(
     relayUrl: label("relay_url").notNull(),
     boxHostname: label("box_hostname").notNull(),
     boxCaPem: label("box_ca_pem").notNull(),
-    // The nodeId of the PRIMARY this mirror pulls from — its sync ORIGIN, distinct from this node's
+    // The nodeId of the PRIMARY this mirror was adopted from — its ORIGIN, distinct from this node's
     // OWN identity (config.till.nodeId). Split out here (membership R3a) so the mirror can run under its
-    // own id as SUBSCRIBER while still applying the primary's rows (origin = this value). Written
+    // own id while its node-scoped reads resolve against the primary's, which is the id the venue's
+    // rows carry (boot.ts's `dataNodeId`). Written
     // owner-role at adopt = designated.nodeId (the primary's). NOT NULL: every mirror has exactly one
     // origin; the table is empty until adopt, so the ADD COLUMN NOT NULL is safe pre-production.
     originNodeId: id("origin_node_id").notNull(),
