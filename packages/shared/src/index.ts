@@ -85,5 +85,6 @@ export { quoteLiteral } from "./sql-literal.js";
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";
 
 export type { ModifierSnapshot } from "./modifier-snapshots.js";
+export type { OptionSelection, OptionSnapshot } from "./option-selection.js";
 
 export * from "./modifiers.js";

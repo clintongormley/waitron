@@ -108,12 +108,16 @@ staff use, not the wording a diner reads on a receipt.
 
 `listContentTranslationGaps` (`packages/catalogue/src/content-languages.ts`) is what refuses to let
 you switch your default content language while text is still missing. A product's and a variant's
-customer-facing name is **optional**, so a wholly absent one — `null` or `{}` — is never a gap. Only
-a partly filled one is: fill in Spanish and leave English blank, and that is a gap, because you
-clearly meant to translate it and stopped. The other five kinds the query reports — `category`,
-`unit`, `section`, `option_group` and `option` — have no fallback of their own and stay required. A
-modifier contributes two of those kinds, not one: the group's own name (`option_group`) and each of
-its choices (`option`), each with its own table.
+customer-facing name is **optional** — absent, what is shown is the staff name
+(`customerPresentationText`, `packages/catalogue/src/product-presentation.ts`) — so a wholly absent
+one (`null` or `{}`) is never a gap. Only a partly filled one is: fill in Spanish and leave English
+blank, and that is a gap, because you clearly meant to translate it and stopped. An options list's
+and an options label's customer-facing name is optional in the same way and is left out of the
+report for the same reason, though nothing displays those names yet. The other kinds the query
+reports — `category`, `unit`, `section`, `option_group` and `option` — have no optional
+customer-facing name to fall back from and stay required. A modifier contributes two of those kinds,
+not one: the group's own name (`option_group`) and each of its choices (`option`), each with its own
+table; an options list does the same, as `option_list` and `option_label`.
 
 ## Variants
 

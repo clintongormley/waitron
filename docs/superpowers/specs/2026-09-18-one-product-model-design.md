@@ -216,10 +216,10 @@ each entry carrying the **list's three names and the chosen label's three names*
   {
     "listName": { "en": "Cooked" },
     "listCustomerName": { "en": "How cooked?", "es": "¿Punto?" },
-    "listKitchenName": { "en": "Cook" },
+    "listKitchenName": "Cook",
     "labelName": { "en": "Medium rare" },
     "labelCustomerName": { "en": "Medium rare", "es": "Al punto" },
-    "labelKitchenName": { "en": "MR" }
+    "labelKitchenName": "MR"
   }
 ]
 ```
@@ -458,7 +458,9 @@ the data — a blank stays blank — while the manager always sees the number th
   with filters, remembered sort in session storage, a detail modal with Edit/Close, a delete flow with
   a dependants preview). Extras and options delete flows differ only in what they preview: extras and
   options both preview products and menus (cascaded); neither previews an order count (options never
-  touch an order; an extras list delete never blocks on an order — only a *product* delete does).
+  touch an order; an extras list delete never blocks on an order — only a *product* delete does). An
+  options list has no per-menu row (§2.2), so its menu preview is reached through the products that
+  carry it, not from a publication table of its own.
 - **Product editor (branch 1):** the section keeps its name, **Modifiers**. It is the one ordered list
   mixing extras and options lists (§5), adding from either, reordering, with the existing
   create-in-place flow for a new list. A product created from inside an extras list starts with

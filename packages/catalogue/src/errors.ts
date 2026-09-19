@@ -122,5 +122,47 @@ declare module "@waitron/shared" {
      * shipped.
      */
     "options.item_invalid": { reason: string };
+    /**
+     * An options list's authoring body is malformed: a missing or blank staff name, a name map with a
+     * non-text entry, an unknown key, a bad label id, or a `defaultLabelId` naming no label of the
+     * list. `field` is the dotted path of the offending value (`"name"`, `"labels.0.kitchenName"`),
+     * so the editor can put the refusal beside the input that caused it. It also covers a structurally
+     * bad ORDER-time selection list — not an array, an unknown key, a non-string id, or an answer for
+     * a list that was never offered — where `field` names the offending path in that body
+     * (`"optionSelections"`, `"listId"`). A CLIENT request fault. Thrown by
+     * `parseOptionListInput` / `validateOptionSelections` (option-contract.ts) and by `writeLabels`
+     * (options.ts), which refuses a body label id that another list holds.
+     */
+    "options.invalid": { field: string };
+    /** An options list id names no list. */
+    "options.not_found": { optionListId: string };
+    /**
+     * An options list's customer-facing name — its own, or one of its labels' — has no text in the
+     * venue's default content language. `field` is the dotted path of the offending map
+     * (`"customerName"`, `"labels.2.customerName"`), the same paths `parseOptionListInput` reports,
+     * because one save submits a translated map for the list AND one per label and a refusal naming
+     * only the language cannot be placed beside an input. The kind-specific counterpart of
+     * `content.translation_required`: `validateNames` (options.ts) asks `findContentTranslationGap`
+     * (content-languages.ts) which of the maps has the gap — that function RETURNS the map's index
+     * and the language rather than throwing anything — and `validateNames` throws this code with
+     * that map's field path. Nothing on the options path throws `content.translation_required`
+     * itself. A CLIENT request fault.
+     */
+    "options.translation_required": { field: string; language: string };
+    /** Registered because Task 2 Step 7 of
+     * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` names it, in the
+     * `dependency: string` shape that step declares and the sibling `modifier.in_use` above already
+     * has. NOTHING throws it: the design has a list delete cascade its product attachments rather
+     * than refuse (spec 2026-09-18-one-product-model-design.md §2.3). It stays registered unthrown,
+     * because a shipped code is never removed. */
+    "options.in_use": { optionListId: string; dependency: string };
+    /**
+     * An order line answered an active options list with nothing, or with a label that list does not
+     * carry or has withdrawn. Every active list a dish asks must be answered with one available
+     * label, so this is the order-time counterpart of `options.invalid`: the body's SHAPE was fine
+     * and its CONTENT is not orderable. Carries only the list's id — the caller knows which dish it
+     * was asking about. Thrown by `validateOptionSelections` (option-contract.ts).
+     */
+    "options.label_required": { optionListId: string };
   }
 }
