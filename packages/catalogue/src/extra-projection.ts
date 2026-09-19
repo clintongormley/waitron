@@ -79,6 +79,29 @@ function priceItems(
 }
 
 /**
+ * The step both reads below finish with: borrow the `unit_price` of every item that still needs
+ * one, settle each list's prices, and group the lists under whatever HOLDS them — a menu offer in
+ * one read, a product in the other. Each entry's `holder` is the id the caller wants its map keyed
+ * by, and the order of `offered` is the order each holder's lists come back in.
+ */
+async function resolveHeldLists(
+  tx: Transaction,
+  offered: { holder: string; definition: ExtraList; items: Candidate[] }[],
+): Promise<Map<string, ResolvedExtraList[]>> {
+  const unitPrices = await borrowedUnitPrices(
+    tx,
+    offered.flatMap(({ items }) => items),
+  );
+  const result = new Map<string, ResolvedExtraList[]>();
+  for (const { holder, definition, items } of offered) {
+    const held = result.get(holder) ?? [];
+    held.push({ ...definition, items: priceItems(items, unitPrices) });
+    result.set(holder, held);
+  }
+  return result;
+}
+
+/**
  * What each menu offer publishes: its extras lists in `display_order`, each narrowed and repriced
  * by that offer's own rows (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md`
  * §3.2), the heir of `readMenuModifiers` (modifier-projection.ts).
@@ -102,8 +125,7 @@ export async function readMenuExtras(
   tx: Transaction,
   menuItemIds: string[],
 ): Promise<Map<string, ResolvedExtraList[]>> {
-  const result = new Map<string, ResolvedExtraList[]>();
-  if (menuItemIds.length === 0) return result;
+  if (menuItemIds.length === 0) return new Map();
   const publications = await tx
     .select({
       menuItemId: menuItemExtraLists.menuItemId,
@@ -112,7 +134,7 @@ export async function readMenuExtras(
     .from(menuItemExtraLists)
     .where(inArray(menuItemExtraLists.menuItemId, menuItemIds))
     .orderBy(menuItemExtraLists.displayOrder, menuItemExtraLists.listId);
-  if (publications.length === 0) return result;
+  if (publications.length === 0) return new Map();
 
   const lists = await readExtraListsByIds(tx, [
     ...new Set(publications.map((publication) => publication.listId)),
@@ -143,19 +165,10 @@ export async function readMenuExtras(
       if (override?.available === false) return [];
       return [{ item, menuPrice: override?.price ?? null }];
     });
-    return [{ menuItemId: publication.menuItemId, definition, items }];
+    return [{ holder: publication.menuItemId, definition, items }];
   });
 
-  const unitPrices = await borrowedUnitPrices(
-    tx,
-    offered.flatMap(({ items }) => items),
-  );
-  for (const { menuItemId, definition, items } of offered) {
-    const held = result.get(menuItemId) ?? [];
-    held.push({ ...definition, items: priceItems(items, unitPrices) });
-    result.set(menuItemId, held);
-  }
-  return result;
+  return resolveHeldLists(tx, offered);
 }
 
 /**
@@ -191,12 +204,11 @@ export async function readProductExtras(
   tx: Transaction,
   productIds: string[],
 ): Promise<Map<string, ResolvedExtraList[]>> {
-  const result = new Map<string, ResolvedExtraList[]>();
   const attachments = await readProductModifiers(tx, productIds);
   const carried = [...attachments].flatMap(([productId, refs]) =>
     refs.flatMap((ref) => (ref.kind === "extras" ? [{ productId, listId: ref.id }] : [])),
   );
-  if (carried.length === 0) return result;
+  if (carried.length === 0) return new Map();
 
   const lists = await readExtraListsByIds(tx, [...new Set(carried.map((each) => each.listId))]);
   const definitions = new Map(lists.map((list) => [list.id, list]));
@@ -212,21 +224,12 @@ export async function readProductExtras(
     // list item's own price.
     return [
       {
-        productId,
+        holder: productId,
         definition,
         items: definition.items.map((item): Candidate => ({ item, menuPrice: null })),
       },
     ];
   });
 
-  const unitPrices = await borrowedUnitPrices(
-    tx,
-    offered.flatMap(({ items }) => items),
-  );
-  for (const { productId, definition, items } of offered) {
-    const held = result.get(productId) ?? [];
-    held.push({ ...definition, items: priceItems(items, unitPrices) });
-    result.set(productId, held);
-  }
-  return result;
+  return resolveHeldLists(tx, offered);
 }

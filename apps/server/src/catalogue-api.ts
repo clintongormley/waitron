@@ -70,6 +70,8 @@ import {
   type MenuVariant,
   readProductEditor,
   saveProductEditor,
+  isModifierListKind,
+  readProductModifiers,
   writeProductModifiers,
   type ProductModifierRef,
   type CreateOptionGroupInput,
@@ -413,7 +415,7 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
   return value.map((entry): ProductModifierRef => {
     if (!isPlainObject(entry)) throw invalid();
     const { kind, id } = entry as { kind?: unknown; id?: unknown };
-    if (kind !== "extras" && kind !== "options") throw invalid();
+    if (!isModifierListKind(kind)) throw invalid();
     if (typeof id !== "string") throw invalid();
     if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind: "ModifierListId", value: id });
     return { kind, id };
@@ -476,8 +478,15 @@ function mountListSurface<TList, TDependants>(
   gated: GatedWork,
   surface: ListSurface<TList, TDependants>,
 ): void {
-  // `as const` keeps these template literal TYPES rather than widening them to `string`, which is
-  // what lets Hono still see the `:id` param and type `c.req.param("id")` as a string.
+  // `as const` keeps these as the template literal TYPE `` `/management-api/modifiers/${string}` ``
+  // instead of the plain `string` a template expression widens to, and Hono reads the `:id` out of
+  // that type. `surface.segment` being declared `string` does not flatten it — the literal parts of
+  // the template survive around the `${string}` hole, which is the part Hono needs.
+  // MEASURED, not read off the types: with both assertions deleted and nothing else changed,
+  // `pnpm --filter @waitron/server typecheck` reports four errors, one per route that reads the
+  // path param — `Argument of type 'string | undefined' is not assignable to parameter of type
+  // 'string'` at each `requireUuidParam(c.req.param("id"), …)` below, because Hono no longer knows
+  // the route declares an `id`. Put back, it is clean.
   const collection = `/management-api/modifiers/${surface.segment}` as const;
   const one = `${collection}/:id` as const;
   app.get(collection, (c) =>
@@ -627,14 +636,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     idKind: "OptionListId",
     collectionKey: "optionLists",
     itemKey: "optionList",
-    list: (tx) => listOptionLists(tx),
-    read: (tx, id) => getOptionList(tx, id),
+    list: listOptionLists,
+    read: getOptionList,
     create: (tx, body) => createOptionList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
     update: (tx, id, body) => updateOptionList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
-    remove: (tx, id) => deleteOptionList(tx, id),
+    remove: deleteOptionList,
     // Not "the dashboard's" preview, as the modifier sibling below says of its own: nothing under
     // `apps/dashboard` or `apps/till` names an option list today.
-    dependants: (tx, id) => optionListDependants(tx, id),
+    dependants: optionListDependants,
   });
 
   // The extras lists. Registered here, ahead of `/management-api/modifiers/:id` below, for the
@@ -648,14 +657,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     idKind: "ExtraListId",
     collectionKey: "extraLists",
     itemKey: "extraList",
-    list: (tx) => listExtraLists(tx),
-    read: (tx, id) => getExtraList(tx, id),
+    list: listExtraLists,
+    read: getExtraList,
     create: (tx, body) => createExtraList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
     update: (tx, id, body) => updateExtraList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
-    remove: (tx, id) => deleteExtraList(tx, id),
+    remove: deleteExtraList,
     // The products carrying the list and the menu offers publishing it. Both are detached by the
     // delete rather than blocking it, so this is information, never a refusal.
-    dependants: (tx, id) => extraListDependants(tx, id),
+    dependants: extraListDependants,
   });
 
   app.get("/management-api/modifiers", (c) =>
@@ -1267,10 +1276,16 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           await validateContentTranslations(tx, customerName, deps.venueLocale ?? FALLBACK_LOCALE);
         }
         const product = await createProduct(tx, input);
-        if (modifiers !== undefined) {
-          await writeProductModifiers(tx, product.id, modifiers);
-        }
-        return { ...product, modifiers: modifiers ?? [] };
+        if (modifiers === undefined) return { ...product, modifiers: [] };
+        await writeProductModifiers(tx, product.id, modifiers);
+        // The 201 reports the STORED list, read back inside the same transaction, never the array
+        // the caller sent: `writeProductModifiers` lower-cases every list id, so a caller that
+        // sent an upper-cased one would otherwise be told its attachments are held in a casing the
+        // database does not have, and its own next read would disagree with this response. The
+        // read is skipped above when the body named no list, because a product created a statement
+        // ago carries nothing whatever the read would say.
+        const stored = await readProductModifiers(tx, [product.id]);
+        return { ...product, modifiers: stored.get(product.id) ?? [] };
       });
       return c.json(created, 201);
     }),

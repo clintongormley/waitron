@@ -1,13 +1,5 @@
-// TWO different functions share the name `readProductModifiers`, so both are aliased here and
-// neither is imported bare. `readLegacyProductModifiers` reads the OLD `product_option_groups`
-// attachments as `Modifier` definitions for the till; `readProductAttachments` reads the NEW
-// `product_modifiers` table as `{ kind, id }` refs. The old one goes in Task 13 of
-// `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
-import {
-  readMenuModifiers,
-  readProductModifiers as readLegacyProductModifiers,
-} from "./modifier-projection.js";
-import { readProductModifiers as readProductAttachments } from "./product-modifiers.js";
+import { readMenuModifiers, readLegacyProductModifiers } from "./modifier-projection.js";
+import { readProductModifiers } from "./product-modifiers.js";
 import type { Modifier } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
 import { isModifierPrice } from "./modifier-limits.js";
@@ -1059,20 +1051,29 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     )
     .orderBy(productVariants.displayOrder, productVariants.id);
   // ONE query for every product read, never one per product (CLAUDE.md §3).
-  const modifiers = await readProductAttachments(
+  const modifiers = await readProductModifiers(
     tx,
     rows.map((row) => row.id),
   );
+  // Both of these are grouped by product ONCE, the way `readProductModifiers` groups its own
+  // rows. A `.filter()` inside the `map` below would rescan every variant row and every attachment
+  // row for each product, which is the whole list read twice per product.
+  const variantsByProduct = new Map<string, typeof variantRows>();
+  for (const variant of variantRows) {
+    const held = variantsByProduct.get(variant.productId) ?? [];
+    held.push(variant);
+    variantsByProduct.set(variant.productId, held);
+  }
+  const groupIdsByProduct = new Map<string, string[]>();
+  for (const attachment of attachments) {
+    const held = groupIdsByProduct.get(attachment.productId) ?? [];
+    held.push(attachment.groupId);
+    groupIdsByProduct.set(attachment.productId, held);
+  }
   return rows.map((row) => ({
-    ...toProduct(
-      row,
-      row.categoryIds,
-      variantRows.filter((variant) => variant.productId === row.id),
-    ),
+    ...toProduct(row, row.categoryIds, variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
-    modifierIds: attachments
-      .filter((attachment) => attachment.productId === row.id)
-      .map((attachment) => attachment.groupId),
+    modifierIds: groupIdsByProduct.get(row.id) ?? [],
   }));
 }
 

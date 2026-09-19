@@ -115,6 +115,14 @@ beforeEach(async () => {
   });
 });
 
+/**
+ * The sandwich carries this list. `setMenuItemExtraLists` refuses to publish a list the offer's
+ * product does not carry (`assertProductCarries`, extras.ts), so a test that publishes has to say
+ * what the dish carries first — the step `carries` takes in extra-projection.test.ts.
+ */
+const carries = (tx: Transaction, listId: string) =>
+  writeProductModifiers(tx, dish, [{ kind: "extras", id: listId }]);
+
 it("refuses both of two saves that each claim the other list's item, without deadlocking", async () => {
   const lists = await app(suite.admin, async (tx) => {
     // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
@@ -307,9 +315,7 @@ it("does not keep a menu price for a product the list stopped offering while it 
       { name: "Bread", items: [{ productId: breads.sourdough }, { productId: breads.rye }] },
       "en",
     );
-    // The sandwich has to carry the list before a menu offer may publish it
-    // (`assertProductCarries`, extras.ts).
-    await writeProductModifiers(tx, dish, [{ kind: "extras", id: created.id }]);
+    await carries(tx, created.id);
     await setMenuItemExtraLists(tx, offer, [{ listId: created.id, items: [] }]);
     return created;
   });
@@ -395,9 +401,7 @@ it("leaves out a list item whose product disappears between the menu view's two 
       },
       "en",
     );
-    // The sandwich has to carry the list before a menu offer may publish it
-    // (`assertProductCarries`, extras.ts).
-    await writeProductModifiers(tx, dish, [{ kind: "extras", id: created.id }]);
+    await carries(tx, created.id);
     await setMenuItemExtraLists(tx, offer, [{ listId: created.id, items: [] }]);
     return created;
   });

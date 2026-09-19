@@ -17,10 +17,12 @@ import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 
-// A product's attachment list turns on neither who connected nor two writers racing, so PGlite is
-// the lighter target that still runs the real migrations (CLAUDE.md §4). The one part of this file
-// that does depend on a role is the grants walkthrough at the foot, and PGlite enforces grants once
-// `asAppUser` makes the session assume the role, so that needs no container either.
+// Every case in THIS file is one writer at a time, so PGlite is the lighter target that still runs
+// the real migrations (CLAUDE.md §4). Two writers racing is a different matter and has its own
+// container twin, product-modifiers.pg.test.ts: PGlite serialises every query onto its one backend,
+// so a save overlapping a delete of one of the lists it names cannot even be staged here. The one
+// part of this file that turns on a ROLE is the grants walkthrough at the foot, and PGlite enforces
+// grants once `asAppUser` makes the session assume the role, so that needs no container either.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));

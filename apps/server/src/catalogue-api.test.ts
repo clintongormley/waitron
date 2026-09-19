@@ -2179,6 +2179,37 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
     expect(await readModifiers(app, catalogueId, created.id)).toEqual(modifiers);
   });
 
+  it("answers the 201 with the list as STORED, not as sent, when a list id arrives in upper case", async () => {
+    // `writeProductModifiers` lower-cases every list id before it writes (product-modifiers.ts), so
+    // a 201 echoing the request would tell the caller its attachments are held in a casing the
+    // database does not have — and the caller's own next read would disagree with the answer it
+    // was just given. The `expect(created).not.toEqual(sent)` line is the control: it fails if the
+    // fixture stops being upper-cased and the case silently stops testing anything.
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Menú en mayúsculas");
+    const options = await createOptionsListVia(app, {
+      name: "Punto",
+      labels: [{ name: "Poco hecho" }],
+    });
+    const sent = [{ kind: "options", id: options.id.toUpperCase() }];
+    const createRes = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Solomillo",
+        pricingUnit: "each",
+        unitPrice: "21.00",
+        vatClass: "general",
+        modifiers: sent,
+      },
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as { id: string; modifiers: unknown };
+    expect(created.modifiers).not.toEqual(sent);
+    expect(created.modifiers).toEqual([{ kind: "options", id: options.id }]);
+    expect(await readModifiers(app, catalogueId, created.id)).toEqual(created.modifiers);
+  });
+
   it("PATCH /products/:id with modifiers re-orders and detaches (the attach is a full replace)", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Reorder menu");
@@ -2865,11 +2896,7 @@ describe("mountCatalogueApi — extras lists", () => {
       body: { modifiers: [{ kind: "extras", id: list.id }] },
     });
     expect(attached.status).toBe(204);
-    const res = await send(
-      app,
-      "GET",
-      `${`/management-api/modifiers/extras/${list.id}`}/dependants`,
-    );
+    const res = await send(app, "GET", `/management-api/modifiers/extras/${list.id}/dependants`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       dependants: { products: [{ id: productId, name: "Producto con opciones" }], menus: [] },

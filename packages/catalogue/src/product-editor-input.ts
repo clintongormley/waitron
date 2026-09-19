@@ -3,6 +3,7 @@ import { validateAllergens } from "./allergens.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
+import { isModifierListKind } from "./product-modifiers.js";
 import type { ProductVariantInput } from "./variants.js";
 import type { VatClass } from "./pricing.js";
 import type { ProductEditorInput, ProductModifierRef } from "./product-types.js";
@@ -62,7 +63,7 @@ function modifiers(value: unknown, field: string): ProductModifierRef[] {
   return value.map((entry, index): ProductModifierRef => {
     const at = `${field}.${index}`;
     const ref = object(entry, at);
-    if (ref.kind !== "extras" && ref.kind !== "options") invalid(`${at}.kind`);
+    if (!isModifierListKind(ref.kind)) invalid(`${at}.kind`);
     const listId = id(ref.id, `${at}.id`);
     const key = `${ref.kind}\u0000${listId}`;
     if (seen.has(key)) invalid(`${at}.id`);
