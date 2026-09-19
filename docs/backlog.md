@@ -3608,6 +3608,39 @@ Codex run-it seat were pointed at the SAME temporary checkout, and the run-it se
 checkout to run experiments — so the convention reviewer reported the seat's live probe lines as
 branch changes. Give each read-only reader its own checkout, or point it at the branch worktree.
 
+**`packages/venue-service` converted, LANDED as #448 on 2026-09-19** (main `ea26beb2`) — the
+thirteenth package of the rollout, five test files and five calls, and the first conversion in seven
+with NO config comment to correct: this package's `vitest.config.ts` sets both timeout budgets
+inside its node project and explains neither. No document was owed a pointer either. Three things to
+carry, and the first of them retires a control.
+
+**First, the `resetPerTest: false` mutation is not a general control, and this is the conversion
+that shows it.** #421 proved the helper with it and several conversions since have leaned on it, but
+run against this package it fails 12 tests in ONE of the five converted files, `operations.test.ts`,
+and the other four pass. A conversion using it as its only control would have proved the wrapper
+reaches one file in five. What made that one file sensitive is a unique key rather than an assertion
+about a vanished row: every test after the first re-seeds the `units` rows `each` and `kg` against
+`units_seed_key_key` (`packages/catalogue/src/schema/units.ts:21`), so the reset being off is a
+`23505`. The general control, which discriminated here in both directions, is forwarding
+`migrations: []` from the wrapper: exactly the five converted files fail (30 of the node project's
+36 tests) while `packages/db/src/testing/lifecycle.test.ts`, which calls the old helper directly,
+passes all 29 of its tests under the SAME mutation. Use that pair from now on, and expect a package
+whose suites never re-insert a globally unique row to be blind to the reset one entirely.
+
+**Second, the docs sweep must be run over the whole tree, not over `docs/`.** This branch's first
+sweep said three documents name both `usePgliteDb` and `venue-service`; the real answer is four, and
+the fourth is the root `CLAUDE.md`. Scoping a sweep to `docs/` is the same path-set mistake `CLAUDE.md`
+§1 already records for `packages/` and `apps/`, and it is easy to make again because the rollout's own
+grep pair is written against `docs/`. Nothing went stale here, but the sentence that said so was wrong
+about its own scope until a fourth review round caught it.
+
+**Third, a coverage figure has to be written beside the bar it is measured against.** A v8 text
+summary prints statements / branches / functions / lines; this repository's `90/90/85/85` shorthand is
+statements / lines / functions / branches (`scripts/coverage-thresholds.test.ts`). Line the two up
+positionally, as a first draft of this branch's message did, and a PASSING run reads as a branch
+failure — 87.02% branches against what looks like a 90 bar and is really 85. Write each number beside
+its own bar.
+
 Which package is NEXT is the plan's step-5 command run on the tree you are converting, never a name
 written here.
 
