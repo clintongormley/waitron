@@ -2059,6 +2059,24 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
+**Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
+latest minor or patch release; two loose ends came with it.
+
+- **Five manifests had their declared floor raised, and nobody has said whether that is the house
+  style.** `hono` was declared `^4.6.0` and `^4.7.0`, `pg` `^8.13.0`, `playwright` `^1.49.0`,
+  `@types/pg` `^8.11.0` and `@aws-sdk/client-s3` `^3.700.0`, in each case well below what was
+  installed, while their siblings in the same files were declared at the installed version. #432
+  raised them so that every package declares one identical range, which is now the shape of all
+  nineteen. No commit or doc explains why those floors were low, so this was a judgement, not a
+  rule being followed. If low floors were deliberate, the revert is one line per manifest.
+- **Half of one `pg` receipt was not re-established at 8.23.0.** Four comments — in
+  `packages/provisioning` (`README.md`, `src/cli.ts`, `src/errors.ts`, `src/cli.test.ts`) — record a
+  measurement taken inside a `postgres:18-alpine` container, where a connection string of
+  `/var/run/postgresql` connected over the cluster's Unix socket. The parsing half was re-run on
+  8.23.0 and is unchanged; the container was not started, so those four still name `pg@8.22.0` and
+  say only that it is the version the measurement was taken on. Re-running it needs the container,
+  because the socket cannot be bind-mounted out of Docker Desktop's VM on macOS (`CLAUDE.md` §4).
+
 **Correctness:**
 
 1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
