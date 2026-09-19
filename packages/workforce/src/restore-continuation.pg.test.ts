@@ -20,8 +20,9 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
  * (pointing at row M with M's stored hash) and rows 1..M; its next append CONTINUES that chain at
  * M+1, chaining onto M's hash. There is no reset and no clock-floor — the fiscal restore's pointer
  * reset was dropped because a mid-chain genesis would weaken the strict verifier (spec §5.1 history).
- * A survivor that holds a longer copy of the chain collides LOUDLY at drain rather than merging
- * silently.
+ * A survivor that holds a forked copy of the chain is refused LOUDLY by the chain-position unique
+ * index rather than merged into a fork, however its rows reach this database; nothing carries rows
+ * between nodes today. The second case below is that proof.
  */
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
@@ -131,9 +132,9 @@ describe("cold restore continues the working-time chain (no hook)", () => {
     await suite.admin.transaction((tx) => appendToChain(tx, k, inputAt("2026-01-06T09:00:00Z")));
 
     // A survivor (a promoted cloud) also wrote position 4 on this same (node, location)
-    // lineage. Its copy arriving at drain lands on a position the box already holds and is refused
-    // LOUDLY — never merged into a fork. This is the local proxy for the replication drain the swap
-    // S1 two-node fixture proves end to end (spec §6).
+    // lineage. However its copy ever reaches this database, it lands on a position the box already
+    // holds and is refused LOUDLY by the unique index — never merged into a fork. The insert
+    // here is the local proxy for that arrival; nothing carries rows between nodes today.
     const error = await captureError(() => rawForkInsertAt(4));
     expect(pgErrorCode(error)).toBe("23505");
     expect(pgErrorMessage(error)).toContain("time_entries_chain_position_uq");

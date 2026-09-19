@@ -40,8 +40,8 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 //   working, not a box that was fenced anyway.
 //
 // Real Postgres, not PGlite: the fence persists `node_membership` and demotes `singleton_role` as the
-// non-superuser app/owner roles (grants enforced), and the fence-LSN capture reads `pg_current_wal_lsn()`
-// — none observable under a PGlite superuser (CLAUDE.md §4).
+// non-superuser app/owner roles, so the GRANTS are enforced — a PGlite superuser holds every
+// privilege, so a missing one would pass (CLAUDE.md §4).
 
 const superseded = useTemplateDb({ template: "manifest", resetPerTest: false });
 const proceeds = useTemplateDb({ template: "manifest", resetPerTest: false });

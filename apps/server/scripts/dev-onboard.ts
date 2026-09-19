@@ -23,7 +23,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import {
   DEV_DATABASE_URL,
   devMigrationsUrl,
-  ensureDevReplicationShape,
+  ensureDevMigratorShape,
   inspectVenues,
   renderEnvFileLines,
   waitForPostgres,
@@ -99,10 +99,10 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
     );
   }
 
-  // Build the same migrator + replication roles as the seeded development target, then migrate the
+  // Build the same migrator role as the seeded development target, then migrate the
   // full manifest AS that migrator. This gives the onboarding database the table ownership and
   // default privileges the installed provisioner creates. Then STOP — no venue is provisioned.
-  await ensureDevReplicationShape(databaseUrl, log);
+  await ensureDevMigratorShape(databaseUrl, log);
   log("dev-onboard: migrating as waitron_migrator…");
   await applyMigrations(devMigrationsUrl(databaseUrl), migrationOptionsFor(manifestSets(), null));
 

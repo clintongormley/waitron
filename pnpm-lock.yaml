@@ -232,9 +232,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@waitron/sync':
+      '@waitron/sync-enrolment':
         specifier: workspace:*
-        version: link:../../packages/sync
+        version: link:../../packages/sync-enrolment
       '@waitron/tunnel':
         specifier: workspace:*
         version: link:../../packages/tunnel
@@ -600,9 +600,6 @@ importers:
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler
-      '@waitron/sync':
-        specifier: workspace:*
-        version: link:../sync
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../venue-service
@@ -1586,39 +1583,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@26.6.2)(@vitest/browser@3.2.7)(tsx@4.23.13)(yaml@2.9.0)
 
-  packages/replication-tests:
-    devDependencies:
-      '@types/node':
-        specifier: ^26.0.0
-        version: 26.6.2
-      '@vitest/coverage-v8':
-        specifier: ^3.0.0
-        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
-      '@waitron/db':
-        specifier: workspace:*
-        version: link:../db
-      '@waitron/fiscal-verifactu':
-        specifier: workspace:*
-        version: link:../fiscal-verifactu
-      '@waitron/provisioning':
-        specifier: workspace:*
-        version: link:../provisioning
-      '@waitron/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@waitron/sync':
-        specifier: workspace:*
-        version: link:../sync
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.7(@types/node@26.6.2)(@vitest/browser@3.2.7)(tsx@4.23.13)(yaml@2.9.0)
-
   packages/reporting:
     dependencies:
       '@waitron/catalogue':
@@ -1723,40 +1687,6 @@ importers:
       '@stryker-mutator/vitest-runner':
         specifier: ^9.6.1
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@26.6.2))(vitest@3.2.7)
-      '@vitest/coverage-v8':
-        specifier: ^3.0.0
-        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.7(@types/node@26.6.2)(@vitest/browser@3.2.7)(tsx@4.23.13)(yaml@2.9.0)
-
-  packages/sync:
-    dependencies:
-      '@waitron/db':
-        specifier: workspace:*
-        version: link:../db
-      '@waitron/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@waitron/sync-enrolment':
-        specifier: workspace:*
-        version: link:../sync-enrolment
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
-      pg:
-        specifier: ^8.23.0
-        version: 8.23.0
-    devDependencies:
-      '@types/node':
-        specifier: ^26.0.0
-        version: 26.6.2
-      '@types/pg':
-        specifier: ^8.23.1
-        version: 8.23.1
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)

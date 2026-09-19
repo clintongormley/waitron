@@ -26,9 +26,10 @@ import { roleUrl } from "./testing/postgres.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// Mirror-mode server boot. Since swap step 4 the mirror reads only its origin/relay/CA from the
-// DATABASE (`mirror_config`, written owner-role at adopt) — the outbox pull and its per-peer token are
-// gone, replaced by a native subscription established at adopt. Real Postgres, not PGlite: the mirror
+// Mirror-mode server boot. The mirror reads only its origin/relay/CA from the DATABASE
+// (`mirror_config`, written owner-role at adopt) — the outbox pull and its per-peer token are gone,
+// and nothing took over from them: a mirror takes in no rows at all today (`mirror-bundle.ts`'s
+// header states the open question). Real Postgres, not PGlite: the mirror
 // serves its dashboard through the ambient viewer session, which writes `persons` /
 // `management_sessions` as the NON-superuser `app_user` — so the table GRANTS are enforced, where a
 // PGlite superuser holds every privilege and a missing one would pass (CLAUDE.md §4). `readMirrorConfig`
@@ -42,12 +43,13 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // must run on the app-role pool, never a superuser one (Task 3 carry-over note). Migrations run over
 // the SUPERUSER uri (`WAITRON_MIGRATIONS_DATABASE_URL`) — the clone is already manifest-migrated, so
 // this is an idempotent re-run the app role could not do (it lacks CREATE — boot.test.ts's PROBE_ROLE
-// note). The pull worker is pointed at an UNREACHABLE relay, so it backs off and the box still serves.
+// note). The relay recorded in `mirror_config` is UNREACHABLE and nothing on this boot dials it.
 
 const mirror = useTemplateDb({ template: "manifest", resetPerTest: false });
 const primary = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A fourth clone for the adoption-pending boot (C6): migrated but with NO identity seeded — it models
-// a mirror that has just adopted and whose native initial copy has not yet brought the tenant rows.
+// a mirror that has just adopted, which holds none of the venue's rows (adopt scaffolds none, and
+// nothing brings them).
 const adopting = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A third mirror-stamped clone that is NEVER seeded with a `mirror_config` row — the fail-closed
 // control: a box stamped `deployment.mode='mirror'` with no DB connection config must refuse to boot
@@ -299,8 +301,8 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
 
   it("runs the trivial empty pass on a mirror — the fiscal drain (AEAT submission) is never invoked", async () => {
     // The first test proves the mirror's health-only pass RAN (`lastPassAt` advanced). This proves the
-    // stronger fiscal claim: that empty pass SUBMITS NOTHING. A mirror holds replicated `pendiente`
-    // `envios` (rows its primary generated) — if the singleton gate leaked, drain would pick them up,
+    // stronger fiscal claim: that empty pass SUBMITS NOTHING. The case seeds a `pendiente` `envios`
+    // row the primary owns — if the singleton gate leaked, drain would pick it up,
     // decrypt a certificate and file them to AEAT under a chain this node does not own, an unrecoverable
     // fiscal error (CLAUDE.md §5). `startServer` builds the AEAT resolver internally from `mtlsFetch`
     // (boot.ts ~1917), so there is NO `resolveClient` seam to inject through the full boot; per the task
@@ -309,7 +311,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // called `resolveClient` tripwire in place of the real transport (the pattern the fiscal suites use,
     // e.g. split-bill.fiscal.test.ts). If drain ever runs, the tripwire fires; on a mirror it must not.
 
-    // A replicated pending envío this node must NOT submit (fresh FK closure + registro + a 'pendiente'
+    // A pending envío this node must NOT submit (fresh FK closure + registro + a 'pendiente'
     // `envios` row). `entorno` matches this box's stamp so the row is genuinely due for the environment
     // the primary control below drains for — `resolveClient` is resolved BEFORE the entorno guard
     // regardless (drain.ts:187), so the tripwire fires either way.
@@ -385,7 +387,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     expect(resolveClientCalled).toBe(false);
     expect(mirrorReport).toEqual({ nextDueAt: null, duties: [] });
 
-    // Belt-and-braces: the replicated envío is untouched — still 'pendiente', no submission side effect.
+    // Belt-and-braces: the seeded envío is untouched — still 'pendiente', no submission side effect.
     const afterMirror = await mirror.admin.execute<{ estado: string }>(
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
     );
@@ -556,8 +558,8 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
   }, 60_000);
 
   it("boots adoption-pending on an EMPTY database with status and public certificate help", async () => {
-    // C6 / derived fact 1: an adopted mirror restarts while its native initial copy is still running,
-    // so the copied rows are absent. A pending-adoption.json is present. Boot must enter the
+    // C6 / derived fact 1: an adopted mirror restarts holding none of the venue's rows — adopt
+    // scaffolds none and nothing brings them. A pending-adoption.json is present. Boot must enter the
     // adoption-pending branch and serve a minimal status surface WITHOUT reading any of them.
     //
     // WHAT THE EMPTY DATABASE PROVES: that this boot returns a serving box at all, and that the
@@ -573,8 +575,10 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
       JSON.stringify({ modules: { "fiscal-none": false } }),
     );
     // The pending-adoption record (the standby's own identity + reservation). Its `standby.nodeId` is
-    // a distinct valid UUID; the finish worker never reaches `establish` here (no subscription exists,
-    // so the copy never reports ready), so the reserved payload is inert.
+    // a distinct valid UUID, and the reserved payload stays inert: `establish` inserts the standby's
+    // node, whose `location_id` FKs a `locations` row this empty database does not hold, and
+    // `runFinishAdoption` logs `adoption.establish_failed` and leaves the latch rather than failing
+    // the boot.
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({

@@ -8,8 +8,9 @@ import { quoteIdent } from "@waitron/provisioning";
  *
  *  - `dropAs` — a connection whose effective role OWNS the target database (the migrator, reached via
  *    `withRole(maintenanceUrl, "waitron_migrator")`). Probe F: `DROP DATABASE … WITH (FORCE)` as the
- *    owner also reclaims the target's INACTIVE replication slot with the database — so rejoin needs no
- *    slot drop of its own (Ruling I3). The migrator can drop the db it owns but has NO CREATEDB.
+ *    owner also reclaims the target's INACTIVE replication slot with the database, so the wipe needs no
+ *    slot drop of its own (Ruling I3; and nothing creates a slot today). The migrator can drop the db
+ *    it owns but has NO CREATEDB.
  *  - `createAs` — the plain maintenance admin holding CREATEDB (`waitron_migrator` lacks it, probe A),
  *    which runs `CREATE DATABASE … OWNER <owner>` so the recreated db is owned by the migrator again.
  *
@@ -19,8 +20,9 @@ import { quoteIdent } from "@waitron/provisioning";
  * reach each statement as text, escaped by `quoteIdent`. NOT a transaction (CREATE/DROP DATABASE cannot
  * run in one); the two statements run autocommit in order. A crash between them leaves the target
  * dropped-not-created and the box wiped; it does not self-recover on re-run (the rejoin guards read
- * `node_membership` from the wiped db), but no data is lost — the drained tail is on the carrier — and
- * an operator re-runs the rejoin, whose next boot is setup mode.
+ * `node_membership` from the wiped db), and an operator re-runs the rejoin, whose next boot is setup
+ * mode. What this costs is stated in `rejoin.ts`: nothing confirms that the rows this node originated
+ * reached the carrier before the wipe, so the caller wipes without that confirmation.
  */
 export async function dropAndCreateDatabase(args: {
   dropAs: Database;

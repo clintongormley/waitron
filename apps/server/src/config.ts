@@ -235,9 +235,6 @@ export const DEFAULT_HTTP_PORT = 8080;
  * where a phone lands by typing the box's bare address. `0` disables the listener entirely. Exported
  * because `node-entry.ts`'s recovery path builds its own landing config without running `loadConfig`. */
 export const DEFAULT_HTTP_LANDING_PORT = 80;
-/** The PostgreSQL port a node advertises for a peer's subscription to dial when
- * WAITRON_REPLICATION_PORT is unset — the cluster default. */
-const DEFAULT_REPLICATION_PORT = 5432;
 /** The rotating log file's size ceiling when WAITRON_LOG_MAX_BYTES is unset — 10 MB, a full file that
  * still opens instantly in an editor. */
 const DEFAULT_LOG_MAX_BYTES = 10_000_000;
@@ -380,36 +377,6 @@ function loadTenantDomain(env: Env): string | undefined {
     });
   }
   return raw.toLowerCase();
-}
-
-/**
- * The native-replication credential + advertise address (swap spec §2.2). The `password` is what a
- * peer's `CREATE SUBSCRIPTION` conninfo authenticates as the `waitron_repl` LOGIN REPLICATION role;
- * `advertiseHost`/`advertisePort` is the reachable address this node publishes for that peer to dial.
- * It rides the mirror bundle (owner decision 2026-09-07), not the sale path — so it is OPTIONAL:
- * absent on a box that never hands out or dials a subscription.
- */
-export interface ReplicationConfig {
-  password: string;
-  advertiseHost: string;
-  advertisePort: number;
-}
-
-/**
- * Native replication is configured iff BOTH the `waitron_repl` password and the advertise host are
- * set — an unset (absent OR empty, via `isUnset`) either one returns `undefined`, the same off-switch
- * `loadTunnelConfig` takes for a required field: a blank password must never mean "no auth", and a
- * blank host names no address to dial. The port defaults to the cluster default 5432.
- */
-export function loadReplicationConfig(env: Env): ReplicationConfig | undefined {
-  const password = env.WAITRON_REPLICATION_PASSWORD;
-  const advertiseHost = env.WAITRON_REPLICATION_HOST;
-  if (isUnset(password) || isUnset(advertiseHost)) return undefined;
-  return {
-    password,
-    advertiseHost,
-    advertisePort: positiveInt(env, "WAITRON_REPLICATION_PORT", DEFAULT_REPLICATION_PORT),
-  };
 }
 
 export interface TunnelConfig {

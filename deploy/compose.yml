@@ -83,9 +83,14 @@ services:
   db:
     image: postgres:18-alpine
     restart: unless-stopped
-    # Native logical replication needs these three; the first two are RESTART-required cluster
-    # settings, so they live here rather than in an ALTER SYSTEM. This stanza IS the box image's
-    # postgresql.conf.
+    # This stanza IS the box image's postgresql.conf. These three are unread — the replication that
+    # needed them is gone — and they go with the storage switch, NOT on their own. Removing them is
+    # not free: a cluster that still holds a logical replication slot refuses to start once
+    # `wal_level` drops below logical (`FATAL: logical replication slot "x" exists, but "wal_level" <
+    # "logical"`), measured on a throwaway volume 2026-09-19, with the control in the other direction
+    # — a cluster holding publications but no slots restarts clean. A box that ever had a standby
+    # adopted against it carries such a slot, and `deploy/waitron.sh` overwrites this file from the
+    # ref on every install. See `docs/backlog.md` -> "Box image constraints (B3)".
     command:
       [
         "postgres",

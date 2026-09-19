@@ -12,11 +12,8 @@ services:
     depends_on:
       - mailpit
     image: postgres:18-alpine
-    # Native logical replication (swap step 4): `wal_level=logical` + `track_commit_timestamp=on` are
-    # RESTART-required cluster settings (`PGC_POSTMASTER`), so they live here rather than in an
-    # `ALTER SYSTEM` (which dev-setup's replication bootstrap does for the reloadable
-    # `max_slot_wal_keep_size`). This makes a dev box publishable/subscribable, matching the box
-    # image's `postgresql.conf`.
+    # Unread — the replication that needed them is gone; kept in step with deploy/compose.yml's db
+    # stanza, and they go with the storage switch.
     command:
       [
         "postgres",

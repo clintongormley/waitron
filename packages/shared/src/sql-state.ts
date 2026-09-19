@@ -19,10 +19,11 @@ const SQLSTATE = /^[0-9A-Z]{5}$/;
  * generated password reach a thrown error" forces a genuine failure through a real container and
  * pins `sqlState: "42704"`, which is only reachable through the walk.
  *
- * It lives in `@waitron/shared` rather than beside either of its callers because both
- * `@waitron/provisioning` (which classifies a failed READ or WRITE — `cli.ts` / `instance-apply.ts`)
- * and `@waitron/sync` (which classifies a failed `CREATE SUBSCRIPTION`) need exactly this, and the
- * safety argument above is the kind that must not be maintained in two copies.
+ * It lives in `@waitron/shared` rather than beside any one caller. `@waitron/provisioning` classifies
+ * a failed READ or WRITE with it (`packages/provisioning/src/cli.ts` and `instance-apply.ts`, both
+ * reaching it through the re-export in that package's `sql-state.ts`), and `apps/server` classifies a
+ * boot failure and a dev-migration failure with it (`boot-failure.ts`, `dev-migration-hint.ts`). The
+ * safety argument above is the kind that must not be maintained in several copies.
  */
 export function sqlStateOf(error: unknown): string | null {
   return firstCodeInCauseChain(error, (code) => SQLSTATE.test(code));

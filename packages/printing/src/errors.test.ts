@@ -7,7 +7,7 @@ import "./index.js";
 // (Task 6's print-api.ts owns that map — createErrorBoundary keys it on exactly this `.code`). The
 // construction typechecks ONLY because errors.ts's `declare module "@waitron/shared"` augmentation is
 // loaded — index.js imports it — which is what makes the codes and their param shapes real for a
-// consumer, mirroring packages/sync/src/errors.test.ts and packages/layouts/src/errors.test.ts.
+// consumer, mirroring packages/layouts/src/errors.test.ts and packages/membership/src/errors.test.ts.
 describe("the printer / agent error codes carry their declared params", () => {
   it("constructs printer.not_found with the printer id", () => {
     const error = new AppError("printer.not_found", { id: "prn_123" });

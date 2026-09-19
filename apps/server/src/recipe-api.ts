@@ -28,17 +28,13 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the dashboard's recipe-authoring routes need: `db` is what every `withTransaction`
- * below runs on. The deployment holds one taxpayer per database.
- * `cfg.nodeId` is this node's origin id, threaded into every write's `withTransaction` exactly as
- * `CatalogueApiDeps` does. The `ingredients`/`recipe_lines` tables themselves carry no
- * sync-capture trigger, but a recipe write UPDATEs `products` — `setProductRecipe` →
- * `recomputeProductDerivations`, which drives BOTH `applyRecipeDerivation` (allergens) and
- * `applyDietDerivation` (diet origins), two separate `products` UPDATEs — and a PATCH's allergen
- * change fans out the same recompute over every product that uses the ingredient — and `products`
- * IS sync-enrolled (`products_capture`, packages/sync/drizzle/0000_sync_baseline.sql:97). Without
- * `nodeId`, that capture would record the all-zero sentinel instead of this node (guarded by
- * `sync-origin.test.ts`). No card provider, clock or media store either — these routes touch only
- * the ingredient + recipe + product tables via the headless `@waitron/recipes` ops.
+ * below runs on. The deployment holds one taxpayer per database. No card provider, clock or media
+ * store either — these routes touch only the ingredient + recipe + product tables via the headless
+ * `@waitron/recipes` ops.
+ *
+ * `cfg.nodeId` is read by NO route in this file, and no write path takes an origin any more
+ * (`withTransaction` is `(db, fn)`, `packages/db/src/tenancy.ts`). It survives only because the two
+ * suites that mount these routes pass it; remove the field and those arguments together.
  */
 export interface RecipeApiDeps {
   db: Database;

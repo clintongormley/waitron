@@ -6,7 +6,12 @@ import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
 
 /**
  * A two-node PostgreSQL cluster on a shared Docker network for exercising native logical
- * replication end-to-end — the fixture the swap S2 replication suites are built on.
+ * replication end-to-end. Imported outside this file by
+ * `packages/db/src/change-feed-replication.pg.test.ts`, which starts the cluster and creates its own
+ * publication and subscription over it to prove the change feed survives the logical apply worker; by
+ * the sibling fixture `two-node-wireguard.ts`, which takes `LOGICAL_REPLICATION_COMMAND` and the
+ * `ReplNode`/`StartedNetwork` types from here and re-exports `StartedNetwork`; and by this file's own
+ * `two-node.test.ts`.
  *
  * Both nodes boot with `wal_level=logical` and `track_commit_timestamp=on`. Neither can be set at
  * runtime (`wal_level` needs a restart, `track_commit_timestamp` too), so they are passed as
@@ -104,11 +109,11 @@ export const LOGICAL_REPLICATION_COMMAND = [
   "wal_level=logical",
   "-c",
   "track_commit_timestamp=on",
-  // The bounded slot the readiness check (spec §6) requires AT BOOT, so an S2 node that provisions on
-  // this cluster passes readiness without racing a `pg_reload_conf`. The S1 smoke test asserts only
-  // `wal_level`, so it stays green. Set the same way as the two above (a `-c` arg, not `ALTER SYSTEM`)
-  // for symmetry; unlike them `max_slot_wal_keep_size` is reloadable, so this is a convenience, not a
-  // requirement.
+  // A generous slot-retention bound, so a subscriber on this cluster cannot lose its slot to WAL
+  // recycling mid-test. Set the same way as the two above (a `-c` arg, not `ALTER SYSTEM`) for
+  // symmetry; unlike them `max_slot_wal_keep_size` is reloadable, so this is a convenience, not a
+  // requirement. A caller that needs a different bound AT BOOT replaces the whole command
+  // (`options.command`): a `-c` flag is a `PGC_S_ARGV` setting and outranks any later `ALTER SYSTEM`.
   "-c",
   "max_slot_wal_keep_size=4GB",
 ];

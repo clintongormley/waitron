@@ -150,14 +150,11 @@ Reproduced end to end before the line was written: the pre-#340 migration root m
 scratch database, one category row seeded, then this branch's root applied over it — the hint printed
 and the original error still arrived intact.
 
-Since swap step 4 the compose `db` service passes `wal_level=logical` + `track_commit_timestamp=on`
-(restart-required cluster settings) plus `max_slot_wal_keep_size=4GB` on its `command:`, so a dev box
-is publishable/subscribable exactly as the box image's `postgresql.conf` makes it. `dev-setup` then
-bootstraps the migrator-owned, replication-ready shape (`waitron_migrator` owns every table, the
-`waitron_repl` bootstrap runs) so a `wa-wt reset demo` boot exercises the real replication provisioning —
-that boot IS the live smoke that the unit suite (`apps/server/scripts/dev-setup.test.ts`) cannot cover
-(`CREATE PUBLICATION` runs only at boot). A dev DB provisioned before this change is refused; run
-`wa-wt reset demo`.
+The compose `db` service still passes `wal_level=logical`, `track_commit_timestamp=on` and
+`max_slot_wal_keep_size=4GB` on its `command:`. Those are leftovers of the PostgreSQL replication
+removed on 2026-09-19 and nothing reads them now; they go with the storage switch rather than in a
+separate change. `dev-setup` bootstraps the migrator-owned shape (`waitron_migrator` owns every table)
+so a `wa-wt reset demo` boot migrates exactly as `waitron-provision instance` does in production.
 
 The print agent's dev launcher treats the inherited `WAITRON_STATE_DIR` as the server's box state
 and nests its own state under `print-agent/`, so worktree switches retain its token and target

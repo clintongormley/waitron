@@ -31,8 +31,8 @@ export type BackupStatus =
  * backup permanently stale. With no backends (backup off) reports
  * `{ configured: false }`; a destination with no artifact yet reports null fields and `stale: true`.
  * `ageSeconds` is measured against `now` — the caller passes request time so freshness is per-request.
- * Any filesystem/backend fault propagates (fail-loud — the caller surfaces it, matching the box-status
- * replication reader's posture).
+ * Any filesystem/backend fault propagates (fail-loud — the caller surfaces it, rather than this
+ * reporting a reassuring status it cannot stand behind).
  */
 export async function readBackupStatus(
   backends: StorageBackend[],

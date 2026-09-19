@@ -20,7 +20,6 @@ import {
   type NodeStanding,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import type { SlotDrain } from "@waitron/sync";
 import { establishNodeIdentity } from "./node-identity.js";
 import { persistEvictionOrThrow, retireSelf, type RetireDeps } from "./retire.js";
 
@@ -35,22 +34,17 @@ const noopLog: RetireDeps["log"] = () => {};
 
 const CARRIER_ID = "carrier-1";
 
-// PGlite is sufficient for the retire LOGIC (the standing gates, the disposal-boolean gate, the
-// mint, and the term-guarded persist): none of these has a privilege / concurrency dependency,
-// and the reads/writes all succeed as the PGlite superuser (CLAUDE.md §4 — pick the lighter
-// target when the heavier one's justification does not apply). `readSlotDrain` is injected,
-// so the real app_user/withTransaction path (the only privilege-sensitive part) is never exercised
-// here — it is the caller's (Task 3) concern. Setup runs CREDENTIALS_MIGRATIONS and establishes a
+// PGlite is sufficient for the retire LOGIC (the standing gates, the mint, and the term-guarded
+// persist): none of these has a privilege / concurrency dependency, and the reads/writes all succeed
+// as the PGlite superuser (CLAUDE.md §4 — pick the lighter target when the heavier one's
+// justification does not apply). The real app_user/withTransaction path (the only privilege-sensitive
+// part) is never exercised here — it is the caller's concern. Setup runs CREDENTIALS_MIGRATIONS and establishes a
 // node identity so the mint has a key to sign with; the gate paths that throw before the mint are
 // harmless to it.
 async function fencedNode(): Promise<{
   db: Database;
   nodeId: string;
-  deps: (
-    log: RetireDeps["log"],
-    readSlotDrain: RetireDeps["readSlotDrain"],
-    carrierNodeId?: RetireDeps["carrierNodeId"],
-  ) => RetireDeps;
+  deps: (log: RetireDeps["log"]) => RetireDeps;
 }> {
   const db = await createPgliteDb();
   await runMigrations(db, CORE_MIGRATIONS);
@@ -65,18 +59,7 @@ async function fencedNode(): Promise<{
   return {
     db,
     nodeId,
-    // `carrierNodeId` defaults to CARRIER_ID — the serving-primary the default `heldDoc` names — so the
-    // request-time carrier-freshness guard passes for every test whose held chart carries CARRIER_ID.
-    // Tests exercising a carrier CHANGE pass an explicit id that differs from the held serving-primary.
-    deps: (log, readSlotDrain, carrierNodeId = CARRIER_ID) => ({
-      appDb: db,
-      ring: RING,
-      nodeId,
-      readSlotDrain,
-      fenceLsn: FENCE_LSN,
-      carrierNodeId,
-      log,
-    }),
+    deps: (log) => ({ appDb: db, ring: RING, nodeId, log }),
   };
 }
 
@@ -104,27 +87,12 @@ function heldDoc(
   };
 }
 
-// The fence LSN this node recorded when it entered its read-only fence, and the SlotDrain fixtures the
-// carrier's slot on this node reports (swap S4, Ruling C2). Drained = the slot is INACTIVE (the carrier
-// disabled its subscription, `!active`) AND its confirmed_flush has passed the fence LSN.
-const FENCE_LSN = "0/1500000";
-const drained: SlotDrain = {
-  exists: true,
-  active: false,
-  walStatus: "reserved",
-  confirmedFlushLsn: "0/1500000", // == fence LSN → passed it
-  currentWalLsn: "0/1600000",
-  retainedBytes: 0n,
-};
-const carrierAttached: SlotDrain = { ...drained, active: true }; // carrier has not yet detached
-const notFlushed: SlotDrain = { ...drained, confirmedFlushLsn: "0/1400000", retainedBytes: 4096n }; // behind the fence
-
 describe("retireSelf", () => {
-  it("self-evicts a drained sell-only node, minting a bumped doc that verifies against its own key", async () => {
+  it("self-evicts a sell-only node with a carrier, minting a bumped doc that verifies against its own key", async () => {
     const { db, deps, nodeId } = await fencedNode();
     await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
 
-    const result = await retireSelf(deps(noopLog, async () => drained));
+    const result = await retireSelf(deps(noopLog));
 
     expect(result).toEqual({ evicted: true, term: 4 }); // bumped from 3
 
@@ -142,14 +110,13 @@ describe("retireSelf", () => {
     await db.close();
   });
 
-  it("is idempotent — an already-evicted node is a no-op and never consults the drain guard", async () => {
+  it("is idempotent — an already-evicted node is a no-op, even with no carrier in the chart", async () => {
     const { db, deps, nodeId } = await fencedNode();
-    await writeNodeMembership(db, heldDoc(nodeId, "evicted"));
+    // No carrier: the idempotent return must come BEFORE the carrier gate, or this would refuse
+    // `node.retire_no_carrier` instead of reporting the held term.
+    await writeNodeMembership(db, heldDoc(nodeId, "evicted", { carrier: false }));
 
-    const spy: RetireDeps["readSlotDrain"] = async () => {
-      throw new Error("drain guard must not be consulted for an already-evicted node");
-    };
-    const result = await retireSelf(deps(noopLog, spy));
+    const result = await retireSelf(deps(noopLog));
 
     expect(result).toEqual({ evicted: false, term: 3 }); // held term, no bump
     expect((await readNodeMembership(db))?.body.term).toBe(3);
@@ -160,7 +127,7 @@ describe("retireSelf", () => {
     const { db, deps, nodeId } = await fencedNode();
     await writeNodeMembership(db, heldDoc(nodeId, "serving-secondary"));
 
-    const err = await captureError(() => retireSelf(deps(noopLog, async () => drained)));
+    const err = await captureError(() => retireSelf(deps(noopLog)));
     expect(isAppError(err) && err.code).toBe("node.retire_not_fenced");
 
     const held = await readNodeMembership(db);
@@ -173,132 +140,21 @@ describe("retireSelf", () => {
   it("refuses a node absent from any held chart with node.retire_not_fenced", async () => {
     const { db, deps } = await fencedNode(); // NB: no writeNodeMembership seed → readNodeMembership null
 
-    const err = await captureError(() => retireSelf(deps(noopLog, async () => drained)));
+    const err = await captureError(() => retireSelf(deps(noopLog)));
     expect(isAppError(err) && err.code).toBe("node.retire_not_fenced");
     expect(await readNodeMembership(db)).toBeNull(); // still no document
     await db.close();
   });
 
-  it("refuses a fenced node with no carrier with node.retire_no_carrier and writes nothing", async () => {
+  it("refuses a fenced node whose chart names no serving primary with node.retire_no_carrier", async () => {
     const { db, deps, nodeId } = await fencedNode();
     await writeNodeMembership(db, heldDoc(nodeId, "sell-only", { carrier: false }));
 
-    // undefined readSlotDrain is how the caller signals "held document names no carrier".
-    const err = await captureError(() => retireSelf(deps(noopLog, undefined)));
+    const err = await captureError(() => retireSelf(deps(noopLog)));
     expect(isAppError(err) && err.code).toBe("node.retire_no_carrier");
 
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(3); // no write
-    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
-    await db.close();
-  });
-
-  it("refuses with node.retire_no_carrier when a drain reader is passed but the boot carrier id is undefined", async () => {
-    // Boundary hardening (Copilot): the invariant "readSlotDrain defined ⇒ carrierNodeId defined" is
-    // boot-derived, but retireSelf must not lean on a non-null assertion — a reader passed WITHOUT a
-    // carrier id is refused fail-safe as no_carrier, never a carrier_changed carrying an undefined
-    // boundCarrierNodeId. `deps`'s default would substitute CARRIER_ID, so override carrierNodeId directly.
-    const { db, deps, nodeId } = await fencedNode();
-    await writeNodeMembership(db, heldDoc(nodeId, "sell-only")); // held names a carrier
-    const base = deps(noopLog, async () => drained);
-    const err = await captureError(() => retireSelf({ ...base, carrierNodeId: undefined }));
-    expect(isAppError(err) && err.code).toBe("node.retire_no_carrier");
-
-    const held = await readNodeMembership(db);
-    expect(held?.body.term).toBe(3); // no write
-    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
-    await db.close();
-  });
-
-  it("refuses a node whose carrier slot is still active with node.retire_carrier_attached and writes nothing", async () => {
-    // The `!active` half of the fence-LSN drain guard (Ruling C2, spec §4.2 step 4): the carrier has
-    // not yet disabled its subscription, so the slot is still active and the drain window is not closed.
-    // Even with confirmed_flush past the fence LSN, an active slot is refused — the carrier may still be
-    // applying. Proven by deletion: drop the `d.active` guard and this node wrongly evicts (term 4).
-    const { db, deps, nodeId } = await fencedNode();
-    await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
-
-    const err = await captureError(() => retireSelf(deps(noopLog, async () => carrierAttached)));
-    expect(isAppError(err) && err.code).toBe("node.retire_carrier_attached");
-
-    const held = await readNodeMembership(db);
-    expect(held?.body.term).toBe(3); // no write
-    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
-    await db.close();
-  });
-
-  it("refuses an undrained fenced node with node.retire_not_drained carrying the drain diagnostics", async () => {
-    // The slot is inactive (carrier detached) but confirmed_flush has NOT passed the fence LSN, so the
-    // tail is not fully applied. Refused with the retained-bytes/wal-status diagnostics. Proven by
-    // deletion: drop the `isDrained` guard and this node wrongly evicts against an unshipped tail.
-    const { db, deps, nodeId } = await fencedNode();
-    await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
-
-    const err = await captureError(() => retireSelf(deps(noopLog, async () => notFlushed)));
-    expect(isAppError(err) && err.code).toBe("node.retire_not_drained");
-    expect(isAppError(err) && err.params).toEqual({ retainedBytes: "4096", walStatus: "reserved" });
-
-    const held = await readNodeMembership(db);
-    expect(held?.body.term).toBe(3); // no write
-    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
-    await db.close();
-  });
-
-  it("refuses when the fence LSN is unset (a dead/never-fenced box) with node.retire_not_drained", async () => {
-    // A null fence LSN cannot be compared — fail-safe as not_drained, never a false evict. The slot
-    // fixture (`drained`, retainedBytes 0n) is otherwise fully drained, so ONLY the null fence LSN is
-    // what refuses here — isolating that half of the guard.
-    const { db, deps, nodeId } = await fencedNode();
-    await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
-
-    const base = deps(noopLog, async () => drained);
-    const err = await captureError(() => retireSelf({ ...base, fenceLsn: null }));
-    expect(isAppError(err) && err.code).toBe("node.retire_not_drained");
-
-    expect((await readNodeMembership(db))?.body.term).toBe(3); // no write
-    await db.close();
-  });
-
-  it("refuses when the held chart now names a DIFFERENT carrier than the boot-bound one (node.retire_carrier_changed) and writes nothing", async () => {
-    // The I1 data-loss guard: a fenced node bakes its carrier at boot and does NOT restart on a carrier
-    // change, so the injected `readSlotDrain` keys on the STALE boot carrier ("C1"). Here the fresh
-    // held chart names serving-primary "C2" — a second failover — while `deps.carrierNodeId` is still
-    // "C1". `readSlotDrain` returns drained:true against C1, but C2 (the current survivor) may not
-    // hold this node's tail. retireSelf must REFUSE and let the operator restart the box, never evict
-    // against a stale carrier (fiscal-unrecoverable). Proven by deletion: remove the guard and this node
-    // wrongly evicts (mints term 4) against the stale carrier.
-    const { db, deps, nodeId } = await fencedNode();
-    await writeNodeMembership(db, heldDoc(nodeId, "sell-only", { carrierId: "C2" }));
-
-    const err = await captureError(() => retireSelf(deps(noopLog, async () => drained, "C1")));
-    expect(isAppError(err) && err.code).toBe("node.retire_carrier_changed");
-    expect(isAppError(err) && err.params).toEqual({
-      boundCarrierNodeId: "C1",
-      currentCarrierNodeId: "C2",
-    });
-
-    const held = await readNodeMembership(db);
-    expect(held?.body.term).toBe(3); // no eviction written
-    expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
-    await db.close();
-  });
-
-  it("refuses when the fresh chart names NO carrier though one was bound at boot (node.retire_carrier_changed, currentCarrierNodeId null)", async () => {
-    // Boot captured a carrier "C1" (so `readSlotDrain` is bound), but the fresh held chart now names
-    // no serving-primary at all — the carrier changed OUT of existence. `servingPrimaryNodeId` returns
-    // undefined ⇒ reported as `currentCarrierNodeId: null`, distinct from the bound "C1".
-    const { db, deps, nodeId } = await fencedNode();
-    await writeNodeMembership(db, heldDoc(nodeId, "sell-only", { carrier: false }));
-
-    const err = await captureError(() => retireSelf(deps(noopLog, async () => drained, "C1")));
-    expect(isAppError(err) && err.code).toBe("node.retire_carrier_changed");
-    expect(isAppError(err) && err.params).toEqual({
-      boundCarrierNodeId: "C1",
-      currentCarrierNodeId: null,
-    });
-
-    const held = await readNodeMembership(db);
-    expect(held?.body.term).toBe(3); // no eviction written
     expect(held!.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("sell-only");
     await db.close();
   });

@@ -273,8 +273,8 @@ export class TillApp extends LitElement {
    * The venue moved to another server (till-reroute §4.3). The login session was a row on the server we
    * just left, so drop the operator LOCALLY, lock, say why (`server.switched`), and re-run the boot
    * against the new target (`#boot` → getTill, device probe). The working order stays in memory — only
-   * the operator session is dropped — and the held-orders list on the new target shows the replicated
-   * state.
+   * the operator session is dropped — and the held-orders list then shows whatever the new target
+   * itself holds.
    */
   readonly #onServerChanged = (event: Event): void => {
     const { from, to } = (event as CustomEvent<{ from: string; to: string }>).detail;

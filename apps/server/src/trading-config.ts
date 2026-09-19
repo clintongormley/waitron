@@ -11,8 +11,10 @@ export type OnboardingIntent = "demo" | "prepare" | "live";
  * The provisioned identity of a single till, written out as the env the supervisor sources on the
  * next boot so the box enters TRADING mode. The four *Id fields become the `WAITRON_TILL_*_ID`
  * config the till reads; `databaseUrl`/`migrationsDatabaseUrl` and `environment` are the same
- * connections + `WAITRON_ENV` the running server expects. Since swap step 4 there is no per-mirror
- * sync-pool URL — a mirror applies through a native subscription, not an outbox pull.
+ * connections + `WAITRON_ENV` the running server expects. There is no per-mirror sync-pool URL: a
+ * mirror takes in no rows at all today — the PostgreSQL replication that fed it is deleted and its
+ * replacement has not landed (`mirror-bundle.ts`'s header states the same open question) — so it
+ * needs no second connection of its own.
  */
 export interface TradingConfig {
   tillId: string;

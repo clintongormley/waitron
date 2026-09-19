@@ -16,8 +16,8 @@ afterEach(async () => {
   await suite.db.transaction(async (tx) => {
     // Fixture cleanup must remove lines whose parent is already terminal, which the origin-only
     // `working_order_lines_require_open_parent` trigger would reject. `session_replication_role =
-    // 'replica'` skips origin-only ('O') triggers exactly as the replication apply path does (PGlite
-    // connections are superuser), leaving the ENABLE ALWAYS append-only guards intact; SET LOCAL
+    // 'replica'` skips origin-only ('O') triggers while leaving the ENABLE ALWAYS append-only guards
+    // intact (PGlite connections are superuser, so the SET is permitted); SET LOCAL
     // restores the ordinary role before the next case exercises the real write path.
     await tx.execute(sql`set local session_replication_role = 'replica'`);
     await tx.execute(sql`delete from working_order_lines`);

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
-import { inArray, sql } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   asAppUser,
@@ -13,10 +13,8 @@ import {
   startChangeListener,
   persistNodeMembershipIfNewer,
   readDeploymentAxes,
-  readFenceLsn,
   readMembershipTrustSet,
   readNodeMembership,
-  setFenceLsnTx,
   setSingletonRoleTx,
   readMirrorConfig,
   withTransaction,
@@ -47,17 +45,10 @@ import {
   ALL_MODULE_PERMISSIONS,
   enabledAlertSources,
   enabledFloorAnnotators,
-  LEDGER_PUBLICATION_TABLES,
-  STATE_PUBLICATION_TABLES,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
-import {
-  loadConfig,
-  loadReplicationConfig,
-  loadTunnelConfig,
-  type ServerConfig,
-} from "./config.js";
+import { loadConfig, loadTunnelConfig, type ServerConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import {
@@ -158,7 +149,6 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
 import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
-import { ensureReplicationShape } from "./replication.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
@@ -180,17 +170,7 @@ import { readOnlyGate } from "./read-only-gate.js";
 import { isFenced } from "./membership-fence.js";
 import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
-import {
-  isDrained,
-  listSlots,
-  publicationName,
-  readSlotDrain,
-  readSubscriptionStatus,
-  setSubscriptionPublications,
-  subscriptionName,
-  type SlotDrain,
-} from "@waitron/sync";
-import { acceptMembershipDocument, servingPrimaryNodeId } from "@waitron/membership";
+import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule, readOrderFlow } from "./till-config.js";
@@ -235,14 +215,15 @@ export interface StartedServer {
  * The mode-specific half of `close()` (see `makeStartedServer`): how to stop this boot's background
  * work and which connection pools to drain. `closePools` closes, through `closeAll`, the long-lived
  * pools the mode holds: setup — the app pool and the provisioning owner pool; adoption-pending and
- * trading — the app pool and the replication pool. Trading's backup read pool is the exception:
+ * trading — the app pool and the owner pool. Trading's backup read pool is the exception:
  * `backupSupervisor.stop()` in `stopWork` closes it, swallowing a failure to close it. Short-lived
- * pools (an adopt's replication pool, a demote's or promote's owner pool) close in their own
+ * pools (a demote's or promote's owner pool) close in their own
  * `finally`. Every close in `closePools` is attempted and the first failure is rethrown, so
  * `close()` rejects; a signal-initiated shutdown then logs `server.shutdown_failed`, unless the
  * shutdown deadline has already exited the process. Setup's `stopWork` is a no-op;
- * adoption-pending's aborts the adoption worker; trading's stops the main loop, the live change
- * listener, the outbound tunnel and the backup sweep.
+ * adoption-pending's AWAITS the adoption worker — `runFinishAdoption` takes no abort signal, so there
+ * is nothing to cancel; trading's stops the main loop, the live change listener, the outbound tunnel
+ * and the backup sweep.
  */
 interface BootTeardown {
   stopWork: () => Promise<void>;
@@ -656,7 +637,7 @@ export function startLandingListener(
  * is idempotent. The mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops
  * any background work and awaits it; then, after the listeners close and in a `finally` so a
  * listener failure still reaches it, `closePools` closes the mode's long-lived pools (setup: app +
- * provisioning owner; adoption-pending and trading: app + replication; trading's backup read pool
+ * provisioning owner; adoption-pending and trading: app + owner; trading's backup read pool
  * is closed by `stopWork` instead). A pool that fails to close rejects `close()` only after every
  * pool in `closePools` has been attempted, and `server.stopped` is then not logged. `mdns` is the
  * mDNS responder (inactive for development and loopback listeners); `close()` stops it FIRST — the box is
@@ -1215,40 +1196,26 @@ export async function startServer(
               return result;
             },
             seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-            adopt: async (req) => {
-              // Adopt establishes a NATIVE subscription (swap step 4), so it needs the MIGRATOR
-              // connection that holds `pg_create_subscription` and owns the subscription it creates —
-              // distinct from `ownerDb` (the table-OWNER connection for the `deployment`/`mirror_config`
-              // writes). Opened per adopt (a one-shot interactive action) and closed in `finally` so no
-              // pool leaks on the setup path.
-              const replicationDb = await createPostgresDb(config.migrationsDatabaseUrl, {
-                max: 2,
-              });
-              try {
-                return await adoptFromPrimary(
-                  {
-                    ownerDb,
-                    replicationDb,
-                    fetchBundle: fetchMirrorBundle,
-                    advertisedOrigin: config.advertisedOrigin,
-                    environment: config.environment,
-                    persistTrading,
-                    // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
-                    // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
-                    persistModuleConfig: async (c) => {
-                      await writeModuleConfig(config.stateDir, c);
-                    },
-                    stateDir: config.stateDir,
-                    databaseUrl: config.databaseUrl,
-                    migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-                    database: ownerDatabaseName,
+            adopt: (req) =>
+              adoptFromPrimary(
+                {
+                  ownerDb,
+                  fetchBundle: fetchMirrorBundle,
+                  advertisedOrigin: config.advertisedOrigin,
+                  environment: config.environment,
+                  persistTrading,
+                  // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
+                  // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
+                  persistModuleConfig: async (c) => {
+                    await writeModuleConfig(config.stateDir, c);
                   },
-                  req,
-                );
-              } finally {
-                await replicationDb.close();
-              }
-            },
+                  stateDir: config.stateDir,
+                  databaseUrl: config.databaseUrl,
+                  migrationsDatabaseUrl: config.migrationsDatabaseUrl,
+                  database: ownerDatabaseName,
+                },
+                req,
+              ),
             establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb, ring }, nodeId),
             seedMembership: (nodeId) =>
               seedTermZeroMembership({ db: ownerDb, ring }, nodeId, config.advertisedOrigin),
@@ -1348,59 +1315,42 @@ export async function startServer(
     current: { version: 1, key: accountPurposeKey(accountKey, "totp") },
   };
 
-  // Adoption-pending boot (C6 / derived fact 1): an adopted mirror restarts into a database whose
-  // native initial copy is still running (spec §2.2, "minutes over a WAN"), so the copied rows
-  // are not there yet. Boot must NOT touch them until the copy completes — it serves `/health` and a
-  // minimal `/api/box/status` reporting `adoption: pending`, ensures the two publications, and starts
-  // `runFinishAdoption`, which seals the reserved identity + ambient viewer once every table has
-  // copied, then the box restarts into normal mirror mode. It reads no deployment axes / membership,
-  // mounts no mirror session and no till/node-scoped read path — `ensureMirrorViewer` in particular
-  // WRITES into `persons` and `management_sessions` (mirror-session.ts), two tables the initial copy
-  // is still filling. What that write would break is not established: the receipt that stood here
-  // named a foreign key from `persons` to `tenants`, and this repo no longer has one (the open
-  // question is in `docs/backlog.md`). Entered BEFORE the axes read below.
+  // Adoption-pending boot (C6): an adopted mirror's reserved standby identity is DORMANT — adopt
+  // records a latch instead of establishing it — and EVERY boot retries that step. None can complete
+  // it today, so a box that has adopted stays in this mode: `finish-adoption.ts`'s `PendingAdoption`
+  // header is the one place that says why, and `docs/backlog.md` carries it as an operator-visible
+  // consequence. In this mode boot serves `/health` and a minimal `/api/box/status` reporting
+  // `adoption: pending`: it reads no deployment axes / membership and mounts no mirror session and no
+  // till/node-scoped read path, and nothing in this branch restarts the box. Entered BEFORE the axes
+  // read below.
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
-    // A dedicated small OWNER pool (M8 — `replicationDb`, NEVER `ownerDb`, already declared from a
-    // possibly-different role at the demote and promote sites). Wrapped so a throw closes both pools
-    // (only `db` + this one are open here) before rethrowing.
-    let replicationDb: Database;
+    // A dedicated small OWNER pool — the identity establish and the ambient viewer are owner writes.
+    // Opened on `config.migrationsDatabaseUrl`, NOT the `config.adminDatabaseUrl` the plain `ownerDb`
+    // pools in this file take (setup, the fenced demote, `withOwnerDb`): on a role-split appliance those
+    // are two different roles, so the name carries which URL it connects on — the same distinction
+    // `feedOwnerDb` below is named for.
+    // Wrapped so a throw closes both pools (only `db` + this one are open here) before rethrowing.
+    let adoptOwnerDb: Database;
     try {
-      replicationDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
+      adoptOwnerDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
     } catch (error) {
       await db.close();
-      throw error;
-    }
-    try {
-      // Mode is 'mirror' (a mirror-to-be): this only ensures the publications (ready for a later
-      // promotion) and narrows nothing.
-      await ensureReplicationShape(replicationDb, {
-        environment: config.environment,
-        mode: "mirror",
-        ledgerTables: LEDGER_PUBLICATION_TABLES,
-        stateTables: STATE_PUBLICATION_TABLES,
-        log,
-      });
-    } catch (error) {
-      await Promise.allSettled([replicationDb.close(), db.close()]);
       throw error;
     }
     // The only status surface an adoption-pending box serves — unauthenticated (no ambient viewer
     // exists yet) and deliberately minimal, distinct from the full `mountBoxStatusApi` shape.
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
-    const finishController = new AbortController();
     const finishWorker = runFinishAdoption({
-      replicationDb,
+      ownerDb: adoptOwnerDb,
       ring,
       stateDir: config.stateDir,
-      environment: config.environment,
       modules: setsToMigrate,
       log,
-      signal: finishController.signal,
     });
     // A settle-by-rejection before close() must not become a process-level unhandled rejection — log
     // it the `codeOf`-classified way the sync/backup workers below do (runFinishAdoption swallows its
-    // own per-tick faults, so this only ever fires under an unexpected escape).
+    // own faults, so this only ever fires under an unexpected escape).
     finishWorker.catch((err) =>
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
@@ -1421,10 +1371,9 @@ export async function startServer(
       log,
       {
         stopWork: async () => {
-          finishController.abort();
           await finishWorker.catch(() => {});
         },
-        closePools: () => closeAll([() => replicationDb.close(), () => db.close()]),
+        closePools: () => closeAll([() => adoptOwnerDb.close(), () => db.close()]),
       },
       mdns,
       // The plain-HTTP trust/landing listener (Task 3) — an adoption-pending box serves trading over
@@ -1440,8 +1389,16 @@ export async function startServer(
     throw error;
   }
 
-  // Which role this database plays (C2a design §4). A mirror pulls + applies and serves read-only; a
-  // primary is today's flow. Read ONCE here into a refreshable holder that the promote action
+  // Which role this database plays (C2a design §4). Nothing gets here as a `mirror` today: the one
+  // production write of `mode='mirror'` (`adoptFromPrimary`, `adopt.ts`) records the adoption-pending
+  // latch in the same call, and the branch above returns while that latch is set. What the code below
+  // does when a mirror does get here: it boots behind the read-only gate and an ambient viewer
+  // session, both mounted below — `read-only-gate.ts` refuses a CLIENT'S non-safe HTTP
+  // VERB bar its named exemptions, which is narrower than "no writes": the viewer's own keepalive
+  // writes inside a GET, and the promote POST is exempt by name. Nothing copies the venue's rows onto
+  // a mirror; `mirror-bundle.ts`'s header says what the deleted replication used to supply and that no
+  // replacement has landed. A primary is today's flow.
+  // Read ONCE here into a refreshable holder that the promote action
   // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its owner-role write — so a mode flip
   // would take effect live, no restart (design §10; the refresh is in promote.ts). This slice does NOT
   // flip the mode: a local-secondary promote refreshes this holder without changing its value ('primary'
@@ -1536,19 +1493,10 @@ export async function startServer(
     try {
       const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
       try {
-        // Demote the singleton axis AND capture the fence-LSN watermark in ONE owner transaction
-        // (CLAUDE.md §3, Ruling C2): the moment this node enters its read-only fence it records
-        // `pg_current_wal_lsn()` in `deployment.fence_lsn`, so the carrier's drain is measured against a
-        // monotone watermark, not against pg_current_wal_lsn() (which decays after the carrier disables
-        // its subscription, probe E). Idempotent: `fence_lsn = pg_current_wal_lsn()` re-runs harmlessly
-        // on a second fenced boot (a slightly later LSN, still ≤ every already-shipped row's LSN because
-        // this boot writes no sale). Owner-role — app_user holds no UPDATE on deployment.
+        // Demote the singleton axis in an owner transaction — app_user holds no UPDATE on
+        // `deployment`. Idempotent: a second fenced boot re-writes the same value.
         await ownerDb.transaction(async (tx) => {
           await setSingletonRoleTx(tx, "secondary");
-          const wal = await tx.execute<{ lsn: string }>(
-            sql`select pg_current_wal_lsn()::text as lsn`,
-          );
-          await setFenceLsnTx(tx, wal.rows[0]!.lsn);
         });
       } finally {
         await ownerDb.close();
@@ -1643,10 +1591,12 @@ export async function startServer(
   }
 
   // The node whose DATA this server DISPLAYS in its node-scoped read paths (report-api's per-till/fiscal
-  // reports). On a PRIMARY it is the node's own id; on a MIRROR it is the ORIGIN — the primary whose
-  // replicated sales the mirror holds — because those rows keep the primary's node_id, so scoping by the
-  // mirror's own id would return nothing. Distinct from `config.till.nodeId`, which stays the node's OWN
-  // identity for every WRITE path (membership promotion R3a). The origin is read from
+  // reports). On a PRIMARY it is the node's own id; on a MIRROR it is the ORIGIN — the primary it was
+  // adopted from — because the venue's sales keep that primary's node_id, so scoping by the mirror's
+  // own id would return nothing. (A mirror holds none of those rows today, `mirror-bundle.ts`'s header
+  // says why; the origin is still what its reads must be scoped to.) Distinct from
+  // `config.till.nodeId`, which stays the node's OWN identity for every WRITE path (membership
+  // promotion R3a). The origin is read from
   // `mirror_config` (written owner-role at adopt), NEVER from env. A mirror REQUIRES it: an absent
   // record is a loud `server.config_invalid` (fail-closed). Wrapped in the same db-cleanup guard the
   // `loadKeyRing` load above uses, so a throw closes the pool rather than leaking it. Hoisted ABOVE the
@@ -1671,40 +1621,26 @@ export async function startServer(
     }
   }
 
-  // Native replication shape, reconciled on EVERY boot (swap spec §2.1/§4.2): ensure both publications
-  // name their derived tables and, on a PRIMARY, self-heal any subscription still naming the state
-  // publication down to ledger-only (a promoted node's drain window must not re-copy state). A
-  // dedicated small OWNER pool (M8 — `replicationDb`, NOT `ownerDb`, which the demote/promote sites
-  // above/below already take): the migrator owns every published table and every subscription it
-  // created, and this pool only runs that occasional owner DDL, so it is capped. Opened AFTER the last
-  // db-cleanup throw site in this branch (the mirror-config read just above) so a throw here is the
-  // first that must also drain it; closed in `closePools` below.
-  let replicationDb: Database;
+  // The live change feed's triggers are owner DDL, so they need a small dedicated OWNER pool. It is its
+  // own pool, and its own name, because it connects on `config.migrationsDatabaseUrl` while the plain
+  // `ownerDb` pools (setup, the fenced demote, `withOwnerDb`) connect on `config.adminDatabaseUrl` — two
+  // different roles on a role-split appliance. It runs only that occasional owner DDL, so it is
+  // capped. Opened AFTER the last db-cleanup throw site in this branch (the mirror-config read just
+  // above) so a throw here is the first that must also drain it; closed in `closePools` below.
+  let feedOwnerDb: Database;
   try {
-    replicationDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
+    feedOwnerDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
   } catch (error) {
     await db.close();
-    throw error;
-  }
-  try {
-    await ensureReplicationShape(replicationDb, {
-      environment: config.environment,
-      mode: holders.mode.current,
-      ledgerTables: LEDGER_PUBLICATION_TABLES,
-      stateTables: STATE_PUBLICATION_TABLES,
-      log,
-    });
-  } catch (error) {
-    await Promise.allSettled([replicationDb.close(), db.close()]);
     throw error;
   }
 
   const liveEvents = new LiveEvents();
   const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
   try {
-    await installChangeFeed(replicationDb, changeSources);
+    await installChangeFeed(feedOwnerDb, changeSources);
   } catch (error) {
-    await Promise.allSettled([replicationDb.close(), db.close()]);
+    await Promise.allSettled([feedOwnerDb.close(), db.close()]);
     throw error;
   }
   mountLiveApi(
@@ -2100,10 +2036,11 @@ export async function startServer(
   // SAME app, the identical convention. Reuses the EXACT `db`
   // `mountPurchasingApi` above receives so the two cannot drift. `nodeId` here is `dataNodeId` —
   // the node whose DATA this server DISPLAYS, not its own identity: on a MIRROR that is the
-  // ORIGIN (the primary whose replicated sales it holds), so the per-till/fiscal reports
-  // (daily-close view, period, cash-up, VAT, overdue) resolve the venue's data rather than the
-  // mirror's empty own node (membership promotion R3a); on a primary it is the own id. The
-  // `/reports/overview` route ignores it entirely and aggregates the WHOLE venue (all nodes), and
+  // ORIGIN (the primary it was adopted from, whose node_id the venue's sales carry), so the
+  // per-till/fiscal reports (daily-close view, period, cash-up, VAT, overdue) scope to the venue's
+  // data rather than the mirror's own empty node (membership promotion R3a); on a primary it is the
+  // own id. The `/reports/overview` route ignores it entirely and aggregates the WHOLE venue (all
+  // nodes), and
   // the modelo 303 export is likewise tenant-wide. No fiscal backend, card provider or media
   // store — READ-ONLY routes over the filed commercial record + the venue's dining tables. Routes
   // only — no database work at boot; the `report.export`/`report.view` gates run per request,
@@ -2229,25 +2166,6 @@ export async function startServer(
     log,
   );
 
-  // The carrier that would drain this node's fenced tail (`servingPrimaryNodeId` of the held chart),
-  // captured at boot. The carrier's publisher-side slot on THIS node is named by the CARRIER (the
-  // subscriber that drains it, C1), so the fenced node finds it by the carrier's id.
-  const carrierNodeId = heldMembership === null ? undefined : servingPrimaryNodeId(heldMembership);
-  // The fence-LSN watermark this node recorded when it entered its read-only fence (Ruling C2), read
-  // ONCE at boot — `null` on a serving node (never fenced) or a dead box. The drain guard is
-  // `isDrained(slot, fenceLsn) && !slot.active`. Only ever consulted when a carrier is known (both
-  // `readDisposal` and `mountBoxRetireApi` are inert with no carrier), so skip the read entirely on an
-  // unfenced primary rather than spend a round-trip on a value nothing reads.
-  const fenceLsn = carrierNodeId === undefined ? null : await readFenceLsn(db);
-  // The native slot-drain reader (swap S4): the carrier's slot on THIS node is named by the carrier
-  // (C1), read on the migrator/owner pool (`replicationDb`) — a non-superuser reads pg_replication_slots
-  // unmasked (probe B). `undefined` when the held chart names no carrier, exactly as retire/box-status
-  // expect (fenced-with-no-carrier → refuse fail-safe). The disposal cell folds in `isDrained` here so
-  // box-status stays pure of the fence LSN.
-  const readFenceSlotDrain: (() => Promise<SlotDrain>) | undefined =
-    carrierNodeId === undefined
-      ? undefined
-      : () => readSlotDrain(replicationDb, subscriptionName(config.environment, carrierNodeId));
   mountBoxStatusApi(
     app,
     {
@@ -2257,29 +2175,6 @@ export async function startServer(
       health,
       now,
       tlsCertPath: config.tls?.certFile,
-      // Native replication (swap S4): a PRIMARY is a publisher and lists its peers' slots; a MIRROR is a
-      // subscriber and reports its own subscription (incl. the narrowed publications, I6). Exactly one is
-      // wired, off the boot-captured mode. Both read the migrator/owner pool (`replicationDb`).
-      readReplicationSlots: isMirror ? undefined : () => listSlots(replicationDb),
-      readReplicationSubscription: isMirror
-        ? () =>
-            readSubscriptionStatus(replicationDb, subscriptionName(config.environment, till.nodeId))
-        : undefined,
-      // The disposal cell: the carrier's slot drain folded with `isDrained` against the fence LSN and the
-      // `!active` half — present only on a fenced node with a known carrier (`readFenceSlotDrain` set).
-      readDisposal:
-        readFenceSlotDrain !== undefined && carrierNodeId !== undefined
-          ? async () => {
-              const d = await readFenceSlotDrain();
-              return {
-                carrierNodeId,
-                drained: fenceLsn !== null && isDrained(d, fenceLsn) && !d.active,
-                active: d.active,
-                walStatus: d.walStatus,
-                retainedBytes: d.retainedBytes,
-              };
-            }
-          : undefined,
       // The live backup freshness, read through the supervisor's async `status()` so box-status and the
       // duty share one view (B3). Backup-off is not a distinct wiring: `status()` reports
       // `configured: false` when no destination is configured, exactly the N/A placeholder box-status
@@ -2298,25 +2193,11 @@ export async function startServer(
     log,
   );
 
-  // The self-eviction endpoint (retire/evict R3): a fully-drained fenced node retires itself. Mounted
+  // The self-eviction endpoint (retire/evict R3): a fenced node retires itself. Mounted
   // UNCONDITIONALLY (a real management endpoint) — `retireSelf`'s ordered guards make it safe on any
-  // node: a serving node refuses `node.retire_not_fenced`, and a fenced node with no carrier refuses
-  // `node.retire_no_carrier` (signalled by `readSlotDrain === undefined`). It consumes the SAME native
-  // slot-drain reader + fence LSN box-status's `disposal` surface uses, so the two views cannot desync.
-  mountBoxRetireApi(
-    app,
-    {
-      appDb: db,
-      ring,
-      nodeId: till.nodeId,
-      readSlotDrain: readFenceSlotDrain,
-      fenceLsn,
-      // The boot carrier the slot reader keys on. retireSelf re-derives the current carrier from the
-      // fresh held chart and refuses `node.retire_carrier_changed` if it changed (I1).
-      carrierNodeId,
-    },
-    log,
-  );
+  // node: a serving node refuses `node.retire_not_fenced`, and a fenced node whose held chart names no
+  // serving primary refuses `node.retire_no_carrier`.
+  mountBoxRetireApi(app, { appDb: db, ring, nodeId: till.nodeId }, log);
 
   // The recovery-bundle download (slice 4b-i): the same management gate as box-status, packing the
   // box's persisted secret files (config.stateDir) into a passphrase-encrypted bundle. Mounted in the
@@ -2381,29 +2262,11 @@ export async function startServer(
 
   // The operator flow's PRIMARY endpoint: POST /management-api/mirror-bundle mints a MirrorBundle a
   // cloud mirror adopts (design §4). SINGLETON-PRIMARY-only (a mirror emits no bundle, and a sell-only
-  // local secondary must not either). The bundle now carries the primary's native-replication
-  // CONNECTION (swap step 4) — `config.replication` (the `waitron_repl` credential + advertise
-  // address); the route refuses `server.config_missing` (503) when it is unconfigured. `database` is
-  // the name of the primary's own database, carried in the bundle so the mirror's subscription names
-  // the right dbname to COPY from. `relayUrl` is this primary's own relay coordinates
+  // local secondary must not either). `relayUrl` is this primary's own relay coordinates
   // (`loadTunnelConfig`, undefined when no tunnel is configured — the route then refuses
   // `mirror.no_relay`); `boxHostname` is the same box leaf SAN the discovery-api and cert-minting use;
   // `designated` is `config.till` (the four WAITRON_TILL_*_ID). Mounted before the SPA catch-alls below.
   if (isSingletonPrimary) {
-    // This primary's own native-replication credential + advertise address (swap spec §2.2), loaded
-    // from env here — it rides the mirror bundle, not the sale path, so it is only read on the
-    // bundle-minting primary. `undefined` when unconfigured; the route then refuses.
-    const replicationConfig = loadReplicationConfig(env);
-    // The NAME of this primary's own database, carried in the bundle's replication connection so the
-    // mirror's `CREATE SUBSCRIPTION` names the right `dbname`. Parsed from the app URL, never the URL
-    // itself (it can carry a password); a socket/malformed URL falls back to a neutral label.
-    let primaryDatabaseName = "the primary database";
-    try {
-      const parsed = new URL(config.databaseUrl).pathname.replace(/^\//, "");
-      if (parsed !== "") primaryDatabaseName = parsed;
-    } catch {
-      // Keep the neutral label.
-    }
     mountMirrorBundleApi(
       app,
       {
@@ -2420,10 +2283,6 @@ export async function startServer(
             : undefined,
         boxHostname: BOX_HOSTNAME,
         designated: config.till,
-        // The primary's own native-replication credential + advertise address, undefined when
-        // unconfigured (the route then refuses `server.config_missing`).
-        replication: replicationConfig,
-        database: primaryDatabaseName,
         accountKey: accountKey.toString("base64"),
       },
       log,
@@ -2482,18 +2341,6 @@ export async function startServer(
             };
             await writeTradingEnv(config.stateDir, next);
           },
-          // Narrow the promoted node's OWN subscription to the ledger publication AFTER the PONR (spec
-          // §4.2 step 3), so the drain window re-copies no state. The subscription is named by THIS
-          // node's own id (C1) and runs on the migrator pool `replicationDb` (which owns the
-          // subscription, I6 — NOT `deps.ownerDb`/`config.adminDatabaseUrl`, which may not). A failure
-          // is logged `promotion.narrow_failed` and not rethrown (the node is already primary); boot's
-          // `ensureReplicationShape` re-narrows on the next boot.
-          narrowSubscription: () =>
-            setSubscriptionPublications(
-              replicationDb,
-              subscriptionName(config.environment, till.nodeId),
-              [publicationName(config.environment, "ledger")],
-            ),
         },
         attestation,
       );
@@ -2580,14 +2427,15 @@ export async function startServer(
     // sell-only local secondary (mode=`primary`, singleton_role=`secondary`). The empty pass keeps
     // `/health` advancing (`recordPass` sets `lastPassAt`) and `close()`'s `await loop` identical to
     // the singleton path. Running drain/reconcile on a non-singleton would contact AEAT/Stripe for a
-    // host that must file and settle nothing (a mirror's real "work" is the pull worker above, §7).
+    // host that must file and settle nothing.
     // `holders.singletonRole.current` is read PER PASS below, so a promotion that flips the holder to
     // 'primary' starts these duties on the next tick, no restart.
-    // NOTE: because a non-singleton's pass has no duties, `/health` reflects only process liveness,
-    // NOT replication liveness — a mirror whose pull is stalled (dead relay, wrong hostname, bad
-    // token) still reports healthy; those surface as `sync.pull_failed` log lines. Real
-    // replication-lag monitoring belongs to the hosting slice (like real per-user auth), out of scope
-    // for the C2a stand-in.
+    // NOTE: because a non-singleton's pass has no duties, `/health` reflects only process liveness and
+    // says NOTHING about how current a mirror's copy of the venue is. Nothing copies the primary's rows
+    // to a mirror at all now — the PostgreSQL replication that did is deleted and its replacement has
+    // not landed (`mirror-bundle.ts`'s header states the same open question) — so there is no data
+    // freshness to measure here and no code measuring it: a mirror answers healthy whatever its data.
+    // A staleness signal has to arrive with whatever replaces the replication.
     // `withPendingSweep` runs each connected card provider's `resolvePending` sweep around the
     // singleton fiscal pass on EVERY trading node (primary or sell-only secondary), returning the
     // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header). The
@@ -2670,7 +2518,7 @@ export async function startServer(
 
   // The shared `StartedServer` + `close()` (see `makeStartedServer`), with the trading mode's own
   // teardown supplied here: stop the main loop, the outbound tunnel and the backup sweep, then drain
-  // the app and replication pools. The ordering guarantees (abort the loop and workers together, await
+  // the app and change-feed owner pools. The ordering guarantees (abort the loop and workers together, await
   // the loop, swallow a worker's settle-by-rejection so it can never skip the guaranteed pool
   // teardown) are unchanged.
   //
@@ -2711,8 +2559,8 @@ export async function startServer(
         // ordering guarantee the tunnel above keeps.
         await backupSupervisor.stop();
       },
-      // The app pool and the replication owner pool; both are closed even if one fails.
-      closePools: () => closeAll([() => db.close(), () => replicationDb.close()]),
+      // The app pool and the change-feed owner pool; both are closed even if one fails.
+      closePools: () => closeAll([() => db.close(), () => feedOwnerDb.close()]),
     },
     mdns,
     // The plain-HTTP trust/landing listener (Task 3) — a trading box serves its own minted leaf, so a

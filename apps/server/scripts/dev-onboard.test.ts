@@ -102,7 +102,7 @@ describe("devOnboard against real Postgres", () => {
     expect(Object.keys(written).some((k) => k.startsWith("WAITRON_TILL_"))).toBe(false);
   });
 
-  it("uses the production-shaped migrator and replication roles", async () => {
+  it("uses the production-shaped migrator role", async () => {
     const owners = await suite.admin.execute<{ owner: string }>(sql`
       select r.rolname as owner
       from pg_class c join pg_roles r on r.oid = c.relowner
@@ -110,17 +110,10 @@ describe("devOnboard against real Postgres", () => {
     `);
     expect(owners.rows).toEqual([{ owner: "waitron_migrator" }]);
 
-    const roles = await suite.admin.execute<{
-      name: string;
-      replication: boolean;
-    }>(sql`
-      select rolname as name, rolreplication as replication
-      from pg_roles where rolname in ('waitron_migrator', 'waitron_repl') order by rolname
+    const roles = await suite.admin.execute<{ name: string }>(sql`
+      select rolname as name from pg_roles where rolname = 'waitron_migrator'
     `);
-    expect(roles.rows).toEqual([
-      { name: "waitron_migrator", replication: false },
-      { name: "waitron_repl", replication: true },
-    ]);
+    expect(roles.rows).toEqual([{ name: "waitron_migrator" }]);
   });
 
   it("writes a .env that loadConfig accepts as a SETUP-MODE config (config.till undefined)", () => {

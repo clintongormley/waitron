@@ -372,9 +372,8 @@ function wrapHookError(module: string, err: unknown): unknown {
 }
 
 /**
- * Run every module's `backup.restore` hook and settle the node's series, in ONE tenant transaction
- * stamped with the node as sync origin (`registro_sif`/`cadenas` are enrolled on the ordered lane; a
- * later standby pulls only rows whose origin is this node). Order: check the node exists → hooks in
+ * Run every module's `backup.restore` hook and settle the node's series, in ONE tenant
+ * transaction. Order: check the node exists → hooks in
  * list order → at most one module may return `series` → if one did, retire the node's live series and
  * open the returned ones → on EVERY path read the live standard series id — zero or two live standard
  * series aborts the transaction, so a commit leaves exactly one live standard series. Returns that id

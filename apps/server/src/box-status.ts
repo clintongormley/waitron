@@ -9,7 +9,6 @@ import {
   type SingletonRole,
 } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import type { SlotSummary, SubscriptionStatus } from "@waitron/sync";
 import type { BackupStatus } from "./backup-status.js";
 import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
 import { readChainHeight, type ChainHeight } from "./chain-height.js";
@@ -20,13 +19,9 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**
- * The box-status wire shape. `cert.available: false`, `replication.configured: false` and
- * `backup.configured: false` are the deliberate N/A placeholders — cert when no TLS path is configured
- * or the leaf is unreadable, replication when neither a slot nor a subscription reader is wired (native
- * replication off), backup when scheduled backup is off. Native replication (swap S4) reports the box's
- * OWN side: a PRIMARY is a `publisher` and lists its peers' slots (`listSlots`); a MIRROR is a
- * `subscriber` and reports its subscription health incl. the narrowed `publications` (I6,
- * `readSubscriptionStatus`). `chain` is passed through untouched; the "no records" signal is
+ * The box-status wire shape. `cert.available: false` and `backup.configured: false` are the deliberate
+ * N/A placeholders — cert when no TLS path is configured or the leaf is unreadable, backup when
+ * scheduled backup is off. `chain` is passed through untouched; the "no records" signal is
  * `chain.height === 0`, never `chain.lastAt`.
  */
 export type BoxStatus = {
@@ -43,48 +38,8 @@ export type BoxStatus = {
   awaitingFiscalCertificate: boolean;
   chain: ChainHeight;
   singletonRole: SingletonRole;
-  replication:
-    | { configured: false }
-    | {
-        configured: true;
-        role: "publisher";
-        slots: { peer: string; active: boolean; walStatus: string | null; retainedBytes: string }[];
-      }
-    | {
-        configured: true;
-        role: "subscriber";
-        enabled: boolean;
-        workerUp: boolean;
-        tablesReady: number;
-        tablesTotal: number;
-        applyErrorCount: number;
-        syncErrorCount: number;
-        publications: string[];
-      };
-  disposal:
-    | { applicable: false }
-    | {
-        applicable: true;
-        carrierNodeId: string;
-        drained: boolean;
-        active: boolean;
-        walStatus: string | null;
-        retainedBytes: string | null;
-      };
   backup: BackupStatus;
   duties: Record<string, unknown>;
-};
-
-/** The carrier a fenced node drains onto, plus its native slot-drain verdict (Ruling C2). `drained` is
- * `isDrained(slot, fenceLsn)` — computed by the boot-wired reader, which holds the fence LSN — so
- * box-status stays pure. Only present when the node is fenced with a known carrier; a serving node
- * reports `disposal.applicable:false`. */
-export type DisposalStatus = {
-  carrierNodeId: string;
-  drained: boolean;
-  active: boolean;
-  walStatus: string | null;
-  retainedBytes: bigint | null;
 };
 
 export type BoxStatusReaders = {
@@ -97,13 +52,6 @@ export type BoxStatusReaders = {
   awaitingFiscalCertificate: () => boolean;
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
-  /** A PRIMARY's peer slots (`listSlots`), or `undefined` when this box is not a publisher. */
-  replicationSlots: (() => Promise<SlotSummary[]>) | undefined;
-  /** A MIRROR's subscription health (`readSubscriptionStatus`), or `undefined` when this box holds no
-   * subscription. Exactly one of `replicationSlots`/`replicationSubscription` is wired per boot; if
-   * neither is, replication reads `configured: false`. */
-  replicationSubscription: (() => Promise<SubscriptionStatus>) | undefined;
-  disposal: (() => Promise<DisposalStatus>) | undefined;
   backup: (() => Promise<BackupStatus>) | undefined;
   duties: () => Record<string, unknown>;
 };
@@ -127,59 +75,9 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     }
   }
 
-  // Native replication (swap S4) reports the box's OWN side. A PRIMARY is a publisher and lists its
-  // peers' slots; a MIRROR is a subscriber and reports its subscription (incl. the narrowed
-  // `publications`, I6). Exactly one reader is wired per boot; neither ⇒ `configured: false`. The
-  // publisher branch takes precedence when both are somehow present (a primary never holds a
-  // subscription in the steady state). bigint → string on the wire (never `Number()`).
-  let replication: BoxStatus["replication"] = { configured: false };
-  if (readers.replicationSlots !== undefined) {
-    const slots = await readers.replicationSlots();
-    replication = {
-      configured: true,
-      role: "publisher",
-      slots: slots.map((s) => ({
-        peer: s.slotName,
-        active: s.active,
-        walStatus: s.walStatus,
-        retainedBytes: (s.retainedBytes ?? 0n).toString(),
-      })),
-    };
-  } else if (readers.replicationSubscription !== undefined) {
-    const sub = await readers.replicationSubscription();
-    replication = {
-      configured: true,
-      role: "subscriber",
-      enabled: sub.enabled,
-      workerUp: sub.workerUp,
-      tablesReady: sub.tablesReady,
-      tablesTotal: sub.tablesTotal,
-      applyErrorCount: sub.applyErrorCount,
-      syncErrorCount: sub.syncErrorCount,
-      publications: sub.publications,
-    };
-  }
-
-  // A fenced node draining onto a carrier surfaces the drain verdict so the box is never junked blind;
-  // an absent reader means the node is serving (unfenced / no carrier), reported `applicable:false`.
-  // `drained` (`isDrained(slot, fenceLsn)`) and `active` come precomputed from the boot-wired reader.
-  // bigint → string on the wire (never `Number()`), matching the `replication` precedent.
-  let disposal: BoxStatus["disposal"] = { applicable: false };
-  if (readers.disposal !== undefined) {
-    const d = await readers.disposal();
-    disposal = {
-      applicable: true,
-      carrierNodeId: d.carrierNodeId,
-      drained: d.drained,
-      active: d.active,
-      walStatus: d.walStatus,
-      retainedBytes: d.retainedBytes?.toString() ?? null,
-    };
-  }
-
-  // Backup mirrors replication's fail-loud posture, NOT cert's swallow: an absent reader means backup
-  // is off (`configured: false`), but a reader that FAULTS (a filesystem error reading the dump dir) is
-  // a real problem worth surfacing — never a silent fallback to "off".
+  // Backup fails LOUD, unlike cert's swallow: an absent reader means backup is off
+  // (`configured: false`), but a reader that FAULTS (a filesystem error reading the dump dir) is a real
+  // problem worth surfacing — never a silent fallback to "off".
   let backup: BoxStatus["backup"] = { configured: false };
   if (readers.backup !== undefined) {
     backup = await readers.backup();
@@ -193,8 +91,6 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     awaitingFiscalCertificate: readers.awaitingFiscalCertificate(),
     chain,
     singletonRole,
-    replication,
-    disposal,
     backup,
     duties: readers.duties(),
   };
@@ -207,12 +103,6 @@ export type BoxStatusDeps = {
   health: HealthState;
   now: () => Date;
   tlsCertPath: string | undefined;
-  /** A PRIMARY's peer-slot lister (`listSlots` on the migrator/owner pool), or `undefined` on a mirror. */
-  readReplicationSlots: (() => Promise<SlotSummary[]>) | undefined;
-  /** A MIRROR's subscription reader (`readSubscriptionStatus` on the migrator/owner pool), or
-   * `undefined` on a primary. Exactly one of the two is wired per boot. */
-  readReplicationSubscription: (() => Promise<SubscriptionStatus>) | undefined;
-  readDisposal: (() => Promise<DisposalStatus>) | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
@@ -242,8 +132,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
  * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
  * `authorizeManager("system.manage")` for the chain read (a `manager`-role person holds
  * it). The composed status is assembled by `collectBoxStatus` from the sibling slice-4a readers; a cert
- * path absent (plain-HTTP boot) yields `cert.available:false`, a lag reader absent (sync off, or Task 6
- * not yet wired) yields `replication.configured:false`.
+ * path absent (plain-HTTP boot) yields `cert.available:false`.
  */
 export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "box-status.failed");
@@ -267,9 +156,6 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         cert: certPath === undefined ? undefined : () => readCertExpiry(certPath, deps.now()),
         awaitingFiscalCertificate: () => deps.readAwaitingFiscalCertificate(),
         chain: async () => chain,
-        replicationSlots: deps.readReplicationSlots,
-        replicationSubscription: deps.readReplicationSubscription,
-        disposal: deps.readDisposal,
         backup: deps.readBackup,
         duties: () =>
           healthSnapshot(deps.health, deps.now()).body.duties as Record<string, unknown>,

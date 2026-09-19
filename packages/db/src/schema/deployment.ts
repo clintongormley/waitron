@@ -22,8 +22,13 @@ export const deployment = table(
     id: count("id").primaryKey(),
     environment: label("environment").notNull(),
     // Which role this database plays in the cloud-mirror topology (C2a design §3): a `primary`
-    // writes and originates; a `mirror` pulls + applies and serves read-only. Read at runtime so a
-    // later promotion needs no restart. Default 'primary' so every existing deployment is unchanged.
+    // writes and originates; on a `mirror` boot mounts the read-only gate
+    // (`apps/server/src/read-only-gate.ts`), which refuses a CLIENT's write VERB — everything but
+    // GET/HEAD/OPTIONS, apart from the promote trigger boot exempts by path. That is not "a mirror
+    // never writes": the server's own writes still run, e.g. boot's `ensureMirrorViewer` and the
+    // session keepalive inside a mirror's own GETs (`apps/server/src/mirror-session.ts`). Read at
+    // runtime so a later promotion needs no restart. Default 'primary' so every existing deployment
+    // is unchanged.
     mode: label("mode").notNull().default("primary"),
     // The singleton-ownership axis (promotion runbook design §2), orthogonal to `mode`: `primary` holds
     // the venue's singleton duties (AEAT submitter + reconciler), `secondary` is sell-only. Default
@@ -35,11 +40,10 @@ export const deployment = table(
     // hold `null`. Never the secret itself — only a verifier — and, like `mode`/`singleton_role`,
     // added by a hand-written ALTER (this table is not in the drizzle schema barrel; see the header).
     breakGlassVerifier: label("break_glass_verifier"),
-    // The fence-LSN watermark (swap S4, Ruling C2): the WAL position recorded when this node entered
-    // its read-only fence. The column's DB type is `pg_lsn` (0001_db_baseline_sql.sql's ALTER); it is
-    // read/written as text here (drizzle has no pg_lsn type), which is safe because this table is not
-    // in the schema barrel so no snapshot diff is derived from this declaration. Nullable — a node
-    // that never fenced holds NULL. Owner-write only, like mode/singleton_role/break_glass_verifier.
+    // DEAD: nothing reads or writes this column. It survives in SQL (0001_db_baseline_sql.sql's
+    // ALTER adds it as `pg_lsn`) and goes with the storage switch. Declared as text here because
+    // drizzle has no pg_lsn type — safe only because this table is outside the schema barrel, so no
+    // snapshot diff is derived from this declaration (see the header).
     fenceLsn: label("fence_lsn"),
     stampedAt: ts("stamped_at").notNull().defaultNow(),
   },

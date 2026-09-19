@@ -36,6 +36,23 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  // The mirror path renders its own copy (no links, no nudge, no reload) plus the break-glass panel,
+  // so its contrast and heading order are a separate surface from the trading one.
+  it("has no violations on the mirror path", async () => {
+    const { host } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        pollIntervalMs: 100000,
+        mirrorJoin: true,
+        breakGlassSecret: "bg-9f3a",
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with the backup nudge suppressed in demo mode", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

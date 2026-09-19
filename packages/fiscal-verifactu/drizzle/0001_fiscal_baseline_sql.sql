@@ -63,6 +63,9 @@ GRANT DELETE ON "acks" TO app_user;
 --> statement-breakpoint
 
 -- Append-only records reject UPDATE, DELETE and TRUNCATE during replication too.
+-- 2026-09-19: SUPERSEDED as a description of today's tree — the PostgreSQL logical replication whose
+-- apply worker ENABLE ALWAYS was for has been deleted. No SQL below changed with it: these triggers
+-- are still ENABLE ALWAYS, and `scripts/append-only-enable-always.test.ts` still requires it.
 ALTER TABLE registros_facturacion ENABLE ALWAYS TRIGGER registros_facturacion_enforce_immutability;
 --> statement-breakpoint
 ALTER TABLE registros_facturacion ENABLE ALWAYS TRIGGER registros_facturacion_block_truncate;

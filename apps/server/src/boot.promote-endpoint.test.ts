@@ -240,8 +240,9 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
 }
 
 beforeAll(async () => {
-  // The migrations root, built exactly as boot.fence.test.ts does: boot's from-source default does not
-  // exist under source, so `WAITRON_MIGRATIONS_DIR` points `applyMigrations` at the real journal content.
+  // The migrations root. Boot's from-source default (`DEFAULT_MIGRATIONS_ROOT`, `boot.ts`) resolves to
+  // `apps/server/src/drizzle`, which does not exist, so each set's real folder is copied into one
+  // directory and `WAITRON_MIGRATIONS_DIR` points `applyMigrations` at that journal content.
   const fromSource = migrationOptionsFor(manifestSets(), null);
   migrationsRoot = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-migrations-"));
   for (const [index, set] of manifestSets().entries()) {
@@ -274,8 +275,11 @@ async function freePort(): Promise<number> {
   });
 }
 
-/** Polls `predicate` up to ~10s for its first defined value, THROWING on timeout so a call site can
- * never silently proceed on an unmet condition (boot.fence.test.ts's hardened shape). */
+/** Polls `predicate` up to ~10s for its first defined value, THROWING on timeout rather than
+ * returning `undefined`, so a call site can never silently proceed on an unmet condition: every call
+ * here discards the value and uses this as a barrier — wait until boot's health check has passed — so
+ * a silent timeout would aim the request below at a server that had not finished booting, and the
+ * failure would surface somewhere other than the unmet condition. */
 async function poll<T>(predicate: () => Promise<T | undefined>): Promise<T> {
   for (let i = 0; i < 200; i += 1) {
     const value = await predicate();

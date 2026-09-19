@@ -20,16 +20,12 @@
 // sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker volume (throwaway
 // preproduction data); this script never deletes data itself.
 //
-// REPLICATION-READY SHAPE (swap step 4): a fresh dev DB is bootstrapped to the SAME migrator-owned
-// shape `waitron-provision instance` produces, so a dev boot exercises the real native-replication
-// provisioning rather than hiding it behind the superuser. The migrations run AS `waitron_migrator`
-// (a session `role=` option, probe A) so every table is migrator-owned — the ownership boot's
-// `ensureReplicationShape` needs for its owner-only `CREATE PUBLICATION … FOR TABLE`. The shared dev
-// `postgres` database is not a migrator-owned database like production, so the migrator is granted the
-// `CREATE` privileges db ownership would otherwise confer, and the SUPERUSER `waitron_repl` bootstrap
-// (`replicationBootstrapStatements`, the box image's one-time step in production) runs here when the
-// role is absent. The generated `.env` names the migrator connection and the dev replication
-// credential so `pnpm dev` boots replication-ready.
+// MIGRATOR-OWNED SHAPE: a fresh dev DB is bootstrapped to the SAME migrator-owned shape
+// `waitron-provision instance` produces, so a dev boot exercises the real provisioning rather than
+// hiding it behind the superuser. The migrations run AS `waitron_migrator` (a session `role=` option,
+// probe A) so every table is migrator-owned. The shared dev `postgres` database is not a
+// migrator-owned database like production, so the migrator is granted the `CREATE` privileges db
+// ownership would otherwise confer. The generated `.env` names the migrator connection.
 //
 // Run from the repo root via `pnpm dev:setup` (which brings the container up first); this script
 // only polls the connection and provisions. Never against a production database — it creates a
@@ -50,8 +46,6 @@ import {
   quoteIdent,
   withRole,
   INSTANCE_MIGRATOR_ROLE,
-  REPLICATION_ROLE,
-  replicationBootstrapStatements,
 } from "@waitron/provisioning";
 import { parseModuleConfig } from "@waitron/module";
 import {
@@ -79,14 +73,9 @@ export { parseEnvFile };
 /** The container superuser + default database every demo uses — one place so the scripts agree. */
 export const DEV_DATABASE_URL = "postgres://postgres:pg@localhost:5432/postgres";
 
-/** The dev `waitron_repl` password. A fixed dev secret; production mints a real one in the box image /
- * operator step. Written to `.env` as `WAITRON_REPLICATION_PASSWORD` so `pnpm dev` boots replication-ready. */
-export const DEV_REPLICATION_PASSWORD = "dev-repl";
-
 /** The migrations connection: the dev superuser url with a `role=waitron_migrator` session option
  * (probe A), so `applyMigrations` runs AS the migrator and every table is migrator-owned — the shape
- * `waitron-provision instance` produces, which boot's `ensureReplicationShape` needs for its owner-only
- * `CREATE PUBLICATION … FOR TABLE`. Pure. */
+ * `waitron-provision instance` produces. Pure. */
 export function devMigrationsUrl(databaseUrl: string): string {
   return withRole(databaseUrl, INSTANCE_MIGRATOR_ROLE);
 }
@@ -146,8 +135,6 @@ export interface DevEnv {
   WAITRON_TILL_SERIES_ID: string;
   WAITRON_TILL_LOCATION_ID: string;
   WAITRON_TILL_LOCALE: string;
-  WAITRON_REPLICATION_HOST: string;
-  WAITRON_REPLICATION_PASSWORD: string;
 }
 
 /** Ordered so `renderEnvFile` emits a stable, reviewable `.env`. */
@@ -164,8 +151,6 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_TILL_SERIES_ID",
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_LOCALE",
-  "WAITRON_REPLICATION_HOST",
-  "WAITRON_REPLICATION_PASSWORD",
 ];
 
 /**
@@ -233,8 +218,8 @@ export function buildDevEnv(input: {
   const { databaseUrl, credentialsKey, ids, seedLocale } = input;
   return {
     DATABASE_URL: databaseUrl,
-    // The migrator connection (role=waitron_migrator session option) so a dev boot migrates and
-    // reconciles its replication shape AS the table owner, exactly as production does.
+    // The migrator connection (role=waitron_migrator session option) so a dev boot migrates AS the
+    // table owner, exactly as production does.
     WAITRON_MIGRATIONS_DATABASE_URL: devMigrationsUrl(databaseUrl),
     WAITRON_ENV: "dev",
     WAITRON_ONBOARDING_INTENT: "demo",
@@ -246,11 +231,6 @@ export function buildDevEnv(input: {
     WAITRON_TILL_SERIES_ID: ids.seriesId,
     WAITRON_TILL_LOCATION_ID: ids.locationId,
     WAITRON_TILL_LOCALE: SEED_INVOICE_LOCALE[seedLocale],
-    // Native replication: the advertise host a peer dials and the `waitron_repl` credential. `pnpm dev`
-    // is single-node, so nothing subscribes; setting them makes boot's `ensureReplicationShape` run
-    // (the publisher side), so the dev boot IS the replication-provisioning smoke.
-    WAITRON_REPLICATION_HOST: "localhost",
-    WAITRON_REPLICATION_PASSWORD: DEV_REPLICATION_PASSWORD,
   };
 }
 
@@ -520,15 +500,13 @@ async function writeFiscalModulesJson(
 }
 
 /**
- * Bootstrap the migrator-owned + replication-ready shape on a FRESH dev database, idempotently. Run as
- * the container superuser (the dev `DATABASE_URL`), which pg exposes as a full superuser — enough for
- * `create role`, `alter system`, and the `waitron_repl` replication login the bootstrap mints. The
- * shared dev `postgres` database is superuser-owned (unlike production's per-instance migrator-owned
- * database), so the migrator is granted the `CREATE` privileges db ownership would confer. Idempotent:
- * the migrator role and the `waitron_repl` bootstrap are each guarded on the role's absence, so a
- * re-run is a no-op.
+ * Bootstrap the migrator-owned shape on a FRESH dev database, idempotently. Run as the container
+ * superuser (the dev `DATABASE_URL`), which pg exposes as a full superuser — enough for `create role`.
+ * The shared dev `postgres` database is superuser-owned (unlike production's per-instance
+ * migrator-owned database), so the migrator is granted the `CREATE` privileges db ownership would
+ * confer. Idempotent: the migrator role is guarded on the role's absence, so a re-run is a no-op.
  */
-export async function ensureDevReplicationShape(
+export async function ensureDevMigratorShape(
   superuserUrl: string,
   log: (line: string) => void,
 ): Promise<void> {
@@ -549,27 +527,17 @@ export async function ensureDevReplicationShape(
       log(`dev-setup: created ${INSTANCE_MIGRATOR_ROLE}`);
     }
     // The privileges production gets from db ownership, granted explicitly on the shared dev database:
-    // CREATE on schema public so the migrate (AS the migrator) can create its tables; CREATE on the
-    // database so boot's `CREATE PUBLICATION` (also the migrator) is permitted; and the SET grant so the
-    // superuser can `set role` to the migrator via the `role=` connection option.
+    // CREATE on schema public for the migrate's own tables (it runs AS the migrator); CREATE on the
+    // DATABASE because drizzle opens every run with `CREATE SCHEMA IF NOT EXISTS "public"`
+    // (`drizzle-orm@0.45.2/pg-core/dialect.js`, reached via `packages/db/src/migrate.ts`'s
+    // `migrationsSchema: "public"`) and PostgreSQL checks that privilege BEFORE the IF NOT EXISTS, so
+    // without it every migrate fails `42501 permission denied for database`, an already-migrated one
+    // included; and SET so the superuser can `set role` to the migrator via the `role=` option.
     await client.query(`grant create on schema public to ${migrator}`);
     if (dbName !== "") {
       await client.query(`grant create on database ${quoteIdent(dbName)} to ${migrator}`);
     }
     await client.query(`grant ${migrator} to ${quoteIdent(adminUser)} with set true`);
-    // The SUPERUSER `waitron_repl` bootstrap (the box image's one-time step in production): create the
-    // replication login, grant the migrator `pg_create_subscription`, the SELECT + default-privilege
-    // grants, and the WAL cap. Run only when `waitron_repl` is absent, and BEFORE the migrate so its
-    // migrator default privileges cover every migrated table (spec §13.3).
-    const hasRepl = await client.query("select 1 from pg_roles where rolname = $1", [
-      REPLICATION_ROLE,
-    ]);
-    if (hasRepl.rowCount === 0) {
-      for (const statement of replicationBootstrapStatements(DEV_REPLICATION_PASSWORD)) {
-        await client.query(statement);
-      }
-      log(`dev-setup: bootstrapped native replication (${REPLICATION_ROLE})`);
-    }
   } finally {
     await client.end().catch(() => {});
   }
@@ -606,10 +574,9 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     );
   }
 
-  // Bootstrap the migrator-owned + replication-ready shape BEFORE migrating: the migrator's default
-  // privileges (set here) then travel to every table the migrate creates (spec §13.3), so a dev boot
-  // reconciles its publications exactly as production does.
-  await ensureDevReplicationShape(databaseUrl, log);
+  // Bootstrap the migrator-owned shape BEFORE migrating: the migrator's default privileges (set here)
+  // then travel to every table the migrate creates.
+  await ensureDevMigratorShape(databaseUrl, log);
 
   // Fresh provision: migrate the full manifest from source (the same sets the server migrates at
   // boot — `boot.ts` uses `migrationOptionsFor(manifestSets(), config.migrationsRoot)`; `null` is

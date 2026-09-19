@@ -8,9 +8,9 @@ import "./errors.js";
 // carrying the params errors.ts declares for it. The construction typechecks ONLY because errors.ts's
 // `declare module "@waitron/shared"` augmentation is loaded — the side-effect import above — which is
 // what makes the codes and their param shapes real for a consumer, mirroring
-// packages/layouts/src/errors.test.ts and packages/sync/src/errors.test.ts (apps/server has no public
-// barrel of its own to load the augmentation from — errors.ts's header comment explains why — so this
-// file loads it directly, the same "every file that throws one of these imports ./errors.js" idiom
+// packages/layouts/src/errors.test.ts and packages/membership/src/errors.test.ts (apps/server has no
+// public barrel of its own to load the augmentation from — errors.ts's header comment explains why —
+// so this file loads it directly, the same "every file that throws one of these imports ./errors.js" idiom
 // tables.ts and till-api.ts already follow). Task 3's zone CRUD verbs are the real throwers; this only
 // proves the two codes are registered with the right shape before any verb exists to throw them.
 describe("the zone error codes carry their declared params", () => {
@@ -203,7 +203,7 @@ describe("the device error codes carry their declared params", () => {
 // {})` would run green even with the code undeclared). The real throwers arrive in later C2b tasks: the
 // primary-side assemble/bundle endpoints (not_provisioned/no_relay) and the mirror-side bundle fetch
 // (bundle_fetch_failed). All three carry `Record<string, never>` — the refusal names no row, so a log line
-// leaks nothing (the sync.*/tunnel.* discipline node.read_only already follows). The HTTP statuses
+// leaks nothing, the same no-leak discipline node.read_only follows. The HTTP statuses
 // (409/400/502) are NOT here — they live in the throwing routes' local STATUS maps (later tasks), the same
 // declare-here / status-in-route split the node.*/device.* codes above follow.
 describe("the mirror error codes carry no params", () => {

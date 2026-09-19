@@ -39,8 +39,6 @@ const sampleEnv: DevEnv = {
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-4444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-5555-5555-555555555555",
   WAITRON_TILL_LOCALE: "en-GB",
-  WAITRON_REPLICATION_HOST: "localhost",
-  WAITRON_REPLICATION_PASSWORD: "dev-repl",
 };
 
 describe("renderEnvFile", () => {
@@ -61,8 +59,6 @@ describe("renderEnvFile", () => {
       "WAITRON_TILL_SERIES_ID=44444444-4444-4444-4444-444444444444",
       "WAITRON_TILL_LOCATION_ID=55555555-5555-5555-5555-555555555555",
       "WAITRON_TILL_LOCALE=en-GB",
-      "WAITRON_REPLICATION_HOST=localhost",
-      "WAITRON_REPLICATION_PASSWORD=dev-repl",
     ]);
   });
 
@@ -137,10 +133,9 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
     expect(env.WAITRON_ONBOARDING_INTENT).toBe("demo");
   });
 
-  it("derives the migrator connection and the dev replication credential", () => {
+  it("derives the migrator connection", () => {
     // The migrations url is the app url with a `role=waitron_migrator` session option, so a dev boot
-    // migrates and reconciles its replication shape AS the table owner (swap step 4). The replication
-    // host + password make boot's `ensureReplicationShape` run.
+    // migrates AS the table owner.
     const env = buildDevEnv({
       databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
       credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
@@ -150,8 +145,6 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
     expect(env.WAITRON_MIGRATIONS_DATABASE_URL).toBe(
       "postgres://postgres:pg@localhost:5432/postgres?options=-c+role%3Dwaitron_migrator",
     );
-    expect(env.WAITRON_REPLICATION_HOST).toBe("localhost");
-    expect(env.WAITRON_REPLICATION_PASSWORD).toBe("dev-repl");
   });
 
   it.each([
@@ -242,30 +235,17 @@ describe("devSetup against real Postgres", () => {
     expect(first.env.WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
-  it("produces the migrator-owned, replication-ready shape a dev boot needs (swap step 4)", async () => {
+  it("produces the migrator-owned shape a dev boot needs", async () => {
     // The migrate ran AS `waitron_migrator` (the `role=` session option), so EVERY public table is
-    // migrator-owned — the ownership boot's owner-only `CREATE PUBLICATION … FOR TABLE` requires. A
-    // superuser-owned table here (the pre-fix shape) would later fail `ensureReplicationShape`.
+    // migrator-owned, exactly as `waitron-provision instance` produces in production. A
+    // superuser-owned table here (the pre-fix shape) would not carry the migrations' own grants.
     const owners = await suite.admin.execute<{ tableowner: string }>(
       sql`select distinct tableowner from pg_tables where schemaname = 'public' order by tableowner`,
     );
     expect(owners.rows.map((r) => r.tableowner)).toEqual(["waitron_migrator"]);
 
-    // The SUPERUSER bootstrap minted the `waitron_repl` replication login and granted the migrator
-    // `pg_create_subscription` (the box image's one-time step, run here for dev).
-    const facts = await suite.admin.execute<{ repl: number; can_subscribe: boolean }>(
-      sql`select
-            (select count(*)::int from pg_roles where rolname = 'waitron_repl') as repl,
-            pg_has_role('waitron_migrator', 'pg_create_subscription', 'MEMBER') as can_subscribe`,
-    );
-    expect(facts.rows[0]!.repl).toBe(1);
-    expect(facts.rows[0]!.can_subscribe).toBe(true);
-
-    // The written `.env` names the migrator connection and the dev replication credential, so `pnpm dev`
-    // boots replication-ready.
+    // The written `.env` names the migrator connection, so `pnpm dev` migrates as the owner.
     expect(first.env.WAITRON_MIGRATIONS_DATABASE_URL).toBe(devMigrationsUrl(suite.pg.uri));
-    expect(first.env.WAITRON_REPLICATION_HOST).toBe("localhost");
-    expect(first.env.WAITRON_REPLICATION_PASSWORD).toBe("dev-repl");
   });
 
   it("writes a modules.json that resolves the fiscal slot to exactly one member (verifactu)", () => {

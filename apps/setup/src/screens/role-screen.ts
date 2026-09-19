@@ -7,8 +7,11 @@ import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto } from "../events.js";
 
 /**
- * The Join or recover subchooser. A mirror adopts a running primary's identity and data. Restore is
- * cold recovery when no usable peer survives. Each choice navigates directly to its own form.
+ * The Join or recover subchooser. Both cards state what the operator will actually get: an adopted
+ * mirror cannot finish joining today, so the mirror card promises nothing beyond that
+ * (`apps/server/src/finish-adoption.ts`'s `PendingAdoption` header is the one place that says why),
+ * and the Restore card's "still running" wording is explained in `restore-screen.ts`. Each choice
+ * navigates directly to its own form.
  */
 @customElement("setup-role-screen")
 export class SetupRoleScreen extends LitElement {
@@ -47,15 +50,20 @@ export class SetupRoleScreen extends LitElement {
     return html`
       <h1>Join or recover an existing restaurant</h1>
       <p class="intro">
-        Add this server as a mirror while another primary is available, or restore a backup after a
-        disaster when no usable peer survives.
+        Restore a backup onto this server when no other server is still running with newer
+        restaurant data. Adding this server as a mirror does not work in this version — the card
+        below says what happens if you try.
       </p>
 
       <div class="choices">
         <wt-card raised>
           <h2>Add a mirror node</h2>
           <p class="choice-copy">
-            Connect to the restaurant's primary. This server copies its data and remains read-only.
+            This does not work in this version. The server signs in to the restaurant's primary and
+            restarts, then stops part-way through joining, and it will not get any further however
+            many times you restart it. It ends up holding none of the restaurant's information, with
+            no dashboard and no till, and it cannot sell or file anything. This setup wizard does
+            not open on this server again afterwards.
           </p>
           <wt-button
             variant="primary"
@@ -67,8 +75,8 @@ export class SetupRoleScreen extends LitElement {
         <wt-card raised>
           <h2>Restore from backup</h2>
           <p class="choice-copy">
-            Recover onto this fresh server from an encrypted Waitron backup when no primary or
-            mirror with newer data is available.
+            Recover onto this fresh server from an encrypted Waitron backup when no other server is
+            still running with newer restaurant data.
           </p>
           <wt-button
             variant="secondary"

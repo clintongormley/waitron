@@ -19,7 +19,6 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
       Promise.resolve({
         databaseUrl: "postgres://app",
         migrationsDatabaseUrl: "postgres://migrator",
-        replicationPassword: "r",
       }),
     ),
     // Stubbed here, unlike `runStagedRestore` below it: the real default opens a connection to
@@ -48,7 +47,6 @@ describe("runEntry", () => {
           return {
             databaseUrl: "postgres://app",
             migrationsDatabaseUrl: "postgres://migrator",
-            replicationPassword: "r",
           };
         }),
         runStagedRestore: vi.fn(async (request) => {
@@ -176,7 +174,7 @@ describe("runEntry", () => {
         ensureInstance: vi.fn(() =>
           Promise.reject(
             new AppError("provisioning.role_unusable", {
-              role: "waitron_repl",
+              role: "waitron_app",
               missing: ["LOGIN"],
             }),
           ),
@@ -281,7 +279,6 @@ describe("runEntry", () => {
         return Promise.resolve({
           databaseUrl: "postgres://app",
           migrationsDatabaseUrl: "postgres://migrator",
-          replicationPassword: "r",
         });
       },
     });
@@ -665,7 +662,6 @@ describe("runEntry", () => {
           return Promise.resolve({
             databaseUrl: "postgres://app",
             migrationsDatabaseUrl: "postgres://migrator",
-            replicationPassword: "r",
           });
         }),
         assertNotAhead: vi.fn(() => {
@@ -705,7 +701,6 @@ describe("runEntry", () => {
             Promise.resolve({
               databaseUrl: "postgres://app",
               migrationsDatabaseUrl: "postgres://waitron@127.0.0.1:1/waitron",
-              replicationPassword: "r",
             }),
           ),
           startServer,

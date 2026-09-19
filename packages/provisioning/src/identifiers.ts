@@ -28,8 +28,8 @@ export function quoteIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-// The standard SQL string-literal quoting rule — moved to @waitron/shared (also needed by
-// @waitron/sync's CREATE SUBSCRIPTION conninfo); see its header for the escaping argument. The one
+// The standard SQL string-literal quoting rule — moved to @waitron/shared so the escaping is written
+// once; see its header for the argument. The one
 // literal this package emits is the `CREATE ROLE … PASSWORD '…'` password: `applyInstance` and
 // `InstanceAction` are EXPORTED (`index.ts`) and `InstanceAction.password` is typed `string`, so
 // escaping makes the safety structural rather than a property of one caller — this repo's dominant

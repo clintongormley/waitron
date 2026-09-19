@@ -27,7 +27,6 @@
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/payments-sumup": "workspace:*",
     "@waitron/scheduler": "workspace:*",
-    "@waitron/sync": "workspace:*",
     "@waitron/venue-service": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",

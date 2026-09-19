@@ -241,9 +241,11 @@ describe("curated operator text", () => {
   // The CONVERSE of the test above. Its scope is the ENTRYPOINT's OWN vocabulary — the codes
   // `classifyBootFailure` produces and the codes `runEntry` throws before `startServer` — and it is
   // NOT every code that can reach the page: the entrypoint persists `classifyBootFailure(error)` for
-  // any error out of `startServer`, so the whole of `boot.ts` lands here, and
-  // `provisioning.replication_not_ready`, `sync.subscription_failed` and the `credentials.*` family
-  // do fall to the generic line. The name says "the entrypoint" for that reason.
+  // any error out of `startServer`, and that returns an `AppError`'s OWN code, so the whole of
+  // `boot.ts` lands here. `provisioning.second_venue` (thrown by `assertSingleOperationalVenue` during
+  // boot) and the `credentials.*` family (thrown by `loadKeyRing`) both do fall to the generic line —
+  // neither is a key of `OPERATOR_TEXT`, and `operatorText` (`recovery-surface.ts`) answers
+  // `GENERIC_TEXT` for any code that is not a key of it. The name says "the entrypoint" for that reason.
   //
   // `deployment.environment_mismatch` is listed by hand as the one exception, because it is the
   // `boot.ts` code a generic line fails worst: a box running against the OTHER environment's

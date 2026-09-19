@@ -1,18 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { AppError, sqlStateOf } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { createPostgresDb, type Database } from "@waitron/db";
 import {
   INSTANCE_MIGRATOR_ROLE,
-  REPLICATION_ROLE,
   applyInstance,
-  generatePassword,
   planInstance,
   readInstanceState,
-  readReplicationReadiness,
-  replicationBootstrapStatements,
-  replicationRepairStatements,
   withDatabase,
   withRole,
   type InstanceAction,
@@ -25,7 +20,6 @@ import "./errors.js";
 export interface InstanceUrls {
   databaseUrl: string;
   migrationsDatabaseUrl: string;
-  replicationPassword: string;
 }
 
 /**
@@ -69,27 +63,6 @@ async function roleExists(admin: Database, role: string): Promise<boolean> {
   return rows.rows[0]?.present === true;
 }
 
-/**
- * `pg_roles` on the replication role: whether it exists AT ALL, and which of the two attributes the
- * bootstrap creates it with are missing.
- *
- * Read separately from `readReplicationReadiness`, whose `replicationRolePresent` is the CONJUNCTION
- * `rolname = 'waitron_repl' AND rolcanlogin AND rolreplication`. That single boolean cannot tell
- * "absent, create it" from "present but wrong, refuse it", and treating the second as the first
- * drives `CREATE ROLE` at a surviving role — a `42710` on every start, forever.
- */
-async function replicationRoleFacts(db: Database): Promise<{ exists: boolean; missing: string[] }> {
-  const rows = await db.execute<{ rolcanlogin: boolean; rolreplication: boolean }>(
-    sql`select rolcanlogin, rolreplication from pg_roles where rolname = ${REPLICATION_ROLE}`,
-  );
-  const row = rows.rows[0];
-  if (row === undefined) return { exists: false, missing: [] };
-  const missing: string[] = [];
-  if (!row.rolcanlogin) missing.push("LOGIN");
-  if (!row.rolreplication) missing.push("REPLICATION");
-  return { exists: true, missing };
-}
-
 /** A password is recoverable only from the `create-role` action that generated it, or from a
  * previous run's `instance.env`. A role that already exists carries a password this process never
  * saw, and returning a guess would hand the server a URL that cannot authenticate. */
@@ -116,35 +89,8 @@ async function readSaved(envPath: string): Promise<Record<string, string>> {
 }
 
 /**
- * Runs one set of replication statements on a connection that is already open to the TARGET
- * database as the SUPERUSER.
- *
- * Both are required. The database, because the schema-local statements land in whichever database
- * the connection is on, and `pg_roles` cannot tell a bootstrap that ran on the wrong one from one
- * that did not — roles are cluster-global, so both answers look alike. The superuser, because
- * `create role … replication` and `alter system` are superuser-only; the role option the migrator's
- * connections carry would fail both.
- *
- * Only the SQLSTATE survives a failure: the full bootstrap's first statement embeds the generated
- * password, and both Drizzle's wrapped failure and PostgreSQL's own message quote the failing
- * statement back verbatim, so a caller that logs the caught value would put a credential in a log
- * file. The re-grant carries no credential and shares this path for uniformity, not from need.
- */
-async function runReplicationStatements(target: Database, statements: string[]): Promise<void> {
-  try {
-    for (const statement of statements) {
-      await target.execute(sql.raw(statement));
-    }
-  } catch (error) {
-    throw new AppError("provisioning.replication_bootstrap_failed", {
-      sqlState: sqlStateOf(error),
-    });
-  }
-}
-
-/**
- * Bring the cluster to the shape a Waitron node needs — the database owned by `waitron_migrator`,
- * the two login roles, and the replication bootstrap — and persist the generated credentials.
+ * Bring the cluster to the shape a Waitron node needs — the database owned by `waitron_migrator` and
+ * the two login roles — and persist the generated credentials.
  *
  * Safe to re-run on every container start: `planInstance` emits only what is missing, so a
  * wiped-and-rejoined box (roles are cluster-global, the database was dropped) plans exactly one
@@ -228,94 +174,24 @@ export async function ensureInstance(opts: {
       created.get(INSTANCE_MIGRATOR_ROLE) ??
       passwordFrom(saved.WAITRON_MIGRATIONS_DATABASE_URL, "WAITRON_MIGRATIONS_DATABASE_URL");
 
-    // ONE superuser connection to the target database for the whole replication step: the readiness
-    // read and whichever statements it selects both need exactly that. Opened here rather than
-    // earlier because on a first provision the database does not exist until `applyInstance` runs.
-    const replication = await createPostgresDb(withDatabase(opts.bootstrapUrl, opts.database));
-    try {
-      // TWO reads, because they answer different questions. `readReplicationReadiness` is the
-      // package's own probe and owns the PER-DATABASE fact (`replicationHasDefaultSelect`); its
-      // `replicationRolePresent` is a CONJUNCTION of existence and two attributes, which is the
-      // wrong shape for deciding whether to CREATE the role — see `replicationRoleFacts`.
-      const readiness = await readReplicationReadiness(replication);
-      const replRole = await replicationRoleFacts(replication);
-
-      // Refused, never ALTERed, and before anything is written or created. This tool did not make
-      // such a role, does not know its password, and silently granting REPLICATION to a login an
-      // operator deliberately made NOLOGIN is not its call — the rule `assertUsable`
-      // (instance-plan.ts) already applies to the two instance roles, and `provisioning.role_unusable`
-      // is its code. The refusal escalates through the entrypoint's failure counter to the recovery
-      // page carrying the role and the missing attributes, which is actionable; falling through to
-      // `CREATE ROLE` instead yields `42710` on every start and says nothing.
-      if (replRole.exists && replRole.missing.length > 0) {
-        throw new AppError("provisioning.role_unusable", {
-          role: REPLICATION_ROLE,
-          missing: replRole.missing,
-        });
-      }
-
-      const savedReplication = saved.WAITRON_REPLICATION_PASSWORD;
-      let replicationPassword: string;
-      if (savedReplication !== undefined && savedReplication !== "") {
-        replicationPassword = savedReplication;
-      } else if (replRole.exists) {
-        throw unrecoverable("WAITRON_REPLICATION_PASSWORD");
-      } else {
-        replicationPassword = generatePassword();
-      }
-
-      const urls: InstanceUrls = {
-        databaseUrl: urlFor(opts.bootstrapUrl, "waitron_app", appPassword, opts.database),
-        migrationsDatabaseUrl: urlFor(
-          opts.bootstrapUrl,
-          INSTANCE_MIGRATOR_ROLE,
-          migratorPassword,
-          opts.database,
-        ),
-        replicationPassword,
-      };
-      // Persisted BEFORE the statements run, not after. The bootstrap is not one transaction, so a
-      // failure part-way leaves `waitron_repl` created with a password held only in this process —
-      // and the branch above would then refuse every later start as unrecoverable, turning a
-      // transient failure into a permanent crash loop. Written first, the next start recovers the
-      // password from the file and re-runs the missing replication grants (the gate below).
-      await writeFileAtomic(
-        envPath,
-        formatEnvFile({
-          DATABASE_URL: urls.databaseUrl,
-          WAITRON_MIGRATIONS_DATABASE_URL: urls.migrationsDatabaseUrl,
-          WAITRON_REPLICATION_PASSWORD: replicationPassword,
-        }),
-        0o600,
-      );
-
-      if (!replRole.exists) {
-        await runReplicationStatements(
-          replication,
-          replicationBootstrapStatements(replicationPassword),
-        );
-        opts.log("info", "instance.replication_bootstrapped", { role: REPLICATION_ROLE });
-      } else if (
-        !readiness.replicationHasDefaultSelect ||
-        !readiness.migratorCanCreateSubscription
-      ) {
-        // The role survived but a prerequisite did not, so re-run every non-`CREATE ROLE` statement
-        // (`replicationRepairStatements`, idempotent) — the full array would fail `42710` at
-        // `CREATE ROLE` on the surviving role. Two distinct losses reach here: the R3 rejoin wipe
-        // drops the database and takes its `pg_default_acl` and table grants (schema-local half),
-        // while `waitron_repl` lives on in the shared `pg_authid`; and the cluster-global membership
-        // can vanish on its own — an interrupted first bootstrap after `CREATE ROLE`, or a revoked
-        // grant — with the database untouched, so `replicationHasDefaultSelect` alone would miss it.
-        // Gated on BOTH readiness facts so a healthy boot re-runs nothing; without the repair a box
-        // reads ready at boot and fails later at adopt (`CREATE SUBSCRIPTION` denied) or streams an
-        // empty initial COPY at promotion.
-        await runReplicationStatements(replication, replicationRepairStatements());
-        opts.log("info", "instance.replication_regranted", { role: REPLICATION_ROLE });
-      }
-      return urls;
-    } finally {
-      await replication.close();
-    }
+    const urls: InstanceUrls = {
+      databaseUrl: urlFor(opts.bootstrapUrl, "waitron_app", appPassword, opts.database),
+      migrationsDatabaseUrl: urlFor(
+        opts.bootstrapUrl,
+        INSTANCE_MIGRATOR_ROLE,
+        migratorPassword,
+        opts.database,
+      ),
+    };
+    await writeFileAtomic(
+      envPath,
+      formatEnvFile({
+        DATABASE_URL: urls.databaseUrl,
+        WAITRON_MIGRATIONS_DATABASE_URL: urls.migrationsDatabaseUrl,
+      }),
+      0o600,
+    );
+    return urls;
   } finally {
     // Nested so a failure closing the target cannot skip closing the admin connection: both are
     // pools, and leaking either keeps the process alive.

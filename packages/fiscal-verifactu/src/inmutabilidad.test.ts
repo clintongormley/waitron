@@ -96,8 +96,8 @@ describe("registros_facturacion is immutable, as the app role", () => {
   });
 });
 
-/** Every append-only table keeps both rejection triggers active during replication. */
-describe("every append-only trigger exists and fires for replication too (spec §1)", () => {
+/** Every append-only table keeps both rejection triggers, each ENABLE ALWAYS. */
+describe("every append-only trigger exists and is ENABLE ALWAYS (spec §1)", () => {
   const EXPECTED: Record<string, string[]> = {
     registros_facturacion: [
       "registros_facturacion_enforce_immutability",

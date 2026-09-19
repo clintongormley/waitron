@@ -2852,7 +2852,7 @@ export async function listHeldOrders(
         .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
         // Venue-wide, not node-scoped (till-reroute design §3.6): under warm standby one node sells at a time,
         // and a promoted node inherits the venue's open tabs tagged with the dead node's id (swap spec §4.3).
-        // `node_id` is still written at create — the writer's id, for replication — and never filtered on here.
+        // `node_id` is still written at create — the writer's id — and never filtered on here.
         .where(eq(workingOrders.status, "open"))
         .groupBy(
           workingOrders.id,

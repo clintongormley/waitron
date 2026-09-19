@@ -9,7 +9,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
 import { parseModuleConfig } from "@waitron/module";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
-import type { ReplicationConfig } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { writeModuleConfig } from "./module-config.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -30,15 +29,6 @@ const RING: KeyRing = loadKeyRing({
 
 // The standby's identity key the primary vouches for — a real Ed25519 SPKI public key.
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
-
-// This primary's own native-replication credential + advertise address (swap step 4), the value the
-// bundle carries so the mirror's subscription can dial the primary as `waitron_repl`.
-const REPLICATION: ReplicationConfig = {
-  password: "repl-pw-abc",
-  advertiseHost: "primary.internal",
-  advertisePort: 6543,
-};
-const PRIMARY_DATABASE = "waitron_pp";
 
 const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A second, never-stamped clone for the null-environment branch.
@@ -111,8 +101,6 @@ function baseDeps() {
     stateDir,
     relayUrl: "https://relay.test:9000/",
     boxHostname: "waitron.local",
-    replication: REPLICATION,
-    database: PRIMARY_DATABASE,
     accountKey: Buffer.alloc(32, 9).toString("base64"),
   };
 }
@@ -138,12 +126,12 @@ afterAll(async () => {
 });
 
 describe("assembleMirrorBundle (primary side, real Postgres)", () => {
-  it("assembles a bundle carrying tenant + node identity, connection details, and the replication credential", async () => {
+  it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
     const bundle = await assembleMirrorBundle({ ...baseDeps(), designated, standby });
 
-    // The connection handshake passes through verbatim; NO parent rows and NO sync token (swap step 4).
+    // The connection handshake passes through verbatim; NO parent rows and NO per-peer credential.
     expect(bundle.designated).toEqual(designated);
     expect(bundle.environment).toBe("preproduction");
     expect(bundle.boxHostname).toBe("waitron.local");
@@ -159,16 +147,6 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     // Provisioning names the node after the LOCATION (venue-plan `create-node`).
     expect(bundle.primaryNode.name).toBe("Sala principal");
     expect(bundle.primaryNode.filingModule).toBe("verifactu");
-
-    // The replication CONNECTION the mirror's subscription dials — advertise host/port, the primary's
-    // database name, and the `waitron_repl` password (secret, but it must travel for the mirror to
-    // subscribe). The `user` is the well-known REPLICATION_ROLE and is not carried.
-    expect(bundle.replication).toEqual({
-      host: "primary.internal",
-      port: 6543,
-      database: "waitron_pp",
-      password: "repl-pw-abc",
-    });
 
     // The reserved identity: a fresh installation number, disjoint series, and an endorsement of the
     // standby's key by the primary node.

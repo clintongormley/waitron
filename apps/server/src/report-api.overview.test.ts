@@ -214,9 +214,9 @@ describe("mountReportApi — /reports/overview", () => {
     // node. The overview must STILL return the sale: it ignores `cfg.nodeId` for its money/counts/
     // top-sellers and aggregates the WHOLE venue (membership promotion R3a Part C). The mismatched node
     // here isolates that venue-wide behaviour by construction — it is a STRONGER control than the real
-    // mirror case, where `cfg.nodeId` is the origin (the primary's node) and so MATCHES the replicated
-    // sales; if the overview still resolves the sale under a node it is NOT pointed at, it resolves it
-    // on a mirror too.
+    // mirror case, where `cfg.nodeId` is the origin (the primary's node) and so MATCHES the node the
+    // venue's sales carry; if the overview still resolves the sale under a node it is NOT pointed at,
+    // it resolves it on a mirror too.
     const app = new Hono();
     mountReportApi(app, { db: suite.db, cfg: { nodeId: secondNodeId } }, noopLog);
 

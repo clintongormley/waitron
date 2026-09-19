@@ -26,8 +26,9 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // Postgres. Real PG, not PGlite, because the venue-wide read runs under `app_user` (super=false) and a
 // PGlite superuser holds every privilege, so a missing grant would pass there (CLAUDE.md §4); the second
 // node also genuinely needs its own database. One venue, two nodes: A (primary, box) and B (mirror,
-// cloud), each its own database with the SAME identity seeded directly, because replication of
-// `devices`/`working_orders` is Track A's, not this slice's. The arc:
+// cloud), each its own database with the SAME identity seeded directly, because nothing copies rows
+// between the two nodes: the PostgreSQL replication that used to is deleted and its replacement has
+// not landed. The arc:
 //
 //   1. A answers `acceptingSales:true`, B `:false` — the truth a till's `ServerRouter` routes on, taken
 //      from the REAL boot posture, not a stub.
@@ -61,8 +62,10 @@ const DEVICE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const DEVICE_PROFILE = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const DEVICE_TOKEN = "reroute-e2e-device-token";
 // The venue's one open tab, tagged with A's node id — the tab A had opened, seeded straight into B's
-// database (the state a replicated tab would be in; swap spec §4.3, live-service rows are copied, never
-// drained back). Only B carries it: the proof is that a promoted B inherits it.
+// database, because nothing copies it there today (the deletion the header above records). It is the
+// state a replicated tab WOULD have been in under that deleted replication, which classed live-service
+// rows as copied to a standby and never drained back (swap spec §4.3). Only B carries it: the proof is
+// that a promoted B inherits it.
 const TAB_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 const DEVICE_COOKIE_HEADER = `${DEVICE_COOKIE}=${DEVICE_ID}.${DEVICE_TOKEN}`;
@@ -169,8 +172,9 @@ function primaryEnv(
   };
 }
 
-/** The env for B's MIRROR boot: the replication connection comes from `mirror_config` + the vault
- * (seeded in beforeAll), not env. The relay is unreachable, so the box still binds and serves. */
+/** The env for B's MIRROR boot: no mirror config rides in env. A mirror boot REQUIRES a `mirror_config`
+ * row (seeded in beforeAll) and reads its DATA SCOPE from it — `origin_node_id`, the primary whose rows
+ * its node-scoped reads display; an absent row is a loud `server.config_invalid` (boot.ts). */
 function mirrorEnv(clone: { pg: { uri: string } }, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
@@ -221,8 +225,8 @@ beforeAll(async () => {
   await seedVenue(b.admin);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
-  // DB-stored pull config a mirror boot requires (unreachable relay). A keeps the 'primary'/'primary'
-  // column defaults; a stamp is all it needs.
+  // `mirror_config` row a mirror boot requires. A keeps the 'primary'/'primary' column defaults; a
+  // stamp is all it needs.
   await stampDeployment(a.admin, "preproduction");
   await stampDeployment(b.admin, "preproduction");
   await setDeploymentMode(b.admin, "mirror");

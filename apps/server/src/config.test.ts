@@ -3,13 +3,7 @@ import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
-import {
-  deploymentEnvironment,
-  isDevMode,
-  loadConfig,
-  loadReplicationConfig,
-  loadTunnelConfig,
-} from "./config.js";
+import { deploymentEnvironment, isDevMode, loadConfig, loadTunnelConfig } from "./config.js";
 
 // Distinct per field so a mis-wired till mapping fails the assertions below rather than passing by
 // coincidence — every id is the same 8-4-4-4-12 shape but a different value, matching
@@ -1132,43 +1126,5 @@ describe("loadTunnelConfig", () => {
       variable: "WAITRON_TUNNEL_POOL_SIZE",
       reason: "not_a_positive_integer",
     });
-  });
-});
-
-describe("loadReplicationConfig", () => {
-  // The replication credential + advertise address ride the mirror bundle (owner decision 2026-09-07):
-  // the password is what a peer's subscription conninfo authenticates as `waitron_repl`, and the
-  // host/port is what this node advertises for a peer to dial. Both password AND host are required —
-  // an unset (absent OR empty, via `isUnset`) either one disables the whole config, the same
-  // off-switch `loadTunnelConfig` takes for its required fields.
-  const base = {
-    WAITRON_REPLICATION_PASSWORD: "repl-secret",
-    WAITRON_REPLICATION_HOST: "box.venue.internal",
-  };
-
-  it("returns undefined when the password is unset", () => {
-    expect(
-      loadReplicationConfig({ WAITRON_REPLICATION_HOST: "box.venue.internal" }),
-    ).toBeUndefined();
-    expect(loadReplicationConfig({ ...base, WAITRON_REPLICATION_PASSWORD: "" })).toBeUndefined();
-  });
-
-  it("returns undefined when the host is unset", () => {
-    expect(loadReplicationConfig({ WAITRON_REPLICATION_PASSWORD: "repl-secret" })).toBeUndefined();
-    expect(loadReplicationConfig({ ...base, WAITRON_REPLICATION_HOST: "" })).toBeUndefined();
-  });
-
-  it("defaults the port to 5432", () => {
-    expect(loadReplicationConfig(base)).toEqual({
-      password: "repl-secret",
-      advertiseHost: "box.venue.internal",
-      advertisePort: 5432,
-    });
-  });
-
-  it("parses WAITRON_REPLICATION_PORT when set", () => {
-    expect(
-      loadReplicationConfig({ ...base, WAITRON_REPLICATION_PORT: "5433" })?.advertisePort,
-    ).toBe(5433);
   });
 });

@@ -26,10 +26,9 @@ import "./errors.js";
 // grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-// This node's origin id — threaded into every recipe write's withTransaction (a recipe write UPDATEs the
-// sync-enrolled `products` table). This PGlite suite carries no sync triggers (core, catalogue and
-// identity migrations only), so it is never read here; any valid uuid serves, kept for parity with
-// production.
+// The uuid handed to `mountRecipeApi`'s `cfg.nodeId`. No route reads it (`recipe-api.ts`'s
+// `RecipeApiDeps` doc says why the field survives at all) and `withTransaction` takes no origin —
+// it is `(db, fn)`, `packages/db/src/tenancy.ts` — so any valid uuid serves.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 let managerCookie: string;

@@ -327,6 +327,9 @@ GRANT SELECT, INSERT, UPDATE ON "daily_close_chain" TO app_user;
 -- replication apply worker skips them, which is intended — a replicated row already passed the rule on
 -- the node that wrote it, so re-checking it on apply would reject valid inbound state. (Contrast the
 -- reject_mutation append-only pairs, which are ENABLE ALWAYS so a corrupted copy is refused everywhere.)
+-- 2026-09-19: SUPERSEDED as a description of today's tree — the PostgreSQL logical replication whose
+-- apply worker the paragraph above refers to has been deleted. No SQL in this file changed with it:
+-- these three triggers are still origin-only and the reject_mutation pairs are still ENABLE ALWAYS.
 CREATE TRIGGER tenders_reject_post_settlement
   BEFORE INSERT ON tenders
   FOR EACH ROW
@@ -546,6 +549,9 @@ ALTER TABLE "deployment" ADD CONSTRAINT "deployment_role_valid_ck" CHECK (NOT ("
 -- the write is owner-only (app_user holds no UPDATE on deployment). Added in the baseline (not in the
 -- drizzle schema barrel; see src/schema/deployment.ts's header) since the deployment DB is recreated
 -- on every dev reset — this is an additive nullable column on an empty deployment, not a data migration.
+-- 2026-09-19: SUPERSEDED as a description of today's tree — the drain guard and the PostgreSQL
+-- replication it read have been deleted, so nothing now reads or writes fence_lsn. The column itself
+-- is untouched, here and in the database; see `packages/db/src/schema/deployment.ts`.
 ALTER TABLE "deployment" ADD COLUMN "fence_lsn" pg_lsn;
 --> statement-breakpoint
 CREATE TABLE "mirror_config" (

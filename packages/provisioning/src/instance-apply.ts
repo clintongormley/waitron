@@ -67,10 +67,13 @@ export async function applyInstance(
     for (const action of actions) {
       switch (action.kind) {
         case "create-database":
-          // `OWNER waitron_migrator`: the migrator owns the database and therefore every table the
-          // migration creates in it (it runs AS the migrator, below), which is what native logical
-          // replication's `CREATE PUBLICATION … FOR TABLE` requires. `CREATE DATABASE` is a utility
-          // statement that will not bind, so the owner is quoted, not parameterised.
+          // `OWNER waitron_migrator`: the migrator owns the database and, because the migrate runs
+          // AS it (below), every table in it. The reason that owner was chosen — logical
+          // replication's owner-only `CREATE PUBLICATION … FOR TABLE` — died with the failover
+          // deletion of 2026-09-19, and no replacement has been written down; what keeps the
+          // arrangement is in `docs/developers/conventions-data.md`, "migrates AS the migrator".
+          // `CREATE DATABASE` is a utility statement that will not bind, so the owner is quoted,
+          // not parameterised.
           await deps.admin.execute(
             sql.raw(
               `create database ${quoteIdent(action.database)} owner ${quoteIdent(action.owner)}`,
@@ -162,9 +165,10 @@ export async function applyInstance(
         case "migrate":
           // Migrate AS the migrator, via the session role option on the admin's own connection
           // string (`withRole`) — the admin's credentials, the migrator's identity — so every table
-          // the migration creates is owned by `waitron_migrator`, which native logical replication
-          // requires. No migrator PASSWORD is used (a re-run has none): probe A confirmed the admin
-          // that created the migrator with `createrole_self_grant = 'set'` can `SET ROLE` to it.
+          // the migration creates is owned by `waitron_migrator`; a plain admin connection could not
+          // create those tables at all (`42501`, C5 in `instance-apply.pg.test.ts`). No migrator
+          // PASSWORD is used (a re-run has none): probe A confirmed the admin that created the
+          // migrator with `createrole_self_grant = 'set'` can `SET ROLE` to it.
           //
           // The database name comes from `deps`, NOT from a `create-database` action in the list: on
           // a re-run that action is absent while `migrate` is present, so deriving it from the
@@ -198,11 +202,13 @@ export async function applyInstance(
  * Confirms, after a plan runs, that the migrator OWNS the database and that every membership grant
  * actually landed.
  *
- * **The ownership check is the whole point of the swap.** Native logical replication needs
- * `waitron_migrator` to own every published table; this tool arranges that by creating the database
- * `OWNER waitron_migrator` and migrating AS the migrator. Read `pg_database.datdba` back rather than
- * trusting those statements ran: a database that ends up owned by anyone else is exactly the failure
- * this catches (`provisioning.database_not_owned`). Ownership is a FACT — `datdba`, one row, no
+ * **The ownership check is the point of this step.** The tool creates the database
+ * `OWNER waitron_migrator` and migrates AS the migrator; every table the migration creates is
+ * migrator-owned as a result. Why that owner rather than the admin — and why the original reason no
+ * longer holds — is in `docs/developers/conventions-data.md`, "migrates AS the migrator". What this
+ * step adds is reading `pg_database.datdba` back rather than trusting those statements ran: a
+ * database that ends up owned by anyone else is exactly the failure this catches
+ * (`provisioning.database_not_owned`). Ownership is a FACT — `datdba`, one row, no
  * closure to walk — unlike a `has_*` privilege, so the recursive-closure false positive
  * `instance-plan.ts` records against reading grants back does not apply. Keyed on the plan carrying
  * `migrate`, which every real plan does (a create-database is always followed by one) — so a

@@ -14,7 +14,7 @@
 // Mounted ONLY on a trading + primary node (boot.ts) — a mirror emits no bundle. If the primary has no
 // relay configured there is nothing for the mirror to dial, so the endpoint refuses `mirror.no_relay`
 // BEFORE `assembleMirrorBundle` mints a token (design §4). The minted token appears once, in the
-// response body, and is NEVER logged (the sync.* / tunnel.* no-row-content discipline).
+// response body, and is NEVER logged.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -30,7 +30,6 @@ import { withMember } from "@waitron/membership";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
-import type { ReplicationConfig } from "./config.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { isBareOrigin } from "./config.js";
@@ -46,12 +45,8 @@ import type { Logger } from "./logger.js";
  * till was provisioned with (`config.till.*`).
  * `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own
  * relay coordinates (`loadTunnelConfig`), `undefined` when no tunnel is configured — the endpoint then
- * refuses `mirror.no_relay` rather than minting an undial-able bundle. `replication` is the primary's
- * native-replication credential + advertise address (`config.replication`); `undefined` when it is
- * unconfigured — the endpoint then refuses `server.config_missing` (503), because a bundle with no
- * replication connection is one no mirror can subscribe to. `database` is the name of the primary's
- * own database, carried in the bundle's replication connection so the mirror's subscription names the
- * right dbname to COPY from. `ring` is the box vault key `assembleMirrorBundle` uses to unseal the
+ * refuses `mirror.no_relay` rather than minting an undial-able bundle.
+ * `ring` is the box vault key `assembleMirrorBundle` uses to unseal the
  * primary's identity key (design §6 R2), and this route signs the membership document it appends the
  * standby to with it (till-reroute §3.3).
  */
@@ -62,8 +57,6 @@ export interface MirrorBundleApiDeps {
   relayUrl: string | undefined;
   boxHostname: string;
   designated: AdoptResult;
-  replication: ReplicationConfig | undefined;
-  database: string;
   accountKey: string;
 }
 
@@ -80,11 +73,9 @@ export interface MirrorBundleApiDeps {
  * which is where a structurally-unreachable `mirror.not_provisioned` (a trading primary is always
  * stamped) would land if `assembleMirrorBundle` ever threw it.
  *
- * The NON-client entries are both 503: `membership.write_contended` (the org-chart write lost its
- * term race on every attempt, a transient server-side condition the caller retries) and
- * `server.config_missing` (this primary has no replication credential configured, so it cannot mint a
- * subscribable bundle — a server-side misconfiguration, not a fault in the request). The boundary
- * permits a 5xx in a status map (`setup-api.ts` maps a 502 the same way).
+ * The one NON-client entry is 503: `membership.write_contended` — the org-chart write lost its term
+ * race on every attempt, a transient server-side condition the caller retries. The boundary permits a
+ * 5xx in a status map (`setup-api.ts` maps a 502 the same way).
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
@@ -95,7 +86,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,
   "membership.write_contended": 503,
-  "server.config_missing": 503,
 };
 
 /**
@@ -191,14 +181,6 @@ export function mountMirrorBundleApi(
       // A mirror with no relay to dial is unusable, so refuse BEFORE assembling the bundle (design §4).
       // The relay endpoint is infrastructure config, not echoed — `mirror.no_relay` carries no params.
       if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
-      // A bundle carries the primary's replication CONNECTION so the mirror can subscribe (swap step
-      // 4). A primary with no `waitron_repl` credential configured cannot mint a subscribable bundle,
-      // so refuse here — reusing `server.config_missing` (M9), the same code `config.ts` throws for an
-      // unset variable; the value is never echoed, only the variable name. Positioned beside
-      // `mirror.no_relay`, before any reservation runs.
-      if (deps.replication === undefined) {
-        throw new AppError("server.config_missing", { variable: "WAITRON_REPLICATION_PASSWORD" });
-      }
 
       const bundle = await assembleMirrorBundle({
         appDb: deps.appDb,
@@ -208,8 +190,6 @@ export function mountMirrorBundleApi(
         boxHostname: deps.boxHostname,
         designated: deps.designated,
         standby,
-        replication: deps.replication,
-        database: deps.database,
         accountKey: deps.accountKey,
       });
       // The standby joins the org chart AT ADOPT and BEFORE the response, so a bundle is never handed

@@ -28,7 +28,7 @@ async function mountDone(
 afterEach(cleanupWidgets);
 
 describe("setup-done-screen", () => {
-  it("always announces the restart", async () => {
+  it("announces the restart into trading on the provision/restore path", async () => {
     const el = await mountDone(() => new Promise(() => {})); // never settles
     expect(el.shadowRoot!.textContent).toContain("restarting into trading mode");
   });
@@ -47,11 +47,12 @@ describe("setup-done-screen", () => {
   it("keeps waiting (no reload) while getStatus fails with a network TypeError", async () => {
     const getStatus = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await mountDone(getStatus);
-    await new Promise((r) => setTimeout(r, 40)); // several poll intervals
+    // It really is polling, not stuck. WAITED for, not timed: the old form slept 40ms against a 3ms
+    // interval and then asserted the count, which fails on a loaded machine when the browser's event
+    // loop starves between two polls — observed once in a full-package run, green in isolation.
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(1));
     expect(q(el, "[data-test=reload]")).toBeNull();
     expect(q(el, "[data-test=status]")).not.toBeNull();
-    // It really is polling, not stuck.
-    expect(getStatus.mock.calls.length).toBeGreaterThan(1);
   });
 
   // Once the setup route stops answering as setup (a non-2xx / a body that no longer parses), trading
@@ -112,7 +113,7 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=backup-nudge]")).toBeNull();
   });
 
-  it("lists the box's reachability links", async () => {
+  it("lists the box's reachability links on the provision/restore path", async () => {
     const el = await mountDone(() => new Promise(() => {}), { hostname: "waitron.local" });
     const links = el.shadowRoot!.querySelector("[data-test=links]")!;
     const hrefs = [...links.querySelectorAll("a")].map((a) =>
@@ -122,5 +123,47 @@ describe("setup-done-screen", () => {
     expect(hrefs).toContain("/manage");
     expect(hrefs).toContain("/manage/email");
     expect(hrefs).toContain("http://waitron.local:9110");
+  });
+
+  // The MIRROR path (a successful adopt). The box restarts and never comes back serving a till, a
+  // dashboard or this wizard (`apps/server/src/finish-adoption.ts`'s `PendingAdoption` header), so
+  // every way in this screen offers on the trading path would send the operator nowhere.
+  // Prove-by-deletion: drop the `mirrorJoin` branch in `render()` and all four of these flip red.
+  it("does not promise trading mode on the mirror path", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
+    const text = el.shadowRoot!.textContent!;
+    expect(text).not.toContain("restarting into trading mode");
+    expect(text.replace(/\s+/g, " ")).toContain("no till and no dashboard");
+  });
+
+  it("offers no till/dashboard links and no backup nudge on the mirror path", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
+    expect(q(el, "[data-test=links]")).toBeNull();
+    expect(q(el, "[data-test=backup-nudge]")).toBeNull();
+  });
+
+  // The restart really does happen, so the poll still flips — it just must not end in a control that
+  // reloads the operator onto a 404.
+  it("reports the restart instead of offering a reload on the mirror path", async () => {
+    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
+    const el = await mountDone(getStatus, { mirrorJoin: true });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent).toContain("has restarted"),
+    );
+    expect(q(el, "[data-test=reload]")).toBeNull();
+  });
+
+  // The break-glass secret is still shown once — it is the adopt response's only appearance — but the
+  // promote it was minted for is on a route this box never mounts (`mountPromoteApi` sits below boot's
+  // adoption-pending return), so the panel must not tell the operator it will work.
+  it("shows the break-glass secret on the mirror path without promising a promote", async () => {
+    const el = await mountDone(() => new Promise(() => {}), {
+      mirrorJoin: true,
+      breakGlassSecret: "bg-9f3a",
+    });
+    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
+    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
+    expect(warning).toContain("will not be shown again");
+    expect(warning).toContain("cannot do that in this version");
   });
 });

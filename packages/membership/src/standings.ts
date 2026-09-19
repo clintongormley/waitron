@@ -2,8 +2,9 @@ import type { MembershipNode } from "./types.js";
 
 /**
  * The new org chart after a local-secondary promotion (design §6 R1): this node becomes serving-primary,
- * whichever node was serving-primary becomes sell-only (still a replication source until drained, so it
- * is demoted rather than evicted), and every other node is left exactly as it was (contactUrl preserved).
+ * whichever node was serving-primary becomes sell-only — demoted, never evicted: eviction is a node's
+ * own act (`retireSelf`), never something another node's promotion does to it — and every other node
+ * is left exactly as it was (contactUrl preserved).
  * If this node is not yet listed, it is appended as serving-primary with an empty contactUrl. That
  * entry is ADDRESS-LESS by design and therefore unroutable — `routableServers` drops a node with an
  * empty contactUrl, so no till would be told to dial it — which is sound only because a node reaches
@@ -31,8 +32,8 @@ export function nextStandings(
  * The new org chart after a node is decommissioned (design §3, §6): the node whose nodeId is named is
  * marked `evicted`, and every other node is left exactly as it was (contactUrl preserved) — the same
  * "preserve everyone else" discipline `nextStandings` follows. This is the eviction producer for the
- * retire/evict decommission path, minting the `sell-only → evicted` transition once a fenced node has
- * fully drained its replication tail. Unlike `nextStandings` it NEVER appends a missing node: you
+ * retire/evict decommission path, minting the `sell-only → evicted` transition when a fenced node
+ * retires itself. Unlike `nextStandings` it NEVER appends a missing node: you
  * cannot evict a node that is not already a member, so a nodeId not in the list yields an unchanged
  * copy. Returns a new array and never mutates the input.
  */

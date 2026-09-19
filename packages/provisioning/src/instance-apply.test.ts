@@ -216,8 +216,9 @@ describe("applyInstance's create-database", () => {
       openTarget: (): Promise<TargetConnection> =>
         Promise.reject(new Error("openTarget must not be reached by this action")),
     });
-    // The owner clause is the whole point of the swap: a database owned by the migrator has every
-    // migrated table owned by it, which native replication requires.
+    // The owner clause is the point: a database owned by the migrator has every migrated table owned
+    // by it, and a plain admin connection to such a database cannot even `CREATE TABLE` in `public`
+    // (`42501`), which is what forces the migrate to run as the migrator.
     expect(executed).toEqual([`create database "wt" owner "waitron_migrator"`]);
   });
 });

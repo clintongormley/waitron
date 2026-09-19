@@ -16,7 +16,12 @@ import type { AdoptBody } from "../api/client.js";
  * (`personId` + `password`, optional `totp`) — and on `Connect` the mirror calls its OWN
  * `POST /setup-api/adopt`, which fetches the primary's mirror bundle server-side (so the admin
  * credential never touches a browser→primary hop), adopts the venue into this box's database, and
- * restarts into read-only mirror mode (spec §5/§8).
+ * restarts (spec §5/§8).
+ *
+ * That restart does NOT reach a usable read-only mirror, which is why this screen's copy warns the
+ * operator off before they type anything: the box comes back unable to establish its own identity
+ * and stays there. `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header is the one place
+ * that says why.
  *
  * The credential is assembled as the STRUCTURED OBJECT `{ personId, password, totp? }` and carried in
  * the `adopt-requested` event's detail — never a JSON string in a single field (Task 9 deliberately
@@ -135,7 +140,8 @@ export class SetupConnectScreen extends LitElement {
       ><wt-help-tooltip slot="help" aria-label=${`Help with ${label.toLowerCase()}`}
         >${
           {
-            primaryUrl: "Enter the full HTTPS address of the primary server this mirror will copy.",
+            primaryUrl:
+              "Enter the full HTTPS address of the primary server this server would join.",
             personId: "Enter an admin's person ID from the primary server.",
             password: "Enter that admin's dashboard password on the primary server.",
             totp: "If this admin uses an authenticator, enter its current one-time code.",
@@ -149,8 +155,11 @@ export class SetupConnectScreen extends LitElement {
     return html`
       <h1>Connect to the primary</h1>
       <p>
-        Point this mirror at the primary server and sign in with an admin login for it. The mirror
-        copies the venue and then shows its data read-only — it never trades or files anything.
+        Point this server at the restaurant's primary and sign in with an admin login for it. This
+        does not work in this version: the server signs in and restarts, then stops part-way through
+        joining, and it will not get any further however many times you restart it. It ends up
+        holding none of the restaurant's information, with no dashboard and no till, and it cannot
+        sell or file anything. This setup wizard does not open on this server again afterwards.
       </p>
       ${this.#field("Primary server address", "primaryUrl", "url")}
       ${this.#field("Admin login (person ID)", "personId")}

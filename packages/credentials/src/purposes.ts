@@ -34,8 +34,8 @@ export const PURPOSES = {
    * while nothing is provisioned.
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
-  /** DEPRECATED (swap step 4): the pull worker this token authenticated is gone under native
-   * replication; the key stays in this persisted contract (never deleted/renamed), unset on new nodes.
+  /** DEPRECATED: the pull worker this token authenticated is gone and nothing has taken over from it;
+   * the key stays in this persisted contract (never deleted/renamed), unset on new nodes.
    * The per-peer sync bearer token a cloud mirror presented when it pulled (sync cloud-mirror C2b).
    * Sealed under the mirror's OWN box key at adopt; a mirror-local operational secret, one field. */
   "sync.mirror_token": ["token"],

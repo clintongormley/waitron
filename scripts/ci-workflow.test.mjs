@@ -573,12 +573,11 @@ describe("ci.yml's job graph", () => {
 });
 
 describe("the test shards", () => {
-  it("isolates Bookings and the replication suites from the light bins", () => {
-    for (const name of ["@waitron/bookings", "@waitron/replication-tests"]) {
-      expect(OWN_SHARD_PACKAGES).toContain(name);
-      expect(LIGHT_A_PACKAGES).not.toContain(name);
-      expect(LIGHT_B_PACKAGES).not.toContain(name);
-    }
+  it("isolates Bookings from the light bins", () => {
+    const name = "@waitron/bookings";
+    expect(OWN_SHARD_PACKAGES).toContain(name);
+    expect(LIGHT_A_PACKAGES).not.toContain(name);
+    expect(LIGHT_B_PACKAGES).not.toContain(name);
   });
 
   it("bounds every test job, including startup and teardown", () => {

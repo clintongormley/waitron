@@ -313,12 +313,12 @@ describe("startTwoNodeCluster cluster mutex", () => {
   });
 });
 
-// Real-Docker smoke test for the two-node logical-replication fixture (swap S1). It proves exactly
-// the two capabilities the S2 replication suites lean on: both nodes run with `wal_level=logical`,
-// and a row published on one node reaches the other over the Docker network. The mechanism check
-// uses a throwaway table so it stays uncoupled from any real schema; the real waitron_repl /
-// waitron_migrator roles are S2's concern, so the subscription connects as the container's default
-// superuser (which carries REPLICATION).
+// Real-Docker smoke test for the two-node logical-replication fixture. It proves exactly the two
+// capabilities the one consumer outside this file leans on — `change-feed-replication.pg.test.ts`,
+// in `packages/db/src`: both nodes run with `wal_level=logical`, and a row published on one node
+// reaches the other over the Docker network. The mechanism check uses a throwaway table so it stays
+// uncoupled from any real schema, and the subscription connects as the container's default
+// superuser, which carries REPLICATION — this fixture creates no dedicated replication role.
 
 describe.runIf(dockerAvailable())("two-node fixture", () => {
   let cluster: TwoNodeCluster;
@@ -380,12 +380,12 @@ describe.runIf(dockerAvailable())("two-node fixture", () => {
   }, 60_000);
 });
 
-// The `command` override (swap S4, I4): Case 4 of the fiscal fidelity suite needs an 8 MB
-// `max_slot_wal_keep_size` so a WAL overflow invalidates the slot — but the fixture's own
-// `-c max_slot_wal_keep_size=4GB` boot flag (a `PGC_S_ARGV` setting) outranks any later `ALTER
-// SYSTEM`, so the small bound has to be a BOOT flag too. This proves the caller-supplied command
-// reaches postgres on both nodes; without threading `options.command` through, `SHOW` returns the
-// default `4GB` and this fails.
+// The `command` override. The fixture's own `-c max_slot_wal_keep_size=4GB` boot flag is a
+// `PGC_S_ARGV` setting, which outranks any later `ALTER SYSTEM`, so a caller that needs a different
+// value (an 8 MB bound, to make a WAL overflow invalidate the slot) must replace the whole boot
+// command rather than change the setting at runtime. This proves the caller-supplied command reaches
+// postgres on both nodes; without threading `options.command` through, `SHOW` returns the default
+// `4GB` and this fails. No caller outside this file passes `command` today.
 describe.runIf(dockerAvailable())("two-node fixture — custom postgres command", () => {
   let cluster: TwoNodeCluster;
 
