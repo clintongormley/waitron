@@ -18,6 +18,8 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("menu_item_options", "state", STATE),
   classify("option_lists", "state", STATE),
   classify("option_labels", "state", STATE),
+  classify("extra_lists", "state", STATE),
+  classify("extra_list_items", "state", STATE),
 ];
 
 export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_CLASSIFICATION.map(

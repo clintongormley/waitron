@@ -86,5 +86,6 @@ export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-upda
 
 export type { ModifierSnapshot } from "./modifier-snapshots.js";
 export type { OptionSelection, OptionSnapshot } from "./option-selection.js";
+export type { ExtraSelection } from "./extra-selection.js";
 
 export * from "./modifiers.js";

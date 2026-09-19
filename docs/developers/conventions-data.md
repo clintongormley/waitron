@@ -201,6 +201,58 @@ resolves outward, but a base table's bare `"id"` binds to the SUBQUERY's table �
 answer (#152: a null table label). Copying a correlated subquery: check base-vs-join and READ the
 emitted SQL with `.toSQL()`.
 
+## An untargeted `.onConflictDoNothing()` absorbs every unique conflict, not only the primary key's
+
+`writeItems` in `packages/catalogue/src/extras.ts` inserted each of an extras list's items with a
+bare `.onConflictDoNothing()` and read "nothing came back" as "another transaction already holds
+this id". Verified with `.toSQL()` on drizzle 0.45.2: the untargeted call emits
+`… on conflict do nothing`, and the same insert with `{ target: extraListItems.id }` emits
+`… on conflict ("id") do nothing`. The table also carries
+`extra_list_items_list_product_uq` over `(list_id, product_id)`, so the bare clause swallowed a
+PRODUCT collision too: a body adding an item for the product a retained item was moving away from
+came back as `extras.invalid` naming `items.0.id`, an `id` field that body never sent, which breaks
+the rule that a refusal is placed beside a field by what the error carries.
+
+Name the target whenever the table has more than one unique constraint and the code reads the empty
+result as a specific cause. Other untargeted calls are still in the tree and nothing guards this;
+`grep -rn 'onConflictDoNothing()' --include='*.ts' packages apps` finds them.
+
+## Editing rows one at a time can break a unique index the final state satisfies
+
+That same `writeItems` kept the rows a save still named and updated each where it stood, so a body
+exchanging two items' products put both rows on the same product midway through and
+`extra_list_items_list_product_uq` refused the first update with
+`23505 duplicate key value violates unique constraint`, although the body's final product set was
+legal. Reproduced on real PostgreSQL by `saves a body that exchanges two retained items' products`
+(`packages/catalogue/src/extras.pg.test.ts`). It now deletes every one of the list's rows and
+inserts the body's fresh, each under the id the body sent or a new one, which removes the
+intermediate state rather than ordering around it.
+
+That is safe under two conditions, and the second one is easy to miss. The FIRST is that nothing
+outside the table holds a key into it, so the rows may lose their identity:
+`grep -rn 'REFERENCES "public"."extra_l' --include='*.sql' packages apps` returns one line, the
+items' own key into `extra_lists`. A table something else references cannot be rewritten this way.
+
+The SECOND is that two writers replacing the same set must be serialised. That condition is about
+the WRITE, not about row identity, and the grep says nothing about it: the second transaction's
+`delete` cannot see the first's uncommitted inserts, so it removes nothing, and its own inserts then
+meet the first's committed rows on `(list_id, product_id)`. That `23505` leaves `writeItems` as a
+drizzle `Failed query:` error carrying no `code` of its own, which the server's error boundary
+answers as an opaque 500 rather than as a domain refusal. `updateExtraList` and `deleteExtraList`
+now take a `select … for update` on the `extra_lists` row first, so two saves of one list run one
+after the other. That is a ROW lock, not an advisory lock: spec §7 bars advisory locks from new code
+and does not reach it, and `lockProduct` in `packages/catalogue/src/variants.ts` already takes the
+same shape on a product row.
+
+The lock made explicit something the code was already doing by accident, which is why the test for
+it needed a control. `updateExtraList` updates the list's own row before it calls `writeItems`, and
+an `UPDATE` takes that row's lock, so the two saves were already serialised — `keeps the later of
+two overlapping saves of the same list` (`packages/catalogue/src/extras.pg.test.ts`) passed on the
+code as it stood. Removing the accident is what measured it: with the lock absent AND that `update`
+moved after `writeItems`, the test read `["saved", "23505"]`; with the lock restored and the
+`update` still moved, both saves succeeded. So what the lock buys is that `writeItems` no longer
+depends on an unrelated statement's position for its correctness.
+
 ## Resolve shared catalogue data once before a basket's line loop
 
 The Products review found that each basket line called `resolveZoneOffer`, which reloaded the whole

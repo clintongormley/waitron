@@ -29,6 +29,34 @@
       "when": 1789811675411,
       "tag": "0003_option_lists_grants_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789839967097,
+      "tag": "0004_extra_lists",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789839967606,
+      "tag": "0005_extra_lists_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789840353305,
+      "tag": "0006_extra_list_items_one_offer_per_product",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789841694737,
+      "tag": "0007_extra_list_items_price_not_negative",
+      "breakpoints": true
     }
   ]
 }

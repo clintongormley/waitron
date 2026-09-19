@@ -289,6 +289,18 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is
   the `.from()` base rather than a join** — no error, a wrong answer. Check base-vs-join and READ the
   emitted SQL with `.toSQL()`.
+- **An untargeted `.onConflictDoNothing()` absorbs EVERY unique conflict, not only the primary
+  key's.** Name the target when the table has more than one unique constraint and the code reads an
+  empty result as a specific cause. Cost: a new extras item collided on `(list_id, product_id)` and
+  was reported as a stolen `id` the body never sent. Untargeted calls remain in the tree and nothing
+  guards this. See [conventions-data.md](docs/developers/conventions-data.md).
+- **Rewriting rows one at a time inside a transaction can break a unique index the FINAL state
+  satisfies.** Two items swapping products refused with `23505` midway through. Replacing the set —
+  delete then insert — needs TWO conditions, and the `REFERENCES` grep is only the first: nothing
+  outside the table may hold a key into it, AND the writers must be serialised on something, because
+  a `delete` cannot see a concurrent transaction's uncommitted inserts, so the second writer removes
+  nothing and collides on a SECOND unique index. A `select … for update` on the parent row is the
+  cheap way. See [conventions-data.md](docs/developers/conventions-data.md).
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
   per-line resolver).

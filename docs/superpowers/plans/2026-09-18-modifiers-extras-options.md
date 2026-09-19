@@ -421,7 +421,7 @@ it("resolveExtraPrice takes menu over item over product", () => {
 - [ ] **Step 6: Classify + errors** — add `classify("extra_lists", "state", STATE)` and
       `classify("extra_list_items", "state", STATE)` to `CATALOGUE_CLASSIFICATION`. Register
       `extras.invalid: { field }`, `extras.not_found: { extraListId }`,
-      `extras.in_use: { extraListId; dependency }`, `extras.limit_exceeded: { listId }`, and
+      `extras.in_use: { extraListId; dependency }`, `extras.limit_exceeded: { extraListId }`, and
       `product.in_use: { productId; dependency }` (see Step 5). Grep the `errors.ts` siblings first —
       the `options.*` and `product.*` families already carry codes (`options.group_invalid`,
       `product.variant_in_use`, …); keep the new suffixes non-colliding and consistent.

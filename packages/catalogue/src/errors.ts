@@ -164,5 +164,60 @@ declare module "@waitron/shared" {
      * was asking about. Thrown by `validateOptionSelections` (option-contract.ts).
      */
     "options.label_required": { optionListId: string };
+    /**
+     * An extras list's authoring body is malformed: a missing or blank staff name, a name map with a
+     * non-text entry, an unknown key, a bad id, a pick bound that is not a whole number or leaves
+     * `maxPicks` below `minPicks`, a `maxQuantity` below one, or a malformed price. `field` is the
+     * dotted path of the offending value (`"maxPicks"`, `"items.1.maxQuantity"`), so the editor can
+     * put the refusal beside the input that caused it. It also covers a structurally bad ORDER-time
+     * selection body — not an array, an unknown key, a non-string id, a pick naming a product the
+     * list does not carry, or an answer for a list that was never offered — where `field` names the
+     * offending path in that body (`"extraSelections"`, `"listId"`, `"productId"`). A CLIENT request
+     * fault. Thrown by `parseExtraListInput` / `validateExtraSelections` (extra-contract.ts), and by
+     * `assertProductsExist` / `writeItems` (extras.ts), which refuse an item naming no `products` row
+     * and an item id another list, or another transaction, already holds.
+     */
+    "extras.invalid": { field: string };
+    /** An extras list id names no list. */
+    "extras.not_found": { extraListId: string };
+    /** Registered in the `dependency: string` shape the sibling `modifier.in_use` above already has.
+     * NOTHING throws it: the design has a list delete cascade its attachments rather than refuse
+     * (spec 2026-09-18-one-product-model-design.md §3.5). It stays registered unthrown, because a
+     * shipped code is never removed. */
+    "extras.in_use": { extraListId: string; dependency: string };
+    /**
+     * An order line's answer to an extras list breaks one of that list's COUNTS: fewer picks than
+     * `minPicks`, more than `maxPicks`, or a quantity above one item's `maxQuantity`. The body's
+     * SHAPE was fine and its CONTENT is not orderable, which is what separates this from
+     * `extras.invalid` — the same split `options.label_required` has from `options.invalid`. Carries
+     * only the list's id, under the same qualified name its `extras.*` and `options.*` siblings use:
+     * the caller knows which dish it was asking about. Thrown by `validateExtraSelections`
+     * (extra-contract.ts).
+     */
+    "extras.limit_exceeded": { extraListId: string };
+    /**
+     * An extras list's customer-facing name has no text in the venue's default content language.
+     * `field` is the dotted path of the offending map (`"customerName"`), matching the paths
+     * `parseExtraListInput` reports. The sibling of `options.translation_required`; an extras list
+     * holds ONE such map (its items name products and carry no names), so the path is always
+     * `"customerName"` today. Thrown by `validateNames` (extras.ts), which asks
+     * `findContentTranslationGap` (content-languages.ts) — that function RETURNS which map has the
+     * gap rather than throwing it, though it does throw `content.translation_invalid` for a value
+     * that is not text — and attaches the field path.
+     */
+    "extras.translation_required": { field: string; language: string };
+    /**
+     * A product cannot be removed while something still names it — an extras list item today.
+     * Registered ahead of a thrower: no route deletes a product, and nothing outside test fixtures
+     * deletes a `products` row, so there is no path to refuse from. Searched on 2026-09-19:
+     * `grep -rn 'app\.delete(' apps/server/src --include="*.ts"` lists every DELETE route and none
+     * of them is products; `grep -rn '\.delete(products)' packages apps --include="*.ts"` and
+     * `grep -rn 'delete from products' packages apps --include="*.ts"` find only test files,
+     * fixtures, and the comments — this one among them — that quote the commands. The dashboard's
+     * `#deleteProduct` (apps/dashboard/src/screens/catalogue-screen.ts) sets `available: false`
+     * through the product editor rather than deleting anything. What refuses today is the database:
+     * `extra_list_items.product_id` is `ON DELETE RESTRICT` (schema/extras.ts).
+     */
+    "product.in_use": { productId: string; dependency: string };
   }
 }

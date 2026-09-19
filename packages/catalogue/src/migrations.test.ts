@@ -33,6 +33,8 @@ const TABLES = [
   "menu_item_variants",
   "option_lists",
   "option_labels",
+  "extra_lists",
+  "extra_list_items",
 ];
 
 const tableList = () =>
@@ -65,6 +67,16 @@ describe("the catalogue migration set carries no tenant column", () => {
         "CHECK ((((cardinality(languages) >= 1) AND (cardinality(languages) <= 200)) AND (array_position(languages, NULL::text) IS NULL)))",
       content_languages_pkey: "PRIMARY KEY (id)",
       content_languages_singleton_ck: "CHECK ((id = 1))",
+      extra_list_items_list_fk:
+        "FOREIGN KEY (list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
+      extra_list_items_pkey: "PRIMARY KEY (id)",
+      extra_list_items_price_ck: "CHECK ((price >= (0)::numeric))",
+      extra_list_items_product_fk:
+        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
+      extra_list_items_qty_ck: "CHECK ((max_quantity >= 1))",
+      extra_lists_picks_ck:
+        "CHECK (((min_picks >= 0) AND ((max_picks IS NULL) OR (max_picks >= min_picks))))",
+      extra_lists_pkey: "PRIMARY KEY (id)",
       menu_item_option_groups_group_fk:
         "FOREIGN KEY (group_id) REFERENCES option_groups(id) ON DELETE CASCADE",
       menu_item_option_groups_item_fk:
@@ -130,6 +142,8 @@ describe("the catalogue migration set carries no tenant column", () => {
     );
     expect(columns).toEqual({
       category_details_parent_idx: "parent_id",
+      extra_list_items_list_product_uq: "list_id, product_id",
+      extra_list_items_list_sort_idx: "list_id, sort",
       menu_items_menu_order_idx: "menu_id, display_order",
       menu_sections_menu_order_idx: "menu_id, display_order",
       option_labels_list_sort_idx: "list_id, sort",
@@ -355,6 +369,23 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     await refusal(
       sql`insert into option_labels (list_id, name) values (${missing}, 'Rare')`,
       "option_labels_list_fk",
+    );
+  });
+
+  it("refuses an extras item whose list or product does not exist", async () => {
+    const c = await catalogue();
+    const listId = (
+      await db.execute<{ id: string }>(
+        sql`insert into extra_lists (name) values ('Breads') returning id`,
+      )
+    ).rows[0]!.id;
+    await refusal(
+      sql`insert into extra_list_items (list_id, product_id) values (${missing}, ${c.productId})`,
+      "extra_list_items_list_fk",
+    );
+    await refusal(
+      sql`insert into extra_list_items (list_id, product_id) values (${listId}, ${missing})`,
+      "extra_list_items_product_fk",
     );
   });
 });

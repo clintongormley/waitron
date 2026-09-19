@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "extra_list_items_list_product_uq" ON "extra_list_items" USING btree ("list_id","product_id");

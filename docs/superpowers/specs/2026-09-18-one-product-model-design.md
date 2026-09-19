@@ -254,7 +254,9 @@ Two tables, engine-neutral (§7):
 - `extra_lists` — `id`, `name` (three names, as §2.1), `min_picks` (total picks required; 0 = optional,
   1 = at least one), `max_picks` (total picks allowed; null = uncapped), `sort`, `active`. (Named
   `min_picks`/`max_picks`, not bare `min`/`max`, which collide with SQL function names; the plan may
-  pick a different spelling but not the bare words.)
+  pick a different spelling but not the bare words.) **2026-09-19:** the spelling stands as a design
+  choice, but that reason is wrong — `min` and `max` are legal column names. Measured on PGlite 0.5.8
+  (PostgreSQL 18.3); the receipt is on `extraLists` in `packages/catalogue/src/schema/extras.ts`.
 - `extra_list_items` — `id`, `list_id` (FK, cascade), `product_id` (FK to `products`, restrict),
   `sort`, `max_quantity` (per-dish cap for this product; `>= 1`, default 1), `preselected` (flag),
   `price` (money, **nullable**; null means "use the product's own `unit_price`").
