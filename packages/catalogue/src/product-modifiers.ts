@@ -35,19 +35,16 @@ export function isModifierListKind(value: unknown): value is ProductModifierRef[
 }
 
 /**
- * A uuid column compares either case in SQL and hands its value back LOWER-CASED, so an id that
- * arrives upper-cased matches its row in SQL and then matches nothing at all in a JavaScript set.
- * Every LIST id is lower-cased once here, at the boundary, and used from there on — same
- * normalisation `updateExtraList` (extras.ts) and `updateOptionList` (options.ts) apply to the id
- * their caller sends, and the two checks in {@link assertRefsExist} are what turn on it.
+ * A uuid column compares either case in SQL and hands its value back LOWER-CASED, so an id also
+ * compared in JAVASCRIPT has to be lower-cased first, or it finds its row in SQL and then matches
+ * nothing in a set. Every LIST id is normalised here, at the boundary, because the two checks in
+ * {@link assertRefsExist} compare them — deleting this call turns "refuses a duplicate that
+ * differs only in case" and "matches a list id the caller sent in upper case"
+ * (product-modifiers.test.ts) red. `updateExtraList` (extras.ts) and `updateOptionList`
+ * (options.ts) normalise their caller's id for the same reason.
  *
- * The PRODUCT id is deliberately NOT normalised, because nothing here compares it in JavaScript:
- * it only ever reaches SQL, where the `uuid` column settles the case on its own. Measured rather
- * than reasoned — this file was written with the product id lower-cased in both functions and then
- * run again with that removed, and all 26 of its tests passed either way, so the call earned
- * nothing. The list ids are a different story: deleting THEIR `normalise` turns
- * "refuses a duplicate that differs only in case" and "matches a list id the caller sent in upper
- * case" (product-modifiers.test.ts) red.
+ * The PRODUCT id is deliberately NOT normalised: nothing here compares it in JavaScript, it only
+ * ever reaches SQL, and the file was run both ways with no test able to tell.
  */
 const normalise = (value: string) => value.toLowerCase();
 
@@ -211,7 +208,14 @@ async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Pro
  * within this transaction the product starts from nothing, so no row the body keeps can collide
  * with a row it is replacing on `product_modifiers_product_extra_uq` or its options twin. The rows
  * are minted fresh each time — an attachment row's `id` is a surrogate nothing outside this file
- * holds, so losing it costs nothing.
+ * holds, so losing it costs nothing. That is the first of the two conditions CLAUDE.md §3 puts on
+ * this shape, and it is discharged the way conventions-data.md prescribes:
+ * `grep -rn 'REFERENCES "public"."product_modifiers' --include='*.sql' packages apps` matches
+ * NOTHING on 2026-09-20, so no key outside the table names a row of it, and no caller is handed
+ * one either — `grep -rn "productModifiers\.id" packages apps --include="*.ts"` returns ONE line,
+ * the `orderBy` tiebreak in {@link readProductModifiers} above, which never leaves this file. (The
+ * dot is escaped in that command, so this comment quoting it is not itself a match.) The second
+ * condition, serialising two writers, is the paragraph below.
  *
  * Every list the body names is locked BEFORE the delete below, which is what keeps this path from
  * deadlocking against a delete of one of those lists; the lock, its strength and its order are on

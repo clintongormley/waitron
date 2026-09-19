@@ -54,14 +54,11 @@ async function borrowedUnitPrices(
  * The candidates that can be priced, in the order they came in.
  *
  * An item that has to borrow its product's price and cannot is left out: it cannot be priced, so it
- * cannot be sold. It narrows the LIST as well, which reaches further than one item: if every item
- * goes this way and the list is active with `minPicks` of 1 or more, `validateExtraSelections`
- * (extra-contract.ts) refuses it either way — picking nothing falls under `minPicks` as
- * `extras.limit_exceeded`, and any pick names a product the narrowed list no longer offers, which
- * is `extras.invalid` — so the DISH becomes unorderable once the order path calls that function
- * (the plan's Task 7; nothing calls it today). And an active list with no items is a shape
- * `parseExtraListInput` refuses outright, so these projections can hand back one the authoring
- * contract treats as impossible. `extra_list_items_product_fk` is ON DELETE RESTRICT
+ * cannot be sold. It narrows the LIST as well, so these projections can hand back an ACTIVE list
+ * with no items at all — a shape `parseExtraListInput` (extra-contract.ts) refuses outright on the
+ * authoring side. What that would mean for an order is not stated here: nothing calls
+ * `validateExtraSelections` in production yet (the plan's Task 7), so there is no order path whose
+ * behaviour could be described. `extra_list_items_product_fk` is ON DELETE RESTRICT
  * (schema/extras.ts), which forbids that state at any ONE instant — but the items and the products
  * are read by two statements with a read-committed snapshot each, so another transaction can drop
  * the item from the list and then delete the product in between. Seen that way, on a real backend,

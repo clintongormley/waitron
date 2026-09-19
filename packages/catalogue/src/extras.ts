@@ -445,9 +445,16 @@ async function lockPublishedLists(
 }
 
 /**
- * Every list the body publishes is one the dish's PRODUCT carries in `product_modifiers` — the
- * check `setMenuItemOptionGroups` (operations.ts) makes against `product_option_groups`. A menu
- * offer narrows and reprices what the product already offers (spec
+ * Every list the body publishes is one the dish's PRODUCT carries in `product_modifiers` — ONE of
+ * the two checks `setMenuItemOptionGroups` (operations.ts) makes against `product_option_groups`,
+ * the one it refuses as `options.group_invalid` with `reason: "not_attached"`. Its OTHER check has
+ * no twin here: that one refuses a body which LEAVES OUT a group the product marks required
+ * (`reason: "required_group_missing"`), and nothing on the extras side refuses an offer that
+ * publishes none of the lists its product carries. Whether it should is open, not decided here —
+ * an extras list has no `required` flag to read (the spec makes "required" `min_picks >= 1`, §3.1),
+ * and §3.2 says only which lists an offer publishes, never that a required one must be among them.
+ *
+ * A menu offer narrows and reprices what the product already offers (spec
  * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2), so publishing a list the
  * product does not carry would put items on a dish that does not have them. Refused as
  * `extras.invalid` naming the publication's own position, the path `parseMenuExtraPublications`
@@ -529,8 +536,10 @@ async function assertProductsOffered(
  * narrowing has its own place and row presence does not have to carry it; and §3.2 says a menu offer
  * MAY narrow and reprice, so an offer that narrows nothing offers the whole list.
  *
- * **A list the dish's product does not carry is refused** ({@link assertProductCarries}), the check
- * `setMenuItemOptionGroups` (operations.ts) makes against `product_option_groups`.
+ * **A list the dish's product does not carry is refused** ({@link assertProductCarries}) — the
+ * `not_attached` half of what `setMenuItemOptionGroups` (operations.ts) checks against
+ * `product_option_groups`. Its `required_group_missing` half has no twin here, for the reason
+ * {@link assertProductCarries} gives.
  *
  * The existence read takes the menu offer's ROW LOCK, so two saves of the SAME offer run one after
  * the other rather than overlapping. NOT measured on this path: the receipt is for the same
@@ -554,8 +563,17 @@ export async function setMenuItemExtraLists(
   // Both reads sit AFTER the offer's row lock and the lists' row locks, never before: an answer
   // read ahead of a lock this path then waits for can be stale by the time the wait ends. Neither
   // read locks `product_modifiers` itself, so a product's attachment list can still change between
-  // the first of them and the commit — `writeProductModifiers` (product-modifiers.ts) takes no lock
-  // this path could wait on. Reasoned over those two files, not measured.
+  // the first of them and the commit — with ONE exception. A save that ATTACHES a list this body
+  // publishes can no longer overlap this path: `writeProductModifiers` (product-modifiers.ts)
+  // takes `for key share` on every `extra_lists` row it names, `lockExtraList` above takes
+  // `for update` on the same rows, and the two conflict, so whichever transaction is second waits
+  // for the first. MEASURED on PostgreSQL 18.4: a `for update` on a row another session held
+  // `for key share` blocked until a 2s `lock_timeout`, while the same `for update` with nothing
+  // held returned at once and a second `for key share` never waited at all. A save that DETACHES a
+  // list does not name it and so locks nothing, so that change is still invisible here. Both paths
+  // take `extra_lists` rows in ascending id order and neither wants a row the other holds
+  // afterwards, so this is a wait and not a deadlock — that last part traced over the two files,
+  // not run.
   // Carrying the list comes first: a body that publishes a list the dish does not have is wrong
   // about the list, whatever its overrides then say.
   await assertProductCarries(tx, offer.productId, publications);

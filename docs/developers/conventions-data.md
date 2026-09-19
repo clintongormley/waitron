@@ -229,9 +229,14 @@ inserts the body's fresh, each under the id the body sent or a new one, which re
 intermediate state rather than ordering around it.
 
 That is safe under two conditions, and the second one is easy to miss. The FIRST is that nothing
-outside the table holds a key into it, so the rows may lose their identity:
-`grep -rn 'REFERENCES "public"."extra_l' --include='*.sql' packages apps` returns one line, the
-items' own key into `extra_lists`. A table something else references cannot be rewritten this way.
+outside the table holds a key into it, so the rows may lose their identity — and it is
+`extra_list_items` that is being rewritten, so what matters is who references THAT table.
+`grep -rn 'REFERENCES "public"."extra_l' --include='*.sql' packages apps` returned one line when
+this was written and returns three now (2026-09-20): all three name `extra_lists`, the parent —
+the items' own key, `menu_item_extra_lists`' key, and `product_modifiers`' key. None names
+`extra_list_items`, so the condition still holds; the grep's count no longer stands on its own,
+because it matches the parent's name as well. A table something else references cannot be
+rewritten this way.
 
 The SECOND is that two writers replacing the same set must be serialised. That condition is about
 the WRITE, not about row identity, and the grep says nothing about it: the second transaction's

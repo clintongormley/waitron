@@ -493,8 +493,18 @@ Task 5 has landed too (#452): the per-menu publication, `menu_item_extra_lists` 
 projection `readMenuExtras` reading it back with every price already resolved. A per-menu item row is
 an OVERRIDE and not a publication — an item of the list with no row is still offered at its own
 resolved price, and `available: false` is what withdraws it — which is the opposite of
-`menu_item_options`, where a row's presence is the publication. No screen shows either kind of list
-yet, and nothing serves extras over the API — that is the plan's Task 6.
+`menu_item_options`, where a row's presence is the publication.
+
+The plan's Task 6 has landed too: `product_modifiers`, the one ordered attachment list a product
+carries, holding an extras list or an options list per row; `writeProductModifiers` and
+`readProductModifiers` behind it; the product write body's flat `modifierIds` and `optionGroupIds`
+replaced by that ordered `modifiers` list, with a body still sending either old field refused by
+name; six management routes for extras lists under `/management-api/modifiers/extras`, mounted by
+the same `mountListSurface` helper the options block now uses; `readProductExtras`, which reads
+what a product itself carries with no menu offer in the question; and `setMenuItemExtraLists`
+refusing to publish a list the dish's product does not carry. What is still missing is the SCREEN:
+the product editor's attachment section was removed rather than rebuilt, and no dashboard screen
+shows either kind of list — that is the plan's Task 11.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -554,10 +564,14 @@ What extras lists left open, and what #449 found on the way:
 - **The seven string-parsing helpers are copied between the two contracts.**
   `packages/catalogue/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
   `invalid`, `record`, `keys`, `staffName`, `translations`, `kitchenName` and `id`, differing only in
-  the error-code prefix. A review asked for them to be shared and it is right — but the plan's Task 6
-  adds a third contract wanting the same helpers, so extracting across two now means pulling it apart
-  again. **Next action:** extract at Task 6, across all three, the same call this track made about the
-  duplicated route handlers above.
+  the error-code prefix. A review asked for them to be shared and it is right. The stated reason for
+  waiting has since EXPIRED: it was that the plan's Task 6 would add a third contract wanting the
+  same helpers, so extracting across two now would mean pulling it apart again — and Task 6 landed
+  without one. Its new screening went into `packages/catalogue/src/product-editor-input.ts`, which
+  already carried its own near-copies of the same helpers. So the two-way extraction is unblocked.
+  Task 6 deliberately did not do it: it is a refactor of two files that branch does not otherwise
+  touch, on a branch that was already large. **Next action:** extract across the two contracts, and
+  decide at the same time whether `product-editor-input.ts`'s near-copies join them.
 - **An untargeted `.onConflictDoNothing()` absorbs EVERY unique conflict, not only the primary key's.**
   Written into `CLAUDE.md` §3 with its receipt in `developers/conventions-data.md`. Seven untargeted
   calls remain in the tree and nothing guards this. The two that read an empty result as a specific
@@ -600,9 +614,14 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
   landed there.** `readProductExtras` (`packages/catalogue/src/extra-projection.ts`) reads the
   extras lists a PRODUCT itself carries, with no menu offer in the question, and
   `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) now refuses to publish a list the
-  dish's product does not carry — the check its options sibling `setMenuItemOptionGroups` makes
-  against `product_option_groups`. Both read `product_modifiers`, which Task 6 added. The dated note
-  on Task 5 in the plan describes the gap as it was, and stays as history.
+  dish's product does not carry — ONE of the two checks its options sibling
+  `setMenuItemOptionGroups` makes against `product_option_groups`, the one refusing an unattached
+  group. The sibling's other check refuses a body that LEAVES OUT a group the product marks
+  required, and there is no extras equivalent: an extras list carries no `required` flag (the spec
+  makes "required" `min_picks >= 1`, §3.1) and §3.2 does not say a required list must be published.
+  Both read `product_modifiers`, which Task 6 added. The dated note on Task 5 in the plan describes
+  the gap as it was, and stays as history. **Next action:** settle whether an offer may publish
+  none of a product's required extras lists, when the menu-offer screen is built.
 - **Two review findings deliberately not taken, both of them structural.** Splitting the publication
   write path out of `packages/catalogue/src/extras.ts` into a module of its own, and moving
   `resolveExtraPrice` from there into `extra-contract.ts` beside the price parsing it belongs with.

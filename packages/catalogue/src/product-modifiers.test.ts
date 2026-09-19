@@ -16,6 +16,7 @@ import { createCatalogue, createProduct } from "./operations.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
+import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
 // Every case in THIS file is one writer at a time, so PGlite is the lighter target that still runs
 // the real migrations (CLAUDE.md §4). Two writers racing is a different matter and has its own
@@ -511,18 +512,43 @@ describe("what a product's attachment write refuses", () => {
   });
 });
 
+describe("a product's attachment list in the catalogue's configuration transfer", () => {
+  const transferred = CATALOGUE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+
+  it("copies both kinds of list before the rows that point at them", () => {
+    // `importConfigurationTables` inserts in this order and deletes in its reverse
+    // (apps/server/src/configuration-transfer.ts), so both parents have to come first: a row here
+    // names an extras list or an options list, and `product_modifiers_extra_list_fk` /
+    // `product_modifiers_option_list_fk` are what refuse it otherwise.
+    // `toContain` first on all three, because `indexOf` answers -1 for a name the list does not
+    // hold and -1 is less than every index, so a missing parent would satisfy the comparisons
+    // below without being there at all. `products` is NOT asserted: the catalogue's transfer list
+    // does not hold it (it belongs to the core set), so there is no position here to compare.
+    for (const name of ["extra_lists", "option_lists", "product_modifiers"])
+      expect(transferred).toContain(name);
+    expect(transferred.indexOf("extra_lists")).toBeLessThan(
+      transferred.indexOf("product_modifiers"),
+    );
+    expect(transferred.indexOf("option_lists")).toBeLessThan(
+      transferred.indexOf("product_modifiers"),
+    );
+  });
+});
+
 /**
  * The walkthrough that answers to the grants migration for this table. Every test above runs on
  * PGlite's superuser connection, which holds every privilege and so exercises no grant at all;
  * `asAppUser` makes the session assume the application role and PGlite enforces the table's grants
  * from there — a container adds nothing (CLAUDE.md §4).
  *
- * Seen red rather than assumed, twice: with `DELETE` dropped from the grant in
- * drizzle/0011_product_modifiers_grants.sql, and again with that whole migration removed from the
- * set, this case failed with `42501 permission denied for table product_modifiers`. Both stopped at
- * the same statement — `delete from "product_modifiers" where "product_modifiers"."product_id" =
- * $1` — because a write clears the product's rows first, so what is measured here is the DELETE
- * grant; the SELECT and INSERT grants are exercised below it but no control has isolated them.
+ * Seen red rather than assumed, three times, each with `42501 permission denied for table
+ * product_modifiers`: with `DELETE` dropped from the grant in
+ * drizzle/0011_product_modifiers_grants.sql, with that whole migration removed from the set, and
+ * with `UPDATE` alone dropped from it. The first two stopped at the same statement —
+ * `delete from "product_modifiers" where "product_modifiers"."product_id" = $1` — because a write
+ * clears the product's rows first; the third stopped at this file's own
+ * `update product_modifiers set sort = 1`. So the DELETE and UPDATE grants each have a control of
+ * their own; the SELECT and INSERT grants are exercised here but no control has isolated them.
  */
 describe("attachment CRUD as the non-superuser application role", () => {
   const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
@@ -549,6 +575,19 @@ describe("attachment CRUD as the non-superuser application role", () => {
       expect(await readProductModifiers(tx, [dishes.burger])).toEqual(
         new Map([[dishes.burger, [{ kind: "options", id: options.dressing }]]]),
       );
+
+      // UPDATE is granted by drizzle/0011_product_modifiers_grants.sql and no write path reaches
+      // it: `writeProductModifiers` deletes the product's rows and inserts fresh ones rather than
+      // editing one in place. It is walked by statement for that reason, the way
+      // extra-projection.test.ts walks `menu_item_extra_lists`' unreached UPDATE — a granted
+      // privilege nothing exercises is a privilege nothing has established the role holds.
+      await tx.execute(
+        sql`update product_modifiers set sort = 1 where product_id = ${dishes.burger}`,
+      );
+      const sorts = await tx.execute<{ sort: number }>(
+        sql`select sort from product_modifiers where product_id = ${dishes.burger}`,
+      );
+      expect(sorts.rows).toEqual([{ sort: 1 }]);
 
       await writeProductModifiers(tx, dishes.burger, []);
       expect(await readProductModifiers(tx, [dishes.burger])).toEqual(new Map());

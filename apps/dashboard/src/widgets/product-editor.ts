@@ -472,6 +472,18 @@ export class ProductEditor extends LitElement {
       };
     }
   }
+  /**
+   * Put focus back on the control that opened a child form, once that form closes.
+   *
+   * "modifier" is accepted for the reason {@link selectRelated} gives, and is dead in the same
+   * way: there is no `[data-test=add-modifier]` left in this shadow root, so the query finds
+   * nothing and the optional call does nothing. Narrowing the type here alone is not possible —
+   * the caller is `ProductChildCreate`'s `focus` effect
+   * (`apps/dashboard/src/state/product-child-create.ts`), typed with `ProductChildKind`, which
+   * still carries all three. Measured: narrowing this parameter to `"unit" | "category"` and
+   * running `pnpm --filter @waitron/dashboard typecheck` gives
+   * `catalogue-screen.ts(120,57): error TS2345`, and nothing else.
+   */
   returnRelatedFocus(kind: "unit" | "category" | "modifier"): void {
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${kind}]`)?.focus();
   }

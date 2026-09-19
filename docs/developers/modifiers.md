@@ -141,12 +141,20 @@ allergens and diet (its recipe-derived list) and each selected extra shows its o
 
 ## Storage and integration order
 
-Generated core migration `0021_product_modifiers.sql` extends the existing group/item definitions
-and adds JSONB snapshots to working and sale lines. No new tables or core-to-catalogue foreign keys
-are added. The catalogue generation script reports no schema change. Existing table grants,
-classification and configuration-transfer ordering apply; the definition/attachment and publication
-operations share one transaction-scoped advisory lock, keyed on the constant
-`"modifier-definitions"` (`packages/catalogue/src/modifier-lock.ts`).
+Generated core migration `packages/db/drizzle/0021_product_modifiers.sql` extends the existing
+group/item definitions and adds JSONB snapshots to working and sale lines. It creates NO table of
+that name, despite the file name — beware the twin: `packages/catalogue/drizzle/0010_product_modifiers.sql`
+is a different migration in a different set, and it is the one that creates the `product_modifiers`
+table. Everything in THIS SECTION is about the OLD `option_groups`/`option_group_items` model and
+its `product_option_groups` attachment table, not that new one; the authoring section above already
+describes the new `modifiers` body field. No new tables or core-to-catalogue
+foreign keys are added here. The catalogue generation script reports no schema change. Existing
+table grants, classification and configuration-transfer ordering apply; the group/item definition,
+`product_option_groups` attachment and `menu_item_option_groups` publication operations share one
+transaction-scoped advisory lock, keyed on the constant `"modifier-definitions"`
+(`packages/catalogue/src/modifier-lock.ts`). The new `product_modifiers` write takes no advisory
+lock at all — `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`) takes a
+`for key share` ROW lock on each list it names instead, which that file explains.
 
 Selections take that lock in shared mode so definition readers can coexist. Canonical and retained
 group/item writers take it exclusively before reading or changing definitions. The retained

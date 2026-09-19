@@ -92,9 +92,13 @@ export const extraListItems = table(
  * this position"; what the list offers is the list's own rows, narrowed and repriced below.
  *
  * A row is written only for a list the dish's PRODUCT carries in `product_modifiers` (below in this
- * file): `setMenuItemExtraLists` (packages/catalogue/src/extras.ts) refuses the rest, the check its
- * option-group sibling `setMenuItemOptionGroups` (packages/catalogue/src/operations.ts) makes
- * against `product_option_groups`. Nothing HOLDS that afterwards — there is no key between the two
+ * file): `setMenuItemExtraLists` (packages/catalogue/src/extras.ts) refuses the rest — the
+ * `not_attached` half of what its option-group sibling `setMenuItemOptionGroups`
+ * (packages/catalogue/src/operations.ts) checks against `product_option_groups`. That sibling's
+ * other half, which refuses a body leaving out a group the product marks required, has no extras
+ * twin; `assertProductCarries` (packages/catalogue/src/extras.ts) says why.
+ *
+ * Nothing HOLDS the attachment afterwards — there is no key between the two
  * tables, and detaching the list from the product leaves this row where it is. Read over the tree
  * rather than measured: `grep -rn 'delete(menuItemExtraLists' --include='*.ts' packages apps`
  * returns two lines, one of them this comment quoting the command; the other is

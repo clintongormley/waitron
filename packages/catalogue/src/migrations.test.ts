@@ -119,6 +119,13 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_sections_menu_id_key: "UNIQUE (menu_id, id)",
       menu_sections_pkey: "PRIMARY KEY (id)",
       option_labels_list_fk: "FOREIGN KEY (list_id) REFERENCES option_lists(id) ON DELETE CASCADE",
+      option_labels_pkey: "PRIMARY KEY (id)",
+      option_lists_pkey: "PRIMARY KEY (id)",
+      product_categories_category_fk:
+        "FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT",
+      product_categories_product_fk:
+        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
+      product_categories_product_id_category_id_pk: "PRIMARY KEY (product_id, category_id)",
       product_modifiers_extra_list_fk:
         "FOREIGN KEY (extra_list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
       product_modifiers_one_reference_ck:
@@ -128,13 +135,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       product_modifiers_pkey: "PRIMARY KEY (id)",
       product_modifiers_product_fk:
         "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
-      option_labels_pkey: "PRIMARY KEY (id)",
-      option_lists_pkey: "PRIMARY KEY (id)",
-      product_categories_category_fk:
-        "FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT",
-      product_categories_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
-      product_categories_product_id_category_id_pk: "PRIMARY KEY (product_id, category_id)",
       product_units_product_fk:
         "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
       product_units_product_id_pk: "PRIMARY KEY (product_id)",

@@ -224,25 +224,23 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `packages/catalogue/src/errors.ts` states on the code itself, citing spec
   // `2026-09-18-one-product-model-design.md` §2.3. Mapped because Task 3 of the plan names it.
   "options.in_use": 409,
-  // Extras lists (`packages/catalogue/src/extras.ts`). `extras.invalid` reaches here from more than
-  // one place — `parseExtraListInput` (extra-contract.ts) on a malformed authoring body, and
-  // `assertProductsExist` / `writeItems` (extras.ts) on an item naming no `products` row or reusing
-  // an item id another list holds; `extras.translation_required` from `validateNames` (extras.ts),
-  // when the customer-facing name map has no text in the venue's default content language. Both are
-  // CLIENT request faults → 400. Listed explicitly as the house style requires; the `?? 400` default
-  // (`packages/server-kit/src/error-boundary.ts:57`) already covers them.
+  // Extras lists (`packages/catalogue/src/extras.ts`), the twin of the `options.*` pair above: 400
+  // for the same reason and listed explicitly by the same convention. What differs is where they
+  // are thrown. `extras.invalid` comes from several places, among them `parseExtraListInput`
+  // (extra-contract.ts) on a malformed authoring body and `assertProductsExist` / `writeItems`
+  // (extras.ts) on an item naming no `products` row or reusing an item id another list holds;
+  // `extras.translation_required` comes from `validateNames` (extras.ts) alone.
   "extras.invalid": 400,
   "extras.translation_required": 400,
   // An id naming no list: `getExtraList` on the single read, `lockExtraList` on the update and the
   // delete, `assertExtraList` on the dependants preview (all extras.ts). The default would make this
   // a 400, so this entry is what makes it a 404.
   "extras.not_found": 404,
-  // 409 rather than the default 400 because the body was fine and the stored state refused it — the
-  // shape the sibling `modifier.in_use` above has. NOTHING throws it, here or anywhere: deleting a
-  // list is DESIGNED to cascade its product attachments and its menu publications rather than refuse
-  // them, which `packages/catalogue/src/errors.ts` states on the code itself, citing spec
-  // `2026-09-18-one-product-model-design.md` §3.5. Mapped because Task 6 of the plan names it, as
-  // `options.in_use` above is mapped for Task 3.
+  // `options.in_use` above, one table over: 409 for the same reason, thrown by nothing, and mapped
+  // because the plan names it — Task 6 here, Task 3 there. What differs is the cascade (deleting an
+  // extras list takes its menu publications with it as well as its product attachments) and the
+  // spec section `packages/catalogue/src/errors.ts` cites on the code itself,
+  // `2026-09-18-one-product-model-design.md` §3.5.
   "extras.in_use": 409,
   // An order line answering an extras list with too few picks, too many, or a quantity above one
   // item's cap — thrown by `validateExtraSelections` (extra-contract.ts). NO ROUTE ON THIS SURFACE
@@ -252,11 +250,18 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 400, which is also what the default would give: it is a CLIENT request fault, the caller having
   // sent a selection the list's own published counts refuse.
   "extras.limit_exceeded": 400,
-  // 409 for the same reason as the three `*.in_use` codes above, and unthrown like two of them:
-  // `grep -rn 'product.in_use' apps packages --include="*.ts"` on 2026-09-20 finds only the
-  // declaration in `packages/catalogue/src/errors.ts`, and no route anywhere deletes a product
-  // (`grep -rn "app.delete(" apps/server/src --include="*.ts"`, same date, lists every DELETE route
-  // on the server and none of them is a product). What refuses today is the database: an extras
+  // 409 for the same reason as the three `*.in_use` codes above, and unthrown like two of them.
+  // `grep -rn 'product.in_use' apps packages --include="*.ts"` on 2026-09-20 returns three lines:
+  // the declaration in `packages/catalogue/src/errors.ts`, this comment quoting the command, and
+  // the map entry below it — so nothing throws it. No route deletes a product either, but the
+  // command that would show that is BLIND in one place, so it is not on its own a receipt:
+  // `grep -rn "app.delete(" apps/server/src --include="*.ts"`, same date, lists the DELETE routes
+  // whose path is written out at the call, and `mountListSurface` above registers
+  // `app.delete(one, …)` with the path in a variable — one grep line standing for the two real
+  // paths its two call sites mount, `/management-api/modifiers/options/:id` and
+  // `/management-api/modifiers/extras/:id`. Both delete a LIST, and it is the only line in that
+  // output whose path is not written out — every other one is a literal, which is what makes the
+  // rest of the list readable. What refuses a product delete today is the database: an extras
   // list item's and a menu override's `product_id` are both ON DELETE RESTRICT
   // (`packages/catalogue/src/schema/extras.ts`), which surfaces as a driver error and not as this
   // code. Mapped because Task 6 of the plan names it — the same reason `extras.in_use` above is
@@ -474,8 +479,8 @@ interface ListSurface<TList, TDependants> {
  */
 function mountListSurface<TList, TDependants>(
   app: Hono,
-  log: Logger,
   gated: GatedWork,
+  log: Logger,
   surface: ListSurface<TList, TDependants>,
 ): void {
   // `as const` keeps these as the template literal TYPE `` `/management-api/modifiers/${string}` ``
@@ -631,7 +636,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // "GET /management-api/modifiers/options lists them" with `expected 400 to be 200`, and the gate
   // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
   // for a session.
-  mountListSurface(app, log, gated, {
+  mountListSurface(app, gated, log, {
     segment: "options",
     idKind: "OptionListId",
     collectionKey: "optionLists",
@@ -652,7 +657,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // "GET /management-api/modifiers/extras lists them" with `expected 400 to be 200`, and the gate
   // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
   // for a session.
-  mountListSurface(app, log, gated, {
+  mountListSurface(app, gated, log, {
     segment: "extras",
     idKind: "ExtraListId",
     collectionKey: "extraLists",
