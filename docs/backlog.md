@@ -3350,6 +3350,29 @@ moved. The rule that survives both: a conversion states the CALL-form grep
 (`grep -rnE "usePgliteDb[(]"`), never the bare name, and does not number a line in a file it is
 still editing.
 
+**`packages/credentials` converted, LANDED as #440 on 2026-09-19** (main `e050cbfb`) — the tenth
+package of the rollout, four test files and four calls, plus the corrected `vitest.config.ts`
+comment, which is why the bullet above no longer names it. Four things to carry, three of them about
+method. **First, the docs sweep this section asks for has to be the path grep ALONE.** Narrowing it
+by a second condition — the document must also contain the word `usePgliteDb` — took eight matching
+documents down to two and threw away the one that carried a designation. That is the same trap
+recorded above in a new dress: a pattern assembled around the claim answers a different question and
+the answer reads like the one you asked for. **Second, one document can carry the same designation
+several times.** `docs/superpowers/plans/2026-09-07-fiscal-cert-distribution.md` points at
+`packages/credentials/src/store.test.ts` in three places — a comment inside its test sketch, the
+parenthetical under that sketch, and its placeholder scan — so the branch added ONE dated pointer
+that names all three rather than three pointers. **Third, the `--hookTimeout=50` probe becomes
+evidence when it carries a positive control, and this one discriminated in both directions in a
+single run:** a temporary suite with an untimed 200ms `beforeAll` printed `Hook timed out in 50ms`
+while all four PGlite suites passed under the same ceiling, and `credentials.test.ts` failed inside
+`useTemplateDb`'s `beforeAll` — a hook `hookTimeout` really does bound. Fourth, the run-it seat
+MEASURED the half every earlier conversion had only read, by injecting 500ms delays into both
+helpers' `afterEach` and `afterAll` under a 300ms limit and watching each one time out; ask it for
+that experiment again rather than restating the reading. One sizing error worth naming: a sibling
+survey that compared "the four packages converted before this one" was false — nine were, and two of
+the five it skipped bore on its own argument. NEXT is `packages/scheduler`, alone at the bottom with
+4 calling files on `e050cbfb` — re-measure with the plan's step-5 command rather than trusting that.
+
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
 only be backed up or restored separately if no row in one points at a row in the other. Six such
