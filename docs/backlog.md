@@ -2155,6 +2155,29 @@ declaration of its own. Two things it leaves open:
   26's and the manifest still advertises 24 as a supported runtime. One line either way; it needs an
   owner call on whether Node 24 is still supported.
 
+**Left behind by the Hono Node adapter upgrade (#444, 2026-09-19).** `apps/server` and
+`apps/print-agent` moved from `@hono/node-server` 1.19.15 to 2.1.1. Three things it leaves open:
+
+- **Only the request side of that adapter was compared between the two versions.** Three probes
+  (mine and each reviewer's) wrote raw request lines to a socket against a real server on both
+  versions and compared the path, the URL, one query value and the status line. Version 2 also
+  changed response code — `Response` fast paths, null-body handling, a close handler for
+  `Blob`/`ReadableStream` responses, and `Response.json()`/`Response.redirect()` — and nothing
+  compared a response BODY or its headers across the two. The suites pass, so nothing is known to
+  be broken; what is missing is the comparison. Re-running it now needs a scratch install of
+  1.19.15, because the lockfile no longer carries it.
+- **`apps/server/src/tls.ts`'s type guarantee is still untested.** It derives its options type from
+  the installed package (`Parameters<typeof serve>[0]`) so that an incompatible reshape fails
+  `tsc`. This upgrade did not exercise that: the type gained one optional key (`websocket`) and was
+  otherwise identical across the two versions. The comment now says so rather than implying the
+  promise has been tried.
+- **A sentence attributed to `CLAUDE.md` §3 that is not in it survives in one historical doc.**
+  `spa-api.ts` quoted "the defence is explicit, never implicit" as a rule from §3; it is not there
+  (`grep -c` in `CLAUDE.md` returns 0) and the branch removed the quotation. The same phrase is in
+  `docs/superpowers/specs/2026-08-08-catalogue-management-ui-design.md`, which records what was
+  believed when it was written and is left alone. Worth knowing for the next sweep: it is wrapped
+  across two lines there, so a one-line `git grep` misses it.
+
 One note for the next 0.x dependency bump, because it cost three review rounds here: esbuild ships
 breaking changes in minor releases, which is documented and was read — but the release that actually
 changed this repository's output was **0.27.1, a patch**. Reading the majors and the releases marked
