@@ -44,7 +44,7 @@ export interface ProvisionRequest {
 }
 
 export interface ProvisionDeps {
-  /** The OWNER connection to the target database (`config.migrationsDatabaseUrl`) — the admin that
+  /** The OWNER connection to the target database (`config.adminDatabaseUrl`) — the admin that
    * owns the tables, which `applyVenue` needs and which `stampDeployment` writes the singleton with. */
   ownerDb: Database;
   /** The desired module set — the fiscal slot ALREADY resolved to exactly one member by the caller's

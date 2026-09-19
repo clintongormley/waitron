@@ -330,6 +330,14 @@ Two things replace it:
 - **Everything else becomes a guard that reads the source** and fails when a write path touches a table
   it has no business writing.
 
+  > **2026-09-19, what P9 actually landed.** `scripts/write-path-tables.test.ts` covers the four
+  > tables `app_user` may read and never write — `tenants`, `nodes`, `deployment`, `mirror_config` —
+  > and nothing else. "Everything else" turned out to be another fifty tables, where the grant
+  > refuses one or two of the three write operations rather than all of them, and where no trigger
+  > refuses what the grant refuses. That gap is open, with three options weighed, in
+  > `docs/backlog.md` → B9. This section
+  > also names only `tenants`, which was the whole list as far as anyone had checked at the time.
+
 **That guard lands while grants still exist** (item P9 in §9). Written then, it can be checked against
 what the database actually refuses today; written after the flip, it would be written from memory with
 the evidence already deleted.

@@ -83,7 +83,7 @@ const REAL_REPLICATION: ReplicationVerbs = {
 };
 
 export interface AdoptDeps {
-  /** The OWNER connection to the mirror's database (`migrationsDatabaseUrl`) — stamps `deployment`,
+  /** The OWNER connection to the mirror's database (`adminDatabaseUrl`) — stamps `deployment`,
    * writes `mirror_config`, mints the break-glass verifier. `app_user` holds none of those writes. */
   ownerDb: Database;
   /** The dedicated OWNER replication pool (M8) the subscription verbs run over — the migrator holds
