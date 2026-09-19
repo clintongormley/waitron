@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
@@ -28,7 +28,7 @@ const STRIPE_JSON = JSON.stringify({
   cancelUrl: "https://example.test/no",
 });
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {

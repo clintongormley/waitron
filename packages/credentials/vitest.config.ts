@@ -8,14 +8,14 @@ export default defineConfig({
     // own (~1.5s). See src/testing/global-setup.ts. Because it precedes every worker, a
     // Docker-absent run now fails the whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suites (store.test.ts, rotate.test.ts, cli.test.ts, migrations.test.ts) boot
-    // PGlite (a WASM PostgreSQL) and apply two migration sets, longer than Vitest's 5s default on
-    // a cold CI runner; the real-PG suite now clones the shared container's migrated
-    // `core_credentials` template (globalSetup, above). Each per-suite cost is paid in a
-    // beforeAll — the PGlite WASM boot, or the real-PG ~26ms clone — so hookTimeout stays
-    // generous for the PGlite boot; the ~26ms clone is a harmless ceiling under it. The container
-    // boot / image pull is NOT in a beforeAll: it moved to globalSetup, which vitest does NOT
-    // bound by hookTimeout.
+    // `testTimeout` covers work inside an individual test. `hookTimeout` bounds a hook that passes
+    // no timeout of its OWN; a hook given one overrides this config (stated at
+    // `packages/db/src/testing/lifecycle.ts:178`, measured at `:182-183`). So it does NOT bound the
+    // PGlite boot and migrations the four PGlite suites pay in a beforeAll, which run under
+    // `usePgliteDb`'s own 60s default; what it bounds here is the real-PG suite's clone of
+    // globalSetup's already-migrated `core_credentials` template — `useTemplateDb` deliberately
+    // carries no default — and both helpers' bare afterEach reset and afterAll close, plus any hook
+    // a test file writes for itself. The container boot/image pull runs in globalSetup, outside both.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

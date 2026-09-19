@@ -2,9 +2,9 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   // Core first — the credentials baseline references `tenants`. Ordering across packages is the
   // runtime's job and nothing enforces it, so it is explicit here.

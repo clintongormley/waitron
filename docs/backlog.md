@@ -3282,8 +3282,9 @@ actually sits:
 
 - False for the same reason (every PGlite boot in the package goes through `usePgliteDb`, so
   `hookTimeout` bounds none of them — `grep -rlE "createPgliteDb|describeEachTarget" --include="*.ts"
-  packages/<pkg>` exits 1): `packages/workforce/vitest.config.ts:13-14`,
-  `packages/reporting/vitest.config.ts:15-16`, `packages/credentials/vitest.config.ts:15-16`.
+  packages/<pkg>` exits 1): `packages/workforce/vitest.config.ts:13-14` and
+  `packages/reporting/vitest.config.ts:15-16`. `packages/credentials`'s was the third; the
+  conversion of that package corrected it, in the same way #438 corrected `packages/workforce-es`'s.
 - ALSO false, and this is where the first correction went wrong: `packages/payments/vitest.config.ts:14`
   and `packages/scheduler/vitest.config.ts:15`. That grep returns a file for each, which a draft took
   as a reason to spare them — but the one out-of-helper boot in each is inside an `it` body

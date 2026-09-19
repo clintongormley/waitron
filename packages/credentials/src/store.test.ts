@@ -14,7 +14,7 @@ import {
   tryGetCredential,
 } from "./store.js";
 import { captured } from "./testing/captured.js";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");
 const K2 = Buffer.alloc(32, 2).toString("base64");
@@ -31,7 +31,7 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {
