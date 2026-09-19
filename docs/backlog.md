@@ -3070,6 +3070,36 @@ and its guard rather than with any one conversion. Whoever writes the guard shou
 deliberately whether it reads comments at all; if it does not, say so in its header, because a guard
 narrower than its name is the thing this repository's §7 asks to be stated.
 
+**One exception to "defer the sweep", set by `packages/provisioning` (#431, 2026-09-19).** That
+conversion renamed a comment mention rather than leaving it, and the line it drew is worth keeping:
+the mention it renamed was a POINTER at the very call being converted, in the same file — a reader
+following "see the suite's `usePgliteDb` options" landed on a function the file no longer called.
+A stray mention elsewhere in the package is still the final pull request's to sweep; a pointer at
+the converted call belongs to the conversion. Note also that a conversion can ADD a mention: that
+same branch's rewritten `packages/provisioning/vitest.config.ts` names `usePgliteDb` in a sentence
+about which timeout governs PGlite setup, which is a live reference, not a dead pointer. So the
+comment-mention list above is still right that `provisioning` has one, and wrong about which line
+and why.
+
+**A claim three readers have now falsified, left standing in one place on purpose.** Three files in
+`packages/provisioning` said `instance` "creates databases and roles and reads `pg_roles` attributes,
+none of which PGlite's bundled single-superuser server can reproduce". Run against PGlite 0.5.4,
+`create role … login createdb createrole` and `create database …` both SUCCEED and `pg_roles` comes
+back with the attributes set; three independent readers got that result. #431 removed the claim from
+the two files it already had open and left `packages/provisioning/src/testing/postgres.ts:13`, which
+is the message thrown when the container will not start. Fixing that one needs the real reason
+established rather than guessed, and there is a candidate already written:
+`packages/db/src/testing/postgres.ts:218-220` says PGlite's default superuser connection "bypasses
+privilege checks and serialises queries" where real PostgreSQL "supplies restricted LOGIN connections
+and independent backends". Nobody has checked that it covers everything the three twins claim.
+
+**A dating method that cannot see what would falsify it, from the same branch.** `git log
+--diff-filter=A -- <file>` looks like it dates a file's arrival and does not: without `--follow` it
+stops at a RENAME and reports the rename's commit as the origin. On #431 that put two container
+suites five weeks late, in the pull request that renamed `*.rls.test.ts` to `*.pg.test.ts` rather
+than the one that wrote them — and it moved the answer onto the wrong side of the very claim being
+checked. Use `--follow` whenever the date is the point.
+
 **The finding of this branch is again about METHOD, and it is the sharpest instance of it so far.**
 The code is three lines and never changed after the first commit. Everything after that was prose,
 and THREE rounds of review each found false claims inside the previous round's CORRECTIONS — nine in
