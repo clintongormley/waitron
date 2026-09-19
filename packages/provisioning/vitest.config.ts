@@ -3,10 +3,12 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // Headroom for the container suites `instance` will need (it creates databases and roles, which
-    // PGlite's single-superuser server cannot reproduce). Every test in this package TODAY is a pure
-    // function or an injected-IO call and finishes in milliseconds — these ceilings are not load-
-    // bearing yet, and nothing here boots a database.
+    // Headroom for the suites that boot a database — the ones that reach a real PostgreSQL through
+    // `startBarePostgres`, and the two `useVenueDb` callers, which boot PGlite. `hookTimeout` below
+    // bounds a hook that passes no timeout of its OWN; a hook given one overrides this config (the
+    // receipt is at `packages/db/src/testing/lifecycle.ts:178`). So it does not bound the container
+    // suites that set a timeout at their own `beforeAll`, and it does not bound PGlite setup, which
+    // runs under `usePgliteDb`'s own 60s default.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
