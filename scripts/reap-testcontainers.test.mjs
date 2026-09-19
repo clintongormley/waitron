@@ -142,8 +142,9 @@ describe("reap-testcontainers", () => {
 
   describe("sweepOrphanedVitestWorkers", () => {
     it("SIGKILLs a vitest worker reparented to launchd (ppid 1) — the orphan signature", () => {
-      // An interrupted vitest run (an Esc, a killed parent) leaves its tinypool workers reparented to
-      // launchd, spinning at ~100% CPU. ppid 1 + the `node (vitest N)` title is that orphan. SIGKILL,
+      // An interrupted vitest run (an Esc, a killed parent) leaves its workers reparented to launchd,
+      // spinning at ~100% CPU. Under Vitest 3, ppid 1 + the `node (vitest N)` tinypool-worker title is
+      // that orphan; the Vitest 4 shape is a separate case further down. SIGKILL,
       // not SIGTERM: the real orphans were observed not to exit on SIGTERM. The leading whitespace mimics
       // `ps` right-padding the pid column, proving the parser absorbs it.
       const { psExec, kill, kills } = fakeProcs({ ps: "  89860     1 node (vitest 3)\n" });
@@ -168,10 +169,11 @@ describe("reap-testcontainers", () => {
     });
 
     it("spares an orphan that only MENTIONS vitest in an argument — matches the worker title, not argv", () => {
-      // `ps` shows a tinypool worker by its process TITLE, `node (vitest 3)`, never as a bare command
-      // line. A real command whose argv merely contains the substring "vitest" (a log path, a config
-      // file) must not be mistaken for one, even orphaned to launchd. A `\bvitest\b`-anywhere match
-      // killed exactly such a process — `node ... --log=/tmp/vitest-results.log` (run-it review).
+      // Neither recognised shape is a bare `vitest` word: Vitest 3's is the parenthesised process
+      // TITLE, Vitest 4's is vitest's own entrypoint path (the case below). A real command whose argv
+      // merely contains the substring "vitest" (a log path, a config file) must not be mistaken for
+      // either, even orphaned to launchd. A `\bvitest\b`-anywhere match killed exactly such a
+      // process — `node ... --log=/tmp/vitest-results.log` (run-it review).
       const { psExec, kill, kills } = fakeProcs({
         ps: "77777 1 node /tmp/report.mjs --log=/tmp/vitest-results.log\n",
       });

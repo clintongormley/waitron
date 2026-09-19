@@ -10,9 +10,12 @@ export default defineConfig({
         test: {
           name: "node",
           // Numbered from 1, not 0: Vitest 4 lifts a groupOrder-0 project that runs one isolated
-          // worker out of its group and appends it after every other group, which put Chromium
-          // ahead of this project. Measured on packages/bookings, against the same run on Vitest 3:
-          // with 0/1 the browser project's first test precedes this project's, with 1/2 it follows.
+          // worker out of its group and appends it after every other group, which puts Chromium ahead
+          // of a node project numbered 0. Measured on packages/bookings, against the same run on
+          // Vitest 3: with 0/1 the browser project's first test precedes the node project's, with 1/2
+          // it follows. bookings, payments-stripe, payments-sumup and venue-service carry this
+          // identical shape; packages/media and apps/dashboard split into projects too but pin no
+          // project-level worker limit, so the lift never reached them.
           sequence: { groupOrder: 1 },
           globals: true,
           clearMocks: false,

@@ -110,10 +110,10 @@ describe("every vitest config holds the coverage bar its package was assigned", 
   it(
     "and every member measures its whole src tree, not only the files a test happened to load",
     () => {
-      // Vitest 4 counts a file only when a test loaded it, where Vitest 3 counted every source
-      // file. An untested file therefore stops pulling the percentage down and starts being
-      // invisible — the gate reads HIGHER after code is added, which is the wrong direction for a
-      // gate to move. Naming the tree in `coverage.include` puts the untested file back in the
+      // Vitest 4 counts a file only when a test loaded it, where Vitest 3's `all: true` counted
+      // every source file. An untested file is therefore invisible rather than a zero in the
+      // denominator: it cannot pull the percentage down, so the gate reads HIGHER for the same
+      // code, which is the wrong direction for a gate to move. Naming the tree in `coverage.include` puts the untested file back in the
       // table. Deleting that line from a config is a one-word diff nothing else would catch, so
       // this case pins it for every member. The root project is not here: its own coverage table
       // is `scripts/`, not a `src` tree.

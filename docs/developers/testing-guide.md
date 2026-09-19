@@ -145,7 +145,8 @@ chose, not on how Vitest resolves the limit.
 top-level `maxWorkers`, and `poolOptions.forks.singleFork: true` became `maxWorkers: 1` — the pool
 is still forks by default, so the "one fork" reasoning behind the old name still holds, but the word
 `singleFork` no longer exists in a config. Vitest 4 says so itself when it meets the old spelling:
-"`poolOptions` was removed in Vitest 4. All previous `poolOptions` are now top-level options."
+"`test.poolOptions` was removed in Vitest 4. All previous `poolOptions` are now top-level
+options." (`vitest@4.1.11`, `dist/chunks/coverage.DM_a_rWm.js:179`.)
 `browser.fileParallelism` still works at 4.1.11 — the resolver reads
 `browser.fileParallelism ??= options.fileParallelism`, so a project-level `fileParallelism` reaches
 the browser pool and the configs here set it there, which is the spelling that survives into 5.
@@ -436,11 +437,21 @@ those stay a clean-exit-plus-manual-targeted sweep.
 ## An interrupted run also ORPHANS its vitest workers, and `pnpm reap` sweeps these too.
 
 A hard interrupt (an Esc, a killed parent, a timeout signal) can take the orchestrator while its
-tinypool workers reparent to launchd (ppid 1) and spin at ~100% CPU indefinitely — SIGTERM did not
-stop them, `kill -9` did (cost: four burned the fan for hours on 2026-09-07). The sweep is scoped by
-ppid 1 AND the `node (vitest N)` process TITLE (its parens), NOT a bare `vitest` word anywhere in
-the line — that broader match killed a real orphan whose argv only held a `vitest` log path (run-it
-review).
+workers reparent to launchd (ppid 1) and spin at ~100% CPU indefinitely — SIGTERM did not stop them,
+`kill -9` did (cost: four burned the fan for hours on 2026-09-07). The sweep is scoped by ppid 1 AND
+the shape vitest leaves in the `ps` command column, NOT a bare `vitest` word anywhere in the line —
+that broader match killed a real orphan whose argv only held a `vitest` log path (run-it review).
+
+There are TWO such shapes, because the two vitest majors this repository has run look different, and
+`scripts/reap-testcontainers.mjs` recognises both. Vitest 3 set a process TITLE — `node (vitest)` for
+the orchestrator, `node (vitest N)` for a tinypool worker — and the parens are the marker, because a
+parenthesised `(vitest` is vanishingly unlikely in an ordinary path or flag (`process.title = ` at `vitest@3.2.7`'s
+`dist/chunks/utils.XdZDrNZV.js:31` and `cac.BfaZ95xE.js:1410`). Vitest 4 sets no title at all and
+spawns its own workers, so a worker appears as its entrypoint path
+`…/node_modules/vitest/dist/workers/<pool>.js` and the orchestrator as `…/vitest/vitest.mjs`; there
+is no `process.title` anywhere in `vitest@4.1.11`'s `dist/`. Measured 2026-09-19 on
+`packages/identity`, one version each: 3.2.7 showed `node (vitest)` and `node (vitest 1)`, 4.1.11
+showed no `(vitest` at any sample and a worker running `…/vitest/dist/workers/forks.js`.
 
 ## A probe that needs a Unix SOCKET runs inside the container.
 

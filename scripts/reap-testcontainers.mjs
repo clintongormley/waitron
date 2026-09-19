@@ -106,8 +106,8 @@ export function reap({ exec, now = () => Date.now() }) {
 //     `ps`, and NEITHER is a bare `vitest` match: a bare-word match killed a real orphan whose argv
 //     merely held a `vitest` log path.
 //     - Vitest 3 set a process TITLE: `node (vitest N)` for a tinypool worker, `node (vitest)` for the
-//       orchestrator. Matched on the parenthesised `(vitest` marker, whose parens cannot occur in an
-//       ordinary path or flag.
+//       orchestrator. Matched on the parenthesised `(vitest` marker, a sequence an ordinary path or
+//       flag is vanishingly unlikely to contain.
 //     - Vitest 4 sets no title at all and spawns its own workers, so a worker appears as its
 //       entrypoint path `…/node_modules/vitest/dist/workers/<pool>.js` and the orchestrator as
 //       `…/vitest/vitest.mjs` (in the row measured it is reached through `.bin/../vitest/`, so the
