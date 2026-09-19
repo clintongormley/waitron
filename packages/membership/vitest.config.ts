@@ -3,9 +3,11 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "src/document-fixtures.ts"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },

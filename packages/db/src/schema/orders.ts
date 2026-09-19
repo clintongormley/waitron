@@ -65,8 +65,9 @@ export const workingOrders = table(
     id: id("id").primaryKey().defaultRandom(),
     tillId: id("till_id")
       .notNull()
-      /* v8 ignore next */
+      /* v8 ignore start */
       .references(() => tills.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     // Nullable at the schema level, and stays that way — but now WRITTEN on the till park path:
     // `createOpenOrder` (apps/server/src/working-order.ts) always sets it to the till's node on every
     // parked AND walk-up order, so in practice a working order carries one. It stays nullable for

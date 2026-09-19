@@ -15,6 +15,9 @@ import { count, table, ts } from "@waitron/db";
  * against. Lazily created: no row means nothing has ever been sent, which reads as "may send now";
  * the drainer upserts one after the first response.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as packages/db/src/schema/sales.ts.
 export const envioFlujo = table(
   "envio_flujo",
   {
@@ -26,5 +29,7 @@ export const envioFlujo = table(
     // re-readable.
     tiempoEsperaSeg: count("tiempo_espera_seg").notNull(),
   },
+  /* v8 ignore start */
   (t) => [check("envio_flujo_singleton_ck", sql`${t.id} = 1`)],
+  /* v8 ignore stop */
 );

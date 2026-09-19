@@ -64,8 +64,9 @@ export function buildLandingApp(deps: LandingDeps): Hono {
         // `code` is optional on the error TYPE, but every fs read failure this route can hit sets it,
         // so the `?? "unknown"` fallback is type-required but unreachable — same shape as
         // `discovery-api.ts`'s own `code ?? "unknown"`.
-        /* v8 ignore next */
+        /* v8 ignore start */
         deps.log("error", "landing.ca_read_failed", { code: code ?? "unknown" });
+        /* v8 ignore stop */
       }
       return c.json(
         {

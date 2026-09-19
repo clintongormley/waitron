@@ -98,6 +98,22 @@ describe("reserved-identity accessors", () => {
     ]);
   });
 
+  it("insertReservedSeriesTx writes nothing at all for an empty list", async () => {
+    // A node reserved with no series must not emit an INSERT with no rows — drizzle builds invalid
+    // SQL for an empty values list, so the early return is what keeps the caller's transaction
+    // alive rather than a nicety.
+    const before = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ count: number }>(sql`select count(*)::int as count from invoice_series`),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) => insertReservedSeriesTx(tx, [])),
+    ).resolves.toBeUndefined();
+    const after = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ count: number }>(sql`select count(*)::int as count from invoice_series`),
+    );
+    expect(Number(after.rows[0]!.count)).toBe(Number(before.rows[0]!.count));
+  });
+
   it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
     // A node with both purposes reserved (R2's real shape): the standard series is the one R3b's
     // promote points config.till.seriesId at, never the rectificative sitting beside it.

@@ -82,10 +82,14 @@ const DOCKER_PROBE_DELAY_MS = 1_000;
 /** Blocking sleep — `dockerAvailable` is synchronous and runs once at suite setup, so a short thread
  * block is acceptable and simpler than making the whole probe async. The retry LOGIC is covered by
  * `probeDockerCli`'s injected sleep; this one-line stdlib primitive is not worth a wall-clock test. */
+/* v8 ignore start -- trivial Atomics.wait sleep, no logic to cover (matches the file's other thin-line
+   ignore). The marker brackets the DECLARATION, not just the body: Vitest 4 counts the function
+   itself, so a marker inside the braces leaves it in the report as an uncovered function. Measured
+   both ways on this file: 19 of 19 functions with the marker here, 19 of 20 with it inside. */
 function sleepSync(ms: number): void {
-  /* v8 ignore next -- trivial Atomics.wait sleep, no logic to cover (matches the file's other thin-line ignore) */
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
+/* v8 ignore stop */
 
 /**
  * Probe for a working Docker daemon, retrying a not-yet-ready daemon up to `attempts` times with a
@@ -156,8 +160,9 @@ function postgresTarget(): Target {
       // what a test must never do. Left in for a clear message if a future
       // caller outside this package's tests ever does construct one by hand.
       // Stryker disable next-line all
-      /* v8 ignore next */
+      /* v8 ignore start */
       if (!handle || !template) throw new Error("postgres target used before setup()");
+      /* v8 ignore stop */
       // A ~26ms `CREATE DATABASE … TEMPLATE` clone of the pre-migrated `core` template, in place of
       // the old `create database` + per-test CORE migration (~387ms). NOT the same isolation PGlite
       // gets — see Target.create's doc comment: cluster-global objects (roles, tablespaces) are shared
@@ -181,8 +186,9 @@ function postgresTarget(): Target {
       // Defensive: a `drop database if exists … with (force)` failing is not reachable through the
       // public Target API (the same footing as the `used before setup()` guard above), so tests do
       // not trigger it — but if one ever does, surface it rather than swallow it.
-      /* v8 ignore next */
+      /* v8 ignore start */
       if (failed.length > 0) throw failed[0].reason;
+      /* v8 ignore stop */
     },
   };
 }

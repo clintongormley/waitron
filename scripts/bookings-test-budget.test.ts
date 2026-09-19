@@ -6,12 +6,12 @@ it("runs Bookings browser files one at a time, after its database project", () =
     test: {
       name: string;
       sequence?: { groupOrder?: number };
-      browser?: { fileParallelism?: boolean };
+      fileParallelism?: boolean;
     };
   }>;
   const node = projects.find((project) => project.test.name === "node")!.test;
   const browser = projects.find((project) => project.test.name === "browser")!.test;
-  expect(node.sequence?.groupOrder).toBe(0);
-  expect(browser.sequence?.groupOrder).toBe(1);
-  expect(browser.browser?.fileParallelism).toBe(false);
+  expect(node.sequence?.groupOrder).toBe(1);
+  expect(browser.sequence?.groupOrder).toBe(2);
+  expect(browser.fileParallelism).toBe(false);
 });

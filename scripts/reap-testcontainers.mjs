@@ -102,10 +102,24 @@ export function reap({ exec, now = () => Date.now() }) {
 // SAFETY — two guards, mirroring the container reaper's label+age pair:
 //  1. PPID. Only processes whose parent is 1 (launchd, on macOS). A LIVE run's workers are parented to
 //     the orchestrator and the orchestrator to the shell — never 1 — so a running suite is untouched.
-//  2. COMMAND. Only the tinypool worker's process TITLE `node (vitest N)` (and the bare `node (vitest)`
-//     orchestrator), matched on the parenthesised `(vitest` marker — NOT `vitest` anywhere in the line.
-//     A bare-word match killed a real orphan whose argv merely held a `vitest` log path; a title's
-//     parens cannot occur in an ordinary path or flag.
+//  2. COMMAND. Two shapes, because the two vitest majors this repository has run look different in
+//     `ps`, and NEITHER is a bare `vitest` match: a bare-word match killed a real orphan whose argv
+//     merely held a `vitest` log path.
+//     - Vitest 3 set a process TITLE: `node (vitest N)` for a tinypool worker, `node (vitest)` for the
+//       orchestrator. Matched on the parenthesised `(vitest` marker, whose parens cannot occur in an
+//       ordinary path or flag.
+//     - Vitest 4 sets no title at all and spawns its own workers, so a worker appears as its
+//       entrypoint path `…/node_modules/vitest/dist/workers/<pool>.js` and the orchestrator as
+//       `…/vitest/vitest.mjs` (in the row measured it is reached through `.bin/../vitest/`, so the
+//       `node_modules/vitest/` form is absent there — which is why the orchestrator pattern asks only
+//       for the trailing `/vitest/vitest.mjs`). What each pattern actually requires is that path
+//       ANYWHERE in the row, not as its final token: a tool pointed at vitest's own worker file and
+//       orphaned to launchd would be killed. That is narrower than the Vitest 3 title match and wider
+//       than "the entrypoint" — the narrowing that matters is that a bare `vitest` in a log path or a
+//       flag value does not match either pattern.
+//     Measured 2026-09-19 on the same package, one version each: under 3.2.7 `ps` showed
+//     `node (vitest)` and `node (vitest 1)`; under 4.1.11 it showed no `(vitest` anywhere and
+//     `/…/node_modules/vitest/dist/workers/forks.js`.
 // SIGKILL, not SIGTERM: the orphaned workers were observed not to exit on SIGTERM and to need `kill -9`,
 // so a best-effort sweep of confirmed orphans signals once, hard.
 /**
@@ -119,6 +133,22 @@ export function reap({ exec, now = () => Date.now() }) {
  *   in the v8-ignored CLI block, never in this measured function.
  * @returns {{ psAvailable: boolean, workersKilled: number }}
  */
+/**
+ * Does this `ps` command column belong to a vitest orchestrator or worker? Vitest 3's process title
+ * and Vitest 4's entrypoint path are different shapes; both are recognised, and neither matches a bare
+ * `vitest` word elsewhere in a command line. See the SAFETY note above.
+ *
+ * @param {string} command the command column of one `ps` row
+ * @returns {boolean}
+ */
+function isVitestProcess(command) {
+  return (
+    /\(vitest[\s)]/.test(command) ||
+    /node_modules\/vitest\/dist\/workers\//.test(command) ||
+    /\/vitest\/vitest\.mjs(\s|$)/.test(command)
+  );
+}
+
 export function sweepOrphanedVitestWorkers({ psExec, kill }) {
   let table;
   try {
@@ -135,7 +165,7 @@ export function sweepOrphanedVitestWorkers({ psExec, kill }) {
   const orphans = table
     .split("\n")
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
-    .filter((m) => m !== null && m[2] === "1" && /\(vitest[\s)]/.test(m[3]))
+    .filter((m) => m !== null && m[2] === "1" && isVitestProcess(m[3]))
     .map((m) => Number(m[1]));
 
   let killed = 0;

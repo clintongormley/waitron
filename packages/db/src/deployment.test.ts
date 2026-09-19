@@ -35,6 +35,12 @@ it("reads as unstamped when the table has not been created yet", async () => {
   // Same pre-migration handle: readSingletonRole must see the table as absent and answer "primary"
   // (an unstamped database is a sole primary) rather than throw.
   expect(await readSingletonRole(bare)).toBe("primary");
+  // The two readers that were never asked this question. readDeploymentAxes answers for both axes
+  // at once, so an unstamped database must read primary on both rather than throwing halfway; and
+  // a database with no table has no fence either, which is the "nothing to drain" answer the
+  // operator's accept-loss path reads.
+  expect(await readDeploymentAxes(bare)).toEqual({ mode: "primary", singletonRole: "primary" });
+  expect(await readFenceLsn(bare)).toBeNull();
   await bare.close();
 });
 
@@ -59,6 +65,14 @@ describeEachTarget("the deployment stamp", (target) => {
 
   it("reads as unstamped on a freshly migrated database", async () => {
     expect(await readDeploymentEnvironment(db)).toBeNull();
+  });
+
+  it("reads as a sole primary on a migrated database nothing has stamped", async () => {
+    // The table exists but holds no row — no migration seeds one, only stampDeployment does — so
+    // the readers fall back rather than reading an absent row. A box between its first migration
+    // and its first stamp is in exactly this state, and it must still sell.
+    expect(await readSingletonRole(db)).toBe("primary");
+    expect(await readDeploymentMode(db)).toBe("primary");
   });
 
   it("reads back what was stamped", async () => {

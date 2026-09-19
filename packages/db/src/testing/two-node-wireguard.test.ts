@@ -257,6 +257,25 @@ describe("startRealWireguardNode", () => {
     ).rejects.toThrow("apk add");
     expect(stops).toBe(1);
   });
+
+  it("surfaces the bring-up failure even when stopping the container also fails", async () => {
+    // The cleanup is best-effort. A daemon that refuses the stop must not replace the bring-up
+    // error, which is the one that says what went wrong.
+    let stops = 0;
+    const container: WireguardContainer = {
+      getConnectionUri: () => "postgres://unused/db",
+      exec: async () => ({ exitCode: 1, output: "temporary failure resolving" }),
+      stop: async () => {
+        stops += 1;
+        throw new Error("Cannot connect to the Docker daemon");
+      },
+    };
+    const plan: NodePlan = { alias: "node-a", tunnelHost: "10.99.0.1" };
+    await expect(
+      startRealWireguardNode({} as StartedNetwork, plan, async () => container),
+    ).rejects.toThrow("apk add");
+    expect(stops).toBe(1);
+  });
 });
 
 // Real-Docker smoke test for the WireGuard two-node fixture: two `postgres:18-alpine` nodes joined

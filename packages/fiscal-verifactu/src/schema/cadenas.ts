@@ -14,6 +14,9 @@ import { registrosFacturacion } from "./registros.js";
  * values that must match the immutable row exactly — and the mutable copy is the one that can
  * drift.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as packages/db/src/schema/sales.ts.
 export const cadenas = table(
   "cadenas",
   {
@@ -21,12 +24,16 @@ export const cadenas = table(
     // FK.
     nodeId: id("node_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => nodes.id),
+    /* v8 ignore stop */
     // Monotonic across SIF identities and NEVER reset. Re-registration breaks the chain POINTER
     // (below), not the counter: resetting to zero would collide head-on with
     // `registros_tenant_node_secuencia_uq`, and the sequence is ours anyway.
     secuencia: count("secuencia").notNull().default(0),
+    /* v8 ignore start */
     ultimoRegistroId: id("ultimo_registro_id").references(() => registrosFacturacion.id),
+    /* v8 ignore stop */
     ultimaHuella: label("ultima_huella"),
     actualizadoEn: ts("actualizado_en").notNull().defaultNow(),
   },

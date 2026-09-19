@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
@@ -41,7 +41,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * repo's real-Postgres test tier needs a local Docker daemon (plus `TESTCONTAINERS_RYUK_DISABLED`);
  * `dockerRequired` turns the raw testcontainers daemon error into that guidance when Docker is absent.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/core's real-Postgres suites require a running Docker daemon. They cannot be skipped: " +

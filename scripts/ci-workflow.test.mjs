@@ -395,13 +395,15 @@ function membersDeclaringTests() {
     .map((pkg) => pkg.name);
 }
 
-/** Every workspace member that declares the Vitest browser provider. */
+/** Every workspace member that declares the Vitest browser provider. Vitest 4 moved the provider
+ *  out of `@vitest/browser` into its own package (`@vitest/browser-playwright`, first published in
+ *  the 4.0.0 betas), so the Playwright one is what a browser package declares now. */
 function browserPackages() {
   return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .filter((pkg) => {
       const manifest = JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8"));
-      return manifest.devDependencies?.["@vitest/browser"] !== undefined;
+      return manifest.devDependencies?.["@vitest/browser-playwright"] !== undefined;
     })
     .map((pkg) => pkg.name);
 }

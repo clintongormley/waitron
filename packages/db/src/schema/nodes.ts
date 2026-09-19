@@ -24,11 +24,16 @@ import { locations } from "./tenants.js";
  * to keep the reshape off every existing bare-node fixture (`seedNode`, `seedNodesForSifContention`,
  * `drain-fixtures`); pre-production, so a later NOT NULL tightening is free.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const nodes = table("nodes", {
   id: id("id").primaryKey().defaultRandom(),
   locationId: id("location_id")
     .notNull()
+    /* v8 ignore start */
     .references(() => locations.id),
+  /* v8 ignore stop */
   name: label("name").notNull(),
   filingModule: label("filing_module"),
   taxModule: label("tax_module"),

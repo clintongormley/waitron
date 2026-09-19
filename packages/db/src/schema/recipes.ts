@@ -31,16 +31,23 @@ export const ingredients = table("ingredients", {
 
 /** The flat composition: which ingredients a product is made of. No quantity this slice (allergen
  * presence is qualitative). One row per (product, ingredient). */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const recipeLines = table(
   "recipe_lines",
   {
     id: id("id").primaryKey().defaultRandom(),
     productId: id("product_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => products.id),
+    /* v8 ignore stop */
     ingredientId: id("ingredient_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => ingredients.id),
+    /* v8 ignore stop */
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [

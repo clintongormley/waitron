@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { runMigrationSets } from "./postgres.js";
 import { startSharedContainer } from "./shared-container.js";
@@ -31,7 +31,7 @@ import { startSharedContainer } from "./shared-container.js";
  * unchanged and still exercised as a pure function (its warn and fatal branches included); the
  * globalSetup just gates the run on Docker one step earlier, with the same friendly message.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/db's real-Postgres suites require a running Docker daemon. They cannot be skipped: " +

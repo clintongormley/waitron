@@ -5,9 +5,11 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel (excluded like the sibling packages exclude theirs).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],

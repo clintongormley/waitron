@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -10,7 +10,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
  * Roles are cluster-wide, so setup creates the fixture once after core creates app_user.
  * Docker is required before any worker starts; returning teardown stops the container.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/fiscal-verifactu's real-Postgres suites require a running Docker daemon. They cannot " +

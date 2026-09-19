@@ -117,8 +117,9 @@ export async function createPostgresDb(
   // Testcontainers container stopping at test teardown, expected noise rather
   // than a fault — surfacing genuine connection instability belongs to
   // app-level monitoring, not this constructor.
-  /* v8 ignore next 2 */
+  /* v8 ignore start */
   pool.on("error", () => {});
+  /* v8 ignore stop */
   // Fail here rather than at the first query: a bad connection string that
   // surfaces inside a transaction looks like a schema fault, not a config one.
   const probe = await pool.connect();

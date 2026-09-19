@@ -4,9 +4,11 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // Process entries are exercised by a manual boot; their helpers are tested directly.
       exclude: [...coverageConfigDefaults.exclude, "src/bin.ts", "src/dev-bin.ts"],

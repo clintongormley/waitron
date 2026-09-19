@@ -1,9 +1,9 @@
 import axe from "axe-core";
-import { commands } from "@vitest/browser/context";
+import { commands } from "vitest/browser";
 import { beforeEach, expect } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 
-declare module "@vitest/browser/context" {
+declare module "vitest/browser" {
   interface BrowserCommands {
     // Moves the real cursor off every element, clearing CSS `:hover`. See `parkPointer` in
     // packages/ui/src/vitest-park-pointer.ts for why `userEvent.unhover()` cannot be used for this.

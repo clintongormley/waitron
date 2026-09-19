@@ -47,6 +47,10 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/payments",
 ];
 
+/** The `coverage.include` every package config declares. Read as text, like the thresholds below:
+ *  a test file's own `include` never collides with it because those name `*.test.ts` patterns. */
+const COVERAGE_INCLUDE = 'include: ["src/**/*.ts"]';
+
 /** A `thresholds: { … }` literal at the start of a line (so a `//` comment line never matches). */
 const THRESHOLDS_BLOCK = /^\s*thresholds:\s*\{([^}]*)\}/gm;
 const METRIC_PAIR = /(\w+):\s*(\d+)/g;
@@ -99,6 +103,34 @@ describe("every vitest config holds the coverage bar its package was assigned", 
         thresholds: parseThresholds(readFileSync(join(REPO_ROOT, path), "utf8"), path),
       }));
       expect(actual).toEqual(configs.map(({ label, bar }) => ({ label, thresholds: bar })));
+    },
+    PNPM_LS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "and every member measures its whole src tree, not only the files a test happened to load",
+    () => {
+      // Vitest 4 counts a file only when a test loaded it, where Vitest 3 counted every source
+      // file. An untested file therefore stops pulling the percentage down and starts being
+      // invisible — the gate reads HIGHER after code is added, which is the wrong direction for a
+      // gate to move. Naming the tree in `coverage.include` puts the untested file back in the
+      // table. Deleting that line from a config is a one-word diff nothing else would catch, so
+      // this case pins it for every member. The root project is not here: its own coverage table
+      // is `scripts/`, not a `src` tree.
+      const members = testedMembers();
+      const names = members.map(({ name }) => name);
+      expect(
+        HIGH_BAR_PACKAGES.filter((name) => !names.includes(name)),
+        "every high-bar package must be a workspace member (guards against a vacuous pass)",
+      ).toEqual([]);
+
+      const missing = members.filter(
+        ({ dir }) =>
+          !readFileSync(join(REPO_ROOT, dir, "vitest.config.ts"), "utf8").includes(
+            COVERAGE_INCLUDE,
+          ),
+      );
+      expect(missing.map(({ name }) => name)).toEqual([]);
     },
     PNPM_LS_TEST_TIMEOUT_MS,
   );

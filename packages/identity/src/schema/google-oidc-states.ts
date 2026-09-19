@@ -4,6 +4,9 @@ import { id, label, table, tsString } from "@waitron/db";
 
 /** One short-lived, single-use Google authorization-code ceremony. These rows stay local because
  * the browser must return to the node that issued the state and PKCE verifier. */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as packages/db/src/schema/sales.ts.
 export const googleOidcStates = table(
   "google_oidc_states",
   {
@@ -25,8 +28,10 @@ export const googleOidcStates = table(
     verifier: label("verifier").notNull(),
     expiresAt: tsString("expires_at").notNull(),
   },
+  /* v8 ignore start */
   (t) => [
     check("google_oidc_states_mode_ck", sql`${t.mode} in ('login', 'link')`),
     check("google_oidc_states_state_hash_ck", sql`length(${t.stateHash}) = 64`),
   ],
+  /* v8 ignore stop */
 );

@@ -1,4 +1,4 @@
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { submitOnEnter } from "./submit-on-enter.js";
 import "./components/wt-input.js";

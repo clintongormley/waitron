@@ -61,19 +61,19 @@ export const sales = table(
   "sales",
   {
     id: id("id").primaryKey().defaultRandom(),
-    // See ./series.ts's identical comment: the two-argument `.references()`
-    // form (with `onDelete`) is what makes v8 track this thunk as its own
-    // never-invoked function — drizzle-kit resolves it in a separate CLI
-    // process, never during `vitest run`. `v8 ignore` here keeps the explicit
+    // These thunks are resolved by `drizzle-kit generate` in its own CLI process, never by
+    // `vitest run`, so v8 reports them as never-invoked functions. The markers keep the explicit
     // `onDelete` rather than dropping it for coverage's sake.
     tillId: id("till_id")
       .notNull()
-      /* v8 ignore next */
+      /* v8 ignore start */
       .references(() => tills.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     seriesId: id("series_id")
       .notNull()
-      /* v8 ignore next */
+      /* v8 ignore start */
       .references(() => invoiceSeries.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     // Which node processed and chained this sale (node-id rekey, 2026-08-03).
     // NOT NULL — the fiscal write path always supplies it. The `(node_id) → nodes(id)` FK is
     // declared in `extraConfig` below (mirroring `sale_lines_sale_fk`/`tenders_sale_fk`), so this

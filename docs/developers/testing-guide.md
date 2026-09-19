@@ -121,15 +121,74 @@ bound a browser whose event loop has stopped. Preserve the job log and use an ou
 deadline, not a retry as proof of repair. Evidence and limits:
 `docs/superpowers/specs/2026-09-09-test-load-design.md`.
 
-## Vitest 3's fork limit belongs on the outer config, even with projects.
+## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
-Its shared pool reads `vitest.config.poolOptions`; per-project `singleFork` is a separate
-scheduling choice. Moving `maxForks: 4` inside fiscal-verifactu's project in #286 started 17
-workers on the local host, observed during a Sync migration stall. fiscal-verifactu has since dropped
-its projects. `scripts/fiscal-test-budget.test.ts` pins these configs and no others: fiscal-verifactu's
-outer `maxForks: 4`, and `packages/media/vitest.config.ts`, which still has projects, keeping
-`maxForks: 2` on its outer config with none inside a project. The test-load design records the live
-process and database probes.
+Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is
+set and only then falls back to the outer config's (`dist/chunks/cli-api.CnMVyzaz.js`). Run
+separately on a scratch fixture of four test files: an outer limit of 4 together with a project limit
+of 1 gave peak concurrency 1 across four distinct worker processes, and the same fixture without the
+project limit peaked at 4. Configs here depend on the project value winning — `packages/bookings`,
+`packages/payments-stripe`, `packages/payments-sumup` and `packages/venue-service` each set
+`maxWorkers: 1` inside a project.
+
+This section came from Vitest 3, where moving `maxForks: 4`
+inside fiscal-verifactu's project in #286 started 17 workers on the local host, observed during a
+Sync migration stall. fiscal-verifactu has since dropped its projects. The test-load design records
+the live process and database probes.
+
+`scripts/fiscal-test-budget.test.ts` pins these configs and no others: fiscal-verifactu's outer
+limit of 4, and `packages/media/vitest.config.ts`, which still has projects, keeping its limit of 2
+on the outer config with none inside a project. That is a pin on the arrangement those two packages
+chose, not on how Vitest resolves the limit.
+
+**The option's NAME changed with Vitest 4** (2026-09-19): `poolOptions.forks.maxForks` became the
+top-level `maxWorkers`, and `poolOptions.forks.singleFork: true` became `maxWorkers: 1` — the pool
+is still forks by default, so the "one fork" reasoning behind the old name still holds, but the word
+`singleFork` no longer exists in a config. Vitest 4 says so itself when it meets the old spelling:
+"`poolOptions` was removed in Vitest 4. All previous `poolOptions` are now top-level options."
+`browser.fileParallelism` still works at 4.1.11 — the resolver reads
+`browser.fileParallelism ??= options.fileParallelism`, so a project-level `fileParallelism` reaches
+the browser pool and the configs here set it there, which is the spelling that survives into 5.
+
+**What the rename costs, measured.** The two spellings do not run the same way:
+`poolOptions.forks.singleFork: true` ran a package's test files in ONE reused process, while
+`maxWorkers: 1` runs them one at a time in a FRESH process per file. Same package, same tests, two
+runs each: `@waitron/shared` (17 test files) reports 1.58s and 1.56s under 4.1.11 with
+`maxWorkers: 1`, against 567ms and 588ms under 3.2.7 with `singleFork: true`. Most vitest configs in
+this workspace carry that pin, so the cost is paid widely. This is recorded as a cost, not as a
+reason to change anything: the alternative that would recover it, `isolate: false`, would newly share
+module state between test files, which the upgrade deliberately did not do.
+
+### A package's `coverage.include` does not mean "this package's src"
+
+Measured on 4.1.11, reading both installed copies. `include: ["src/**/*.ts"]` is matched by
+picomatch against the ABSOLUTE file path with `contains: true`, so any path with a matching
+segment matches, wherever that segment sits. What normally keeps another package out is the
+external check — and in 4.1.11 that check is
+`roots.every((root) => !filename.startsWith(root))`, a bare string prefix with no trailing
+separator. So for `packages/sync`, a file at `packages/sync-enrolment/src/migration-tables.ts` is not
+judged external — its path starts with the `packages/sync` root — and the include then matches it on
+its `src/…/*.ts` segment, so it lands in `packages/sync`'s report.
+
+`packages/sync` is the only package this reaches today, because it is the only one whose tests load
+source from a sibling whose directory name extends its own: its `src/index.ts` barrel re-exports
+`@waitron/sync-enrolment`, and `src/errors.test.ts` imports the barrel. The numbers: 114 statements
+at 81.57% with the sibling counted, 91 at 100% once `"**/sync-enrolment/**"` is in that package's
+`coverage.exclude`. Every other package's `coverage-summary.json` in the same run holds only its own
+files, and `packages/membership`, which imports `@waitron/shared` in its source, is the control —
+`shared` is not a prefix of `membership`, so its files never enter the report.
+
+Vitest 5 fixes this: it matches the include against the path RELATIVE to the matching root and
+requires `${root}/`. The exclude line is what a 4.x tree needs; a later Vitest 5 upgrade can drop it
+and should re-measure rather than assume.
+
+The pairs to watch when adding a package, since the hazard is a NAME prefix and not a dependency:
+`sync`/`sync-enrolment`, `country`/`country-es`/`country-gb`/`country-packs`,
+`fiscal`/`fiscal-verifactu`/`fiscal-none`, `payments`/`payments-stripe`/`payments-sumup`,
+`workforce`/`workforce-es` — every place under `packages/` where one package directory's name is a
+prefix of another's. Only a pair where the shorter package's own tests load the longer one's source
+is actually exposed. Under `apps/` there is no such pair: `dashboard`, `print-agent`, `server`,
+`setup` and `till`, none of them a prefix of another.
 
 ## Vitest's per-test timeout does not bound a blocking child — it fails healthy runs that outlast it.
 
@@ -539,12 +598,20 @@ in the root `coverage.include` and excluded from its package's.
 
 ## Prove a guard by deletion, and confirm a negative control fails for the reason you think.
 
-## Vitest's default coverage excludes swallow every dot-prefixed path (`**/[.]**`), and `include`/`exclude` replace rather than merge.
+## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 
-The root config's first version measured `All files | 0 | 0 | 0 | 0`, wrote `"Unknown"` percentages
-and **exited 0** with the thresholds intact. Whenever `include` points inside a dot-directory, read
-the per-file table, not the exit code. (The root config now carries no `exclude`; nothing it
-measures is dot-prefixed.)
+`coverageConfigDefaults.exclude` is `[]` in 4.1.11 and the object has no `all` key; in 3.2.7 it was a
+17-entry list — `**/[.]**` among them — with `all: true`. No default exclude GLOBS are applied for you
+now: what scopes a package's report is its own `coverage.include`. The provider still drops four
+things in code rather than as globs (`@vitest/coverage-v8@4.1.11`'s `dist/index.js`): anything whose
+URL is not `file://`, anything under `node_modules`, and vitest's and vite's own client chunks.
+
+The failure this section was written for is about the exit code rather than about the default list,
+so it still stands. The root config's first version measured `All files | 0 | 0 | 0 | 0`, wrote
+`"Unknown"` percentages and **exited 0** with the thresholds intact — that was a Vitest 3 run whose
+`include` pointed inside a dot-directory the default list swallowed. Whenever a config's numbers
+could plausibly be nothing, read the per-file table, not the exit code. (The root config now carries
+no `exclude`.)
 
 ## `errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`,
 
@@ -600,7 +667,7 @@ false positive that SKIPS a needed grant.
 ---
 
 Adding a new real-PG test package: the shared-container pattern and its knobs (`useTemplateDb`,
-`cloneTemplate`, `singleFork` vs `maxForks`, template-key naming) are in `docs/backlog.md` →
+`cloneTemplate`, the worker limit, template-key naming) are in `docs/backlog.md` →
 _Reference_.
 
 ## Concurrent coverage runs must not share a package's report directory
@@ -616,9 +683,18 @@ second run its own `--coverage.reportsDirectory`. Receipt:
 which is the more expensive half. The receipt it cites already worked that way —
 `docs/superpowers/plans/2026-09-12-setup-wizard-a2.md` records that "the follow-up used a separate
 `/tmp` report directory" — so the stronger remedy was the practice before it was the rule. A
-directory left inside the package is measured as source by the next PACKAGE run: of the sixteen
-patterns in vitest's default coverage excludes, the only two that would catch such a directory are
-`coverage/**` and `**/[.]**`. Both qualifiers matter, and they rest on different evidence. The NAME
+directory left inside the package was measured as source by the next PACKAGE run. Every reading in
+this section was taken on Vitest 3.2.7, where the only two entries in the default coverage excludes
+that would have caught such a directory were `coverage/**` and `**/[.]**`. That list is gone —
+`coverageConfigDefaults.exclude` is `[]` in 4.1.11 — so what decides now is the package's own
+`coverage.include: ["src/**/*.ts"]`. On 4.1.11 that closes this route: untested-file discovery calls
+`glob(include, { cwd: root, … })` with `root` at the package directory (vitest 4.1.11's
+`getUntestedFilesByRoot`), so a directory outside `src/` is never scanned, and the `contains` match
+described in the include section above widens only over files a test actually loaded — which a report
+directory's own assets never are. Keep putting the second directory outside the package anyway: it
+costs nothing and does not depend on which Vitest is installed.
+
+Both qualifiers matter, and they rest on different evidence. The NAME
 one was measured on
 2026-09-18 in `packages/scheduler`: `--coverage.reportsDirectory=.coverage-review` does NOT
 contaminate, the next run reading 402/404 at exit 0. The PACKAGE one is a reading, not a run — the

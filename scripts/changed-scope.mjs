@@ -166,7 +166,7 @@ export const UI_PACKAGE = "@waitron/ui";
  * consumer after @waitron/ui.
  *
  * It gets a shard of its own for the SAME reason @waitron/ui does, applied before the fact rather
- * than after it. apps/till drives Chromium through @vitest/browser + Playwright exactly as
+ * than after it. apps/till drives Chromium through Vitest's browser mode and its Playwright provider exactly as
  * @waitron/ui does, and the receipt for what a Chromium consumer does to the shared `test-light`
  * shard is on UI_PACKAGE above: test-light HUNG on the workspace's only other browser package,
  * twice, reproducibly enough to name both runs. This split is therefore a MITIGATION taken on that
@@ -182,8 +182,9 @@ export const TILL_PACKAGE = "@waitron/till";
  * Chromium consumer after @waitron/ui and apps/till.
  *
  * It gets a shard of its own for the SAME reason apps/till does, and on the same precedent rather
- * than on a hang of its own. apps/dashboard drives Chromium through @vitest/browser + Playwright
- * exactly as @waitron/ui and apps/till do (its package.json carries @vitest/browser and a
+ * than on a hang of its own. apps/dashboard drives Chromium through Vitest's browser mode and its Playwright
+ * provider exactly as @waitron/ui and apps/till do (its package.json carries
+ * @vitest/browser-playwright and a
  * `test:coverage` that runs Vitest in the browser), and the receipt for what a Chromium consumer
  * does to the shared `test-light` shard is on UI_PACKAGE above: test-light HUNG on the workspace's
  * first browser package, twice, reproducibly enough to name both runs. This split is therefore a
@@ -199,8 +200,9 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
  * FOURTH Chromium consumer after @waitron/ui, apps/till and apps/dashboard.
  *
  * It gets a shard of its own for the SAME reason apps/dashboard does, and on the same precedent
- * rather than on a hang of its own. apps/setup drives Chromium through @vitest/browser + Playwright
- * exactly as the other three do (its package.json carries @vitest/browser and a `test:coverage` that
+ * rather than on a hang of its own. apps/setup drives Chromium through Vitest's browser mode and its Playwright
+ * provider exactly as the other three do (its package.json carries @vitest/browser-playwright and a
+ * `test:coverage` that
  * runs Vitest in the browser), and the receipt for what a Chromium consumer does to the shared
  * `test-light` shard is on UI_PACKAGE above: test-light HUNG on the workspace's first browser
  * package, twice, reproducibly enough to name both runs. This split is therefore a MITIGATION taken
@@ -231,24 +233,24 @@ export const PAYMENTS_SUMUP_PACKAGE = "@waitron/payments-sumup";
  * apps/server was 341.7s of test-light's 358s wall-clock — its 63-file suite, 277s of that test
  * execution — so on its own it set test-light's floor, and no amount of re-sharding the other twenty
  * packages could drop the shard below it. On a dedicated runner it stops being that floor, AND it
- * runs MULTI-FORK there rather than singleFork: the @vitest/coverage-v8 branch under-merge that held
- * apps/server to one fork is a `pnpm -r` CONTENTION artifact, and apps/server never runs under that
+ * runs in SEVERAL workers there rather than one: the @vitest/coverage-v8 branch under-merge that held
+ * apps/server to a single worker is a `pnpm -r` CONTENTION artifact, and apps/server never runs under that
  * contention — it is terminal in the workspace graph so `pnpm -r` runs it alone, and the only
  * `--no-sort` shards (the two light ones) exclude it. The receipt for why the flip is safe is on
- * apps/server/vitest.config.ts's poolOptions.
+ * apps/server/vitest.config.ts's `maxWorkers`.
  */
 export const SERVER_PACKAGE = "@waitron/server";
 
 /**
- * The `test-fiscal-verifactu` shard's package: packages/fiscal-verifactu. It is a `maxForks: 4`
+ * The `test-fiscal-verifactu` shard's package: packages/fiscal-verifactu. It is a `maxWorkers: 4`
  * suite — thousands of real AEAT fixtures across 33 files — so, like the workspace's two other
- * maxForks:4 suites (packages/db → test-heavy, apps/server → test-server), it wants all four of a
- * runner's cores to itself and belongs on a runner of its own. It was the LAST maxForks:4 package
+ * `maxWorkers: 4` suites (packages/db → test-heavy, apps/server → test-server), it wants all four of a
+ * runner's cores to itself and belongs on a runner of its own. It was the LAST `maxWorkers: 4` package
  * still sharing, in the light shards, where it oversubscribed its bin-mates: measured on the
  * two-shard run 32425078097, fiscal-verifactu ran 219s inside test-light-a's 270s while the lighter
- * test-light-b packed ten packages into 127s. Its own runner lets its maxForks:4 run uncontended AND
- * stops it inflating whatever it shared a bin with. Unlike apps/server (whose split flipped
- * singleFork→maxForks), no config change here — it already multi-forks; see its vitest.config.ts. NOT
+ * test-light-b packed ten packages into 127s. Its own runner lets its `maxWorkers: 4` run uncontended AND
+ * stops it inflating whatever it shared a bin with. Unlike apps/server (whose split took it from one
+ * worker to four), no config change here — it already runs several; see its vitest.config.ts. NOT
  * to be confused with the `verifactu` gate, the mutation run over the separate packages/verifactu.
  */
 export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";

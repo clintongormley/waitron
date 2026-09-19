@@ -5,7 +5,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-// The first @vitest/browser + Playwright suite in apps/till. Its whole job is to de-risk the
+// The first browser-mode Playwright suite in apps/till. Its whole job is to de-risk the
 // browser toolchain FOR THIS WORKTREE before Tasks 9-19 build on it: prove Chromium actually
 // boots under the runner and that a @waitron/ui primitive registers (via its @customElement
 // decorator) and renders when mounted into the real DOM. If this suite is red, the runner is

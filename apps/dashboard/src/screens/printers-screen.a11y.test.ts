@@ -1,5 +1,5 @@
 import { expect, afterEach, describe, it, vi } from "vitest";
-import { page, userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import "./printers-screen.js";

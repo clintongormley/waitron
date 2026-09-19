@@ -72,8 +72,9 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       if (code !== "ENOENT") {
         // `code` is optional on the ERROR TYPE, but every fs read failure this route can hit (EISDIR,
         // EACCES, ENOTDIR, …) sets it, so the `?? "unknown"` fallback is type-required but unreachable.
-        /* v8 ignore next */
+        /* v8 ignore start */
         log("error", "setup.ca_read_failed", { code: code ?? "unknown" });
+        /* v8 ignore stop */
       }
       return c.json(
         {

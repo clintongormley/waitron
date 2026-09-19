@@ -21,8 +21,9 @@ export async function runWithDeadline(
       try {
         process.kill(-child.pid, signal);
       } catch (error) {
-        /* v8 ignore next -- signalling our own process group can only fail when it has exited. */
+        /* v8 ignore start -- signalling our own process group can only fail when it has exited. */
         if (error.code !== "ESRCH") throw error;
+        /* v8 ignore stop */
       }
     };
     const finish = () => {

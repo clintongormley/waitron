@@ -738,7 +738,7 @@ describe("till-tender-pay", () => {
 
   // -----------------------------------------------------------------------------------------------
   // Integrated card terminal (sub-project 7, Task 9): the collecting / card_outcome state machine,
-  // Cancel as a client-side abort, and the tip/offline-consent affordances. UI-unit (@vitest/browser):
+  // Cancel as a client-side abort, and the tip/offline-consent affordances. UI-unit (browser mode):
   // this is a pure DOM+event concern — no DB, no privilege — so the hermetic browser target used by
   // this whole file is the right one (CLAUDE.md §4), unchanged from every other test above.
   // -----------------------------------------------------------------------------------------------

@@ -182,6 +182,45 @@ describe("reap-testcontainers", () => {
       expect(kills).toEqual([]);
     });
 
+    it("SIGKILLs an orphaned Vitest 4 worker, which carries no process title at all", () => {
+      // Vitest 4 sets no `process.title` and spawns its own workers, so the title the Vitest 3 rows
+      // above match never appears. These two rows are real `ps -axo pid=,ppid=,command=` output from a
+      // 4.1.11 run of packages/identity on 2026-09-19, with two edits: the parent is rewritten to 1 to
+      // make them the orphans this sweep exists for, and the long pnpm store hash is shortened to
+      // `hash` so the row fits. The orchestrator runs `vitest/vitest.mjs`, the worker runs
+      // `vitest/dist/workers/forks.js`.
+      const { psExec, kill, kills } = fakeProcs({
+        ps: [
+          "89211     1 node /repo/packages/identity/node_modules/.bin/../vitest/vitest.mjs run",
+          "89293     1 /opt/homebrew/Cellar/node/26.7.0/bin/node --experimental-import-meta-resolve --require /repo/node_modules/.pnpm/vitest@4.1.11_hash/node_modules/vitest/suppress-warnings.cjs /repo/node_modules/.pnpm/vitest@4.1.11_hash/node_modules/vitest/dist/workers/forks.js",
+        ].join("\n"),
+      });
+      expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
+        psAvailable: true,
+        workersKilled: 2,
+      });
+      expect(kills).toEqual([
+        { pid: 89211, signal: "SIGKILL" },
+        { pid: 89293, signal: "SIGKILL" },
+      ]);
+    });
+
+    it("spares a process that merely reads a file inside vitest's dist — the Vitest 4 control", () => {
+      // The two Vitest 4 patterns ask for vitest's WORKER directory or the orchestrator entrypoint,
+      // not for "a path under node_modules/vitest appears somewhere". A tool pointed at another file
+      // in that same package must survive, orphaned or not. What this case does NOT establish, and
+      // the sweep does not promise: a row whose argv names a real worker file is killed, because the
+      // patterns match anywhere in the row rather than at its end.
+      const { psExec, kill, kills } = fakeProcs({
+        ps: "77778 1 node /tmp/inspect.mjs --entry /repo/node_modules/vitest/dist/index.js\n",
+      });
+      expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
+        psAvailable: true,
+        workersKilled: 0,
+      });
+      expect(kills).toEqual([]);
+    });
+
     it("spares a non-vitest process even when it is itself orphaned to launchd", () => {
       // Plenty of legitimate daemons run under launchd (ppid 1); the vitest-command guard is what keeps
       // the sweep from touching them.

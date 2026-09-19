@@ -22,8 +22,9 @@ export async function enrolDeviceForTest(
       stationId: input.stationId ?? null,
       registerId: input.registerId ?? null,
     });
-    /* v8 ignore next -- the fixture always passes the request's own number */
+    /* v8 ignore start -- the fixture always passes the request's own number */
     if (!accepted.ok) throw new Error("enrolDeviceForTest: mismatch");
+    /* v8 ignore stop */
     return { deviceId: accepted.deviceId, token: made.token };
   });
 }

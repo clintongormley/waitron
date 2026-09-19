@@ -9,6 +9,9 @@ import { count, id, label, nodes, table, ts } from "@waitron/db";
  * actually generated them. (Node-id rekey, 2026-08-03: the SIF is the node — #33 — so this moved
  * from till to node.)
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as packages/db/src/schema/sales.ts.
 export const registroSif = table(
   "registro_sif",
   {
@@ -17,7 +20,9 @@ export const registroSif = table(
     // the node — #33). Plain one-argument FK.
     nodeId: id("node_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => nodes.id),
+    /* v8 ignore stop */
     nif: label("nif").notNull(),
     idSistemaInformatico: label("id_sistema_informatico").notNull(),
     numeroInstalacion: count("numero_instalacion").notNull(),
@@ -57,5 +62,7 @@ export const contadoresInstalacion = table(
     idSistemaInformatico: label("id_sistema_informatico").notNull(),
     proximoNumero: count("proximo_numero").notNull().default(1),
   },
+  /* v8 ignore start */
   (t) => [primaryKey({ columns: [t.nif, t.idSistemaInformatico] })],
+  /* v8 ignore stop */
 );

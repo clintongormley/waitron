@@ -432,9 +432,21 @@ container or browser test** — most of these rules exist because a test passed 
   never a retry as proof of repair.
 - **A recurrent real-PG stall needs a retained log and a live database snapshot.** Locate the stalled
   operation before assigning its cause to resource contention.
-- **Vitest 3's fork limit belongs on the outer config, even with projects.** Moving `maxForks` inside
-  a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which
-  pins only fiscal-verifactu's and media's configs.
+- **On Vitest 4 a project's own `maxWorkers` wins, and the outer config's is only the fallback.**
+  Measured on 4.1.11 over four test files: an outer limit of 4 with a project limit of 1 ran one file
+  at a time, and the same fixture without the project limit ran four. Configs here depend on that —
+  `packages/bookings`, `packages/payments-stripe`, `packages/payments-sumup` and
+  `packages/venue-service` each set `maxWorkers: 1` inside a project. **A cap that must apply to
+  every project still belongs on the outer config**: a project that sets none of its own falls back
+  to the outer one, and with none there to `availableParallelism() - 1`. The rule this replaces came
+  from Vitest 3, where a limit moved inside a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which pins the arrangement
+  fiscal-verifactu and media chose and nothing about how Vitest resolves the limit.
+- **A package that splits into two projects numbers them from 1, never 0.** Vitest 4 lifts a
+  `groupOrder: 0` project that runs one isolated worker out of its group and appends it after every
+  other group, so a database project numbered 0 runs AFTER the browser project it was ordered before.
+  Measured on `packages/bookings` against the same run on Vitest 3. Guard:
+  `scripts/bookings-test-budget.test.ts` — which pins bookings alone, not the three other packages
+  with the same shape.
 - **A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs**, and that timeout
   defaults to 5s. It does not shorten a `spawnSync` timeout or interrupt a blocking child — the kill
   still fires — it fails the test for its duration alone. Set the bound above the longest a healthy

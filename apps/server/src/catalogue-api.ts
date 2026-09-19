@@ -1398,11 +1398,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
  * not a request fault — the same posture `management-api.ts`'s namesake takes.
  */
 function requireVenueCfg(deps: CatalogueApiDeps): TillConfig {
-  /* v8 ignore next 4 -- boot always threads a venueCfg; only a harness that omits it AND sends editor
+  /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND sends editor
      routing reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
   if (deps.venueCfg === undefined) {
     throw new Error("mountCatalogueApi: venueCfg is required for the product editor's routing");
   }
+  /* v8 ignore stop */
   return deps.venueCfg;
 }
 

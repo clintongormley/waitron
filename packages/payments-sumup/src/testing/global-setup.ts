@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
@@ -11,7 +11,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
  * roles must be distinct across every package sharing a container, so this package names its own
  * (`sumup_probe`, not stripe's `rls_probe`).
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/payments-sumup's real-Postgres suites require a running Docker daemon. They cannot " +

@@ -18,6 +18,9 @@ import { registrosFacturacion } from "./registros.js";
  * need is created now, because adding columns to a table the write path already populates is a
  * migration against live fiscal data.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as packages/db/src/schema/sales.ts.
 export const envios = table(
   "envios",
   {
@@ -25,7 +28,9 @@ export const envios = table(
     // is no shape of this table in which a registro can have two envío rows.
     registroId: id("registro_id")
       .primaryKey()
+      /* v8 ignore start */
       .references(() => registrosFacturacion.id),
+    /* v8 ignore stop */
     estado: label("estado").notNull().default("pendiente"),
     intentos: count("intentos").notNull().default(0),
     // Persisted, never an in-memory timer. This is what makes art. 16.4's hourly duty survive a

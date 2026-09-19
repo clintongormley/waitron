@@ -90,12 +90,12 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.5",
-    "@vitest/coverage-v8": "^3.0.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "@waitron/print-agent": "workspace:*",
     "esbuild": "^0.28.2",
     "otplib": "^13.5.0",
     "tsx": "^4.23.13",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.11"
   }
 }

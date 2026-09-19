@@ -120,20 +120,23 @@ export async function createJoinRequest(
       const candidate = twoDigits(source() % 100);
       if (!forbidden.has(candidate)) return candidate;
     }
-    /* v8 ignore next */
+    /* v8 ignore start */
     return undefined;
+    /* v8 ignore stop */
   };
   const spokenFor = new Set([...reals, ...decoys]);
   const nextReal = input.numbers ?? (() => randomInt(0, 100));
   const verificationNumber = pick(nextReal, spokenFor);
-  /* v8 ignore next */
+  /* v8 ignore start */
   if (verificationNumber === undefined) throw new AppError("device.join_full", {});
+  /* v8 ignore stop */
   const decoyNumbers: string[] = [];
   const decoyForbidden = new Set([...reals, verificationNumber]);
   while (decoyNumbers.length < 2) {
     const d = pick(() => randomInt(0, 100), decoyForbidden);
-    /* v8 ignore next */
+    /* v8 ignore start */
     if (d === undefined) throw new AppError("device.join_full", {});
+    /* v8 ignore stop */
     decoyNumbers.push(d);
     decoyForbidden.add(d);
   }

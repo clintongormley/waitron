@@ -16,6 +16,9 @@ import { count, id, label, table, ts } from "./columns.js";
  * that fails against any database that already ran the baseline. The accessors are exported from
  * the package barrel (`../index.ts`, via `../mirror-config.ts`); that surface is unaffected.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const mirrorConfig = table(
   "mirror_config",
   {
@@ -32,5 +35,7 @@ export const mirrorConfig = table(
     originNodeId: id("origin_node_id").notNull(),
     adoptedAt: ts("adopted_at").notNull().defaultNow(),
   },
+  /* v8 ignore start */
   (t) => [check("mirror_config_singleton_ck", sql`${t.id} = 1`)],
+  /* v8 ignore stop */
 );

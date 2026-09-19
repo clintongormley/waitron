@@ -18,7 +18,7 @@ import { databaseUrl, startPostgresContainer, type StartedContainer } from "./po
  * boundary, and each worker reads it with `inject("sharedPg")` (typed by the `ProvidedContext`
  * augmentation below). A globalSetup's return value is its globalTeardown, so a package wires it as:
  *
- *     export default async function ({ provide }: GlobalSetupContext) {
+ *     export default async function ({ provide }: TestProject) {
  *       const { handle, teardown } = await startSharedContainer({ templates: { … }, roles: [ … ] });
  *       provide("sharedPg", handle);
  *       return teardown;

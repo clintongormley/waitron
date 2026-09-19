@@ -493,8 +493,9 @@ function startListening(
     // `startServer`'s public surface can emit a synthetic 'error' event on the raw `http.Server`
     // once it is listening (it is never exposed on `StartedServer`), so this branch is untestable
     // the same way `error.code ?? "unknown"` below already is documented to be.
-    /* v8 ignore next */
+    /* v8 ignore start */
     if (bound) return;
+    /* v8 ignore stop */
     const failure = new AppError("server.listen_failed", {
       port: config.httpPort,
       // `error.code` is optional on `NodeJS.ErrnoException`'s TYPE, but every real listen failure
@@ -504,8 +505,9 @@ function startListening(
       // raw `http.Server` this handler is attached to is never exposed on `StartedServer`) — the
       // same shape of unreachable-but-type-required branch `loop.ts`'s `realSleep` documents rather
       // than forces.
-      /* v8 ignore next */
+      /* v8 ignore start */
       code: error.code ?? "unknown",
+      /* v8 ignore stop */
     });
     // NOT `log(...)` followed by a bare `process.exit(1)`: `log`'s sink is `process.stdout.write`
     // discarding any signal of completion, and on a pipe (Docker, systemd) that write is
@@ -622,8 +624,9 @@ export function startLandingListener(
       port: config.landingPort,
       // `code` is optional on the error TYPE, but every listen failure this can hit (EACCES,
       // EADDRINUSE, …) sets it; the fallback is type-required but unreachable in practice.
-      /* v8 ignore next */
+      /* v8 ignore start */
       code: error.code ?? "unknown",
+      /* v8 ignore stop */
     });
   });
   return {

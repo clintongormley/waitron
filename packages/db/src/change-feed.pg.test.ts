@@ -12,7 +12,9 @@ describe("database change feed", () => {
   beforeAll(async () => {
     await suite.admin.execute(sql`
       create table live_probe (id text primary key, tenant_id text not null, printer_id text, secret text);
-      grant select, insert, update, delete on live_probe to app_user
+      grant select, insert, update, delete on live_probe to app_user;
+      create table live_probe_alone (id text primary key, tenant_id text not null);
+      grant select, insert, update, delete on live_probe_alone to app_user
     `);
     await installChangeFeed(suite.admin, [
       {
@@ -20,6 +22,10 @@ describe("database change feed", () => {
         type: "print-job",
         related: [{ type: "printer", column: "printer_id" }],
       },
+      // A source with no related objects at all — most of the real sources are this shape, and the
+      // trigger takes its related list as a literal argument, so an omitted list has to become an
+      // empty JSON array rather than the word "undefined".
+      { table: "live_probe_alone", type: "alone" },
     ]);
   });
 
@@ -53,6 +59,24 @@ describe("database change feed", () => {
             ],
           },
         ]),
+      );
+    } finally {
+      await listener.end();
+    }
+  });
+
+  it("publishes a source that declares no related objects, carrying only its own identity", async () => {
+    const listener = new pg.Client({ connectionString: suite.pg.uri });
+    const received: unknown[] = [];
+    await listener.connect();
+    try {
+      listener.on("notification", (notification) =>
+        received.push(JSON.parse(notification.payload!)),
+      );
+      await listener.query("listen waitron_changes");
+      await suite.admin.execute(sql`insert into live_probe_alone values ('a1', 'tenant-a')`);
+      await vi.waitFor(() =>
+        expect(received).toEqual([{ resources: [{ type: "alone", id: "a1" }] }]),
       );
     } finally {
       await listener.end();

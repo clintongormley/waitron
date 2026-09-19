@@ -1,4 +1,5 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+import { playwright } from "@vitest/browser-playwright";
 
 // Separate Node and browser projects share one coverage report. Run Node first so Chromium
 // does not compete with this package's PostgreSQL/PGlite work, and bound browser concurrency.
@@ -8,8 +9,13 @@ export default defineConfig({
       {
         test: {
           name: "node",
-          sequence: { groupOrder: 0 },
+          // Numbered from 1, not 0: Vitest 4 lifts a groupOrder-0 project that runs one isolated
+          // worker out of its group and appends it after every other group, which put Chromium
+          // ahead of this project. Measured on packages/bookings, against the same run on Vitest 3:
+          // with 0/1 the browser project's first test precedes this project's, with 1/2 it follows.
+          sequence: { groupOrder: 1 },
           globals: true,
+          clearMocks: false,
           // Migrate the shared templates once before this project's workers start.
           globalSetup: ["./src/testing/global-setup.ts"],
           include: ["src/**/*.test.ts"],
@@ -19,10 +25,10 @@ export default defineConfig({
           // which vitest does not bound by hookTimeout.
           testTimeout: 120_000,
           hookTimeout: 180_000,
-          // Keep singleFork (CLAUDE.md §4): @vitest/coverage-v8 under-merges BRANCH coverage across
+          // Keep one worker (CLAUDE.md §4): @vitest/coverage-v8 under-merges BRANCH coverage across
           // fork workers, and a package this size has few enough branches that a handful of mis-merged
           // ones sink the ratio under the branch gate.
-          poolOptions: { forks: { singleFork: true } },
+          maxWorkers: 1,
         },
       },
       {
@@ -30,15 +36,18 @@ export default defineConfig({
         // globalSetup (a browser test must never boot Docker). Scoped to the `./dashboard` sub-path.
         test: {
           name: "browser",
-          sequence: { groupOrder: 1 },
+          sequence: { groupOrder: 2 },
           globals: true,
+          clearMocks: false,
           include: ["src/dashboard/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+          // The project's own `fileParallelism` is where Vitest 4 reads this: it fills
+          // `browser.fileParallelism` from this key when the browser block does not set it.
+          fileParallelism: false,
           browser: {
             enabled: true,
-            provider: "playwright",
+            provider: playwright({}),
             headless: true,
-            fileParallelism: false,
             instances: [{ browser: "chromium" }],
           },
         },
@@ -46,6 +55,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,

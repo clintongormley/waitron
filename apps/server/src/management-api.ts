@@ -474,11 +474,12 @@ function requireDeviceProfileId(id: string): string {
  * takes (`till-config.ts`).
  */
 function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
-  /* v8 ignore next 4 -- boot always threads venueCfg; only a harness that omits it AND hits a zone/table
+  /* v8 ignore start -- boot always threads venueCfg; only a harness that omits it AND hits a zone/table
      route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
   if (deps.venueCfg === undefined) {
     throw new Error("mountManagementApi: venueCfg is required for the zone/table config routes");
   }
+  /* v8 ignore stop */
   return deps.venueCfg;
 }
 

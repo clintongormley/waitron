@@ -20,15 +20,22 @@ export type IncidentSeverity = "warning" | "error";
  * (`apps/dashboard/src/i18n/alert-messages.ts`). A prose column here would reach a screen
  * untranslatable, which is the constraint spec §9 places on this layer specifically.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const incidents = table(
   "incidents",
   {
     id: id("id").primaryKey().defaultRandom(),
     tillId: id("till_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => tills.id),
+    /* v8 ignore stop */
     /** Nullable: plan 3's drainer raises incidents with no sale attached. */
+    /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
+    /* v8 ignore stop */
     code: label("code").notNull(),
     params: json<Record<string, unknown>>("params").notNull().default({}),
     severity: label("severity").$type<IncidentSeverity>().notNull(),

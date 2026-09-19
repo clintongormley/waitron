@@ -102,8 +102,9 @@ async function resolvePrinterAndReceipt(
   const printer = await resolveReceiptPrinter(tx, cfg);
   if (printer === undefined) return undefined;
   const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, duplicate, printer);
-  /* v8 ignore next -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
+  /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
   if (receiptBytes === undefined) return undefined;
+  /* v8 ignore stop */
   return { printer, receiptBytes };
 }
 

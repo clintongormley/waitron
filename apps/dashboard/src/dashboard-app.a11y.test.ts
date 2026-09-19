@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { commands } from "@vitest/browser/context";
+import { commands } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 
-declare module "@vitest/browser/context" {
+declare module "vitest/browser" {
   interface BrowserCommands {
     // Resizes the Playwright viewport to cross Task 12's 48rem drawer breakpoint (fires matchMedia
     // change → flips the shell's `narrow` state). Restore a desktop width in a finally.

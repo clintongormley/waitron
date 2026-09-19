@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
@@ -28,7 +28,7 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * globalSetup runs for every package test, so Docker is required even for filtered PGlite cases.
  * Returning teardown stops the shared container when the run finishes.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/reporting's real-Postgres suites require a running Docker daemon. They cannot be " +
