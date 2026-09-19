@@ -41,7 +41,7 @@
     "@waitron/core": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/verifactu": "workspace:*",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "pg": "^8.23.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
