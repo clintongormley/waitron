@@ -250,13 +250,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 400, which is also what the default would give: it is a CLIENT request fault, the caller having
   // sent a selection the list's own published counts refuse.
   "extras.limit_exceeded": 400,
-  // `product.in_use` is DELIBERATELY ABSENT, though Task 6 of the plan names it beside the `extras.*`
-  // codes. No route here can raise it: nothing in the tree throws it
-  // (`grep -rn product.in_use apps packages --include="*.ts"` on 2026-09-20 finds only its
-  // declaration in `packages/catalogue/src/errors.ts`), and no route on this surface or any other
-  // deletes a product (`grep -rn "app.delete(" apps/server/src --include="*.ts"`, same date, lists
-  // every DELETE route and none of them is a product). An entry would claim a catalogue route can
-  // answer with it.
+  // 409 for the same reason as the three `*.in_use` codes above, and unthrown like two of them:
+  // `grep -rn 'product.in_use' apps packages --include="*.ts"` on 2026-09-20 finds only the
+  // declaration in `packages/catalogue/src/errors.ts`, and no route anywhere deletes a product
+  // (`grep -rn "app.delete(" apps/server/src --include="*.ts"`, same date, lists every DELETE route
+  // on the server and none of them is a product). What refuses today is the database: an extras
+  // list item's and a menu override's `product_id` are both ON DELETE RESTRICT
+  // (`packages/catalogue/src/schema/extras.ts`), which surfaces as a driver error and not as this
+  // code. Mapped because Task 6 of the plan names it — the same reason `extras.in_use` above is
+  // mapped with no thrower either.
+  "product.in_use": 409,
 };
 
 // The one error boundary every catalogue route wraps its handler in — the shared `createErrorBoundary`
@@ -429,6 +432,106 @@ function refuseLegacyAttachFields(body: Record<string, unknown>): void {
       throw new AppError("management.request_invalid", { field: legacy });
 }
 
+/**
+ * How a mounted route runs its database work: `mountCatalogueApi`'s `gated` — one transaction, as
+ * the app role, with the caller's management session checked for the catalogue write permission.
+ */
+type GatedWork = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) => Promise<T>;
+
+/** Everything that differs between one kind of modifier list and another. */
+interface ListSurface<TList, TDependants> {
+  /** The path segment under `/management-api/modifiers` that says which kind of list this is. */
+  segment: string;
+  /** What a refused `:id` is called in `shared.invalid_id`'s `kind` param. */
+  idKind: string;
+  /** The JSON key the collection read answers under. */
+  collectionKey: string;
+  /** The JSON key every single-list route answers under. */
+  itemKey: string;
+  list: (tx: Transaction) => Promise<TList[]>;
+  read: (tx: Transaction, id: string) => Promise<TList>;
+  create: (tx: Transaction, body: unknown) => Promise<TList>;
+  update: (tx: Transaction, id: string, body: unknown) => Promise<TList>;
+  remove: (tx: Transaction, id: string) => Promise<void>;
+  dependants: (tx: Transaction, id: string) => Promise<TDependants>;
+}
+
+/**
+ * Mount the six routes that serve one kind of modifier list: read and create on the collection,
+ * read, update and delete on one list, and the delete preview. Both kinds sit UNDER
+ * `/management-api/modifiers` because a dish's one attachment list holds either an option list or
+ * an extras list; `surface.segment` is the discriminator in the path.
+ *
+ * EVERY call MUST come before the `/management-api/modifiers/:id` block is registered. Only the
+ * collection read is at risk — it is the one whose path that `:id` can match, and `:id` swallows
+ * the literal segment, so it answers 400 `shared.invalid_id` instead of 200 — but the six move as
+ * one call. Each call site records its own measurement.
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §11 intends these routes to
+ * REPLACE `/management-api/modifiers`, but no task in the plan deletes that block, so nothing
+ * schedules this hazard's removal.
+ */
+function mountListSurface<TList, TDependants>(
+  app: Hono,
+  log: Logger,
+  gated: GatedWork,
+  surface: ListSurface<TList, TDependants>,
+): void {
+  // `as const` keeps these template literal TYPES rather than widening them to `string`, which is
+  // what lets Hono still see the `:id` param and type `c.req.param("id")` as a string.
+  const collection = `/management-api/modifiers/${surface.segment}` as const;
+  const one = `${collection}/:id` as const;
+  app.get(collection, (c) =>
+    run(c, log, async () => {
+      const lists = await gated(requireManagementSession(c), (tx) => surface.list(tx));
+      return c.json({ [surface.collectionKey]: lists });
+    }),
+  );
+  app.post(collection, (c) =>
+    run(c, log, async () => {
+      // Session before body, as `POST /management-api/categories` below does: an unauthenticated
+      // request is then refused without its payload being read at all.
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const created = await gated(sessionId, (tx) => surface.create(tx, body));
+      return c.json({ [surface.itemKey]: created }, 201);
+    }),
+  );
+  app.get(one, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      const list = await gated(requireManagementSession(c), (tx) => surface.read(tx, id));
+      return c.json({ [surface.itemKey]: list });
+    }),
+  );
+  app.patch(one, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const updated = await gated(sessionId, (tx) => surface.update(tx, id, body));
+      return c.json({ [surface.itemKey]: updated });
+    }),
+  );
+  app.delete(one, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      await gated(requireManagementSession(c), (tx) => surface.remove(tx, id));
+      return c.json({ ok: true });
+    }),
+  );
+  // What deleting this list would touch — the preview a delete confirmation reads. What each kind
+  // counts, and whether anything reads it yet, is at the call site's `dependants`.
+  app.get(`${one}/dependants`, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      const dependants = await gated(requireManagementSession(c), (tx) =>
+        surface.dependants(tx, id),
+      );
+      return c.json({ dependants });
+    }),
+  );
+}
+
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
   // Open a transaction as the app role, confirm the caller's management session carries
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
@@ -513,141 +616,47 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }
   };
 
-  // Option lists sit UNDER `/management-api/modifiers` because a dish's one attachment list holds
-  // either an option list or an extras list; `options` is the discriminator in the path.
-  //
-  // This block MUST stay registered ahead of the `/management-api/modifiers/:id` block below. Only
-  // the collection read is at risk — it is the one whose path that `:id` can match, and `:id`
-  // swallows the literal `options`, so it answers 400 `shared.invalid_id` instead of 200 — but the
-  // six move as one block. Measured by moving this block after that one and re-running the file
-  // (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red — "GET
-  // /management-api/modifiers/options lists them" with `expected 400 to be 200`, and the gate case
-  // with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks for a
-  // session. `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §11 intends the
-  // collection and `:id` routes to REPLACE `/management-api/modifiers`, but no task in the plan
-  // deletes that block, so nothing schedules this hazard's removal.
-  app.get("/management-api/modifiers/options", (c) =>
-    run(c, log, async () => {
-      const optionLists = await gated(requireManagementSession(c), (tx) => listOptionLists(tx));
-      return c.json({ optionLists });
-    }),
-  );
-  app.post("/management-api/modifiers/options", (c) =>
-    run(c, log, async () => {
-      // Session before body, as `POST /management-api/categories` below does: an unauthenticated
-      // request is then refused without its payload being read at all.
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody(c);
-      const optionList = await gated(sessionId, (tx) =>
-        createOptionList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ optionList }, 201);
-    }),
-  );
-  app.get("/management-api/modifiers/options/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      const optionList = await gated(requireManagementSession(c), (tx) => getOptionList(tx, id));
-      return c.json({ optionList });
-    }),
-  );
-  app.patch("/management-api/modifiers/options/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody(c);
-      const optionList = await gated(sessionId, (tx) =>
-        updateOptionList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ optionList });
-    }),
-  );
-  app.delete("/management-api/modifiers/options/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      await gated(requireManagementSession(c), (tx) => deleteOptionList(tx, id));
-      return c.json({ ok: true });
-    }),
-  );
-  // What deleting this list would touch — the preview a delete confirmation reads. Not "the
-  // dashboard's", as the modifier sibling below says of its own: nothing under `apps/dashboard` or
-  // `apps/till` names an option list today.
-  app.get("/management-api/modifiers/options/:id/dependants", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      const dependants = await gated(requireManagementSession(c), (tx) =>
-        optionListDependants(tx, id),
-      );
-      return c.json({ dependants });
-    }),
-  );
+  // The option lists. Registered here, ahead of `/management-api/modifiers/:id` below, for the
+  // reason `mountListSurface` states. Measured by moving this call after that block and re-running
+  // the file (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red —
+  // "GET /management-api/modifiers/options lists them" with `expected 400 to be 200`, and the gate
+  // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
+  // for a session.
+  mountListSurface(app, log, gated, {
+    segment: "options",
+    idKind: "OptionListId",
+    collectionKey: "optionLists",
+    itemKey: "optionList",
+    list: (tx) => listOptionLists(tx),
+    read: (tx, id) => getOptionList(tx, id),
+    create: (tx, body) => createOptionList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    update: (tx, id, body) => updateOptionList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    remove: (tx, id) => deleteOptionList(tx, id),
+    // Not "the dashboard's" preview, as the modifier sibling below says of its own: nothing under
+    // `apps/dashboard` or `apps/till` names an option list today.
+    dependants: (tx, id) => optionListDependants(tx, id),
+  });
 
-  // Extras lists sit UNDER `/management-api/modifiers` for the reason the option-list block above
-  // does: a dish's one attachment list holds either kind, and the path segment is the discriminator.
-  //
-  // This block MUST stay registered ahead of the `/management-api/modifiers/:id` block below — the
-  // hazard the option-list block above carries, for the same reason: `:id` swallows the literal
-  // `extras`, so the COLLECTION read is the one at risk and it answers 400 `shared.invalid_id`
-  // instead of 200. Measured by moving this block after that one and re-running the file
-  // (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red — "GET
-  // /management-api/modifiers/extras lists them" with `expected 400 to be 200`, and the gate case
-  // with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks for a
-  // session.
-  app.get("/management-api/modifiers/extras", (c) =>
-    run(c, log, async () => {
-      const extraLists = await gated(requireManagementSession(c), (tx) => listExtraLists(tx));
-      return c.json({ extraLists });
-    }),
-  );
-  app.post("/management-api/modifiers/extras", (c) =>
-    run(c, log, async () => {
-      // Session before body, as the option-list sibling above does: an unauthenticated request is
-      // then refused without its payload being read at all.
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody(c);
-      const extraList = await gated(sessionId, (tx) =>
-        createExtraList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ extraList }, 201);
-    }),
-  );
-  app.get("/management-api/modifiers/extras/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
-      const extraList = await gated(requireManagementSession(c), (tx) => getExtraList(tx, id));
-      return c.json({ extraList });
-    }),
-  );
-  app.patch("/management-api/modifiers/extras/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody(c);
-      const extraList = await gated(sessionId, (tx) =>
-        updateExtraList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ extraList });
-    }),
-  );
-  app.delete("/management-api/modifiers/extras/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
-      await gated(requireManagementSession(c), (tx) => deleteExtraList(tx, id));
-      return c.json({ ok: true });
-    }),
-  );
-  // What deleting this list would touch — the preview a delete confirmation reads: the products
-  // carrying it and the menu offers publishing it. Both are detached by the delete rather than
-  // blocking it, so this is information, never a refusal.
-  app.get("/management-api/modifiers/extras/:id/dependants", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ExtraListId");
-      const dependants = await gated(requireManagementSession(c), (tx) =>
-        extraListDependants(tx, id),
-      );
-      return c.json({ dependants });
-    }),
-  );
+  // The extras lists. Registered here, ahead of `/management-api/modifiers/:id` below, for the
+  // reason `mountListSurface` states. Measured by moving this call after that block and re-running
+  // the file (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red —
+  // "GET /management-api/modifiers/extras lists them" with `expected 400 to be 200`, and the gate
+  // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
+  // for a session.
+  mountListSurface(app, log, gated, {
+    segment: "extras",
+    idKind: "ExtraListId",
+    collectionKey: "extraLists",
+    itemKey: "extraList",
+    list: (tx) => listExtraLists(tx),
+    read: (tx, id) => getExtraList(tx, id),
+    create: (tx, body) => createExtraList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    update: (tx, id, body) => updateExtraList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    remove: (tx, id) => deleteExtraList(tx, id),
+    // The products carrying the list and the menu offers publishing it. Both are detached by the
+    // delete rather than blocking it, so this is information, never a refusal.
+    dependants: (tx, id) => extraListDependants(tx, id),
+  });
 
   app.get("/management-api/modifiers", (c) =>
     run(c, log, async () => {

@@ -509,20 +509,24 @@ What option lists left open, none of it taken in #436 or #445:
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
   registered because a shipped code is never removed.
-- **There are now THREE copies of the same six route handlers in `catalogue-api.ts`** — the old
-  `/management-api/modifiers` block, the option-list block and, since Task 6 Step 5, the extras-list
-  block. A review on #445 asked for a shared mount helper (the file already has the pattern in
-  `mountCourseVerb`, `apps/server/src/till-api.ts`) and expected Task 6 to extract it. Task 6 Step 5
-  did NOT: its brief specified the six routes one by one as a mirror of the option block, and
-  extracting a helper would have rewritten the option block on the same branch. **Next action:**
-  extract the helper across the option and extras blocks, which are the two copies the spec keeps.
+- **The option and extras route blocks now share one mount helper; the old modifier block is still a
+  third hand-written copy.** A review on #445 asked for the helper (the pattern is `mountCourseVerb`,
+  `apps/server/src/till-api.ts`) and Task 6 Step 5 did not write one, because its brief specified the
+  six routes one by one as a mirror of the option block. `mountListSurface` in
+  `apps/server/src/catalogue-api.ts` is that helper: it mounts all six routes for one kind of list —
+  read and create on the collection, read, update and delete on one list, and the delete preview —
+  and each of the two call sites hands it only what differs (the path segment, the `shared.invalid_id`
+  kind name, the two JSON keys, and the six catalogue functions). What is left is the old
+  `/management-api/modifiers` block, which the spec retires and which still spells its own six
+  handlers out; the entry below is the one that covers it.
 - **Nothing schedules the deletion of the old `/management-api/modifiers` routes.** Spec §11 says the
   options and extras routes replace them, but no task in the plan lists `apps/server/src/catalogue-api.ts`
   as a file it deletes from — Task 13's file list does not name it. Until that is fixed, the old
   routes survive the plan, and so does the ordering requirement #445 had to comment on: BOTH the
   option-list block and the extras-list block must be registered ahead of
   `/management-api/modifiers/:id`, or `:id` swallows the literal word `options` or `extras` and the
-  collection read answers 400 instead of 200. Each block carries its own measurement of that.
+  collection read answers 400 instead of 200. `mountListSurface` states the hazard once and each of
+  its two call sites carries its own measurement of it, both re-run after the helper was extracted.
   **Next action:** add the route removal to Task 13, or state that the old routes stay.
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
