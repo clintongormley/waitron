@@ -10,11 +10,12 @@ import {
   menuItemExtraLists,
 } from "./schema/extras.js";
 import {
-  extraPrice,
   parseExtraListInput,
+  parseMenuExtraPublications,
   type ExtraList,
   type ExtraListItem,
   type ExtraListInput,
+  type MenuExtraPublication,
 } from "./extra-contract.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import "./errors.js";
@@ -27,13 +28,17 @@ import "./errors.js";
  * Only null and undefined fall through — `"0.00"` is a price a venue chose and is kept, which is
  * what makes a free bread expressible. VAT does not resolve this way at all: an extra always carries
  * its product's own rate.
+ *
+ * `undefined` back means the chain ran out: no menu price, no price on the item, and no product row
+ * to borrow one from. The caller decides what that means — `readMenuExtras` (extra-projection.ts)
+ * leaves such an item out of the menu view, because an item nothing can price cannot be sold.
  */
 export function resolveExtraPrice(
   item: ExtraListItem,
-  product: { unitPrice: string },
+  product: { unitPrice: string } | undefined,
   menuPrice?: string | null,
-): string {
-  return menuPrice ?? item.price ?? product.unitPrice;
+): string | undefined {
+  return menuPrice ?? item.price ?? product?.unitPrice;
 }
 
 // A LIST's `sort` is read but never written from a body: it is not one of the keys
@@ -109,17 +114,9 @@ export async function readExtraListsByIds(
 }
 
 export async function getExtraList(tx: Transaction, extraListId: string): Promise<ExtraList> {
-  const [list] = await tx
-    .select(listColumns)
-    .from(extraLists)
-    .where(eq(extraLists.id, extraListId));
+  const [list] = await readExtraListsByIds(tx, [extraListId]);
   if (!list) throw new AppError("extras.not_found", { extraListId });
-  const items = await tx
-    .select(itemColumns)
-    .from(extraListItems)
-    .where(eq(extraListItems.listId, extraListId))
-    .orderBy(extraListItems.sort, extraListItems.id);
-  return { ...list, items };
+  return list;
 }
 
 /** The list exists. A plain read, taking no locks — the preview path's half of the pair below. */
@@ -133,7 +130,8 @@ async function assertExtraList(tx: Transaction, extraListId: string): Promise<vo
 
 /**
  * The list exists, and this transaction holds its row until it ends, so two saves of the SAME list
- * run one after the other instead of overlapping. {@link writeItems} needs that: it replaces the
+ * run one after the other instead of overlapping — and so does a save racing a menu offer
+ * publishing that list ({@link lockPublishedLists}). {@link writeItems} needs that: it replaces the
  * whole item set, and a `delete` cannot see another transaction's uncommitted inserts, so an
  * unserialised second save removes nothing and then collides on
  * `extra_list_items_list_product_uq` — a `23505` that leaves `writeItems` as a drizzle
@@ -299,7 +297,6 @@ async function writeItems(
       .returning({ id: extraListItems.id });
     if (!inserted.length) throw new AppError("extras.invalid", { field: `items.${sort}.id` });
   }
-  await dropStaleMenuOverrides(tx, extraListId, input);
 }
 
 /**
@@ -334,10 +331,9 @@ async function dropStaleMenuOverrides(
 /**
  * The only write path here that takes no lock of its own on the list, and the reason is the id: it
  * is minted below and no other transaction can name it yet, so there is nothing to serialise
- * against.
- * `updateExtraList` and `deleteExtraList` do take one — a row lock, not an advisory lock, which spec
- * §7 bars from new code ({@link lockExtraList}). The content-language lock `validateNames` reaches
- * through is the existing shared one.
+ * against. `updateExtraList`, `deleteExtraList` and `setMenuItemExtraLists` all take one — a row
+ * lock, not an advisory lock, which spec §7 bars from new code ({@link lockExtraList}). The
+ * content-language lock `validateNames` reaches through is the existing shared one.
  */
 export async function createExtraList(
   tx: Transaction,
@@ -371,6 +367,9 @@ export async function updateExtraList(
   await validateNames(tx, input, fallbackLanguage);
   await tx.update(extraLists).set(listValues(input)).where(eq(extraLists.id, extraListId));
   await writeItems(tx, extraListId, input);
+  // Only here, and not in {@link createExtraList}: that path mints the list id a statement earlier,
+  // so no menu offer can hold an override against it yet.
+  await dropStaleMenuOverrides(tx, extraListId, input);
   return getExtraList(tx, extraListId);
 }
 
@@ -387,74 +386,36 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
   await tx.delete(extraLists).where(eq(extraLists.id, extraListId));
 }
 
-/** One published list as a body sends it, normalised: ids lower-cased, prices in the stored shape,
- * and each item carrying the field path a refusal about it should name. */
-interface Publication {
-  listId: string;
-  items: { productId: string; price: string | null; available: boolean; field: string }[];
-}
-
 /**
- * Lower-case every id the caller sent and refuse the two duplicates a body can carry: one list
- * published twice, and one product overridden twice within a list. Touches no database.
+ * Every published list exists, and this transaction holds each of their rows until it ends — so a
+ * save of one of those lists cannot land between {@link assertProductsOffered}'s membership read and
+ * the override rows written below. Without it, a manager's override for a product the list dropped
+ * in that window is written anyway and comes back the moment the product is offered again: measured
+ * on a real backend by "does not keep a menu price for a product the list stopped offering while it
+ * was saving" (extras.pg.test.ts), which read `0.25` where the product's own `2.50` was due.
  *
- * The lower-casing is not cosmetic. A `uuid` column accepts either case and hands its value back
- * lower-cased, so an upper-cased id finds its row in SQL and then fails every comparison made in
- * JavaScript against a stored value — which is how `updateExtraList` once classified a list's own
- * items as another list's. Same normalisation the authoring contract applies to what a body sends
- * (`id` in extra-contract.ts).
+ * LOCK ORDER is the invariant, and it is what keeps two writers from waiting on each other for
+ * ever. A publication takes the menu OFFER's row first and then the list rows in ID ORDER;
+ * `updateExtraList` and `deleteExtraList` take exactly one list row and no offer row at all
+ * ({@link lockExtraList}). So a waiter is either waiting on a list id above every one it already
+ * holds, or waiting on an offer row while holding no list — and neither closes a cycle.
+ *
+ * One statement per id rather than one `in (…) order by id for update`: the order the rows are
+ * locked in is the whole point here, and a loop makes it this code's choice rather than a query
+ * plan's. The count is the number of lists ONE menu offer publishes.
  */
-function normalisePublications(
-  lists: {
-    listId: string;
-    items: { productId: string; price?: string | null; available?: boolean }[];
-  }[],
-): Publication[] {
-  const seenLists = new Set<string>();
-  return lists.map((list, index) => {
-    const listId = list.listId.toLowerCase();
-    if (seenLists.has(listId))
-      throw new AppError("extras.invalid", { field: `lists.${index}.listId` });
-    seenLists.add(listId);
-    const seenProducts = new Set<string>();
-    const items = list.items.map((item, at) => {
-      const field = `lists.${index}.items.${at}`;
-      const productId = item.productId.toLowerCase();
-      if (seenProducts.has(productId))
-        throw new AppError("extras.invalid", { field: `${field}.productId` });
-      seenProducts.add(productId);
-      // The same body that decides a list item's own price, so the two prices a diner can be
-      // charged cannot drift apart (`extraPrice`, extra-contract.ts).
-      return {
-        productId,
-        price: extraPrice(item.price, `${field}.price`),
-        available: item.available ?? true,
-        field,
-      };
-    });
-    return { listId, items };
-  });
+async function lockPublishedLists(
+  tx: Transaction,
+  publications: MenuExtraPublication[],
+): Promise<void> {
+  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3), and in turn is
+  // also what makes the order above real.
+  for (const listId of publications.map((publication) => publication.listId).sort())
+    await lockExtraList(tx, listId);
 }
 
-/** Every published list exists. ONE query for the whole body, never one per list. */
-async function assertPublishedListsExist(
-  tx: Transaction,
-  publications: Publication[],
-): Promise<void> {
-  if (publications.length === 0) return;
-  const rows = await tx
-    .select({ id: extraLists.id })
-    .from(extraLists)
-    .where(
-      inArray(
-        extraLists.id,
-        publications.map((publication) => publication.listId),
-      ),
-    );
-  const held = new Set(rows.map((row) => row.id));
-  const missing = publications.find((publication) => !held.has(publication.listId));
-  if (missing) throw new AppError("extras.not_found", { extraListId: missing.listId });
-}
+/** A list-and-product pair as one key, joined by a byte no uuid can contain. */
+const offeredKey = (listId: string, productId: string) => `${listId}\u0000${productId}`;
 
 /**
  * Every overridden product is one its list actually offers. Refused here as `extras.invalid` with
@@ -464,7 +425,10 @@ async function assertPublishedListsExist(
  *
  * ONE grouped query for the whole body, never one per list (CLAUDE.md §3).
  */
-async function assertProductsOffered(tx: Transaction, publications: Publication[]): Promise<void> {
+async function assertProductsOffered(
+  tx: Transaction,
+  publications: MenuExtraPublication[],
+): Promise<void> {
   const overriding = publications.filter((publication) => publication.items.length > 0);
   if (overriding.length === 0) return;
   const rows = await tx
@@ -476,15 +440,11 @@ async function assertProductsOffered(tx: Transaction, publications: Publication[
         overriding.map((publication) => publication.listId),
       ),
     );
-  const offered = new Map<string, Set<string>>();
-  for (const row of rows) {
-    const held = offered.get(row.listId) ?? new Set<string>();
-    held.add(row.productId);
-    offered.set(row.listId, held);
-  }
+  const offered = new Set(rows.map((row) => offeredKey(row.listId, row.productId)));
   for (const publication of overriding) {
-    const held = offered.get(publication.listId) ?? new Set<string>();
-    const stray = publication.items.find((item) => !held.has(item.productId));
+    const stray = publication.items.find(
+      (item) => !offered.has(offeredKey(publication.listId, item.productId)),
+    );
     if (stray) throw new AppError("extras.invalid", { field: `${stray.field}.productId` });
   }
 }
@@ -514,14 +474,13 @@ async function assertProductsOffered(tx: Transaction, publications: Publication[
  * insert shape one table over, where unserialised saves collided with `23505` ({@link lockExtraList}
  * and extras.pg.test.ts). This is a `select … for update` on a row both saves must read — the row
  * lock this file already takes on a list, not an advisory lock, which spec §7 bars from new code.
+ * The lists published are locked next, in id order, and {@link lockPublishedLists} states why that
+ * order is the one to take them in.
  */
 export async function setMenuItemExtraLists(
   tx: Transaction,
   menuItemId: string,
-  lists: {
-    listId: string;
-    items: { productId: string; price?: string | null; available?: boolean }[];
-  }[],
+  lists: unknown,
 ): Promise<void> {
   const offerId = menuItemId.toLowerCase();
   const [offer] = await tx
@@ -530,8 +489,8 @@ export async function setMenuItemExtraLists(
     .where(eq(menuItems.id, offerId))
     .for("update");
   if (offer === undefined) throw new AppError("menu_item.not_found", { menuItemId });
-  const publications = normalisePublications(lists);
-  await assertPublishedListsExist(tx, publications);
+  const publications = parseMenuExtraPublications(lists);
+  await lockPublishedLists(tx, publications);
   await assertProductsOffered(tx, publications);
 
   // The offer's item rows go with its list rows, through `menu_item_extra_items_list_fk`

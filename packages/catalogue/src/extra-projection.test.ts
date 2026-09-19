@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { asAppUser, captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -16,11 +16,14 @@ import {
 } from "./extras.js";
 import { readMenuExtras } from "./extra-projection.js";
 
-// Publishing an extras list on a menu offer is authoring configuration: nothing here turns on who
-// connected or on two writers racing, so PGlite is the lighter target that still runs the real
-// migrations (CLAUDE.md §4). The grants on the two publication tables are walked in extras.test.ts's
-// `asAppUser` suite; what needs a container is the concurrent save, and that lives in
-// extras.pg.test.ts.
+// Publishing an extras list on a menu offer is authoring configuration, and PGlite is the lighter
+// target that still runs the real migrations (CLAUDE.md §4). It enforces the two publication
+// tables' grants once the session assumes the application role — which only the walkthrough at the
+// foot of this file does, with `asAppUser`; every other test in this file runs on PGlite's
+// superuser connection and so exercises no grant at all. What PGlite cannot show is two writers
+// overlapping, because every query serialises onto its one backend: the cases about a save racing a
+// list edit, and about a product vanishing mid-read, are in extras.pg.test.ts against a real
+// backend.
 const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -390,6 +393,80 @@ describe("what publishing an extras list on a menu offer refuses", () => {
     );
   });
 
+  it("refuses a list id that is not a uuid", async () => {
+    await list();
+
+    const error = await refusal((tx) =>
+      setMenuItemExtraLists(tx, offers.burger, [{ listId: "not-a-uuid", items: [] }]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "lists.0.listId" } }),
+    );
+  });
+
+  it("refuses an overridden product id that is not a uuid", async () => {
+    const toppingsList = await list();
+
+    const error = await refusal((tx) =>
+      setMenuItemExtraLists(tx, offers.burger, [
+        { listId: toppingsList.id, items: [{ productId: "not-a-uuid" }] },
+      ]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({
+        code: "extras.invalid",
+        params: { field: "lists.0.items.0.productId" },
+      }),
+    );
+  });
+
+  it("refuses an availability flag that is a string rather than a boolean", async () => {
+    const toppingsList = await list();
+
+    const error = await refusal((tx) =>
+      setMenuItemExtraLists(tx, offers.burger, [
+        { listId: toppingsList.id, items: [{ productId: ids.bacon, available: "false" }] },
+      ]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({
+        code: "extras.invalid",
+        params: { field: "lists.0.items.0.available" },
+      }),
+    );
+  });
+
+  it("refuses a key neither a published list nor an override carries", async () => {
+    const toppingsList = await list();
+
+    const onTheList = await refusal((tx) =>
+      setMenuItemExtraLists(tx, offers.burger, [
+        { listId: toppingsList.id, items: [], displayOrder: 3 },
+      ]),
+    );
+    const onAnOverride = await refusal((tx) =>
+      setMenuItemExtraLists(tx, offers.burger, [
+        { listId: toppingsList.id, items: [{ productId: ids.bacon, maxQuantity: 2 }] },
+      ]),
+    );
+
+    expect(onTheList).toEqual(
+      expect.objectContaining({
+        code: "extras.invalid",
+        params: { field: "lists.0.displayOrder" },
+      }),
+    );
+    expect(onAnOverride).toEqual(
+      expect.objectContaining({
+        code: "extras.invalid",
+        params: { field: "lists.0.items.0.maxQuantity" },
+      }),
+    );
+  });
+
   it("leaves the published set as it was when it refuses", async () => {
     const toppingsList = await list();
     await run((tx) =>
@@ -556,5 +633,59 @@ describe("what deleting an extras list would touch", () => {
     expect(await countRows("menu_item_extra_lists")).toBe(0);
     expect(await countRows("menu_item_extra_items")).toBe(0);
     expect(await run((tx) => readMenuExtras(tx, [offers.burger]))).toEqual(new Map());
+  });
+});
+
+/**
+ * The walkthrough that answers to drizzle/0009_menu_extra_publication_grants.sql, the sibling of
+ * extras.test.ts's for drizzle/0005_extra_lists_grants.sql. Every other test in this file runs as
+ * PGlite's superuser, which holds every privilege and so proves nothing about a grant.
+ *
+ * Seen red rather than assumed: with `DELETE` removed from the grant in that migration, this
+ * walkthrough failed at
+ * `delete from "menu_item_extra_lists" where "menu_item_extra_lists"."menu_item_id" = $1` with
+ * `42501 permission denied for table menu_item_extra_lists`; with the grant put back it passed.
+ */
+describe("publishing on a menu offer as the non-superuser application role", () => {
+  const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
+    withTransaction(fx.db, async (tx) => {
+      await asAppUser(tx);
+      return fn(tx);
+    });
+
+  const baconPrice = (published: Awaited<ReturnType<typeof readMenuExtras>>) =>
+    published.get(offers.burger)![0]!.items.find((item) => item.productId === ids.bacon)!.price;
+
+  it("publishes, reads, reprices and clears under the application role's grants", async () => {
+    await app(async (tx) => {
+      const role = await tx.execute<{ role: string; superuser: boolean }>(
+        sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
+      );
+      expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
+
+      const list = await createExtraList(tx, toppings(), "en");
+      // INSERT on both tables: the publication row, and the override under it.
+      await setMenuItemExtraLists(tx, offers.burger, [
+        { listId: list.id, items: [{ productId: ids.bacon, price: "1.00" }] },
+      ]);
+      // SELECT on both tables.
+      expect(baconPrice(await readMenuExtras(tx, [offers.burger]))).toBe("1.00");
+
+      // UPDATE is granted and no write path reaches it today — `setMenuItemExtraLists` replaces
+      // rows rather than editing them — so it is walked by statement, which is the only way to
+      // establish the role actually holds what the migration granted it.
+      await tx.execute(
+        sql`update menu_item_extra_lists set display_order = 1 where menu_item_id = ${offers.burger}`,
+      );
+      await tx.execute(
+        sql`update menu_item_extra_items set price = '1.50' where menu_item_id = ${offers.burger}`,
+      );
+      expect(baconPrice(await readMenuExtras(tx, [offers.burger]))).toBe("1.50");
+
+      // DELETE on both: republishing clears what the offer carried, and the override goes with its
+      // publication row.
+      await setMenuItemExtraLists(tx, offers.burger, []);
+      expect(await readMenuExtras(tx, [offers.burger])).toEqual(new Map());
+    });
   });
 });

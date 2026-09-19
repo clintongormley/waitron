@@ -124,6 +124,63 @@ export function extraPrice(value: unknown, field: string): string | null {
   return toScale(decimal(value), 2);
 }
 
+/**
+ * One published list as a body sends it, normalised: ids lower-cased, prices in the stored shape,
+ * and each item carrying the field path a refusal about it should name.
+ */
+export interface MenuExtraPublication {
+  listId: string;
+  items: { productId: string; price: string | null; available: boolean; field: string }[];
+}
+
+/**
+ * What one menu offer publishes, as `setMenuItemExtraLists` (extras.ts) takes it: the lists it
+ * carries, in the order the editor sent, each with the overrides that narrow and reprice it.
+ *
+ * It lives beside {@link parseExtraListInput} because every rule it needs is already here — the
+ * uuid-and-lower-case `id`, the boolean `bool`, the unknown-key `keys` and the shared
+ * {@link extraPrice}. Parsed by hand inside the write path instead, two of those checks were simply
+ * absent: a `listId` that was not a uuid reached PostgreSQL as `22P02`, and an `available` of
+ * `"false"` — the STRING — was stored as `true`.
+ *
+ * The two duplicates a body can carry are refused here as well, because neither has a unique index
+ * behind it that would name the offending position: one list published twice, and one product
+ * overridden twice within a list.
+ */
+export function parseMenuExtraPublications(value: unknown): MenuExtraPublication[] {
+  if (!Array.isArray(value)) invalid("lists");
+  const seenLists = new Set<string>();
+  return value.map((entry, index): MenuExtraPublication => {
+    const field = `lists.${index}`;
+    const row = record(entry, field);
+    keys(row, ["listId", "items"], field);
+    const listId = id(row.listId, `${field}.listId`);
+    if (seenLists.has(listId)) invalid(`${field}.listId`);
+    seenLists.add(listId);
+    if (!Array.isArray(row.items)) invalid(`${field}.items`);
+    const seenProducts = new Set<string>();
+    const items = row.items.map((each, at) => {
+      const itemField = `${field}.items.${at}`;
+      const item = record(each, itemField);
+      keys(item, ["productId", "price", "available"], itemField);
+      const productId = id(item.productId, `${itemField}.productId`);
+      // One override per product per list: the primary key refuses the pair as `23505`, which
+      // carries no position for an editor to put a message beside.
+      if (seenProducts.has(productId)) invalid(`${itemField}.productId`);
+      seenProducts.add(productId);
+      return {
+        productId,
+        // The same rule that decides a LIST item's own price, so the two prices a diner can be
+        // charged cannot drift apart.
+        price: extraPrice(item.price, `${itemField}.price`),
+        available: bool(item.available, `${itemField}.available`, true),
+        field: itemField,
+      };
+    });
+    return { listId, items };
+  });
+}
+
 export function parseExtraListInput(value: unknown): ExtraListInput {
   const row = record(value, "extraList");
   keys(

@@ -260,6 +260,14 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     };
   }
 
+  /** One extras list, for the cases that need a list without needing what it offers. */
+  async function extraList(name: string): Promise<string> {
+    const rows = await db.execute<{ id: string }>(
+      sql`insert into extra_lists (name) values (${name}) returning id`,
+    );
+    return rows.rows[0]!.id;
+  }
+
   async function refusal(statement: ReturnType<typeof sql>, constraint: string) {
     const error = await captureError(() => db.transaction((tx) => tx.execute(statement)));
     expect(pgErrorCode(error), constraint).toBe("23503");
@@ -387,13 +395,48 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     );
   });
 
+  it("refuses a published extras list whose menu offer or list does not exist", async () => {
+    const c = await catalogue();
+    const listId = await extraList("Breads");
+    await refusal(
+      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${missing}, ${listId})`,
+      "menu_item_extra_lists_item_fk",
+    );
+    await refusal(
+      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${c.menuItemId}, ${missing})`,
+      "menu_item_extra_lists_list_fk",
+    );
+  });
+
+  it("refuses a menu override whose publication or product does not exist or does not match", async () => {
+    const c = await catalogue();
+    const listId = await extraList("Breads");
+    const otherListId = await extraList("Sauces");
+    await db.execute(
+      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${c.menuItemId}, ${listId})`,
+    );
+    await refusal(
+      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
+        values (${missing}, ${listId}, ${c.productId})`,
+      "menu_item_extra_items_list_fk",
+    );
+    // The offer and the list both exist; what is wrong is that this offer does not publish THAT
+    // list, so an override under it would be read by nothing.
+    await refusal(
+      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
+        values (${c.menuItemId}, ${otherListId}, ${c.productId})`,
+      "menu_item_extra_items_list_fk",
+    );
+    await refusal(
+      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
+        values (${c.menuItemId}, ${listId}, ${missing})`,
+      "menu_item_extra_items_product_fk",
+    );
+  });
+
   it("refuses an extras item whose list or product does not exist", async () => {
     const c = await catalogue();
-    const listId = (
-      await db.execute<{ id: string }>(
-        sql`insert into extra_lists (name) values ('Breads') returning id`,
-      )
-    ).rows[0]!.id;
+    const listId = await extraList("Breads");
     await refusal(
       sql`insert into extra_list_items (list_id, product_id) values (${missing}, ${c.productId})`,
       "extra_list_items_list_fk",
