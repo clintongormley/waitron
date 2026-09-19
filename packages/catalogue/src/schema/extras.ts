@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { count, flag, id, json, label, money, products, table } from "@waitron/db";
 
 /** A reusable, named list of products a diner may add to a dish, with rules on how many. The list
@@ -66,6 +66,12 @@ export const extraListItems = table(
       name: "extra_list_items_product_fk",
     }).onDelete("restrict"),
     check("extra_list_items_qty_ck", sql`${t.maxQuantity} >= 1`),
+    // One offer per product per list. `parseExtraListInput`
+    // (packages/catalogue/src/extra-contract.ts) refuses the pair within one authoring body, because
+    // `validateExtraSelections` matches a diner's pick to an item BY PRODUCT ID and could not tell
+    // two rows apart; this is the database backstop under that refusal, for a write that never goes
+    // through the contract.
+    uniqueIndex("extra_list_items_list_product_uq").on(t.listId, t.productId),
     index("extra_list_items_list_sort_idx").on(t.listId, t.sort),
   ],
 );
