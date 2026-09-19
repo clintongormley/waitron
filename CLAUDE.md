@@ -75,6 +75,13 @@ wide margin. This section stays in full deliberately: it applies to every change
   then paraphrase. Cost: compressing Square's _"doesn't support splitting a checkout into multiple payments
   for a single checkout request"_ into "no splitting a checkout" turned an API limit into a product
   limitation. Two sources that seem to contradict usually describe different paths.
+- **A class's representative has to be a value the two sides could treat differently.** Enumerating
+  edge cases from a changelog is only as good as the example chosen per class — pick it from what
+  the FORMAT allows, not from the first value that comes to mind. Cost: a `fast-xml-parser` 4 → 5
+  equivalence probe over every AEAT document the suites could be made to yield, plus a hand-built
+  edge case per changelog entry, found one difference of four and missed that version 5 had stopped
+  decoding `&#38;` — because the case standing for "numeric entity" was `&#233;`, which NEITHER
+  version decodes. Instance in [writing-claims.md](docs/developers/writing-claims.md).
 - **A comment carries the invariant, not the history.** The receipt lives in the commit message and
   the PR thread, with at most a one-line pointer. Thin on touch; do not sweep. Cost: comment lines
   measured 43–48% of non-test source in four packages, nearly all narrative, which doubles the tokens

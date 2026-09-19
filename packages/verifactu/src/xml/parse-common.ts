@@ -1,15 +1,16 @@
 import { XMLParser } from "fast-xml-parser";
 
 /**
- * Shared parser configuration for both response parsers (parse-suministro.ts
- * and parse-consulta.ts). Leaf values stay strings — parseTagValue is off —
- * so each parser converts specific numeric fields explicitly via asNumber
- * below.
+ * Shared parser configuration for every module here that reads XML —
+ * parse-suministro.ts, parse-consulta.ts and parse-request.ts. Leaf values
+ * stay strings — parseTagValue is off — so each parser converts specific
+ * numeric fields explicitly via asNumber below.
  *
  * parseTagValue is deliberately off: flipping it to true would turn a literal
  * like "123.40" into the number 123.4 and "0012345678" into 12345678,
- * destroying literals on the reconciliation path (DatosRegistroFacturacion
- * holds AEAT's stored literals, compared field-for-field against ours).
+ * destroying literals on the reconciliation path. DatosRegistroFacturacion is
+ * not diffed field by field — drain.ts compares Huella alone, deliberately —
+ * but the values that locate a record there are matched as exact strings.
  *
  * trimValues is deliberately off too, for the identical reason: it is a
  * second, independent transformation of the same literals, applied whether or

@@ -13,7 +13,7 @@
     "mutation": "stryker run"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.5.0"
+    "fast-xml-parser": "^5.11.1"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
