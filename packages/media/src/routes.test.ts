@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
@@ -17,7 +17,7 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);

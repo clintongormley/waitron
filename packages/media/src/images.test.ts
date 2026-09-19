@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withTransaction, CORE_MIGRATIONS } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import {
@@ -18,7 +18,7 @@ import {
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 // PGlite exercises content persistence; the real-Postgres suite covers grants and races.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
