@@ -211,14 +211,105 @@ exploits it is "send Spanish cards to SumUp until the allowance is spent, then r
 routes on cumulative monthly volume rather than on the size of any one bill. It is worth more than the
 bill-size rule and needs no second merchant account.
 
+## The card-present market, and the integration question (added 2026-09-19)
+
+Written after the owner asked to survey the whole card-acceptance market — not only the two adapters
+already in the tree — and specifically whether each provider can be **driven from Waitron's own POS**.
+Figures gathered 2026-09-19 from each provider's Spanish pricing page unless a row says otherwise; the
+"a price is a table, not a number" caution at the top of this note applies unchanged, and anything not
+read off the provider's own page is flagged inline.
+
+**The filter that matters for a POS like Waitron is not the rate — it is whether a third-party
+application can start a payment on the provider's reader and read the result back.** Waitron is the
+software, not the payment brand; a reader it cannot drive from its own checkout is useless to it
+however cheap. Each provider names this differently — SumUp a "Cloud API", Stripe a "Terminal SDK",
+Viva a "Cloud Terminal / EFT POS API", Adyen a "Terminal API" — but they are one kind of thing: our
+server tells a networked reader to charge, and the answer comes back by webhook or polling. The
+generic term is an ISV API (ISV = independent software vendor, i.e. us).
+
+| Provider | In-person rate, Spain/EEA consumer card | Cheapest reader / standalone terminal (ex-IVA) | Drivable from our own POS in Spain? |
+| --- | --- | --- | --- |
+| SumUp | 1,49 % pay-as-you-go, 0,75 % on the €19/mo plan | Solo Lite €17 / Terminal €109 (printer) | **Yes** — Cloud API drives the standalone Solo. Adapter already built (`payments-sumup`); the owner's Solo is paired. |
+| Stripe | _"1,4 % + 0,10 €"_ (Terminal, EEA) | WisePOS E €199 / Reader S700 €259 | **Yes** — Terminal SDK (JS/iOS/Android), server-driven; can even run our POS on the S700. Adapter already built (`payments-stripe`). |
+| Viva.com | 1,69 % (min €0,03); the advertised "0 %" is a cashback rebate tied to spending on the Viva debit card, not a base rate | Mini reader €49 / Android POS €199–290 | **Yes** — Cloud Terminal / EFT POS REST API with explicit ISV endpoints (strongest documented ISV fit). No adapter yet. |
+| Adyen | interchange++ **+ €0,11 + from 0,60 %** (interchange + scheme passed through at cost) | quote-only — hardware prices not public | **Yes** — Terminal API (cloud or local JSON). No adapter yet. Everything is quote-gated and there is a monthly minimum invoice. |
+| Revolut | 0,8 % + €0,02 EEA, but **2,6 % + €0,02** on commercial/foreign cards — figures from a review site, **not** an official Revolut page (Revolut's own site blocks fetching) | Reader €49 / Terminal €169 (printer) | **Only the €169 Terminal**, via the Dec-2025 server-to-server push API — the cheap €49 Reader is not a documented push target. No adapter yet. |
+| Square | 1,25 % + €0,05 (EEA); +1,5 % on non-EEA cards | Reader €19 / Terminal €165 | **Uncertain in Spain** — Square's Terminal API lists Spain in one doc and omits it in another, and the Reader/Mobile-Payments SDK does **not** cover Spain. Treat as blocked until confirmed with Square. |
+| PayPal Zettle | 1,49 % flat | Reader €29 / Terminal €199 | Reader Connect API exists, but partner-approval gating and eligible reader models could not be confirmed from the (JS-rendered) developer pages. |
+
+**What this confirms about the repository.** The swappable seam this note relies on already holds two
+adapters — `payments-sumup` and `payments-stripe`, both filling the `CardProviderContribution` +
+`PaymentProvider` contracts in `packages/payments`. Adding Viva, Adyen or Revolut is a **new adapter
+package** against those same contracts, not a refactor of the existing two, and does not touch
+checkout. Two facts stated so a later session does not over-assume, as one did on 2026-09-19:
+**in-person payments are not routed today** — a single card-present provider is used — and **online
+acceptance is not built at all yet**. The routing table in this note is the intended end state. When
+online lands, the axis the owner named is the payment METHOD: **Bizum vs national cards vs
+international cards**, each going to whichever provider is cheapest for that cell.
+
+**Ruled out: "AgoraPay".** Investigated 2026-09-19 because the name came up. Two unrelated things carry
+it. The Spanish one, Ágora Payments (`agorapos.com`), is the in-house card feature of a rival
+restaurant POS and has **no public API** — a dead end. The French one, AgoraPay (`agorapay.com`),
+built by Crédit Agricole Payment Services, is a real licensed payment institution with a clean REST
+API — but it is a **marketplace/platform** product (escrow, split payments, sub-merchant KYC, virtual
+IBANs), it is **online / card-not-present only** with no in-person terminal support, and its card rate
+is a flat _"1.5% + €0.20 excl. VAT"_ (EEA) that mainstream PSPs beat. Wrong shape for a restaurant
+taking a card at the table, and uncompetitive for the online cell. Not pursued.
+
+## Redsys TPV Virtual — the Spanish online rail (added 2026-09-19)
+
+This upgrades the "Redsys" bullet under _Not priced_ from "no receipt at all" to "mechanics
+documented; rates still bank-negotiated". The owner asked what Redsys TPV Virtual is, whether it is
+one standard API across all the Redsys banks, and whether Waitron can integrate it. Sources:
+`pagosonline.redsys.es` (Redsys's own developer site) and MONEI's integrator documentation.
+
+- **What it is.** Redsys is Spain's shared card-processing switch, operated by _Redsys Servicios de
+  Procesamiento S.L._ and jointly owned by the large Spanish banks (Santander, CaixaBank, BBVA,
+  Sabadell and others). "TPV Virtual" (also called _SIS_) is its **online payment gateway** — the
+  card-not-present piece, for internet, in-app and phone payments — handling _"more than 45 million
+  payments per month"_.
+- **It is ONE standard API across every Redsys bank.** The protocol, the SIS endpoints
+  (`sis.redsys.es` in production, `sis-t.redsys.es` for the sandbox) and the security scheme are
+  identical no matter which bank issued the account. A merchant integrates once and it works with any
+  Redsys-processing bank; only the credentials and the negotiated rate differ per bank. Those
+  credentials are three values the bank issues: a **merchant code** (FUC), a **terminal number**, and
+  a **secret key** used for signing. Banks re-brand the same gateway ("CaixaBank Payments TPV
+  Virtual", "BBVA TPV Virtual"). A small minority of Spanish banks process elsewhere, but Redsys is
+  the overwhelming majority.
+- **Integration types offered:** _"Redirection, REST, inSite, Payment Modules, inApp, MO/TO Payment,
+  PayGold"_. The **REST** (server-to-server) style is the one that fits a POS — Waitron keeps the
+  customer on its own pages and drives the flow, handling the 3-D Secure step itself. Redirection
+  (Redsys hosts the card page) is the simplest fallback; PayGold is their pay-by-link.
+- **Payment methods on the same gateway:** Visa, Mastercard, Amex, JCB, Diners, UnionPay, plus
+  **Bizum, PayPal, Google Pay and Apple Pay** — Bizum is built in (a single `Ds_Merchant_Paymethods`
+  parameter), which makes Redsys the obvious home for the Bizum and national-card cells of the routing
+  table.
+- **Security model:** the request is a base64-encoded JSON `Ds_MerchantParameters`, signed with
+  `Ds_Signature` (HMAC-SHA256, `Ds_SignatureVersion = HMAC_SHA256_V1`); the per-order signing key is
+  derived from the secret key. Fiddly but very well-trodden, with a sandbox and mature libraries
+  including Node.
+- **The caveat that matters for us.** TPV Virtual is **card-not-present only**. It is ideal for a
+  QR/pay-by-link tab, a booking deposit, or Bizum — but it is **not** how you take a physical tap/chip
+  card at the table. That is the bank's physical datáfono, a separate contract and a separate
+  integration, not this API. In the repository it maps onto the **hosted/online seat**
+  (`AsyncPaymentProvider`, as `payments-stripe`'s `hosted-provider.ts` already fills it), not the
+  card-present reader seat.
+- **Rates are still not priced here.** The gateway is self-serve once contracted, but the
+  per-transaction cost is negotiated with the acquiring bank and none publish it — indicative Spanish
+  market figures put card and Bizum both broadly in the 0,3–0,9 % range, which agrees with this note's
+  earlier Bizum inference but is not a quote. The deli already has a banking relationship, so one
+  phone call would settle it.
+
 ## Not priced
 
-- **Straight through the deli's bank, on a Redsys virtual terminal.** The traditional Spanish route,
-  and usually the cheapest because it removes a layer. Every bank sets its own rates and none publish
-  them, so there is no receipt here at all. The deli already has a banking relationship, so one phone
-  call would settle it.
-- **Adyen and Viva.com.** Neither publishes a Bizum rate that could be found. Adyen also normally
-  wants volume commitments a single restaurant would not meet.
+- **Straight through the deli's bank, on a Redsys virtual terminal.** The mechanics are now documented
+  above (_Redsys TPV Virtual_); what is still unpriced is the rate, because every bank sets its own
+  and none publish them. The deli already has a banking relationship, so one phone call would settle
+  it.
+- **Adyen and Viva.com — Bizum.** In-person card rates for both are now in the card-present table
+  above, but neither publishes a **Bizum** rate that could be found; Adyen's page states Bizum needs a
+  _"direct contract with Bizum + management service fee"_. Adyen also normally wants volume
+  commitments a single restaurant would not meet.
 
 ## What would settle this
 
