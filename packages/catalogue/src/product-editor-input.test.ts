@@ -3,6 +3,8 @@ import { parseProductEditorInput, type ProductEditorInput } from "./product-edit
 
 const unitId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const categoryId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const extrasListId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const optionsListId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const input: ProductEditorInput = {
   name: "Coffee",
   customerName: { en: "Coffee", es: "Café" },
@@ -17,7 +19,7 @@ const input: ProductEditorInput = {
   variants: [],
   categoryIds: [],
   primaryCategoryId: null,
-  modifierIds: [],
+  modifiers: [],
   allergens: null,
   dietaryDeclarations: [],
 };
@@ -83,7 +85,6 @@ it.each([
   ["kitchenName", 42],
   ["image", false],
   ["categoryIds", [categoryId, categoryId.toUpperCase()]],
-  ["modifierIds", [unitId, unitId]],
   ["primaryCategoryId", undefined],
 ] as const)("rejects malformed %s (%j)", (field, value) => {
   expect(() => parseProductEditorInput({ ...input, [field]: value })).toThrow(
@@ -224,3 +225,68 @@ it("rejects a repeated variant ID even with a different case", () => {
     expect.objectContaining({ code: "product.invalid", params: { field: "variants.1.id" } }),
   );
 });
+
+// ── The product's ordered attachment list (`modifiers`) ────────────────────────────────────────
+//
+// It replaces the flat `modifierIds` the body used to carry: each entry names one list and which
+// KIND of list it is, and the array's order is the order a diner is offered them.
+//
+// The field names below are INDEXED (`modifiers.0.kind`), where the plan's Task 6 Step 1(b) wrote a
+// bare `modifiers`. Two reasons to diverge, both checkable: the `variants` screen in this same file
+// already refuses per entry (`variants.0.id`, product-editor-input.ts), and the refusals thrown one
+// layer down when the ids are checked against the stored lists carry the indexed form too
+// (`assertRefsExist`, product-modifiers.ts:113 and :127). A bare `modifiers` here would hand the
+// editor two different field shapes for one bad input, depending on which layer caught it. The
+// whole-array refusals (not an array, absent) stay bare, because no entry is at fault.
+
+it("keeps a mixed extras-and-options list in the order the body sent, and lower-cases the ids", () => {
+  const sent = [
+    { kind: "options", id: optionsListId.toUpperCase() },
+    { kind: "extras", id: extrasListId },
+    { kind: "options", id: extrasListId },
+  ];
+  expect(parseProductEditorInput({ ...input, modifiers: sent }).modifiers).toEqual([
+    { kind: "options", id: optionsListId },
+    { kind: "extras", id: extrasListId },
+    // The same id under the OTHER kind is a different list, so it is not a duplicate.
+    { kind: "options", id: extrasListId },
+  ]);
+});
+
+it.each([
+  ["a non-array", "modifiers", "nope"],
+  ["an absent list", "modifiers", undefined],
+  ["a non-object entry", "modifiers.0", ["nope"]],
+  ["a null entry", "modifiers.0", [null]],
+  ["an unknown kind", "modifiers.0.kind", [{ kind: "sauces", id: extrasListId }]],
+  ["a missing kind", "modifiers.0.kind", [{ id: extrasListId }]],
+  ["a non-uuid id", "modifiers.0.id", [{ kind: "extras", id: "not-a-uuid" }]],
+  ["a missing id", "modifiers.0.id", [{ kind: "extras" }]],
+  [
+    "the same list twice under one kind",
+    "modifiers.1.id",
+    [
+      { kind: "extras", id: extrasListId },
+      { kind: "extras", id: extrasListId.toUpperCase() },
+    ],
+  ],
+] as const)("rejects %s in modifiers, naming %s", (_label, field, value) => {
+  expect(() => parseProductEditorInput({ ...input, modifiers: value })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field } }),
+  );
+});
+
+it.each(["modifierIds", "optionGroupIds"] as const)(
+  "refuses the legacy %s field rather than silently ignoring it",
+  (legacy) => {
+    // Silently dropping it would save a product with NO attachments and report success, which is the
+    // one outcome a caller still on the old contract could not tell from having worked.
+    expect(() => parseProductEditorInput({ ...input, [legacy]: [extrasListId] })).toThrow(
+      expect.objectContaining({ code: "product.invalid", params: { field: legacy } }),
+    );
+    // Even an empty legacy array is refused: it still says the caller is on the old contract.
+    expect(() => parseProductEditorInput({ ...input, [legacy]: [] })).toThrow(
+      expect.objectContaining({ code: "product.invalid", params: { field: legacy } }),
+    );
+  },
+);

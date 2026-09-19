@@ -23,6 +23,7 @@ import {
   resolveExtraPrice,
   updateExtraList,
 } from "./extras.js";
+import { writeProductModifiers } from "./product-modifiers.js";
 
 // An extras list names products, and nothing here turns on who connected or on two writers racing,
 // so PGlite is the lighter target that still runs the real migrations — including the grants
@@ -368,6 +369,40 @@ describe("extra list CRUD", () => {
       products: [],
       menus: [],
     });
+  });
+
+  it("names every product that carries the list, by the product's staff name", async () => {
+    const created = await run((tx) => createExtraList(tx, breadList(), "en"));
+    const dishes = await run(async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: "Counter" });
+      const made: string[] = [];
+      // Two dishes with DIFFERENT names, so a join that reaches the wrong product row shows up
+      // here rather than passing. A third carries nothing, so a read that simply listed every
+      // product would fail too.
+      for (const name of ["sandwich", "toastie", "soup"]) {
+        const product = await createProduct(tx, {
+          catalogueId: catalogue.id,
+          categoryId: null,
+          name,
+          unitId: null,
+          unitPrice: "6.00",
+          vatClass: "reduced",
+        });
+        if (name !== "soup")
+          await writeProductModifiers(tx, product.id, [{ kind: "extras", id: created.id }]);
+        made.push(product.id);
+      }
+      return made;
+    });
+
+    const dependants = await run((tx) => extraListDependants(tx, created.id));
+
+    expect(dependants.products).toEqual([
+      { id: dishes[0], name: "sandwich" },
+      { id: dishes[1], name: "toastie" },
+    ]);
+    // Nothing publishes it on a menu: the two sides are separate reads, and this file has no menu.
+    expect(dependants.menus).toEqual([]);
   });
 
   it("refuses to read an id that names no list", async () => {

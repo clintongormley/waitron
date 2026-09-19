@@ -34,6 +34,7 @@ const categories: CategorySummary[] = [
 const products: Product[] = [
   {
     id: "p1",
+    modifiers: [],
     modifierIds: [],
     catalogueId: "cat-a",
     categoryId: "c1",

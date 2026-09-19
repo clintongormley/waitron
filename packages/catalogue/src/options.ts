@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { optionLabels, optionLists } from "./schema/options.js";
+import { productModifiers } from "./schema/extras.js";
+import { menuItems } from "./schema/menu.js";
 import {
   parseOptionListInput,
   type OptionLabel,
@@ -266,23 +268,64 @@ export interface OptionListDependants {
 }
 
 /**
- * What deleting this list would touch — the preview a delete confirmation reads.
+ * What deleting this list would touch — the preview a delete confirmation reads. Both sides are
+ * detached by the delete rather than blocking it: `product_modifiers_option_list_fk` is
+ * ON DELETE CASCADE (drizzle/0010_product_modifiers.sql:12), and an order line carries the chosen
+ * names as text and points at nothing here (spec
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3).
  *
- * The two sides are not the same kind of thing. A PRODUCT holds the list, through the attachment
- * table Task 6 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` adds. A MENU only
- * shows a dish that holds it — options lists have no per-menu row at all
- * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.2), so `menus` is reached
- * through the products, never queried directly.
+ * The two sides are not the same kind of thing. A PRODUCT holds the list, through
+ * `product_modifiers` (spec §5). A MENU only shows a dish that holds it — options lists have no
+ * per-menu row at all (spec §2.2) — so `menus` walks the same attachment rows on to `menu_items`
+ * rather than having a table of its own to read, which is where it differs from the extras twin
+ * (`extraListDependants`, extras.ts). Each offer is named by the staff name of the product that
+ * dish is, exactly as that twin does.
  *
- * Both sides are empty today because nothing can hold a list yet. Receipt, over the generated
- * migrations: `grep -rn 'REFERENCES "public"."option_l' --include='*.sql' packages apps` returns one
- * line, `option_labels`' own key into `option_lists` (drizzle/0002_option_lists.sql:21). No other
- * table has a key into either of these two.
+ * ONE query for both sides, not two: every menu offer of a carrying dish hangs off the same
+ * attachment row the product side already resolved, so a second query would filter
+ * `product_modifiers` on the same list id and re-join `products` on the same product. The extras
+ * twin cannot be folded the same way — its menu side reads a table of its own,
+ * `menu_item_extra_lists`, which is not reached through the attachment rows at all.
+ *
+ * Receipt for "no other table points at an options list", over the generated migrations:
+ * `grep -rn 'REFERENCES "public"."option_l' --include='*.sql' packages apps` returns two lines,
+ * `option_labels`' own key into `option_lists` (drizzle/0002_option_lists.sql:21) and
+ * `product_modifiers`' (drizzle/0010_product_modifiers.sql:12).
+ *
+ * The products come back alphabetical by staff name with the id breaking a tie, so a confirmation
+ * dialog reads in a fixed order whichever ids were minted; the menus in offer-id order, as the
+ * extras twin's do. An INACTIVE menu offer is listed like any other — deleting the list detaches
+ * it either way.
+ *
+ * The products' order is the query's; the menus are sorted here, because one query has one
+ * `order by` and the product side has the claim on it. A JavaScript string sort reproduces what
+ * `order by menu_items.id` gave: PostgreSQL orders a `uuid` by its sixteen bytes, and the
+ * canonical lower-cased hex text compares the same way. MEASURED on PostgreSQL 18 rather than read
+ * off the documentation — 2000 `gen_random_uuid()` values, `string_agg(u::text, ',' order by u)`,
+ * compared with the same list sorted in JavaScript: identical, and a control with one adjacent
+ * pair swapped reported a difference.
  */
 export async function optionListDependants(
   tx: Transaction,
   optionListId: string,
 ): Promise<OptionListDependants> {
   await assertOptionList(tx, optionListId);
-  return { products: [], menus: [] };
+  // A LEFT join on the offers: a carrying dish that is on no menu still has to reach the products
+  // side, and one that is on several menus contributes one row per offer.
+  const rows = await tx
+    .select({ productId: products.id, name: products.name, menuItemId: menuItems.id })
+    .from(productModifiers)
+    .innerJoin(products, eq(products.id, productModifiers.productId))
+    .leftJoin(menuItems, eq(menuItems.productId, productModifiers.productId))
+    .where(eq(productModifiers.optionListId, optionListId))
+    .orderBy(products.name, products.id);
+  const carrying = new Map<string, { id: string; name: string }>();
+  const menus: { id: string; name: string }[] = [];
+  for (const row of rows) {
+    // A dish on two menus arrives twice; the map keeps the query's order and the first of the pair.
+    carrying.set(row.productId, { id: row.productId, name: row.name });
+    if (row.menuItemId !== null) menus.push({ id: row.menuItemId, name: row.name });
+  }
+  menus.sort((left, right) => (left.id < right.id ? -1 : 1));
+  return { products: [...carrying.values()], menus };
 }

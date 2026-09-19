@@ -14,7 +14,9 @@ import {
   setMenuItemExtraLists,
   updateExtraList,
 } from "./extras.js";
-import { readMenuExtras } from "./extra-projection.js";
+import { createOptionList } from "./options.js";
+import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
+import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 
 // Publishing an extras list on a menu offer is authoring configuration, and PGlite is the lighter
 // target that still runs the real migrations (CLAUDE.md §4). It enforces the two publication
@@ -102,6 +104,31 @@ const toppings = () => ({
   ],
 });
 
+/**
+ * Attach these extras lists to the dish's product, on top of whatever it already carries.
+ * `setMenuItemExtraLists` refuses a list the offer's product does not carry, so a test that
+ * publishes has to say what the dish carries first.
+ */
+const carries = async (tx: Transaction, dish: keyof typeof offers, ...listIds: string[]) => {
+  const productId = ids[dish];
+  const held = (await readProductModifiers(tx, [productId])).get(productId) ?? [];
+  const added = listIds
+    .map((listId) => listId.toLowerCase())
+    .filter((listId) => !held.some((ref) => ref.kind === "extras" && ref.id === listId))
+    .map((listId) => ({ kind: "extras" as const, id: listId }));
+  await writeProductModifiers(tx, productId, [...held, ...added]);
+};
+
+/** {@link carries}, then publish — what a manager's two saves do, in one call. */
+const publish = async (
+  tx: Transaction,
+  dish: keyof typeof offers,
+  publications: { listId: string; items?: unknown[] }[],
+) => {
+  await carries(tx, dish, ...publications.map((publication) => publication.listId));
+  await setMenuItemExtraLists(tx, offers[dish], publications);
+};
+
 const countRows = async (table: "menu_item_extra_lists" | "menu_item_extra_items") => {
   const rows = await fx.db.execute<{ count: number }>(
     sql`select count(*)::int as count from ${sql.identifier(table)}`,
@@ -113,7 +140,7 @@ describe("what a menu offer publishes", () => {
   it("prices each item from the menu, then the list item, then the product", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         { listId: list.id, items: [{ productId: ids.bacon, price: "1.00" }] },
       ]),
     );
@@ -136,7 +163,7 @@ describe("what a menu offer publishes", () => {
   it("drops an item this menu offer marks unavailable, leaving the list itself alone", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         { listId: list.id, items: [{ productId: ids.cheese, available: false }] },
       ]),
     );
@@ -149,7 +176,7 @@ describe("what a menu offer publishes", () => {
       ids.ham,
     ]);
     // Withdrawn here and nowhere else: the pizza's offer publishes the same list and still shows it.
-    await run((tx) => setMenuItemExtraLists(tx, offers.pizza, [{ listId: list.id, items: [] }]));
+    await run((tx) => publish(tx, "pizza", [{ listId: list.id, items: [] }]));
     const elsewhere = await run((tx) => readMenuExtras(tx, [offers.pizza]));
     expect(elsewhere.get(offers.pizza)![0]!.items.map((item) => item.productId)).toContain(
       ids.cheese,
@@ -158,7 +185,7 @@ describe("what a menu offer publishes", () => {
 
   it("carries the list's own terms through to the menu view", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
-    await run((tx) => setMenuItemExtraLists(tx, offers.burger, [{ listId: list.id, items: [] }]));
+    await run((tx) => publish(tx, "burger", [{ listId: list.id, items: [] }]));
 
     const [published] = (await run((tx) => readMenuExtras(tx, [offers.burger]))).get(
       offers.burger,
@@ -193,11 +220,11 @@ describe("what a menu offer publishes", () => {
     // list id rather than from `display_order` has to get one of them wrong whichever ids were
     // minted.
     await run(async (tx) => {
-      await setMenuItemExtraLists(tx, offers.burger, [
+      await publish(tx, "burger", [
         { listId: toppingsList.id, items: [] },
         { listId: sauces.id, items: [] },
       ]);
-      await setMenuItemExtraLists(tx, offers.pizza, [
+      await publish(tx, "pizza", [
         { listId: sauces.id, items: [] },
         { listId: toppingsList.id, items: [] },
       ]);
@@ -217,7 +244,7 @@ describe("what a menu offer publishes", () => {
 
   it("returns an empty map for no menu items, and nothing for an offer that publishes none", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
-    await run((tx) => setMenuItemExtraLists(tx, offers.burger, [{ listId: list.id, items: [] }]));
+    await run((tx) => publish(tx, "burger", [{ listId: list.id, items: [] }]));
 
     expect(await run((tx) => readMenuExtras(tx, []))).toEqual(new Map());
     const published = await run((tx) => readMenuExtras(tx, [offers.pizza]));
@@ -230,12 +257,12 @@ describe("what a menu offer publishes", () => {
       createExtraList(tx, { name: "Sauces", items: [{ productId: ids.ham }] }, "en"),
     );
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         { listId: toppingsList.id, items: [{ productId: ids.bacon, price: "1.00" }] },
       ]),
     );
 
-    await run((tx) => setMenuItemExtraLists(tx, offers.burger, [{ listId: sauces.id, items: [] }]));
+    await run((tx) => publish(tx, "burger", [{ listId: sauces.id, items: [] }]));
 
     const published = await run((tx) => readMenuExtras(tx, [offers.burger]));
     expect(published.get(offers.burger)!.map((list) => list.id)).toEqual([sauces.id]);
@@ -247,12 +274,12 @@ describe("what a menu offer publishes", () => {
   it("publishes nothing when the body is empty, clearing what the offer carried", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         { listId: list.id, items: [{ productId: ids.bacon, price: "1.00" }] },
       ]),
     );
 
-    await run((tx) => setMenuItemExtraLists(tx, offers.burger, []));
+    await run((tx) => publish(tx, "burger", []));
 
     expect(await run((tx) => readMenuExtras(tx, [offers.burger]))).toEqual(new Map());
     expect(await countRows("menu_item_extra_lists")).toBe(0);
@@ -263,7 +290,7 @@ describe("what a menu offer publishes", () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
 
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         {
           listId: list.id.toUpperCase(),
           items: [{ productId: ids.bacon.toUpperCase(), price: "1.00" }],
@@ -276,6 +303,117 @@ describe("what a menu offer publishes", () => {
     expect(
       published.get(offers.burger)![0]!.items.find((item) => item.productId === ids.bacon)!.price,
     ).toBe("1.00");
+  });
+});
+
+describe("what a product's own extras lists offer", () => {
+  it("prices each item from the list item and then the product, with no menu offer involved", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    await run((tx) => carries(tx, "burger", list.id));
+
+    const carried = await run((tx) => readProductExtras(tx, [ids.burger]));
+
+    const [only] = carried.get(ids.burger)!;
+    expect(only!.id).toBe(list.id);
+    // Bacon and olives carry a price on the list item, over their products' 3.00 and 1.25; cheese
+    // and ham carry none and fall to their products' own. Four different amounts, so an item paired
+    // with the wrong product's row shows up as the wrong money.
+    expect(only!.items.map((item) => [item.productId, item.price])).toEqual([
+      [ids.bacon, "1.50"],
+      [ids.cheese, "2.00"],
+      [ids.olives, "0.75"],
+      [ids.ham, "5.00"],
+    ]);
+  });
+
+  it("returns each product's lists in the order that product carries them", async () => {
+    const toppingsList = await run((tx) => createExtraList(tx, toppings(), "en"));
+    const sauces = await run((tx) =>
+      createExtraList(tx, { name: "Sauces", items: [{ productId: ids.ham }] }, "en"),
+    );
+    // The two dishes carry the same two lists in OPPOSITE orders, so an order taken from the list
+    // id, or from `extra_lists.sort`, has to get one of them wrong whichever ids were minted.
+    await run(async (tx) => {
+      await writeProductModifiers(tx, ids.burger, [
+        { kind: "extras", id: toppingsList.id },
+        { kind: "extras", id: sauces.id },
+      ]);
+      await writeProductModifiers(tx, ids.pizza, [
+        { kind: "extras", id: sauces.id },
+        { kind: "extras", id: toppingsList.id },
+      ]);
+    });
+
+    const carried = await run((tx) => readProductExtras(tx, [ids.burger, ids.pizza]));
+
+    expect(carried.get(ids.burger)!.map((each) => each.id)).toEqual([toppingsList.id, sauces.id]);
+    expect(carried.get(ids.pizza)!.map((each) => each.id)).toEqual([sauces.id, toppingsList.id]);
+  });
+
+  it("leaves out an options list the same product carries", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    const doneness = await run((tx) =>
+      createOptionList(tx, { name: "Doneness", labels: [{ name: "Rare" }] }, "en"),
+    );
+    // The options list is attached FIRST, so a read that walked the attachment list without
+    // filtering would hand back its id here rather than the extras list's.
+    await run((tx) =>
+      writeProductModifiers(tx, ids.burger, [
+        { kind: "options", id: doneness.id },
+        { kind: "extras", id: list.id },
+      ]),
+    );
+
+    const carried = await run((tx) => readProductExtras(tx, [ids.burger]));
+
+    expect(carried.get(ids.burger)!.map((each) => each.id)).toEqual([list.id]);
+  });
+
+  it("returns an empty map for no products, and nothing for a product carrying none", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    await run((tx) => carries(tx, "burger", list.id));
+
+    expect(await run((tx) => readProductExtras(tx, []))).toEqual(new Map());
+    const carried = await run((tx) => readProductExtras(tx, [ids.pizza]));
+    expect(carried.get(ids.pizza)).toBeUndefined();
+  });
+
+  it("ignores what the dish's menu offer reprices and withdraws", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    await run((tx) =>
+      publish(tx, "burger", [
+        {
+          listId: list.id,
+          items: [
+            { productId: ids.bacon, price: "1.00" },
+            { productId: ids.cheese, available: false },
+          ],
+        },
+      ]),
+    );
+
+    const carried = await run((tx) => readProductExtras(tx, [ids.burger]));
+
+    // The burger's menu offer charges 1.00 for bacon and withdraws cheese. What the PRODUCT carries
+    // is a different thing, so all four items are still here at the list-then-product prices.
+    expect(carried.get(ids.burger)![0]!.items.map((item) => [item.productId, item.price])).toEqual([
+      [ids.bacon, "1.50"],
+      [ids.cheese, "2.00"],
+      [ids.olives, "0.75"],
+      [ids.ham, "5.00"],
+    ]);
+  });
+
+  it("returns an inactive list rather than dropping it", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    await run((tx) => carries(tx, "burger", list.id));
+    await run((tx) => updateExtraList(tx, list.id, { ...toppings(), active: false }, "en"));
+
+    const carried = await run((tx) => readProductExtras(tx, [ids.burger]));
+
+    expect(carried.get(ids.burger)!.map((each) => [each.id, each.active])).toEqual([
+      [list.id, false],
+    ]);
   });
 });
 
@@ -294,6 +432,27 @@ describe("what publishing an extras list on a menu offer refuses", () => {
         code: "menu_item.not_found",
         params: { menuItemId: UNKNOWN_ID },
       }),
+    );
+  });
+
+  it("refuses a list the offer's product does not carry, naming its position", async () => {
+    const sauces = await run((tx) =>
+      createExtraList(tx, { name: "Sauces", items: [{ productId: ids.ham }] }, "en"),
+    );
+    const toppingsList = await list();
+    // The burger carries the sauces and not the toppings, so the refusal has to name the SECOND
+    // publication rather than simply the first.
+    await run((tx) => carries(tx, "burger", sauces.id));
+
+    const error = await refusal((tx) =>
+      setMenuItemExtraLists(tx, offers.burger, [
+        { listId: sauces.id, items: [] },
+        { listId: toppingsList.id, items: [] },
+      ]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "lists.1.listId" } }),
     );
   });
 
@@ -355,6 +514,8 @@ describe("what publishing an extras list on a menu offer refuses", () => {
 
   it("refuses an override naming a product the list does not offer", async () => {
     const toppingsList = await list();
+    // Carried by the dish, so the refusal below is about the override and not about the list.
+    await run((tx) => carries(tx, "burger", toppingsList.id));
 
     // The burger itself is a product, and a real one — what makes it wrong here is that the
     // Toppings list does not offer it. The field path names its own position, so a hardcoded
@@ -470,7 +631,7 @@ describe("what publishing an extras list on a menu offer refuses", () => {
   it("leaves the published set as it was when it refuses", async () => {
     const toppingsList = await list();
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         { listId: toppingsList.id, items: [{ productId: ids.bacon, price: "1.00" }] },
       ]),
     );
@@ -490,7 +651,7 @@ describe("a menu override whose product leaves the list", () => {
   it("is gone when the product comes back, rather than repricing it", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         { listId: list.id, items: [{ productId: ids.bacon, price: "1.00" }] },
       ]),
     );
@@ -513,7 +674,7 @@ describe("a menu override whose product leaves the list", () => {
   it("is gone when the list is emptied altogether", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         {
           listId: list.id,
           items: [
@@ -541,7 +702,7 @@ describe("a menu override whose product leaves the list", () => {
   it("keeps the overrides of the products the list still offers", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         {
           listId: list.id,
           items: [
@@ -587,8 +748,8 @@ describe("what deleting an extras list would touch", () => {
   it("names every menu offer that publishes it, by the dish's staff name", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run(async (tx) => {
-      await setMenuItemExtraLists(tx, offers.burger, [{ listId: list.id, items: [] }]);
-      await setMenuItemExtraLists(tx, offers.pizza, [{ listId: list.id, items: [] }]);
+      await publish(tx, "burger", [{ listId: list.id, items: [] }]);
+      await publish(tx, "pizza", [{ listId: list.id, items: [] }]);
     });
 
     const dependants = await run((tx) => extraListDependants(tx, list.id));
@@ -598,8 +759,12 @@ describe("what deleting an extras list would touch", () => {
       { id: offers.burger, name: "burger" },
       { id: offers.pizza, name: "pizza" },
     ]);
-    // Nothing attaches a list to a PRODUCT yet — `product_modifiers` is Task 6 of the plan.
-    expect(dependants.products).toEqual([]);
+    // Both dishes carry the list as well as publishing it, which is the only way to publish it.
+    // Alphabetical by staff name, so this pins the order as well as the membership.
+    expect(dependants.products).toEqual([
+      { id: ids.burger, name: "burger" },
+      { id: ids.pizza, name: "pizza" },
+    ]);
   });
 
   it("reports no menu offer for a list nobody publishes", async () => {
@@ -607,7 +772,7 @@ describe("what deleting an extras list would touch", () => {
     const other = await run((tx) =>
       createExtraList(tx, { name: "Sauces", items: [{ productId: ids.ham }] }, "en"),
     );
-    await run((tx) => setMenuItemExtraLists(tx, offers.burger, [{ listId: other.id, items: [] }]));
+    await run((tx) => publish(tx, "burger", [{ listId: other.id, items: [] }]));
 
     expect(await run((tx) => extraListDependants(tx, list.id))).toEqual({
       products: [],
@@ -618,7 +783,7 @@ describe("what deleting an extras list would touch", () => {
   it("takes the publication and its overrides with it when the list is deleted", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
     await run((tx) =>
-      setMenuItemExtraLists(tx, offers.burger, [
+      publish(tx, "burger", [
         { listId: list.id, items: [{ productId: ids.bacon, price: "1.00" }] },
       ]),
     );
@@ -666,8 +831,11 @@ describe("publishing on a menu offer as the non-superuser application role", () 
       expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
 
       const list = await createExtraList(tx, toppings(), "en");
-      // INSERT on both tables: the publication row, and the override under it.
-      await setMenuItemExtraLists(tx, offers.burger, [
+      // `publish` attaches the list to the burger's product first, so this also touches
+      // `product_modifiers` under the application role; that table's own grants are walked in
+      // product-modifiers.test.ts, and the two tables this walkthrough is about are below.
+      // INSERT on both of those: the publication row, and the override under it.
+      await publish(tx, "burger", [
         { listId: list.id, items: [{ productId: ids.bacon, price: "1.00" }] },
       ]);
       // SELECT on both tables.

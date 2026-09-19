@@ -4,12 +4,8 @@ import { AppError } from "@waitron/shared";
 import { readProductCategories, replaceProductCategories } from "./categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
-import {
-  createProduct,
-  listProductOptionGroupIds,
-  setProductOptionGroups,
-  updateProduct,
-} from "./operations.js";
+import { createProduct, updateProduct } from "./operations.js";
+import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { readProductUnitId } from "./units.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
@@ -49,7 +45,9 @@ export async function readProductEditor(
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     unitId: await readProductUnitId(tx, productId),
     ...categories,
-    modifierIds: await listProductOptionGroupIds(tx, productId),
+    // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
+    // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
+    modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],
     variants: await listProductVariants(tx, productId),
   };
 }
@@ -122,6 +120,6 @@ export async function saveProductEditor(
     primaryCategoryId: value.primaryCategoryId,
   });
   await setProductVariants(tx, productId, value.variants, fallbackLanguage);
-  await setProductOptionGroups(tx, productId, value.modifierIds);
+  await writeProductModifiers(tx, productId, value.modifiers);
   return readProductEditor(tx, productId);
 }

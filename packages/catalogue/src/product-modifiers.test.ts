@@ -1,0 +1,596 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
+import {
+  asAppUser,
+  captureError,
+  CORE_MIGRATIONS,
+  pgErrorCode,
+  pgErrorMessage,
+  withTransaction,
+} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { CATALOGUE_MIGRATIONS } from "./migrations.js";
+import { createCatalogue, createProduct } from "./operations.js";
+import { createExtraList } from "./extras.js";
+import { createOptionList } from "./options.js";
+import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
+import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+
+// Every case in THIS file is one writer at a time, so PGlite is the lighter target that still runs
+// the real migrations (CLAUDE.md §4). Two writers racing is a different matter and has its own
+// container twin, product-modifiers.pg.test.ts: PGlite serialises every query onto its one backend,
+// so a save overlapping a delete of one of the lists it names cannot even be staged here. The one
+// part of this file that turns on a ROLE is the grants walkthrough at the foot, and PGlite enforces
+// grants once `asAppUser` makes the session assume the role, so that needs no container either.
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
+const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
+
+const UNKNOWN_ID = "99999999-9999-4999-8999-999999999999";
+
+/**
+ * Two dishes, two products an extras list offers, and two lists of each kind, re-made per test:
+ * `useVenueDb` empties every data table after each test, so the ids are minted fresh each time.
+ * Every fixture carries DIFFERENT text so a read that picks up the wrong row is visible
+ * (CLAUDE.md §4). Products are created with `unitId: null` and `categoryId: null` so nothing else
+ * points at them, which is what lets the product-delete case below name the one key it is about.
+ */
+const dishes: { burger: string; salad: string } = { burger: "", salad: "" };
+const toppings: { bacon: string; aioli: string } = { bacon: "", aioli: "" };
+const extras: { breads: string; sauces: string } = { breads: "", sauces: "" };
+const options: { doneness: string; dressing: string } = { doneness: "", dressing: "" };
+
+beforeEach(async () => {
+  await seedTenant(fx.db);
+  await run(async (tx) => {
+    const catalogue = await createCatalogue(tx, { name: "Deli" });
+    const product = async (name: string, unitPrice: string) =>
+      (
+        await createProduct(tx, {
+          catalogueId: catalogue.id,
+          categoryId: null,
+          name,
+          unitId: null,
+          unitPrice,
+          vatClass: "reduced",
+        })
+      ).id;
+    dishes.burger = await product("burger", "9.50");
+    dishes.salad = await product("salad", "7.25");
+    toppings.bacon = await product("bacon", "1.50");
+    toppings.aioli = await product("aioli", "0.75");
+    // An ACTIVE extras list must offer at least one product (`parseExtraListInput`,
+    // extra-contract.ts), and an active options list at least one label.
+    for (const [key, productId] of [
+      ["breads", toppings.bacon],
+      ["sauces", toppings.aioli],
+    ] as const) {
+      const list = await createExtraList(tx, { name: key, items: [{ productId }] }, "en");
+      extras[key] = list.id;
+    }
+    for (const key of ["doneness", "dressing"] as const) {
+      const list = await createOptionList(tx, { name: key, labels: [{ name: key }] }, "en");
+      options[key] = list.id;
+    }
+  });
+});
+
+describe("what the attachment table refuses", () => {
+  it("refuses a row naming both an extras list and an options list", async () => {
+    const error = await captureError(() =>
+      fx.db.execute(
+        sql`insert into product_modifiers (product_id, extra_list_id, option_list_id)
+            values (${dishes.burger}, ${extras.breads}, ${options.doneness})`,
+      ),
+    );
+
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
+  });
+
+  it("refuses a row naming neither list", async () => {
+    const error = await captureError(() =>
+      fx.db.execute(sql`insert into product_modifiers (product_id) values (${dishes.burger})`),
+    );
+
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
+  });
+
+  it("refuses an attachment naming a product, extras list or options list that does not exist", async () => {
+    const missing = async (statement: ReturnType<typeof sql>, constraint: string) => {
+      const error = await captureError(() => fx.db.transaction((tx) => tx.execute(statement)));
+      expect(pgErrorCode(error), constraint).toBe("23503"); // foreign_key_violation
+      expect(pgErrorMessage(error), constraint).toContain(constraint);
+    };
+
+    await missing(
+      sql`insert into product_modifiers (product_id, extra_list_id)
+          values (${UNKNOWN_ID}, ${extras.breads})`,
+      "product_modifiers_product_fk",
+    );
+    await missing(
+      sql`insert into product_modifiers (product_id, extra_list_id)
+          values (${dishes.burger}, ${UNKNOWN_ID})`,
+      "product_modifiers_extra_list_fk",
+    );
+    await missing(
+      sql`insert into product_modifiers (product_id, option_list_id)
+          values (${dishes.burger}, ${UNKNOWN_ID})`,
+      "product_modifiers_option_list_fk",
+    );
+  });
+
+  /**
+   * The receipt for the claim the two unique indexes rest on: in PostgreSQL a unique index treats
+   * two NULLs as DIFFERENT values, so `product_modifiers_product_option_uq` constrains only the
+   * rows that carry an options list, and leaves every extras-only row of the same product alone.
+   * Run rather than read off the documentation.
+   */
+  it("lets one product carry many extras-only rows under the options-list unique index", async () => {
+    await fx.db.execute(
+      sql`insert into product_modifiers (product_id, extra_list_id, sort)
+          values (${dishes.burger}, ${extras.breads}, 0), (${dishes.burger}, ${extras.sauces}, 1)`,
+    );
+
+    const rows = await fx.db.execute<{ count: number }>(
+      sql`select count(*)::int as count from product_modifiers
+          where product_id = ${dishes.burger} and option_list_id is null`,
+    );
+    expect(rows.rows).toEqual([{ count: 2 }]);
+  });
+
+  it("refuses the same extras list attached to one product twice", async () => {
+    await fx.db.execute(
+      sql`insert into product_modifiers (product_id, extra_list_id) values (${dishes.burger}, ${extras.breads})`,
+    );
+
+    // `writeProductModifiers` already refuses a duplicate ref in one body; this index is what
+    // enforces the same rule for a write that goes through no write path at all.
+    const error = await captureError(() =>
+      fx.db.execute(
+        sql`insert into product_modifiers (product_id, extra_list_id) values (${dishes.burger}, ${extras.breads})`,
+      ),
+    );
+
+    expect(pgErrorCode(error)).toBe("23505"); // unique_violation
+    expect(pgErrorMessage(error)).toContain("product_modifiers_product_extra_uq");
+  });
+
+  it("refuses the same options list attached to one product twice", async () => {
+    await fx.db.execute(
+      sql`insert into product_modifiers (product_id, option_list_id) values (${dishes.burger}, ${options.doneness})`,
+    );
+
+    const error = await captureError(() =>
+      fx.db.execute(
+        sql`insert into product_modifiers (product_id, option_list_id) values (${dishes.burger}, ${options.doneness})`,
+      ),
+    );
+
+    expect(pgErrorCode(error)).toBe("23505");
+    expect(pgErrorMessage(error)).toContain("product_modifiers_product_option_uq");
+  });
+
+  it("lets two different products each carry the same list", async () => {
+    await fx.db.execute(
+      sql`insert into product_modifiers (product_id, extra_list_id)
+          values (${dishes.burger}, ${extras.breads}), (${dishes.salad}, ${extras.breads})`,
+    );
+
+    const rows = await fx.db.execute<{ count: number }>(
+      sql`select count(*)::int as count from product_modifiers where extra_list_id = ${extras.breads}`,
+    );
+    expect(rows.rows).toEqual([{ count: 2 }]);
+  });
+});
+
+describe("what deleting a parent row takes with it", () => {
+  const attachmentCount = async () => {
+    const rows = await fx.db.execute<{ count: number }>(
+      sql`select count(*)::int as count from product_modifiers`,
+    );
+    return rows.rows[0]!.count;
+  };
+
+  it("removes a product's attachments when the extras list is deleted", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "extras", id: extras.breads },
+        { kind: "options", id: options.doneness },
+      ]),
+    );
+    expect(await attachmentCount()).toBe(2);
+
+    await fx.db.execute(sql`delete from extra_lists where id = ${extras.breads}`);
+
+    expect(await attachmentCount()).toBe(1);
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger]))).toEqual(
+      new Map([[dishes.burger, [{ kind: "options", id: options.doneness }]]]),
+    );
+  });
+
+  it("removes a product's attachments when the options list is deleted", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "extras", id: extras.breads },
+        { kind: "options", id: options.doneness },
+      ]),
+    );
+
+    await fx.db.execute(sql`delete from option_lists where id = ${options.doneness}`);
+
+    expect(await attachmentCount()).toBe(1);
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger]))).toEqual(
+      new Map([[dishes.burger, [{ kind: "extras", id: extras.breads }]]]),
+    );
+  });
+
+  it("removes a product's attachments when the product is deleted", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]),
+    );
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.salad, [{ kind: "options", id: options.dressing }]),
+    );
+    expect(await attachmentCount()).toBe(2);
+
+    // Direct SQL because no route deletes a product row; the dashboard marks one unavailable
+    // instead. The attachment's key is the only one of the three that is ON DELETE CASCADE from
+    // `products` in this table, and the assertion below is what shows the cascade fired rather than
+    // the delete being refused.
+    await fx.db.execute(sql`delete from products where id = ${dishes.burger}`);
+
+    expect(await attachmentCount()).toBe(1);
+    expect(await run((tx) => readProductModifiers(tx, [dishes.salad]))).toEqual(
+      new Map([[dishes.salad, [{ kind: "options", id: options.dressing }]]]),
+    );
+  });
+});
+
+describe("reading and writing a product's attachment list", () => {
+  it("reads back the order the body was written in, extras and options mixed", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "options", id: options.doneness },
+        { kind: "extras", id: extras.sauces },
+        { kind: "options", id: options.dressing },
+        { kind: "extras", id: extras.breads },
+      ]),
+    );
+
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger]))).toEqual(
+      new Map([
+        [
+          dishes.burger,
+          [
+            { kind: "options", id: options.doneness },
+            { kind: "extras", id: extras.sauces },
+            { kind: "options", id: options.dressing },
+            { kind: "extras", id: extras.breads },
+          ],
+        ],
+      ]),
+    );
+  });
+
+  it("reads several products in one call, keyed by product id", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]),
+    );
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.salad, [
+        { kind: "options", id: options.dressing },
+        { kind: "extras", id: extras.sauces },
+      ]),
+    );
+
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger, dishes.salad]))).toEqual(
+      new Map([
+        [dishes.burger, [{ kind: "extras", id: extras.breads }]],
+        [
+          dishes.salad,
+          [
+            { kind: "options", id: options.dressing },
+            { kind: "extras", id: extras.sauces },
+          ],
+        ],
+      ]),
+    );
+  });
+
+  it("leaves a product with no attachments out of the map entirely", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]),
+    );
+
+    const read = await run((tx) => readProductModifiers(tx, [dishes.burger, dishes.salad]));
+
+    // An ABSENT key, not an empty array: the doc comment on `readProductModifiers` states it and
+    // this is what pins it, because every caller reads `?? []` and would not notice either way.
+    expect(read.has(dishes.salad)).toBe(false);
+    expect([...read.keys()]).toEqual([dishes.burger]);
+  });
+
+  it("gives back an empty map for an empty product list", async () => {
+    expect(await run((tx) => readProductModifiers(tx, []))).toEqual(new Map());
+  });
+
+  it("replaces the whole list on a second write rather than appending", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "extras", id: extras.breads },
+        { kind: "options", id: options.doneness },
+      ]),
+    );
+
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "options", id: options.dressing }]),
+    );
+
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger]))).toEqual(
+      new Map([[dishes.burger, [{ kind: "options", id: options.dressing }]]]),
+    );
+  });
+
+  it("clears a product's list when the body is empty, and leaves another product's alone", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]),
+    );
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.salad, [{ kind: "extras", id: extras.sauces }]),
+    );
+
+    await run((tx) => writeProductModifiers(tx, dishes.burger, []));
+
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger, dishes.salad]))).toEqual(
+      new Map([[dishes.salad, [{ kind: "extras", id: extras.sauces }]]]),
+    );
+  });
+
+  /**
+   * This one measures the uuid COLUMN, not the code: a product id may arrive in either case and the
+   * column settles it, so the row a write in upper case leaves behind is found by a read in lower
+   * case, a second write in the other case REPLACES it rather than landing beside it (which
+   * `product_modifiers_product_extra_uq` would refuse), and the map comes back keyed lower-case
+   * either way. That is why `writeProductModifiers` lower-cases the LIST ids and not the product
+   * id — the list ids are the ones it compares in JavaScript.
+   */
+  it("settles a product id sent in upper case in the database, and keys the map lower-case", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger.toUpperCase(), [
+        { kind: "extras", id: extras.breads },
+      ]),
+    );
+
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger]))).toEqual(
+      new Map([[dishes.burger, [{ kind: "extras", id: extras.breads }]]]),
+    );
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]),
+    );
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger.toUpperCase()]))).toEqual(
+      new Map([[dishes.burger, [{ kind: "extras", id: extras.breads }]]]),
+    );
+  });
+
+  it("matches a list id the caller sent in upper case", async () => {
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "extras", id: extras.breads.toUpperCase() },
+      ]),
+    );
+
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger]))).toEqual(
+      new Map([[dishes.burger, [{ kind: "extras", id: extras.breads }]]]),
+    );
+  });
+});
+
+describe("what a product's attachment write refuses", () => {
+  it("refuses an extras list that does not exist, naming its position in the body", async () => {
+    const error = await refusal((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "options", id: options.doneness },
+        { kind: "extras", id: UNKNOWN_ID },
+      ]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "product.invalid", params: { field: "modifiers.1.id" } }),
+    );
+  });
+
+  it("refuses an options list that does not exist, naming its position in the body", async () => {
+    const error = await refusal((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "options", id: UNKNOWN_ID }]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "product.invalid", params: { field: "modifiers.0.id" } }),
+    );
+  });
+
+  it("refuses an extras list id that names an OPTIONS list, and the other way round", async () => {
+    const asExtras = await refusal((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: options.doneness }]),
+    );
+    expect(asExtras).toEqual(
+      expect.objectContaining({ code: "product.invalid", params: { field: "modifiers.0.id" } }),
+    );
+
+    const asOptions = await refusal((tx) =>
+      writeProductModifiers(tx, dishes.burger, [{ kind: "options", id: extras.breads }]),
+    );
+    expect(asOptions).toEqual(
+      expect.objectContaining({ code: "product.invalid", params: { field: "modifiers.0.id" } }),
+    );
+  });
+
+  /**
+   * The refusal comes BEFORE the delete, and that is only measurable INSIDE one transaction: after
+   * a rollback the caller's earlier list survives either way, because the rollback undoes the
+   * delete as readily as the check prevents it. Run in one transaction, the two orders differ —
+   * an `AppError` thrown from JavaScript leaves the transaction usable, so the read below still
+   * answers.
+   *
+   * Measured, with `assertRefsExist` (product-modifiers.ts) moved to just AFTER the delete and
+   * nothing else changed: this case alone went red, on the read, `expected Map{} to deeply equal
+   * Map{ …(1) }` — the earlier list had already been deleted. Twenty-five of the twenty-six cases
+   * here cannot see that move at all.
+   */
+  it("refuses before deleting anything, inside the caller's own transaction", async () => {
+    await run(async (tx) => {
+      await writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]);
+
+      const error = await captureError(() =>
+        writeProductModifiers(tx, dishes.burger, [
+          { kind: "extras", id: extras.sauces },
+          { kind: "options", id: UNKNOWN_ID },
+        ]),
+      );
+      expect(error).toEqual(
+        expect.objectContaining({ code: "product.invalid", params: { field: "modifiers.1.id" } }),
+      );
+
+      expect(await readProductModifiers(tx, [dishes.burger])).toEqual(
+        new Map([[dishes.burger, [{ kind: "extras", id: extras.breads }]]]),
+      );
+    });
+  });
+
+  it("refuses the same list named twice in one body, naming the second position", async () => {
+    const error = await refusal((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "extras", id: extras.breads },
+        { kind: "options", id: options.doneness },
+        { kind: "extras", id: extras.breads },
+      ]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "product.invalid", params: { field: "modifiers.2.id" } }),
+    );
+  });
+
+  it("refuses a duplicate that differs only in case", async () => {
+    const error = await refusal((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "extras", id: extras.breads },
+        { kind: "extras", id: extras.breads.toUpperCase() },
+      ]),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "product.invalid", params: { field: "modifiers.1.id" } }),
+    );
+  });
+
+  it("allows the same id under both kinds to be told apart", async () => {
+    // Two DIFFERENT lists, one of each kind: the duplicate check is on the pair, not on the id
+    // alone, so this body is legal and both rows land.
+    await run((tx) =>
+      writeProductModifiers(tx, dishes.burger, [
+        { kind: "extras", id: extras.breads },
+        { kind: "options", id: options.doneness },
+      ]),
+    );
+
+    expect(await run((tx) => readProductModifiers(tx, [dishes.burger]))).toEqual(
+      new Map([
+        [
+          dishes.burger,
+          [
+            { kind: "extras", id: extras.breads },
+            { kind: "options", id: options.doneness },
+          ],
+        ],
+      ]),
+    );
+  });
+});
+
+describe("a product's attachment list in the catalogue's configuration transfer", () => {
+  const transferred = CATALOGUE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+
+  it("copies both kinds of list before the rows that point at them", () => {
+    // `importConfigurationTables` inserts in this order and deletes in its reverse
+    // (apps/server/src/configuration-transfer.ts), so both parents have to come first: a row here
+    // names an extras list or an options list, and `product_modifiers_extra_list_fk` /
+    // `product_modifiers_option_list_fk` are what refuse it otherwise.
+    // `toContain` first on all three, because `indexOf` answers -1 for a name the list does not
+    // hold and -1 is less than every index, so a missing parent would satisfy the comparisons
+    // below without being there at all. `products` is NOT asserted: the catalogue's transfer list
+    // does not hold it (it belongs to the core set), so there is no position here to compare.
+    for (const name of ["extra_lists", "option_lists", "product_modifiers"])
+      expect(transferred).toContain(name);
+    expect(transferred.indexOf("extra_lists")).toBeLessThan(
+      transferred.indexOf("product_modifiers"),
+    );
+    expect(transferred.indexOf("option_lists")).toBeLessThan(
+      transferred.indexOf("product_modifiers"),
+    );
+  });
+});
+
+/**
+ * The walkthrough that answers to the grants migration for this table. Every test above runs on
+ * PGlite's superuser connection, which holds every privilege and so exercises no grant at all;
+ * `asAppUser` makes the session assume the application role and PGlite enforces the table's grants
+ * from there — a container adds nothing (CLAUDE.md §4).
+ *
+ * Seen red rather than assumed, three times, each with `42501 permission denied for table
+ * product_modifiers`: with `DELETE` dropped from the grant in
+ * drizzle/0011_product_modifiers_grants.sql, with that whole migration removed from the set, and
+ * with `UPDATE` alone dropped from it. The first two stopped at the same statement —
+ * `delete from "product_modifiers" where "product_modifiers"."product_id" = $1` — because a write
+ * clears the product's rows first; the third stopped at this file's own
+ * `update product_modifiers set sort = 1`. So the DELETE and UPDATE grants each have a control of
+ * their own; the SELECT and INSERT grants are exercised here but no control has isolated them.
+ */
+describe("attachment CRUD as the non-superuser application role", () => {
+  const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
+    withTransaction(fx.db, async (tx) => {
+      await asAppUser(tx);
+      return fn(tx);
+    });
+
+  it("writes, replaces, reads and clears a product's list under the role's grants", async () => {
+    await app(async (tx) => {
+      const role = await tx.execute<{ role: string; superuser: boolean }>(
+        sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
+      );
+      expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
+
+      // INSERT and SELECT.
+      await writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]);
+      expect(await readProductModifiers(tx, [dishes.burger])).toEqual(
+        new Map([[dishes.burger, [{ kind: "extras", id: extras.breads }]]]),
+      );
+
+      // DELETE, which every write reaches: the list is replaced wholesale.
+      await writeProductModifiers(tx, dishes.burger, [{ kind: "options", id: options.dressing }]);
+      expect(await readProductModifiers(tx, [dishes.burger])).toEqual(
+        new Map([[dishes.burger, [{ kind: "options", id: options.dressing }]]]),
+      );
+
+      // UPDATE is granted by drizzle/0011_product_modifiers_grants.sql and no write path reaches
+      // it: `writeProductModifiers` deletes the product's rows and inserts fresh ones rather than
+      // editing one in place. It is walked by statement for that reason, the way
+      // extra-projection.test.ts walks `menu_item_extra_lists`' unreached UPDATE — a granted
+      // privilege nothing exercises is a privilege nothing has established the role holds.
+      await tx.execute(
+        sql`update product_modifiers set sort = 1 where product_id = ${dishes.burger}`,
+      );
+      const sorts = await tx.execute<{ sort: number }>(
+        sql`select sort from product_modifiers where product_id = ${dishes.burger}`,
+      );
+      expect(sorts.rows).toEqual([{ sort: 1 }]);
+
+      await writeProductModifiers(tx, dishes.burger, []);
+      expect(await readProductModifiers(tx, [dishes.burger])).toEqual(new Map());
+    });
+  });
+});

@@ -5,8 +5,8 @@ import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import type { OptionList } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, setProductOptionGroups } from "@waitron/catalogue";
+import type { ExtraList, OptionList } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -808,10 +808,13 @@ describe("mountCatalogueApi — products", () => {
       body: { name: { es: "Cafés" } },
     });
     const categoryId = ((await category.json()) as { id: string }).id;
-    const modifier = await send(app, "POST", "/management-api/modifiers", {
-      body: { type: "text", name: { es: "Nota" }, available: true },
+    // An OPTIONS list, not the old text modifier: the editor body's flat `modifierIds` is now an
+    // ordered `modifiers` list naming a list and its kind.
+    const optionList = await send(app, "POST", "/management-api/modifiers/options", {
+      body: { name: "Nota", labels: [{ name: "Sin azúcar" }] },
     });
-    const modifierId = ((await modifier.json()) as { modifier: { id: string } }).modifier.id;
+    const optionListId = ((await optionList.json()) as { optionList: { id: string } }).optionList
+      .id;
     const value = {
       name: "Café",
       customerName: { es: "Café recién molido" },
@@ -843,7 +846,7 @@ describe("mountCatalogueApi — products", () => {
       ],
       categoryIds: [categoryId],
       primaryCategoryId: categoryId,
-      modifierIds: [modifierId],
+      modifiers: [{ kind: "options", id: optionListId }],
       allergens: {},
       dietaryDeclarations: ["vegetarian", "halal"],
     };
@@ -930,7 +933,7 @@ describe("mountCatalogueApi — products", () => {
       variants: [],
       categoryIds: [],
       primaryCategoryId: null,
-      modifierIds: [],
+      modifiers: [],
       allergens: null,
       dietaryDeclarations: [],
       ...extra,
@@ -2110,32 +2113,55 @@ describe("mountCatalogueApi — option group items", () => {
   });
 });
 
-describe("mountCatalogueApi — attaching option groups to products", () => {
-  it("creates a group + items, attaches via the product body, and reads the whole thing back", async () => {
-    // Pinned test 1 (route half): author a group with two items, create a product carrying an ordered
-    // `optionGroupIds`, then read the group's items (GET /option-groups/:id/items) and the product's
-    // attached group ids (GET /products/:id/option-groups) back. The till-read half (the same attach
-    // surfacing in `listAvailableProducts`) is the real-Postgres suite's, where a location exists.
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Menú con opciones");
-    const g = await createGroupVia(app, {
-      name: { es: "Punto de la carne" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-    });
-    // Explicit ascending `sort` so the list order is deterministic (equal sort would tiebreak on the
-    // random uuid, which is why the sort is set rather than relying on insertion order).
-    for (const [sort, name] of [
-      [0, "Poco hecho"],
-      [1, "Al punto"],
-    ] as const) {
-      const r = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-        body: { name: { es: name }, sort },
-      });
-      expect(r.status).toBe(201);
-    }
+describe("mountCatalogueApi — attaching extras and options lists to products", () => {
+  // The product body used to carry a flat `optionGroupIds`/`modifierIds` of option-group ids. It now
+  // carries one ordered `modifiers` list, each entry naming a KIND (`extras` or `options`) and a list
+  // id, written to `product_modifiers`. The cases below are the old ones re-aimed at that contract,
+  // plus the two the old field had no equivalent of: a mixed ordered list, and the legacy fields'
+  // refusal.
+  async function createOptionsListVia(
+    app: Hono,
+    body: Record<string, unknown>,
+  ): Promise<OptionList> {
+    const res = await send(app, "POST", "/management-api/modifiers/options", { body });
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { optionList: OptionList }).optionList;
+  }
 
+  async function createExtrasListVia(
+    app: Hono,
+    catalogueId: string,
+    name: string,
+  ): Promise<ExtraList> {
+    const productId = await createProductVia(app, catalogueId);
+    const res = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name, items: [{ productId }] },
+    });
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { extraList: ExtraList }).extraList;
+  }
+
+  /** The product's attachment list as the catalogue read hands it back. */
+  async function readModifiers(app: Hono, catalogueId: string, productId: string) {
+    const res = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    expect(res.status).toBe(200);
+    const products = (await res.json()) as { id: string; modifiers: unknown }[];
+    return products.find((product) => product.id === productId)?.modifiers;
+  }
+
+  it("creates a product with an ordered mix of extras and options, and reads it back in order", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Menú con listas");
+    const options = await createOptionsListVia(app, {
+      name: "Punto de la carne",
+      labels: [{ name: "Poco hecho" }],
+    });
+    const extras = await createExtrasListVia(app, catalogueId, "Salsas");
+    // Options FIRST, so the read-back proves the stored order is the body's and not the two tables'.
+    const modifiers = [
+      { kind: "options", id: options.id },
+      { kind: "extras", id: extras.id },
+    ];
     const createRes = await send(app, "POST", "/management-api/products", {
       body: {
         catalogueId,
@@ -2144,87 +2170,118 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
         pricingUnit: "each",
         unitPrice: "18.00",
         vatClass: "general",
-        optionGroupIds: [g.id],
+        modifiers,
       },
     });
     expect(createRes.status).toBe(201);
-    const productId = ((await createRes.json()) as { id: string }).id;
-
-    const items = (await (
-      await send(app, "GET", `/management-api/option-groups/${g.id}/items`)
-    ).json()) as { name: Record<string, string> }[];
-    expect(items.map((i) => i.name["es"])).toEqual(["Poco hecho", "Al punto"]);
-
-    const attached = await send(app, "GET", `/management-api/products/${productId}/option-groups`);
-    expect(attached.status).toBe(200);
-    expect((await attached.json()) as string[]).toEqual([g.id]);
+    const created = (await createRes.json()) as { id: string; modifiers: unknown };
+    expect(created.modifiers).toEqual(modifiers);
+    expect(await readModifiers(app, catalogueId, created.id)).toEqual(modifiers);
   });
 
-  it("PATCH /products/:id with optionGroupIds re-orders and detaches (the attach is a full replace)", async () => {
+  it("answers the 201 with the list as STORED, not as sent, when a list id arrives in upper case", async () => {
+    // `writeProductModifiers` lower-cases every list id before it writes (product-modifiers.ts), so
+    // a 201 echoing the request would tell the caller its attachments are held in a casing the
+    // database does not have — and the caller's own next read would disagree with the answer it
+    // was just given. The `expect(created).not.toEqual(sent)` line is the control: it fails if the
+    // fixture stops being upper-cased and the case silently stops testing anything.
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Menú en mayúsculas");
+    const options = await createOptionsListVia(app, {
+      name: "Punto",
+      labels: [{ name: "Poco hecho" }],
+    });
+    const sent = [{ kind: "options", id: options.id.toUpperCase() }];
+    const createRes = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Solomillo",
+        pricingUnit: "each",
+        unitPrice: "21.00",
+        vatClass: "general",
+        modifiers: sent,
+      },
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as { id: string; modifiers: unknown };
+    expect(created.modifiers).not.toEqual(sent);
+    expect(created.modifiers).toEqual([{ kind: "options", id: options.id }]);
+    expect(await readModifiers(app, catalogueId, created.id)).toEqual(created.modifiers);
+  });
+
+  it("PATCH /products/:id with modifiers re-orders and detaches (the attach is a full replace)", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Reorder menu");
-    const g1 = await createGroupVia(app, { name: { es: "A" } });
-    const g2 = await createGroupVia(app, { name: { es: "B" } });
+    const a = await createOptionsListVia(app, { name: "A", labels: [{ name: "a1" }] });
+    const b = await createOptionsListVia(app, { name: "B", labels: [{ name: "b1" }] });
     const productId = await createProductVia(app, catalogueId);
+    const ref = (id: string) => ({ kind: "options", id });
 
-    // Attach [g1, g2] in order.
-    let res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { optionGroupIds: [g1.id, g2.id] },
-    });
-    expect(res.status).toBe(204);
-    expect(
-      (await (
-        await send(app, "GET", `/management-api/products/${productId}/option-groups`)
-      ).json()) as string[],
-    ).toEqual([g1.id, g2.id]);
-
-    // Replace with [g2] only — g1 detaches, order is the new list.
-    res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { optionGroupIds: [g2.id] },
-    });
-    expect(res.status).toBe(204);
-    expect(
-      (await (
-        await send(app, "GET", `/management-api/products/${productId}/option-groups`)
-      ).json()) as string[],
-    ).toEqual([g2.id]);
-
-    // An empty list detaches everything.
-    res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { optionGroupIds: [] },
-    });
-    expect(res.status).toBe(204);
-    expect(
-      (await (
-        await send(app, "GET", `/management-api/products/${productId}/option-groups`)
-      ).json()) as string[],
-    ).toEqual([]);
+    for (const wanted of [[ref(a.id), ref(b.id)], [ref(b.id), ref(a.id)], [ref(b.id)], []]) {
+      const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
+        body: { modifiers: wanted },
+      });
+      expect(res.status).toBe(204);
+      expect(await readModifiers(app, catalogueId, productId)).toEqual(wanted);
+    }
   });
 
-  it("PATCH /products/:id dedupes a repeated optionGroupId instead of a PK-collision 500", async () => {
+  it("PATCH /products/:id refuses a repeated attachment rather than colliding in the insert", async () => {
+    // The old `optionGroupIds` screen COLLAPSED a repeat, because two copies would otherwise hit the
+    // `(product_id, group_id)` primary key and surface as an opaque 500. The ordered list refuses it
+    // instead, through the same `product.invalid` the catalogue parser throws — a 400 naming the
+    // entry, which is a better answer than silently saving something the caller did not send.
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Dupe attach menu");
-    const g1 = await createGroupVia(app, { name: { es: "A" } });
+    const a = await createOptionsListVia(app, { name: "Repetida", labels: [{ name: "a1" }] });
     const productId = await createProductVia(app, catalogueId);
-
-    // The same id twice would collide on the (product_id, group_id) PK if it reached the insert —
-    // the shape screen collapses it to one, first-occurrence order preserved. 204, not 500.
     const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
-      body: { optionGroupIds: [g1.id, g1.id] },
+      body: {
+        modifiers: [
+          { kind: "options", id: a.id },
+          { kind: "options", id: a.id },
+        ],
+      },
     });
-    expect(res.status).toBe(204);
-    expect(
-      (await (
-        await send(app, "GET", `/management-api/products/${productId}/option-groups`)
-      ).json()) as string[],
-    ).toEqual([g1.id]);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "modifiers.1.id" } },
+    });
+    expect(await readModifiers(app, catalogueId, productId)).toEqual([]);
+  });
+
+  it("POST /products refuses an attachment naming no stored list", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Lista inexistente");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "x",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        modifiers: [{ kind: "extras", id: "11111111-1111-4111-8111-111111111111" }],
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "modifiers.0.id" } },
+    });
   });
 
   it.each([
-    ["not an array", { optionGroupIds: "g1" }],
-    ["a non-string element", { optionGroupIds: [123] }],
+    ["not an array", { modifiers: "lista" }],
+    ["a non-object element", { modifiers: [123] }],
+    ["an element with no kind", { modifiers: [{ id: "11111111-1111-4111-8111-111111111111" }] }],
+    [
+      "an element with an unknown kind",
+      { modifiers: [{ kind: "salsas", id: "11111111-1111-4111-8111-111111111111" }] },
+    ],
+    ["an element with no id", { modifiers: [{ kind: "extras" }] }],
   ])(
-    "POST /products rejects optionGroupIds that is %s → management.request_invalid 400",
+    "POST /products rejects %s → management.request_invalid 400 naming modifiers",
     async (_label, extra) => {
       const app = mountApp();
       const catalogueId = await createCatalogueVia(app, `Bad attach ${_label}`);
@@ -2243,30 +2300,71 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
       expect(
         (await res.json()) as { error: { code: string; params: { field: string } } },
       ).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "optionGroupIds" } },
+        error: { code: "management.request_invalid", params: { field: "modifiers" } },
       });
     },
   );
 
-  it("POST /products rejects a malformed uuid in optionGroupIds → shared.invalid_id 400", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Bad uuid attach");
-    const res = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "x",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "general",
-        optionGroupIds: ["not-a-uuid"],
-      },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
+  it.each(["modifierIds", "optionGroupIds"])(
+    "POST /products refuses the legacy %s field, naming it",
+    async (legacy) => {
+      // Naming the legacy field, not `modifiers`: a caller still on the old contract needs to be told
+      // which of its fields is the one that went away. Same choice `parseProductEditorInput`
+      // (packages/catalogue/src/product-editor-input.ts) makes on the editor body.
+      const app = mountApp();
+      const catalogueId = await createCatalogueVia(app, `Legacy ${legacy}`);
+      const res = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          name: "x",
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+          [legacy]: [],
+        },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: legacy } },
+      });
+    },
+  );
+
+  it.each(["POST", "PATCH"])(
+    "%s /products rejects a malformed uuid in modifiers → shared.invalid_id 400",
+    async (method) => {
+      // Same treatment `requireUuidParam` gives a path id, and for the same reason: a string that is
+      // not uuid-shaped would otherwise reach the `uuid` column as a `22P02` driver error, which the
+      // STATUS map has nothing for and which surfaces as an opaque 500.
+      const app = mountApp();
+      const catalogueId = await createCatalogueVia(app, `Bad uuid attach ${method}`);
+      const modifiers = [{ kind: "extras", id: "not-a-uuid" }];
+      const res =
+        method === "POST"
+          ? await send(app, "POST", "/management-api/products", {
+              body: {
+                catalogueId,
+                categoryId: null,
+                name: "x",
+                pricingUnit: "each",
+                unitPrice: "1.00",
+                vatClass: "general",
+                modifiers,
+              },
+            })
+          : await send(
+              app,
+              "PATCH",
+              `/management-api/products/${await createProductVia(app, catalogueId)}`,
+              { body: { modifiers } },
+            );
+      expect(res.status).toBe(400);
+      expect((await res.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "shared.invalid_id" },
+      });
+    },
+  );
 
   it("GET /management-api/products/:id/option-groups with a non-uuid id → shared.invalid_id 400", async () => {
     const res = await send(mountApp(), "GET", "/management-api/products/not-a-uuid/option-groups");
@@ -2288,11 +2386,18 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
         pricingUnit: "each",
         unitPrice: "18.00",
         vatClass: "general",
-        optionGroupIds: [group.id],
       },
     });
     expect(createRes.status).toBe(201);
     const productId = ((await createRes.json()) as { id: string }).id;
+    // No request body attaches an option GROUP any more — the product carries `modifiers` and writes
+    // `product_modifiers` — so the row this read is about is written directly. `product_option_groups`
+    // and everything reading it go in Task 13 of
+    // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+    await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      await setProductOptionGroups(tx, productId, [group.id]);
+    });
 
     const res = await send(app, "GET", `/management-api/modifiers/${group.id}/dependants`);
     expect(res.status).toBe(200);
@@ -2512,6 +2617,290 @@ describe("mountCatalogueApi — option lists", () => {
     const res = await send(app, "GET", `/management-api/modifiers/options/${list.id}/dependants`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ dependants: { products: [], menus: [] } });
+  });
+});
+
+/**
+ * Extras lists over the management API. What the CRUD itself does is proven in the catalogue package
+ * (`packages/catalogue/src/extras.test.ts`); what is proven HERE is the request/response boundary —
+ * the status codes, the `{ extraList }` / `{ extraLists }` envelopes, the uuid screen, the venue's
+ * fallback language reaching the write, and the permission gate. The sibling suite for option lists
+ * is directly above.
+ */
+describe("mountCatalogueApi — extras lists", () => {
+  // The same shared-database insurance the option-list block above takes, and for the same reason:
+  // a content-language configuration another describe left behind would decide what
+  // `createExtraList` demands of the customer-facing name map. Emptying the table puts
+  // `readContentLanguages` on the mounted venue locale.
+  beforeEach(async () => {
+    await suite.db.execute(sql`delete from content_languages`);
+  });
+
+  /** Two products a list can offer. Each gets a catalogue of its own; only the ids matter here. */
+  async function twoProducts(app: Hono): Promise<[string, string]> {
+    return [
+      await createNamedProductVia(app, `Alioli ${crypto.randomUUID()}`),
+      await createNamedProductVia(app, `Brava ${crypto.randomUUID()}`),
+    ];
+  }
+
+  /**
+   * Staff, customer-facing and kitchen name are DIFFERENT text, so a response reading the wrong one
+   * of the three cannot pass these assertions (CLAUDE.md §3). The two items differ in every field a
+   * response could confuse — quantity cap, preselection and price — for the same reason.
+   */
+  const sauces = (productIds: string[]) => ({
+    name: "Salsas",
+    customerName: { es: "¿Alguna salsa?" },
+    kitchenName: "SALSA",
+    minPicks: 0,
+    maxPicks: 2,
+    items: productIds.map((productId, index) => ({
+      productId,
+      maxQuantity: index + 1,
+      preselected: index === 0,
+      price: index === 0 ? "0.50" : null,
+    })),
+  });
+
+  async function createListVia(app: Hono, body: Record<string, unknown>): Promise<ExtraList> {
+    const res = await send(app, "POST", "/management-api/modifiers/extras", { body });
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { extraList: ExtraList }).extraList;
+  }
+
+  it("POST creates a list (201) with all three names, its bounds and its items in body order", async () => {
+    const app = mountApp();
+    const [alioli, brava] = await twoProducts(app);
+    const list = await createListVia(app, sauces([alioli, brava]));
+    expect(list).toMatchObject({
+      name: "Salsas",
+      customerName: { es: "¿Alguna salsa?" },
+      kitchenName: "SALSA",
+      minPicks: 0,
+      maxPicks: 2,
+      active: true,
+    });
+    expect(
+      list.items.map((item) => [item.productId, item.maxQuantity, item.preselected, item.price]),
+    ).toEqual([
+      [alioli, 1, true, "0.50"],
+      [brava, 2, false, null],
+    ]);
+  });
+
+  it("GET /management-api/modifiers/extras lists them", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista listada" });
+    const res = await send(app, "GET", "/management-api/modifiers/extras");
+    expect(res.status).toBe(200);
+    const { extraLists } = (await res.json()) as { extraLists: ExtraList[] };
+    expect(extraLists.find((row) => row.id === list.id)).toMatchObject({
+      name: "Lista listada",
+      kitchenName: "SALSA",
+      items: [{ productId: alioli, price: "0.50" }],
+    });
+  });
+
+  it("GET /management-api/modifiers/extras/:id reads one back", async () => {
+    const app = mountApp();
+    const [alioli, brava] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli, brava]), name: "Lista leída" });
+    const res = await send(app, "GET", `/management-api/modifiers/extras/${list.id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      extraList: {
+        id: list.id,
+        name: "Lista leída",
+        customerName: { es: "¿Alguna salsa?" },
+        kitchenName: "SALSA",
+        items: [{ productId: alioli }, { productId: brava }],
+      },
+    });
+  });
+
+  it("PATCH replaces the list — a rename, a reorder and a reprice come back in the new order", async () => {
+    const app = mountApp();
+    const [alioli, brava] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli, brava]), name: "Lista reordenada" });
+    const [first, second] = list.items;
+    const res = await send(app, "PATCH", `/management-api/modifiers/extras/${list.id}`, {
+      body: {
+        name: "Lista reordenada y renombrada",
+        customerName: { es: "¿Dos salsas?" },
+        kitchenName: "SALSA2",
+        minPicks: 1,
+        maxPicks: 3,
+        items: [
+          { id: second!.id, productId: brava, maxQuantity: 4, preselected: true, price: "1.25" },
+          { id: first!.id, productId: alioli, maxQuantity: 1, preselected: false, price: null },
+        ],
+      },
+    });
+    expect(res.status).toBe(200);
+    const { extraList } = (await res.json()) as { extraList: ExtraList };
+    expect(extraList).toMatchObject({
+      name: "Lista reordenada y renombrada",
+      customerName: { es: "¿Dos salsas?" },
+      kitchenName: "SALSA2",
+      minPicks: 1,
+      maxPicks: 3,
+    });
+    expect(extraList.items.map((item) => [item.id, item.productId, item.price])).toEqual([
+      [second!.id, brava, "1.25"],
+      [first!.id, alioli, null],
+    ]);
+  });
+
+  it("DELETE answers { ok: true } and the list is then gone", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista borrada" });
+    const res = await send(app, "DELETE", `/management-api/modifiers/extras/${list.id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    const gone = await send(app, "GET", `/management-api/modifiers/extras/${list.id}`);
+    expect(gone.status).toBe(404);
+    expect(await gone.json()).toMatchObject({ error: { code: "extras.not_found" } });
+  });
+
+  it("refuses an invalid body with 400 and the domain code, naming the field", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const item = { productId: alioli };
+    for (const [body, field] of [
+      [{ name: "   ", items: [item] }, "name"],
+      // An ACTIVE list with no product cannot be answered, so the contract refuses it.
+      [{ name: "Sin productos", items: [] }, "items"],
+      // The cap below the floor: the contract names the cap, the field a manager just raised.
+      [{ name: "Tope al revés", minPicks: 2, maxPicks: 1, items: [item] }, "maxPicks"],
+      [{ name: "Clave de más", items: [item], nope: 1 }, "extraList.nope"],
+      [{ name: "Producto inventado", items: [{ productId: "no-es-uuid" }] }, "items.0.productId"],
+    ] as const) {
+      const res = await send(app, "POST", "/management-api/modifiers/extras", { body });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "extras.invalid", params: { field } },
+      });
+    }
+  });
+
+  /**
+   * The VENUE's fallback language decides which language a customer-facing name must carry, so the
+   * mount here is `fr-FR` and nothing else in the file is: a route passing `FALLBACK_LOCALE`
+   * (`en-GB`) or nothing at all would report the gap as `en`, and a route passing the mounted
+   * `es-ES` of every other test would find no gap in an `es` map and answer 201.
+   */
+  it("reports a missing customer-facing name in the venue's own language, on create and on update", async () => {
+    const app = mountApp("fr-FR");
+    const [alioli] = await twoProducts(app);
+    const refused = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: sauces([alioli]),
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: {
+        code: "extras.translation_required",
+        params: { field: "customerName", language: "fr" },
+      },
+    });
+    const list = await createListVia(app, {
+      ...sauces([alioli]),
+      customerName: { fr: "Une sauce ?" },
+    });
+    const patched = await send(app, "PATCH", `/management-api/modifiers/extras/${list.id}`, {
+      body: sauces([alioli]),
+    });
+    expect(patched.status).toBe(400);
+    expect(await patched.json()).toMatchObject({
+      error: {
+        code: "extras.translation_required",
+        params: { field: "customerName", language: "fr" },
+      },
+    });
+  });
+
+  it("gates every extras-list route and refuses an id naming no list", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista vigilada" });
+    const collection = "/management-api/modifiers/extras";
+    const path = `${collection}/${list.id}`;
+    // Every gated route, as [method, path, body] — the table the option-list block above uses. Each
+    // route is checked BOTH ways, so a route missing one of the two refusals cannot hide behind a
+    // sibling that has it.
+    const routes: ["GET" | "POST" | "PATCH" | "DELETE", string, unknown?][] = [
+      ["GET", collection],
+      ["POST", collection, sauces([alioli])],
+      ["GET", path],
+      ["PATCH", path, sauces([alioli])],
+      ["DELETE", path],
+      ["GET", `${path}/dependants`],
+    ];
+    for (const [method, routePath, body] of routes) {
+      for (const [cookie, status, code] of [
+        [null, 401, "management_session.required"],
+        [staffCookie, 403, "authorization.not_permitted"],
+      ] as const) {
+        const res = await send(app, method, routePath, {
+          cookie,
+          ...(body === undefined ? {} : { body }),
+        });
+        expect(res.status, `${method} ${routePath}`).toBe(status);
+        expect(await res.json()).toMatchObject({ error: { code } });
+      }
+    }
+    const malformed = `${collection}/not-a-uuid`;
+    for (const [method, routePath, body] of [
+      ["GET", malformed],
+      ["PATCH", malformed, sauces([alioli])],
+      ["DELETE", malformed],
+      ["GET", `${malformed}/dependants`],
+    ] as ["GET" | "PATCH" | "DELETE", string, unknown?][]) {
+      const res = await send(app, method, routePath, {
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(res.status, `${method} ${routePath}`).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    }
+    // A well-formed id naming no list, on each of the four `:id` routes — the read reaches
+    // `getExtraList`, the update and the delete reach `lockExtraList`, the preview reaches
+    // `assertExtraList`, and all four must answer 404 rather than the boundary's 400 default. The
+    // PATCH body is a VALID one, or the contract would refuse it before the list is looked up.
+    const absentId = "33333333-3333-4333-8333-333333333333";
+    const absentPath = `${collection}/${absentId}`;
+    for (const [method, routePath, body] of [
+      ["GET", absentPath],
+      ["PATCH", absentPath, sauces([alioli])],
+      ["DELETE", absentPath],
+      ["GET", `${absentPath}/dependants`],
+    ] as ["GET" | "PATCH" | "DELETE", string, unknown?][]) {
+      const absent = await send(app, method, routePath, {
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(absent.status, `${method} ${routePath}`).toBe(404);
+      expect(await absent.json()).toMatchObject({
+        error: { code: "extras.not_found", params: { extraListId: absentId } },
+      });
+    }
+  });
+
+  it("previews what deleting a list would touch — the products carrying it", async () => {
+    const app = mountApp();
+    const [alioli] = await twoProducts(app);
+    const list = await createListVia(app, { ...sauces([alioli]), name: "Lista con dependientes" });
+    const catalogueId = await createCatalogueVia(app, "Menú con extras");
+    const productId = await createProductVia(app, catalogueId);
+    const attached = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { modifiers: [{ kind: "extras", id: list.id }] },
+    });
+    expect(attached.status).toBe(204);
+    const res = await send(app, "GET", `/management-api/modifiers/extras/${list.id}/dependants`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      dependants: { products: [{ id: productId, name: "Producto con opciones" }], menus: [] },
+    });
   });
 });
 

@@ -8,6 +8,7 @@ import {
   extraLists,
   menuItemExtraItems,
   menuItemExtraLists,
+  productModifiers,
 } from "./schema/extras.js";
 import {
   parseExtraListInput,
@@ -443,6 +444,49 @@ async function lockPublishedLists(
     await lockExtraList(tx, listId);
 }
 
+/**
+ * Every list the body publishes is one the dish's PRODUCT carries in `product_modifiers` — ONE of
+ * the two checks `setMenuItemOptionGroups` (operations.ts) makes against `product_option_groups`,
+ * the one it refuses as `options.group_invalid` with `reason: "not_attached"`. Its OTHER check has
+ * no twin here: that one refuses a body which LEAVES OUT a group the product marks required
+ * (`reason: "required_group_missing"`), and nothing on the extras side refuses an offer that
+ * publishes none of the lists its product carries. Whether it should is open, not decided here —
+ * an extras list has no `required` flag to read (the spec makes "required" `min_picks >= 1`, §3.1),
+ * and §3.2 says only which lists an offer publishes, never that a required one must be among them.
+ *
+ * A menu offer narrows and reprices what the product already offers (spec
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2), so publishing a list the
+ * product does not carry would put items on a dish that does not have them. Refused as
+ * `extras.invalid` naming the publication's own position, the path `parseMenuExtraPublications`
+ * (extra-contract.ts) builds for its own refusals, so an editor can put the message beside the
+ * input. The database refuses nothing here: `menu_item_extra_lists` has a key into `extra_lists`
+ * and none into `product_modifiers`.
+ *
+ * ONE grouped query for the whole body, never one per list (CLAUDE.md §3).
+ */
+async function assertProductCarries(
+  tx: Transaction,
+  productId: string,
+  publications: MenuExtraPublication[],
+): Promise<void> {
+  if (publications.length === 0) return;
+  const rows = await tx
+    .select({ extraListId: productModifiers.extraListId })
+    .from(productModifiers)
+    .where(
+      and(
+        eq(productModifiers.productId, productId),
+        inArray(
+          productModifiers.extraListId,
+          publications.map((publication) => publication.listId),
+        ),
+      ),
+    );
+  const held = new Set(rows.map((row) => row.extraListId));
+  const at = publications.findIndex((publication) => !held.has(publication.listId));
+  if (at !== -1) throw new AppError("extras.invalid", { field: `lists.${at}.listId` });
+}
+
 /** A list-and-product pair as one key, joined by a byte no uuid can contain. */
 const offeredKey = (listId: string, productId: string) => `${listId}\u0000${productId}`;
 
@@ -492,10 +536,10 @@ async function assertProductsOffered(
  * narrowing has its own place and row presence does not have to carry it; and §3.2 says a menu offer
  * MAY narrow and reprice, so an offer that narrows nothing offers the whole list.
  *
- * **Nothing here checks that the dish's product carries the list** — the check
- * `setMenuItemOptionGroups` (operations.ts) makes against `product_option_groups` — because no table
- * attaches an extras list to a product yet. Task 6 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` adds both.
+ * **A list the dish's product does not carry is refused** ({@link assertProductCarries}) — the
+ * `not_attached` half of what `setMenuItemOptionGroups` (operations.ts) checks against
+ * `product_option_groups`. Its `required_group_missing` half has no twin here, for the reason
+ * {@link assertProductCarries} gives.
  *
  * The existence read takes the menu offer's ROW LOCK, so two saves of the SAME offer run one after
  * the other rather than overlapping. NOT measured on this path: the receipt is for the same
@@ -509,13 +553,30 @@ export async function setMenuItemExtraLists(
 ): Promise<void> {
   const offerId = menuItemId.toLowerCase();
   const [offer] = await tx
-    .select({ id: menuItems.id })
+    .select({ id: menuItems.id, productId: menuItems.productId })
     .from(menuItems)
     .where(eq(menuItems.id, offerId))
     .for("update");
   if (offer === undefined) throw new AppError("menu_item.not_found", { menuItemId });
   const publications = parseMenuExtraPublications(lists);
   await lockPublishedLists(tx, publications);
+  // Both reads sit AFTER the offer's row lock and the lists' row locks, never before: an answer
+  // read ahead of a lock this path then waits for can be stale by the time the wait ends. Neither
+  // read locks `product_modifiers` itself, so a product's attachment list can still change between
+  // the first of them and the commit — with ONE exception. A save that ATTACHES a list this body
+  // publishes can no longer overlap this path: `writeProductModifiers` (product-modifiers.ts)
+  // takes `for key share` on every `extra_lists` row it names, `lockExtraList` above takes
+  // `for update` on the same rows, and the two conflict, so whichever transaction is second waits
+  // for the first. MEASURED on PostgreSQL 18.4: a `for update` on a row another session held
+  // `for key share` blocked until a 2s `lock_timeout`, while the same `for update` with nothing
+  // held returned at once and a second `for key share` never waited at all. A save that DETACHES a
+  // list does not name it and so locks nothing, so that change is still invisible here. Both paths
+  // take `extra_lists` rows in ascending id order and neither wants a row the other holds
+  // afterwards, so this is a wait and not a deadlock — that last part traced over the two files,
+  // not run.
+  // Carrying the list comes first: a body that publishes a list the dish does not have is wrong
+  // about the list, whatever its overrides then say.
+  await assertProductCarries(tx, offer.productId, publications);
   await assertProductsOffered(tx, publications);
 
   // The offer's item rows go with its list rows, through `menu_item_extra_items_list_fk`
@@ -558,16 +619,26 @@ export interface ExtraListDependants {
  * publication has no name of its own, so it is identified by the menu ITEM's id and the staff name
  * of the product that dish is, exactly as `modifierDependants` (modifiers.ts) identifies one.
  *
- * `products` is empty because nothing attaches a list to a product yet: the attachment table
- * `product_modifiers` arrives with Task 6 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, whose Step 3 says
- * `extraListDependants` then reads products through it.
+ * A PRODUCT carries the list in its own right too, through `product_modifiers` (spec §5). The two
+ * sides are two separate reads rather than one reached through the other, because neither follows
+ * from the other: a dish can carry the list and be on no menu at all.
+ *
+ * The products come back alphabetical by staff name with the id breaking a tie, so a confirmation
+ * dialog reads in a fixed order whichever ids were minted; the menus stay in offer-id order. An
+ * INACTIVE menu offer is listed like any other — deleting the list detaches it either way.
  */
 export async function extraListDependants(
   tx: Transaction,
   extraListId: string,
 ): Promise<ExtraListDependants> {
   await assertExtraList(tx, extraListId);
+  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
+  const carrying = await tx
+    .select({ id: products.id, name: products.name })
+    .from(productModifiers)
+    .innerJoin(products, eq(products.id, productModifiers.productId))
+    .where(eq(productModifiers.extraListId, extraListId))
+    .orderBy(products.name, products.id);
   const menus = await tx
     .select({ id: menuItems.id, name: products.name })
     .from(menuItemExtraLists)
@@ -575,5 +646,5 @@ export async function extraListDependants(
     .innerJoin(products, eq(products.id, menuItems.productId))
     .where(eq(menuItemExtraLists.listId, extraListId))
     .orderBy(menuItems.id);
-  return { products: [], menus };
+  return { products: carrying, menus };
 }

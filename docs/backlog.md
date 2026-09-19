@@ -440,13 +440,13 @@ choice availability still win.
 
 What it left open:
 
-- **Two ways to attach a modifier to a product still exist side by side — half closed by #345.**
-  The combined catalogue editor that was the reason for keeping the old door is gone. The door itself
-  is not: `apps/server/src/catalogue-api.ts` still accepts `optionGroupIds` as an alternative to the
-  canonical ordered `modifierIds`, still rejects a request that sends both, and still writes the same
-  underlying tables either way. Nothing in the dashboard sends the old field any more. **Next action:**
-  delete the `optionGroupIds` branch from the product POST/PATCH handler and its parser, confirm no
-  other caller sends it, and drop the mutual-exclusion check with it.
+- **Two ways to attach a modifier to a product — CLOSED, 2026-09-19.** Both `optionGroupIds` and
+  `modifierIds` are gone from the product POST/PATCH body and from the editor body; a request sending
+  either is refused, naming the field. What replaced them is one ordered `modifiers` list of
+  `{ kind, id }`, written to `product_modifiers`
+  (`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, Task 6 Step 4). The old
+  `product_option_groups` table and the code reading it survive until Task 13 of that plan, but
+  nothing writes them through a route any more.
 - **Catalogue rows created before this migration keep their old caps, and nothing upgrades them.**
   The old per-group `max_select` limit does not become the new `maxTotalQuantity` cap. Following the
   repo's no-backfill rule, the fix is to recreate disposable pre-production catalogue data under the
@@ -493,33 +493,51 @@ Task 5 has landed too (#452): the per-menu publication, `menu_item_extra_lists` 
 projection `readMenuExtras` reading it back with every price already resolved. A per-menu item row is
 an OVERRIDE and not a publication — an item of the list with no row is still offered at its own
 resolved price, and `available: false` is what withdraws it — which is the opposite of
-`menu_item_options`, where a row's presence is the publication. No screen shows either kind of list
-yet, and nothing serves extras over the API — that is the plan's Task 6.
+`menu_item_options`, where a row's presence is the publication.
+
+The plan's Task 6 has landed too: `product_modifiers`, the one ordered attachment list a product
+carries, holding an extras list or an options list per row; `writeProductModifiers` and
+`readProductModifiers` behind it; the product write body's flat `modifierIds` and `optionGroupIds`
+replaced by that ordered `modifiers` list, with a body still sending either old field refused by
+name; six management routes for extras lists under `/management-api/modifiers/extras`, mounted by
+the same `mountListSurface` helper the options block now uses; `readProductExtras`, which reads
+what a product itself carries with no menu offer in the question; and `setMenuItemExtraLists`
+refusing to publish a list the dish's product does not carry. What is still missing is the SCREEN:
+the product editor's attachment section was removed rather than rebuilt, and no dashboard screen
+shows either kind of list — that is the plan's Task 11.
 
 What option lists left open, none of it taken in #436 or #445:
 
-- **`dependants` returns a `menus` list that can only ever be filled indirectly.** An options list
-  has no per-menu publication row at all, so the menus a delete would touch are the ones showing a
-  dish that carries the list. Nothing computes that yet; the attachment table it needs arrives with
-  the plan's Task 6. **Next action:** whoever builds Task 6 fills both sides through one shared
-  predicate, so the delete preview and any future refusal cannot drift — the modifier code it
-  replaces already learned that lesson (`openOrderUse` in `packages/catalogue/src/modifiers.ts`).
+- **`dependants` now fills both of its sides, and both of them through `product_modifiers`.** An
+  options list has no per-menu publication row at all, so `optionListDependants`
+  (`packages/catalogue/src/options.ts`) reads the products that carry the list, then walks the same
+  attachment rows on to `menu_items` for the menus. The two queries repeat the same `option_list_id`
+  condition rather than sharing one predicate; nothing can drift from it yet, because
+  `options.in_use` is still thrown by nothing. **Next action:** whoever writes a refusal that uses
+  the same condition shares it then — the modifier code this replaces already learned that lesson
+  (`openOrderUse` in `packages/catalogue/src/modifiers.ts`).
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
   registered because a shipped code is never removed.
-- **The six option-list route handlers duplicate the six `/management-api/modifiers` ones, and Task 6
-  will make a third copy.** A review asked for a shared mount helper in `catalogue-api.ts` (the file
-  already has the pattern in `mountCourseVerb`, `apps/server/src/till-api.ts`). #445 did NOT take it:
-  the `/management-api/modifiers` block is meant to be REPLACED by the options and extras routes
-  (spec §11), so a helper extracted across it now would be undone. **Next action:** whoever builds
-  Task 6 extracts it then, when extras adds the second surviving copy, rather than writing a third
-  copy by hand.
+- **The option and extras route blocks now share one mount helper; the old modifier block is still a
+  third hand-written copy.** A review on #445 asked for the helper (the pattern is `mountCourseVerb`,
+  `apps/server/src/till-api.ts`) and Task 6 Step 5 did not write one, because its brief specified the
+  six routes one by one as a mirror of the option block. `mountListSurface` in
+  `apps/server/src/catalogue-api.ts` is that helper: it mounts all six routes for one kind of list —
+  read and create on the collection, read, update and delete on one list, and the delete preview —
+  and each of the two call sites hands it only what differs (the path segment, the `shared.invalid_id`
+  kind name, the two JSON keys, and the six catalogue functions). What is left is the old
+  `/management-api/modifiers` block, which the spec retires and which still spells its own six
+  handlers out; the entry below is the one that covers it.
 - **Nothing schedules the deletion of the old `/management-api/modifiers` routes.** Spec §11 says the
   options and extras routes replace them, but no task in the plan lists `apps/server/src/catalogue-api.ts`
   as a file it deletes from — Task 13's file list does not name it. Until that is fixed, the old
-  routes survive the plan, and so does the ordering requirement #445 had to comment on (the options
-  routes must be registered ahead of `/management-api/modifiers/:id`, or `:id` swallows the literal
-  word `options`). **Next action:** add the route removal to Task 13, or state that the old routes stay.
+  routes survive the plan, and so does the ordering requirement #445 had to comment on: BOTH the
+  option-list block and the extras-list block must be registered ahead of
+  `/management-api/modifiers/:id`, or `:id` swallows the literal word `options` or `extras` and the
+  collection read answers 400 instead of 200. `mountListSurface` states the hazard once and each of
+  its two call sites carries its own measurement of it, both re-run after the helper was extracted.
+  **Next action:** add the route removal to Task 13, or state that the old routes stay.
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
   bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
@@ -546,10 +564,14 @@ What extras lists left open, and what #449 found on the way:
 - **The seven string-parsing helpers are copied between the two contracts.**
   `packages/catalogue/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
   `invalid`, `record`, `keys`, `staffName`, `translations`, `kitchenName` and `id`, differing only in
-  the error-code prefix. A review asked for them to be shared and it is right — but the plan's Task 6
-  adds a third contract wanting the same helpers, so extracting across two now means pulling it apart
-  again. **Next action:** extract at Task 6, across all three, the same call this track made about the
-  duplicated route handlers above.
+  the error-code prefix. A review asked for them to be shared and it is right. The stated reason for
+  waiting has since EXPIRED: it was that the plan's Task 6 would add a third contract wanting the
+  same helpers, so extracting across two now would mean pulling it apart again — and Task 6 landed
+  without one. Its new screening went into `packages/catalogue/src/product-editor-input.ts`, which
+  already carried its own near-copies of the same helpers. So the two-way extraction is unblocked.
+  Task 6 deliberately did not do it: it is a refactor of two files that branch does not otherwise
+  touch, on a branch that was already large. **Next action:** extract across the two contracts, and
+  decide at the same time whether `product-editor-input.ts`'s near-copies join them.
 - **An untargeted `.onConflictDoNothing()` absorbs EVERY unique conflict, not only the primary key's.**
   Written into `CLAUDE.md` §3 with its receipt in `developers/conventions-data.md`. Seven untargeted
   calls remain in the tree and nothing guards this. The two that read an empty result as a specific
@@ -573,11 +595,11 @@ What extras lists left open, and what #449 found on the way:
   and `max` takes a check constraint over them, selects them unqualified and aggregates `min(min)` /
   `max(max)`. The spelling stands — it reads better — and a dated pointer now sits on the design
   document saying only the reason was wrong.
-- **An extras list's `dependants` now fills its `menus` side and still returns `products` empty.**
-  The plan's Task 5 added the per-menu publication row, which options lists do not have, so
+- **An extras list's `dependants` fills its two sides from two different tables.** The plan's
+  Task 5 added the per-menu publication row, which options lists do not have, so
   `extraListDependants` (`packages/catalogue/src/extras.ts`) reads the menus a delete would touch
-  straight out of `menu_item_extra_lists` rather than reaching them through the products. The
-  `products` side stays empty until the plan's Task 6 adds the product attachment table.
+  straight out of `menu_item_extra_lists` rather than reaching them through the products, and the
+  products out of `product_modifiers`. Its options twin has only the one table to read.
 - **`extras.in_use` is registered and nothing throws it**, the same posture as `options.in_use`.
 
 - **A save reaches the database once per submitted label.** The read that finds which list each
@@ -588,18 +610,25 @@ What extras lists left open, and what #449 found on the way:
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 
-- **`readProductExtras` and the product-attachment check both moved to Task 6.** Neither can be built
-  before `product_modifiers` exists, because nothing in the tree joins a product to an extras list
-  today. That is why `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) publishes a list on
-  a menu offer without checking the dish's product carries it, where the options sibling
-  `setMenuItemOptionGroups` checks against `product_option_groups`. Task 6 now carries a step for
-  each, and a dated note on Task 5 in the plan says the same.
+- **`readProductExtras` and the product-attachment check both moved to Task 6, and both have
+  landed there.** `readProductExtras` (`packages/catalogue/src/extra-projection.ts`) reads the
+  extras lists a PRODUCT itself carries, with no menu offer in the question, and
+  `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) now refuses to publish a list the
+  dish's product does not carry — ONE of the two checks its options sibling
+  `setMenuItemOptionGroups` makes against `product_option_groups`, the one refusing an unattached
+  group. The sibling's other check refuses a body that LEAVES OUT a group the product marks
+  required, and there is no extras equivalent: an extras list carries no `required` flag (the spec
+  makes "required" `min_picks >= 1`, §3.1) and §3.2 does not say a required list must be published.
+  Both read `product_modifiers`, which Task 6 added. The dated note on Task 5 in the plan describes
+  the gap as it was, and stays as history. **Next action:** settle whether an offer may publish
+  none of a product's required extras lists, when the menu-offer screen is built.
 - **Two review findings deliberately not taken, both of them structural.** Splitting the publication
   write path out of `packages/catalogue/src/extras.ts` into a module of its own, and moving
   `resolveExtraPrice` from there into `extra-contract.ts` beside the price parsing it belongs with.
-  Both were declined as churn on a branch about to land, and Task 6 adds the extras routes and the
-  attachment check to that same file, which reshapes it anyway. **Next action:** whoever builds Task 6
-  settles the file's shape then, with the routes in front of them.
+  Both were declined as churn on a branch about to land. Task 6 has since added the attachment check
+  to that file, and the extras ROUTES went where the option ones live
+  (`apps/server/src/catalogue-api.ts`), so the file was not reshaped after all. **Next action:**
+  still open — settle whether the publication write path and `resolveExtraPrice` move.
 - **`setMenuItemExtraLists` keeps its membership check as its own query rather than a `LEFT JOIN`.**
   A review asked for the join. Not taken: `assertProductsOffered` reads `extra_list_items` for only
   the lists the body actually overrides, and a join hung off the publication rows would read the

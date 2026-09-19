@@ -13,6 +13,22 @@ import type { DietaryLabel } from "./dietary-declarations.js";
  * from here so existing imports are unchanged.
  */
 
+/**
+ * One entry in a product's ordered attachment list: an extras list or an options list, never both
+ * (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §5). The `id` is the LIST's
+ * id, not the attachment row's — the row's own key is a surrogate nothing outside
+ * `product-modifiers.ts` names.
+ *
+ * It lives HERE rather than beside the read/write code because the dashboard's product editor sends
+ * and receives it, and this file is the one the browser may import: `product-modifiers.ts` imports
+ * drizzle and `@waitron/db`. Same split `Unit`, `ProductVariant` and `Product` already take, and
+ * `product-modifiers.ts` re-exports it so existing imports are unchanged.
+ */
+export interface ProductModifierRef {
+  kind: "extras" | "options";
+  id: string;
+}
+
 /** A unit a product is priced and sold in (`Each`, or a stored `units` row). */
 export interface Unit {
   id: string;
@@ -57,6 +73,12 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
  */
 export interface Product {
   id: string;
+  /** The ordered extras and options lists attached to this product. */
+  modifiers: ProductModifierRef[];
+  /** The OLD flat attachment list, read from `product_option_groups`. Nothing writes it any more —
+   * the product body carries `modifiers` — and it goes with the old tables in Task 13 of
+   * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. It stays until then because
+   * `apps/dashboard/src/widgets/product-list.ts` still reads it. */
   modifierIds: string[];
   catalogueId: string;
   categoryId: string | null;
@@ -116,7 +138,8 @@ export interface ProductEditorInput {
   variants: ProductVariantInput[];
   categoryIds: string[];
   primaryCategoryId: string | null;
-  modifierIds: string[];
+  /** The ordered extras and options lists to attach, replacing whatever the product carries today. */
+  modifiers: ProductModifierRef[];
   allergens: ProductAllergens | null;
   dietaryDeclarations: DietaryLabel[];
 }

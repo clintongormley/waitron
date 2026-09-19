@@ -6,7 +6,8 @@ import { createCatalogue, listProducts } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
 import { createCategory } from "./categories.js";
-import { createModifier } from "./modifiers.js";
+import { createExtraList } from "./extras.js";
+import { createOptionList } from "./options.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
 const fx = useCatalogueDb();
@@ -55,7 +56,7 @@ beforeEach(async () => {
     ],
     categoryIds: [],
     primaryCategoryId: null,
-    modifierIds: [],
+    modifiers: [],
     allergens: null,
     dietaryDeclarations: ["vegan"],
   };
@@ -169,29 +170,49 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
 });
 
 it("rolls back product and variants when a supporting association fails", async () => {
+  // An attachment naming no stored list is the failure this reaches for. It used to name an
+  // option group and come back `modifier.invalid`; the product body now carries `modifiers`, and
+  // the refusal is `assertRefsExist`'s (product-modifiers.ts) `product.invalid`. What the test is
+  // actually about — the product and its variants roll back with it — is unchanged.
   await expect(
     withTransaction(fx.db, (tx) =>
       saveProductEditor(
         tx,
         null,
         catalogueId,
-        { ...input, modifierIds: [crypto.randomUUID()] },
+        { ...input, modifiers: [{ kind: "extras", id: crypto.randomUUID() }] },
         "en",
       ),
     ),
-  ).rejects.toMatchObject({ code: "modifier.invalid" });
+  ).rejects.toMatchObject({ code: "product.invalid", params: { field: "modifiers.0.id" } });
   expect(await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).toEqual([]);
 });
 
-it("round-trips real category and modifier associations", async () => {
-  const associations = await withTransaction(fx.db, async (tx) => ({
-    category: await createCategory(tx, { name: { en: "Drinks" } }, "en"),
-    modifier: await createModifier(
+it("round-trips real category, extras and options associations in the order they were sent", async () => {
+  const associations = await withTransaction(fx.db, async (tx) => {
+    const topping = await saveProductEditor(
       tx,
-      { type: "text", name: { en: "Note" }, available: true },
+      null,
+      catalogueId,
+      { ...input, name: "Bacon", customerName: null, variants: [] },
       "en",
-    ),
-  }));
+    );
+    return {
+      category: await createCategory(tx, { name: { en: "Drinks" } }, "en"),
+      sauces: await createExtraList(
+        tx,
+        { name: "Sauces", items: [{ productId: topping.id }] },
+        "en",
+      ),
+      doneness: await createOptionList(tx, { name: "Doneness", labels: [{ name: "Rare" }] }, "en"),
+    };
+  });
+  // An options list BEFORE an extras list, so the read-back proves the stored order is the body's
+  // and not the two tables' own.
+  const sent = [
+    { kind: "options" as const, id: associations.doneness.id },
+    { kind: "extras" as const, id: associations.sauces.id },
+  ];
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(
       tx,
@@ -201,20 +222,39 @@ it("round-trips real category and modifier associations", async () => {
         ...input,
         categoryIds: [associations.category.id],
         primaryCategoryId: associations.category.id,
-        modifierIds: [associations.modifier.id],
+        modifiers: sent,
       },
       "en",
     ),
   );
   expect(saved.categoryIds).toEqual([associations.category.id]);
   expect(saved.primaryCategoryId).toBe(associations.category.id);
-  expect(saved.modifierIds).toEqual([associations.modifier.id]);
+  expect(saved.modifiers).toEqual(sent);
+  // And the same order comes back from a fresh read, not just from the save's own return value.
+  const reread = await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id));
+  expect(reread.modifiers).toEqual(sent);
+  // A later save replaces the whole list, in the new order.
+  const reordered = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(
+      tx,
+      saved.id,
+      catalogueId,
+      {
+        ...input,
+        categoryIds: [associations.category.id],
+        primaryCategoryId: associations.category.id,
+        modifiers: [sent[1]!],
+      },
+      "en",
+    ),
+  );
+  expect(reordered.modifiers).toEqual([sent[1]]);
 });
 
 it.each([
   ["unitId", "not-an-id"],
   ["categoryIds", ["not-an-id"]],
-  ["modifierIds", null],
+  ["modifiers", null],
   ["variants", null],
   ["name", null],
   ["primaryCategoryId", crypto.randomUUID()],

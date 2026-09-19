@@ -31,7 +31,7 @@ const product: ProductEditorDraft = {
   variants: [],
   categoryIds: [],
   primaryCategoryId: null,
-  modifierIds: [],
+  modifiers: [],
   allergens: null,
   dietaryDeclarations: [],
   stationId: null,
@@ -211,39 +211,6 @@ it("applies variant-table unit changes and forwards its add-unit action", async 
   expect(create.mock.calls[0]![0].detail).toEqual({ kind: "unit" });
 });
 
-it("shows each modifier's choices beside its name when attaching and when attached", async () => {
-  const modifiers = [
-    {
-      id: "sauce",
-      type: "options" as const,
-      name: { en: "Sauce" },
-      available: true,
-      defaultChoiceId: null,
-      choices: [
-        { id: "red", name: { en: "Red" }, available: true },
-        { id: "green", name: { en: "Green" }, available: true },
-      ],
-    },
-  ];
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, modifierIds: ["sauce"] },
-    locales: ["en"],
-    units: [unit],
-    modifiers,
-    taxChoices: reduced,
-  });
-  expect(el.shadowRoot!.querySelector('[data-test="attached-modifier"]')!.textContent).toContain(
-    "Sauce · Red, Green",
-  );
-  el.value = { ...product, modifierIds: [] };
-  await el.updateComplete;
-  const combobox = el.shadowRoot!.querySelector<HTMLElement & { options: { label: string }[] }>(
-    '[data-test="add-modifier"]',
-  )!;
-  expect(combobox.options.map(({ label }) => label)).toContain("Sauce · Red, Green");
-});
-
 it("renders the sections in the designed order, with the VAT rate above the price", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -256,16 +223,7 @@ it("renders the sections in the designed order, with the VAT rate above the pric
     [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-section]")].map(
       (node) => node.dataset.section,
     ),
-  ).toEqual([
-    "name",
-    "categories",
-    "available",
-    "kitchen",
-    "descriptors",
-    "nutrition",
-    "price",
-    "modifiers",
-  ]);
+  ).toEqual(["name", "categories", "available", "kitchen", "descriptors", "nutrition", "price"]);
   const tax = el.shadowRoot!.querySelector("[name=tax]")!;
   const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
   // DOCUMENT_POSITION_FOLLOWING: the price field comes after the VAT select, never before it.
@@ -457,67 +415,6 @@ it("restores an existing allergen's presence and source when it is removed then 
     await el.updateComplete;
   }
   expect(el.currentValue.allergens).toEqual({ milk });
-});
-
-it("shows only attached modifiers, attaches from the combobox, reorders and removes", async () => {
-  const choices = [
-    { id: "milk", name: { en: "Milk" } },
-    { id: "sugar", name: { en: "Sugar" } },
-    { id: "ice", name: { en: "Ice" } },
-  ];
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, modifierIds: ["milk", "sugar"] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-    modifiers: choices,
-  });
-  const rows = () => [
-    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=attached-modifier]"),
-  ];
-  expect(rows().map((row) => row.dataset.modifier)).toEqual(["milk", "sugar"]);
-  const combobox = el.shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>(
-    "[data-test=add-modifier]",
-  )!;
-  // Only the unattached modifier is offered, beside the create entry.
-  expect(combobox.options.map((option) => option.value)).toEqual(["create", "ice"]);
-  combobox.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "ice" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(el.currentValue.modifierIds).toEqual(["milk", "sugar", "ice"]);
-  const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-ice"]')!;
-  handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-  await el.updateComplete;
-  expect(el.currentValue.modifierIds).toEqual(["milk", "ice", "sugar"]);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-modifier-milk]")!.click();
-  await el.updateComplete;
-  expect(el.currentValue.modifierIds).toEqual(["ice", "sugar"]);
-});
-
-it("asks the screen to create a modifier, and to edit an attached one", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, modifierIds: ["milk"] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-    modifiers: [{ id: "milk", name: { en: "Milk" } }],
-  });
-  const create = vi.fn();
-  const edit = vi.fn();
-  el.addEventListener("wt-create-related", create);
-  el.addEventListener("wt-edit-related", edit);
-  el.shadowRoot!.querySelector("[data-test=add-modifier]")!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "create" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(create.mock.calls[0]![0].detail).toEqual({ kind: "modifier" });
-  // The create entry is a command, not a membership: it must not attach itself to the product.
-  expect(el.currentValue.modifierIds).toEqual(["milk"]);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-modifier-milk]")!.click();
-  expect(edit.mock.calls[0]![0].detail).toEqual({ kind: "modifier", id: "milk" });
 });
 
 it("edits the product's categories through the membership picker's own Save", async () => {
@@ -823,7 +720,7 @@ it("saves station and course with a new product, without a separate routing even
     variants: [],
     categoryIds: [],
     primaryCategoryId: null,
-    modifierIds: [],
+    modifiers: [],
     allergens: null,
     dietaryDeclarations: [],
     stationId: "station-2",

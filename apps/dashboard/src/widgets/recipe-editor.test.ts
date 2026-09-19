@@ -29,6 +29,7 @@ const INGREDIENTS: Ingredient[] = [
 /** A minimal but complete product; the editor only reads its `id`. */
 const PRODUCT: Product = {
   id: "prod-1",
+  modifiers: [],
   modifierIds: [],
   catalogueId: "cat-1",
   categoryId: null,

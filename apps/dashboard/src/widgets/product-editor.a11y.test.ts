@@ -28,7 +28,7 @@ const coffee: ProductEditorDraft = {
   dietaryDeclarations: ["vegan"],
   categoryIds: ["drinks"],
   primaryCategoryId: "drinks",
-  modifierIds: ["milk"],
+  modifiers: [],
   stationId: "bar",
   courseId: null,
 };
@@ -62,7 +62,6 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "variants",
     "open-sections",
     "categories",
-    "modifier-picker",
     "variant-window",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
@@ -78,7 +77,6 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
           { id: "drinks", name: { en: "Drinks" }, image: null, color: "#3355aa", parentId: null },
           { id: "food", name: { en: "Food" }, image: null, color: null, parentId: null },
         ],
-        modifiers: [{ id: "milk", name: { en: "Milk" } }],
         stations: [{ id: "bar", name: "Bar" }],
         courses: [{ id: "starters", name: "Starters" }],
       },
@@ -90,15 +88,6 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       await el.updateComplete;
       // Without this the scan could pass on an editor whose modal never opened.
       expect(el.shadowRoot!.querySelector("dashboard-category-membership-picker")).not.toBeNull();
-    }
-    if (state === "modifier-picker") {
-      const combobox = el.shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >("[data-test=add-modifier]")!;
-      await combobox.updateComplete;
-      combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
-      await combobox.updateComplete;
-      expect(combobox.shadowRoot!.querySelector('[role="listbox"]')).not.toBeNull();
     }
     if (state === "variant-window") {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();

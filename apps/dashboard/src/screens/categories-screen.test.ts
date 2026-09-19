@@ -38,6 +38,7 @@ const product: Product = {
   dietOverride: null,
   image: null,
   id: "p",
+  modifiers: [],
   modifierIds: [],
   name: "Toast",
   customerName: { en: "Buttered toast" },

@@ -49,11 +49,16 @@ import {
   updateOptionList,
   deleteOptionList,
   optionListDependants,
+  listExtraLists,
+  getExtraList,
+  createExtraList,
+  updateExtraList,
+  deleteExtraList,
+  extraListDependants,
   listProductOptionGroupIds,
   listProducts,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
-  setProductOptionGroups,
   renameCatalogue,
   updateOptionGroup,
   updateOptionGroupItem,
@@ -65,6 +70,10 @@ import {
   type MenuVariant,
   readProductEditor,
   saveProductEditor,
+  isModifierListKind,
+  readProductModifiers,
+  writeProductModifiers,
+  type ProductModifierRef,
   type CreateOptionGroupInput,
   type CreateOptionGroupItemInput,
   type DietOverride,
@@ -209,12 +218,55 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "options.not_found": 404,
   // 409 rather than the default 400 because the body was fine and the stored state refused it — the
   // shape the sibling `modifier.in_use` above has. NOTHING throws it, and the design may never give
-  // it one: a list delete is DESIGNED to cascade its product attachments rather than refuse (there
-  // are none yet — `product_modifiers` arrives with the plan's Task 6, and `deleteOptionList`
-  // cascades only labels today), which `packages/catalogue/src/errors.ts` states on the code
-  // itself, citing spec
+  // it one: a list delete is DESIGNED to cascade its product attachments rather than refuse — and
+  // `product_modifiers_option_list_fk` is what does that cascading
+  // (packages/catalogue/drizzle/0010_product_modifiers.sql:12) — which
+  // `packages/catalogue/src/errors.ts` states on the code itself, citing spec
   // `2026-09-18-one-product-model-design.md` §2.3. Mapped because Task 3 of the plan names it.
   "options.in_use": 409,
+  // Extras lists (`packages/catalogue/src/extras.ts`), the twin of the `options.*` pair above: 400
+  // for the same reason and listed explicitly by the same convention. What differs is where they
+  // are thrown. `extras.invalid` comes from several places, among them `parseExtraListInput`
+  // (extra-contract.ts) on a malformed authoring body and `assertProductsExist` / `writeItems`
+  // (extras.ts) on an item naming no `products` row or reusing an item id another list holds;
+  // `extras.translation_required` comes from `validateNames` (extras.ts) alone.
+  "extras.invalid": 400,
+  "extras.translation_required": 400,
+  // An id naming no list: `getExtraList` on the single read, `lockExtraList` on the update and the
+  // delete, `assertExtraList` on the dependants preview (all extras.ts). The default would make this
+  // a 400, so this entry is what makes it a 404.
+  "extras.not_found": 404,
+  // `options.in_use` above, one table over: 409 for the same reason, thrown by nothing, and mapped
+  // because the plan names it — Task 6 here, Task 3 there. What differs is the cascade (deleting an
+  // extras list takes its menu publications with it as well as its product attachments) and the
+  // spec section `packages/catalogue/src/errors.ts` cites on the code itself,
+  // `2026-09-18-one-product-model-design.md` §3.5.
+  "extras.in_use": 409,
+  // An order line answering an extras list with too few picks, too many, or a quantity above one
+  // item's cap — thrown by `validateExtraSelections` (extra-contract.ts). NO ROUTE ON THIS SURFACE
+  // raises it: a management route takes an authoring body, never a diner's picks, and
+  // `grep -rn validateExtraSelections apps packages --include="*.ts"` on 2026-09-20 found no
+  // production caller anywhere — the order path that will call it is Task 7 of the plan. Mapped at
+  // 400, which is also what the default would give: it is a CLIENT request fault, the caller having
+  // sent a selection the list's own published counts refuse.
+  "extras.limit_exceeded": 400,
+  // 409 for the same reason as the three `*.in_use` codes above, and unthrown like two of them.
+  // `grep -rn 'product.in_use' apps packages --include="*.ts"` on 2026-09-20 returns three lines:
+  // the declaration in `packages/catalogue/src/errors.ts`, this comment quoting the command, and
+  // the map entry below it — so nothing throws it. No route deletes a product either, but the
+  // command that would show that is BLIND in one place, so it is not on its own a receipt:
+  // `grep -rn "app.delete(" apps/server/src --include="*.ts"`, same date, lists the DELETE routes
+  // whose path is written out at the call, and `mountListSurface` above registers
+  // `app.delete(one, …)` with the path in a variable — one grep line standing for the two real
+  // paths its two call sites mount, `/management-api/modifiers/options/:id` and
+  // `/management-api/modifiers/extras/:id`. Both delete a LIST. Of the rest of that output, two
+  // lines are this comment quoting the command and every remaining one writes its path out, which
+  // is what makes them readable. What refuses a product delete today is the database: an extras
+  // list item's and a menu override's `product_id` are both ON DELETE RESTRICT
+  // (`packages/catalogue/src/schema/extras.ts`), which surfaces as a driver error and not as this
+  // code. Mapped because Task 6 of the plan names it — the same reason `extras.in_use` above is
+  // mapped with no thrower either.
+  "product.in_use": 409,
 };
 
 // The one error boundary every catalogue route wraps its handler in — the shared `createErrorBoundary`
@@ -339,30 +391,159 @@ function screenDietOverride(value: unknown): void {
 }
 
 /**
- * Screen an OPTIONAL ordered `optionGroupIds` attach list on the product POST/PATCH body, returning it.
- * Absent stays `undefined` (the attach set is left untouched); present must be an ARRAY of uuid-shaped
- * STRINGS — a non-array or a non-string element is `management.request_invalid` naming the field, and a
- * string that is not uuid-shaped is `shared.invalid_id` (as `requireUuidParam`, so a malformed id never
- * reaches the `uuid` column → `22P02` → opaque 500). Existence + tenant-consistency of each id is the
- * `product_option_groups` FK's job, not this shape screen's.
+ * Screen the OPTIONAL ordered `modifiers` attach list on the product POST/PATCH body, returning it.
+ * Absent stays `undefined` (the product's attachments are left untouched); present must be an ARRAY
+ * of `{ kind: "extras" | "options", id }` objects, in the order a diner is offered them.
  *
- * DUPLICATES are collapsed here, first-occurrence order preserved: two copies of one id would otherwise
- * both reach `setProductOptionGroups`' insert and collide on the `(product_id, group_id)` PK → an opaque
- * 500. A repeated attach carries no meaning (the list is a set of groups in display order), so the second
- * copy is dropped rather than rejected.
+ * A non-array, a non-object entry, an unknown or missing `kind` and a non-string `id` are all
+ * `management.request_invalid` naming `modifiers` — the split Task 1 made, where the server's screen
+ * throws the REQUEST code and the catalogue's own parser throws the DOMAIN code
+ * (`parseProductEditorInput`, packages/catalogue/src/product-editor-input.ts, throws
+ * `product.invalid`). A string that is not uuid-shaped is `shared.invalid_id` instead, exactly as
+ * `requireUuidParam` treats a path id and for the same reason: it would otherwise reach the `uuid`
+ * column as a `22P02` driver error, which this surface's STATUS map has nothing for, so it would
+ * surface as an opaque 500.
+ *
+ * DUPLICATES are NOT collapsed here, unlike the `optionGroupIds` screen this replaces. That screen
+ * collapsed them because two copies of one id would otherwise collide on the
+ * `(product_id, group_id)` primary key and surface as a 500. `writeProductModifiers`
+ * (packages/catalogue/src/product-modifiers.ts) refuses a repeat itself, as `product.invalid`
+ * naming the entry, which the STATUS map already maps to 400 — so the 500 this guarded against
+ * cannot happen, and the caller is told rather than quietly saved something it did not send.
+ *
+ * Whether each id names a real list is `writeProductModifiers`' check, not this shape screen's.
  */
-function parseOptionGroupIds(value: unknown): string[] | undefined {
+function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined {
   if (value === undefined) return undefined;
-  if (!Array.isArray(value)) {
-    throw new AppError("management.request_invalid", { field: "optionGroupIds" });
-  }
-  for (const id of value) {
-    if (typeof id !== "string") {
-      throw new AppError("management.request_invalid", { field: "optionGroupIds" });
-    }
-    if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind: "OptionGroupId", value: id });
-  }
-  return [...new Set(value as string[])];
+  const invalid = () => new AppError("management.request_invalid", { field: "modifiers" });
+  if (!Array.isArray(value)) throw invalid();
+  return value.map((entry): ProductModifierRef => {
+    if (!isPlainObject(entry)) throw invalid();
+    const { kind, id } = entry as { kind?: unknown; id?: unknown };
+    if (!isModifierListKind(kind)) throw invalid();
+    if (typeof id !== "string") throw invalid();
+    if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind: "ModifierListId", value: id });
+    return { kind, id };
+  });
+}
+
+/**
+ * Refuse a product body still carrying one of the two fields the ordered `modifiers` list replaced,
+ * naming the field the caller sent so it knows which of its own fields went away. Ignoring it would
+ * save a product with NO attachments and answer 201/204, the one outcome a caller on the old
+ * contract could not tell from having worked.
+ */
+function refuseLegacyAttachFields(body: Record<string, unknown>): void {
+  for (const legacy of ["modifierIds", "optionGroupIds"])
+    if (body[legacy] !== undefined)
+      throw new AppError("management.request_invalid", { field: legacy });
+}
+
+/**
+ * How a mounted route runs its database work: `mountCatalogueApi`'s `gated` — one transaction, as
+ * the app role, with the caller's management session checked for the catalogue write permission.
+ */
+type GatedWork = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) => Promise<T>;
+
+/** Everything that differs between one kind of modifier list and another. */
+interface ListSurface<TList, TDependants> {
+  /** The path segment under `/management-api/modifiers` that says which kind of list this is. */
+  segment: string;
+  /** What a refused `:id` is called in `shared.invalid_id`'s `kind` param. */
+  idKind: string;
+  /** The JSON key the collection read answers under. */
+  collectionKey: string;
+  /** The JSON key every single-list route answers under. */
+  itemKey: string;
+  list: (tx: Transaction) => Promise<TList[]>;
+  read: (tx: Transaction, id: string) => Promise<TList>;
+  create: (tx: Transaction, body: unknown) => Promise<TList>;
+  update: (tx: Transaction, id: string, body: unknown) => Promise<TList>;
+  remove: (tx: Transaction, id: string) => Promise<void>;
+  dependants: (tx: Transaction, id: string) => Promise<TDependants>;
+}
+
+/**
+ * Mount the six routes that serve one kind of modifier list: read and create on the collection,
+ * read, update and delete on one list, and the delete preview. Both kinds sit UNDER
+ * `/management-api/modifiers` because a dish's one attachment list holds either an option list or
+ * an extras list; `surface.segment` is the discriminator in the path.
+ *
+ * EVERY call MUST come before the `/management-api/modifiers/:id` block is registered. Only the
+ * collection read is at risk — it is the one whose path that `:id` can match, and `:id` swallows
+ * the literal segment, so it answers 400 `shared.invalid_id` instead of 200 — but the six move as
+ * one call. Each call site records its own measurement.
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §11 intends these routes to
+ * REPLACE `/management-api/modifiers`, but no task in the plan deletes that block, so nothing
+ * schedules this hazard's removal.
+ */
+function mountListSurface<TList, TDependants>(
+  app: Hono,
+  gated: GatedWork,
+  log: Logger,
+  surface: ListSurface<TList, TDependants>,
+): void {
+  // `as const` keeps these as the template literal TYPE `` `/management-api/modifiers/${string}` ``
+  // instead of the plain `string` a template expression widens to, and Hono reads the `:id` out of
+  // that type. `surface.segment` being declared `string` does not flatten it — the literal parts of
+  // the template survive around the `${string}` hole, which is the part Hono needs.
+  // MEASURED, not read off the types: with both assertions deleted and nothing else changed,
+  // `pnpm --filter @waitron/server typecheck` reports four errors, one per route that reads the
+  // path param — `Argument of type 'string | undefined' is not assignable to parameter of type
+  // 'string'` at each `requireUuidParam(c.req.param("id"), …)` below, because Hono no longer knows
+  // the route declares an `id`. Put back, it is clean.
+  const collection = `/management-api/modifiers/${surface.segment}` as const;
+  const one = `${collection}/:id` as const;
+  app.get(collection, (c) =>
+    run(c, log, async () => {
+      const lists = await gated(requireManagementSession(c), (tx) => surface.list(tx));
+      return c.json({ [surface.collectionKey]: lists });
+    }),
+  );
+  app.post(collection, (c) =>
+    run(c, log, async () => {
+      // Session before body, as `POST /management-api/categories` below does: an unauthenticated
+      // request is then refused without its payload being read at all.
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const created = await gated(sessionId, (tx) => surface.create(tx, body));
+      return c.json({ [surface.itemKey]: created }, 201);
+    }),
+  );
+  app.get(one, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      const list = await gated(requireManagementSession(c), (tx) => surface.read(tx, id));
+      return c.json({ [surface.itemKey]: list });
+    }),
+  );
+  app.patch(one, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const updated = await gated(sessionId, (tx) => surface.update(tx, id, body));
+      return c.json({ [surface.itemKey]: updated });
+    }),
+  );
+  app.delete(one, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      await gated(requireManagementSession(c), (tx) => surface.remove(tx, id));
+      return c.json({ ok: true });
+    }),
+  );
+  // What deleting this list would touch — the preview a delete confirmation reads. What each kind
+  // counts, and whether anything reads it yet, is at the call site's `dependants`.
+  app.get(`${one}/dependants`, (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), surface.idKind);
+      const dependants = await gated(requireManagementSession(c), (tx) =>
+        surface.dependants(tx, id),
+      );
+      return c.json({ dependants });
+    }),
+  );
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
@@ -449,74 +630,47 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }
   };
 
-  // Option lists sit UNDER `/management-api/modifiers` because a dish's one attachment list holds
-  // either an option list or an extras list; `options` is the discriminator in the path.
-  //
-  // This block MUST stay registered ahead of the `/management-api/modifiers/:id` block below. Only
-  // the collection read is at risk — it is the one whose path that `:id` can match, and `:id`
-  // swallows the literal `options`, so it answers 400 `shared.invalid_id` instead of 200 — but the
-  // six move as one block. Measured by moving this block after that one and re-running the file
-  // (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red — "GET
-  // /management-api/modifiers/options lists them" with `expected 400 to be 200`, and the gate case
-  // with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks for a
-  // session. `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §11 intends the
-  // collection and `:id` routes to REPLACE `/management-api/modifiers`, but no task in the plan
-  // deletes that block, so nothing schedules this hazard's removal.
-  app.get("/management-api/modifiers/options", (c) =>
-    run(c, log, async () => {
-      const optionLists = await gated(requireManagementSession(c), (tx) => listOptionLists(tx));
-      return c.json({ optionLists });
-    }),
-  );
-  app.post("/management-api/modifiers/options", (c) =>
-    run(c, log, async () => {
-      // Session before body, as `POST /management-api/categories` below does: an unauthenticated
-      // request is then refused without its payload being read at all.
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody(c);
-      const optionList = await gated(sessionId, (tx) =>
-        createOptionList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ optionList }, 201);
-    }),
-  );
-  app.get("/management-api/modifiers/options/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      const optionList = await gated(requireManagementSession(c), (tx) => getOptionList(tx, id));
-      return c.json({ optionList });
-    }),
-  );
-  app.patch("/management-api/modifiers/options/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody(c);
-      const optionList = await gated(sessionId, (tx) =>
-        updateOptionList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ optionList });
-    }),
-  );
-  app.delete("/management-api/modifiers/options/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      await gated(requireManagementSession(c), (tx) => deleteOptionList(tx, id));
-      return c.json({ ok: true });
-    }),
-  );
-  // What deleting this list would touch — the preview a delete confirmation reads. Not "the
-  // dashboard's", as the modifier sibling below says of its own: nothing under `apps/dashboard` or
-  // `apps/till` names an option list today.
-  app.get("/management-api/modifiers/options/:id/dependants", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "OptionListId");
-      const dependants = await gated(requireManagementSession(c), (tx) =>
-        optionListDependants(tx, id),
-      );
-      return c.json({ dependants });
-    }),
-  );
+  // The option lists. Registered here, ahead of `/management-api/modifiers/:id` below, for the
+  // reason `mountListSurface` states. Measured by moving this call after that block and re-running
+  // the file (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red —
+  // "GET /management-api/modifiers/options lists them" with `expected 400 to be 200`, and the gate
+  // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
+  // for a session.
+  mountListSurface(app, gated, log, {
+    segment: "options",
+    idKind: "OptionListId",
+    collectionKey: "optionLists",
+    itemKey: "optionList",
+    list: listOptionLists,
+    read: getOptionList,
+    create: (tx, body) => createOptionList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    update: (tx, id, body) => updateOptionList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    remove: deleteOptionList,
+    // Not "the dashboard's" preview, as the modifier sibling below says of its own: nothing under
+    // `apps/dashboard` or `apps/till` names an option list today.
+    dependants: optionListDependants,
+  });
+
+  // The extras lists. Registered here, ahead of `/management-api/modifiers/:id` below, for the
+  // reason `mountListSurface` states. Measured by moving this call after that block and re-running
+  // the file (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red —
+  // "GET /management-api/modifiers/extras lists them" with `expected 400 to be 200`, and the gate
+  // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
+  // for a session.
+  mountListSurface(app, gated, log, {
+    segment: "extras",
+    idKind: "ExtraListId",
+    collectionKey: "extraLists",
+    itemKey: "extraList",
+    list: listExtraLists,
+    read: getExtraList,
+    create: (tx, body) => createExtraList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    update: (tx, id, body) => updateExtraList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+    remove: deleteExtraList,
+    // The products carrying the list and the menu offers publishing it. Both are detached by the
+    // delete rather than blocking it, so this is information, never a refusal.
+    dependants: extraListDependants,
+  });
 
   app.get("/management-api/modifiers", (c) =>
     run(c, log, async () => {
@@ -1056,8 +1210,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         soldAlone?: unknown;
-        optionGroupIds?: unknown;
+        modifiers?: unknown;
+        // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
         modifierIds?: unknown;
+        optionGroupIds?: unknown;
       }>(c);
       if (typeof body.catalogueId !== "string") {
         throw new AppError("management.request_invalid", { field: "catalogueId" });
@@ -1098,13 +1254,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // authority on the label/contains-tag/disjointness content — exactly the posture `allergens`
       // takes with `validateAllergens`.
       screenDietOverride(body.dietOverride);
-      // The optional ordered attach set (Task 11): screened here (array of uuid-shaped strings) and
-      // applied in the SAME transaction as the create, so a product and its option groups land atomically.
-      if (body.modifierIds !== undefined && body.optionGroupIds !== undefined)
-        throw new AppError("modifier.invalid", { field: "modifierIds" });
-      const optionGroupIds = parseOptionGroupIds(
-        body.modifierIds === undefined ? body.optionGroupIds : body.modifierIds,
-      );
+      // The optional ordered attach list: screened here and applied in the SAME transaction as the
+      // create, so a product and its extras/options lists land atomically.
+      refuseLegacyAttachFields(body);
+      const modifiers = parseProductModifiers(body.modifiers);
       const input = {
         catalogueId: body.catalogueId,
         categoryId: body.categoryId,
@@ -1128,10 +1281,16 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           await validateContentTranslations(tx, customerName, deps.venueLocale ?? FALLBACK_LOCALE);
         }
         const product = await createProduct(tx, input);
-        if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, product.id, optionGroupIds);
-        }
-        return { ...product, modifierIds: optionGroupIds ?? [] };
+        if (modifiers === undefined) return { ...product, modifiers: [] };
+        await writeProductModifiers(tx, product.id, modifiers);
+        // The 201 reports the STORED list, read back inside the same transaction, never the array
+        // the caller sent: `writeProductModifiers` lower-cases every list id, so a caller that
+        // sent an upper-cased one would otherwise be told its attachments are held in a casing the
+        // database does not have, and its own next read would disagree with this response. The
+        // read is skipped above when the body named no list, because a product created a statement
+        // ago carries nothing whatever the read would say.
+        const stored = await readProductModifiers(tx, [product.id]);
+        return { ...product, modifiers: stored.get(product.id) ?? [] };
       });
       return c.json(created, 201);
     }),
@@ -1159,8 +1318,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         soldAlone?: unknown;
-        optionGroupIds?: unknown;
+        modifiers?: unknown;
+        // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
         modifierIds?: unknown;
+        optionGroupIds?: unknown;
       }>(c);
       const patch: UpdateProductInput = {};
       if (body.name !== undefined) {
@@ -1230,15 +1391,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         screenDietOverride(body.dietOverride);
         patch.dietOverride = body.dietOverride as DietOverride | null;
       }
-      // The optional ordered attach set (Task 11): a full replace when present, applied in the SAME
-      // transaction as the field update. Absent leaves the product's attached groups untouched; `[]`
-      // detaches them all. An empty `patch` alongside a present `optionGroupIds` is fine — `updateProduct`
+      // The optional ordered attach list: a full replace when present, applied in the SAME
+      // transaction as the field update. Absent leaves the product's attachments untouched; `[]`
+      // detaches them all. An empty `patch` alongside a present `modifiers` is fine — `updateProduct`
       // always bumps `updatedAt`, so its `.set()` is never empty.
-      if (body.modifierIds !== undefined && body.optionGroupIds !== undefined)
-        throw new AppError("modifier.invalid", { field: "modifierIds" });
-      const optionGroupIds = parseOptionGroupIds(
-        body.modifierIds === undefined ? body.optionGroupIds : body.modifierIds,
-      );
+      refuseLegacyAttachFields(body);
+      const modifiers = parseProductModifiers(body.modifiers);
       await gated(sessionId, async (tx) => {
         await assertOwned(tx, "products", productId);
         // A customer-facing name is optional: absent or wholly blank, the staff name is what a
@@ -1251,8 +1409,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
         await updateProduct(tx, productId, patch);
-        if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, productId, optionGroupIds);
+        if (modifiers !== undefined) {
+          await writeProductModifiers(tx, productId, modifiers);
         }
       });
       return c.body(null, 204);
@@ -1260,10 +1418,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   // ── Product ↔ option-group attach read-back ──────────────────────────────────────────────────────
-  // The ids of the option groups attached to a product, in per-attachment `sort` order — the read-back
-  // Task 12's product form uses to show which groups are attached and in what order (it cross-references
-  // GET /management-api/option-groups for the names). The attach itself is carried on the product
-  // POST/PATCH body above; this is the read half. `:id` screened as a uuid (→ shared.invalid_id).
+  // The ids of the option groups attached to a product, in per-attachment `sort` order (a caller
+  // cross-references GET /management-api/option-groups for the names). There is no WRITE half any
+  // more (2026-09-19): the product POST/PATCH body carries the ordered `modifiers` list and writes
+  // `product_modifiers`, so nothing a client can send fills `product_option_groups`. This read goes
+  // with those tables in Task 13 of
+  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+  // `:id` screened as a uuid (→ shared.invalid_id).
   app.get("/management-api/products/:id/option-groups", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

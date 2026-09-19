@@ -28,7 +28,14 @@ function projectModifier(modifier: Modifier, prices?: Map<string, string>): Modi
   };
 }
 
-export async function readProductModifiers(
+/**
+ * A product's OLD `product_option_groups` attachments, read as `Modifier` definitions for the
+ * till. "Legacy" is in the name because `readProductModifiers` (product-modifiers.ts) is the one
+ * that reads what a product carries TODAY — the ordered `product_modifiers` list — and two
+ * functions of the same name forced every importer to alias both. This one goes with the old
+ * tables in Task 13 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+ */
+export async function readLegacyProductModifiers(
   tx: Transaction,
   productIds: string[],
 ): Promise<Map<string, Modifier[]>> {

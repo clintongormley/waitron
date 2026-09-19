@@ -24,5 +24,8 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     // `menu_item_option_groups`/`menu_item_options` take.
     { name: "menu_item_extra_lists" },
     { name: "menu_item_extra_items" },
+    // A product's attachment list last of all: a row names an extras list or an options list,
+    // so both of those have to exist before one can be written.
+    { name: "product_modifiers" },
   ],
 } as const;
