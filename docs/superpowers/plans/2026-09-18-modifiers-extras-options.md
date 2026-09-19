@@ -322,7 +322,7 @@ the plain staff name into a single-entry map under the venue's default language.
 
 **Files:**
 
-- Modify: `apps/server/src/catalogue-api.ts`, `apps/server/src/errors.ts` (status mapping)
+- Modify: `apps/server/src/catalogue-api.ts` (the routes and its own local `STATUS` map)
 - Test: `apps/server/src/catalogue-api.test.ts` (or the modifier route test it replaces)
 
 **Interfaces:**
@@ -339,7 +339,9 @@ the plain staff name into a single-entry map under the venue's default language.
 
 - [ ] **Step 3: Add the routes** — mirror the existing `/management-api/modifiers` block
       (`catalogue-api.ts:427-471`), calling the Task 2 CRUD. Map `options.invalid` → 400,
-      `options.not_found` → 404, `options.in_use` → 409 in `apps/server/src/errors.ts`.
+      `options.not_found` → 404, `options.in_use` → 409 in `apps/server/src/catalogue-api.ts`'s own
+      `STATUS` map — a code is DECLARED in an `errors.ts`, and its HTTP status is assigned in the
+      route file that serves it.
 
 - [ ] **Step 4: Run and commit** — `git commit -s -m "Serve option lists over the management API"`.
 
@@ -480,7 +482,9 @@ expect((await readProductExtras(tx, [productId])).get(productId)![0].items).toHa
 **Files:**
 
 - Create: `packages/catalogue/src/product-modifiers.ts`; add `product_modifiers` to `schema/extras.ts`
-- Modify: `apps/server/src/catalogue-api.ts`, `apps/server/src/errors.ts`,
+- Modify: `apps/server/src/catalogue-api.ts` (the routes and its own `STATUS` map),
+  `packages/catalogue/src/errors.ts` (declare `extras.*` and `product.in_use` — `product.*` is
+  declared there, not in the server's registry),
   `packages/catalogue/src/{operations.ts,product-editor.ts,product-editor-input.ts,product-types.ts}`
 - Test: catalogue-api route test; `product-modifiers.test.ts`; `product-editor-input.test.ts`
 
@@ -523,7 +527,7 @@ expect((await readProductExtras(tx, [productId])).get(productId)![0].items).toHa
       `modifiers` to `Product`/`ProductEditorValue`.
 
 - [ ] **Step 5: Add the extras routes** — mirror Task 3. Map `extras.*` (and the new `product.in_use`)
-      statuses in `apps/server/src/errors.ts`.
+      statuses in `apps/server/src/catalogue-api.ts`'s own `STATUS` map, not in an `errors.ts`.
 
 - [ ] **Step 6: Run and commit** — `pnpm --filter @waitron/catalogue test && pnpm --filter @waitron/server test catalogue-api && pnpm format:check`; then
       `git commit -s -m "Attach extras and options to a product through one ordered list"`.

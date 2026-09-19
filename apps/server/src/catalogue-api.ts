@@ -43,6 +43,12 @@ import {
   listMenuSections,
   listOptionGroupItems,
   listOptionGroups,
+  listOptionLists,
+  getOptionList,
+  createOptionList,
+  updateOptionList,
+  deleteOptionList,
+  optionListDependants,
   listProductOptionGroupIds,
   listProducts,
   removeCatalogueFromLocation,
@@ -190,6 +196,25 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // opaque 500 the `option_group_items_qty_ck` CHECK would raise. Listed explicitly as the house style
   // requires; the `?? 400` default already covers it.
   "options.item_invalid": 400,
+  // Option lists (`packages/catalogue/src/options.ts`). `options.invalid` reaches here from more
+  // than one place — `parseOptionListInput` on a malformed authoring body, and `writeLabels` on a
+  // label id the stored rows put on another list, among them; `options.translation_required` from a
+  // customer-facing name map with no text in the default content language. Both are CLIENT request
+  // faults → 400. Listed
+  // explicitly as the house style requires; the `?? 400` default
+  // (`packages/server-kit/src/error-boundary.ts:57`) already covers them.
+  "options.invalid": 400,
+  "options.translation_required": 400,
+  // An id naming no list. The default would make this a 400, so this entry is what makes it a 404.
+  "options.not_found": 404,
+  // 409 rather than the default 400 because the body was fine and the stored state refused it — the
+  // shape the sibling `modifier.in_use` above has. NOTHING throws it, and the design may never give
+  // it one: a list delete is DESIGNED to cascade its product attachments rather than refuse (there
+  // are none yet — `product_modifiers` arrives with the plan's Task 6, and `deleteOptionList`
+  // cascades only labels today), which `packages/catalogue/src/errors.ts` states on the code
+  // itself, citing spec
+  // `2026-09-18-one-product-model-design.md` §2.3. Mapped because Task 3 of the plan names it.
+  "options.in_use": 409,
 };
 
 // The one error boundary every catalogue route wraps its handler in — the shared `createErrorBoundary`
@@ -423,6 +448,75 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
     }
   };
+
+  // Option lists sit UNDER `/management-api/modifiers` because a dish's one attachment list holds
+  // either an option list or an extras list; `options` is the discriminator in the path.
+  //
+  // This block MUST stay registered ahead of the `/management-api/modifiers/:id` block below. Only
+  // the collection read is at risk — it is the one whose path that `:id` can match, and `:id`
+  // swallows the literal `options`, so it answers 400 `shared.invalid_id` instead of 200 — but the
+  // six move as one block. Measured by moving this block after that one and re-running the file
+  // (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red — "GET
+  // /management-api/modifiers/options lists them" with `expected 400 to be 200`, and the gate case
+  // with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks for a
+  // session. `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §11 intends the
+  // collection and `:id` routes to REPLACE `/management-api/modifiers`, but no task in the plan
+  // deletes that block, so nothing schedules this hazard's removal.
+  app.get("/management-api/modifiers/options", (c) =>
+    run(c, log, async () => {
+      const optionLists = await gated(requireManagementSession(c), (tx) => listOptionLists(tx));
+      return c.json({ optionLists });
+    }),
+  );
+  app.post("/management-api/modifiers/options", (c) =>
+    run(c, log, async () => {
+      // Session before body, as `POST /management-api/categories` below does: an unauthenticated
+      // request is then refused without its payload being read at all.
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const optionList = await gated(sessionId, (tx) =>
+        createOptionList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
+      return c.json({ optionList }, 201);
+    }),
+  );
+  app.get("/management-api/modifiers/options/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "OptionListId");
+      const optionList = await gated(requireManagementSession(c), (tx) => getOptionList(tx, id));
+      return c.json({ optionList });
+    }),
+  );
+  app.patch("/management-api/modifiers/options/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "OptionListId");
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody(c);
+      const optionList = await gated(sessionId, (tx) =>
+        updateOptionList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
+      return c.json({ optionList });
+    }),
+  );
+  app.delete("/management-api/modifiers/options/:id", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "OptionListId");
+      await gated(requireManagementSession(c), (tx) => deleteOptionList(tx, id));
+      return c.json({ ok: true });
+    }),
+  );
+  // What deleting this list would touch — the preview a delete confirmation reads. Not "the
+  // dashboard's", as the modifier sibling below says of its own: nothing under `apps/dashboard` or
+  // `apps/till` names an option list today.
+  app.get("/management-api/modifiers/options/:id/dependants", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "OptionListId");
+      const dependants = await gated(requireManagementSession(c), (tx) =>
+        optionListDependants(tx, id),
+      );
+      return c.json({ dependants });
+    }),
+  );
 
   app.get("/management-api/modifiers", (c) =>
     run(c, log, async () => {

@@ -482,8 +482,9 @@ both through one ordered attachment list. Design:
 [one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
 [modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). Two
 tasks have landed — a `sold_alone` flag on products (#412), and option lists (#436): the two tables,
-the authoring and order-time rules, the reads and writes, and five refusal codes. Nothing is served
-over the API yet and no screen shows a list.
+the authoring and order-time rules, the reads and writes, and five refusal codes. Option lists are
+now served over the management API, under `/management-api/modifiers/options` (the plan's Task 3).
+No screen shows a list yet.
 
 What option lists left open, none of it taken in #436:
 
