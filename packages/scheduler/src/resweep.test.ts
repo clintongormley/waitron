@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { DEFAULTS, type LedgerSnapshot } from "./derive.js";
 import { completeRun, readSnapshot, reclaimStale } from "./store.js";
@@ -14,7 +14,7 @@ const TOMORROW = new Date("2026-07-26T04:00:00Z");
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const DUTY = "test.duty";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
 
 beforeEach(async () => {
   await seedTenant(suite.db);

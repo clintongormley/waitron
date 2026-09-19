@@ -8,13 +8,19 @@ export default defineConfig({
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails the
     // whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suites (store.test.ts, resweep.test.ts et al.) boot PGlite (a WASM PostgreSQL) and
-    // apply two migration sets, longer than Vitest's 5s default on a cold CI runner; the real-PG
-    // suites now clone the shared container's migrated `core_scheduler` template (globalSetup, above).
-    // Each per-suite cost is paid in a beforeAll — the PGlite WASM boot, or the real-PG ~26ms clone —
-    // so hookTimeout stays generous for the PGlite boot; the ~26ms clone is a harmless ceiling under
-    // it. The container boot / image pull is NOT in a beforeAll: it moved to globalSetup, which vitest
-    // does NOT bound by hookTimeout. testTimeout covers the ordinary risk within a single `it`.
+    // hookTimeout does NOT bound the PGlite boot. The four PGlite suites boot a WASM PostgreSQL and
+    // apply two migration sets, but they ask for it through `useVenueDb`, which hands `beforeAll` its
+    // own 60s default (packages/db/src/testing/lifecycle.ts:22, passed at :146), and a timeout passed
+    // to a hook overrides this config's (stated at lifecycle.ts:178, measured at :182-183). What
+    // hookTimeout bounds instead is the hooks that pass no timeout of their own, among them:
+    // `useTemplateDb`'s `beforeAll`, which deliberately takes no default (lifecycle.ts:382), and its
+    // `afterAll`, which takes no timeout argument at all (:440) — the `core_scheduler` clone is inside
+    // the first of those; the PGlite helper's own per-test reset and close (:148, :153); and each
+    // suite's untimed hooks, including store.concurrency.test.ts's
+    // `beforeAll` and `afterAll` and the `beforeEach` seeds in run.test.ts and resweep.test.ts. Two
+    // costs sit outside it either way: the container boot / image pull, which moved to globalSetup
+    // and vitest does NOT bound by hookTimeout, and run.test.ts's own direct PGlite boot, which is
+    // inside an `it` and so bounded by testTimeout.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

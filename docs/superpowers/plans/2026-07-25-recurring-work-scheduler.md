@@ -166,6 +166,36 @@ export default defineConfig({
 });
 ```
 
+> **2026-09-19 — read `packages/scheduler/vitest.config.ts` rather than the sketch above.** Its
+> comment is two sentences, and every clause of both has DRIFTED since this plan ran. None of them
+> was written wrong; each describes code that has since moved.
+>
+> "The RLS and store suites additionally pull and start a real Postgres container" held for the two
+> suites that did: `packages/scheduler/src/scheduler.rls.test.ts` and `store.concurrency.test.ts`
+> both called `startRealPostgres()` in the commit that landed this plan (`11f16ac6`, 2026-07-26).
+> It was always loose about the other store suite — `store.test.ts` booted PGlite in that same commit
+> and has never touched a container. Since then the RLS suite was DELETED (`fd6da988`, 2026-09-06,
+> "Drop row-level security — step 1"), so there is no RLS suite at all now, and
+> `store.concurrency.test.ts` no longer starts a container: it CLONES a pre-migrated `core_scheduler`
+> template.
+>
+> "Both costs are one-off, paid in a beforeAll, so `hookTimeout` is the generous one" was true as
+> landed — every suite booted its own database in its own untimed `beforeAll`, and `hookTimeout`
+> bounds an untimed hook. Both halves moved afterwards. The container boot went to
+> `src/testing/global-setup.ts`, which vitest does not bound by `hookTimeout` at all. And the PGlite
+> boot went behind a shared helper in `c4d24c0d` (2026-07-31), which hands `beforeAll` its own
+> 60-second default (`packages/db/src/testing/lifecycle.ts:22`, passed at `:146`); a timeout passed
+> to a hook overrides the config's, stated at `:178` and measured at `:182-183`. So `hookTimeout` no
+> longer bounds the PGlite boot in this package. The live config now says which hooks it does bound.
+>
+> Two more ways the sketch has drifted. The coverage thresholds are this package's `90/90/85/85`
+> floor, not the `98/98/98/95` sketched (CLAUDE.md §2). And the four test files this plan prints in
+> full now ask for their database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) — task P2
+> step 5 of `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` — rather than naming a
+> driver directly, as this plan's sketches and `c4d24c0d`'s helper both did. `run.test.ts` is the one
+> exception, and only partly: it takes its suite database through the helper like the rest, but still
+> boots a second PGlite database directly inside one test, which that step deliberately leaves alone.
+
 - [ ] **Step 2: Confirm the workspace picks the package up**
 
 Run: `grep -n packages pnpm-workspace.yaml`
