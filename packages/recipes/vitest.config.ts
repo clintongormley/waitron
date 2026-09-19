@@ -8,9 +8,11 @@ export default defineConfig({
     // available. The retained suites use PGlite; globalSetup still precedes every worker, so a
     // Docker-absent run fails the whole package. See src/testing/global-setup.ts.
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout
-    // covers that setup. The container boot/image pull runs in globalSetup, outside hookTimeout.
-    // testTimeout covers work inside an individual test.
+    // `testTimeout` covers work inside an individual test. `hookTimeout` bounds a hook that passes
+    // no timeout of its OWN; a hook given one overrides this config (the receipt is at
+    // `packages/db/src/testing/lifecycle.ts:178`). So it does NOT bound the PGlite boot and
+    // migrations, which run under `usePgliteDb`'s own 60s default. The container boot/image pull
+    // runs in globalSetup, outside both.
     testTimeout: 30_000,
     hookTimeout: 60_000,
     // The suites use PGlite and do not open PostgreSQL backend pools, so they need no
