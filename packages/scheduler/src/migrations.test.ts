@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   // Core first — this set's baseline migration references core's `tenants` table and `app_user`
   // role. Ordering across packages is the runtime's job and nothing enforces it, so it is explicit
   // here.

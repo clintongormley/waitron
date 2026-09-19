@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, createPgliteDb, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 // Side-effect only: this test constructs a real `AppError<"payment.reconcile_unsettled">`, and
 // that code exists only via @waitron/payments's own `declare module "@waitron/shared"`
@@ -23,7 +23,7 @@ const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const SKIP_RETRY_MS = DEFAULTS.skipRetryMs;
 const AFTER_SKIP_RETRY = new Date(NOW.getTime() + SKIP_RETRY_MS);
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
 
 beforeEach(async () => {
   await seedTenant(suite.db);

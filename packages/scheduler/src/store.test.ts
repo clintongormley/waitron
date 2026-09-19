@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { dayPeriod } from "./derive.js";
 import {
@@ -18,7 +18,7 @@ const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");
 const PERIOD = dayPeriod(new Date("2026-07-24T00:00:00Z"));
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
   setup: async (db) => {

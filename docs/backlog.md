@@ -3297,9 +3297,10 @@ passes no timeout (`packages/db/src/testing/networked-postgres.test.ts`), so cor
 deciding what the sentence should say about both halves — which is why it is here rather than fixed.
 
 **THAT PHRASE-GREP IS NOT THE SIZE OF THE PROBLEM, and #438's review rounds are what showed it.** It
-finds ONE wording. Six more `vitest.config.ts` files state the same claim in other words, and the
-count is not the point — the METHOD is, because two successive corrections inside #438 got this
-wrong in opposite directions. Read each config against its own package and ask where the boot
+finds ONE wording. Six more `vitest.config.ts` files stated the same claim in other words when this
+was written; four do now, `packages/credentials` having been corrected by #440 and
+`packages/scheduler` by its own conversion. The count is not the point — the METHOD is, because two
+successive corrections inside #438 got this wrong in opposite directions. Read each config against its own package and ask where the boot
 actually sits:
 
 - False for the same reason (every PGlite boot in the package goes through `usePgliteDb`, so
@@ -3308,11 +3309,15 @@ actually sits:
   `packages/reporting/vitest.config.ts:15-16`. `packages/credentials`'s was the third; the
   conversion of that package corrected it, in the same way #438 corrected `packages/workforce-es`'s.
 - ALSO false, and this is where the first correction went wrong: `packages/payments/vitest.config.ts:14`
-  and `packages/scheduler/vitest.config.ts:15`. That grep returns a file for each, which a draft took
-  as a reason to spare them — but the one out-of-helper boot in each is inside an `it` body
-  (`packages/payments/src/migrations.test.ts:27`, `packages/scheduler/src/run.test.ts:205`), and
-  `testTimeout` bounds a test body, not `hookTimeout`. **The grep tells you a boot exists; only
-  reading tells you whether it is in a hook.**
+  and `packages/scheduler`'s, the latter corrected while converting scheduler. That grep returns a file
+  for each of the two, which a draft took as a reason to spare them both — but the one out-of-helper
+  boot in each is inside an `it` body (`packages/payments/src/migrations.test.ts:27`,
+  `packages/scheduler/src/run.test.ts:205`), and `testTimeout` bounds a test body, not `hookTimeout`.
+  **The grep tells you a boot exists; only reading tells you whether it is in a hook.**
+  `packages/payments` is the one of the two still standing. A caution for whoever fixes it: scheduler's
+  replacement comment deliberately does NOT write the word `createPgliteDb`, because that grep is how
+  this class is identified and a config that names the driver answers it about itself — the same shape
+  as the bare-name trap below.
 - False for a DIFFERENT reason: `packages/fiscal-verifactu/vitest.config.ts:14-16`. Three of its
   suites do boot PGlite in an untimed `beforeEach` that `hookTimeout` really does bound
   (`provisioning.test.ts:26`, `registro-sif.test.ts:27`, `restore.test.ts:64`) — but the sentence
@@ -3392,8 +3397,9 @@ MEASURED the half every earlier conversion had only read, by injecting 500ms del
 helpers' `afterEach` and `afterAll` under a 300ms limit and watching each one time out; ask it for
 that experiment again rather than restating the reading. One sizing error worth naming: a sibling
 survey that compared "the four packages converted before this one" was false — nine were, and two of
-the five it skipped bore on its own argument. NEXT is `packages/scheduler`, alone at the bottom with
-4 calling files on `e050cbfb` — re-measure with the plan's step-5 command rather than trusting that.
+the five it skipped bore on its own argument. Which package is NEXT is the plan's step-5 command run
+on the tree you are converting, never a name written here — the one that used to stand here went
+stale the moment the package it named was converted.
 
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
