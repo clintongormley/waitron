@@ -1952,7 +1952,7 @@ image constraints under *Detail → Box image*.
   the job log on the next sighting — nobody knows the cause, and it is the cheapest evidence there
   is.
 - **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
-  `scripts/write-path-tables.test.ts` (landed with this note) covers the four tables `app_user` may
+  `scripts/write-path-tables.test.ts` (LANDED #430, 2026-09-19) covers the four tables `app_user` may
   read and never write — `tenants`, `nodes`, `deployment`, `mirror_config` — and nothing else. The
   slice-1 design asks for more than that: "everything else becomes a guard that reads the source …
   not a convention with nothing checking it". After this guard, that holds for four tables out of the hundred and five that
@@ -1966,6 +1966,16 @@ image constraints under *Detail → Box image*.
   them. That is fifty tables where the grant is the only thing
   refusing an insert, an update or a delete it does not allow. TRUNCATE is wider still: no table
   grants it, and only ten carry a trigger that blocks it.
+
+  **What #430's review left behind, none of it taken there.** The allowance list is a JSON file
+  rather than the annotated TypeScript constant every sibling guard uses, because the plan named a
+  file that outlives the grants; the justification for each entry is a doc comment beside the
+  `JSON.parse` instead, which no test reads. The guard's comment reader still has a hole of the shape
+  it was rewritten to close — a line inside a template literal whose first characters open a block
+  comment swallows the code below it — narrowed to line-leading openers rather than closed, because
+  closing it needs a parser. And the detector only reads a builder call whose receiver looks like a
+  database handle, so a write through a handle named something else is invisible; that was the price
+  of not reporting `cache.delete(nodes)` on an ordinary `Set`.
 
   **Next action:** decide before the flip between three shapes. Grow the guard an operation column,
   which means encoding a privilege matrix as regexes. Give the tables that lack one a `reject_mutation`
