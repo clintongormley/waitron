@@ -140,8 +140,13 @@ export interface MenuExtraPublication {
  * It lives beside {@link parseExtraListInput} because every rule it needs is already here — the
  * uuid-and-lower-case `id`, the boolean `bool`, the unknown-key `keys` and the shared
  * {@link extraPrice}. Parsed by hand inside the write path instead, two of those checks were simply
- * absent: a `listId` that was not a uuid reached PostgreSQL as `22P02`, and an `available` of
- * `"false"` — the STRING — was stored as `true`.
+ * absent: a `listId` that was not a uuid reached PostgreSQL as `22P02`, and a non-boolean
+ * `available` went straight to the column. Run through that same drizzle insert on PGlite 0.5.8
+ * (PostgreSQL 18.3): the NUMBER `1` stored true and `0` stored false, silently; `"banana"` and `{}`
+ * came back from the driver as `Invalid input for boolean type` carrying no SQLSTATE and no field an
+ * editor could read; and the STRING `"false"` stored FALSE, because PostgreSQL's own boolean parser
+ * reads the text. So what {@link bool} adds is a refusal with a field path where there was either a
+ * silent coercion or a fieldless driver error.
  *
  * The two duplicates a body can carry are refused here as well, because neither has a unique index
  * behind it that would name the offending position: one list published twice, and one product

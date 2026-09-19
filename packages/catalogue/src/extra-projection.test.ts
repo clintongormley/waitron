@@ -641,10 +641,12 @@ describe("what deleting an extras list would touch", () => {
  * extras.test.ts's for drizzle/0005_extra_lists_grants.sql. Every other test in this file runs as
  * PGlite's superuser, which holds every privilege and so proves nothing about a grant.
  *
- * Seen red rather than assumed: with `DELETE` removed from the grant in that migration, this
- * walkthrough failed at
- * `delete from "menu_item_extra_lists" where "menu_item_extra_lists"."menu_item_id" = $1` with
- * `42501 permission denied for table menu_item_extra_lists`; with the grant put back it passed.
+ * Seen red rather than assumed, once per table, because a grant on one of them proves nothing about
+ * the other. With `DELETE` revoked on `menu_item_extra_lists` this walkthrough failed at
+ * `delete from "menu_item_extra_lists" where "menu_item_extra_lists"."menu_item_id" = $1`; with it
+ * revoked on `menu_item_extra_items` alone it failed inside `dropStaleMenuOverrides` (extras.ts)
+ * instead. Both said `42501 permission denied for table <that table>`, and both passed with the
+ * grant put back.
  */
 describe("publishing on a menu offer as the non-superuser application role", () => {
   const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
@@ -682,8 +684,26 @@ describe("publishing on a menu offer as the non-superuser application role", () 
       );
       expect(baconPrice(await readMenuExtras(tx, [offers.burger]))).toBe("1.50");
 
-      // DELETE on both: republishing clears what the offer carried, and the override goes with its
-      // publication row.
+      // DELETE on `menu_item_extra_items`, walked as its own step because nothing else here
+      // reaches it: dropping bacon from the LIST makes `dropStaleMenuOverrides` (extras.ts) issue a
+      // delete on that table under this role, and `dropStaleMenuOverrides` is the only place in the
+      // tree that deletes from it.
+      await updateExtraList(
+        tx,
+        list.id,
+        { ...toppings(), items: toppings().items.filter((item) => item.productId !== ids.bacon) },
+        "en",
+      );
+      const overrides = await tx.execute<{ count: number }>(
+        sql`select count(*)::int as count from menu_item_extra_items`,
+      );
+      expect(overrides.rows).toEqual([{ count: 0 }]);
+
+      // DELETE on `menu_item_extra_lists`: republishing the offer as empty removes its publication
+      // row. Whatever override rows sat under it go by `menu_item_extra_items_list_fk`'s ON DELETE
+      // CASCADE, and a CASCADE is not checked against this role, so this statement leaves the child
+      // table's own `DELETE` grant unwalked. That is why the step above exists: without it, and with
+      // `DELETE` revoked on `menu_item_extra_items`, this walkthrough passed whole.
       await setMenuItemExtraLists(tx, offers.burger, []);
       expect(await readMenuExtras(tx, [offers.burger])).toEqual(new Map());
     });

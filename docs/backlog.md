@@ -480,15 +480,20 @@ idea is being split into two: Extras (reusable lists of products, each pick beco
 line) and Options (reusable lists of labels, saved as a note on the dish line). A product composes
 both through one ordered attachment list. Design:
 [one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
-[modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). Two
-tasks have landed — a `sold_alone` flag on products (#412), option lists (#436): the two tables,
-the authoring and order-time rules, the reads and writes, and five refusal codes; serving those
-lists over the management API under `/management-api/modifiers/options` (#445, the plan's Task 3);
-and extras lists (#449, the plan's Task 4): `extra_lists` and `extra_list_items`, the authoring and
-order-time rules, the reads and writes, and the price rule — a menu's price, else the list item's,
-else the product's own, with VAT always the product's. An extras list names PRODUCTS, so an item on
-it owns no price, VAT, allergens, photo or name of its own. No screen shows either kind of list yet,
-and nothing serves extras over the API — that is the plan's Task 6.
+[modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). The
+plan's Tasks 1 to 4 have landed — a `sold_alone` flag on products (#412), option lists (#436): the
+two tables, the authoring and order-time rules, the reads and writes, and five refusal codes;
+serving those lists over the management API under `/management-api/modifiers/options` (#445, the
+plan's Task 3); and extras lists (#449, the plan's Task 4): `extra_lists` and `extra_list_items`,
+the authoring and order-time rules, the reads and writes, and the price rule — a menu's price, else
+the list item's, else the product's own, with VAT always the product's. An extras list names
+PRODUCTS, so an item on it owns no price, VAT, allergens, photo or name of its own. **The plan's
+Task 5 — the per-menu publication, `menu_item_extra_lists` and `menu_item_extra_items` with
+`setMenuItemExtraLists` and the menu projection `readMenuExtras` — is written and under review on the
+branch `feat/modifiers-menu-extras`, with no pull request open yet**; put its number in this
+sentence when it lands, and read _What the per-menu publication (the plan's Task 5) left behind_
+below as describing that branch rather than `main`. No screen shows either kind of list yet, and
+nothing serves extras over the API — that is the plan's Task 6.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -610,6 +615,10 @@ What the per-menu publication (the plan's Task 5) left behind:
   `packages/catalogue/src/extra-projection.test.ts` exercises `UPDATE` with direct statements, which
   is the only way to establish the role really holds what the migration granted it. **Next action:**
   decide whether to narrow the grant to `SELECT, INSERT, DELETE`, or record that `UPDATE` stays.
+  Narrowing it is not a one-file change: `packages/fiscal-verifactu/src/privileges.expected.ts` pins
+  `SIUD` for both tables, its own header says a deliberate grant change edits it in the same commit,
+  and `packages/fiscal-verifactu/src/privileges.test.ts` compares that table against the live catalog
+  with `toEqual`, so the migration and that file move together or the comparison disagrees.
 
 **Product selling units — LANDED #342 (2026-09-13).** You now say what you actually sell a product
 by — by the each (the default when you choose nothing), or by weight or volume: grams, milligrams,

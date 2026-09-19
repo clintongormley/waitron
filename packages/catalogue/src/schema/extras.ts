@@ -167,7 +167,9 @@ export const menuItemExtraItems = table(
     check("menu_item_extra_items_price_ck", sql`${t.price} >= 0`),
     // The primary key leads with `menu_item_id`, so nothing here answers a filter on `list_id`
     // alone: `dropStaleMenuOverrides` (packages/catalogue/src/extras.ts) deletes on `list_id` every
-    // time a manager saves an extras list.
+    // time a manager UPDATES an extras list. Only an update — `updateExtraList` is its one caller,
+    // because a create mints the list id a statement earlier and no offer can hold an override
+    // against it yet.
     index("menu_item_extra_items_list_product_idx").on(t.listId, t.productId),
   ],
 );

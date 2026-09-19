@@ -331,11 +331,12 @@ async function dropStaleMenuOverrides(
 }
 
 /**
- * The only write path here that takes no lock of its own on the list, and the reason is the id: it
- * is minted below and no other transaction can name it yet, so there is nothing to serialise
- * against. `updateExtraList`, `deleteExtraList` and `setMenuItemExtraLists` all take one — a row
- * lock, not an advisory lock, which spec §7 bars from new code ({@link lockExtraList}). The
- * content-language lock `validateNames` reaches through is the existing shared one.
+ * The only write path here that takes no lock of its own on an existing list, and the reason is the
+ * id: it is minted below and no other transaction can name it yet, so there is nothing to serialise
+ * against. The others do take one — a row lock, not an advisory lock, which spec §7 bars from new
+ * code ({@link lockExtraList}): `updateExtraList` and `deleteExtraList` take exactly one each, and
+ * `setMenuItemExtraLists` takes one per PUBLISHED LIST, so none at all when the body publishes
+ * nothing. The content-language lock `validateNames` reaches through is the existing shared one.
  */
 export async function createExtraList(
   tx: Transaction,
@@ -397,11 +398,36 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
  * on a real backend by "does not keep a menu price for a product the list stopped offering while it
  * was saving" (extras.pg.test.ts), which read `0.25` where the product's own `2.50` was due.
  *
- * LOCK ORDER is the invariant, and it is what keeps two writers from waiting on each other for
- * ever. A publication takes the menu OFFER's row first and then the list rows in ID ORDER;
- * `updateExtraList` and `deleteExtraList` take exactly one list row and no offer row at all
- * ({@link lockExtraList}). So a waiter is either waiting on a list id above every one it already
- * holds, or waiting on an offer row while holding no list — and neither closes a cycle.
+ * LOCK ORDER is what keeps two writers from waiting on each other for ever. The next two paragraphs
+ * are REASONING over the write paths named below, traced by hand; they are not a measurement, and
+ * they say nothing about a path outside this file. Only the sort's paragraph is measured.
+ *
+ * Three locks are taken deliberately, and each path takes the ones it needs in this order: the menu
+ * OFFER's row in `menu_items` (the only one of these paths that takes it), then `extra_lists` rows
+ * in ascending id order ({@link lockExtraList}), then the content-languages ADVISORY lock, which
+ * `validateNames` reaches through `findContentTranslationGap` (content-languages.ts) and only when
+ * the body carries a customer-facing name. `setMenuItemExtraLists` takes the first two;
+ * `updateExtraList` takes one list row and then the advisory lock; `deleteExtraList` takes one list
+ * row and neither of the other two; `createExtraList` takes the advisory lock and no EXISTING list
+ * row at all — the `extra_lists` row it locks after that is one it has just minted, which no other
+ * transaction can name yet.
+ *
+ * Below those, each path's own writes take ordinary row locks this code does not order: the list's
+ * `extra_list_items` rows, and its `menu_item_extra_items` rows — reached directly by
+ * {@link dropStaleMenuOverrides}, which sweeps ONE list across every offer, and by the cascade under
+ * `setMenuItemExtraLists`'s publication delete, which sweeps ONE offer across every list. Those two
+ * sweeps cross, so nothing here claims they cannot wait on each other. What the paragraph above
+ * claims is narrower: no path waits on one of the three deliberate locks while holding a row lock
+ * from this one.
+ *
+ * The ascending sort is the part that IS measured, on real PostgreSQL in this worktree. With
+ * `.sort()` removed and a 300ms pause after each acquired lock, two menu offers publishing the same
+ * two lists in OPPOSITE body order ended one of the two in `40P01 deadlock detected` — three runs of
+ * three; with the sort put back and the pause still in place, both completed — three runs of three.
+ *
+ * An unknown list id is refused from inside this loop, as `extras.not_found`
+ * ({@link lockExtraList}), so the id the refusal names is the lowest unknown one in string order
+ * rather than the first unknown one in body order. No test pins which.
  *
  * One statement per id rather than one `in (…) order by id for update`: the order the rows are
  * locked in is the whole point here, and a loop makes it this code's choice rather than a query

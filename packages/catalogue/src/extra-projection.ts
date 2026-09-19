@@ -30,9 +30,10 @@ const key = (menuItemId: string, listId: string, productId: string) =>
  * read by nothing here, which is the other half of that table's missing foreign key
  * (schema/extras.ts).
  *
- * An INACTIVE list is returned rather than dropped, carrying its `active` flag, because there is a
- * consumer for that flag: `validateExtraSelections` (extra-contract.ts) answers only the ACTIVE
- * lists of the set it is handed.
+ * An INACTIVE list is returned rather than dropped, carrying its `active` flag, because the flag is
+ * what `validateExtraSelections` (extra-contract.ts) reads to answer only the ACTIVE lists of the
+ * set it is handed. Nothing joins the two yet: on 2026-09-19 every caller of either is a test, and
+ * no production code passes this function's output to that one.
  *
  * A bounded number of queries whatever the number of menu items: the publications, the lists, their
  * items, this offer's overrides, and the products whose own price an item still has to borrow.
@@ -111,7 +112,13 @@ export async function readMenuExtras(
   for (const { menuItemId, definition, items } of offered) {
     const priced = items.flatMap(({ item, menuPrice }): MenuExtraListItem[] => {
       // An item that has to borrow its product's price and cannot is left out of the menu view: it
-      // cannot be priced, so it cannot be sold. `extra_list_items_product_fk` is ON DELETE RESTRICT
+      // cannot be priced, so it cannot be sold. It narrows the LIST as well, which reaches further
+      // than one item: if every item goes this way and the list is active with `minPicks` of 1 or
+      // more, `validateExtraSelections` (extra-contract.ts) answers it with `extras.limit_exceeded`
+      // whatever the diner picks, so the DISH becomes unorderable once the order path calls that
+      // function (the plan's Task 7; nothing calls it today). And an active list with no items is a
+      // shape `parseExtraListInput` refuses outright, so this projection can hand back one the
+      // authoring contract treats as impossible. `extra_list_items_product_fk` is ON DELETE RESTRICT
       // (schema/extras.ts), which forbids that state at any ONE instant — but the items above and
       // the products here are two statements with a read-committed snapshot each, so another
       // transaction can drop the item from the list and then delete the product in between. Seen
