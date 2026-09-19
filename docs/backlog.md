@@ -482,9 +482,13 @@ both through one ordered attachment list. Design:
 [one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
 [modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). Two
 tasks have landed — a `sold_alone` flag on products (#412), option lists (#436): the two tables,
-the authoring and order-time rules, the reads and writes, and five refusal codes; and serving those
-lists over the management API under `/management-api/modifiers/options` (#445, the plan's Task 3).
-No screen shows a list yet.
+the authoring and order-time rules, the reads and writes, and five refusal codes; serving those
+lists over the management API under `/management-api/modifiers/options` (#445, the plan's Task 3);
+and extras lists (#449, the plan's Task 4): `extra_lists` and `extra_list_items`, the authoring and
+order-time rules, the reads and writes, and the price rule — a menu's price, else the list item's,
+else the product's own, with VAT always the product's. An extras list names PRODUCTS, so an item on
+it owns no price, VAT, allergens, photo or name of its own. No screen shows either kind of list yet,
+and nothing serves extras over the API — that is the plan's Task 6.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -531,6 +535,44 @@ What option lists left open, none of it taken in #436 or #445:
   `2026-09-14-dashboard-alerts-events.md`. Left for whoever works those files. Note that both styles
   are in the tree, so a grep does not hand anyone the convention:
   `packages/catalogue/src/dietary.test.ts` asserts `/diet.invalid_origin/` by regex.
+What extras lists left open, and what #449 found on the way:
+
+- **The seven string-parsing helpers are copied between the two contracts.**
+  `packages/catalogue/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
+  `invalid`, `record`, `keys`, `staffName`, `translations`, `kitchenName` and `id`, differing only in
+  the error-code prefix. A review asked for them to be shared and it is right — but the plan's Task 6
+  adds a third contract wanting the same helpers, so extracting across two now means pulling it apart
+  again. **Next action:** extract at Task 6, across all three, the same call this track made about the
+  duplicated route handlers above.
+- **An untargeted `.onConflictDoNothing()` absorbs EVERY unique conflict, not only the primary key's.**
+  Written into `CLAUDE.md` §3 with its receipt in `developers/conventions-data.md`. Seven untargeted
+  calls remain in the tree and nothing guards this. The two that read an empty result as a specific
+  cause — `packages/catalogue/src/options.ts` and `modifiers.ts` — were checked and are safe today,
+  because neither table carries a unique constraint beyond its primary key. **Next action:** that is a
+  property of those tables, not of the code, so adding a unique index to either one reopens it.
+- **An `ON DELETE RESTRICT` key raises `23001 restrict_violation`, not `23503 foreign_key_violation`.**
+  The plan implies `23503`. Cost: one wrong expected literal in a test whose behaviour held on the
+  first run.
+- **A defect found in the options sibling and fixed out of scope.** `updateOptionList` compared a
+  stored, lower-cased `list_id` against the caller's id in JavaScript, so a save whose list id
+  arrived upper-cased had every one of its own labels read as another list's and was refused with
+  `options.invalid`. The route is real (`PATCH /management-api/modifiers/options/:id`, whose
+  `requireUuidParam` checks shape and does not normalise). #449 fixed it and added the regression
+  test, because the identical bug was already proven and fixed on the extras side.
+- **`packages/catalogue/src/options.ts` still says `findContentTranslationGap` returns rather than
+  throwing.** It does throw `content.translation_invalid` for a non-text value. The extras twin of
+  that sentence was narrowed in #449; this one was left, being pre-existing and out of scope.
+- **The design's stated reason for `min_picks`/`max_picks` is false.** It says bare `min`/`max`
+  "collide with SQL function names". Measured on PostgreSQL 18.3: a table with columns named `min`
+  and `max` takes a check constraint over them, selects them unqualified and aggregates `min(min)` /
+  `max(max)`. The spelling stands — it reads better — and a dated pointer now sits on the design
+  document saying only the reason was wrong.
+- **An extras list's `dependants` returns both sides empty**, for the same reason the options one
+  does: nothing can hold a list until the plan's Tasks 5 and 6 add the per-menu and product
+  attachment tables. Unlike options, extras DO get a per-menu publication row, so the menus side will
+  be a direct query rather than one reached through the products.
+- **`extras.in_use` is registered and nothing throws it**, the same posture as `options.in_use`.
+
 - **A save reaches the database once per submitted label.** The read that finds which list each
   submitted label belongs to, and the delete that drops the labels a body omits, are each one
   statement — but writing the labels is a loop, because a multi-row insert cannot say WHICH label's
