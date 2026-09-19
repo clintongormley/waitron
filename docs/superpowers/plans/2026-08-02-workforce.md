@@ -231,6 +231,55 @@ Each slice is an independently-reviewable PR. **Order puts the legally-required 
 
 ## 7. Test strategy (PGlite vs real Postgres — `CLAUDE.md` §4)
 
+> **2026-09-20 — `packages/workforce` calls none of the three test-database helpers named in the two
+> headings below.** Two were replaced, at different times and for different reasons; the third was
+> never used in this package at all (`git log -S describeEachTarget -- packages/workforce` returns
+> nothing). Read the tree for those three, not these headings.
+>
+> Two other functions the section names are still called and are nothing to do with this rollout:
+> `runMigrationSets` by `src/testing/global-setup.ts` and `asAppUser` by `src/immutability.test.ts`.
+> The two expressions printed below that carry a migration list — `runMigrationSets`'s and the
+> PGlite heading's — have moved on in one way, though: each passes THREE migration
+> sets now, `IDENTITY_MIGRATIONS` between core and workforce, which is the relocation
+> `docs/superpowers/plans/2026-08-04-identity.md` step 15 carried out. And `verifyPin`, the second
+> bullet under the PGlite heading, is not in this package any more at all: it moved to
+> `packages/identity/src/verify-pin.ts` with the persons relocation, and its test there
+> (`packages/identity/src/verify-pin.test.ts`) opens no database, so it is no longer a PGlite target
+> of any package.
+>
+> The PGlite line is the one this rollout changed: the package's nine hermetic suites now ask for
+> their database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) instead of `usePgliteDb`.
+> It is the same PGlite database with the same migration sets and the same per-test reset — the new
+> helper's whole body forwards to the old one — so this section's reasoning about which target suits
+> which test is untouched; only the name to write in a new suite changes (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+>
+> The other two are older and are nothing to do with the storage switch. No workforce suite calls
+> `useRealPostgres`: they take a real database by cloning a shared migrated template with
+> `useTemplateDb({ template: "core_identity_workforce" })`, which arrived in `4bc99f0ae` (#118) and
+> is why `src/testing/global-setup.ts` exists. `describeEachTarget` is not used here either
+> (`grep -rn describeEachTarget packages/workforce` exits 1). And the first bullet below asks for RLS
+> tenant isolation on every table, which the house no longer has: row-level security was dropped in
+> `fd6da9880` (#255) and `CLAUDE.md` §3 now reads "No policies, no RLS: one tenant per database".
+> The role-revocation floor in the second bullet is alive: `src/immutability.test.ts` asserts
+> SQLSTATE `WT001`, and it takes its database from the real-PostgreSQL template. The bullet's reason
+> for that — "PGlite's superuser can `DISABLE TRIGGER` and bypasses RLS, so this MUST run on real
+> Postgres or it is theatre" — did not survive being run. Pointed at the hermetic helper instead,
+> with nothing else in the file changed but the handle it reads, all seven of its cases still pass,
+> the refused `UPDATE`/`DELETE` and the `WT001` trigger refusals among them (the run-it seat's
+> experiment on this branch, 2026-09-20). Which is what `CLAUDE.md` §4 already says: PGlite enforces
+> a grant once the session assumes the role. §4's confinement clause — that a PGlite session can
+> step back out with `reset role`, "so it cannot prove code is confined to a role" — does not rescue
+> the bullet either. What would prove confinement is a non-superuser LOGIN connection, and this
+> suite takes none: it runs on the clone's superuser handle and assumes the role inside the
+> transaction, four cases through `asAppUser` and three with its `set local role app_user` written
+> inline. (This package does create such a role, `workforce_clock_probe` in
+> `src/testing/global-setup.ts`, for the concurrency suites; the immutability suite does not use
+> it.) So the
+> suite's real-PostgreSQL database is where it runs today, and what that buys these seven cases is
+> not established. Nothing here proposes moving it; that is a question for
+> the storage flip. Nothing else in this document was re-checked.
+
 **Real Postgres (Testcontainers; `useRealPostgres`/`describeEachTarget`; `TESTCONTAINERS_RYUK_DISABLED=true` locally) — required for:**
 - **RLS tenant isolation** on every table (PGlite connects as superuser and bypasses RLS — a false pass).
 - **The role-revocation floor** — `UPDATE`/`DELETE`/`TRUNCATE` on `time_entries` denied **as the app role** (`asAppUser`), asserting SQLSTATE `WT001`. PGlite's superuser can `DISABLE TRIGGER` and bypasses RLS, so this MUST run on real Postgres or it is theatre (pattern: `packages/fiscal-verifactu/src/inmutabilidad.test.ts`, whose first assertion proves it is actually running as the non-owner role).
