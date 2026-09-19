@@ -60,12 +60,15 @@ async function lockWaiters(): Promise<number> {
 }
 
 /**
- * Poll until `condition` holds, and fail by NAME rather than hang when it never does. The bound is
- * well under this package's 30s test timeout (vitest.config.ts) and is reached in milliseconds on a
- * healthy run — it is here so a choreography that stops working reports what it was waiting for.
+ * Poll until `condition` holds, and fail by NAME rather than hang when it never does. It is reached
+ * in milliseconds on a healthy run — the bound is here so a choreography that stops working reports
+ * what it was waiting for, and it is 15s rather than the 5s it started at because 5s was not above
+ * what a HEALTHY first case costs on a loaded CI runner. Still under this package's 30s test
+ * timeout (vitest.config.ts), which is what has to hold for the failure to be this message rather
+ * than Vitest's own.
  */
 async function until(what: string, condition: () => Promise<boolean>): Promise<void> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     if (await condition()) return;
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -182,12 +185,22 @@ async function raceSaveAgainstDelete(kind: ProductModifierRef["kind"]): Promise<
   let saving: Promise<unknown> | undefined;
   let deleting: Promise<unknown> | undefined;
   try {
+    // The blocker signals once its lock is actually HELD, and the save does not start until then.
+    // Starting the save as soon as the blocker's promise exists is a race the script loses on a
+    // slow machine: if the blocker has not reached its `for update` yet, the save's delete takes
+    // the row unopposed, nothing ever waits, and the poll below times out having proved nothing.
+    // Seen exactly that way on CI, where this case reported "timed out waiting for the save to
+    // reach the row the blocker holds" while the other two cases passed — the first case pays for
+    // three cold connections inside its own deadline.
+    const acquired = latch();
     held = withTransaction(blocker, async (tx) => {
       await tx.execute(
         sql`select 1 from product_modifiers where product_id = ${dish} and ${column} = ${other} for update`,
       );
+      acquired.open();
       await release.waited;
     });
+    await acquired.waited;
     // Nothing else in this transaction: the save under test is the whole of it, exactly as a route
     // handler runs it.
     saving = app(writer, (tx) => writeProductModifiers(tx, dish, [{ kind, id: target }]));
