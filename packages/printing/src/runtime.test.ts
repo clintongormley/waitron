@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { esc } from "./escpos.js";
 import { MAX_DELIVERY_ATTEMPTS, runAgentOnce } from "./runtime.js";
@@ -17,7 +17,7 @@ import type { PrintConfig } from "./printers.js";
 // or the deployment role. The one property PGlite CANNOT show is the double-pull race (it serialises
 // every query onto one backend, so two agents never truly contend): that lives in runtime.race.test.ts
 // against real Postgres, proven by deletion of the locking pull (CLAUDE.md §4).
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);

@@ -8,11 +8,15 @@ export default defineConfig({
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run fails the
     // whole package — the same broadening the sibling real-PG packages (db, identity) accepted.
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The real-PG suites clone the shared container's already-migrated `core` template (globalSetup),
-    // so their beforeAll is a ~26ms CREATE DATABASE … TEMPLATE, not a per-file container boot+migrate;
-    // the container's one-off boot is paid once in globalSetup, off this timeout. hookTimeout stays
-    // generous mainly for globalSetup's own image pull on a cold CI runner; testTimeout covers the
-    // ordinary risk of the concurrency suite opening several backends.
+    // `testTimeout` covers work inside an individual test, including the concurrency suite opening
+    // several backends and this package's seeding, which every test does for itself rather than in a
+    // hook. `hookTimeout` bounds a hook that passes no timeout of its OWN; a hook given one overrides
+    // this config (the receipt is at `packages/db/src/testing/lifecycle.ts:178`). So it DOES bound the
+    // real-PG suites' beforeAll — a CREATE DATABASE … TEMPLATE against globalSetup's already-migrated
+    // `core` template, and `useTemplateDb` deliberately carries no default — and it bounds both
+    // helpers' bare afterEach reset and afterAll close, the PGlite suites' included. The one database
+    // hook it does NOT bound is the PGlite boot and migrations, which run under `usePgliteDb`'s own
+    // 60s default. The container boot/image pull runs in globalSetup, outside both.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
