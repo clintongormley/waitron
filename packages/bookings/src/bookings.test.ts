@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
@@ -34,7 +34,7 @@ type VenueCfg = BookingConfig;
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
 // container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs
 // into core, so it lands on top of the shared ordered set.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: BOOKINGS_TEST_MIGRATIONS,
   timeoutMs: 60_000,
 });

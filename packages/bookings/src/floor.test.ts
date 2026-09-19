@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { asAppUser, DEFAULT_TIME_ZONE, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
@@ -14,7 +14,7 @@ import "./errors.js";
 // The reserved-on-floor annotator is a correlated read with no privilege/concurrency dimension, so
 // PGlite is enough (the moved-from `apps/server/src/tables.test.ts` cases ran on PGlite too). The whole
 // manifest, not [core, bookings]: the shared ordered set lands bookings on top of its dependencies.
-const suite = usePgliteDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
 beforeAll(() => {
