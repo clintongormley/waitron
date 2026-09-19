@@ -2,13 +2,13 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { captureError, CORE_MIGRATIONS, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 
 // PGlite applies the same migration files PostgreSQL does; these cases read the catalog and the
 // foreign-key refusals, with no role or concurrency dimension.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   timeoutMs: 60_000,
 });

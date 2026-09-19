@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalRecordRef, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
@@ -39,7 +39,7 @@ import { seedVenue } from "../test/fixtures.js";
  * `record-sale.test.ts` does; the real Veri*Factu chain is exercised by the runnable demo
  * (`apps/server/scripts/catalogue-demo.ts`) and by `packages/fiscal-verifactu`'s e2e suite.
  */
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   // `FakeFiscalBackend.recordSale`/`registerNode` read and write their own
   // `fake_node_registrations`/`fake_fiscal_records` tables, and nothing creates those tables except

@@ -597,6 +597,29 @@ git commit -s -m "feat(catalogue): publish allergens from manual + recipe overla
 ```
 Copy `packages/catalogue/tsconfig.json` and `packages/catalogue/vitest.config.ts` verbatim into `packages/recipes/` (they are package-relative; confirm coverage thresholds match 98/98/98/95). Run `pnpm install` at the repo root to register the workspace package.
 
+> **2026-09-19 — do not copy `packages/catalogue/vitest.config.ts`'s comments, only its settings.**
+> Copying that file verbatim was never safe; what changed is the reason. Its `hookTimeout` comment
+> used to claim something that setting does not do — one instance of a false claim that is being
+> corrected package by package, recorded in `docs/backlog.md` — and it is now a measurement taken on
+> `packages/catalogue` itself, naming that package's own suite and its own globalSetup, so carrying
+> it across would restate a receipt nobody ran in the new package. The line's other instruction is
+> untrue for an unrelated reason: the config's thresholds read `90/90/85/85`, not the `98/98/98/95`
+> the sentence says to confirm.
+>
+> This document writes the old test-database helper in four places, and they did not go stale
+> together, so take them one at a time. Task 2 step 6's sketch, headed
+> `packages/db/src/schema/recipes.test.ts`, is STILL TRUE — that file calls `usePgliteDb` today
+> (`:4` and `:6`), `packages/db` being a package this rollout has not reached. The
+> `packages/recipes/src/ingredients.test.ts` sketch went stale first, in `fd6da9880` (#255, the
+> row-level-security drop), which moved that suite onto `useIngredientDb` in
+> `packages/recipes/test/fixtures.ts:53-54`. The `packages/recipes/src/recipes.test.ts` sketch went
+> stale when `packages/recipes` was converted in #434, and that file calls `useVenueDb` directly
+> today (`:4` and `:10`). Task 4's Consumes line is the one to read clause by clause: its
+> `usePgliteDb` survived #255, because the fixture that task created still called the old helper, and
+> died at #434; its `withTenant` had already gone three days earlier, in `91caf00d9` (#378, the
+> tenant-column drop), and no TypeScript source names it now. Nothing else in this document was
+> re-checked.
+
 - [ ] **Step 2: Write the test harness**
 
 `packages/recipes/src/testing/postgres.ts` — copy `packages/catalogue/src/testing/postgres.ts` verbatim (it runs `[CORE_MIGRATIONS]`, which now contains the recipe tables), adjusting the doc comment to say "recipes".

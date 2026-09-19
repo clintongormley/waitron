@@ -5,10 +5,20 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // One shared PostgreSQL template serves the content-language privilege and concurrency tests.
+    // One shared PostgreSQL template, cloned by every .pg.test.ts suite in this package — all of
+    // them, through `useTemplateDb`, not the content-language ones alone.
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout
-    // covers that setup. The container boot/image pull runs in globalSetup, outside hookTimeout.
+    // hookTimeout bounds a hook only when that hook passes no timeout of its own, because an
+    // argument REPLACES this setting rather than narrowing it: the config value is only that
+    // parameter's default (`beforeAll(fn, timeout = getDefaultHookTimeout())`,
+    // @vitest/runner@4.1.11). So it bounds the template clone in the .pg.test.ts suites, which pass
+    // none, each suite's own beforeEach/afterEach, and the untimed afterEach reset and afterAll
+    // close that `useVenueDb` registers (packages/db/src/testing/lifecycle.ts:148 and :153) — but
+    // NOT the PGlite boot, which is given `options.timeoutMs ?? 60s` where it is registered
+    // (lifecycle.ts:146). Measured on this package rather than read: under `--hookTimeout=50`
+    // src/provisioning.test.ts still passes, while putting `timeoutMs: 50` on its own call fails
+    // that same beforeAll. The same run shows the globalSetup container boot is outside hook
+    // timeouts too — it completed and the suites ran under that 50ms ceiling.
     // testTimeout covers work inside an individual test.
     testTimeout: 30_000,
     hookTimeout: 60_000,

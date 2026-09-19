@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -9,7 +9,7 @@ import { CATALOGUE_PROVISIONING } from "./provisioning.js";
 import { getSeededUnit } from "./units.js";
 
 // This suite checks seeded values and idempotence; it makes no privilege or contention claim.
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 async function venue(country: string, province: string, receipt: string) {
   await seedTenant(suite.db);
