@@ -3042,6 +3042,23 @@ and the rule). And a converted suite that reads its accessor too early still get
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
 
+**A third thing for that last pull request, found while converting `packages/bookings` (#428).**
+Converting a package does not remove the old helper's name from its PROSE, and the grep pair cannot
+see what is left: the still-to-convert command matches `usePgliteDb[(]`, with a parenthesis, so a
+comment that writes the bare name is invisible to it. `packages/bookings` is converted and
+`grep -rlE "usePgliteDb[(]" --include="*.ts" packages/bookings` exits 1, yet
+`packages/bookings/src/migrations.ts:5` still tells a reader that a test's `usePgliteDb` applies the
+migration descriptor — true, because `useVenueDb`'s whole body is `return usePgliteDb(options)`, but
+a pointer to a caller the package no longer has. Comment mentions of the helper today, run on
+`ceeae219`:
+`grep -rnE "^[[:space:]]*(//|\*|/\*).*usePgliteDb" --include="*.ts" packages apps` returns 21 lines
+— 12 in `packages/db`, which owns the function and is not a dead pointer, and the rest spread over
+`bookings`, `fiscal-verifactu`, `identity`, `payments`, `provisioning` and `workforce`. Each
+conversion turns that package's share into dead pointers, so the sweep belongs with the house rule
+and its guard rather than with any one conversion. Whoever writes the guard should decide
+deliberately whether it reads comments at all; if it does not, say so in its header, because a guard
+narrower than its name is the thing this repository's §7 asks to be stated.
+
 **The finding of this branch is again about METHOD, and it is the sharpest instance of it so far.**
 The code is three lines and never changed after the first commit. Everything after that was prose,
 and THREE rounds of review each found false claims inside the previous round's CORRECTIONS — nine in
