@@ -62,6 +62,23 @@ controller who was supposed to be watching for it. The instances:
    statement takes a fresh snapshot. Only a repeatable-read transaction gives you the one snapshot the sentence
    assumed.
 
+6. **"The property initializers are gone."** A negative grep, reported as a defect, over the output of
+   a toolchain that had just been swapped. Moving the front-ends from vite 6 to vite 8 replaced
+   esbuild with Oxc; searching the new till bundle for `this.variant="secondary"` — the exact string
+   the vite 6 bundle contained — returned nothing, and every decorated Lit property looked as though
+   it had lost its default. Had that been true the break would have been silent and wide, though the
+   failing version was never run, so treat the scale as reasoning rather than measurement. The
+   initializers were there. Oxc prints string literals as TEMPLATE literals, so the same code reads
+   ``this.variant=`secondary` `` and no double-quote search can find it.
+
+   The durable part is not the backtick, which is a fact about one version of one printer. It is
+   that **a negative grep over a tool's output is not evidence when the tool is what changed.** Both
+   answers print nothing — "the construct is absent" and "the construct is spelled differently" —
+   which is `CLAUDE.md` section 1's "a measurement taken where both answers look alike". The control
+   costs one command: find a construct you KNOW is present in the new output, see how it is spelled,
+   and only then conclude something is missing. Here that was searching for the identifier
+   (`_t=class extends x{constructor`) rather than the quoted value.
+
 The cheapest habit, and it would have caught nearly all of these: before writing a sentence that
 names a part of the system you did not edit, open that part. If you cannot open it — because you do
 not know where it is — that is the finding, and the sentence should say "I believe" until you do.

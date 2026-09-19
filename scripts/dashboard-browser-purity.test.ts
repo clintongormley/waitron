@@ -17,7 +17,11 @@ import { afterAll, describe, expect, it } from "vitest";
  * file. LIMITATION, stated because the guard reads text: it resolves RELATIVE paths only. A CROSS-
  * WORKSPACE-PACKAGE transitive leak (a dashboard file → a browser-safe `@waitron/x` export → server code
  * inside that package) is NOT followed here — resolving arbitrary workspace-package internals is beyond
- * a text scan — and stays the Vite-build backstop's job (`bundle-smoke`).
+ * a text scan. It used to say that case "stays the Vite-build backstop's job (`bundle-smoke`)", which
+ * was wrong on both halves and is corrected here (2026-09-19): `bundle-smoke` runs no `vite build` at
+ * all, and the dashboard bundle is not built by any pull request that leaves `deploy/` alone. So
+ * NOTHING catches that case on a pull request. See CLAUDE.md §2 and
+ * docs/developers/ci-and-gates.md.
  *
  * It reads TEXT (like module-seams / module-graph-honesty): a `from "@waitron/db"` inside a comment
  * would count, and a dynamic `import("…")` would not. Stated, not papered over — the shape it protects
@@ -169,7 +173,9 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     // interface` (`export const`, `export {value}`, `export default`), and a bare top-level value
     // declaration (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch an exotic
     // top-level expression statement (`sideEffect();`) — which no type file writes; the transpile check
-    // (typescript is not a root dependency) is left to the `bundle-smoke` backstop. Prove-by-deletion:
+    // (typescript is not a root dependency) is left to whatever next builds the dashboard bundle,
+    // which on a pull request that leaves `deploy/` alone is nothing (corrected 2026-09-19; this
+    // line used to name `bundle-smoke`, which builds no vite bundle). Prove-by-deletion:
     // add `import "@waitron/db";` or `export const x = 1;` to either leaf and it goes red.
     const LEAVES = [
       "packages/catalogue/src/product-types.ts",

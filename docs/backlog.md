@@ -2246,12 +2246,23 @@ latest minor or patch release; two loose ends came with it.
 **Left behind by the esbuild upgrade (#439, 2026-09-19).** The four packages that build bundles
 moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
 
-- **Three older esbuild copies stay in the tree, and they are not ours to move.** `vite` declares
-  `^0.25.0` and `drizzle-kit` declares `^0.25.4`, so both resolve 0.25.12, and `drizzle-kit` also
-  pulls the deprecated `@esbuild-kit/esm-loader`, which carries esbuild **0.18.20**. Those ranges
-  belong to those packages: the only way to move them is to upgrade vite and drizzle-kit. The vite 8
-  item in the dependency lane will move one of the three; nothing currently planned moves the
-  0.18.20 copy, and `pnpm install` warns about the package that brings it on every run.
+- **Two esbuild copies older than ours stay in the tree, and they are not ours to move.**
+  `drizzle-kit` declares `^0.25.4` and resolves 0.25.12, and it also pulls the deprecated
+  `@esbuild-kit/esm-loader`, which carries esbuild **0.18.20**. Those ranges belong to those
+  packages: the only way to move either copy is to upgrade `drizzle-kit`. Nothing currently planned
+  does, and `pnpm install` warns about the package that brings the 0.18.20 one on every run.
+  - **Rewritten 2026-09-19 after the vite 8 upgrade, which retired the previous wording.** Until
+    then this bullet said THREE older copies and named `vite` as a second declarer of `^0.25.0`
+    alongside `drizzle-kit`, and predicted that the vite 8 item "will move one of the three". Both
+    halves are now wrong, and the prediction was wider than what happened: upgrading vite removed
+    vite as a REASON for the old copy without removing the copy. Read out of the two lockfiles, by
+    which package declares each esbuild: at base, 0.25.12 was pulled by `drizzle-kit@0.31.10` AND
+    `vite@6.4.3`; at tip, by `drizzle-kit@0.31.10` alone, because vite 8 takes esbuild as an
+    optional peer (`^0.27.0 || ^0.28.0`) and resolves the workspace's own 0.28.2. **Watch the unit
+    when reading a count here:** three distinct esbuild VERSIONS are installed at both base and tip
+    (0.18.20, 0.25.12 and our own 0.28.2), and that is unchanged — but only two of them are older
+    than ours, and the number of packages pulling 0.25.12 went from two to one. Saying "unchanged at
+    three" across those two different units reads as "nothing moved", which is not what happened.
 - **The bundles are checked by comparison, and the comparison is a thing you have to remember to
   do.** What established this upgrade was safe was building all twelve bundles on both versions and
   diffing the bytes — not the test suites, which run against TypeScript source and cannot see a
@@ -2259,6 +2270,9 @@ moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
   would catch a bundle that no longer boots, but not a bundle whose contents quietly changed shape.
   If a future bundler bump wants the same receipt, the method is: build, stash the twelve outputs,
   bump, rebuild, `cmp` each pair, and account for every difference class before accepting it.
+  **That method does not survive a bundler REPLACEMENT**, which the vite 8 upgrade was: Rolldown and
+  Rollup do not agree byte for byte on anything, so every pair differs and there is no difference
+  class to account for. What replaced it there is below.
 
 **Left behind by the Node types upgrade (#441, 2026-09-19).** Thirty-eight manifests moved from
 `@types/node` `^24.0.0` to `^26.0.0`, matching the Node 26 the `.nvmrc` pins, and
@@ -2304,6 +2318,74 @@ declaration of its own. Two things it leaves open:
   `docs/superpowers/specs/2026-08-08-catalogue-management-ui-design.md`, which records what was
   believed when it was written and is left alone. Worth knowing for the next sweep: it is wrapped
   across two lines there, so a one-line `git grep` misses it.
+
+**Left behind by the vite 8 upgrade (2026-09-19).** `apps/dashboard`, `apps/setup`, `apps/till` and
+`packages/ui` moved from vite `^6.0.0` to `^8.0.0` (installed 8.3.0). Vite 8 swaps the bundler and
+the transformer: Rolldown and Oxc in place of Rollup and esbuild. What replaced the byte-comparison
+method above, since a bundler replacement makes it meaningless: build both, then run the SHIPPED
+bundles and compare what they produce. Concretely — `till-ticket-view` was instantiated out of each
+production bundle in real Chromium with the fixture from
+`apps/till/src/screens/till-ticket-view.test.ts`, and the Veri*Factu QR SVG came out identical at
+28231 bytes with the receipt text matching character for character; and `manifest.webmanifest`,
+emitted by the only custom Rollup-hook surface in the repo (`webManifest()` in
+`apps/till/vite.config.ts`, `generateBundle` + `this.emitFile`), came out identical at 434 bytes.
+Five things it leaves open:
+
+- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI.**
+  `bundle-smoke` builds `@waitron/credentials` and `@waitron/server`, which are esbuild bundles. The
+  only thing that runs `vite build` is `deploy/Dockerfile`, which the `image` job runs — and on a
+  pull request `image` is gated on `deploy/` having changed (`.github/workflows/ci.yml`, the `image`
+  job's `if`). So `image` DOES build the SPAs on a pull request that touches `deploy/`, and on every
+  main push; what it never does is OPEN one, so a bundle that builds and renders nothing passes
+  there too. `docs/superpowers/plans/2026-08-27-onboarding-slice2c-setup-wizard.md` (R6) recorded
+  this gap when `apps/setup` was written and called a cross-front-end build-smoke "a separate later
+  cleanup". It then survived a whole bundler replacement, which is what earns it a line in
+  `CLAUDE.md` §2 and a receipt in `docs/developers/ci-and-gates.md`.
+- **The default browser floor rose, and a `browserslist` will not hold it.** Nothing sets a
+  `build.target` and there is no `browserslist` anywhere, so the SPAs take vite's default. Resolved
+  with `resolveConfig` in `apps/till` on each installed version: 6.4.3 gives
+  `["es2020","edge88","firefox78","chrome87","safari14"]`, 8.3.0 gives
+  `["chrome111","edge111","firefox114","safari16.4","ios16.4"]`. **A `browserslist` field would not
+  fix this** — measured both ways against vite 8.3.0 with a scratch root: `browserslist:
+  ["chrome 120"]` in `package.json` leaves the resolved target at the 8.3.0 default, while
+  `build: { target: "chrome120" }` sets it. Those two are what was measured; no other way of pinning
+  it was tried. **No BROWSER floor is stated anywhere in the repo.** The compile floors that do
+  exist are for Node and are a different knob: `tsconfig.base.json`'s `"target": "ES2022"`, which
+  constrains the syntax TypeScript emits, and `--target=node24` in the four esbuild build scripts
+  (`apps/server`, `apps/print-agent`, `packages/credentials`, `packages/provisioning`). Nothing is
+  known to break, and the devices are bought new — but note that the hardware track's own stated
+  floors do NOT establish that, and one of them cuts the other way: Screen Wake Lock's iOS Safari
+  16.4 (`docs/superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md` line 83) sits
+  exactly ON the new floor rather than above it, and Web NFC's Chrome for Android 89
+  (`docs/superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md` line 79, citing
+  `browser-compat-data` for `NDEFReader`) is twenty-two majors BELOW the new chrome111. A device
+  that can do the NFC tap path is not thereby a device this bundle runs on. What is missing is
+  anywhere that states a browser floor, so the next bump moves it again silently.
+- **The four manifests declare `^8.0.0` while the lockfile installs 8.3.0**, which is the same
+  low-floor shape they carried at `^6.0.0`. Whether low floors are house style is the open question
+  the dependency refresh left above (#432 raised five of them to the installed version); this bump
+  deliberately did not answer it, because changing the shape is the owner's call and not a version
+  bump's. Decide it once, for all of them.
+- **Only four packages declare vite; the other five browser-mode packages follow by deduplication,
+  not by a declaration.** `packages/bookings`, `packages/media`, `packages/payments-stripe`,
+  `packages/payments-sumup` and `packages/venue-service` run tests in a browser but never invoke the
+  `vite` binary, so they correctly declare no vite. They moved to 8.3.0 because vitest declares vite
+  as a REQUIRED peer spanning three majors (`^6.0.0 || ^7.0.0 || ^8.0.0`, and absent from
+  `peerDependenciesMeta`), the four bumped manifests are the only thing choosing a vite in the tree,
+  and pnpm deduped onto it. Nothing pins the five. If a future change ever puts a second vite in the
+  tree, they could land on a different one silently.
+- **Four dependency-optimizer receipts were taken on vite 6 and were not re-measured.**
+  `apps/dashboard/vitest.config.ts`, `apps/setup/vitest.config.ts`, `apps/till/vitest.config.ts` and
+  `packages/ui/vitest.config.ts` each carry an `optimizeDeps.include` list with a comment recording
+  a flake. Three of the four (`apps/dashboard`, `apps/setup`, `apps/till`) name Vite outright and
+  quote its warning — "Vite unexpectedly reloaded a test" — as the thing they were measured against;
+  `packages/ui`'s records no measurement at all. Vite 8 changes the optimizer underneath all four:
+  its migration guide heads a section _"Dependency Optimizer Now Uses Rolldown"_ and says Rolldown
+  "is now used for dependency optimization instead of esbuild"
+  (`docs/guide/migration.md` on `vitejs/vite@main`, read 2026-09-19). Nobody re-checked that vite 8
+  still emits that warning string, or that the `include` lists are still the fix. The suites are
+  green either way; the risk is that the lists quietly become cargo and the quoted receipt goes
+  stale.
 
 One note for the next 0.x dependency bump, because it cost three review rounds here: esbuild ships
 breaking changes in minor releases, which is documented and was read — but the release that actually
