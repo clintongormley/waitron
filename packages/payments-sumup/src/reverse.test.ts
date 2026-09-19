@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, isAppError } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { setup } from "./testing/setup.js";
@@ -8,7 +8,7 @@ import { setup } from "./testing/setup.js";
 // PGlite: this file proves the reversal LOGIC (the T1 pre-check, the network refund between the two
 // transactions, the T2 write). Whether the same writes land as a non-superuser app_user member is
 // sumup.test.ts's question (CLAUDE.md §4). `setup` is shared with `provider.test.ts`.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });

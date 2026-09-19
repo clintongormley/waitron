@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
@@ -14,7 +14,7 @@ import { FakeSumUp } from "./testing/fake-sumup.js";
 import { NOT_FOUND_GRACE_MS, RESOLVE_RETRY_MS, SumUpCloudProvider } from "./provider.js";
 
 // PGlite — the sweep's logic. The grant/tenant questions are sumup.test.ts's (real PG).
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });

@@ -8,6 +8,21 @@
 > a --tenant flag with usage"). The rest of this document is left as it was written. Spec:
 > [drop-tenant-id](../specs/2026-09-14-drop-tenant-id-design.md).
 
+> **2026-09-19 — the two sketches below that name the old test-database helper describe suites
+> that now ask for their database through `useVenueDb`.**
+> Task 3's step 1 and Task 4's step 1 each import `usePgliteDb` from
+> `@waitron/db/testing/lifecycle.js` and call it, for `src/provider.test.ts` and
+> `src/resolve-pending.test.ts` respectively — four lines in all. What those two files import today
+> is `useVenueDb` from `@waitron/db/testing/venue-db.js`, and they call that instead. It is the same
+> PGlite database: the forwarding body is `packages/db/src/testing/venue-db.ts`, and all it does is
+> call the helper the sketches name. The point of the seam is that the SQLite storage switch
+> replaces one function body rather than every call site. Two more of this document's suites moved
+> the same way and no wording here goes stale with them: Task 5's step 1 sketches
+> `src/reverse.test.ts` from its `describe` down, and Task 7's step 1 describes
+> `src/collect.sandbox.test.ts` in prose, so neither writes the helper's name at all. The rest of
+> this document is left as it was written. Plan:
+> [sqlite-slice1-storage-swap](2026-09-16-sqlite-slice1-storage-swap.md), task P2.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A `@waitron/payments-sumup` package whose `SumUpCloudProvider` drives a paired SumUp Solo from the till's existing pay flow over SumUp's Cloud API, so that on 2026-09-11 the owner can set `WAITRON_TILL_CARD_PROVIDER=sumup_cloud`, seal the merchant credential, tap the Card button, and the Solo wakes.

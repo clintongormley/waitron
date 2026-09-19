@@ -33,10 +33,16 @@ export default defineConfig({
             // The dashboard panel is browser-mode; it runs in the project below, never boots Docker.
             "src/dashboard/**",
           ],
-          // The hermetic suites boot PGlite (a WASM PostgreSQL) and apply migrations, and the real-PG
-          // suites clone the shared container's migrated template (globalSetup); Vitest's 5s default
-          // testTimeout is a live risk for both. The container boot/pull is NOT in a beforeAll: it moved
-          // to globalSetup, which vitest does not bound by hookTimeout.
+          // testTimeout bounds a test body, and neither database start-up is one: the PGlite boot with
+          // its migrations and the real-PG suite's clone of the migrated template both run in a
+          // beforeAll. hookTimeout bounds a hook that passes no timeout of its own, which is why it
+          // does not reach the PGlite boot either — useVenueDb hands that beforeAll a timeout itself,
+          // the 60_000 this project's four PGlite suites pass, and a 60-second default when a suite
+          // passes none. What hookTimeout does bound is sumup.test.ts's untimed useTemplateDb hooks
+          // (the template clone, the per-test reset, the teardown), the bare afterEach reset and
+          // afterAll close every PGlite suite here gets, and any hook a test file writes for itself —
+          // today no file here writes one. The container boot and image pull run in globalSetup,
+          // outside both.
           testTimeout: 120_000,
           hookTimeout: 180_000,
           // Keep one worker (#22): only ONE test file runs at a time, so the shared cluster's single
