@@ -786,7 +786,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // FORMAT is validated at the account write boundary, not here:
   // login screens only that a non-empty string was supplied and leaves a well-formed-but-unknown
   // address to `loginManager`, which answers `password.invalid` uniformly. (Screening `totp` does
-  // NOT avert a 500: `verifyTotp` fails closed — probed against otplib@13.4.1, `verifyTotp`
+  // NOT avert a 500: `verifyTotp` fails closed — probed against otplib@13.5.0, `verifyTotp`
   // returns `false` for a non-string `totp` (number/null/undefined/object/boolean/non-six-digit
   // string all tested): v13's `verifySync` throws on such input and `verifyTotp`'s catch swallows
   // the throw, so the wrapper never surfaces it — a non-string `totp` reaching `loginManager`

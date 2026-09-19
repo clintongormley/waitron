@@ -100,7 +100,7 @@ declare module "@waitron/shared" {
      * produces, deliberately, in `bin.ts`'s `ask`.
      *
      * Refused rather than passed through, because `pg` does not refuse it either. Run against this
-     * repo's `pg@8.22.0`: `new Client({ connectionString: "" })` resolved to
+     * repo's `pg@8.23.0`: `new Client({ connectionString: "" })` resolved to
      * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}` — an empty string is
      * falsy, so nothing is parsed and every default applies — and `pg-pool@3.14.0` builds each
      * client with `new this.Client(this.options)` (`index.js:241`) off the same options object. So
@@ -118,7 +118,7 @@ declare module "@waitron/shared" {
      *
      * Refused rather than accepted, because `pg` and `new URL` disagree about real, WORKING
      * connection strings and this tool needs both to agree. Run inside a `postgres:18-alpine`
-     * container (PostgreSQL 18.4) with this repo's `pg@8.22.0` and the connection string
+     * container (PostgreSQL 18.4) with `pg@8.22.0` and the connection string
      * `/var/run/postgresql`: pg parsed it to `{host:"/var/run/postgresql",port:5432}`, `connect()`
      * succeeded, and `select inet_server_addr() is null` returned `t` — a live connection over the
      * cluster's Unix socket. `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the

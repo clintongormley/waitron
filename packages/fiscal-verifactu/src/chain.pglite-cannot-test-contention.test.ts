@@ -25,9 +25,12 @@ beforeEach(async () => {
  * months from now.
  *
  * THE MECHANISM, PRECISELY — this is the one thing this file must get right, because it exists
- * only to be read as evidence: PGlite 0.5.4 serialises every `.query()`/`.transaction()` call
- * through one per-instance, weight-1 mutex (`_runExclusiveTransaction`, verified against PGlite's
- * own source). That is a SINGLE-BACKEND MUTEX, not "concurrent transactions merging into one" —
+ * only to be read as evidence: PGlite 0.5.8 serialises every `.query()`/`.transaction()` call
+ * through one per-instance, weight-1 mutex. Read in 0.5.8's shipped bundle, which is what npm
+ * installs, following the whole chain rather than one line of it: `query()`, `exec()` and
+ * `transaction()` each await `_runExclusiveTransaction`; that hands its callback to a private
+ * field's `runExclusive`; the field holds a small wrapper class whose own `_semaphore` is
+ * constructed with a value of one. A semaphore of one is a mutex. That is a SINGLE-BACKEND MUTEX, not "concurrent transactions merging into one" —
  * the wording an earlier draft of the spec used and which this file deliberately does not repeat.
  * The distinction matters: with the mutex, there is never a SECOND backend process for `FOR
  * UPDATE` to block against, full stop — nothing runs at the same time as anything else, ever, no

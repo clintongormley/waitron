@@ -354,7 +354,7 @@ describe("runCli", () => {
 
   it("refuses an empty admin connection string on both paths that take one", async () => {
     // `pg` does not refuse one either, which is the whole hazard. Run against this repo's
-    // `pg@8.22.0`: `new Client({ connectionString: "" })` came back as
+    // `pg@8.23.0`: `new Client({ connectionString: "" })` came back as
     // `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0`
     // builds every client with `new this.Client(this.options)` (`index.js:241`) off the same
     // options object. So an unset or misspelled WAITRON_ADMIN_DATABASE_URL plus a stdin that
@@ -463,7 +463,7 @@ describe("runCli instance", () => {
 
   it("refuses an admin connection string that is not a URL, from either source", async () => {
     // `pg` accepts connection-string forms `new URL` rejects, and at least one of them WORKS. Run
-    // inside a `postgres:18-alpine` container (PostgreSQL 18.4) with this repo's `pg@8.22.0`, over
+    // inside a `postgres:18-alpine` container (PostgreSQL 18.4) with `pg@8.22.0`, over
     // the connection string `/var/run/postgresql`: pg parsed it to
     // `{host:"/var/run/postgresql",port:5432}`, `connect()` succeeded, and
     // `select inet_server_addr() is null` returned `t` — a live connection over the cluster's Unix

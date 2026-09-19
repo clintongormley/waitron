@@ -27,17 +27,17 @@
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/ui": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.6.0",
+    "hono": "^4.13.8",
     "lit": "^3.2.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.4",
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^24.0.0",
     "@vitest/browser": "^3.0.0",
     "@vitest/coverage-v8": "^3.0.0",
     "@waitron/migrations": "workspace:*",
     "drizzle-kit": "^0.31.10",
-    "playwright": "^1.49.0",
+    "playwright": "^1.63.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

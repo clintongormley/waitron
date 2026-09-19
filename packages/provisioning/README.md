@@ -298,7 +298,7 @@ cluster answers there.
 keyword/value string (`host=… port=… user=…`) and a bare Unix-socket directory path
 (`/var/run/postgresql`), and this tool refuses both with `provisioning.admin_uri_not_a_url` before
 it connects. That is a real refusal of something that works, not a formatting preference: measured
-inside a `postgres:18-alpine` container (PostgreSQL 18.4) with this repo's `pg@8.22.0`, the socket
+inside a `postgres:18-alpine` container (PostgreSQL 18.4) with `pg@8.22.0`, the socket
 path connected successfully (`select inet_server_addr() is null` → `t`) while
 `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. `instance`
 re-points the admin string at the target database — for the state read, for the migrator's URL and

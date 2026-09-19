@@ -23,10 +23,10 @@
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/verifactu": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "undici": "^8.7.0"
+    "undici": "^8.10.2"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.4",
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^3.0.0",
     "@waitron/identity": "workspace:*",

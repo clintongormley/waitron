@@ -279,7 +279,7 @@ export interface EntryDeps {
 /** The bootstrap URL, refused rather than passed to the driver when it is unusable.
  *
  * Both checks are needed. `new Client({ connectionString: "" })` resolves to localhost with every
- * default (`pg@8.22.0`, the receipt on `provisioning.admin_uri_missing`), so an `VAR=` line would
+ * default (`pg@8.23.0`, the receipt on `provisioning.admin_uri_missing`), so an `VAR=` line would
  * otherwise silently provision whatever answers on localhost:5432 — and one database per
  * environment is a fiscal invariant. A value `new URL` cannot parse reaches `withDatabase`
  * (`ensureInstance`) as a bare `TypeError` instead of a classified code, which the recovery page

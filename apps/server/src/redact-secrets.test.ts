@@ -40,7 +40,7 @@ describe("redactSecrets", () => {
     expect(redactSecrets("postgres://user:@host/db")).toBe("postgres://user:***@host/db");
   });
 
-  // The three shapes below were fed to the installed `pg` (8.22.0) and each marked value came back
+  // The three shapes below were fed to the installed `pg` (8.23.0) and each marked value came back
   // as `connectionParameters.password` — they are passwords, not decoration:
   //   postgres://u@localhost/db?password=QUERY_SECRET       -> password "QUERY_SECRET"
   //   postgres://:EMPTY_USER_SECRET@localhost/db            -> password "EMPTY_USER_SECRET"
@@ -79,12 +79,12 @@ describe("redactSecrets", () => {
   // non-password parameter must survive untouched, or the branch above would also pass with a rule
   // that eats every query string. Measured on `postgres://u@localhost/db?PASSWORD=UPPER_SECRET`:
   // `pg-connection-string@2.14.0`'s `parse()` returns the EMPTY STRING for `password`, and a
-  // `pg@8.22.0` `Client` then reports `null` because it falls back to its default when the parsed
+  // `pg@8.23.0` `Client` then reports `null` because it falls back to its default when the parsed
   // value is empty. (An earlier version of this comment said "parses to a null password" — the
   // conclusion holds, the upper-case parameter is not a credential position, but null is what the
   // Client reports, not what the parser returns.)
   // Two shapes the first version of the character classes stopped at, both measured against the
-  // installed parser (`pg-connection-string@2.14.0`, the one `pg@8.22.0` resolves):
+  // installed parser (`pg-connection-string@2.14.0`, the one `pg@8.23.0` resolves):
   //   postgres://u:p@ss@localhost/db      -> password "p@ss"
   //   postgres://u:se cret@localhost/db   -> password "se cret"
   // An unencoded `@` is legal in the user-info because WHATWG `new URL` splits the authority on the
