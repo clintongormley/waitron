@@ -3518,6 +3518,31 @@ and the rule). And a converted suite that reads its accessor too early still get
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
 
+**Two things the pre-landing documentation sweep still cannot do, both measured on
+`packages/catalogue` (#454, 2026-09-19).** The sweep is two greps over the whole tree — the converted
+files' paths with no second condition, and `usePgliteDb` on its own — and running each unnarrowed is
+what finally works, because neither alone is enough: the path grep misses
+`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, which names `options.test.ts` bare
+and "the `*.test.ts` below", while the name grep misses documents that discuss a converted file
+without naming the helper.
+
+What NEITHER reaches is a document that writes a converted file's path **package-relative under a
+heading that supplies the package**. `docs/superpowers/plans/2026-09-12-product-categories.md:86` is
+a table row headed `catalogue` listing `src/content-languages.test.ts src/integration.test.ts` and
+four more, and `grep -c usePgliteDb` on it returns 0. That one needs nothing — it is a historical run
+record — but nothing found it, and the gap grows with the package: `apps/server` has 56 files left to
+convert and is named package-relative all over the plans. If a third grep is wanted, it is the
+converted files' BASENAMES, read with their surrounding heading.
+
+And a count of how many stale claims a document carries has to come from a grep over the WHOLE
+document, not from the places an earlier round happened to name. Three review rounds on #454 passed a
+"three places" count between them for
+`docs/superpowers/plans/2026-08-15-recipes-allergen-inheritance.md` while correcting each other about
+which commit each of the three died at; a fifth round ran `grep -n usePgliteDb` over the file and
+found four, and the fourth is STILL TRUE — a sketch headed `packages/db/src/schema/recipes.test.ts`,
+a package this rollout has not reached. A document's stale claims and its still-true ones look
+identical to every grep; only reading each one against the tree separates them.
+
 **A fourth helper the rollout's own plan did not name, found while converting `packages/media`
 (#429).** Task P2 listed the doors to a test database as `usePgliteDb`, `useRealPostgres` and
 `describeEachTarget`, and told step 5 to leave the last two alone. `useTemplateDb` was in neither
