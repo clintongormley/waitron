@@ -9,7 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
@@ -31,10 +31,10 @@ import {
 // extras.pg.test.ts.
 // Only the tenant row is seeded outside each test's own setup: with no `content_languages` row,
 // `readContentLanguages` falls back to the language passed in
-// (packages/catalogue/src/content-languages.ts), and `usePgliteDb` empties every data table after
+// (packages/catalogue/src/content-languages.ts), and `useVenueDb` empties every data table after
 // each test on its own (packages/db/src/testing/lifecycle.ts:148-151), which is why the three
 // products below are re-made per test.
-const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
 

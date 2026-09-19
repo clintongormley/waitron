@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_CLASSIFICATION } from "./classification.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
@@ -21,9 +21,9 @@ import {
 // `asAppUser` and is enforced from there (CLAUDE.md §4). What needs a container is the concurrent
 // save, and that lives in options.pg.test.ts.
 // Nothing is seeded: with no `content_languages` row, `readContentLanguages` falls back to the
-// language passed in (packages/catalogue/src/content-languages.ts), and `usePgliteDb` empties every
+// language passed in (packages/catalogue/src/content-languages.ts), and `useVenueDb` empties every
 // data table after each test on its own (packages/db/src/testing/lifecycle.ts:132,148-151).
-const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
 

@@ -540,6 +540,28 @@ it("scopes itself to the eleven generic packages", () => {
 - Consumes: `@waitron/db` tables + `Transaction`, `withTenant`, `asAppUser`; `@waitron/db/testing` (`usePgliteDb`, `useRealPostgres`, `seedTenant`, `CORE_MIGRATIONS`, `seedNode`).
 - Produces (all `(tx, …)`): `createCatalogue`, `listCatalogues`, `renameCatalogue`, `deactivateCatalogue`, `createCategory`, `listCategories`, `renameCategory`, `createProduct`, `listProducts(tx, catalogueId)`, `updateProduct`, `deactivateProduct`, `assignCatalogueToLocation(tx, locationId, catalogueId)`, `listAvailableProducts(tx, locationId): AvailableProduct[]`. `AvailableProduct` carries `id`, `descriptions`, `pricingUnit`, `unitPrice`, `vatClass`, `category` (resolved name | null) — structurally assignable to `PriceableProduct`.
 
+> **2026-09-19 — neither of this task's two `usePgliteDb` clauses is true any more, and three other
+> things it names are gone.** The Consumes line above and step 3 below both name `usePgliteDb`, and
+> they stopped being true at different times for different reasons.
+> `packages/catalogue/test/fixtures.ts`, which step 2 creates, now asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) — the same PGlite database, the new helper's whole
+> body forwarding to the old one (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Step 3's
+> `packages/catalogue/src/operations.test.ts` does not call either one: it takes its database from
+> `useCatalogueDb`, a helper of this package's own in those fixtures — and it stopped naming the old
+> helper long before this rollout, in `fd6da9880` (#255, the row-level-security drop).
+>
+> The three that are nothing to do with this rollout, named so nobody copies the step. The Consumes
+> line's `useRealPostgres` is not used in this package at all (`grep -rn useRealPostgres
+> packages/catalogue` exits 1) — the RLS isolation this task is named for was dropped (`CLAUDE.md`
+> §3: "No policies, no RLS: one tenant per database"). `withTenant`
+> is gone from the TypeScript sources (`git grep -ln withTenant -- '*.ts'` exits 1, though the plans
+> still write it), the tenant column having been dropped under
+> `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`, so the code block below step 3
+> predates it. And step 2's `seedVenue` no longer returns a `tenantId`: `SeededVenue` is
+> `locationId`, `tillId`, `nodeId`, `seriesId` (`packages/catalogue/test/fixtures.ts:22-27`). Nothing
+> else in this document was re-checked.
+
 - [ ] **Step 1: Copy the real-PG start helper.** `packages/catalogue/src/testing/postgres.ts` — mirror `packages/payments-stripe/src/testing/postgres.ts` (starts `postgres:18-alpine`, applies `CORE_MIGRATIONS`).
 
 - [ ] **Step 2: Write the fixtures.** `packages/catalogue/test/fixtures.ts` — mirror `packages/reporting/test/fixtures.ts`'s `seedVenue` (returns `{ tenantId, locationId, tillId, nodeId, seriesId }`); add `seedCatalogueFixture(tx, ids)` inserting one catalogue, two categories, one `each` + one `weight` product. **English test strings only** (this is `src`-adjacent and the guard scans `packages/catalogue/src`; `test/` is excluded from coverage but keep it English to be safe).

@@ -1,6 +1,6 @@
 import { beforeEach } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import {
   locationId as brandLocationId,
@@ -97,7 +97,7 @@ export async function seedCatalogueFixture(
 
 /** Share the migrated database; clear authoring rows before each fixture is seeded. */
 export function useCatalogueDb(): { readonly db: Database } {
-  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+  const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
   beforeEach(async () => {
     // DELETE avoids TRUNCATE CASCADE following catalogue references into locations and immutable
     // sales tables. These tests write mutable authoring rows; venue identity rows can stay.

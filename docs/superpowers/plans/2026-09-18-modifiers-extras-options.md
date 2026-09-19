@@ -35,6 +35,14 @@ Every task's requirements implicitly include this section.
   error-code names appear once as pointers; a command that was run goes in verbatim.
 - **TDD, always.** Failing test first, watched failing for the right reason, then the minimal code. A
   test that never failed proves nothing.
+- **2026-09-19 — where this plan writes `usePgliteDb`, the files it names now call `useVenueDb`.**
+  Three places say it: the options task's step 3b and step 8, both about
+  `packages/catalogue/src/options.test.ts`, and the extras task's step 3b, about
+  `packages/catalogue/src/extras.test.ts`. Both files now take their database from `useVenueDb`
+  (`@waitron/db/testing/venue-db.js`). It is the same PGlite database and it still applies the
+  migrations those steps depend on — the new helper's whole body forwards to the old one (plan task P2
+  step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). So the steps' reasoning
+  stands; only the name to write in a new suite changes. Nothing else in this document was re-checked.
 - **Engine neutrality (spec §7).** No `pg_advisory_xact_lock` in new code; no JSON containment
   (`@>`); no new `pgEnum`. Use the shared column vocabulary from `@waitron/db` (`id()`, `flag()`,
   `count()`, `money()`, `json()`, `label()`) for every new column, so the SQLite flip's conversions

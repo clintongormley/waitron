@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withTransaction, CORE_MIGRATIONS } from "@waitron/db";
 import { sql } from "drizzle-orm";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
@@ -16,7 +16,7 @@ import { setProductVariants } from "./variants.js";
 import { createUnit } from "./units.js";
 
 // These tests exercise configuration queries. Privileges and concurrent edits use real Postgres.
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 describe("site content languages", () => {
   it("requires a variant's customer name in a new default language but leaves the product's optional", async () => {

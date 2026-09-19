@@ -3564,11 +3564,17 @@ than a list or a command that pretends to be the answer.
 **The false claim that branch was correcting, and the twins it deliberately left.** A package's
 `hookTimeout` does NOT bound the PGlite boot and migrations: `usePgliteDb` hands `beforeAll` its own
 60-second default (`packages/db/src/testing/lifecycle.ts:22` and `:146`), and a timeout passed to a
-hook overrides the config's. Three configs still carry the sentence verbatim — found with
+hook overrides the config's. Three configs carried the sentence verbatim when this was written —
+found with
 `grep -rn "boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout" --include=vitest.config.ts packages apps`,
-which returned `packages/purchasing`, `packages/workforce-es` and `packages/catalogue`. **#438
-corrected `packages/workforce-es`'s as part of converting that package, so that grep now returns
-two.** Another instance sits in the package that owns the helper, `packages/db/README.md:39-40`:
+which returned `packages/purchasing`, `packages/workforce-es` and `packages/catalogue`. **Two of the
+three have since been corrected by the conversion of their own package — #438 took
+`packages/workforce-es`'s, and the `packages/catalogue` conversion took that one — so the grep now
+returns `packages/purchasing` alone. That one has no conversion left to catch it: `packages/purchasing`
+was converted early in the rollout, by #427, whose whole diff is two lines in
+`packages/purchasing/test/fixtures.ts` and does not touch the config. Somebody has to take it
+deliberately.** Another instance sits in the package that owns the helper,
+`packages/db/README.md:39-40`:
 "Setup hooks have a separate `hookTimeout: 120_000` budget for booting and migrating PostgreSQL."
 That one is false for that package's `usePgliteDb` suites and true for a container suite whose hook
 passes no timeout (`packages/db/src/testing/networked-postgres.test.ts`), so correcting it means
