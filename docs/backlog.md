@@ -487,12 +487,14 @@ serving those lists over the management API under `/management-api/modifiers/opt
 plan's Task 3); and extras lists (#449, the plan's Task 4): `extra_lists` and `extra_list_items`,
 the authoring and order-time rules, the reads and writes, and the price rule — a menu's price, else
 the list item's, else the product's own, with VAT always the product's. An extras list names
-PRODUCTS, so an item on it owns no price, VAT, allergens, photo or name of its own. **The plan's
-Task 5 — the per-menu publication, `menu_item_extra_lists` and `menu_item_extra_items` with
-`setMenuItemExtraLists` and the menu projection `readMenuExtras` — is open as #452 and not yet
-merged**; read _What the per-menu publication (the plan's Task 5) left behind_ below as describing
-that pull request rather than `main` until it lands. No screen shows either kind of list yet, and
-nothing serves extras over the API — that is the plan's Task 6.
+PRODUCTS, so an item on it owns no price, VAT, allergens, photo or name of its own. The plan's
+Task 5 has landed too (#452): the per-menu publication, `menu_item_extra_lists` and
+`menu_item_extra_items`, with `setMenuItemExtraLists` writing what one offer carries and the
+projection `readMenuExtras` reading it back with every price already resolved. A per-menu item row is
+an OVERRIDE and not a publication — an item of the list with no row is still offered at its own
+resolved price, and `available: false` is what withdraws it — which is the opposite of
+`menu_item_options`, where a row's presence is the publication. No screen shows either kind of list
+yet, and nothing serves extras over the API — that is the plan's Task 6.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -584,7 +586,7 @@ What extras lists left open, and what #449 found on the way:
   id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
   worth knowing if extras lists turn out to be much longer.
 
-What the per-menu publication (the plan's Task 5) left behind:
+What the per-menu publication (#452, the plan's Task 5) left behind:
 
 - **`readProductExtras` and the product-attachment check both moved to Task 6.** Neither can be built
   before `product_modifiers` exists, because nothing in the tree joins a product to an extras list
