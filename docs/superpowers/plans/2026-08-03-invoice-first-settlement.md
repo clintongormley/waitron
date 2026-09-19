@@ -424,6 +424,20 @@ DEFINER`, tenant-scoped by RLS plus an explicit predicate.
 
 - [ ] **Step 1: Write the failing tests** — create `packages/core/src/list-outstanding-sales.test.ts`.
 
+> **2026-09-19 — read that file rather than this sketch of it.** The suite it created asks for its
+> database through `useVenueDb` (`@waitron/db/testing/venue-db.js`), not the `usePgliteDb` import and
+> call the block below prints; it is the same PGlite database, the new helper's whole body forwarding
+> to the old one (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Two of the block's other
+> imports have gone the same way, for an unrelated reason: `withTenant` and the `TenantId` type are
+> no longer in the TYPESCRIPT sources — `git grep -ln withTenant -- '*.ts'` exits 1, and the only
+> whole-word `TenantId` a `.ts` file still holds is a fixture string inside
+> `scripts/no-tenant-column.test.ts` — the tenant column having been dropped under
+> `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`. Both words are still all over the
+> plans, this document included, which is why the scope is stated. That change is not this pointer's
+> to explain; it is named so nobody copies the block wholesale. `asAppUser` is still there. The rest
+> of this document is left as it was written.
+
 ```typescript
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";

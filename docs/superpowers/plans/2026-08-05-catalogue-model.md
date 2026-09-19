@@ -220,6 +220,20 @@ GRANT SELECT, INSERT, UPDATE ON "products" TO app_user;
 
 - [ ] **Step 2: Write failing core tests.** Extend `packages/core/src/record-sale.test.ts` (mirror its existing fake-backend + `usePgliteDb`/`withTenant` setup and its seed helper). Add:
 
+> **2026-09-19 — three of the four things that step says to mirror have moved.**
+> `packages/core/src/record-sale.test.ts` asks for its database through `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`), not `usePgliteDb`; it is the same PGlite database, the new
+> helper's whole body forwarding to the old one (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). `withTenant` is gone from the
+> TypeScript sources — `git grep -ln withTenant -- '*.ts'` exits 1, though the plans, this one
+> included, still write it — the tenant column having been dropped under
+> `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`, which the code block below this line
+> predates. And the seed helper moved with it: `seedTenant` no longer takes an `overrides` argument
+> and what it returns no longer carries a `tenantId`
+> (`packages/core/test/fixtures.ts:12-16`), so a suite mirroring this step cannot take a `tenantId`
+> out of it — which is what the block below passes to `withTenant`. The fake-backend setup is
+> unchanged. The rest of this document is left as it was written.
+
 ```ts
 it("passes a supplied vatBreakdown to the backend verbatim", async () => {
   const breakdown = [{ rate: decimal("10.00"), base: decimal("7.25"), tax: decimal("0.72") }];

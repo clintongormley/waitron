@@ -3560,6 +3560,22 @@ actually sits:
   says every per-suite cost "is paid in a beforeAll", and 25 files there call `usePgliteDb` and take
   the helper's own 60-second `beforeAll`. So it needs rewording, not sparing; a second correction
   inside #438 spared it and was itself wrong.
+- Three more, each matched by the claim's own words (`git grep -n "5s default"`) and then read,
+  found while converting `packages/core`. `packages/fiscal-none/vitest.config.ts:8-10` and
+  `packages/fiscal/vitest.config.ts:8-10` each name a boot that goes through the helper —
+  `packages/fiscal-none/src/migrations.test.ts:10` and
+  `packages/fiscal/src/testing/fake-backend.test.ts:35`, both already converted, neither passing a
+  `timeoutMs`, and `grep -rlE "createPgliteDb|describeEachTarget" --include="*.ts" packages/<pkg>`
+  exits 1 in both packages — so neither comment's boot is bounded by the setting it is written
+  above. `packages/fiscal`'s is wrong twice over: the setting it raises is `testTimeout`, which
+  bounds a test body and not a hook at all. `packages/fiscal-none` raises both, and neither reaches
+  the boot: its `testTimeout: 120_000` bounds test bodies, and its `hookTimeout: 180_000` reaches
+  only the hooks the helper leaves untimed — its `afterEach` reset and its `afterAll` close
+  (`packages/db/src/testing/lifecycle.ts:148` and `:153`) — which is what this package's
+  `hookTimeout` does reach, the boot aside. `packages/payments-stripe/vitest.config.ts:36-39` has the same second
+  error, calling the 5s `testTimeout` default "a live risk" for a PGlite boot and a template clone
+  that both sit in hooks. `packages/core`'s three were corrected by that conversion, and two of them
+  are in TEST files rather than a config — every other entry in this list is a config or a README.
 
 **A claim stated in a markdown file is invisible to every grep this rollout kept, and #438 is where
 that cost something.** `docs/superpowers/plans/2026-09-06-module-fiscal-none.md:101` and `:119` told

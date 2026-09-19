@@ -16,7 +16,7 @@ import {
   sales,
   withTransaction,
 } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
@@ -44,7 +44,7 @@ let staffSessionId: string;
 // the wrong purpose, an unsettled corrective) that a superuser backend exercises just as well as a
 // non-superuser one. `sale.not_found` and `sale.series_not_found` are asserted below for a
 // genuinely ABSENT row, which is what those codes mean with one tenant per database.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordCorrection/checkIntegrity read and write

@@ -10,9 +10,11 @@ export default defineConfig({
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails the
     // whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suites (record-sale.test.ts et al.) boot PGlite (a WASM PostgreSQL) and apply
-    // `@waitron/db`'s migrations, longer than Vitest's 5s default on a cold CI runner (mirrors
-    // packages/fiscal-verifactu's identical reasoning). The real-PG suites now clone the shared
+    // `hookTimeout` does NOT bound the PGlite suites' boot (record-sale.test.ts et al.): the helper
+    // hands `beforeAll` the 60s each of those suites passes it
+    // (`packages/db/src/testing/lifecycle.ts:146`), and an argument to a hook replaces this setting
+    // rather than narrowing it (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`). What it bounds
+    // is the hooks that pass no timeout of their own. The real-PG suites now clone the shared
     // container's migrated template — a ~26ms beforeAll the 60s hookTimeout is a harmless ceiling over;
     // the one-off container boot / image pull moved to globalSetup, which vitest does NOT bound by
     // hookTimeout (measured 2026-08-20 on vitest@3.2.7: a globalSetup sleeping 2003ms returned green
@@ -24,8 +26,9 @@ export default defineConfig({
     // `maxWorkers` before this branch, so it has been multi-fork on `main` all along and passes the
     // unfiltered `main` merge's `pnpm -r` coverage that way — this batch changes where the DB comes
     // from, not how coverage merges across forks, so it neither introduces nor worsens the artifact.
-    // (An isolated `test:coverage` here also reports 100/99.38/100/100, but per CLAUDE.md §2 that alone
-    // proves nothing about the concurrent case.) It needs no
+    // (An isolated `test:coverage` here passes every one of this package's bars, but per CLAUDE.md §2
+    // that alone proves nothing about the concurrent case. The figures that used to stand here had
+    // gone stale, which is what a number in a comment does.) It needs no
     // `maxWorkers` connection cap (db/fiscal-verifactu's lever): each real-PG race here opens just two
     // extra `pg.connect()` backends, so even fully parallel they hold a handful of connections, far
     // under the shared cluster's ~100 budget.

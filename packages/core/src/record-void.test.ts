@@ -20,7 +20,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import type { AuthzInput } from "@waitron/identity";
 import { recordSale } from "./record-sale.js";
@@ -39,7 +39,7 @@ let supervisorId: string;
 let managerSessionId: string;
 let staffSessionId: string;
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   // IDENTITY_MIGRATIONS after CORE_MIGRATIONS: identity's `persons`/`sessions` carry a foreign key
   // onto `tenants`/`tills`, which the core set creates, so the order is load-bearing (identity's
   // own migrations descriptor says as much). recordVoid now calls `authorize`, which reads both.

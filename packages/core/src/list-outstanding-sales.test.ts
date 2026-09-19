@@ -8,12 +8,12 @@ import {
   tenders,
   withTransaction,
 } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedBareSale, seedTenant } from "../test/fixtures.js";
 import { listOutstandingSales } from "./list-outstanding-sales.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let tillId: TillId;
 let nodeId: NodeId;
