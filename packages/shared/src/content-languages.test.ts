@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   contentLanguageCode,
   contentLanguageChoices,
@@ -44,6 +44,27 @@ describe("content languages", () => {
     second[0]!.code = "invalid";
     second.push({ code: "invalid", name: "Invalid" });
     expect(contentLanguageChoices("fr-FR")).toEqual(saved);
+  });
+
+  it("answers a repeated request from its cache instead of deriving the names again", () => {
+    // Deriving the list again has to build a DisplayNames; a cached answer never touches one.
+    // Swapping in a formatter that names nothing tells the two apart: with the cache write
+    // deleted this reads "expected [] to deeply equal [ ...(546) ]", and the length assertion
+    // below is the control that stops a both-empty pass. The mock implementation must be a
+    // `function` expression — an arrow is not a constructor, so the `new Intl.DisplayNames(...)`
+    // inside contentLanguageChoices would throw "is not a constructor" instead. Vitest 4.1.11
+    // warns about that case, naming the property it mocked.
+    const locale = "pt-PT";
+    const expected = contentLanguageChoices(locale);
+    expect(expected.length).toBeGreaterThan(0);
+    const spy = vi.spyOn(Intl, "DisplayNames").mockImplementation(function (): Intl.DisplayNames {
+      return { of: () => undefined } as unknown as Intl.DisplayNames;
+    } as unknown as typeof Intl.DisplayNames);
+    try {
+      expect(contentLanguageChoices(locale)).toEqual(expected);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it.each(["es", "en", "ca", "gl", "eu", "fr", "de", "it", "ar", "ja"])(
