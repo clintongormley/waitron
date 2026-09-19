@@ -5,8 +5,12 @@ import { count, flag, id, json, label, money, products, table } from "@waitron/d
 /** A reusable, named list of products a diner may add to a dish, with rules on how many. The list
  * carries three names (staff, customer-facing, kitchen) like an options list and a product; what it
  * does NOT carry is anything an item would duplicate from the product it names — no price, VAT,
- * allergens or dietary labels live below. `min_picks`/`max_picks` are spelled out rather than bare
- * `min`/`max`, which collide with SQL function names. Tasks 5, 6 and 11 of
+ * allergens or dietary labels live below. `min_picks`/`max_picks` are the spelling the design asks
+ * for (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.1) and not a
+ * technical necessity: bare `min` and `max` are legal column names. Measured on PGlite 0.5.8
+ * (PostgreSQL 18.3) — a table declared with `min integer not null default 0, max integer` took a
+ * `check (min >= 0 and (max is null or max >= min))`, refused a bad row with `23514`, selected both
+ * columns unqualified and aggregated them as `min(min)` / `max(max)`. Tasks 5, 6 and 11 of
  * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` add the per-menu publication, the
  * product attachment and the dashboard editor. */
 export const extraLists = table(

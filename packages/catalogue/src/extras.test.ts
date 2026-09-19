@@ -499,13 +499,16 @@ describe("what the database refuses under an extras list", () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
     expect(created.items.map((item) => item.productId)).toContain(breads.rye);
 
-    // Done as direct SQL because nothing in the tree removes a product ROW. Receipts, run on
-    // 2026-09-19: `grep -rn "deleteProduct" packages apps --include="*.ts"` matches only the
-    // dashboard's `#deleteProduct` (apps/dashboard/src/screens/catalogue-screen.ts:235), which sets
-    // `available: false` through the product editor rather than deleting anything; and
-    // `grep -rn 'app.delete("/management-api/products' apps/server/src` matches nothing, so there is
-    // no product DELETE route either. The constraint name is asserted below so a key that stopped
-    // being ON DELETE RESTRICT, or a different row refusing first, fails here rather than passing.
+    // Done as direct SQL because no route and no write path removes a product ROW — only test
+    // fixtures do. Searched on 2026-09-19: `grep -rn 'app\.delete(' apps/server/src --include="*.ts"`
+    // lists every DELETE route and none of them is products, and `grep -rn '\.delete(products)'
+    // packages apps --include="*.ts"` and `grep -rn 'delete from products' packages apps
+    // --include="*.ts"` find only test files, fixtures, and the comments — this one among them —
+    // that quote the commands. The dashboard's `#deleteProduct`
+    // (apps/dashboard/src/screens/catalogue-screen.ts) sets `available: false` through the product
+    // editor rather than deleting anything. The constraint name is asserted below so a key that
+    // stopped being ON DELETE RESTRICT, or a different row refusing first, fails here rather than
+    // passing.
     const error = await captureError(() =>
       fx.db.execute(sql`delete from products where id = ${breads.rye}`),
     );

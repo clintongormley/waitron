@@ -173,7 +173,9 @@ declare module "@waitron/shared" {
      * selection body — not an array, an unknown key, a non-string id, a pick naming a product the
      * list does not carry, or an answer for a list that was never offered — where `field` names the
      * offending path in that body (`"extraSelections"`, `"listId"`, `"productId"`). A CLIENT request
-     * fault. Thrown by `parseExtraListInput` / `validateExtraSelections` (extra-contract.ts).
+     * fault. Thrown by `parseExtraListInput` / `validateExtraSelections` (extra-contract.ts), and by
+     * `assertProductsExist` / `writeItems` (extras.ts), which refuse an item naming no `products` row
+     * and an item id another list, or another transaction, already holds.
      */
     "extras.invalid": { field: string };
     /** An extras list id names no list. */
@@ -198,16 +200,22 @@ declare module "@waitron/shared" {
      * `field` is the dotted path of the offending map (`"customerName"`), matching the paths
      * `parseExtraListInput` reports. The sibling of `options.translation_required`; an extras list
      * holds ONE such map (its items name products and carry no names), so the path is always
-     * `"customerName"` today. Nothing throws it yet — the extras list CRUD that will is Task 4 Step 5
-     * of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+     * `"customerName"` today. Thrown by `validateNames` (extras.ts), which asks
+     * `findContentTranslationGap` (content-languages.ts) — that function RETURNS which map has the
+     * gap rather than throwing — and attaches the field path.
      */
     "extras.translation_required": { field: string; language: string };
     /**
      * A product cannot be removed while something still names it — an extras list item today.
-     * Registered ahead of a thrower: `grep -rn "deleteProduct" packages --include="*.ts"` and
-     * `grep -rn '\.delete(' apps/server/src/*.ts | grep -i product` both matched nothing on
-     * 2026-09-19, so there is no product-delete path to refuse from. What refuses today is the
-     * database: `extra_list_items.product_id` is `ON DELETE RESTRICT` (schema/extras.ts).
+     * Registered ahead of a thrower: no route deletes a product, and nothing outside test fixtures
+     * deletes a `products` row, so there is no path to refuse from. Searched on 2026-09-19:
+     * `grep -rn 'app\.delete(' apps/server/src --include="*.ts"` lists every DELETE route and none
+     * of them is products; `grep -rn '\.delete(products)' packages apps --include="*.ts"` and
+     * `grep -rn 'delete from products' packages apps --include="*.ts"` find only test files,
+     * fixtures, and the comments — this one among them — that quote the commands. The dashboard's
+     * `#deleteProduct` (apps/dashboard/src/screens/catalogue-screen.ts) sets `available: false`
+     * through the product editor rather than deleting anything. What refuses today is the database:
+     * `extra_list_items.product_id` is `ON DELETE RESTRICT` (schema/extras.ts).
      */
     "product.in_use": { productId: string; dependency: string };
   }
