@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseExtraListInput,
+  parseMenuExtraPublications,
   validateExtraSelections,
   type ExtraList,
   type ExtraListItem,
@@ -485,5 +486,70 @@ describe("resolveExtraPrice", () => {
   it("keeps a zero price rather than falling through it", () => {
     expect(resolveExtraPrice({ ...item, price: "0.00" }, { unitPrice: "3.00" })).toBe("0.00");
     expect(resolveExtraPrice(item, { unitPrice: "3.00" }, "0.00")).toBe("0.00");
+  });
+});
+
+describe("parseMenuExtraPublications", () => {
+  const refuses = (value: unknown, field: string) =>
+    expect(() => parseMenuExtraPublications(value)).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field } }),
+    );
+
+  it("lower-cases both ids, defaults availability, and keeps each item's own position", () => {
+    expect(
+      parseMenuExtraPublications([
+        {
+          listId: breadsId.toUpperCase(),
+          items: [
+            { productId: sourdoughProductId.toUpperCase(), price: "1.5" },
+            { productId: ryeProductId, available: false },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        listId: breadsId,
+        items: [
+          {
+            productId: sourdoughProductId,
+            price: "1.50",
+            available: true,
+            field: "lists.0.items.0",
+          },
+          {
+            productId: ryeProductId,
+            price: null,
+            available: false,
+            field: "lists.0.items.1",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("refuses a body, a published list or an override that is the wrong shape", () => {
+    refuses({ listId: breadsId }, "lists");
+    refuses(["not an object"], "lists.0");
+    refuses([{ listId: breadsId, items: "none" }], "lists.0.items");
+    refuses([{ listId: breadsId, items: ["not an object"] }], "lists.0.items.0");
+  });
+
+  it("refuses a duplicate list and a duplicate product, naming the second of the pair", () => {
+    refuses(
+      [
+        { listId: breadsId, items: [] },
+        { listId: breadsId, items: [] },
+      ],
+      "lists.1.listId",
+    );
+    refuses(
+      [
+        {
+          listId: breadsId,
+          items: [{ productId: ryeProductId }, { productId: ryeProductId.toUpperCase() }],
+        },
+      ],
+      "lists.0.items.1.productId",
+    );
   });
 });

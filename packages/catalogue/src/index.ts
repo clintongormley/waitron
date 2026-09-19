@@ -22,6 +22,7 @@ export * from "./modifiers.js";
 export * from "./options.js";
 export * from "./extra-contract.js";
 export * from "./extras.js";
+export * from "./extra-projection.js";
 export { lockModifierDefinitions } from "./modifier-lock.js";
 
 export * from "./variants.js";

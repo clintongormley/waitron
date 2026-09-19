@@ -480,15 +480,19 @@ idea is being split into two: Extras (reusable lists of products, each pick beco
 line) and Options (reusable lists of labels, saved as a note on the dish line). A product composes
 both through one ordered attachment list. Design:
 [one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
-[modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). Two
-tasks have landed — a `sold_alone` flag on products (#412), option lists (#436): the two tables,
-the authoring and order-time rules, the reads and writes, and five refusal codes; serving those
-lists over the management API under `/management-api/modifiers/options` (#445, the plan's Task 3);
-and extras lists (#449, the plan's Task 4): `extra_lists` and `extra_list_items`, the authoring and
-order-time rules, the reads and writes, and the price rule — a menu's price, else the list item's,
-else the product's own, with VAT always the product's. An extras list names PRODUCTS, so an item on
-it owns no price, VAT, allergens, photo or name of its own. No screen shows either kind of list yet,
-and nothing serves extras over the API — that is the plan's Task 6.
+[modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). The
+plan's Tasks 1 to 4 have landed — a `sold_alone` flag on products (#412), option lists (#436): the
+two tables, the authoring and order-time rules, the reads and writes, and five refusal codes;
+serving those lists over the management API under `/management-api/modifiers/options` (#445, the
+plan's Task 3); and extras lists (#449, the plan's Task 4): `extra_lists` and `extra_list_items`,
+the authoring and order-time rules, the reads and writes, and the price rule — a menu's price, else
+the list item's, else the product's own, with VAT always the product's. An extras list names
+PRODUCTS, so an item on it owns no price, VAT, allergens, photo or name of its own. **The plan's
+Task 5 — the per-menu publication, `menu_item_extra_lists` and `menu_item_extra_items` with
+`setMenuItemExtraLists` and the menu projection `readMenuExtras` — is open as #452 and not yet
+merged**; read _What the per-menu publication (the plan's Task 5) left behind_ below as describing
+that pull request rather than `main` until it lands. No screen shows either kind of list yet, and
+nothing serves extras over the API — that is the plan's Task 6.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -567,10 +571,11 @@ What extras lists left open, and what #449 found on the way:
   and `max` takes a check constraint over them, selects them unqualified and aggregates `min(min)` /
   `max(max)`. The spelling stands — it reads better — and a dated pointer now sits on the design
   document saying only the reason was wrong.
-- **An extras list's `dependants` returns both sides empty**, for the same reason the options one
-  does: nothing can hold a list until the plan's Tasks 5 and 6 add the per-menu and product
-  attachment tables. Unlike options, extras DO get a per-menu publication row, so the menus side will
-  be a direct query rather than one reached through the products.
+- **An extras list's `dependants` now fills its `menus` side and still returns `products` empty.**
+  The plan's Task 5 added the per-menu publication row, which options lists do not have, so
+  `extraListDependants` (`packages/catalogue/src/extras.ts`) reads the menus a delete would touch
+  straight out of `menu_item_extra_lists` rather than reaching them through the products. The
+  `products` side stays empty until the plan's Task 6 adds the product attachment table.
 - **`extras.in_use` is registered and nothing throws it**, the same posture as `options.in_use`.
 
 - **A save reaches the database once per submitted label.** The read that finds which list each
@@ -578,6 +583,41 @@ What extras lists left open, and what #449 found on the way:
   statement — but writing the labels is a loop, because a multi-row insert cannot say WHICH label's
   id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
   worth knowing if extras lists turn out to be much longer.
+
+What the per-menu publication (the plan's Task 5) left behind:
+
+- **`readProductExtras` and the product-attachment check both moved to Task 6.** Neither can be built
+  before `product_modifiers` exists, because nothing in the tree joins a product to an extras list
+  today. That is why `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) publishes a list on
+  a menu offer without checking the dish's product carries it, where the options sibling
+  `setMenuItemOptionGroups` checks against `product_option_groups`. Task 6 now carries a step for
+  each, and a dated note on Task 5 in the plan says the same.
+- **Two review findings deliberately not taken, both of them structural.** Splitting the publication
+  write path out of `packages/catalogue/src/extras.ts` into a module of its own, and moving
+  `resolveExtraPrice` from there into `extra-contract.ts` beside the price parsing it belongs with.
+  Both were declined as churn on a branch about to land, and Task 6 adds the extras routes and the
+  attachment check to that same file, which reshapes it anyway. **Next action:** whoever builds Task 6
+  settles the file's shape then, with the routes in front of them.
+- **`setMenuItemExtraLists` keeps its membership check as its own query rather than a `LEFT JOIN`.**
+  A review asked for the join. Not taken: `assertProductsOffered` reads `extra_list_items` for only
+  the lists the body actually overrides, and a join hung off the publication rows would read the
+  items of every list the offer publishes — the larger set.
+- **The two new tables are not dashboard live-query dependencies, and should not be yet.**
+  `QUERY_DEPENDENCIES` in `packages/venue-service/src/dashboard/live-queries.ts` names
+  `menu_item_option_groups` and `menu_item_options` and has no extras equivalent. Nothing in the
+  dashboard reads `menu_item_extra_lists` or `menu_item_extra_items` at all — no screen does — so the
+  dependency belongs with the plan's Task 11, which builds those screens.
+- **Nobody has decided whether the application role should hold `UPDATE` on the two publication
+  tables.** `packages/catalogue/drizzle/0009_menu_extra_publication_grants.sql` grants it, and no
+  production path uses it: `setMenuItemExtraLists` replaces rows rather than editing them. So the
+  grants walkthrough in
+  `packages/catalogue/src/extra-projection.test.ts` exercises `UPDATE` with direct statements, which
+  is the only way to establish the role really holds what the migration granted it. **Next action:**
+  decide whether to narrow the grant to `SELECT, INSERT, DELETE`, or record that `UPDATE` stays.
+  Narrowing it is not a one-file change: `packages/fiscal-verifactu/src/privileges.expected.ts` pins
+  `SIUD` for both tables, its own header says a deliberate grant change edits it in the same commit,
+  and `packages/fiscal-verifactu/src/privileges.test.ts` compares that table against the live catalog
+  with `toEqual`, so the migration and that file move together or the comparison disagrees.
 
 **Product selling units — LANDED #342 (2026-09-13).** You now say what you actually sell a product
 by — by the each (the default when you choose nothing), or by weight or volume: grams, milligrams,

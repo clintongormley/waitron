@@ -475,6 +475,34 @@ expect((await readProductExtras(tx, [productId])).get(productId)![0].items).toHa
 
 - [ ] **Step 4: Run and commit** — after `pnpm --filter @waitron/catalogue typecheck && pnpm --filter @waitron/catalogue lint && pnpm format:check`, `git commit -s -m "Publish extra lists per menu with per-offer prices"`.
 
+**2026-09-19, while doing Task 5:** `readProductExtras` moved to Task 6, and the interfaces above are
+left as written rather than rewritten. It cannot be built here: a product holds its extras lists
+through `product_modifiers`, and Task 6 Step 3 is what creates that table. Checked, not assumed —
+`grep -rn 'REFERENCES "public"."extra_l' --include='*.sql' packages apps` finds two keys into
+`extra_lists`, `extra_list_items`' own and `menu_item_extra_lists`', and nothing at all joins a
+product to a list. What Task 5 shipped is `readMenuExtras` in
+`packages/catalogue/src/extra-projection.ts`, plus `setMenuItemExtraLists` in
+`packages/catalogue/src/extras.ts`. The same gap leaves `setMenuItemExtraLists` unable to check that
+the dish's product carries the list it publishes — the check `setMenuItemOptionGroups` makes against
+`product_option_groups` — and that is Task 6's too; both are steps below.
+
+**The same day, the same task — what Step 1 and Step 3 above say about unpublished items is the
+opposite of what shipped, and the steps are left as written.** Read the code, not those two lines. A
+`menu_item_extra_items` row is an OVERRIDE, not a publication: a list item with NO row is offered on
+the menu at its own resolved price, and a row either replaces that price or, with `available: false`,
+withdraws the item. So "drops unpublished items" and "unpublished item is dropped from the menu view"
+describe a rule `readMenuExtras` (`packages/catalogue/src/extra-projection.ts`) does not have.
+(`available: false` is how an OFFER withdraws an item; the projection also leaves out an item it
+cannot price at all, which is a different thing.) Two reasons it went the other way. First, the table
+the design gave this path carries an explicit `available` flag (spec
+`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2), where `menu_item_options` has
+no such column — so `readMenuModifiers` (`packages/catalogue/src/modifier-projection.ts`) has only
+row presence to narrow with, and here narrowing has a column of its own and does not have to be
+inferred from a row existing. Second, §3.2 says a menu offer **may** narrow and reprice, so an offer
+that narrows nothing is one that offers the whole list, where under the step's reading an offer would
+have to re-list every item it wanted to keep. `setMenuItemExtraLists`
+(`packages/catalogue/src/extras.ts`) carries the same statement in its own doc comment.
+
 ---
 
 ## Task 6: Extras — API routes; `product_modifiers` attachment; product read/write
@@ -516,6 +544,17 @@ expect((await readProductExtras(tx, [productId])).get(productId)![0].items).toHa
       regenerate + commit the catalogue migration (as Task 4 Step 3b) before the `product-modifiers.test.ts`
       runs. `deleteExtraList`/`deleteOptionList` now cascade their rows here (complete the Task 2/4
       cascades). `extraListDependants`/`optionListDependants` now read products through this table.
+
+- [ ] **Step 3a: `readProductExtras(tx, productIds)`** in `packages/catalogue/src/extra-projection.ts`,
+      beside `readMenuExtras` — a product's own extras lists, read through `product_modifiers`, each
+      item priced from the list item and then the product (no menu row is involved). Deferred from
+      Task 5, which had no table to read.
+
+- [ ] **Step 3b: The attachment check in `setMenuItemExtraLists`** (`packages/catalogue/src/extras.ts`)
+      — refuse publishing a list the offer's product does not carry, reading `product_modifiers`, the
+      way `setMenuItemOptionGroups` (`packages/catalogue/src/operations.ts`) reads
+      `product_option_groups`. Its doc comment says today that no such check happens; update it in the
+      same change, and add the refusal's test to `extra-projection.test.ts`.
 
 - [ ] **Step 4: Replace `modifierIds` in the product body** — in `product-editor-input.ts`, remove the
       `screenOptionGroupIds`/`modifierIds` screen, add a `modifiers` screen validating an ordered array of

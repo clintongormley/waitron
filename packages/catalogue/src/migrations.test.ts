@@ -35,6 +35,8 @@ const TABLES = [
   "option_labels",
   "extra_lists",
   "extra_list_items",
+  "menu_item_extra_lists",
+  "menu_item_extra_items",
 ];
 
 const tableList = () =>
@@ -77,6 +79,17 @@ describe("the catalogue migration set carries no tenant column", () => {
       extra_lists_picks_ck:
         "CHECK (((min_picks >= 0) AND ((max_picks IS NULL) OR (max_picks >= min_picks))))",
       extra_lists_pkey: "PRIMARY KEY (id)",
+      menu_item_extra_items_list_fk:
+        "FOREIGN KEY (menu_item_id, list_id) REFERENCES menu_item_extra_lists(menu_item_id, list_id) ON DELETE CASCADE",
+      menu_item_extra_items_pk: "PRIMARY KEY (menu_item_id, list_id, product_id)",
+      menu_item_extra_items_price_ck: "CHECK ((price >= (0)::numeric))",
+      menu_item_extra_items_product_fk:
+        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
+      menu_item_extra_lists_item_fk:
+        "FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE",
+      menu_item_extra_lists_list_fk:
+        "FOREIGN KEY (list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
+      menu_item_extra_lists_pk: "PRIMARY KEY (menu_item_id, list_id)",
       menu_item_option_groups_group_fk:
         "FOREIGN KEY (group_id) REFERENCES option_groups(id) ON DELETE CASCADE",
       menu_item_option_groups_item_fk:
@@ -144,6 +157,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       category_details_parent_idx: "parent_id",
       extra_list_items_list_product_uq: "list_id, product_id",
       extra_list_items_list_sort_idx: "list_id, sort",
+      menu_item_extra_items_list_product_idx: "list_id, product_id",
+      menu_item_extra_lists_list_idx: "list_id",
       menu_items_menu_order_idx: "menu_id, display_order",
       menu_sections_menu_order_idx: "menu_id, display_order",
       option_labels_list_sort_idx: "list_id, sort",
@@ -243,6 +258,14 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       variantId,
       otherVariantId,
     };
+  }
+
+  /** One extras list, for the cases that need a list without needing what it offers. */
+  async function extraList(name: string): Promise<string> {
+    const rows = await db.execute<{ id: string }>(
+      sql`insert into extra_lists (name) values (${name}) returning id`,
+    );
+    return rows.rows[0]!.id;
   }
 
   async function refusal(statement: ReturnType<typeof sql>, constraint: string) {
@@ -372,13 +395,48 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     );
   });
 
+  it("refuses a published extras list whose menu offer or list does not exist", async () => {
+    const c = await catalogue();
+    const listId = await extraList("Breads");
+    await refusal(
+      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${missing}, ${listId})`,
+      "menu_item_extra_lists_item_fk",
+    );
+    await refusal(
+      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${c.menuItemId}, ${missing})`,
+      "menu_item_extra_lists_list_fk",
+    );
+  });
+
+  it("refuses a menu override whose publication or product does not exist or does not match", async () => {
+    const c = await catalogue();
+    const listId = await extraList("Breads");
+    const otherListId = await extraList("Sauces");
+    await db.execute(
+      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${c.menuItemId}, ${listId})`,
+    );
+    await refusal(
+      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
+        values (${missing}, ${listId}, ${c.productId})`,
+      "menu_item_extra_items_list_fk",
+    );
+    // The offer and the list both exist; what is wrong is that this offer does not publish THAT
+    // list, so an override under it would be read by nothing.
+    await refusal(
+      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
+        values (${c.menuItemId}, ${otherListId}, ${c.productId})`,
+      "menu_item_extra_items_list_fk",
+    );
+    await refusal(
+      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
+        values (${c.menuItemId}, ${listId}, ${missing})`,
+      "menu_item_extra_items_product_fk",
+    );
+  });
+
   it("refuses an extras item whose list or product does not exist", async () => {
     const c = await catalogue();
-    const listId = (
-      await db.execute<{ id: string }>(
-        sql`insert into extra_lists (name) values ('Breads') returning id`,
-      )
-    ).rows[0]!.id;
+    const listId = await extraList("Breads");
     await refusal(
       sql`insert into extra_list_items (list_id, product_id) values (${missing}, ${c.productId})`,
       "extra_list_items_list_fk",
