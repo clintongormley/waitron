@@ -4003,7 +4003,7 @@ positionally, as a first draft of this branch's message did, and a PASSING run r
 failure — 87.02% branches against what looks like a 90 bar and is really 85. Write each number beside
 its own bar.
 
-**`packages/workforce` converted (2026-09-20)** — nine test files, nine calls, plus the
+**`packages/workforce` converted, LANDED as #457 on 2026-09-20** (main `a4567862`) — nine test files, nine calls, plus the
 `vitest.config.ts` comment the list above named as carrying this rollout's false `hookTimeout`
 claim until this change took it out of that list. Four things to carry.
 
