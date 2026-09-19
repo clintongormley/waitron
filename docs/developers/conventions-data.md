@@ -223,6 +223,38 @@ with at most three reads; `working-order.test.ts` checks the single call and
 
 `app_user` holds `SELECT` on `tenants` and not `INSERT` deliberately.
 
+Four tables are in that shape, not one. Read on 2026-09-19 from
+`packages/fiscal-verifactu/src/privileges.expected.ts`, the matrix whose own suite reads every
+table's privileges back from the live catalogue, `app_user` holds `SELECT` and no write on
+`tenants`, `nodes`, `deployment` and `mirror_config`. Asked of the database rather than the file, in
+PGlite against the core migrations inside a transaction that had called `asAppUser`: an insert and
+an update of `tenants`, an insert of `nodes`, an update of `deployment` and a delete from
+`mirror_config` each came back
+
+```
+42501 permission denied for table <name>
+```
+
+while `select 1 from tenants` in the same shape was allowed.
+
+Real code does write all four — the setup-mode provision and adopt routes, the boot adoption worker
+and demote, the promote path, the break-glass mint, the fiscal-readiness runner and the
+`waitron-provision` command line. None of them serves the write on the connection the request
+arrived on, which is why PostgreSQL does not refuse them, but they do not all reach the database the
+same way: most open a handle on `adminDatabaseUrl`, the boot adoption worker uses the separate
+`migrationsDatabaseUrl` pool (`apps/server/src/boot.ts` insists on the distinction in capitals), the
+command line assumes the migrator role explicitly, and the readiness runner opens no URL at all — it
+writes into an in-process PGlite database. So the rule is about the role the connection wears, not
+about being a request.
+
+SQLite has no roles, so at the flip that refusal disappears. `scripts/write-path-tables.test.ts` is
+the replacement, written while the grants still existed to check it against: it reads production
+source text under `apps/<app>/src` and `packages/<package>/src` and fails when a file outside
+`scripts/write-path-tables.json`'s allowance list writes one of the four. Its own header states four
+ways it is weaker than "no write path touches a forbidden table", and the two paragraphs on its
+comment reader and its detector state what each of those gives up in turn. What it does not cover at
+all is what the grants refuse one operation at a time (`docs/backlog.md` → B9).
+
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`
 
 The replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what

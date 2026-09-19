@@ -296,6 +296,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
   deliberately. If a test needs a privilege the role does not have, the test is asserting the wrong
   thing or the code is reaching somewhere it should not — establish which before touching any grant.
+- **Four tables the application role may read and never write — `tenants`, `nodes`, `deployment`,
+  `mirror_config` — and today PostgreSQL is the only thing refusing the write.** A write of one of
+  them belongs on a path that opens its own owner handle, never on the connection a request is served
+  on. Guard: `scripts/write-path-tables.test.ts`, weaker than its name in four ways, among those its
+  own header states — it reads TEXT, so a table name reached through a variable is invisible to it;
+  it judges a FILE against an allowance list rather than a call chain, so a request path that calls
+  into an allowed file writes through it unseen; it walks `<member>/src` under `apps` and `packages`
+  alone, so a package's `test/` directory and `apps/<app>/scripts` are outside it; and what the
+  grants refuse one operation at a time it does not cover at all (`docs/backlog.md` → B9).
 - **An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** A partial
   grant WARNs and exits 0, and `PUBLIC`'s default `CONNECT`/`TEMP` counts as "held" so the hard error
   is rarely reached. Read the ACL back rather than trusting the exit code; `has_*` functions also

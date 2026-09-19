@@ -1951,6 +1951,32 @@ image constraints under *Detail → Box image*.
   [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
   the job log on the next sighting — nobody knows the cause, and it is the cheapest evidence there
   is.
+- **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
+  `scripts/write-path-tables.test.ts` (landed with this note) covers the four tables `app_user` may
+  read and never write — `tenants`, `nodes`, `deployment`, `mirror_config` — and nothing else. The
+  slice-1 design asks for more than that: "everything else becomes a guard that reads the source …
+  not a convention with nothing checking it". After this guard, that holds for four tables out of the hundred and five that
+  matrix records. The rest, read from `packages/fiscal-verifactu/src/privileges.expected.ts`, which
+  goes when the grants do: fourteen tables allow INSERT and refuse UPDATE and DELETE, and ten of them
+  also carry an `ENABLE ALWAYS` immutability trigger refusing those two writes by a second mechanism
+  the storage switch has to carry over anyway — so four are left, `drawer_opens`, `media_image_data`,
+  and `incidents` and `invoice_series`, whose UPDATE is narrowed to named columns. Forty-three more
+  refuse DELETE alone and three refuse UPDATE alone (`join_requests`, `location_catalogues`,
+  `station_printers`), and no trigger anywhere refuses the operation the grant refuses on any of
+  them. That is fifty tables where the grant is the only thing
+  refusing an insert, an update or a delete it does not allow. TRUNCATE is wider still: no table
+  grants it, and only ten carry a trigger that blocks it.
+
+  **Next action:** decide before the flip between three shapes. Grow the guard an operation column,
+  which means encoding a privilege matrix as regexes. Give the tables that lack one a `reject_mutation`
+  trigger, as the core baseline already does for eight tables in a single migration. Or brand the owner handle as its own type
+  so `tsc` refuses the write instead of a text scan reporting it. Today the distinction is carried by
+  a NAME and nothing else: `apps/server` declares `ownerDb: Database` at half a dozen call sites and
+  hands it to write helpers in `packages/db` that take a plain `Database`, which is the same gap
+  `CLAUDE.md` §3 names for the neighbouring `Database`/`Transaction` case. The third also closes
+  the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
+  than a call chain.
+
 - **Comments across the tree still say PGlite cannot check a database permission** — the belief
   CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
   session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
@@ -1961,7 +1987,14 @@ image constraints under *Detail → Box image*.
   snippet and is left as written. Find the rest with `grep -rn "PGlite" apps packages scripts`. A
   sweep, not a one-liner: for each suite, check whether anything else still needs the container
   (concurrency, triggers running as the deployment role, or who connected) before moving it, and
-  correct the comment either way.
+  correct the comment either way. Five of them name one of the four tables P9's guard is about, and
+  P9 ran the probe they call impossible — `packages/db/src/deployment.break-glass.test.ts`,
+  `packages/db/src/reserved-identity.test.ts`, `packages/db/src/node-identity.test.ts`,
+  `apps/server/src/boot.singleton.test.ts` and `apps/server/src/boot.promote.test.ts` each say PGlite
+  cannot show the `42501`, while an
+  insert and an update of `tenants`, an insert of `nodes`, an update of `deployment` and a delete
+  from `mirror_config` each returned exactly that in PGlite after `asAppUser`. Left standing rather
+  than corrected in passing, because moving a suite off its container is the decision above.
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`);
   if it flakes on `test-server` it needs a `--shard`-compatible isolation. The step (4) flake seen on
   2026-09-14 matches a race instead (forcing that race reproduced the same symptom), fixed in #361 by
