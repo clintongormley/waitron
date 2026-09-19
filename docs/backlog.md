@@ -2136,7 +2136,7 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**Left behind by the Stryker 9.6.1 → 10.0.0 bump (2026-09-19).** Four things the bump surfaced and
+**Left behind by the Stryker upgrade (#447, 2026-09-19).** Four things the bump surfaced and
 deliberately did not settle.
 
 - **`packages/ui` and `packages/db` are on Stryker 10 with no whole-package score.** Both runs take
