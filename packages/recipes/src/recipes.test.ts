@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, ingredients, products, withTransaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS, type DietaryOrigin } from "@waitron/catalogue";
 import { createIngredient, updateIngredient } from "./ingredients.js";
 import { getProductRecipe, setProductRecipe } from "./recipes.js";
 import { seedProduct, seedVenue } from "../test/fixtures.js";
 
-const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 async function publishedAllergens(productId: string) {
   return withTransaction(fx.db, async (tx) => {

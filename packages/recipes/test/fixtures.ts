@@ -1,6 +1,6 @@
 import { beforeEach } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -51,7 +51,7 @@ export async function seedProduct(db: Database): Promise<string> {
 
 /** Share the migrated database; each ingredient case starts with empty ingredient tables. */
 export function useIngredientDb(): { readonly db: Database } {
-  const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+  const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
   beforeEach(async () => {
     await fx.db.execute(sql`truncate recipe_lines, ingredients`);
   });
