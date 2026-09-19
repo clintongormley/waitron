@@ -2393,6 +2393,50 @@ changed this repository's output was **0.27.1, a patch**. Reading the majors and
 breaking is not enough on a 0.x dependency; the whole range has to be read, and a paraphrase of it
 does not belong in a commit message when the byte comparison is the real evidence.
 
+**Left behind by the passkey library upgrade (#453, 2026-09-19).** `packages/identity`, `apps/server`
+and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebauthn/browser` 13.3.0 to
+14.0.2 / 14.0.0. Four things it leaves open:
+
+- **Whether the vulnerability the upgrade fixes is reachable in this product is open, and nobody
+  established it either way.** Version 14.0.2's release note says it fixes "a CVSS v3 Moderate (5.4) security
+  vulnerability" and describes it as "Revamped certificate revocation logic to only cryptographically
+  verify and process CRLs from certificates that chained back to an RP-chosen trust anchor"
+  (GHSA-2g3p-m8c9-hhwh). That advisory is repository-level, not in GitHub's global database — the
+  global API answers 404 for the id, with the control that it resolves other ids fine — so the release
+  note is the only source. The fixed path is certificate-revocation processing inside attestation
+  verification. We ask for `attestation: "none"` (measured by running `generateRegistrationOptions`
+  with the repo's own arguments) and never call `MetadataService` (nothing under
+  `packages/identity/src` or `apps/server/src` names it) — but neither of those closes the question,
+  because the attestation FORMAT is chosen by the RESPONSE, not by the options: the verifier
+  dispatches on the `fmt` inside the client-supplied attestation object, and the `apple` and
+  `android-key` formats carry the library's own built-in trust anchors, which is what makes
+  `validateCertificatePath` — the only caller of `isCertRevoked` — do work. So reachability is OPEN,
+  and the cheap evidence leans towards reachable rather than away. Nobody has established it either
+  way. The algorithm-policy fix below was worth having on its own.
+- **Three more manifests declare `^14.0.0`.** Two of them (`packages/identity`, `apps/server`) sit two
+  patch releases below the installed 14.0.2; `apps/dashboard`'s floor is exactly the installed 14.0.0.
+  That is the same open question #432 raised and #450 restated: whether low floors are house style. It
+  is one decision for every manifest, not one per bump.
+- **The version-14 browser helpers are unused.** `sendSignal()`, `browserSupportsPasskeys()` and
+  `getBrowserCapabilities()` are new in 14.0.0 and nothing in the tree calls them. One of them is
+  adjacent to something the dashboard already does: the login screen gates on
+  `browserSupportsWebAuthnAutofill()`, and whether `browserSupportsPasskeys()` would improve that gate
+  has not been assessed.
+- **`verifyAuthenticationResponse` has no algorithm list to pin.** The registration ceremony now
+  states its accepted algorithms on both halves. The assertion ceremony verifies against the stored
+  public key and takes no such parameter (its argument list, `verifyAuthenticationResponse.js:28`),
+  so there is nothing equivalent to pin there. Recorded because the asymmetry looks like an
+  oversight and is not.
+
+One note for the next dependency bump, because it is what this one nearly shipped: **a library
+default can be computed from the RUNNING runtime, and then the same source behaves differently on two
+machines.** Version 14 asks Node's Web Crypto at import time whether it supports ML-DSA-44 and, where
+it does, prepends that algorithm to the list BOTH halves of the registration ceremony default to.
+Pinning only the half that issues the options left the half that accepts them still runtime-decided,
+and a response whose credential public key declared the unoffered algorithm verified anyway. That was
+found by running one through the real verifier, not by reading. The general shape: a default you did
+not state is not a value you tested.
+
 **Correctness:**
 
 1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's

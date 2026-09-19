@@ -807,3 +807,59 @@ insert does commit, PostgreSQL rejects the category delete with `23503` on
 and the test fails on `expected 'rejected' to be 'fulfilled'`. The lock's job is to move the wait in
 front of the cascade reads, not to create the wait. Both controls passed again with the production
 guards restored.
+
+## A default you did not state is not a value you tested
+
+`@simplewebauthn/server` 14 decides its default signature-algorithm list when the module loads, from
+what the running Node's Web Crypto reports:
+
+```js
+// esm/registration/generateRegistrationOptions.js:23-30 in 14.0.2, verbatim
+export let defaultSupportedAlgorithmIDs = [
+    COSEALG.EdDSA,
+    COSEALG.ES256,
+    COSEALG.RS256,
+];
+if (SettingsService.runtimeSupportsPQC()) {
+    defaultSupportedAlgorithmIDs = [COSEALG.ML_DSA_44, ...defaultSupportedAlgorithmIDs];
+}
+```
+
+Both `.d.ts` files still document the default as `[COSEALG.EdDSA, COSEALG.ES256, COSEALG.RS256]`.
+Reading the types tells you three; only running tells you four.
+
+`verifyRegistrationResponse.js:36` defaults its own `supportedAlgorithmIDs` to that same mutated
+binding, so one runtime probe decides both what a WebAuthn registration OFFERS and what it ACCEPTS.
+On Node 26.7.0 the probe says yes, and it is flagged experimental: importing the package prints two
+warnings, `"The supports Web Crypto API method is an experimental feature and might change at any
+time"` and the same sentence for `"The ML-DSA-44 Web Crypto API algorithm"`.
+
+Version 13.3.2 had no such probe. Its options default was the three classical algorithms and its
+verify default was a fixed list of ten — `supportedCOSEAlgorithmIdentifiers`,
+`[-8,-7,-36,-37,-38,-39,-257,-258,-259,-65535]`, read out of the installed 13.3.2 tree. So pinning
+three at both call sites keeps the OFFER identical to 13.3.2's and narrows what registration
+ACCEPTS.
+
+What made this worth a rule is the half-fix. Pinning `supportedAlgorithmIDs` on
+`generateRegistrationOptions` alone made the OPTIONS byte-identical to 13.3.2's on fixed inputs — a
+real measurement, and one that reads like the whole answer. It is not: the verify side still took the
+runtime's list. The gate is not a signature check: `verifyRegistrationResponse.js:137` compares the credential public
+key's own declared COSE algorithm against the list. A synthetic response whose key declares ML-DSA-44,
+an algorithm those pinned options never offered, run against all three configurations:
+
+```text
+UNOFFERED -48 v13 REJECT Unexpected public key alg "-48", expected one of "-8, -7, -36, -37, -38, -39, -257, -258, -259, -65535"
+UNOFFERED -48 v14 verified= true
+UNOFFERED -48 v14 verify pin REJECT Unexpected public key alg "-48", expected one of "-8, -7, -257"
+```
+
+The middle line is the defect: the upgrade made the server accept a credential it had stopped asking
+for, and this route persists whatever comes back verified (`packages/identity/src/passkey.ts`, the
+insert that follows the `verified` check). Three reviewers on the branch reached the same file; the
+one that RAN the response is the one that could show the middle line rather than argue about it.
+
+Both call sites now take one module-level list (`SUPPORTED_ALGORITHM_IDS` in
+`packages/identity/src/passkey.ts`), and `packages/identity/src/passkey.test.ts` asserts it on both —
+the offered `pubKeyCredParams` and the argument handed to the verifier. `verifyAuthenticationResponse`
+takes no such parameter (it verifies against the stored public key), so the assertion ceremony has
+nothing equivalent to pin.

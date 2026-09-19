@@ -580,6 +580,14 @@ container or browser test** — most of these rules exist because a test passed 
   file and open it with the workspace's playwright Chromium.
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
   `toEqual` is what put `memberOf` under a matcher for the first time.
+- **A default you did not state is not a value you tested**, and a library default can be computed
+  from the RUNNING runtime, where reading the types tells you the wrong answer. State it at every call
+  site that shares it — the two ends of one ceremony drift apart while each looks right. Cost:
+  `@simplewebauthn/server` 14 probes Node's Web Crypto at import and rewrites the algorithm list both
+  halves of WebAuthn registration default to; pinning only the half that OFFERS left the half that
+  ACCEPTS on the runtime's answer. Guard: the two `supportedAlgorithmIDs` assertions in
+  `packages/identity/src/passkey.test.ts`. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md).
 
 Adding a new real-PG test package: the shared-container pattern and its knobs are in
 `docs/backlog.md` → _Reference_.

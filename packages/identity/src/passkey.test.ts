@@ -24,7 +24,6 @@ vi.mock("@simplewebauthn/server", async (orig) => ({
 }));
 
 import { verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
-import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
 import {
   beginPasskeyAuthentication,
   beginPasskeyRegistration,
@@ -37,12 +36,12 @@ const mockVerify = vi.mocked(verifyRegistrationResponse);
 const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
 /** A fully-typed `verified: true` result — our code reads only `credential`, but the discriminated
- * union requires the rest, so building it in full keeps the mock honest against v13's shape. The
- * authenticator's `transports` hint is optional (an authenticator may omit it), so it is a parameter:
- * `undefined` mirrors an authenticator that reports none. */
+ * union requires the rest, so building it in full keeps the mock honest against the library's shape.
+ * The authenticator's `transports` hint is optional (an authenticator may omit it), so it is a
+ * parameter: `undefined` mirrors an authenticator that reports none. */
 function verified(
   id: string,
-  transports?: AuthenticatorTransportFuture[],
+  transports?: string[],
 ): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
   return {
     verified: true,
@@ -61,7 +60,7 @@ function verified(
 }
 
 /** A fully-typed `verified: true` auth result. Our code reads only `verified` and
- * `authenticationInfo.newCounter`, but v13's `VerifiedAuthenticationResponse` is NOT a discriminated
+ * `authenticationInfo.newCounter`, but `VerifiedAuthenticationResponse` is NOT a discriminated
  * union — `authenticationInfo` is required even when `verified` is false — so building it in full
  * keeps the mock honest against the real shape (and the failed case spreads this with `verified:
  * false`). */
@@ -181,7 +180,7 @@ describe("passkey registration", () => {
     const begun = await begin(sessionId);
     // Tell the authenticator user verification is MANDATORY up front, matching the verify side which
     // rejects a response lacking the UV flag. The library default is 'preferred'
-    // (generateRegistrationOptions.js:39-40 in @simplewebauthn/server@13.3.2), which lets a device skip
+    // (generateRegistrationOptions.js:14-15 in @simplewebauthn/server@14.0.2), which lets a device skip
     // UV and yet still fail verify — so it is pinned explicitly. Drop the userVerification pin and this
     // reads 'preferred'. residentKey is asserted alongside because supplying `authenticatorSelection` at
     // all drops the library's `residentKey: 'preferred'` default (it merges nothing) — so dropping the
@@ -191,6 +190,17 @@ describe("passkey registration", () => {
       residentKey: "preferred",
       userVerification: "required",
     });
+  });
+
+  it("offers exactly the three signature algorithms the server pins, in that order", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const begun = await begin(sessionId);
+    // EdDSA (-8), ES256 (-7), RS256 (-257) — pinned by `supportedAlgorithmIDs` rather than left to
+    // @simplewebauthn/server@14, which asks the running runtime what to offer and prepends ML-DSA-44
+    // where Web Crypto reports it (generateRegistrationOptions.js:23-29). Delete the pin and this
+    // assertion fails on Node 26.7.0 with a leading -48 — watched, that is how the pin was arrived at.
+    // What the pin buys is that the answer no longer depends on which runtime served the request.
+    expect(begun.options.pubKeyCredParams.map((p) => p.alg)).toEqual([-8, -7, -257]);
   });
 
   it.each([
@@ -228,9 +238,27 @@ describe("passkey registration", () => {
     mockVerify.mockResolvedValue(verified("cred-abc"));
     const begun = await begin(sessionId);
     await finish(sessionId, begun.challengeHandle);
-    // Pinned explicitly rather than leaning on the library default (true, verifyRegistrationResponse.js:35),
+    // Pinned explicitly rather than leaning on the library default (true, verifyRegistrationResponse.js:36),
     // so a future default flip cannot silently drop the UV requirement on a primary login.
     expect(mockVerify.mock.calls[0]![0]).toMatchObject({ requireUserVerification: true });
+  });
+
+  it("passes its pinned algorithm list to the registration verifier", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    mockVerify.mockResolvedValue(verified("cred-abc"));
+    const begun = await begin(sessionId);
+    await finish(sessionId, begun.challengeHandle);
+    // The verify side has its own algorithm list and the library defaults it to the SAME
+    // runtime-decided list the options side uses (verifyRegistrationResponse.js:36 defaults to the
+    // `defaultSupportedAlgorithmIDs` that generateRegistrationOptions.js:28-29 puts ML-DSA-44 into).
+    // Unpinned here, a response whose credential public key DECLARES an algorithm the options never
+    // offered verifies — demonstrated against the real verifier, which checks that declared alg
+    // against this list (verifyRegistrationResponse.js:137). Offer and accept must be the same set,
+    // so the same list goes to both calls. The library is mocked in this suite, so what this asserts
+    // is the argument; what it would catch is the pin being dropped.
+    expect(mockVerify.mock.calls[0]![0]).toMatchObject({
+      supportedAlgorithmIDs: [-8, -7, -257],
+    });
   });
 
   it("excludes already-registered credentials from a second ceremony", async () => {
@@ -264,9 +292,7 @@ describe("passkey registration", () => {
     // `verifyRegistrationResponse` copies transports verbatim from the client, so at runtime it may be
     // a non-array despite its declared type. serializeTransports coerces anything but an array to null
     // (Array.isArray guard); drop that guard and this value would be stored as the string '"usb"'.
-    mockVerify.mockResolvedValue(
-      verified("cred-forged", "usb" as unknown as AuthenticatorTransportFuture[]),
-    );
+    mockVerify.mockResolvedValue(verified("cred-forged", "usb" as unknown as string[]));
 
     const begun = await begin(sessionId);
     await finish(sessionId, begun.challengeHandle);
@@ -460,7 +486,7 @@ describe("passkey authentication", () => {
 
   it("pins userVerification to 'required' in the authentication options", async () => {
     const begun = await beginAuth();
-    // Default is 'preferred' (generateAuthenticationOptions.js:16 in @simplewebauthn/server@13.3.2);
+    // Default is 'preferred' (generateAuthenticationOptions.js:16 in @simplewebauthn/server@14.0.2);
     // pinned to 'required' so the authenticator performs UV on the primary login, matching the verify
     // side. Drop the pin and this reads 'preferred'.
     expect(begun.options.userVerification).toBe("required");
@@ -472,7 +498,7 @@ describe("passkey authentication", () => {
     mockVerifyAuth.mockResolvedValue(authVerified(1));
     const begun = await beginAuth();
     await authenticate(begun.challengeHandle, "cred-abc");
-    // Pinned explicitly rather than leaning on the library default (true, verifyAuthenticationResponse.js:24).
+    // Pinned explicitly rather than leaning on the library default (true, verifyAuthenticationResponse.js:28).
     expect(mockVerifyAuth.mock.calls[0]![0]).toMatchObject({ requireUserVerification: true });
   });
 

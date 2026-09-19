@@ -82,7 +82,7 @@
     "@waitron/media": "workspace:*"
   },
   "devDependencies": {
-    "@simplewebauthn/server": "^13.0.0",
+    "@simplewebauthn/server": "^14.0.0",
     "@testcontainers/postgresql": "^12.1.0",
     "@types/multicast-dns": "^7.2.4",
     "@types/node": "^26.0.0",

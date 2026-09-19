@@ -37,7 +37,7 @@ const mockVerifyReg = vi.mocked(verifyRegistrationResponse);
 const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
 /** A fully-typed `verified: true` registration result — our route only persists `credential`, but the
- * discriminated union requires the rest, so building it in full keeps the mock honest against v13's
+ * discriminated union requires the rest, so building it in full keeps the mock honest against the library's
  * real `VerifiedRegistrationResponse` shape (Tasks 2/3 confirmed it). */
 function regVerified(id: string): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
   return {
@@ -57,7 +57,7 @@ function regVerified(id: string): Awaited<ReturnType<typeof verifyRegistrationRe
 }
 
 /** A fully-typed `verified: true` authentication result. Our route reads only `verified` and
- * `authenticationInfo.newCounter`; v13's `VerifiedAuthenticationResponse` is NOT a discriminated union
+ * `authenticationInfo.newCounter`; `VerifiedAuthenticationResponse` is NOT a discriminated union
  * (`authenticationInfo` is required even when `verified` is false), so building it in full keeps the
  * mock honest against the real shape. */
 function authVerified(
