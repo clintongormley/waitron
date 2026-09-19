@@ -2133,6 +2133,28 @@ moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
   If a future bundler bump wants the same receipt, the method is: build, stash the twelve outputs,
   bump, rebuild, `cmp` each pair, and account for every difference class before accepting it.
 
+**Left behind by the Node types upgrade (#441, 2026-09-19).** Thirty-eight manifests moved from
+`@types/node` `^24.0.0` to `^26.0.0`, matching the Node 26 the `.nvmrc` pins, and
+`packages/tunnel` — which imports `node:net` in six files and declared no Node types at all — got a
+declaration of its own. Two things it leaves open:
+
+- **`apps/dashboard` now type-checks against two `@types/node` majors at once.** `@types/qrcode` is
+  a declared devDependency there and in `apps/server`; its `index.d.ts` opens with a reference to
+  the Node types, its own range is `"*"`, and the lockfile leaves it on **24.13.3** while everything
+  else moved to 26.6.2. Measured with `tsc --noEmit --explainFiles` in `apps/dashboard`: 141 file
+  mentions of 24.13.3 beside 384 of 26.6.2, where the same command on the pre-merge `main` showed
+  350 of 24.13.3 alone. Nothing complains because `skipLibCheck` is on (`tsconfig.base.json:15`);
+  with `--skipLibCheck false` that program reports a duplicate `NonSharedBuffer` identifier.
+  `pnpm update --recursive --depth Infinity "@types/node"` does not collapse it — tried and
+  reverted, it rewrote our own declarations to `"^26.6.2"` and left the transitive copy alone. The
+  fix is a pnpm resolution override, which is a policy decision rather than a version bump, so it
+  was left for the owner. (`@types/ssh2@1.15.5` also holds 18.19.130, but that one asks for
+  `"^18.11.18"` and no 26 release satisfies it.)
+- **The root `package.json` still says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** The
+  two have disagreed since the commit that created both, so this is not new, but the types are now
+  26's and the manifest still advertises 24 as a supported runtime. One line either way; it needs an
+  owner call on whether Node 24 is still supported.
+
 One note for the next 0.x dependency bump, because it cost three review rounds here: esbuild ships
 breaking changes in minor releases, which is documented and was read — but the release that actually
 changed this repository's output was **0.27.1, a patch**. Reading the majors and the releases marked
