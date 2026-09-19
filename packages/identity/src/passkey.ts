@@ -7,7 +7,6 @@ import {
 } from "@simplewebauthn/server";
 import type {
   AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
@@ -49,8 +48,24 @@ import {
  * interactive and brief; a stored challenge older than this is discarded rather than honoured. */
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * The signature algorithms a management passkey may use — EdDSA (-8), ES256 (-7), RS256 (-257), the
+ * three @simplewebauthn/server@13.3.2 OFFERED by default. Its verify side defaulted to ten, so giving
+ * this list to both halves of the registration ceremony also narrows what registration accepts: what
+ * the authenticator is offered and what the server will accept are now the same set, rather than the
+ * server accepting credentials it never asked for.
+ *
+ * Stated here rather than left to the library, because version 14's default is decided by the RUNNING
+ * runtime — `generateRegistrationOptions.js:23-29` asks `SettingsService.runtimeSupportsPQC()` and
+ * prepends ML-DSA-44 (-48) where it says yes, and `verifyRegistrationResponse.js:36` defaults to that
+ * same mutated list. Offering a post-quantum algorithm on a primary login is a decision to take
+ * deliberately, not one to inherit from a version bump on whichever machine happens to serve the
+ * request.
+ */
+const SUPPORTED_ALGORITHM_IDS = [-8, -7, -257];
+
 /** The WebAuthn spec keys `userID` on an opaque byte string; we use the person's uuid as its text.
- * Returns `Uint8Array<ArrayBuffer>` (what `TextEncoder.encode` produces) to match v13's `userID`
+ * Returns `Uint8Array<ArrayBuffer>` (what `TextEncoder.encode` produces) to match the library's `userID`
  * type — a bare `Uint8Array` annotation widens to `ArrayBufferLike` and no longer assigns. */
 function textToBytes(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);
@@ -66,13 +81,12 @@ function b64url(bytes: Uint8Array): string {
  * JSON array string in the nullable `transports` column and read back to seed a later ceremony's
  * `excludeCredentials`, so the authenticator can match an already-registered credential across its
  * transports. `verifyRegistrationResponse` copies `transports` VERBATIM from the client-supplied
- * response (`verifyRegistrationResponse.js:202`), so at runtime the value is whatever the client sent
- * and may not be the `AuthenticatorTransportFuture[]` its type claims — store only a genuine array,
- * coercing any other runtime shape to null.
+ * response (`verifyRegistrationResponse.js:213`, @simplewebauthn/server@14.0.2), so at runtime the
+ * value is whatever the client sent. The library types it `string[]` too (`WebAuthnCredential`,
+ * types/index.d.ts:127), which constrains it no further. Store only a genuine array, coercing any
+ * other runtime shape to null.
  */
-function serializeTransports(
-  transports: AuthenticatorTransportFuture[] | undefined,
-): string | null {
+function serializeTransports(transports: string[] | undefined): string | null {
   return Array.isArray(transports) ? JSON.stringify(transports) : null;
 }
 
@@ -82,8 +96,8 @@ function serializeTransports(
  * population — yields undefined; every non-null value was written by `serializeTransports`, so it is a
  * JSON array.
  */
-function parseTransports(stored: string | null): AuthenticatorTransportFuture[] | undefined {
-  return stored === null ? undefined : (JSON.parse(stored) as AuthenticatorTransportFuture[]);
+function parseTransports(stored: string | null): string[] | undefined {
+  return stored === null ? undefined : (JSON.parse(stored) as string[]);
 }
 
 /**
@@ -144,7 +158,7 @@ export async function beginPasskeyRegistration(
   const options = await generateRegistrationOptions({
     rpID: input.rpId,
     rpName: input.rpName,
-    userID: textToBytes(personId), // Uint8Array (v10+)
+    userID: textToBytes(personId), // the library keys this on bytes, not text
     userName: person!.displayName,
     excludeCredentials: existing.map((c) => ({
       id: c.credentialId,
@@ -152,12 +166,14 @@ export async function beginPasskeyRegistration(
     })),
     // A management passkey is a PHISHING-RESISTANT PRIMARY login, so user verification is MANDATORY, not
     // merely encouraged. The library default is `{ residentKey: 'preferred', userVerification:
-    // 'preferred' }` (generateRegistrationOptions.js:39-40, @simplewebauthn/server@13.3.2); 'preferred'
+    // 'preferred' }` (generateRegistrationOptions.js:14-15, @simplewebauthn/server@14.0.2); 'preferred'
     // lets a device skip UV yet the verify side rejects a response without the UV flag
     // (requireUserVerification defaults true), so the two must agree. `residentKey` is kept at the
     // library default 'preferred' — supplying `authenticatorSelection` at all drops that default
     // (it applies only when the whole object is absent), and this login is discoverable.
     authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+    // What the authenticator is offered; `finishPasskeyRegistration` accepts the same list.
+    supportedAlgorithmIDs: SUPPORTED_ALGORITHM_IDS,
   });
   const [row] = await tx
     .insert(webauthnChallenges)
@@ -215,16 +231,21 @@ export async function finishPasskeyRegistration(
       expectedChallenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
-      // Pin UV explicitly rather than lean on the library default (true, verifyRegistrationResponse.js:35),
+      // Pin UV explicitly rather than lean on the library default (true, verifyRegistrationResponse.js:36),
       // so a future default flip cannot silently weaken this primary-login enrollment. Matches the
       // `userVerification: "required"` asked of the authenticator in beginPasskeyRegistration.
       requireUserVerification: true,
+      // What the server accepts, which must be what beginPasskeyRegistration offered. Unpinned, the
+      // library defaults this to its runtime-decided list, and a response whose credential public key
+      // declares an algorithm the options excluded verifies here (the check is on the key's declared
+      // COSE alg, verifyRegistrationResponse.js:137).
+      supportedAlgorithmIDs: SUPPORTED_ALGORITHM_IDS,
     });
   } catch {
     throw new AppError("passkey.verification_failed", {});
   }
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
-  const cred = verification.registrationInfo.credential; // { id, publicKey, counter, transports? } — v13 WebAuthnCredential
+  const cred = verification.registrationInfo.credential; // { id, publicKey, counter, transports? } — WebAuthnCredential
   // The challenge was already consumed above (consumeChallenge); the insert commits alongside it. The
   // authenticator's transports are stored here (see `serializeTransports`) for a later ceremony.
   try {
@@ -263,7 +284,7 @@ export async function beginPasskeyAuthentication(
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialRequestOptionsJSON }> {
   // Discoverable (no allowCredentials) AND user-verifying: 'required' makes the authenticator perform UV
   // on this primary login, matching the verify side (requireUserVerification true). The library default
-  // is 'preferred' (generateAuthenticationOptions.js:16, @simplewebauthn/server@13.3.2), which would let
+  // is 'preferred' (generateAuthenticationOptions.js:16, @simplewebauthn/server@14.0.2), which would let
   // a device assert without UV and then fail verify — so it is pinned here.
   const options = await generateAuthenticationOptions({
     rpID: input.rpId,
@@ -349,7 +370,7 @@ export async function finishPasskeyAuthentication(
       expectedChallenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
-      // Pin UV explicitly rather than lean on the library default (true, verifyAuthenticationResponse.js:24),
+      // Pin UV explicitly rather than lean on the library default (true, verifyAuthenticationResponse.js:28),
       // matching the `userVerification: "required"` asked of the authenticator in beginPasskeyAuthentication.
       requireUserVerification: true,
       // WebAuthnCredential: the stored public key is base64url text, decoded back to bytes here.
