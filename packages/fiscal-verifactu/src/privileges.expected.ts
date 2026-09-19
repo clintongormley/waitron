@@ -52,6 +52,8 @@ export const PRIVILEGES: Record<string, string> = {
   locations: "SIU",
   management_account_actions: "SIU",
   management_sessions: "SIU",
+  menu_item_extra_items: "SIUD",
+  menu_item_extra_lists: "SIUD",
   menu_item_option_groups: "SIUD",
   menu_item_options: "SIUD",
   menu_items: "SIU",
