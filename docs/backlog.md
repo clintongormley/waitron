@@ -521,8 +521,7 @@ What option lists left open, none of it taken in #436 or #445:
   registered because a shipped code is never removed.
 - **The option and extras route blocks now share one mount helper; the old modifier block is still a
   third hand-written copy.** A review on #445 asked for the helper (the pattern is `mountCourseVerb`,
-  `apps/server/src/till-api.ts`) and Task 6 Step 5 did not write one, because its brief specified the
-  six routes one by one as a mirror of the option block. `mountListSurface` in
+  `apps/server/src/till-api.ts`), and Task 6 wrote it. `mountListSurface` in
   `apps/server/src/catalogue-api.ts` is that helper: it mounts all six routes for one kind of list —
   read and create on the collection, read, update and delete on one list, and the delete preview —
   and each of the two call sites hands it only what differs (the path segment, the `shared.invalid_id`
@@ -607,6 +606,38 @@ What extras lists left open, and what #449 found on the way:
   statement — but writing the labels is a loop, because a multi-row insert cannot say WHICH label's
   id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
   worth knowing if extras lists turn out to be much longer.
+
+What the product attachment (#456, the plan's Task 6) left behind:
+
+- **A delete-then-insert of rows that REFERENCE another table can deadlock with a delete of the
+  referenced row, and `CLAUDE.md` §3's rule about that shape does not yet say so.** The rule names
+  two conditions — nothing outside the table holds a key into it, and the writers are serialised —
+  and both were met here. The cycle is a third thing: the rewrite deletes its own rows first and
+  only then inserts rows whose foreign key needs a lock on the parent, while a delete of that parent
+  holds the parent row and waits for those same child rows through its cascade. Measured on both
+  kinds of list (`40P01`), fixed by locking the referenced rows before touching the child rows, and
+  pinned by `packages/catalogue/src/product-modifiers.pg.test.ts`. **Next action:** add the third
+  condition to `CLAUDE.md` §3 with its receipt in
+  [conventions-data.md](developers/conventions-data.md) — a root `CLAUDE.md` edit takes the normal
+  branch-and-pull-request flow.
+- **A two-transaction concurrency test that starts both sides in sequence is racing itself.** The
+  first version of the test above started the transaction that holds a row and the save that should
+  wait for it one after the other, without waiting for the first to actually hold anything. It
+  passed locally and failed on CI with "timed out waiting for the save to reach the row the blocker
+  holds", having proved nothing rather than having found a bug. The blocker now signals once its
+  lock is held. Nothing guards the shape; it is worth looking for in any new racing test.
+- **`scripts/spawn-timeout-budget.test.ts` was failing healthy runs of itself**, which is the rule
+  it exists to enforce. Its scan of every package and app suite read each file twice and declared no
+  bound, so the non-vacuity case timed out at Vitest's 5000ms default inside a loaded full root run
+  while the whole file measures 1.4s alone. Fixed in #456: one read per file, and a declared bound
+  on each scanning case. **Next action:** none — noted because the same shape is latent in any root
+  guard that walks the whole tree without declaring a bound.
+- **The product editor has no Modifiers section until Task 11.** #456 removed the old option-group
+  attachment section rather than leave one whose edits the save would discard, and the catalogue
+  screen's nested modifier form is now unreachable from the interface but left in place, because
+  removing it reaches through `ProductChildKind` into that screen's own create-and-edit plumbing.
+  **Next action:** Task 11 rebuilds the section over extras and options lists, and decides whether
+  the nested form is rewired or removed.
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 
