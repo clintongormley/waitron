@@ -22,6 +22,7 @@ async function tableRoot(el: ProductList): Promise<ShadowRoot> {
 function product(overrides: Partial<Product> = {}): Product {
   return {
     id: "prod-1",
+    modifiers: [],
     modifierIds: [],
     catalogueId: "cat-1",
     categoryId: "category-1",

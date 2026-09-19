@@ -410,7 +410,6 @@ export class CatalogueScreen extends LitElement {
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
         .categories=${this.categories}
-        .modifiers=${this.modifiers}
         .stations=${this.stations}
         .courses=${this.courses}
         .api=${this.api}

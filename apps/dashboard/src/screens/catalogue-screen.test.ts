@@ -30,6 +30,7 @@ const modifiers: Modifier[] = [{ id: "m1", type: "text", name: { es: "Nota" }, a
 const products: Product[] = [
   {
     id: "p1",
+    modifiers: [],
     modifierIds: [],
     catalogueId: "cat-a",
     categoryId: "c1",
@@ -69,7 +70,10 @@ const value: ProductEditorValue = {
   variants: [],
   categoryIds: ["c1"],
   primaryCategoryId: "c1",
-  modifierIds: ["m1"],
+  // An attachment the editor has no section for today: the product editor's option-group section
+  // went with the new model, and Task 11 builds its replacement. It is here so the tests below can
+  // show an unrelated save carrying it back untouched rather than wiping it.
+  modifiers: [{ kind: "options", id: "opt-list-1" }],
   allergens: {},
   dietaryDeclarations: ["vegetarian"],
   stationId: null,
@@ -273,8 +277,8 @@ describe("catalogue-screen", () => {
     });
     expect(api.createModifier).not.toHaveBeenCalled();
     expect(form.open).toBe(false);
-    // The product keeps the modifier it already had; editing one never attaches a second copy.
-    expect(editor(el).currentValue.modifierIds).toEqual(["m1"]);
+    // The product's own attachments are untouched by editing a modifier through the nested form.
+    expect(editor(el).currentValue.modifiers).toEqual([{ kind: "options", id: "opt-list-1" }]);
   });
 
   it("opens the modifier form empty again after an edit was cancelled", async () => {

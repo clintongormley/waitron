@@ -1,6 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
-import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, currentContentLanguages, selectStyles, submitOnEnter } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
@@ -8,13 +7,11 @@ import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { VAT_CLASSES, resolveVatRate } from "@waitron/catalogue/src/pricing.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
 import "@waitron/ui/src/components/wt-price-input.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -34,10 +31,8 @@ import {
   type FieldContext,
 } from "./form-fields.js";
 import { reorder } from "./reorder.js";
-import { ReorderController, type ReorderModel } from "./reorder-table.js";
-import type { CategorySummary, DashboardApi, Modifier, ProductCategories } from "../api/client.js";
+import type { CategorySummary, DashboardApi, ProductCategories } from "../api/client.js";
 import type {
-  EditorChoice,
   EditorVariant,
   UnitChoice,
   LocalizedText,
@@ -53,9 +48,6 @@ const dietaryLabels: readonly DietaryLabel[] = DIETARY_LABELS;
 /** Separates the parts of a collapsed section's summary. This is NOT the product·variant name join,
  * which belongs to `packages/catalogue/src/product-presentation.ts` and is never re-implemented. */
 const SUMMARY_SEPARATOR = " · ";
-
-/** The combobox row that opens the modifier form rather than attaching an existing modifier. */
-const CREATE_MODIFIER = "create";
 
 /** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
@@ -139,7 +131,7 @@ function emptyDraft(): ProductEditorDraft {
     variants: [],
     categoryIds: [],
     primaryCategoryId: null,
-    modifierIds: [],
+    modifiers: [],
     allergens: null,
     dietaryDeclarations: [],
     stationId: null,
@@ -162,7 +154,6 @@ export class ProductEditor extends LitElement {
   static override styles = [
     baseStyles,
     selectStyles,
-    ReorderController.styles,
     css`
       :host {
         display: block;
@@ -258,39 +249,6 @@ export class ProductEditor extends LitElement {
         border-radius: var(--wt-radius-sm);
         font-size: var(--wt-font-size-sm);
       }
-      /* The modifiers table may be wider than the form; its own scroller keeps the dialog from
-         scrolling sideways at phone width. */
-      .wrap {
-        overflow-x: auto;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      th,
-      td {
-        padding: var(--wt-space-2) var(--wt-space-1);
-        text-align: start;
-        vertical-align: middle;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-      th {
-        font-weight: var(--wt-font-weight-bold);
-      }
-      td:nth-child(2) {
-        max-width: var(--wt-cell-name-max-width);
-      }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
     `,
   ];
   @property({ type: Boolean }) open = false;
@@ -300,7 +258,6 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) modifiers: (Modifier | EditorChoice)[] = [];
   @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
   @property({ attribute: false }) taxChoices?: {
@@ -324,23 +281,6 @@ export class ProductEditor extends LitElement {
   private generation = 0;
   /** The field to put focus in once the update that reported an error has rendered. */
   #focusField: string | null = null;
-
-  readonly #reorder = new ReorderController(this, {
-    order: () => this.draft.modifierIds,
-    move: (id, to) => {
-      const from = this.draft.modifierIds.indexOf(id);
-      if (from < 0 || from === to) return;
-      this.change("modifierIds", reorder(this.draft.modifierIds, from, to));
-    },
-    label: (id) => {
-      const choice = this.modifiers.find((modifier) => modifier.id === id);
-      return choice ? this.label(choice) : t("editor.modifier");
-    },
-    busy: () => this.suspended,
-    get reorderLabel(): string {
-      return t("editor.reorder_modifier");
-    },
-  } satisfies ReorderModel);
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("value") || (changed.has("open") && this.open)) {
@@ -466,18 +406,6 @@ export class ProductEditor extends LitElement {
   private text(value: LocalizedText) {
     return resolveContentText(value, this.language, this.language);
   }
-  private label(choice: { name: LocalizedText }) {
-    return this.text(choice.name);
-  }
-  private modifierLabel(modifier: Modifier | EditorChoice): string {
-    const choices =
-      !("type" in modifier) || modifier.type === "text"
-        ? []
-        : modifier.choices.map((choice) => this.label(choice));
-    return choices.length
-      ? `${this.label(modifier)}${SUMMARY_SEPARATOR}${choices.join(", ")}`
-      : this.label(modifier);
-  }
   private unitLabel(unit: UnitChoice) {
     const name = this.text(unit.name);
     const abbr = this.text(unit.abbreviation);
@@ -517,14 +445,23 @@ export class ProductEditor extends LitElement {
     }
     this.change("variants", variants);
   }
-  private related(event: Event, kind: "unit" | "category" | "modifier") {
+  private related(event: Event, kind: "unit" | "category") {
     event.stopPropagation();
     if (this.suspended) return;
     this.dispatchEvent(
       new CustomEvent("wt-create-related", { detail: { kind }, bubbles: true, composed: true }),
     );
   }
-  /** A nested create returns through the composing screen, without reseeding the product. */
+  /**
+   * A nested create returns through the composing screen, without reseeding the product.
+   *
+   * "modifier" is still an accepted kind because the catalogue screen's own child-create controller
+   * is typed with it, but there is nothing here to attach it to: a product now carries extras lists
+   * and options lists (`modifiers` on the draft), not the option groups this used to add, and the
+   * section that attached them is gone until Task 11 of
+   * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` builds its replacement. Nothing
+   * in this editor asks the screen to create a modifier any more, so the case is unreachable today.
+   */
   selectRelated(kind: "unit" | "category" | "modifier", id: string): void {
     if (kind === "unit") this.change("unitId", id);
     if (kind === "category" && !this.draft.categoryIds.includes(id)) {
@@ -534,8 +471,6 @@ export class ProductEditor extends LitElement {
         primaryCategoryId: this.draft.primaryCategoryId ?? id,
       };
     }
-    if (kind === "modifier" && !this.draft.modifierIds.includes(id))
-      this.change("modifierIds", [...this.draft.modifierIds, id]);
   }
   returnRelatedFocus(kind: "unit" | "category" | "modifier"): void {
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${kind}]`)?.focus();
@@ -1000,109 +935,6 @@ export class ProductEditor extends LitElement {
     </fieldset>`;
   }
 
-  private renderModifierRow(id: string) {
-    const choice = this.modifiers.find((modifier) => modifier.id === id);
-    const label = choice ? this.modifierLabel(choice) : t("editor.missing_choice");
-    return html`<tr data-test="attached-modifier" data-modifier=${id}>
-      <td>${this.#reorder.handle(id)}</td>
-      <td>${label}</td>
-      <td>
-        <wt-row-actions align="end" label=${`${t("editor.modifier_actions")}: ${label}`}
-          ><wt-button
-            variant="secondary"
-            data-test=${`edit-modifier-${id}`}
-            .disabled=${this.suspended}
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              if (this.suspended) return;
-              this.dispatchEvent(
-                new CustomEvent("wt-edit-related", {
-                  detail: { kind: "modifier", id },
-                  bubbles: true,
-                  composed: true,
-                }),
-              );
-            }}
-            >${t("action.edit")}</wt-button
-          ><wt-button
-            variant="danger"
-            data-test=${`remove-modifier-${id}`}
-            .disabled=${this.suspended}
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              if (this.suspended) return;
-              this.change(
-                "modifierIds",
-                this.draft.modifierIds.filter((value) => value !== id),
-              );
-            }}
-            >${t("action.remove")}</wt-button
-          ></wt-row-actions
-        >
-      </td>
-    </tr>`;
-  }
-
-  private renderModifiers() {
-    const attached = this.draft.modifierIds;
-    const options = [
-      { value: CREATE_MODIFIER, label: t("editor.create_modifier") },
-      ...this.modifiers
-        .filter((modifier) => !attached.includes(modifier.id))
-        .map((modifier) => ({ value: modifier.id, label: this.modifierLabel(modifier) })),
-    ];
-    return html`<div class="group" data-section="modifiers">
-      <span class="group-label">${t("editor.modifiers")}</span>
-      ${
-        attached.length
-          ? html`<div class="wrap">
-              <table>
-                <caption class="visually-hidden">
-                  ${t("editor.modifiers")}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      <span class="visually-hidden">${t("editor.reorder_modifier")}</span>
-                    </th>
-                    <th scope="col">${t("editor.name")}</th>
-                    <th scope="col">
-                      <span class="visually-hidden">${t("editor.modifier_actions")}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${repeat(
-                    attached,
-                    (id) => id,
-                    (id) => this.renderModifierRow(id),
-                  )}
-                </tbody>
-              </table>
-            </div>`
-          : nothing
-      }
-      ${this.#reorder.liveRegion()}
-      <wt-combobox
-        name="modifier"
-        data-test="add-modifier"
-        label=${t("editor.add_modifier")}
-        placeholder=${t("editor.choose")}
-        searchPlaceholder=${t("editor.search_choices")}
-        noResultsLabel=${t("editor.no_modifiers")}
-        .disabled=${this.suspended}
-        .options=${options}
-        .value=${""}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          if (event.detail.value === "") return;
-          if (event.detail.value === CREATE_MODIFIER) this.related(event, "modifier");
-          else this.selectRelated("modifier", event.detail.value);
-        }}
-      ></wt-combobox>
-    </div>`;
-  }
-
   override render() {
     const fields = this.fields();
     return html`<wt-modal
@@ -1142,7 +974,6 @@ export class ProductEditor extends LitElement {
           ${keyed(this.generation, this.renderKitchen())}
           ${keyed(this.generation, this.renderDescriptors())}
           ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}
-          ${this.renderModifiers()}
         </div>
         <wt-form-actions slot="footer"
           ><wt-button

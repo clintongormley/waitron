@@ -42,6 +42,7 @@ const CATALOGUES: CatalogueSummary[] = [{ id: "cat-a", name: "Comida", active: t
 const PRODUCTS: Product[] = [
   {
     id: "p1",
+    modifiers: [],
     modifierIds: [],
     catalogueId: "cat-a",
     categoryId: null,

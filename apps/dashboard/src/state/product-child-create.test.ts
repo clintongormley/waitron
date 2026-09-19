@@ -31,14 +31,10 @@ async function fixture() {
   const refresh = vi.fn(async () => {});
   const focus = vi.fn();
   const accept = vi.fn(
-    (
-      kind: "unit" | "category" | "modifier",
-      value: { id: string; name: Record<string, string> },
-    ) => {
+    (kind: "unit" | "category", value: { id: string; name: Record<string, string> }) => {
       if (kind === "unit") el.units = [...el.units, { ...value, abbreviation: {} }];
       if (kind === "category")
         el.categories = [...el.categories, { ...value, image: null, color: null, parentId: null }];
-      if (kind === "modifier") el.modifiers = [...el.modifiers, value];
       el.selectRelated(kind, value.id);
     },
   );
@@ -46,7 +42,10 @@ async function fixture() {
   return { el, controller, refresh, loadError, accept, focus };
 }
 
-it.each(["unit", "category", "modifier"] as const)(
+// "modifier" is not among the kinds here: the product editor no longer attaches option groups, so
+// there is no draft field a created modifier would land in. The controller itself does not care
+// which kind it is carrying — unit and category exercise every branch of its lifecycle.
+it.each(["unit", "category"] as const)(
   "keeps the dirty product after a durable %s create even if refresh fails",
   async (kind) => {
     const fx = await fixture();
@@ -60,13 +59,9 @@ it.each(["unit", "category", "modifier"] as const)(
     expect(fx.focus).toHaveBeenCalledWith(kind);
     expect(fx.loadError).toHaveBeenCalledOnce();
     expect(fx.el.currentValue.name).toBe("Dirty coffee");
-    expect(
-      kind === "unit"
-        ? fx.el.currentValue.unitId
-        : kind === "category"
-          ? fx.el.currentValue.categoryIds[0]
-          : fx.el.currentValue.modifierIds[0],
-    ).toBe(saved.id);
+    expect(kind === "unit" ? fx.el.currentValue.unitId : fx.el.currentValue.categoryIds[0]).toBe(
+      saved.id,
+    );
   },
 );
 

@@ -32,6 +32,7 @@ const RECIPE: RecipeLine[] = [INGREDIENTS[0]];
 
 const PRODUCT: Product = {
   id: "prod-1",
+  modifiers: [],
   modifierIds: [],
   catalogueId: "cat-1",
   categoryId: null,
