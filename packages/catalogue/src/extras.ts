@@ -93,11 +93,41 @@ export async function getExtraList(tx: Transaction, extraListId: string): Promis
   return { ...list, items };
 }
 
+/** The list exists. A plain read, taking no locks — the preview path's half of the pair below. */
 async function assertExtraList(tx: Transaction, extraListId: string): Promise<void> {
   const [list] = await tx
     .select({ id: extraLists.id })
     .from(extraLists)
     .where(eq(extraLists.id, extraListId));
+  if (!list) throw new AppError("extras.not_found", { extraListId });
+}
+
+/**
+ * The list exists, and this transaction holds its row until it ends, so two saves of the SAME list
+ * run one after the other instead of overlapping. {@link writeItems} needs that: it replaces the
+ * whole item set, and a `delete` cannot see another transaction's uncommitted inserts, so an
+ * unserialised second save removes nothing and then collides on
+ * `extra_list_items_list_product_uq` — a `23505` that leaves `writeItems` as a drizzle
+ * `Failed query:` error carrying no `code`, which the server's error boundary answers as an opaque
+ * 500.
+ *
+ * Measured on a real backend, because the two saves were already serialised by accident and the
+ * measurement had to remove the accident: with this lock gone AND `updateExtraList`'s own `update`
+ * of the list row moved after `writeItems`, "keeps the later of two overlapping saves of the same
+ * list" (extras.pg.test.ts) reported `23505` for one of the two saves; putting this lock back, with
+ * that `update` still moved, it passed. So what the lock buys is that `writeItems` no longer depends
+ * on an unrelated statement's position for its correctness.
+ *
+ * This is a ROW lock, not an advisory one: spec §7 bars advisory locks from new code and does not
+ * reach a `select … for update`, which is what `lockProduct` already takes on a product row
+ * (variants.ts).
+ */
+async function lockExtraList(tx: Transaction, extraListId: string): Promise<void> {
+  const [list] = await tx
+    .select({ id: extraLists.id })
+    .from(extraLists)
+    .where(eq(extraLists.id, extraListId))
+    .for("update");
   if (!list) throw new AppError("extras.not_found", { extraListId });
 }
 
@@ -108,9 +138,11 @@ async function assertExtraList(tx: Transaction, extraListId: string): Promise<vo
  *
  * An extras list holds exactly ONE such map, where an options list holds one per label as well as
  * its own: an item names a product and carries no name of its own (extra-contract.ts's
- * `ExtraListItem`), so the field path this reports is always `"customerName"`. Nothing is thrown by
- * `findContentTranslationGap` — it RETURNS which map has the gap — and the throw below attaches the
- * field path, so an editor can put the refusal beside the input.
+ * `ExtraListItem`), so the field path this reports is always `"customerName"`. A GAP is not thrown
+ * by `findContentTranslationGap` — it RETURNS which map has one — and the throw below attaches the
+ * field path, so an editor can put the refusal beside the input. It does throw on a key that is not
+ * a language code or a value that is not text (content-languages.ts), with no field on the error —
+ * but `parseExtraListInput` has refused both before a body gets this far.
  */
 async function validateNames(
   tx: Transaction,
@@ -207,18 +239,22 @@ async function writeItems(
     const at = input.items.findIndex((item) => item.id !== undefined && foreign.has(item.id));
     throw new AppError("extras.invalid", { field: `items.${at}.id` });
   }
-  // The list starts from nothing, so no row the body keeps can collide with a row it is replacing.
+  // Within this transaction the list now starts from nothing, so no row the body keeps can collide
+  // with a row it is replacing. Rows another transaction is writing are a separate problem, and one
+  // this delete cannot see: every caller either holds the list's row lock ({@link lockExtraList}) or
+  // has just minted the list id, so there are none.
   await tx.delete(extraListItems).where(eq(extraListItems.listId, extraListId));
   for (const [sort, item] of input.items.entries()) {
     // Each item's `sort` is its position in the body, so the order the editor sent is the order
     // `listExtraLists` and `getExtraList` read back.
-    // The read above locks nothing, so another transaction can claim this id between it and here.
-    // An id another transaction has already COMMITTED is refused as a domain fault rather than
-    // surfacing as a driver error. The conflict clause names the PRIMARY KEY: left untargeted,
-    // drizzle emits a bare `on conflict do nothing`, which also absorbs a
-    // `extra_list_items_list_product_uq` collision and would report a product clash as a stolen id.
-    // Two transactions inserting the same NEW id are not covered: each waits on the other's
-    // uncommitted insert, and a mutual wait can still end as `40P01`.
+    // The read above locks nothing, and the list's row lock serialises saves of THIS list only, so a
+    // save of ANOTHER list can claim this id between the two. One that has already COMMITTED the id
+    // is refused as a domain fault rather than surfacing as a driver error. The conflict clause
+    // names the PRIMARY KEY: left untargeted, drizzle emits a bare `on conflict do nothing`, which
+    // also absorbs an `extra_list_items_list_product_uq` collision and would report a product clash
+    // as a stolen id. Still uncovered: two saves of DIFFERENT lists inserting the same NEW id each
+    // wait on the other's uncommitted insert, and a mutual wait can still end as `40P01`. The
+    // product index needs no such hedge — it is scoped to one `list_id`, which the row lock holds.
     const inserted = await tx
       .insert(extraListItems)
       .values({
@@ -237,9 +273,12 @@ async function writeItems(
 }
 
 /**
- * Nothing here takes a lock of its own on the list or its items: spec §7 bars advisory locks from
- * new code, which is the same decision `createOptionList` records (options.ts). The
- * content-language lock `validateNames` reaches through is the existing shared one.
+ * The only write path here that takes no lock of its own on the list, and the reason is the id: it
+ * is minted below and no other transaction can name it yet, so there is nothing to serialise
+ * against.
+ * `updateExtraList` and `deleteExtraList` do take one — a row lock, not an advisory lock, which spec
+ * §7 bars from new code ({@link lockExtraList}). The content-language lock `validateNames` reaches
+ * through is the existing shared one.
  */
 export async function createExtraList(
   tx: Transaction,
@@ -269,7 +308,7 @@ export async function updateExtraList(
   const extraListId = callerListId.toLowerCase();
   // The list has to exist before its name is worth checking, or updating an id that names nothing
   // reports a translation problem for a list that is not there.
-  await assertExtraList(tx, extraListId);
+  await lockExtraList(tx, extraListId);
   await validateNames(tx, input, fallbackLanguage);
   await tx.update(extraLists).set(listValues(input)).where(eq(extraLists.id, extraListId));
   await writeItems(tx, extraListId, input);
@@ -277,7 +316,7 @@ export async function updateExtraList(
 }
 
 export async function deleteExtraList(tx: Transaction, extraListId: string): Promise<void> {
-  await assertExtraList(tx, extraListId);
+  await lockExtraList(tx, extraListId);
   // The items go with it through `extra_list_items_list_fk` ... ON DELETE CASCADE
   // (drizzle/0004_extra_lists.sql:24). There is no open-order check, because the design has an open
   // order's child line carry the product rather than the list (spec §3.5, §3.4) — and that order

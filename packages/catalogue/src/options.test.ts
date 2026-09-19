@@ -200,6 +200,29 @@ describe("option list CRUD", () => {
     expect(updated.labels.map((label) => [label.id, label.name])).toEqual([[labelId, "Rare"]]);
   });
 
+  it("treats a list's own labels as its own when the list id arrives in upper case", async () => {
+    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+
+    // A `uuid` column compares case-insensitively, so an upper-cased list id still names this list;
+    // what must not happen is the list's own labels reading as another list's because the comparison
+    // moved into JavaScript. `PATCH /management-api/modifiers/options/:id` checks only the SHAPE of
+    // the id it is given (`requireUuidParam`, apps/server/src/catalogue-api.ts), so the case a caller
+    // sends is the case this function receives.
+    const updated = await run((tx) =>
+      updateOptionList(
+        tx,
+        created.id.toUpperCase(),
+        { name: "Cooked", labels: [{ id: created.labels[0]!.id, name: "Rare" }] },
+        "en",
+      ),
+    );
+
+    expect(updated.id).toBe(created.id);
+    expect(updated.labels.map((label) => [label.id, label.name])).toEqual([
+      [created.labels[0]!.id, "Rare"],
+    ]);
+  });
+
   it("refuses a label id that belongs to a different list", async () => {
     const other = await run((tx) => createOptionList(tx, cookedList(), "en"));
     const mine = await run((tx) =>

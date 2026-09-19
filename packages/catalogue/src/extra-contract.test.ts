@@ -337,9 +337,14 @@ describe("extra selections at order time", () => {
     );
   });
 
-  it("refuses an order-time quantity above what the column can hold, as a shape fault", () => {
-    // A count the LIST refuses is `extras.limit_exceeded`; a number no `integer` column could hold is
-    // a bad shape, so it is refused with a field path like any other malformed value.
+  it("refuses an order-time quantity above the contract's shared ceiling, as a shape fault", () => {
+    // A count the LIST refuses is `extras.limit_exceeded`; a number above the ceiling `whole` holds
+    // every integer in this contract to is a bad shape, so it is refused with a field path like any
+    // other malformed value. That ceiling is the contract's, not this field's own: `minPicks`,
+    // `maxPicks` and `maxQuantity` are `integer` columns (schema/extras.ts) and an order-time
+    // `quantity` is not a column at all — the child `working_order_lines` row an extra is designed to
+    // become holds its quantity as `numeric(12, 3)` (packages/db/src/schema/orders.ts:164,
+    // columns.ts:73).
     expect(() =>
       validateExtraSelections(
         [breads({ minPicks: 0, maxPicks: null })],

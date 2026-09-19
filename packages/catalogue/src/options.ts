@@ -232,11 +232,17 @@ export async function createOptionList(
 
 export async function updateOptionList(
   tx: Transaction,
-  optionListId: string,
+  callerListId: string,
   value: unknown,
   fallbackLanguage: string,
 ): Promise<OptionList> {
   const input = parseOptionListInput(value);
+  // Lower-cased once, here, and used from here on. A `uuid` column compares either case and hands
+  // its value back lower-cased, so an upper-cased id finds the list in SQL but does not match the
+  // stored `list_id` that `writeLabels` compares in JavaScript — which classified every one of the
+  // list's own labels as another list's. Same normalisation the contract's `id` applies to what a
+  // body sends (option-contract.ts).
+  const optionListId = callerListId.toLowerCase();
   // The list has to exist before its names are worth checking, or updating an id that names nothing
   // reports a translation problem for a list that is not there.
   await assertOptionList(tx, optionListId);

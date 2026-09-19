@@ -202,7 +202,8 @@ declare module "@waitron/shared" {
      * holds ONE such map (its items name products and carry no names), so the path is always
      * `"customerName"` today. Thrown by `validateNames` (extras.ts), which asks
      * `findContentTranslationGap` (content-languages.ts) — that function RETURNS which map has the
-     * gap rather than throwing — and attaches the field path.
+     * gap rather than throwing it, though it does throw `content.translation_invalid` for a value
+     * that is not text — and attaches the field path.
      */
     "extras.translation_required": { field: string; language: string };
     /**
