@@ -2435,6 +2435,43 @@ changed this repository's output was **0.27.1, a patch**. Reading the majors and
 breaking is not enough on a 0.x dependency; the whole range has to be read, and a paraphrase of it
 does not belong in a commit message when the byte comparison is the real evidence.
 
+*2026-09-19: this is not a 0.x rule.* The `fast-xml-parser` 4 → 5 bump found the same shape on a
+stable major: the major itself behaves like 4.5.7 on the changes that did reach us, and each of
+those arrived in a minor — **5.5.5 and 5.7.0**. Measured by installing each version in turn rather
+than read off the changelog: 5.5.4 accepts an element named `constructor` and 5.5.5 refuses it;
+5.6.0 still decodes `&#38;` to an ampersand and 5.7.0 leaves it as its own source text. Read the
+whole range whatever the leading digit is.
+
+**Left behind by the AEAT XML parser upgrade (fast-xml-parser 4 -> 5, 2026-09-20).** Version 5 no
+longer decodes numeric character references: `&#38;` and the references for the other four
+XML-reserved characters arrive as their own source text where 4.5.7 gave back the single character,
+and a reference to a character XML 1.0 forbids (code points 0-8, 11, 12, 14-31, and the surrogate
+range) is removed entirely where 4.5.7 left it as source text. Both arrived in 5.7.0. Named forms
+(`&amp;` and the rest) still decode on both, and `escape.ts` writes nothing but named forms, so a
+value we sent and AEAT echoed is unaffected.
+
+The upgrade shipped WITHOUT compensating for it. Every parsed AEAT value that gets matched against
+one of ours is a value WE minted and AEAT echoed: `RefExterna`, which is our
+`registros_facturacion.id`, a UUID (`drain.ts` in `persistResponse`, and `reconcile.ts` building its
+authority map); `NumSerieFactura`, which we only ever emit from the `A-Za-z0-9/_.-` charset
+`NUMSERIE_PATTERN` in `packages/verifactu/src/validate.ts` holds the outgoing record to; and
+`Huella`, which is hex. No character in any of those sets is ever entity-encoded. Everything else
+parsed is either compared against a constant (the status and error-code enums) or stored and
+displayed and compared against nothing, such as `DescripcionErrorRegistro` → `envios.mensaje_error`.
+
+**State the limit of that receipt honestly: nothing validates a value on the way back IN.**
+`NUMSERIE_PATTERN` runs in `validate()`, on the record `chain.ts` has just built, before submission
+— never on a parsed response. So the argument is that AEAT echoes what we sent and we send nothing
+encodable, which is an assumption about AEAT's serialiser, not an invariant this code enforces. If
+that assumption is ever in doubt, validating the parsed values on arrival is the cheap fix, not a
+parser option.
+
+`htmlEntities: true` was tried as the fix and reverted. It is wider than XML: it decodes 35 named
+entities XML does not define, and it turns `&nbsp;` and `&#160;` into U+00A0 where 4.5.7 gave
+U+0020 — a difference invisible in any report. If exact XML semantics are ever wanted here, version
+5 has an `entityDecoder` hook, which is bespoke code on a fiscal path and a decision rather than a
+bump.
+
 **Left behind by the passkey library upgrade (#453, 2026-09-19).** `packages/identity`, `apps/server`
 and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebauthn/browser` 13.3.0 to
 14.0.2 / 14.0.0. Four things it leaves open:

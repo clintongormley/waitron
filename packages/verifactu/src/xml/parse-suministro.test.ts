@@ -179,6 +179,34 @@ describe("parseRespuestaSuministro", () => {
     expect(linea?.IDFactura.NumSerieFactura).toBe("00123.40");
   });
 
+  it.each([
+    ["&amp;", "&"],
+    ["&lt;", "<"],
+    ["&gt;", ">"],
+    ["&quot;", '"'],
+    ["&apos;", "'"],
+  ])("decodes the named entity %s in a leaf to the character it names", (entity, character) => {
+    // These five spellings are the only ones that can come back from a value
+    // we sent: escape.ts writes nothing else, and AEAT echoes our own text. A
+    // leaf arriving as its own source text would be a character our record
+    // does not hold.
+    const xml = DUPLICATE_BUT_ACCEPTED.replace("Registro de facturacion duplicado.", `a${entity}b`);
+    const [linea] = parseRespuestaSuministro(xml).RespuestaLinea;
+    expect(linea?.DescripcionErrorRegistro).toBe(`a${character}b`);
+  });
+
+  it.each(["__proto__", "constructor", "prototype"])(
+    "refuses a response whose element is named %s",
+    (name) => {
+      // A response naming one of these elements fails the submit rather than
+      // arriving as an object with a key on a name JavaScript itself uses.
+      // client.ts is the only production caller of this function, and the
+      // throw reaches the same handler a transport failure does.
+      const xml = ACCEPTED.replace("<CSV>ABC123CSV</CSV>", `<${name}>x</${name}>`);
+      expect(() => parseRespuestaSuministro(xml)).toThrow(new RegExp(name));
+    },
+  );
+
   it("throws when the body has no RespuestaRegFactuSistemaFacturacion", () => {
     expect(() => parseRespuestaSuministro("<foo>bar</foo>")).toThrow(
       /RespuestaRegFactuSistemaFacturacion/,

@@ -79,6 +79,39 @@ controller who was supposed to be watching for it. The instances:
    and only then conclude something is missing. Here that was searching for the identifier
    (`_t=class extends x{constructor`) rather than the quoted value.
 
+7. **"The two versions parse this repository's XML identically."** Said after two probes that both
+   looked thorough. Moving `fast-xml-parser` from 4.5.7 to 5.11.1 was checked first by replaying 217
+   real AEAT documents — captured by wrapping `parser.parse` while the suites ran — through both
+   versions under the four options `packages/verifactu/src/xml/parse-common.ts` sets: byte-identical.
+   The captured corpus is only what our own fixtures happen to contain, so 37 further cases were hand
+   built from the changelog between the two versions, one per thing it said had changed. That set
+   reported a single difference, and the sentence above was written.
+
+   It was wrong. Version 5 had stopped decoding `&#38;`, `&#60;`, `&#62;`, `&#34;` and `&#39;` — the
+   numeric character references for the five characters XML reserves — so an AEAT literal written
+   that way arrived as its own source text on the path that matches an AEAT response to one of our
+   records. The Codex run-it seat found it by parsing a document, not by reading.
+
+   Why 37 hand-built cases missed it is the durable part. The set DID have a "numeric entity in
+   leaf" case. Its representative was `Caf&#233;` — and **neither** version decodes that one, so the
+   case printed the same thing on both sides whatever the answer was. That is `CLAUDE.md` section 1's
+   "a measurement taken where both answers look alike", arriving through a different door: not a
+   probe that cannot see, but a class whose chosen representative sits outside the part of the class
+   that moved. **Enumerate a class from what the FORMAT allows, not from the first value that comes
+   to mind.** XML has exactly five predefined character entities and they are handled by different
+   code from every other code point; a case list that does not contain all five is not a case list
+   for entities. The same question to ask anywhere: of the values this class contains, which ones
+   could the two sides possibly treat differently — and is my example one of them?
+
+   The tail of this one is worth as much as the head. The first fix was to set `htmlEntities: true`,
+   chosen because it made 4.5.7 and 5.11.1 agree on all 217 captured documents — the same corpus
+   that had already failed to distinguish them. It does not make the two versions agree. Under it
+   version 5 decodes `&nbsp;` to U+00A0 where version 4 gives U+0020, two characters that look
+   identical in every report and diff, and it decodes 35 named entities XML does not define at all.
+   The corpus said "equivalent" both times because the corpus cannot tell these versions apart on
+   entities, which was the original finding. **A probe that has already been shown blind to a class
+   is not evidence about a change in that class** — including a change you make to fix it.
+
 The cheapest habit, and it would have caught nearly all of these: before writing a sentence that
 names a part of the system you did not edit, open that part. If you cannot open it — because you do
 not know where it is — that is the finding, and the sentence should say "I believe" until you do.
