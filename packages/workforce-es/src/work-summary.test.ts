@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
@@ -12,7 +12,7 @@ import { seedConvenioConfig, seedEmployment, seedLocation, seedPerson } from "..
 
 const backend = new WorkforceBackend();
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   // Core first (tenants/locations FKs), then identity (persons), then workforce
   // (employments/time_entries, which FK persons) and workforce-es (convenio_config): the end-to-end

@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedLocation } from "../test/fixtures.js";
 
 let locationId: string;
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   // Core first — the tenants/locations foreign keys. Ordering across packages is the runtime's job
   // and nothing enforces it, so it is explicit here; this proves convenio_config applies core-first.

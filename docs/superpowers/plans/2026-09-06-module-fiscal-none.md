@@ -118,6 +118,14 @@ describe("@waitron/fiscal-none empty migration set", () => {
 
 Match `usePgliteDb`'s real option shape and the core-migrations import to what `workforce-es/src/migrations.test.ts` actually does — that is the canonical pattern and the source of truth for symbol names.
 
+> **Pointer added 2026-09-19.** Both files named above have since moved behind one seam, by the
+> SQLite slice-1 rollout (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P2
+> step 5): `packages/fiscal-none/src/migrations.test.ts` in #423, and
+> `packages/workforce-es/src/migrations.test.ts` in the pull request that adds this pointer. Each now
+> calls `useVenueDb` from `@waitron/db/testing/venue-db.js`, which forwards to `usePgliteDb`
+> unchanged. The step above is left as it was written, because it records what was true in September
+> 2026; read either file for the current call shape rather than the code block.
+
 - [ ] **Step 4: Run it.** `pnpm --filter @waitron/fiscal-none test migrations` (Testcontainers not needed; PGlite via `usePgliteDb`) — Expected: PASS (an empty drizzle set is a no-op — confirmed feasible: `resolveExistingMigrationsFolder` guards only on `meta/_journal.json` existence, and a `{ entries: [] }` journal drizzle reads as zero migrations). **If it FAILS** with a drizzle error about the journal, STOP and report: the fallback (relax `WaitronModule.migrations` to optional for a slot-only module — a contract change) needs owner sign-off before proceeding.
 
 - [ ] **Step 5: Run the package lint/typecheck.** `pnpm --filter @waitron/fiscal-none lint typecheck` — Expected: PASS. The coverage FLOOR is not asserted for a scaffold with one migration test; it is met once the backend + slot land (Tasks 6–7). `coverage-thresholds.test.ts` auto-discovers the package and applies the floor from the copied `vitest.config.ts` — no pin edit needed.

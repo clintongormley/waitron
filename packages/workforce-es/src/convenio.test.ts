@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import type { WorkTimeRuleset } from "@waitron/workforce";
@@ -9,7 +9,7 @@ import { resolveWorkTimeRuleset } from "./convenio.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedConvenioConfig, seedLocation } from "../test/fixtures.js";
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
