@@ -7454,6 +7454,8 @@ export default defineConfig({
 
 `mutate` names the two files explicitly rather than globbing `src/**/*.ts`, because `src/testing/` holds a test double whose mutants are meaningless — a surviving mutant in a fake proves only that the fake has behaviour nobody asserted, which is a property of fakes, not a defect. Thresholds are omitted, so this package publishes a score without breaking the build; it is not added to CI as a gate in this plan, because Task 11's PGlite-backed suite gives it `packages/db`'s cost profile rather than `packages/verifactu`'s.
 
+> **Superseded 2026-09-19** (branch `chore/mutation-break-thresholds`, owner decision — target is 90% mutation score everywhere): `packages/fiscal/stryker.config.json` now carries `"thresholds": { "high": 95, "low": 90, "break": 90 }`, matching `verifactu` and `shared`, so its mutation run **does** break below 90%. The "thresholds are omitted" wording above, the config block reproduced earlier in this section, and Step 9's expected-output line "no break threshold is configured for this package" all describe the original 2026-07-20 plan, not the current config. No CI job runs fiscal's mutation suite, so the gate takes effect only on a local `pnpm --filter @waitron/fiscal mutation`.
+
 - [ ] **Step 3: Write the failing clock tests**
 
 `packages/fiscal/src/clock.test.ts`. Every test controls time explicitly: a mutable counter for the monotonic source and an injected wall clock. **Never `await sleep()`** — a sleeping test is slow, flaky, and cannot express a one-hour wall-clock jump at all.
@@ -8156,7 +8158,7 @@ pnpm lint
 ./node_modules/.bin/prettier --check "packages/fiscal/**/*.{ts,json}"
 ```
 
-Expected: typecheck passes with no output; PASS, 33 tests; coverage at or above every threshold; a mutation score is reported (no break threshold is configured for this package); lint passes; format check passes.
+Expected: typecheck passes with no output; PASS, 33 tests; coverage at or above every threshold; a mutation score is reported (no break threshold is configured for this package); lint passes; format check passes. _(Superseded 2026-09-19: fiscal now has `break: 90` — see the note in the stryker-config section above.)_
 
 ```bash
 git add packages/fiscal pnpm-lock.yaml

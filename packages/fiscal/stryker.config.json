@@ -9,5 +9,6 @@
   "incrementalFile": "reports/stryker-incremental.json",
   "reporters": ["clear-text", "progress", "html"],
   "htmlReporter": { "fileName": "reports/mutation/index.html" },
-  "coverageAnalysis": "perTest"
+  "coverageAnalysis": "perTest",
+  "thresholds": { "high": 95, "low": 90, "break": 90 }
 }
