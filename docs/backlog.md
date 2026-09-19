@@ -3042,6 +3042,17 @@ and the rule). And a converted suite that reads its accessor too early still get
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
 
+**A fourth helper the rollout's own plan did not name, found while converting `packages/media`
+(#429).** Task P2 listed the doors to a test database as `usePgliteDb`, `useRealPostgres` and
+`describeEachTarget`, and told step 5 to leave the last two alone. `useTemplateDb` was in neither
+list, and a converter meets it nearly as often as the helper being replaced: on `61b5016e`, 179
+files call it against 202 still calling `usePgliteDb`. It hands back a real PostgreSQL database
+cloned from a pre-migrated template, so routing it through the PGlite seam would delete the
+real-PostgreSQL coverage it exists for — which is wider than grants and concurrency: of the four
+such suites in `packages/media`, one is accent collation and one is full-text stemming and ranking.
+Both of the plan's lists now name it (#429 corrected them in place). Nothing to do; it is here so
+the next converter meeting a real-PostgreSQL suite does not have to work it out again.
+
 **A third thing for that last pull request, found while converting `packages/bookings` (#428).**
 Converting a package does not remove the old helper's name from its PROSE, and the grep pair cannot
 see what is left: the still-to-convert command matches `usePgliteDb[(]`, with a parenthesis, so a
