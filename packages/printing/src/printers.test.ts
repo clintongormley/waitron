@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, isPgError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
@@ -13,7 +13,7 @@ import "./errors.js";
 // pre-check plus the DB's transport CHECK + partial UNIQUE — none of which is a CONCURRENCY or
 // deployment-role-privilege property. The CHECK/UNIQUE integrity is already proven on real Postgres in
 // packages/db's printing.test.ts, so the heavier target buys this suite nothing (CLAUDE.md §4).
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /**
  * A fresh tenant + venue per test, seeded on the superuser connection. Each test gets its OWN

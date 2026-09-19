@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { createPrinter, deactivatePrinter } from "./printers.js";
 import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
@@ -17,7 +17,7 @@ import "./errors.js";
 // NEVER-BLOCK invariant (CLAUDE.md §5 / design §5): enqueue opens NO socket. PGlite is in-process
 // WASM, so the DB access itself opens no socket either — which makes "Socket.prototype.connect was
 // never called" a clean structural proof rather than one muddied by driver traffic.
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(() => {
   vi.restoreAllMocks();
