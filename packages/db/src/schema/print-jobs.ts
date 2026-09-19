@@ -28,8 +28,9 @@ export const printJobs = table(
     id: id("id").primaryKey().defaultRandom(),
     locationId: id("location_id")
       .notNull()
-      /* v8 ignore next */
+      /* v8 ignore start */
       .references(() => locations.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     // The target printer. Bare column: the (printer_id) → printers
     // FK is hand-written in the --custom migration.
     printerId: id("printer_id").notNull(),

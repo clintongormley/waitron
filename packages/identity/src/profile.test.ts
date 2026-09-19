@@ -150,6 +150,42 @@ describe("your profile", () => {
     }
   });
 
+  it("refuses a profile read whose management session does not exist", async () => {
+    // Every profile call resolves the caller from the session row. A session id that matches
+    // nothing is not an empty profile — it is no caller at all, and the refusal is the same one a
+    // signed-out person gets, so the dashboard sends them to log in rather than showing a blank form.
+    await fixture();
+    await expect(
+      withTransaction(suite.db, (tx) => readOwnProfile(tx, { managementSessionId: randomUUID() })),
+    ).rejects.toMatchObject({ code: "management_session.required" });
+  });
+
+  it("names the field in a refusal for each name that was supplied but blank", async () => {
+    // Three separate guards, one per name, and each refusal must name ITS OWN field: the profile
+    // screen puts the message beside the input the person emptied, so a refusal that named the
+    // wrong field (or no field) would point at the wrong box.
+    const f = await fixture();
+    const details = {
+      ...f,
+      displayName: "Name",
+      firstNames: "Ada",
+      lastNames: "Lovelace",
+      telephone: null,
+      email: f.email,
+      locale: "en-GB",
+      currentPassword: "correct horse",
+    };
+    for (const [patch, field] of [
+      [{ displayName: "  " }, "displayName"],
+      [{ firstNames: "  " }, "firstNames"],
+      [{ lastNames: "  " }, "lastNames"],
+    ] as const) {
+      await expect(
+        withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...details, ...patch })),
+      ).rejects.toMatchObject({ code: "profile.invalid", params: { field } });
+    }
+  });
+
   it("accepts a valid telephone stored trimmed and an absent one, rejecting only a malformed value", async () => {
     const f = await fixture();
     const base = {
@@ -201,6 +237,11 @@ describe("your profile", () => {
       withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, { ...f, currentPassword: "wrong", password: "new password" }),
       ),
+    ).rejects.toMatchObject({ code: "password.invalid" });
+    // Omitting the current password entirely is refused the same way a wrong one is. A caller that
+    // simply leaves the field out must not reach the check with something that could match.
+    await expect(
+      withTransaction(suite.db, (tx) => changeOwnPassword(tx, { ...f, password: "new password" })),
     ).rejects.toMatchObject({ code: "password.invalid" });
     await expect(
       withTransaction(suite.db, (tx) =>

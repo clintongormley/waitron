@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // globalSetup boots ONE shared Postgres container and migrates the `core_payments` template every
     // real-PG suite clones (~26ms) instead of each file booting and migrating its own (~1.5s). See
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
@@ -29,12 +30,13 @@ export default defineConfig({
     // running the container tests back-to-back rather than in parallel (a few seconds on a suite
     // this size).
     //
-    // A consequence, not the reason: singleFork also means only ONE test file runs at a time, so the
-    // shared cluster's single 100-connection budget is a non-issue here and needs no `maxForks` cap
+    // A consequence, not the reason: one worker also means only ONE test file runs at a time, so the
+    // shared cluster's single 100-connection budget is a non-issue here and needs no `maxWorkers` cap
     // — unlike packages/db, which runs multi-fork and caps forks at 4 for exactly that budget.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,

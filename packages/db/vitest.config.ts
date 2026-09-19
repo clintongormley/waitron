@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the
     // source. Without this exclude Vitest discovers them as real test files, so
     // one interrupted mutation run makes every later test run fail confusingly.
@@ -23,7 +24,7 @@ export default defineConfig({
     // `runMigrationSets` path; `describeEachTarget` and the converted `useRealPostgres` suites clone
     // it (~26ms) instead of booting per file/per test. See `src/testing/global-setup.ts`.
     globalSetup: ["./src/testing/global-setup.ts"],
-    // BOUNDED multi-fork — a cap, not this package's previous UNBOUNDED default and not `singleFork`.
+    // BOUNDED multi-fork — a cap, not this package's previous UNBOUNDED default and not `maxWorkers: 1`.
     // The shared container is ONE cluster on the default 100-connection budget (postgres.ts starts it
     // with no override) where the old per-file containers each had their own 100. `createPostgresDb`
     // pools to 10 connections each, and three suites open many backends against one clone: the
@@ -34,13 +35,14 @@ export default defineConfig({
     // 4 keeps the worst case ~46-50 (~21 + ~11 + ~11 + a normal fork's ~3) with wide margin at the
     // default ceiling, so it needs no `max_connections` change to the shared `startPostgresContainer`
     // primitive — and 4 is ALSO CI's core count (`test-heavy` on a 2-4 vCPU runner), so the cap costs
-    // the CI gate essentially nothing while recovering most of the ~2.6x `singleFork` left on the table
+    // the CI gate essentially nothing while recovering most of the ~2.6x `maxWorkers: 1` left on the table
     // (measured 137s→50s at 4 forks / 42s at 18 forks locally). NOT the `@vitest/coverage-v8`
     // branch-merge reason apps/server/payments/scheduler carry: this shard runs alone and passed
     // coverage multi-fork at far more than 4 forks for its whole history.
-    poolOptions: { forks: { maxForks: 4 } },
+    maxWorkers: 4,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/testing/** used to be excluded wholesale as "harness code, not
       // product code" — but that hid the fact that describeEachTarget,

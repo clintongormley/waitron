@@ -60,6 +60,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // Scoped deliberately. Vitest's default include is `**/*.{test,spec}.?(c|m)[jt]s?(x)`, which
     // from the repo root sweeps up every package's suite and would run the whole workspace twice —
     // once here and once through `pnpm -r`. Two extensions rather than one glob with a brace:

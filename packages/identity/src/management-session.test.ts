@@ -117,4 +117,18 @@ describe("management session lifecycle", () => {
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
     expect(code).toBe("person.suspended");
   });
+
+  it("throws management_session.required when the person is put back to pending mid-session", async () => {
+    // `pending` is the third status — an account that exists but has not been taken up yet. It is
+    // neither active nor suspended, so it falls past both checks above, and the session must be
+    // refused rather than resolved: only an ACTIVE person holds a management session. Refused as
+    // "required" (sign in again), not "suspended", because nothing has been withdrawn from them.
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
+    await run((tx) =>
+      tx.execute(sql`update persons set status = 'pending' where id = ${personId}`),
+    );
+    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
+    expect(code).toBe("management_session.required");
+  });
 });

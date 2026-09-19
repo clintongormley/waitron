@@ -2975,9 +2975,11 @@ decides to rewrite these constraints should start here; `columns.ts` now names i
 
 It also paid for a trap in the acceptance method itself, now written into `CLAUDE.md` §4,
 `docs/developers/testing-guide.md` and the plan's step 4: a coverage run given its own
-`--coverage.reportsDirectory` under a non-dot name INSIDE the package leaves a directory the next
-package run measures as source, because the only entries in vitest's coverage excludes that would
-catch it are `coverage/**` and `**/[.]**`. The HTML reporter's own assets add 267 statements, and
+`--coverage.reportsDirectory` under a non-dot name INSIDE the package left a directory the next
+package run measured as source. That was measured on Vitest 3.2.7, where the only entries in vitest's
+default coverage excludes that would have caught it were `coverage/**` and `**/[.]**`; Vitest 4 has no
+default excludes at all, so a package's own `coverage.include` is what decides. The HTML reporter's
+own assets add 267 statements, and
 one leftover directory took this
 package from 99.5% to 59.91% against a 90 threshold — a number that looks like a coverage regression
 and is not. The fix is to put a second run's directory outside the package, which is what the rule's
@@ -4021,9 +4023,9 @@ package needing a fresh DB per test (a `describeEachTarget`-style seam) reuses i
 `harness.ts` `postgresTarget` is the reference (clone per test, track, drop all in `teardown()`);
 `nextCloneName()` mints the shared clone-name; `useTemplateDb` covers one-clone-per-file. Template-key
 naming is **`core_<schema>`** (self-describing about what it migrates, not the package name). Fork mode is
-a **per-package call**: (a) the `@vitest/coverage-v8` cross-fork branch-merge bug needs `singleFork` where
-a package runs under `pnpm -r` oversubscription; (b) a shared container is one cluster on a 100-connection
-budget, so a package whose suites open many backends caps at `maxForks: 4`. `packages/db` is the
+a **per-package call**: (a) the `@vitest/coverage-v8` cross-fork branch-merge bug needs `maxWorkers: 1`
+where a package runs under `pnpm -r` oversubscription; (b) a shared container is one cluster on a
+100-connection budget, so a package whose suites open many backends caps at `maxWorkers: 4`. `packages/db` is the
 reason-(b) reference, `packages/payments` the reason-(a) one — but both carry the HIGH coverage bar, so
 a new package that copies either config must set the `90/90/85/85` floor (CLAUDE.md §2), or
 `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job. Plan:

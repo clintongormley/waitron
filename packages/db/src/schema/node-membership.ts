@@ -25,6 +25,9 @@ import type { SignedMembershipDocument } from "@waitron/membership";
  * plain `drizzle-kit generate`. The accessors are exported from the package barrel (`../index.ts`,
  * via `../node-membership.ts`); that surface is unaffected.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const nodeMembership = table(
   "node_membership",
   {
@@ -36,5 +39,7 @@ export const nodeMembership = table(
     document: json<SignedMembershipDocument>("document").notNull(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
+  /* v8 ignore start */
   (t) => [check("node_membership_singleton_ck", sql`${t.id} = 1`)],
+  /* v8 ignore stop */
 );

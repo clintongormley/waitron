@@ -142,8 +142,9 @@ describe("reap-testcontainers", () => {
 
   describe("sweepOrphanedVitestWorkers", () => {
     it("SIGKILLs a vitest worker reparented to launchd (ppid 1) — the orphan signature", () => {
-      // An interrupted vitest run (an Esc, a killed parent) leaves its tinypool workers reparented to
-      // launchd, spinning at ~100% CPU. ppid 1 + the `node (vitest N)` title is that orphan. SIGKILL,
+      // An interrupted vitest run (an Esc, a killed parent) leaves its workers reparented to launchd,
+      // spinning at ~100% CPU. Under Vitest 3, ppid 1 + the `node (vitest N)` tinypool-worker title is
+      // that orphan; the Vitest 4 shape is a separate case further down. SIGKILL,
       // not SIGTERM: the real orphans were observed not to exit on SIGTERM. The leading whitespace mimics
       // `ps` right-padding the pid column, proving the parser absorbs it.
       const { psExec, kill, kills } = fakeProcs({ ps: "  89860     1 node (vitest 3)\n" });
@@ -168,12 +169,52 @@ describe("reap-testcontainers", () => {
     });
 
     it("spares an orphan that only MENTIONS vitest in an argument — matches the worker title, not argv", () => {
-      // `ps` shows a tinypool worker by its process TITLE, `node (vitest 3)`, never as a bare command
-      // line. A real command whose argv merely contains the substring "vitest" (a log path, a config
-      // file) must not be mistaken for one, even orphaned to launchd. A `\bvitest\b`-anywhere match
-      // killed exactly such a process — `node ... --log=/tmp/vitest-results.log` (run-it review).
+      // Neither recognised shape is a bare `vitest` word: Vitest 3's is the parenthesised process
+      // TITLE, Vitest 4's is vitest's own entrypoint path (the case below). A real command whose argv
+      // merely contains the substring "vitest" (a log path, a config file) must not be mistaken for
+      // either, even orphaned to launchd. A `\bvitest\b`-anywhere match killed exactly such a
+      // process — `node ... --log=/tmp/vitest-results.log` (run-it review).
       const { psExec, kill, kills } = fakeProcs({
         ps: "77777 1 node /tmp/report.mjs --log=/tmp/vitest-results.log\n",
+      });
+      expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
+        psAvailable: true,
+        workersKilled: 0,
+      });
+      expect(kills).toEqual([]);
+    });
+
+    it("SIGKILLs an orphaned Vitest 4 worker, which carries no process title at all", () => {
+      // Vitest 4 sets no `process.title` and spawns its own workers, so the title the Vitest 3 rows
+      // above match never appears. These two rows are real `ps -axo pid=,ppid=,command=` output from a
+      // 4.1.11 run of packages/identity on 2026-09-19, with two edits: the parent is rewritten to 1 to
+      // make them the orphans this sweep exists for, and the long pnpm store hash is shortened to
+      // `hash` so the row fits. The orchestrator runs `vitest/vitest.mjs`, the worker runs
+      // `vitest/dist/workers/forks.js`.
+      const { psExec, kill, kills } = fakeProcs({
+        ps: [
+          "89211     1 node /repo/packages/identity/node_modules/.bin/../vitest/vitest.mjs run",
+          "89293     1 /opt/homebrew/Cellar/node/26.7.0/bin/node --experimental-import-meta-resolve --require /repo/node_modules/.pnpm/vitest@4.1.11_hash/node_modules/vitest/suppress-warnings.cjs /repo/node_modules/.pnpm/vitest@4.1.11_hash/node_modules/vitest/dist/workers/forks.js",
+        ].join("\n"),
+      });
+      expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
+        psAvailable: true,
+        workersKilled: 2,
+      });
+      expect(kills).toEqual([
+        { pid: 89211, signal: "SIGKILL" },
+        { pid: 89293, signal: "SIGKILL" },
+      ]);
+    });
+
+    it("spares a process that merely reads a file inside vitest's dist — the Vitest 4 control", () => {
+      // The two Vitest 4 patterns ask for vitest's WORKER directory or the orchestrator entrypoint,
+      // not for "a path under node_modules/vitest appears somewhere". A tool pointed at another file
+      // in that same package must survive, orphaned or not. What this case does NOT establish, and
+      // the sweep does not promise: a row whose argv names a real worker file is killed, because the
+      // patterns match anywhere in the row rather than at its end.
+      const { psExec, kill, kills } = fakeProcs({
+        ps: "77778 1 node /tmp/inspect.mjs --entry /repo/node_modules/vitest/dist/index.js\n",
       });
       expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
         psAvailable: true,

@@ -3,8 +3,9 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // Keep at most four fork workers alive; scripts/fiscal-test-budget.test.ts pins it.
-    poolOptions: { forks: { maxForks: 4 } },
+    maxWorkers: 4,
     // Shared globalSetup requires Docker for the real-Postgres privilege and concurrency suites.
     // It runs once before the workers, including for PGlite-only selections.
     globalSetup: ["./src/testing/global-setup.ts"],
@@ -20,6 +21,7 @@ export default defineConfig({
     hookTimeout: 180_000,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,

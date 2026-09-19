@@ -153,3 +153,44 @@ it("does not signal a reset after shutdown while LISTEN is still completing", as
   await closed;
   expect(onReset).toHaveBeenCalledOnce();
 });
+
+// A connection that refuses to close is the one failure the listener must absorb rather than pass
+// on: `end()` is called on a connection the listener is already finished with, so a rejection there
+// says nothing about whether live updates can carry on. Each of the three call sites is reached in
+// a different state, so each gets its own case.
+
+it("keeps reconnecting when the connection it is replacing refuses to close", async () => {
+  vi.useFakeTimers();
+  const onReset = vi.fn();
+  const onError = vi.fn();
+  const listener = await startChangeListener("test", { onChange: () => {}, onReset, onError });
+  const first = state.clients[0]!;
+  first.end.mockRejectedValue(new Error("socket already gone"));
+
+  first.emit("end");
+  await vi.advanceTimersByTimeAsync(1000);
+
+  expect(state.clients).toHaveLength(2);
+  expect(onReset).toHaveBeenCalledTimes(2);
+  expect(onError).not.toHaveBeenCalled();
+  await listener.close();
+});
+
+it("reports the connect failure, not the close failure, when a failed connection also refuses to close", async () => {
+  state.connects.push(async () => {
+    state.clients.at(-1)!.end.mockRejectedValue(new Error("socket already gone"));
+    throw new Error("offline");
+  });
+
+  await expect(
+    startChangeListener("test", { onChange: () => {}, onReset: () => {} }),
+  ).rejects.toThrow("offline");
+  expect(state.clients[0]!.end).toHaveBeenCalledOnce();
+});
+
+it("closes cleanly when the live connection refuses to close", async () => {
+  const listener = await startChangeListener("test", { onChange: () => {}, onReset: () => {} });
+  state.clients[0]!.end.mockRejectedValue(new Error("socket already gone"));
+
+  await expect(listener.close()).resolves.toBeUndefined();
+});

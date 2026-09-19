@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { encryptTotpSecret, hashPassword, hashPin } from "@waitron/identity";
@@ -8,6 +8,7 @@ import { DEFAULT_RECEIPT } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
+import type { exchangeGoogleCode } from "./google-oidc.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
@@ -114,7 +115,7 @@ function mountApp(
   sendAccountEmail?: AccountEmailSender,
   passwordThrottle?: PasswordThrottle,
   google?: {
-    exchange: ReturnType<typeof vi.fn>;
+    exchange: Mock<typeof exchangeGoogleCode>;
   },
 ): Hono {
   const app = new Hono();
@@ -236,7 +237,9 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
   it("links and then signs in with a configured Google account", async () => {
     await setupTenant();
-    const exchange = vi.fn().mockResolvedValue({ subject: "google-subject-1" });
+    const exchange = vi
+      .fn<typeof exchangeGoogleCode>()
+      .mockResolvedValue({ subject: "google-subject-1" });
     const app = mountApp(undefined, undefined, {
       exchange,
     });
@@ -279,7 +282,7 @@ describe("Management API staff + session routes over real Postgres", () => {
   it("refuses a Google callback that did not start in the same browser", async () => {
     await setupTenant();
     const app = mountApp(undefined, undefined, {
-      exchange: vi.fn().mockResolvedValue({ subject: "google-subject" }),
+      exchange: vi.fn<typeof exchangeGoogleCode>().mockResolvedValue({ subject: "google-subject" }),
     });
     const started = await app.request("/management-api/google/login", { method: "POST" });
     const url = new URL(((await started.json()) as { authorizationUrl: string }).authorizationUrl);

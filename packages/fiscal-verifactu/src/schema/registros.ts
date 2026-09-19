@@ -7,6 +7,9 @@ import { registroSif } from "./sif.js";
  * Immutable fiscal records keep query keys in columns and structured, non-hashed payloads in jsonb.
  * Huella inputs retain their original text representation; JSON key ordering must not affect a hash.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as packages/db/src/schema/sales.ts.
 export const registrosFacturacion = table(
   "registros_facturacion",
   {
@@ -17,21 +20,29 @@ export const registrosFacturacion = table(
     // chaining or contention after the rekey.
     tillId: id("till_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => tills.id),
+    /* v8 ignore stop */
     // The node that owns the chain this record belongs to — the CHAIN KEY (node-id rekey,
     // 2026-08-03). NOT NULL, stamped by the chain-append. Plain one-argument FK.
     nodeId: id("node_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => nodes.id),
+    /* v8 ignore stop */
     // Which SIF identity generated this record. A new NúmeroInstalación is a new SIF, therefore a
     // new chain (findings §1), and this column is what makes "which chain" a fact on the row
     // rather than an inference from dates.
     sifId: id("sif_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => registroSif.id),
+    /* v8 ignore stop */
     saleId: id("sale_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => sales.id),
+    /* v8 ignore stop */
     // OUR ordering aid for the outbox. NOT AEAT's — AEAT has no sequence number. It is never a
     // substitute for the four-part predecessor pointer below, and it is NEVER derived from or
     // validated against the invoice counter (spec §3, findings §1): chain position is
@@ -124,10 +135,10 @@ export const registrosFacturacion = table(
   // runs inside this package's own test process. It runs for real in exactly one place today:
   // `drizzle-kit generate`, in its own separate CLI process, the same reason
   // packages/db/src/schema/sales.ts's two-argument `.references(..., { onDelete })` thunks
-  // carry `/* v8 ignore next */`. The ignore markers bracket the WHOLE arrow function, not just
-  // its returned array's elements: v8 also tracks "was this function ever called", and a range
-  // that opened only after the arrow function's own `(t) => [` left the function's closing
-  // bracket itself separately reported as an uncovered line.
+  // carry `/* v8 ignore start */` … `/* v8 ignore stop */`. The markers bracket the WHOLE arrow
+  // function, not just its returned array's elements: v8 also tracks "was this function ever
+  // called", and a range that opened only after the arrow function's own `(t) => [` left the
+  // function's closing bracket itself separately reported as an uncovered line.
   /* v8 ignore start */
   (t) => [
     // THE non-negotiable backstop against two writers claiming one chain position — a real risk

@@ -15,8 +15,9 @@ export const printAgents = table(
     // locations.id FK with onDelete restrict, the `shifts`/`devices` shape (§2a).
     locationId: id("location_id")
       .notNull()
-      /* v8 ignore next */
+      /* v8 ignore start */
       .references(() => locations.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     // The human label ("Cocina USB"), shown in the Impresoras management surface.
     name: label("name").notNull(),
     // Reported by the agent after authentication; independent of its editable display name.

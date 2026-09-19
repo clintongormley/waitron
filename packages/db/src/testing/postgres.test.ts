@@ -73,6 +73,23 @@ describe("startMigratedPostgres when migration fails", () => {
     ).rejects.toBe(boom);
     expect(stop).toHaveBeenCalledTimes(1);
   });
+
+  it("still propagates the migration error when the container also refuses to stop", async () => {
+    // Best-effort cleanup: a wedged daemon makes stop() reject, and that rejection must not become
+    // the error the suite reports in place of the migration failure that actually broke it.
+    const stop = vi.fn(async () => {
+      throw new Error("Cannot connect to the Docker daemon");
+    });
+    const boom = new Error("relation already exists");
+    await expect(
+      startMigratedPostgres({
+        dockerRequired: "unused here",
+        migrate: () => Promise.reject(boom),
+        start: async () => fakeContainer(stop),
+      }),
+    ).rejects.toBe(boom);
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("startMigratedPostgres on the happy path", () => {

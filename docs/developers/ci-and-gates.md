@@ -144,6 +144,17 @@ tick (four workers plus the main process on four vCPUs — the rebalance-shard-3
 above) or patching vitest. Both are changes to CI machinery, and both still want a measurement of the
 stall itself, which nobody has.
 
+**2026-09-19 — the timeout is gone from the runner.** The Vitest 4 upgrade removes this failure's
+mechanism, though not the habit the entry asks for. Read out of the two installed copies, side by
+side: in 3.2.7 the worker builds its channel in `dist/chunks/rpc.-pEldfrD.js` with no `timeout`, so
+birpc's `DEFAULT_TIMEOUT = 6e4` applies and an unanswered call reaches the `onTimeoutError` handler
+that throws the message above; in 4.1.11 the same function in `dist/chunks/rpc.MzXet3jl.js` passes
+`timeout: -1`, which switches the timer off. One thing that did NOT change: the spread of the
+caller's options comes last in both, so a pool supplying its own `timeout` would still win — the
+built-in fork pool supplies none. Nobody ever established why that one call went unanswered, so
+this removes the way the symptom reached the exit code, not the underlying stall. Keep reading the
+counts before the diff.
+
 ### CI does not run every check on every push
 
 The `changes` job skips the expensive `code`-gated jobs when every changed path is inert —

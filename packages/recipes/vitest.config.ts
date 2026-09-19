@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // globalSetup boots one shared Postgres container and makes the migrated `core` template
     // available. The retained suites use PGlite; globalSetup still precedes every worker, so a
@@ -19,6 +20,7 @@ export default defineConfig({
     // shared-cluster connection cap. Coverage merges across the default fork workers.
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel with no logic of its own; src/testing/** and test/**
       // hold the DB harness/fixtures. All three are test infrastructure, not measured product code, so

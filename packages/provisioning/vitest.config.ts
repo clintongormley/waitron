@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // Headroom for the suites that boot a database — the ones that reach a real PostgreSQL through
     // `startBarePostgres`, and the two `useVenueDb` callers, which boot PGlite. `hookTimeout` below
     // bounds a hook that passes no timeout of its OWN; a hook given one overrides this config (the
@@ -15,9 +16,10 @@ export default defineConfig({
     // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers, and this
     // package is small enough that a handful of mis-merged branches sinks the ratio. Same finding
     // as packages/payments and packages/scheduler.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // `src/bin.ts` is the process entry point: every decision it could get wrong lives in
       // `cli.ts`, which is injected and fully tested, and what remains — a tty, a readline, a

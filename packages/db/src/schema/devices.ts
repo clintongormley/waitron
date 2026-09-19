@@ -31,8 +31,9 @@ export const devices = table("devices", {
   // kitchen_stations uses. The station binding narrows it further to one display.
   locationId: id("location_id")
     .notNull()
-    /* v8 ignore next */
+    /* v8 ignore start */
     .references(() => locations.id, { onDelete: "restrict" }),
+  /* v8 ignore stop */
   // The station binding, populated only for a kds-form-factor device. Bare column: the
   // (station_id) → kitchen_stations(id) FK is hand-written
   // in the --custom migration. NULLABLE — a non-kds device carries no station (MATCH SIMPLE skips

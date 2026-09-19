@@ -186,11 +186,16 @@ export const locations = table(
  * live SIF identity per regime, so that join is 1:1; a till reaches its SIF
  * through the node that serves it.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const tills = table("tills", {
   id: id("id").primaryKey().defaultRandom(),
   locationId: id("location_id")
     .notNull()
+    /* v8 ignore start */
     .references(() => locations.id),
+  /* v8 ignore stop */
   name: label("name").notNull(),
   // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
   // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).

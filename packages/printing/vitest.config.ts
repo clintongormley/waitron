@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // globalSetup boots ONE shared Postgres container and migrates the `core` template every real-PG
     // suite clones (~26ms) instead of each file booting and migrating its own (~1.5s). See
     // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run fails the
@@ -25,9 +26,10 @@ export default defineConfig({
     // as uncovered after merging profiles), and — because only ONE test file runs at a time — the
     // shared cluster's single connection budget is a non-issue, so the concurrency suite's extra
     // backends never race another file's.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel (excluded like packages/layouts/purchasing exclude
       // theirs); src/testing/** is the globalSetup harness. errors.ts IS measured — it erases to a

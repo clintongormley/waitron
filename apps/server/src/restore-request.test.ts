@@ -85,7 +85,9 @@ describe("staged restore requests", () => {
     ).toBe(true);
     expect(restore).toHaveBeenCalledWith(
       expect.objectContaining({
-        artifact: Uint8Array.from([4, 5]),
+        // A Buffer, not a bare Uint8Array: `runStagedRestore` hands `restore` exactly what
+        // `readFile` returned, and deep equality here distinguishes the subclass.
+        artifact: Buffer.from([4, 5]),
         recoveryKey: "recovery",
         environment: "preproduction",
         databaseUrl: "postgres://migrator",

@@ -48,14 +48,16 @@ export function tablesCreatedBy(files: readonly string[]): Set<string> {
     const sql = stripSql(raw);
     const statements: Statement[] = [];
     for (const m of sql.matchAll(CREATE_TABLE)) {
-      /* v8 ignore next -- a matched group 1 is always defined; the guard is for the type, not a case */
+      /* v8 ignore start -- a matched group 1 is always defined; the guard is for the type, not a case */
       if (m[1] !== undefined)
         statements.push({ index: m.index, table: m[1].toLowerCase(), drops: false });
+      /* v8 ignore stop */
     }
     for (const m of sql.matchAll(DROP_TABLE)) {
-      /* v8 ignore next */
+      /* v8 ignore start */
       if (m[1] !== undefined)
         statements.push({ index: m.index, table: m[1].toLowerCase(), drops: true });
+      /* v8 ignore stop */
     }
     statements.sort((a, b) => a.index - b.index);
     for (const s of statements) {

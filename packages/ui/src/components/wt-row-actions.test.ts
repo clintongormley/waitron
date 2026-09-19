@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import { afterEach, describe, expect, it, test, vi } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
 import { WtDataTable } from "./wt-data-table.js";

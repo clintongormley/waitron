@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the source. Without
     // this exclude Vitest discovers them as real test files, so one interrupted mutation run
     // makes every later test run fail confusingly.
@@ -26,11 +27,13 @@ export default defineConfig({
     // fork-merge under-count the `packages/payments` config documents). Pinning to a single fork
     // removes that cross-fork merge entirely, so the gate is deterministic under `-r` load too. The
     // suite is tiny (<300ms), so one fork costs nothing.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `exclude` replaces rather than merges, so the defaults must be spread back in.
+      // `exclude` replaces rather than merges, but Vitest 4's own default list is empty, so the
+      // spread adds nothing today; keep it so a later non-empty default is not dropped.
       // src/index.ts is a pure re-export barrel with no logic of its own (see its own header
       // comment) and is excluded for the same reason packages/db excludes drizzle.config.ts and
       // packages/ui excludes its test-helpers: nothing here is worth gating on. It is also,

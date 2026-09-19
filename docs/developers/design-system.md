@@ -857,9 +857,9 @@ Custom events are named `wt-*` and carry data in `detail`.
 
 ## Testing
 
-Component tests run in real Chromium via `@vitest/browser` + Playwright, not jsdom — the things
-being asserted (computed styles, `adoptedStyleSheets`, shadow-DOM event composition) don't exist
-in a DOM simulator. Shared test helpers live in `packages/ui/src/test-helpers.ts`:
+Component tests run in real Chromium via Vitest's browser mode and its Playwright provider
+(`@vitest/browser-playwright`), not jsdom — the things being asserted (computed styles,
+`adoptedStyleSheets`, shadow-DOM event composition) don't exist in a DOM simulator. Shared test helpers live in `packages/ui/src/test-helpers.ts`:
 
 ```ts
 import { afterEach, expect, test } from "vitest";

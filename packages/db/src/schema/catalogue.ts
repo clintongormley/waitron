@@ -33,15 +33,22 @@ export const categories = table("categories", {
 
 /** A priced item. Catalogue-owned `product_units` assigns its unit without a reverse migration edge.
  * Deactivate via `active`, never delete (may sit behind historical sale-line snapshots). */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const products = table(
   "products",
   {
     id: id("id").primaryKey().defaultRandom(),
     catalogueId: id("catalogue_id")
       .notNull()
+      /* v8 ignore start */
       .references(() => catalogues.id),
+    /* v8 ignore stop */
     // The primary category; catalogue replaces it together with the complete membership set.
+    /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),
+    /* v8 ignore stop */
     stationId: id("station_id"),
     courseId: id("course_id"),
     // Staff-facing product name — plain text, shown on the dashboard, till buttons/basket and reports.

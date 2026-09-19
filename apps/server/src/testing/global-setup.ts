@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
@@ -35,7 +35,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
  * PGlite is not a fallback: it runs every connection as a superuser and cannot show the
  * non-superuser deployment role these suites exist to exercise.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "apps/server's real-Postgres suites require a running Docker daemon. They cannot be " +

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-combobox.js";
 import type { WtCombobox } from "./wt-combobox.js";

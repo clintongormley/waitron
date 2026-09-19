@@ -2,9 +2,9 @@ import type { BrowserCommand } from "vitest/node";
 
 /**
  * The slice of Playwright's `Page` that `parkPointer` touches. Only the playwright provider's browser
- * command context carries a `page` (see `provider.getCommandsContext` in @vitest/browser), so it is
- * cast narrowly at the boundary rather than typed onto `BrowserCommandContext` itself — the same
- * boundary cast every command in these configs uses for `page`.
+ * command context carries a `page` (see `provider.getCommandsContext` in @vitest/browser-playwright),
+ * so it is cast narrowly at the boundary rather than typed onto `BrowserCommandContext` itself — the
+ * same boundary cast every command in these configs uses for `page`.
  */
 interface PlaywrightMousePage {
   mouse: { move(x: number, y: number): Promise<void> };

@@ -1,5 +1,5 @@
 import { expect, test, afterEach, vi } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-help-tooltip.js";
 import "./wt-dialog.js";

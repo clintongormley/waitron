@@ -1,5 +1,5 @@
 import { expect, test, afterEach } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-button.js";
 

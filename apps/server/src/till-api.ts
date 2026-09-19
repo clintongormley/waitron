@@ -1216,10 +1216,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const reader = await resolvePayReader(deps, device?.deviceId, body.readerId);
       // The pool is DB-free at construction and always supplied by a live boot; a reader that resolved
       // without one is a boot misconfiguration, not a client fault.
-      /* v8 ignore next 3 */
+      /* v8 ignore start */
       if (deps.pool === undefined) {
         throw new Error("/api/pay: card provider pool not configured");
       }
+      /* v8 ignore stop */
       // The pool builds (or returns cached) the reader's provider. The provider carries NO reader:
       // this sale's chosen reader travels as a per-collect input (`readerRef` below), so one cached
       // provider serves every reader on the same vendor. A genuine decline / network stall is returned
@@ -1683,8 +1684,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // The till's own location is selected by id (like the receipt-mode read in
         // `receipt-print.ts`); if it somehow returns nothing, fall back to the SECURE 'gated'
         // default so a missing row can never leave the gate open.
-        /* v8 ignore next -- unreachable: the provisioned till's own location row exists */
+        /* v8 ignore start -- unreachable: the provisioned till's own location row exists */
         const policy = loc?.policy ?? "gated";
+        /* v8 ignore stop */
 
         // `authorize()` returns `{ authorizedBy, viaOverride }` (plus `permission`), the same names the
         // `'open'` branch supplies directly — so a ternary destructure covers both policies.

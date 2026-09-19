@@ -414,7 +414,8 @@ container or browser test** — most of these rules exist because a test passed 
   leaks containers; `pnpm reap` removes them by label and age. Never a blanket `docker volume prune`, and
   `docker volume inspect` before any manual `rm`.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
-  `pnpm reap` sweeps these, scoped by ppid 1 AND the process TITLE — not a bare `vitest` match.
+  `pnpm reap` sweeps these, scoped by ppid 1 AND one of the two shapes vitest leaves in `ps` — a
+  Vitest 3 process TITLE or a Vitest 4 entrypoint PATH — never a bare `vitest` match.
 - **Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.** A
   second bridge with a different MTU stalled larger queries while small ones passed. Use
   `networkedPostgresContainer`.
@@ -432,9 +433,26 @@ container or browser test** — most of these rules exist because a test passed 
   never a retry as proof of repair.
 - **A recurrent real-PG stall needs a retained log and a live database snapshot.** Locate the stalled
   operation before assigning its cause to resource contention.
-- **Vitest 3's fork limit belongs on the outer config, even with projects.** Moving `maxForks` inside
-  a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which
-  pins only fiscal-verifactu's and media's configs.
+- **On Vitest 4 a project's own `maxWorkers` wins, and the outer config's is only the fallback.**
+  Measured on 4.1.11 over four test files: an outer limit of 4 with a project limit of 1 ran one file
+  at a time, and the same fixture without the project limit ran four. Configs here depend on that —
+  `packages/bookings`, `packages/payments-stripe`, `packages/payments-sumup` and
+  `packages/venue-service` each set `maxWorkers: 1` inside a project. **A cap that must apply to
+  every project still belongs on the outer config**: a project that sets none of its own falls back
+  to the outer one, and with none there to `availableParallelism() - 1` on a one-shot run, or half
+  the CPU count rounded down under `--watch` — two different numbers, never below 1. The rule this replaces came
+  from Vitest 3, where a limit moved inside a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which pins the arrangement
+  fiscal-verifactu and media chose and nothing about how Vitest resolves the limit.
+- **A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1,
+  never 0.** Vitest 4 lifts a `groupOrder: 0` project that runs one isolated worker out of its group
+  and appends it after every other group, so a database project numbered 0 runs AFTER the browser
+  project it was ordered before. Two of the lift's three conditions are DEFAULTS — `groupOrder` is 0
+  when unset and isolation is on — so stating no `groupOrder` at all does not avoid it. The condition
+  a package can actually be outside is the third: `packages/media` and `apps/dashboard` split into
+  projects too, and are unaffected because neither pins a project-level `maxWorkers: 1`.
+  Measured on `packages/bookings` against the same run on Vitest 3. Guard:
+  `scripts/bookings-test-budget.test.ts` — which pins bookings alone, not the three other packages
+  with the same shape.
 - **A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs**, and that timeout
   defaults to 5s. It does not shorten a `spawnSync` timeout or interrupt a blocking child — the kill
   still fires — it fails the test for its duration alone. Set the bound above the longest a healthy
@@ -514,10 +532,27 @@ container or browser test** — most of these rules exist because a test passed 
 - **`errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`.** Thirteen
   hand-copied per-package versions were deleted; six of them passed with `errors.ts` fully
   unreachable. It reads TEXT, so a `from "./errors.js"` inside a comment fakes an edge.
-- **Vitest's default coverage excludes swallow every dot-prefixed path** (`**/[.]**`), and
-  `include`/`exclude` replace rather than merge. A config measuring nothing still exits 0 with the
-  thresholds intact. Whenever `include` points inside a dot-directory, read the per-file table, not
-  the exit code.
+- **Vitest 4 ships no default coverage excludes at all.** `coverageConfigDefaults.exclude` is `[]`
+  in 4.1.11 and there is no `all` key, where 3.2.7 carried a 17-entry list (`**/[.]**` among them)
+  and `all: true`. What scopes a package's report now is its own `coverage.include`.
+  `include`/`exclude` still replace rather than merge, and a config measuring nothing still exits 0
+  with the thresholds intact, so read the per-file table rather than the exit code.
+- **A package config must name its own source tree in `coverage.include`, or an untested file stops
+  being counted.** Without one, Vitest 4 counts only the files a test loaded, so a file nobody
+  imports is invisible rather than a zero in the denominator: it can never pull the ratio down, and
+  moving code into one RAISES the percentage. Guard: `scripts/coverage-thresholds.test.ts`, which reads the configs as
+  TEXT and looks for one exact string, so a config that spells the same include differently fails
+  it. **That include is not anchored to the package**: Vitest 4 matches it against the whole
+  absolute path and calls a file external only when it does not `startsWith` the package directory —
+  no trailing slash — so a SIBLING package whose directory name extends this one's lands in this
+  package's report. Cost: `packages/sync` read 81.57% statements on files belonging to
+  `packages/sync-enrolment`. See [testing-guide.md](docs/developers/testing-guide.md).
+- **Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
+  Measured both ways on `packages/sync-enrolment/src/migration-tables.ts` under
+  `@vitest/coverage-v8@4.1.11`: with the pair the package reads 2 of 2 branches and passes; with the
+  same two guards marked `next` it reads 4 of 6 and fails its 85% branch bar. Whether `next` can
+  ever work is not established — the provider's `ast-v8-to-istanbul@1.0.6` does parse `next` hints —
+  but it did not here, and it fails silently, with no message naming the marker. Nothing guards it.
 - **A page asserted as a STRING, or reached only through its API, has nothing checking that it
   renders.** An invalid CSS value, an unclosed tag, an unreadable dark-theme colour and a screen that
   throws on open all pass every such assertion. Cost: a corrupted colour value on `/setup/trust` that

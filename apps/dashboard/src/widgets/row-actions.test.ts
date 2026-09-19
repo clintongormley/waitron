@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";

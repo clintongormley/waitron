@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // globalSetup boots ONE shared Postgres container and migrates the `core_identity` template each
     // real-PG suite (canvas-store.pg.test.ts, device-profile-store.pg.test.ts, theme-store.test.ts,
@@ -19,17 +20,18 @@ export default defineConfig({
     // under 30s.
     testTimeout: 30_000,
     hookTimeout: 60_000,
-    // NO poolOptions: this package stays MULTI-FORK, deliberately. It is not held to `singleFork` for
+    // NO `maxWorkers`: this package stays MULTI-FORK, deliberately. It is not held to `maxWorkers: 1` for
     // the @vitest/coverage-v8 branch-merge artifact (unlike scheduler/credentials/workforce-es):
-    // layouts had no `poolOptions` before this branch, so it has been multi-fork on `main` all along
+    // layouts had no `maxWorkers` before this branch, so it has been multi-fork on `main` all along
     // and passes the unfiltered `main` merge's `pnpm -r` coverage that way — this batch changes where
     // the DB comes from, not how coverage merges across forks, so it neither introduces nor worsens the
     // artifact (an isolated `test:coverage` here proves nothing about the concurrent case, per
-    // CLAUDE.md §2; the pre-existing main history is the evidence). It needs no `maxForks` connection
+    // CLAUDE.md §2; the pre-existing main history is the evidence). It needs no `maxWorkers` connection
     // cap either: the few real-PG files here each open a small number of connections to their own
     // cloned template, far under the shared cluster's ~100-connection budget.
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel with no logic of its own, excluded for the same
       // reason packages/catalogue's own vitest.config.ts excludes its identical barrel. src/testing/**

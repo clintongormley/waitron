@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // Task 11 adds a PGlite-backed fake, and PGlite boots a WASM Postgres that routinely takes
     // longer than Vitest's 5s default on a cold CI runner. Raised here rather than in Task 11
@@ -10,6 +11,7 @@ export default defineConfig({
     testTimeout: 30_000,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [...coverageConfigDefaults.exclude],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },

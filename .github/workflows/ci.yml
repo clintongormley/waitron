@@ -548,8 +548,11 @@ jobs:
   # `test:coverage` plus `--reporter=blob` and the four thresholds overridden to 0 — and emit a `blob`
   # report; `test-heavy-merge` below downloads all three blobs, merges them with
   # `vitest --merge-reports`, and applies the REAL thresholds to the merged total. Verified on
-  # vitest 3.2.7 (2026-09-04), each run rather than reasoned about: the merge EXITS NON-ZERO when the
-  # merged coverage is below threshold (functions 50% → exit 1) — the property the whole gate rests on;
+  # vitest 3.2.7 (2026-09-04) and again on vitest 4.1.11 (2026-09-19), each run rather than reasoned
+  # about: the merge EXITS NON-ZERO when the merged coverage is below threshold (functions 50% → exit
+  # 1 on 3.2.7; on 4.1.11, packages/printing over two shards reads 66.55% and 68.60% statements alone,
+  # 98.63% merged and exit 0, and exit 1 with the same blobs merged against a 100% bar) — the property
+  # the whole gate rests on;
   # a blob captures coverage ONLY when `--coverage` is on (a blob written without it merges to an empty
   # map that passes thresholds vacuously GREEN, so the missing flag is caught by ci-workflow.test.mjs,
   # not at runtime); the shard's own threshold check fires on its partial coverage unless overridden;
@@ -557,7 +560,7 @@ jobs:
   # no Docker.
   #
   # Each shard boots its OWN shared container (globalSetup runs once per process), so the
-  # install+container overhead is re-paid per shard and the speed-up is sub-linear. maxForks:4 and the
+  # install+container overhead is re-paid per shard and the speed-up is sub-linear. maxWorkers: 4 and the
   # REQUIRE_DOCKER / TESTCONTAINERS_RYUK_DISABLED pair are exactly as the un-sharded job had them; the
   # `heavy` gate is unchanged and now feeds three jobs (these shards plus the merge) rather than one.
   #
@@ -676,8 +679,8 @@ jobs:
   # split out of test-light on a measurement (341.7s of test-light's 358s wall-clock on run
   # 32417600304); sharding it is the next step down. See SERVER_PACKAGE in scripts/changed-scope.mjs.
   #
-  # The dedicated runners also let apps/server run MULTI-FORK (apps/server/vitest.config.ts's
-  # poolOptions): the @vitest/coverage-v8 branch under-merge that held it to singleFork is a `pnpm -r`
+  # The dedicated runners also let apps/server run in SEVERAL workers (apps/server/vitest.config.ts's
+  # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`
   # contention artifact a runner it has to itself does not have — and each shard has a runner to itself.
   #
   # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy: apps/server's global-setup
@@ -768,12 +771,12 @@ jobs:
       - name: Merge the server coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/server" test:merge
 
-  # packages/fiscal-verifactu alone. It is a maxForks:4 suite — thousands of real AEAT fixtures across
+  # packages/fiscal-verifactu alone. It is a maxWorkers: 4 suite — thousands of real AEAT fixtures across
   # 33 files — so, like the other two (packages/db → test-heavy, apps/server → test-server), it wants
-  # all four of a runner's cores and belongs on its own; it was the last maxForks:4 package still
+  # all four of a runner's cores and belongs on its own; it was the last maxWorkers: 4 package still
   # sharing, in the light shards, where it oversubscribed its bin-mates. Measured on the two-shard run
   # 32425078097 it was 219s inside test-light-a's 270s while the lighter test-light-b packed ten
-  # packages into 127s. A runner of its own lets its maxForks:4 run uncontended AND stops it inflating
+  # packages into 127s. A runner of its own lets its maxWorkers: 4 run uncontended AND stops it inflating
   # its bin-mates. Unlike apps/server this needed no config change: fiscal-verifactu already
   # multi-forks (packages/fiscal-verifactu/vitest.config.ts). See FISCAL_VERIFACTU_PACKAGE in
   # scripts/changed-scope.mjs.
@@ -898,7 +901,7 @@ jobs:
           pnpm --filter "@waitron/ui" test:coverage
 
   # apps/till alone: the Counter POS browser app, the workspace's SECOND Chromium consumer after
-  # packages/ui. It has a shard of its own for the same reason test-ui does — a @vitest/browser +
+  # packages/ui. It has a shard of its own for the same reason test-ui does — a browser-mode
   # Playwright package sharing test-light with the rest of the workspace is the shape that hung that
   # shard on packages/ui, twice (the receipts are on UI_PACKAGE in scripts/changed-scope.mjs). This
   # split is PREEMPTIVE: apps/till has never run in test-light and so has never hung it, and nothing
@@ -955,7 +958,7 @@ jobs:
 
   # apps/dashboard alone: the admin/reporting dashboard app, the workspace's THIRD Chromium consumer
   # after packages/ui and apps/till. It has a shard of its own for the same reason test-till does — a
-  # @vitest/browser + Playwright package sharing test-light with the rest of the workspace is the
+  # browser-mode Playwright package sharing test-light with the rest of the workspace is the
   # shape that hung that shard on packages/ui, twice (the receipts are on UI_PACKAGE in
   # scripts/changed-scope.mjs). This split is PREEMPTIVE: apps/dashboard has never run in test-light
   # and so has never hung it, and nothing here proves it would — see DASHBOARD_PACKAGE in
@@ -1011,7 +1014,7 @@ jobs:
 
   # apps/setup alone: the setup-wizard browser app, the workspace's FOURTH Chromium consumer after
   # packages/ui, apps/till and apps/dashboard. It has a shard of its own for the same reason
-  # test-dashboard does — a @vitest/browser + Playwright package sharing test-light with the rest of
+  # test-dashboard does — a browser-mode Playwright package sharing test-light with the rest of
   # the workspace is the shape that hung that shard on packages/ui, twice (the receipts are on
   # UI_PACKAGE in scripts/changed-scope.mjs). This split is PREEMPTIVE: apps/setup has never run in
   # test-light and so has never hung it, and nothing here proves it would — see SETUP_PACKAGE in

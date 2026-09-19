@@ -52,6 +52,21 @@ describe("startSharedContainer without a container", () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
+  it("still propagates the setup error when stopping the container also fails", async () => {
+    // The cleanup is best-effort: a wedged daemon makes stop() reject, and that rejection must not
+    // become the error the caller sees in place of the one that actually broke the setup.
+    const stop = vi.fn(async () => {
+      throw new Error("Cannot connect to the Docker daemon");
+    });
+    await expect(
+      startSharedContainer({
+        templates: { "bad-name": async () => {} },
+        start: async () => fakeContainer(stop),
+      }),
+    ).rejects.toThrow(/unsafe template name/);
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it("propagates a start() failure with no container to stop", async () => {
     await expect(
       startSharedContainer({

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { page, userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { WtModal } from "./wt-modal.js";
 import "./wt-form-actions.js";

@@ -1,5 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./canvas-editor-screen.js";

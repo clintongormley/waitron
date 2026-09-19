@@ -1,4 +1,5 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+import { playwright } from "@vitest/browser-playwright";
 
 // Two projects share one coverage report: the server suites run in Node (real Postgres / PGlite), and
 // the dashboard panel's Lit widgets run in real headless Chromium (mirrors packages/bookings). Run Node
@@ -9,8 +10,16 @@ export default defineConfig({
       {
         test: {
           name: "node",
-          sequence: { groupOrder: 0 },
+          // Numbered from 1, not 0: Vitest 4 lifts a groupOrder-0 project that runs one isolated
+          // worker out of its group and appends it after every other group, which puts Chromium ahead
+          // of a node project numbered 0. Measured on packages/bookings, against the same run on
+          // Vitest 3: with 0/1 the browser project's first test precedes the node project's, with 1/2
+          // it follows. bookings, payments-stripe, payments-sumup and venue-service carry this
+          // identical shape; packages/media and apps/dashboard split into projects too but pin no
+          // project-level worker limit, so the lift never reached them.
+          sequence: { groupOrder: 1 },
           globals: true,
+          clearMocks: false,
           // globalSetup boots ONE shared Postgres container and migrates the `core_payments` template
           // every real-PG suite clones (~26ms) instead of each file booting and migrating its own
           // (~1.5s). See src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent
@@ -30,9 +39,9 @@ export default defineConfig({
           // to globalSetup, which vitest does not bound by hookTimeout.
           testTimeout: 120_000,
           hookTimeout: 180_000,
-          // Keep singleFork (#22): only ONE test file runs at a time, so the shared cluster's single
-          // 100-connection budget is a non-issue and needs no `maxForks` cap.
-          poolOptions: { forks: { singleFork: true } },
+          // Keep one worker (#22): only ONE test file runs at a time, so the shared cluster's single
+          // 100-connection budget is a non-issue and needs no `maxWorkers` cap.
+          maxWorkers: 1,
         },
       },
       {
@@ -41,15 +50,18 @@ export default defineConfig({
         // `./dashboard` sub-path.
         test: {
           name: "browser",
-          sequence: { groupOrder: 1 },
+          sequence: { groupOrder: 2 },
           globals: true,
+          clearMocks: false,
           include: ["src/dashboard/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+          // The project's own `fileParallelism` is where Vitest 4 reads this: it fills
+          // `browser.fileParallelism` from this key when the browser block does not set it.
+          fileParallelism: false,
           browser: {
             enabled: true,
-            provider: "playwright",
+            provider: playwright({}),
             headless: true,
-            fileParallelism: false,
             instances: [{ browser: "chromium" }],
           },
         },
@@ -57,6 +69,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,
@@ -70,11 +83,6 @@ export default defineConfig({
         "src/sumup-client.ts",
         "src/testing/**",
         "src/**/*.sandbox.test.ts",
-        // The nightly sandbox suite's OWN vitest config (a `defineConfig()` call, no logic) — v8's
-        // `all`-file scan otherwise picks up this package-root file since it doesn't match the
-        // default excludes' `vitest.config.*` token (it's `vitest.sandbox.config.ts`, a distinct
-        // file from `vitest.config.ts`).
-        "vitest.sandbox.config.ts",
       ],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },

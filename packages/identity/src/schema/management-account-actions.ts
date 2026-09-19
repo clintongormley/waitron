@@ -8,6 +8,9 @@ import { persons } from "./persons.js";
  * account state: a newer action invalidates an older one and completion stamps `used_at`.
  * `token_hash` is SHA-256 of the random URL token; the bearer token itself is never stored.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as packages/db/src/schema/sales.ts.
 export const managementAccountActions = table(
   "management_account_actions",
   {
@@ -28,6 +31,7 @@ export const managementAccountActions = table(
     expiresAt: tsString("expires_at").notNull(),
     usedAt: tsString("used_at"),
   },
+  /* v8 ignore start */
   (t) => [
     foreignKey({
       columns: [t.personId],
@@ -52,4 +56,5 @@ export const managementAccountActions = table(
     check("management_account_actions_code_attempts_ck", sql`${t.codeAttempts} >= 0`),
     check("management_account_actions_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
   ],
+  /* v8 ignore stop */
 );

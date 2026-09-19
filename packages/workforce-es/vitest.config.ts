@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // globalSetup boots one shared Postgres container and makes the migrated
     // `core_identity_workforce_es` template available. The retained suites use PGlite;
     // globalSetup still precedes every worker, so a Docker-absent run fails the whole package.
@@ -19,9 +20,10 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // A single worker avoids the v8 branch-coverage merge artifact across fork workers.
     // The suites use PGlite, so they need no shared-cluster connection cap.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,

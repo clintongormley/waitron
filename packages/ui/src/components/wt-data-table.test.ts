@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";

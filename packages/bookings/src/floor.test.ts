@@ -196,14 +196,16 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const tb = await makeTable(vb, "tz-b");
 
     // Return a GENUINE instance from the mock (a bare construct-through spy yields an object whose
-    // prototype chain is the spy's, so `formatToParts` throws "incompatible receiver").
+    // prototype chain is the spy's, so `formatToParts` throws "incompatible receiver"). The
+    // implementation must be a `function` expression, not an arrow. Measured on 4.1.11 by switching
+    // this one `mockImplementation` to an arrow: the assertion below then reads two constructions
+    // instead of one and the test fails. Why the arrow behaves differently here was not established.
     const OriginalDTF = Intl.DateTimeFormat;
-    const spy = vi
-      .spyOn(Intl, "DateTimeFormat")
-      .mockImplementation(
-        ((...args: ConstructorParameters<typeof Intl.DateTimeFormat>) =>
-          new OriginalDTF(...args)) as unknown as typeof Intl.DateTimeFormat,
-      );
+    const spy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (
+      ...args: ConstructorParameters<typeof Intl.DateTimeFormat>
+    ): Intl.DateTimeFormat {
+      return new OriginalDTF(...args);
+    } as unknown as typeof Intl.DateTimeFormat);
     try {
       await annotate(va, MADRID_NOON, [ta]); // same zone, twice
       await annotate(va, MADRID_NOON, [ta]);

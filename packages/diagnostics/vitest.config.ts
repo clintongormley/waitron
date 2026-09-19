@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the source. Without
     // this exclude Vitest discovers them as real test files, so one interrupted mutation run
     // makes every later test run fail confusingly.
@@ -20,11 +21,13 @@ export default defineConfig({
     // packages under pnpm's oversubscription, and @vitest/coverage-v8's cross-fork merge under-counts
     // this package's branches. Pinning to a single fork removes that cross-fork merge entirely, so
     // the gate is deterministic under `-r` load too.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `exclude` replaces rather than merges, so the defaults must be spread back in.
+      // `exclude` replaces rather than merges, but Vitest 4's own default list is empty, so the
+      // spread adds nothing today; keep it so a later non-empty default is not dropped.
       // src/index.ts is a pure re-export barrel with no logic of its own, excluded for the same
       // reason packages/shared excludes its barrel: nothing here is worth gating on.
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],

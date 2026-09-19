@@ -289,7 +289,7 @@ describe("gateOutputs", () => {
   });
 
   // The `fiscal_verifactu` gate exists for the same reason as `heavy`: packages/fiscal-verifactu has
-  // a shard of its own (test-fiscal-verifactu, isolated because it is the one maxForks:4 suite), so
+  // a shard of its own (test-fiscal-verifactu, isolated because it is the one `maxWorkers: 4` suite), so
   // both light shards subtract it and something has to decide whether test-fiscal-verifactu runs.
   // NOT the `verifactu` gate below, which is the mutation run over the separate packages/verifactu.
   it("runs the fiscal-verifactu shard when @waitron/fiscal-verifactu is in scope, and not otherwise", () => {

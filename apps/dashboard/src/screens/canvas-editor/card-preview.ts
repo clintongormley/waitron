@@ -120,8 +120,9 @@ function buildPreview(type: CardType): TemplateResult {
         ${bars(3, "cp-order-line")}
       </div>`;
   }
-  /* v8 ignore next -- unreachable: the switch above is exhaustive over CardType (compile-time guard) */
+  /* v8 ignore start -- unreachable: the switch above is exhaustive over CardType (compile-time guard) */
   return assertNever(type);
+  /* v8 ignore stop */
 }
 
 /** Every silhouette, built once from the exhaustive {@link buildPreview}. Fully static, so the same

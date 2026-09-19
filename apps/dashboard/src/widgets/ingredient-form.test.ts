@@ -1,4 +1,4 @@
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";

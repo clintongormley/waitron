@@ -1,4 +1,4 @@
-import { commands, page } from "@vitest/browser/context";
+import { commands, page } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";

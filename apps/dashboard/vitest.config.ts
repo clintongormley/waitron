@@ -1,4 +1,5 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
@@ -12,7 +13,7 @@ interface PlaywrightPage {
 /**
  * Emulates the OS `prefers-color-scheme` media feature for the current test.
  * Only the playwright provider's command context carries a `page` (see
- * `provider.getCommandsContext` in @vitest/browser), which is why this isn't
+ * `provider.getCommandsContext` in @vitest/browser-playwright), which is why this isn't
  * typed on `BrowserCommandContext` itself — cast narrowly at the boundary.
  */
 const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
@@ -56,6 +57,7 @@ const browserProject = {
   test: {
     name: "browser",
     globals: true,
+    clearMocks: false,
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the
     // source. Without this exclude Vitest discovers them as real test files, so
     // one interrupted mutation run makes every later test run fail confusingly.
@@ -63,9 +65,14 @@ const browserProject = {
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/date-utils.test.ts"],
     browser: {
       enabled: true,
-      provider: "playwright",
+      // The timezone pin belongs to the PROVIDER, as `contextOptions`. Vitest 3 read a `context`
+      // key off the instance; Vitest 4's playwright provider reads `contextOptions` off the factory
+      // and ignores an unknown instance key in silence, so the pin stopped applying and the
+      // wall-clock assertions read the host's zone (measured: "14:00" in Madrid for a 12:00Z
+      // instant, "12:00" again once the pin moved here).
+      provider: playwright({ contextOptions: { timezoneId: "UTC" } }),
       headless: true,
-      instances: [{ browser: "chromium", context: { timezoneId: "UTC" } }],
+      instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
         setViewportSize,
@@ -84,6 +91,7 @@ const nodeTimezoneProject = {
   test: {
     name: "node-tz",
     globals: true,
+    clearMocks: false,
     environment: "node",
     include: ["src/date-utils.test.ts"],
     env: { TZ: "America/New_York" },
@@ -102,12 +110,13 @@ export default defineConfig({
     projects: [browserProject, nodeTimezoneProject],
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `coverage.exclude` replaces (does not merge with) Vitest's own default exclude
-      // list — verified empirically in packages/ui, whose config this mirrors: omitting
-      // the spread lets vite.config.ts, vitest.config.ts, and vite-env.d.ts reappear in
-      // the report. Spread the defaults (test files, *.d.ts, config files) and add this
-      // app's own non-source surface: src/main.ts is the browser entry point that wires
+      // `coverage.exclude` replaces rather than merges, but Vitest 4's own default list is EMPTY
+      // (`coverageConfigDefaults.exclude` is `[]`), so the spread adds nothing today — keep it so a
+      // later non-empty default is not silently dropped. What scopes the report now is `include`
+      // above; the test files the runner ran are left out by the runner itself, not by this list.
+      // This app's own non-source surface: src/main.ts is the browser entry point that wires
       // the app together at startup (tokens, the placeholder render) and is
       // exercised only in a real browser, not under the test runner; and
       // src/widgets/test-helpers.ts is test-only mount/cleanup/axe support, mirroring

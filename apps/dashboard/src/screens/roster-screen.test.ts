@@ -1,6 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "@vitest/browser/context";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, PersonSummary, RosterSnapshot } from "../api/client.js";
 import { RosterScreen } from "./roster-screen.js";

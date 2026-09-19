@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     // The concurrency suite starts a real Postgres container and races two migrators against it.
     testTimeout: 120_000,
     hookTimeout: 180_000,
@@ -10,9 +11,10 @@ export default defineConfig({
     // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers, and this
     // package is small enough that a handful of mis-merged branches sinks the ratio. Same finding
     // as packages/payments, packages/scheduler and packages/credentials.
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },

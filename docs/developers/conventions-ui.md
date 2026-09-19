@@ -161,7 +161,7 @@ moment the file exists, with nothing to register. If a needed token doesn't exis
 
 ## Real Chromium only — never jsdom
 
-`packages/ui` tests run in real Chromium via Vitest 3 browser mode (`@vitest/browser` + Playwright),
+`packages/ui` tests run in real Chromium via Vitest browser mode (`@vitest/browser-playwright`),
 not jsdom. Token/theming tests depend on `getComputedStyle` resolving CSS custom properties and on
 `adoptedStyleSheets`, neither of which jsdom implements — a jsdom-based version of these tests would
 pass regardless of whether the component actually works. Never suggest introducing jsdom,

@@ -16,6 +16,9 @@ import { count, label, table, ts } from "./columns.js";
  * `deployment` and its accessors are still exported from the package's own public barrel
  * (`../index.ts`) — that surface is unaffected by this.
  */
+// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
+// the same reason, as ./sales.ts.
 export const deployment = table(
   "deployment",
   {
@@ -47,6 +50,7 @@ export const deployment = table(
     fenceLsn: label("fence_lsn"),
     stampedAt: ts("stamped_at").notNull().defaultNow(),
   },
+  /* v8 ignore start */
   (t) => [
     check("deployment_singleton_ck", sql`${t.id} = 1`),
     check("deployment_mode_ck", sql`${t.mode} in ('primary', 'mirror')`),
@@ -56,4 +60,5 @@ export const deployment = table(
       sql`not (${t.mode} = 'mirror' and ${t.singletonRole} = 'primary')`,
     ),
   ],
+  /* v8 ignore stop */
 );

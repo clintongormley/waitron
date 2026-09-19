@@ -3,6 +3,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
+    clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // One shared PostgreSQL template serves the content-language privilege and concurrency tests.
     globalSetup: ["./src/testing/global-setup.ts"],
@@ -13,6 +14,7 @@ export default defineConfig({
     hookTimeout: 60_000,
     coverage: {
       provider: "v8",
+      include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel with no logic of its own, excluded for the same
       // reason packages/reporting's own vitest.config.ts excludes its identical barrel. src/testing

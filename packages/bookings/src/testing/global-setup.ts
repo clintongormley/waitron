@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
@@ -16,7 +16,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
  * a superuser holding every grant and serialises onto one backend, so it answers neither the privilege
  * matrix nor the two-backend CAS race). Returning `teardown` stops the container.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/bookings's real-Postgres suites require a running Docker daemon: PGlite connects as a " +

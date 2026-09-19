@@ -1,4 +1,4 @@
-import type { GlobalSetupContext } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { runMigrationSets } from "@waitron/db/testing/postgres.js";
 import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
@@ -15,7 +15,7 @@ import { IDENTITY_MIGRATIONS } from "../migrations.js";
  * The probe login is declared here rather than per suite because roles are cluster-global — the
  * shared container is one cluster, so a per-file `CREATE ROLE` would fail `role … already exists`.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/identity's real-Postgres suites require a running Docker daemon. They cannot be " +
