@@ -56,11 +56,14 @@ export async function listContentTranslationGaps(
   language: string,
 ): Promise<{ kind: string; id: string }[]> {
   const code = contentLanguageCode(language);
-  // `product`, `variant`, `option_list` and `option_label` are the kinds whose customer-facing name
-  // is optional, so the query filters a wholly-absent one (null or {}) out of them: absent is not a
-  // gap, only a partly filled map is. The kinds it emits unfiltered — `category`, `unit`, `section`,
-  // `option_group` and `option` — have no optional customer name; their name is the only text they
-  // have and stays required.
+  // `product`, `variant`, `option_list`, `option_label` and `extra_list` are the kinds whose
+  // customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
+  // them: absent is not a gap, only a partly filled map is. The kinds it emits unfiltered —
+  // `category`, `unit`, `section`, `option_group` and `option` — have no optional customer name;
+  // their name is the only text they have and stays required. `extra_list_items` is in neither
+  // group because it holds no name at all: its columns are id, list_id, product_id, sort,
+  // max_quantity, preselected and price (drizzle/0004_extra_lists.sql), so there is no map here for
+  // this report to read.
   const result = await tx.execute<{
     kind: string;
     id: string;
@@ -78,6 +81,8 @@ export async function listContentTranslationGaps(
     union all select 'option_list' as kind, id, customer_name as translations from option_lists
       where customer_name is not null and customer_name <> '{}'::jsonb
     union all select 'option_label' as kind, id, customer_name as translations from option_labels
+      where customer_name is not null and customer_name <> '{}'::jsonb
+    union all select 'extra_list' as kind, id, customer_name as translations from extra_lists
       where customer_name is not null and customer_name <> '{}'::jsonb
   `);
   return result.rows

@@ -38,6 +38,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
 
 const UNKNOWN_ID = "99999999-9999-4999-8999-999999999999";
+const SECOND_UNKNOWN_ID = "88888888-8888-4888-8888-888888888888";
 
 /**
  * Three breads with three DIFFERENT names and three DIFFERENT unit prices, so a read that picks up
@@ -322,6 +323,53 @@ describe("extra list CRUD", () => {
     expect(error).toEqual(
       expect.objectContaining({ code: "extras.not_found", params: { extraListId: UNKNOWN_ID } }),
     );
+  });
+
+  it("refuses to create a list whose item names a product that does not exist", async () => {
+    // Two unknown products, and a real one first: the field path has to name the FIRST missing item
+    // at ITS OWN position, so a hardcoded `items.0` and a path taken from the last miss both fail.
+    const error = await refusal((tx) =>
+      createExtraList(
+        tx,
+        {
+          name: "Bread",
+          items: [
+            { productId: breads.rye },
+            { productId: UNKNOWN_ID },
+            { productId: SECOND_UNKNOWN_ID },
+          ],
+        },
+        "en",
+      ),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "items.1.productId" } }),
+    );
+  });
+
+  it("refuses to update a list to an item naming a product that does not exist", async () => {
+    const created = await run((tx) => createExtraList(tx, breadList(), "en"));
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        created.id,
+        { name: "Bread", items: [{ productId: UNKNOWN_ID }, { productId: breads.rye }] },
+        "en",
+      ),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "items.0.productId" } }),
+    );
+    // The refused save left the list as it was, items included.
+    const read = await run((tx) => getExtraList(tx, created.id));
+    expect(read.items.map((item) => item.productId)).toEqual([
+      breads.focaccia,
+      breads.sourdough,
+      breads.rye,
+    ]);
   });
 
   it("refuses a customer name with no text in the venue's default language", async () => {

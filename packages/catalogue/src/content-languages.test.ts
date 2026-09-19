@@ -169,6 +169,26 @@ describe("site content languages", () => {
     });
   });
 
+  it("reports a missing extras list customer name as a gap", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const named = await tx.execute<{ id: string }>(sql`
+        insert into extra_lists (name, customer_name)
+        values ('Sides', '{"en":"Choose a side"}'::jsonb) returning id`);
+      const plain = await tx.execute<{ id: string }>(sql`
+        insert into extra_lists (name) values ('Sauces') returning id`);
+      const blank = await tx.execute<{ id: string }>(sql`
+        insert into extra_lists (name, customer_name) values ('Breads', '{}'::jsonb) returning id`);
+
+      const gaps = await listContentTranslationGaps(tx, "fr");
+
+      expect(gaps).toContainEqual({ kind: "extra_list", id: named.rows[0]!.id });
+      // The customer name is optional and falls back to the staff `name`, so a wholly-absent one —
+      // null or an empty map — is no gap, the same split the option kinds above make.
+      expect(gaps).not.toContainEqual({ kind: "extra_list", id: plain.rows[0]!.id });
+      expect(gaps).not.toContainEqual({ kind: "extra_list", id: blank.rows[0]!.id });
+    });
+  });
+
   it.each(["", "invalid_locale", "und"])(
     "uses the shared fallback for an absent setting and invalid preference %j",
     async (fallbackLanguage) => {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import {
@@ -137,6 +137,33 @@ function listValues(input: ExtraListInput) {
 }
 
 /**
+ * Refuses an item naming a product no `products` row holds, as `extras.invalid` carrying that item's
+ * position in the body, so an editor can put the message beside the input it came from. Without this
+ * the id reaches `extra_list_items_product_fk` and surfaces as a `23503` driver error carrying no
+ * field at all.
+ *
+ * The foreign key STAYS: it is the database backstop under this refusal, for a write that never
+ * comes through here — the same division `parseExtraListInput` and
+ * `extra_list_items_list_product_uq` already make for the one-offer-per-product rule.
+ *
+ * ONE grouped read for the whole body, never one per item (CLAUDE.md §3). The set comparison is a
+ * plain string match because both sides are lower-cased: the contract's `id`
+ * (extra-contract.ts) lower-cases what the body sent, and a `uuid` column hands its value back
+ * lower-cased whatever case it was written in.
+ */
+async function assertProductsExist(tx: Transaction, input: ExtraListInput): Promise<void> {
+  const named = [...new Set(input.items.map((item) => item.productId))];
+  if (named.length === 0) return;
+  const rows = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(inArray(products.id, named));
+  const held = new Set(rows.map((row) => row.id));
+  const at = input.items.findIndex((item) => !held.has(item.productId));
+  if (at !== -1) throw new AppError("extras.invalid", { field: `items.${at}.productId` });
+}
+
+/**
  * Replaces the list's items with the body's, in the body's order. An item the body omits is removed:
  * nothing outside these two tables names an extras list item (see {@link extraListDependants}), and
  * the design has an open order's child line point at the PRODUCT rather than back at the item
@@ -159,6 +186,7 @@ async function writeItems(
   extraListId: string,
   input: ExtraListInput,
 ): Promise<void> {
+  await assertProductsExist(tx, input);
   const bodyIds = input.items.flatMap((item) => (item.id === undefined ? [] : [item.id]));
   const existing = bodyIds.length
     ? await tx

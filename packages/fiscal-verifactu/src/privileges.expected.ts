@@ -38,6 +38,8 @@ export const PRIVILEGES: Record<string, string> = {
   employments: "SIU",
   envio_flujo: "SIU",
   envios: "SIU",
+  extra_list_items: "SIUD",
+  extra_lists: "SIUD",
   floor_zones: "SIU",
   google_oidc_states: "SIUD",
   incidents: "SI",
