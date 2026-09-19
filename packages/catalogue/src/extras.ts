@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { extraListItems, extraLists } from "./schema/extras.js";
@@ -170,16 +170,22 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
  * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4) — a path Task 8 of the plan
  * builds, so today there is nothing at all on the order side to check.
  *
- * A body item carrying the id of an item this list already holds is updated in place; one with no
- * id, or with an id nothing holds, is inserted. An id that names an item of a DIFFERENT list is
- * refused as `extras.invalid` rather than moving that item.
+ * EVERY item of the list is deleted and the body's are inserted fresh, each under the id the body
+ * sent or a new one, so an item keeps its identity only because the body carries that id. Editing
+ * the retained rows in place instead left an intermediate state a legal body could break:
+ * `extra_list_items_list_product_uq` covers `(list_id, product_id)`, so a body exchanging two
+ * retained items' products failed on the first update with `23505 duplicate key value` although its
+ * final product set was fine. Seen red that way, on real PostgreSQL, by "saves a body that exchanges
+ * two retained items' products" (extras.pg.test.ts).
  *
- * That refusal is decided BEFORE the delete below, on a plain `select`, which takes no row locks.
- * The ordering is the point: two saves that each name the other list's item both read, both see the
- * other's item still there, and both refuse. Deciding it later instead — at the insert's
- * primary-key conflict — left each save waiting on the other's uncommitted delete, and PostgreSQL
- * ended one of them with `40P01 deadlock detected` in place of a domain refusal. Measured on the
- * options twin this mirrors (`writeLabels`, options.ts); receipt in that branch's review thread.
+ * An id that names an item of a DIFFERENT list is refused as `extras.invalid` rather than moving
+ * that item, and that refusal is decided on a plain `select`, which takes no row locks, before any
+ * insert below. Two saves that each name the other list's item both read, both see the other's item
+ * still there, and both refuse. Left to the insert's primary-key conflict instead, each save waits
+ * on the other's uncommitted delete and PostgreSQL ends one of them with `40P01 deadlock detected`
+ * in place of a domain refusal — measured on this code with the check removed, five runs out of
+ * five, by "refuses both of two saves that each claim the other list's item, without deadlocking"
+ * (extras.pg.test.ts).
  */
 async function writeItems(
   tx: Transaction,
@@ -201,41 +207,30 @@ async function writeItems(
     const at = input.items.findIndex((item) => item.id !== undefined && foreign.has(item.id));
     throw new AppError("extras.invalid", { field: `items.${at}.id` });
   }
-  // What the body does not name is this list's to remove; `bodyIds` cannot name another list's item
-  // by the check above, so every id in it that exists is one of this list's own.
-  await tx
-    .delete(extraListItems)
-    .where(
-      bodyIds.length
-        ? and(eq(extraListItems.listId, extraListId), notInArray(extraListItems.id, bodyIds))
-        : eq(extraListItems.listId, extraListId),
-    );
-  const heldIds = new Set(existing.map((row) => row.id));
+  // The list starts from nothing, so no row the body keeps can collide with a row it is replacing.
+  await tx.delete(extraListItems).where(eq(extraListItems.listId, extraListId));
   for (const [sort, item] of input.items.entries()) {
     // Each item's `sort` is its position in the body, so the order the editor sent is the order
     // `listExtraLists` and `getExtraList` read back.
-    const values = {
-      productId: item.productId,
-      maxQuantity: item.maxQuantity,
-      preselected: item.preselected,
-      price: item.price,
-      sort,
-    };
-    if (item.id !== undefined && heldIds.has(item.id)) {
-      await tx
-        .update(extraListItems)
-        .set(values)
-        .where(and(eq(extraListItems.listId, extraListId), eq(extraListItems.id, item.id)));
-      continue;
-    }
     // The read above locks nothing, so another transaction can claim this id between it and here.
     // An id another transaction has already COMMITTED is refused as a domain fault rather than
-    // surfacing as a driver error. Two transactions inserting the same NEW id are not covered: each
-    // waits on the other's uncommitted insert, and a mutual wait can still end as `40P01`.
+    // surfacing as a driver error. The conflict clause names the PRIMARY KEY: left untargeted,
+    // drizzle emits a bare `on conflict do nothing`, which also absorbs a
+    // `extra_list_items_list_product_uq` collision and would report a product clash as a stolen id.
+    // Two transactions inserting the same NEW id are not covered: each waits on the other's
+    // uncommitted insert, and a mutual wait can still end as `40P01`.
     const inserted = await tx
       .insert(extraListItems)
-      .values({ id: item.id ?? randomUUID(), listId: extraListId, ...values })
-      .onConflictDoNothing()
+      .values({
+        id: item.id ?? randomUUID(),
+        listId: extraListId,
+        productId: item.productId,
+        maxQuantity: item.maxQuantity,
+        preselected: item.preselected,
+        price: item.price,
+        sort,
+      })
+      .onConflictDoNothing({ target: extraListItems.id })
       .returning({ id: extraListItems.id });
     if (!inserted.length) throw new AppError("extras.invalid", { field: `items.${sort}.id` });
   }
@@ -261,11 +256,17 @@ export async function createExtraList(
 
 export async function updateExtraList(
   tx: Transaction,
-  extraListId: string,
+  callerListId: string,
   value: unknown,
   fallbackLanguage: string,
 ): Promise<ExtraList> {
   const input = parseExtraListInput(value);
+  // Lower-cased once, here, and used from here on. A `uuid` column compares either case and hands
+  // its value back lower-cased, so an upper-cased id finds the list in SQL but does not match the
+  // stored `list_id` that `writeItems` compares in JavaScript — which classified every one of the
+  // list's own items as another list's. Same normalisation the contract's `id` applies to what a
+  // body sends (extra-contract.ts).
+  const extraListId = callerListId.toLowerCase();
   // The list has to exist before its name is worth checking, or updating an id that names nothing
   // reports a translation problem for a list that is not there.
   await assertExtraList(tx, extraListId);

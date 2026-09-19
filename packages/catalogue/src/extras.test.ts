@@ -27,7 +27,8 @@ import {
 // An extras list names products, and nothing here turns on who connected or on two writers racing,
 // so PGlite is the lighter target that still runs the real migrations — including the grants
 // walkthrough at the foot of this file, which assumes app_user with `asAppUser` and is enforced from
-// there (CLAUDE.md §4).
+// there (CLAUDE.md §4). What needs a container is the concurrent save, and that lives in
+// extras.pg.test.ts.
 // Only the tenant row is seeded outside each test's own setup: with no `content_languages` row,
 // `readContentLanguages` falls back to the language passed in
 // (packages/catalogue/src/content-languages.ts), and `usePgliteDb` empties every data table after
@@ -185,6 +186,82 @@ describe("extra list CRUD", () => {
     // The focaccia item's own terms were not resent, so they fall back to the body's defaults rather
     // than lingering from the create.
     expect([updated.items[1]!.maxQuantity, updated.items[1]!.preselected]).toEqual([1, false]);
+  });
+
+  it("updates an item whose id the body sends in upper case", async () => {
+    // Hex letters, so upper-casing the id below actually changes it. PostgreSQL stores a uuid
+    // case-insensitively and hands it back lower-cased, which is what the body has to match.
+    const itemId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    const created = await run((tx) =>
+      createExtraList(
+        tx,
+        { name: "Bread", items: [{ id: itemId, productId: breads.sourdough }] },
+        "en",
+      ),
+    );
+    expect(created.items[0]!.id).toBe(itemId); // the row the update below has to find
+
+    const updated = await run((tx) =>
+      updateExtraList(
+        tx,
+        created.id,
+        {
+          name: "Bread",
+          items: [{ id: itemId.toUpperCase(), productId: breads.sourdough, price: "2.00" }],
+        },
+        "en",
+      ),
+    );
+
+    expect(updated.items.map((item) => [item.id, item.price])).toEqual([[itemId, "2.00"]]);
+  });
+
+  it("treats a list's own items as its own when the list id arrives in upper case", async () => {
+    const created = await run((tx) => createExtraList(tx, breadList(), "en"));
+
+    // A `uuid` column compares case-insensitively, so an upper-cased list id still names this list;
+    // what must not happen is the list's own items reading as another list's because the comparison
+    // moved into JavaScript.
+    const updated = await run((tx) =>
+      updateExtraList(
+        tx,
+        created.id.toUpperCase(),
+        {
+          name: "Bread",
+          items: [{ id: created.items[0]!.id, productId: breads.focaccia, price: "3.00" }],
+        },
+        "en",
+      ),
+    );
+
+    expect(updated.id).toBe(created.id);
+    expect(updated.items.map((item) => [item.id, item.productId, item.price])).toEqual([
+      [created.items[0]!.id, breads.focaccia, "3.00"],
+    ]);
+  });
+
+  it("adds an item for the product a retained item is moving away from", async () => {
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Bread", items: [{ productId: breads.sourdough }] }, "en"),
+    );
+    const held = created.items[0]!.id;
+
+    // The body's final products are sourdough and rye — one each, which the list allows. The only
+    // clash is between the new item and the state the retained item is leaving behind.
+    const updated = await run((tx) =>
+      updateExtraList(
+        tx,
+        created.id,
+        {
+          name: "Bread",
+          items: [{ productId: breads.sourdough }, { id: held, productId: breads.rye }],
+        },
+        "en",
+      ),
+    );
+
+    expect(updated.items.map((item) => item.productId)).toEqual([breads.sourdough, breads.rye]);
+    expect(updated.items[1]!.id).toBe(held);
   });
 
   it("removes an item the new body leaves out and adds the one it introduces", async () => {
@@ -440,12 +517,32 @@ describe("what the database refuses under an extras list", () => {
     expect(pgErrorMessage(error)).toContain("extra_list_items_product_fk");
   });
 
+  it("refuses an item priced below zero", async () => {
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Sides", items: [{ productId: breads.rye }] }, "en"),
+    );
+
+    // `isProductPrice` (modifier-limits.ts) refuses a leading minus before the write, so a negative
+    // price cannot arrive through the contract; this is the database backstop under that, in the
+    // shape `product_variants.unit_price` and `menu_item_variants.unit_price` already carry
+    // (schema/variants.ts). An item's price becomes a sale line and so reaches a fiscal record.
+    const error = await captureError(() =>
+      fx.db.execute(
+        sql`insert into extra_list_items (list_id, product_id, price)
+            values (${created.id}, ${breads.sourdough}, '-1.00')`,
+      ),
+    );
+
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(error)).toContain("extra_list_items_price_ck");
+  });
+
   it("refuses a second item naming the same product in one list", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
 
     // `parseExtraListInput` already refuses the pair in one authoring body (extra-contract.ts); this
-    // is the database backstop under that refusal, reached by an insert that never goes through the
-    // contract.
+    // index is what enforces the same rule in the database, reached here by a direct insert that
+    // goes through no contract at all.
     const error = await captureError(() =>
       fx.db.execute(
         sql`insert into extra_list_items (list_id, product_id) values (${created.id}, ${breads.rye})`,
@@ -492,9 +589,10 @@ describe("extra list CRUD as the non-superuser application role", () => {
       expect(await getExtraList(tx, created.id)).toEqual(created);
 
       // What reaches `extra_list_items`' own DELETE grant is a SAVE, not the list delete:
-      // `writeItems` clears the items the body does not name on a create as well as an update.
-      // Measured, with `DELETE` removed from the grant in 0005_extra_lists_grants.sql: this test
-      // failed inside `createExtraList` at
+      // `writeItems` clears every one of the list's items before inserting the body's, on a create
+      // as well as an update, so the statement runs even when it matches nothing. Measured, with
+      // `DELETE` removed from the grant in 0005_extra_lists_grants.sql: this test failed inside
+      // `createExtraList` at
       // `delete from "extra_list_items" where "extra_list_items"."list_id" = $1`, with
       // `42501 permission denied for table extra_list_items`.
       const updated = await updateExtraList(

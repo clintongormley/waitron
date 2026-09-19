@@ -66,11 +66,16 @@ export const extraListItems = table(
       name: "extra_list_items_product_fk",
     }).onDelete("restrict"),
     check("extra_list_items_qty_ck", sql`${t.maxQuantity} >= 1`),
+    // An item's price becomes a sale line and so reaches a fiscal record. `isProductPrice`
+    // (packages/catalogue/src/modifier-limits.ts) refuses a leading minus before the write; this is
+    // the database backstop under that, in the shape `product_variants.unit_price` and
+    // `menu_item_variants.unit_price` already carry (schema/variants.ts).
+    check("extra_list_items_price_ck", sql`${t.price} >= 0`),
     // One offer per product per list. `parseExtraListInput`
     // (packages/catalogue/src/extra-contract.ts) refuses the pair within one authoring body, because
     // `validateExtraSelections` matches a diner's pick to an item BY PRODUCT ID and could not tell
-    // two rows apart; this is the database backstop under that refusal, for a write that never goes
-    // through the contract.
+    // two rows apart; this index is what enforces the same rule in the database, so a write that
+    // does not go through the contract cannot leave the pair behind either.
     uniqueIndex("extra_list_items_list_product_uq").on(t.listId, t.productId),
     index("extra_list_items_list_sort_idx").on(t.listId, t.sort),
   ],

@@ -1,6 +1,6 @@
 import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
-import { isProductPrice } from "./modifier-limits.js";
+import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import "./errors.js";
 
@@ -86,8 +86,21 @@ function bool(value: unknown, field: string, fallback: boolean): boolean {
   if (typeof value !== "boolean") invalid(field);
   return value;
 }
+/**
+ * A whole number the `integer` columns behind this contract can hold. `min_picks`, `max_picks` and
+ * `max_quantity` are all `integer` (schema/extras.ts), so without the ceiling a larger number passes
+ * every check here and surfaces from the driver as `22003 value out of range for type integer`,
+ * carrying no field for an editor to put beside an input. Same ceiling, for the same reason, as
+ * `integer` in modifier-contract.ts.
+ */
 function whole(value: unknown, field: string, minimum: number): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum) invalid(field);
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < minimum ||
+    value > MAX_MODIFIER_INTEGER
+  )
+    invalid(field);
   return value;
 }
 /**
@@ -215,13 +228,13 @@ export function validateExtraSelections(
       const quantity = picked.get(item.productId);
       if (quantity === undefined) continue;
       if (quantity > item.maxQuantity) {
-        throw new AppError("extras.limit_exceeded", { listId: list.id });
+        throw new AppError("extras.limit_exceeded", { extraListId: list.id });
       }
       total += quantity;
       picks.push({ productId: item.productId, quantity });
     }
     if (total < list.minPicks || (list.maxPicks !== null && total > list.maxPicks)) {
-      throw new AppError("extras.limit_exceeded", { listId: list.id });
+      throw new AppError("extras.limit_exceeded", { extraListId: list.id });
     }
     out.push({ listId: list.id, picks });
   }

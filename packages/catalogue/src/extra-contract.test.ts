@@ -172,6 +172,31 @@ describe("extra list authoring contract", () => {
     );
   });
 
+  it("refuses a pick bound above what the column can hold", () => {
+    // `min_picks`, `max_picks` and `max_quantity` are PostgreSQL `integer` columns (schema/extras.ts),
+    // so a value above 2147483647 that the contract lets through reaches the driver as
+    // `22003 value out of range for type integer`, carrying no field for an editor to show.
+    expect(() =>
+      parseExtraListInput({ ...breadsBody, minPicks: 99999999999, maxPicks: null }),
+    ).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "minPicks" } }),
+    );
+    expect(() => parseExtraListInput({ ...breadsBody, maxPicks: 99999999999 })).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "maxPicks" } }),
+    );
+  });
+
+  it("refuses a maxQuantity above what the column can hold, naming the offending item", () => {
+    expect(() =>
+      parseExtraListInput({
+        ...breadsBody,
+        items: [sourdough, { ...rye, maxQuantity: 99999999999 }],
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "items.1.maxQuantity" } }),
+    );
+  });
+
   it("refuses a maxQuantity below one, naming the offending item", () => {
     expect(() =>
       parseExtraListInput({ ...breadsBody, items: [sourdough, { ...rye, maxQuantity: 0 }] }),
@@ -285,7 +310,7 @@ describe("extra selections at order time", () => {
 
   it("refuses fewer picks than minPicks, carrying the list id", () => {
     expect(() => validateExtraSelections([breads()], [])).toThrowError(
-      expect.objectContaining({ code: "extras.limit_exceeded", params: { listId: breadsId } }),
+      expect.objectContaining({ code: "extras.limit_exceeded", params: { extraListId: breadsId } }),
     );
   });
 
@@ -296,7 +321,7 @@ describe("extra selections at order time", () => {
         [{ listId: breadsId, picks: [{ productId: ryeProductId, quantity: 2 }] }],
       ),
     ).toThrowError(
-      expect.objectContaining({ code: "extras.limit_exceeded", params: { listId: breadsId } }),
+      expect.objectContaining({ code: "extras.limit_exceeded", params: { extraListId: breadsId } }),
     );
   });
 
@@ -308,7 +333,20 @@ describe("extra selections at order time", () => {
         [{ listId: breadsId, picks: [{ productId: ryeProductId, quantity: 3 }] }],
       ),
     ).toThrowError(
-      expect.objectContaining({ code: "extras.limit_exceeded", params: { listId: breadsId } }),
+      expect.objectContaining({ code: "extras.limit_exceeded", params: { extraListId: breadsId } }),
+    );
+  });
+
+  it("refuses an order-time quantity above what the column can hold, as a shape fault", () => {
+    // A count the LIST refuses is `extras.limit_exceeded`; a number no `integer` column could hold is
+    // a bad shape, so it is refused with a field path like any other malformed value.
+    expect(() =>
+      validateExtraSelections(
+        [breads({ minPicks: 0, maxPicks: null })],
+        [{ listId: breadsId, picks: [{ productId: ryeProductId, quantity: 99999999999 }] }],
+      ),
+    ).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "quantity" } }),
     );
   });
 

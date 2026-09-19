@@ -201,6 +201,36 @@ resolves outward, but a base table's bare `"id"` binds to the SUBQUERY's table �
 answer (#152: a null table label). Copying a correlated subquery: check base-vs-join and READ the
 emitted SQL with `.toSQL()`.
 
+## An untargeted `.onConflictDoNothing()` absorbs every unique conflict, not only the primary key's
+
+`writeItems` in `packages/catalogue/src/extras.ts` inserted each of an extras list's items with a
+bare `.onConflictDoNothing()` and read "nothing came back" as "another transaction already holds
+this id". Verified with `.toSQL()` on drizzle 0.45.2: the untargeted call emits
+`… on conflict do nothing`, and the same insert with `{ target: extraListItems.id }` emits
+`… on conflict ("id") do nothing`. The table also carries
+`extra_list_items_list_product_uq` over `(list_id, product_id)`, so the bare clause swallowed a
+PRODUCT collision too: a body adding an item for the product a retained item was moving away from
+came back as `extras.invalid` naming `items.0.id`, an `id` field that body never sent, which breaks
+the rule that a refusal is placed beside a field by what the error carries.
+
+Name the target whenever the table has more than one unique constraint and the code reads the empty
+result as a specific cause. Other untargeted calls are still in the tree and nothing guards this;
+`grep -rn 'onConflictDoNothing()' --include='*.ts' packages apps` finds them.
+
+## Editing rows one at a time can break a unique index the final state satisfies
+
+That same `writeItems` kept the rows a save still named and updated each where it stood, so a body
+exchanging two items' products put both rows on the same product midway through and
+`extra_list_items_list_product_uq` refused the first update with
+`23505 duplicate key value violates unique constraint`, although the body's final product set was
+legal. Reproduced on real PostgreSQL by `saves a body that exchanges two retained items' products`
+(`packages/catalogue/src/extras.pg.test.ts`). It now deletes every one of the list's rows and
+inserts the body's fresh, each under the id the body sent or a new one, which removes the
+intermediate state rather than ordering around it. That is only safe because nothing outside the
+table holds a key into it: `grep -rn 'REFERENCES "public"."extra_l' --include='*.sql' packages apps`
+returns one line, the items' own key into `extra_lists`. A table something else references cannot be
+rewritten this way.
+
 ## Resolve shared catalogue data once before a basket's line loop
 
 The Products review found that each basket line called `resolveZoneOffer`, which reloaded the whole

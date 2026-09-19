@@ -188,10 +188,11 @@ declare module "@waitron/shared" {
      * `minPicks`, more than `maxPicks`, or a quantity above one item's `maxQuantity`. The body's
      * SHAPE was fine and its CONTENT is not orderable, which is what separates this from
      * `extras.invalid` — the same split `options.label_required` has from `options.invalid`. Carries
-     * only the list's id: the caller knows which dish it was asking about. Thrown by
-     * `validateExtraSelections` (extra-contract.ts).
+     * only the list's id, under the same qualified name its `extras.*` and `options.*` siblings use:
+     * the caller knows which dish it was asking about. Thrown by `validateExtraSelections`
+     * (extra-contract.ts).
      */
-    "extras.limit_exceeded": { listId: string };
+    "extras.limit_exceeded": { extraListId: string };
     /**
      * An extras list's customer-facing name has no text in the venue's default content language.
      * `field` is the dotted path of the offending map (`"customerName"`), matching the paths

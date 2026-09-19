@@ -50,6 +50,13 @@
       "when": 1789840353305,
       "tag": "0006_extra_list_items_one_offer_per_product",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789841694737,
+      "tag": "0007_extra_list_items_price_not_negative",
+      "breakpoints": true
     }
   ]
 }
