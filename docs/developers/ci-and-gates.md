@@ -33,6 +33,32 @@ the scope for both the hook and CI. Package tests and coverage run in CI; the ro
 because they check the machinery that decides what runs. CI also runs mutation testing and
 `bundle-smoke`.
 
+### What `bundle-smoke` does NOT cover: the three front-end bundles
+
+`bundle-smoke` runs the build scripts of two packages, `@waitron/credentials` and `@waitron/server`,
+and every bundle they produce is an esbuild bundle. **Nothing in that job, or in any other job a
+front-end-only pull request runs, executes `vite build`.** In CI, the dashboard, setup and till
+bundles are built only inside `deploy/Dockerfile` — and on a pull request the `image` job carries
+`needs.changes.outputs.deploy == 'true'`, so it runs only when the pull request touched `deploy/`
+(`isImageInputPath` in `scripts/changed-scope.mjs` is `path.startsWith("deploy/")`). A change under
+`apps/till/src` therefore reaches a main push before anything in CI builds its bundle. Locally the
+root `build` script does run all three, which is how this branch got its evidence.
+
+Three hedges, because the gap is both narrower and wider than it first reads. Narrower on the
+trigger: `image` builds all three on a pull request that happens to touch `deploy/`, and on every
+code-gated main push. Narrower again: the Dockerfile is also built by `publish` on a push and nightly
+by `image-nightly.yml`, which exists precisely as the safety net for this scoping and says so in its
+own header — so all three SPAs are built daily against the default branch. Wider, and this is the
+part a reader is most likely to assume away: every one of those paths only BUILDS them. Nothing
+opens one, so a bundle that compiles and then renders nothing passes everywhere.
+
+This was first recorded on 2026-08-27 in
+`docs/superpowers/plans/2026-08-27-onboarding-slice2c-setup-wizard.md` (R6), which called a
+cross-front-end build-smoke "a separate later cleanup". It was still uncleaned when the vite 6 → 8
+upgrade replaced the bundler underneath all three apps (Rolldown and Oxc for Rollup and esbuild),
+which is the change it would most have been wanted for; that upgrade's build evidence had to be
+taken locally instead. `docs/backlog.md` carries the work item.
+
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
 guards. A documentation-only push stops after formatting. Deletion-only pushes run no checks.
 Unknown ranges keep the full local gate, including workspace typechecking. The hook no longer

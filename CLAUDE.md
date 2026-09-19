@@ -119,6 +119,11 @@ hook, or how tests are scheduled:
   broken `apps/server`.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
+- **No front-end bundle is built by a pull request that did not touch `deploy/`.** In CI the SPAs
+  are `vite build`-ed only inside `deploy/Dockerfile`, which on a pull request runs only when
+  `deploy/` changed — and wherever it does run it builds them without opening one, so a bundle that
+  renders nothing passes anyway. Cost: the vite 6 → 8 bundler replacement had to take its build
+  evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Two pushes to `main` must never share a CI concurrency group.** GitHub keeps only one PENDING
   run per group and a newer push cancels the waiting one, which `cancel-in-progress` never reaches.
   Cost: a code merge that got NO run at all — no image published, no unfiltered main suite, and
