@@ -3243,12 +3243,49 @@ than a list or a command that pretends to be the answer.
 60-second default (`packages/db/src/testing/lifecycle.ts:22` and `:146`), and a timeout passed to a
 hook overrides the config's. Three configs still carry the sentence verbatim — found with
 `grep -rn "boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout" --include=vitest.config.ts packages apps`,
-which returns `packages/purchasing`, `packages/workforce-es` and `packages/catalogue`. A fourth
-instance sits in the package that owns the helper, `packages/db/README.md:39-40`: "Setup hooks have a
-separate `hookTimeout: 120_000` budget for booting and migrating PostgreSQL." That one is false for
-that package's `usePgliteDb` suites and true for a container suite whose hook passes no timeout
-(`packages/db/src/testing/networked-postgres.test.ts`), so correcting it means deciding what the
-sentence should say about both halves — which is why it is here rather than fixed.
+which returned `packages/purchasing`, `packages/workforce-es` and `packages/catalogue`. **#438
+corrected `packages/workforce-es`'s as part of converting that package, so that grep now returns
+two.** Another instance sits in the package that owns the helper, `packages/db/README.md:39-40`:
+"Setup hooks have a separate `hookTimeout: 120_000` budget for booting and migrating PostgreSQL."
+That one is false for that package's `usePgliteDb` suites and true for a container suite whose hook
+passes no timeout (`packages/db/src/testing/networked-postgres.test.ts`), so correcting it means
+deciding what the sentence should say about both halves — which is why it is here rather than fixed.
+
+**THAT PHRASE-GREP IS NOT THE SIZE OF THE PROBLEM, and #438's review rounds are what showed it.** It
+finds ONE wording. Six more `vitest.config.ts` files state the same claim in other words, and the
+count is not the point — the METHOD is, because two successive corrections inside #438 got this
+wrong in opposite directions. Read each config against its own package and ask where the boot
+actually sits:
+
+- False for the same reason (every PGlite boot in the package goes through `usePgliteDb`, so
+  `hookTimeout` bounds none of them — `grep -rlE "createPgliteDb|describeEachTarget" --include="*.ts"
+  packages/<pkg>` exits 1): `packages/workforce/vitest.config.ts:13-14`,
+  `packages/reporting/vitest.config.ts:15-16`, `packages/credentials/vitest.config.ts:15-16`.
+- ALSO false, and this is where the first correction went wrong: `packages/payments/vitest.config.ts:14`
+  and `packages/scheduler/vitest.config.ts:15`. That grep returns a file for each, which a draft took
+  as a reason to spare them — but the one out-of-helper boot in each is inside an `it` body
+  (`packages/payments/src/migrations.test.ts:27`, `packages/scheduler/src/run.test.ts:205`), and
+  `testTimeout` bounds a test body, not `hookTimeout`. **The grep tells you a boot exists; only
+  reading tells you whether it is in a hook.**
+- False for a DIFFERENT reason: `packages/fiscal-verifactu/vitest.config.ts:14-16`. Three of its
+  suites do boot PGlite in an untimed `beforeEach` that `hookTimeout` really does bound
+  (`provisioning.test.ts:26`, `registro-sif.test.ts:27`, `restore.test.ts:64`) — but the sentence
+  says every per-suite cost "is paid in a beforeAll", and 25 files there call `usePgliteDb` and take
+  the helper's own 60-second `beforeAll`. So it needs rewording, not sparing; a second correction
+  inside #438 spared it and was itself wrong.
+
+**A claim stated in a markdown file is invisible to every grep this rollout kept, and #438 is where
+that cost something.** `docs/superpowers/plans/2026-09-06-module-fiscal-none.md:101` and `:119` told
+whoever executed that plan to read `packages/workforce-es/src/migrations.test.ts` for "the exact
+`usePgliteDb` … names and call shape" and called it "the source of truth for symbol names" — a
+designation, not just a mention. Converting the package falsified it, and only the convention
+review's stale-receipts pass found it; #438 added a dated pointer beneath the step rather than
+rewriting history. The scope gap is general: the guide's pair and the plan's step-5 command are all
+`--include="*.ts"` under `packages` and `apps`. Note the sharper version of the same point — a grep
+DID look. #423 ran `git grep -l 'usePgliteDb(' c54dee74` unscoped and got 243 files, 34 of them
+markdown, that plan among them; nothing read the markdown half for what a document SAYS about a
+converted file. **The remaining conversions should run one unscoped search over `docs/` for the
+converted package's test paths before landing.**
 
 **And the measurement trap inside that correction, which is CLAUDE.md §1's "both answers look
 alike" in a new dress.** The obvious probe is to set `hookTimeout: 50` and see the suites still pass.
