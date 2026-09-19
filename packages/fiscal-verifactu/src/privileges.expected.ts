@@ -79,6 +79,7 @@ export const PRIVILEGES: Record<string, string> = {
   printers: "SIU",
   preparation_routes: "SIUD",
   product_categories: "SIUD",
+  product_modifiers: "SIUD",
   product_option_groups: "SIUD",
   product_units: "SIUD",
   products: "SIU",

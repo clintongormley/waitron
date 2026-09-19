@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
 import { count, flag, id, json, label, money, products, table } from "@waitron/db";
 import { menuItems } from "./menu.js";
+import { optionLists } from "./options.js";
 
 /** A reusable, named list of products a diner may add to a dish, with rules on how many. The list
  * carries three names (staff, customer-facing, kitchen) like an options list and a product; what it
@@ -171,5 +172,68 @@ export const menuItemExtraItems = table(
     // because a create mints the list id a statement earlier and no offer can hold an override
     // against it yet.
     index("menu_item_extra_items_list_product_idx").on(t.listId, t.productId),
+  ],
+);
+
+/** The ONE ordered list a product exposes at the till: each row attaches exactly one extras list or
+ * one options list, and `sort` is the position the till draws it in (spec
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §5). It replaces
+ * `product_option_groups`, which could only ever hold option groups.
+ *
+ * The key is a surrogate `id` rather than the natural pair, because a composite primary key cannot
+ * span columns that are allowed to be null and both references here are — each row leaves one of
+ * them empty. What stands in for that key is the pair of unique indexes below.
+ *
+ * `(extra_list_id is null) <> (option_list_id is null)` is the check, not the
+ * `num_nonnulls(extra_list_id, option_list_id) = 1` the plan's prose names: `num_nonnulls` is a
+ * PostgreSQL function that SQLite has no equivalent for, and spec §7 bars new code from constructs
+ * the in-flight flip would have to rewrite. The `<>` form is plain boolean inequality — "exactly one
+ * of the two is absent" — and both engines have it. */
+export const productModifiers = table(
+  "product_modifiers",
+  {
+    id: id("id").primaryKey().defaultRandom(),
+    productId: id("product_id").notNull(),
+    // Position in the product's list, written from the body's order by `writeProductModifiers`
+    // (packages/catalogue/src/product-modifiers.ts) the way `extra_list_items.sort` is.
+    sort: count("sort").notNull().default(0),
+    extraListId: id("extra_list_id"),
+    optionListId: id("option_list_id"),
+  },
+  (t) => [
+    // All three are `cascade`, not the `restrict` an extras ITEM's product key takes: an attachment
+    // is a link and carries nothing of its own, so removing either end should take the link with it
+    // rather than refuse. Run rather than read off the clauses, by the three cases in "what deleting
+    // a parent row takes with it" (packages/catalogue/src/product-modifiers.test.ts).
+    foreignKey({
+      columns: [t.productId],
+      foreignColumns: [products.id],
+      name: "product_modifiers_product_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.extraListId],
+      foreignColumns: [extraLists.id],
+      name: "product_modifiers_extra_list_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.optionListId],
+      foreignColumns: [optionLists.id],
+      name: "product_modifiers_option_list_fk",
+    }).onDelete("cascade"),
+    check(
+      "product_modifiers_one_reference_ck",
+      sql`(${t.extraListId} is null) <> (${t.optionListId} is null)`,
+    ),
+    // The read path orders a product's rows by `sort`; nothing else filters this table by product.
+    index("product_modifiers_product_sort_idx").on(t.productId, t.sort),
+    // One attachment per list per product, and each index constrains only the rows whose reference
+    // is present: a unique index treats two nulls as DIFFERENT values, so the options index ignores
+    // every extras-only row and the other way round. Measured on PGlite (PostgreSQL 18.3) rather
+    // than read off the documentation, by "lets one product carry many extras-only rows under the
+    // options-list unique index" (packages/catalogue/src/product-modifiers.test.ts). These are the
+    // database backstop under `writeProductModifiers`' own duplicate refusal, the same division
+    // `extra_list_items_list_product_uq` makes above.
+    uniqueIndex("product_modifiers_product_extra_uq").on(t.productId, t.extraListId),
+    uniqueIndex("product_modifiers_product_option_uq").on(t.productId, t.optionListId),
   ],
 );

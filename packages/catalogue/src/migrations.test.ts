@@ -37,6 +37,7 @@ const TABLES = [
   "extra_list_items",
   "menu_item_extra_lists",
   "menu_item_extra_items",
+  "product_modifiers",
 ];
 
 const tableList = () =>
@@ -118,6 +119,15 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_sections_menu_id_key: "UNIQUE (menu_id, id)",
       menu_sections_pkey: "PRIMARY KEY (id)",
       option_labels_list_fk: "FOREIGN KEY (list_id) REFERENCES option_lists(id) ON DELETE CASCADE",
+      product_modifiers_extra_list_fk:
+        "FOREIGN KEY (extra_list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
+      product_modifiers_one_reference_ck:
+        "CHECK (((extra_list_id IS NULL) <> (option_list_id IS NULL)))",
+      product_modifiers_option_list_fk:
+        "FOREIGN KEY (option_list_id) REFERENCES option_lists(id) ON DELETE CASCADE",
+      product_modifiers_pkey: "PRIMARY KEY (id)",
+      product_modifiers_product_fk:
+        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
       option_labels_pkey: "PRIMARY KEY (id)",
       option_lists_pkey: "PRIMARY KEY (id)",
       product_categories_category_fk:
@@ -163,6 +173,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_sections_menu_order_idx: "menu_id, display_order",
       option_labels_list_sort_idx: "list_id, sort",
       product_categories_category_idx: "category_id",
+      product_modifiers_product_extra_uq: "product_id, extra_list_id",
+      product_modifiers_product_option_uq: "product_id, option_list_id",
+      product_modifiers_product_sort_idx: "product_id, sort",
       product_units_unit_idx: "unit_id",
     });
   });
