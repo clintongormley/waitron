@@ -110,7 +110,13 @@ const refKey = (ref: ProductModifierRef) => `${ref.kind}\u0000${ref.id}`;
  * PostgreSQL 18, not read off the documentation — with one session holding an open transaction
  * that had inserted a child row, a second session's `for key share` on the parent returned at
  * once and a third session's `for update` on it blocked, and the same `for update` returned at
- * once as a control once the inserter had committed. It is also shared, so two products attaching the SAME list still run side by side —
+ * once as a control once the inserter had committed. Read for exactly what it settles: those two
+ * probes rule OUT `for update` and rule out anything that would let a `for update` through, which
+ * leaves three of PostgreSQL's four row-lock strengths, and no pair of probes can separate
+ * `for key share` from `for no key update` — that the check takes `for key share` specifically is
+ * PostgreSQL's documented behaviour for a foreign key, not something measured here. What the
+ * measurement does establish is the part this code turns on: taking `for key share` here neither
+ * adds a conflict the insert would not have had, nor removes one. It is also shared, so two products attaching the SAME list still run side by side —
  * measured by "lets two products attach the same list at once, without either waiting for the
  * other" (product-modifiers.pg.test.ts), which stalls and fails on its own deadline when this is
  * changed to `for update`. It is not the first in this package: `assignProductUnit` (units.ts)

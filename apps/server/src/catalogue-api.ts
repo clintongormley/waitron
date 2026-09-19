@@ -259,9 +259,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // whose path is written out at the call, and `mountListSurface` above registers
   // `app.delete(one, …)` with the path in a variable — one grep line standing for the two real
   // paths its two call sites mount, `/management-api/modifiers/options/:id` and
-  // `/management-api/modifiers/extras/:id`. Both delete a LIST, and it is the only line in that
-  // output whose path is not written out — every other one is a literal, which is what makes the
-  // rest of the list readable. What refuses a product delete today is the database: an extras
+  // `/management-api/modifiers/extras/:id`. Both delete a LIST. Of the rest of that output, two
+  // lines are this comment quoting the command and every remaining one writes its path out, which
+  // is what makes them readable. What refuses a product delete today is the database: an extras
   // list item's and a menu override's `product_id` are both ON DELETE RESTRICT
   // (`packages/catalogue/src/schema/extras.ts`), which surfaces as a driver error and not as this
   // code. Mapped because Task 6 of the plan names it — the same reason `extras.in_use` above is
