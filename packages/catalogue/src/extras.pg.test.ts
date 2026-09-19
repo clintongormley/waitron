@@ -6,11 +6,13 @@ import { createCatalogue, createMenuItem, createMenuSection, createProduct } fro
 import { createExtraList, getExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
 import { readMenuExtras, type MenuExtraList } from "./extra-projection.js";
 
-// Two saves have to be in flight at once for the first two tests to mean anything, and PGlite
-// serialises every query onto its single backend, so the same suite there is a false pass
-// (CLAUDE.md §4). The last test would run on PGlite; it is here because it shares this file's
-// product fixture with the others, and because a real backend is where the unique index it is about
-// was first seen to fire.
+// Every test here but one needs two things in flight at once — two saves, a save against a list
+// edit, or a read against a delete — and PGlite serialises every query onto its single backend, so
+// the same suite there is a false pass (CLAUDE.md §4). The exception is "saves a body that
+// exchanges two retained items' products", which would run on PGlite; it is here because it shares
+// this file's product fixture with the others, and because a real backend is where the unique index
+// it is about was first seen to fire.
+
 const suite = useTemplateDb({ template: "core" });
 
 function app<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -20,7 +22,7 @@ function app<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   });
 }
 
-/** A promise plus the function that settles it — the two barriers below are built from these. */
+/** A promise plus the function that settles it — the barriers below are built from these. */
 function latch(): { waited: Promise<void>; open: () => void } {
   let open!: () => void;
   const waited = new Promise<void>((resolve) => {
