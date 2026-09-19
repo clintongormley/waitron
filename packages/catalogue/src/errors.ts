@@ -164,5 +164,50 @@ declare module "@waitron/shared" {
      * was asking about. Thrown by `validateOptionSelections` (option-contract.ts).
      */
     "options.label_required": { optionListId: string };
+    /**
+     * An extras list's authoring body is malformed: a missing or blank staff name, a name map with a
+     * non-text entry, an unknown key, a bad id, a pick bound that is not a whole number or leaves
+     * `maxPicks` below `minPicks`, a `maxQuantity` below one, or a malformed price. `field` is the
+     * dotted path of the offending value (`"maxPicks"`, `"items.1.maxQuantity"`), so the editor can
+     * put the refusal beside the input that caused it. It also covers a structurally bad ORDER-time
+     * selection body — not an array, an unknown key, a non-string id, a pick naming a product the
+     * list does not carry, or an answer for a list that was never offered — where `field` names the
+     * offending path in that body (`"extraSelections"`, `"listId"`, `"productId"`). A CLIENT request
+     * fault. Thrown by `parseExtraListInput` / `validateExtraSelections` (extra-contract.ts).
+     */
+    "extras.invalid": { field: string };
+    /** An extras list id names no list. */
+    "extras.not_found": { extraListId: string };
+    /** Registered in the `dependency: string` shape the sibling `modifier.in_use` above already has.
+     * NOTHING throws it: the design has a list delete cascade its attachments rather than refuse
+     * (spec 2026-09-18-one-product-model-design.md §3.5). It stays registered unthrown, because a
+     * shipped code is never removed. */
+    "extras.in_use": { extraListId: string; dependency: string };
+    /**
+     * An order line's answer to an extras list breaks one of that list's COUNTS: fewer picks than
+     * `minPicks`, more than `maxPicks`, or a quantity above one item's `maxQuantity`. The body's
+     * SHAPE was fine and its CONTENT is not orderable, which is what separates this from
+     * `extras.invalid` — the same split `options.label_required` has from `options.invalid`. Carries
+     * only the list's id: the caller knows which dish it was asking about. Thrown by
+     * `validateExtraSelections` (extra-contract.ts).
+     */
+    "extras.limit_exceeded": { listId: string };
+    /**
+     * An extras list's customer-facing name has no text in the venue's default content language.
+     * `field` is the dotted path of the offending map (`"customerName"`), matching the paths
+     * `parseExtraListInput` reports. The sibling of `options.translation_required`; an extras list
+     * holds ONE such map (its items name products and carry no names), so the path is always
+     * `"customerName"` today. Nothing throws it yet — the extras list CRUD that will is Task 4 Step 5
+     * of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+     */
+    "extras.translation_required": { field: string; language: string };
+    /**
+     * A product cannot be removed while something still names it — an extras list item today.
+     * Registered ahead of a thrower: `grep -rn "deleteProduct" packages --include="*.ts"` and
+     * `grep -rn '\.delete(' apps/server/src/*.ts | grep -i product` both matched nothing on
+     * 2026-09-19, so there is no product-delete path to refuse from. What refuses today is the
+     * database: `extra_list_items.product_id` is `ON DELETE RESTRICT` (schema/extras.ts).
+     */
+    "product.in_use": { productId: string; dependency: string };
   }
 }
