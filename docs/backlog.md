@@ -475,6 +475,45 @@ What it left open:
   kitchen-rendering evidence comes from the build's own focused tests plus CI's package suites, not
   from a second pair of eyes. Worth knowing before anyone treats those paths as double-checked.
 
+**Modifiers become Extras and Options — IN PROGRESS, thirteen pull requests.** The single "modifier"
+idea is being split into two: Extras (reusable lists of products, each pick becoming its own sale
+line) and Options (reusable lists of labels, saved as a note on the dish line). A product composes
+both through one ordered attachment list. Design:
+[one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
+[modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). Two
+tasks have landed — a `sold_alone` flag on products (#412), and option lists (#436): the two tables,
+the authoring and order-time rules, the reads and writes, and five refusal codes. Nothing is served
+over the API yet and no screen shows a list.
+
+What option lists left open, none of it taken in #436:
+
+- **`dependants` returns a `menus` list that can only ever be filled indirectly.** An options list
+  has no per-menu publication row at all, so the menus a delete would touch are the ones showing a
+  dish that carries the list. Nothing computes that yet; the attachment table it needs arrives with
+  the plan's Task 6. **Next action:** whoever builds Task 6 fills both sides through one shared
+  predicate, so the delete preview and any future refusal cannot drift — the modifier code it
+  replaces already learned that lesson (`openOrderUse` in `packages/catalogue/src/modifiers.ts`).
+- **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
+  its product attachments rather than be refused, so there may never be a thrower. It stays
+  registered because a shipped code is never removed.
+- **A list switched on with no pickable label is refused only by the parser.** The rule lives in
+  `parseOptionListInput`, which is the only door today, but nothing in the database enforces it: a
+  path that writes `option_labels.available` directly, or flips `option_lists.active` with a plain
+  update, could still leave a list nobody can answer.
+- **Three plans still assert error codes by matching the error's message with a regular expression**,
+  the shape #436 corrected in its own plan — a regex over the message cannot tell an `AppError` from
+  a plain `Error` whose text happens to contain those words, and checks nothing about the error's
+  params. They are `2026-08-31-modifier-allergen-association.md` (three places) with weaker twins in
+  `2026-07-26-server-host.md`, `2026-08-28-sync-cloud-mirror-c2a-mirror-server.md` and
+  `2026-09-14-dashboard-alerts-events.md`. Left for whoever works those files. Note that both styles
+  are in the tree, so a grep does not hand anyone the convention:
+  `packages/catalogue/src/dietary.test.ts` asserts `/diet.invalid_origin/` by regex.
+- **A save reaches the database once per submitted label.** The read that finds which list each
+  submitted label belongs to, and the delete that drops the labels a body omits, are each one
+  statement — but writing the labels is a loop, because a multi-row insert cannot say WHICH label's
+  id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
+  worth knowing if extras lists turn out to be much longer.
+
 **Product selling units — LANDED #342 (2026-09-13).** You now say what you actually sell a product
 by — by the each (the default when you choose nothing), or by weight or volume: grams, milligrams,
 kilograms, millilitres, litres, or a unit you invent yourself — and how many decimal
