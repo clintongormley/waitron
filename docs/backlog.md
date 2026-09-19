@@ -3510,6 +3510,60 @@ class of false `hookTimeout` claim above is identified by
 `.ts` config file. Scheduler's replacement comment deliberately writes neither word — the same shape
 as the bare-name trap #435 recorded, one layer along.
 
+**`packages/payments-sumup` converted, LANDED as #446 on 2026-09-19** (main `7e9c5f1c`) — the
+twelfth package of the rollout, five test files and five calls, plus a corrected
+`vitest.config.ts` comment and one dated pointer on a finished plan
+(`docs/superpowers/plans/2026-09-10-payments-sumup.md`, whose Task 3 and Task 4 sketches both wrote
+the old helper). FIVE review rounds this time, every finding in prose again, and rounds four and
+five each broke sentences the round before had written. Four things to carry.
+
+**First, a THIRD shape of false timeout claim, and nothing was tracking it: one about
+`testTimeout`.** The two shapes above are about `hookTimeout` (it does not bound the PGlite boot)
+and about `globalSetup` (vitest bounds it by neither budget). This one is different: this package's
+config said Vitest's five-second default `testTimeout` was "a live risk" for the PGlite start-up and
+for the real-PostgreSQL suite's clone of the migrated template — two costs the same sentence places
+in a `beforeAll`, which is not a test body. **`packages/payments-stripe/vitest.config.ts` carries it
+word for word and is still standing**, found with `grep -rn "live risk"` over the whole tree with no
+file-type or directory filter. Correcting it needs that package read against its own suites, which
+this branch did not do.
+
+**Second, and this one retires a probe several conversions have leaned on:
+`--hookTimeout` on the command line does NOT reach a project that sets its own.** Measured on this
+package: `npx vitest run --project node --hookTimeout=1` passes all 114 tests with no hook timeout
+at all, while the same 1ms value written into a config kills the reset and close hooks a PGlite
+suite gets (`Hook timed out in 1ms` at `packages/db/src/testing/lifecycle.ts:148` and `:153`,
+reproduced in a throwaway project and in `packages/fiscal-none`, which defines no projects and so
+does take the flag). `--testTimeout` demonstrably does reach such a project, which is what makes the
+asymmetry visible at all. So wherever a package's vitest config splits into projects and the project
+states a `hookTimeout` of its own, the `--hookTimeout=50` run the entries above describe is INERT,
+and passing under it is not a receipt for anything. Check the config before quoting such a run; the
+probe that discriminates there is writing the value into the project.
+
+**Third, a sibling survey must count, not gesture.** A draft said the replacement comment says what
+each budget bounds "which the earlier conversions' comments do". Of the eleven conversions before
+this one, only six touched a `vitest.config.ts` at all (`git show --stat` on each), and of those six
+only four name a hook of their own that `hookTimeout` bounds — `printing`, `workforce-es`,
+`credentials`, `scheduler`. `provisioning` and `recipes` state only what it does not bound. This is
+the same shape as #434's rule about naming files that carry a claim, one step along: do not
+characterise a group of siblings you have not enumerated.
+
+**Fourth, the self-referential trap recurred as a COUNT rather than a grep.** The branch's own dated
+pointer said the plan document "contains exactly those four mentions" of the old helper — false the
+moment the pointer, which writes the name itself, is added; `grep -c` returns five. #435 recorded
+this as a grep problem and #431 before it; it is really a problem with any statement a document
+makes about its own text. Also worth noting, because it is the reason the branch's grep receipt
+survives: the replacement config comment deliberately does not write the old helper's name, so
+`grep -rn usePgliteDb packages/payments-sumup` still exits 1. Four of the six sibling comments DO
+write it, which is why their packages cannot make the same claim.
+
+**One method note about review dispatch, not about the code.** The convention reviewer and the
+Codex run-it seat were pointed at the SAME temporary checkout, and the run-it seat mutates its
+checkout to run experiments — so the convention reviewer reported the seat's live probe lines as
+branch changes. Give each read-only reader its own checkout, or point it at the branch worktree.
+
+Which package is NEXT is the plan's step-5 command run on the tree you are converting, never a name
+written here.
+
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
 only be backed up or restored separately if no row in one points at a row in the other. Six such
