@@ -481,12 +481,12 @@ line) and Options (reusable lists of labels, saved as a note on the dish line). 
 both through one ordered attachment list. Design:
 [one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
 [modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md). Two
-tasks have landed — a `sold_alone` flag on products (#412), and option lists (#436): the two tables,
-the authoring and order-time rules, the reads and writes, and five refusal codes. Option lists are
-now served over the management API, under `/management-api/modifiers/options` (the plan's Task 3).
+tasks have landed — a `sold_alone` flag on products (#412), option lists (#436): the two tables,
+the authoring and order-time rules, the reads and writes, and five refusal codes; and serving those
+lists over the management API under `/management-api/modifiers/options` (#445, the plan's Task 3).
 No screen shows a list yet.
 
-What option lists left open, none of it taken in #436:
+What option lists left open, none of it taken in #436 or #445:
 
 - **`dependants` returns a `menus` list that can only ever be filled indirectly.** An options list
   has no per-menu publication row at all, so the menus a delete would touch are the ones showing a
@@ -497,6 +497,28 @@ What option lists left open, none of it taken in #436:
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
   registered because a shipped code is never removed.
+- **The six option-list route handlers duplicate the six `/management-api/modifiers` ones, and Task 6
+  will make a third copy.** A review asked for a shared mount helper in `catalogue-api.ts` (the file
+  already has the pattern in `mountCourseVerb`, `apps/server/src/till-api.ts`). #445 did NOT take it:
+  the `/management-api/modifiers` block is meant to be REPLACED by the options and extras routes
+  (spec §11), so a helper extracted across it now would be undone. **Next action:** whoever builds
+  Task 6 extracts it then, when extras adds the second surviving copy, rather than writing a third
+  copy by hand.
+- **Nothing schedules the deletion of the old `/management-api/modifiers` routes.** Spec §11 says the
+  options and extras routes replace them, but no task in the plan lists `apps/server/src/catalogue-api.ts`
+  as a file it deletes from — Task 13's file list does not name it. Until that is fixed, the old
+  routes survive the plan, and so does the ordering requirement #445 had to comment on (the options
+  routes must be registered ahead of `/management-api/modifiers/:id`, or `:id` swallows the literal
+  word `options`). **Next action:** add the route removal to Task 13, or state that the old routes stay.
+- **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
+  `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
+  bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
+  `vitest run "catalogue-api.test"` and 165 tests run, with `-- -t "option lists"` it is
+  `vitest run "catalogue-api.test" "-t" "option lists"` and 8 run with 157 skipped. Two review agents
+  and the session driver all reported "2 of the 8 failed" from runs that were really the whole file —
+  the numbers look plausible either way, which is §1's "a measurement taken where both answers look
+  alike". **Next action:** add it to `CLAUDE.md` §2's trap list, which is a root-file change and so
+  takes the normal pull request flow rather than the documentation shortcut.
 - **A list switched on with no pickable label is refused only by the parser.** The rule lives in
   `parseOptionListInput`, which is the only door today, but nothing in the database enforces it: a
   path that writes `option_labels.available` directly, or flips `option_lists.active` with a plain
