@@ -33,8 +33,10 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
 /**
  * Resolve a request's relative path to an absolute file inside `root`, or `null` if it would escape
  * `root`. THIS is the explicit path-traversal guard — the reason we serve files by a custom `fs`
- * handler and not `@hono/node-server/serve-static` (`CLAUDE.md` §3: "the defence is explicit, never
- * implicit"). `root` is normalised with `resolve` FIRST, so the containment check compares two
+ * handler and not `@hono/node-server/serve-static`: the refusal is written here, in code this repo
+ * tests, rather than inherited from a dependency's own idea of containment.
+ *
+ * `root` is normalised with `resolve` FIRST, so the containment check compares two
  * canonical absolute paths: a relative root (`apps/till/dist`) or a trailing-slash root (`/srv/till/`)
  * would otherwise make `absolute.startsWith(<raw root> + sep)` always false and 404 every asset. The
  * request path is resolved against that same normalised `base`, and `resolve` collapses any `..`
@@ -103,20 +105,12 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
       return sendFile(c, indexFile, REVALIDATE_CACHE_CONTROL, log);
     }
     const abs = safeResolve(root, relPath);
-    // Defence-in-depth: `safeResolve` returns null on an escaping path, and we 404 it. In production
-    // requests reach this handler through `@hono/node-server`, whose `newRequest` builds the `Request`
-    // by running Node's raw `req.url` through WHATWG `new URL(...)`:
-    // `@hono/node-server@1.19.15` `dist/request.js` `newRequest` (defined at its line 191) reads
-    // `const incomingUrl = incoming.url || ""` (line 194) and constructs
-    // `const url = new URL(`${scheme}://${host}${incomingUrl}`)` (line 221), storing `url.href` as the
-    // request URL (line 225) — the SAME `new URL(...)` normalisation `app.request` applies in tests.
-    // So an escaping `/../` is collapsed before the handler's `c.req.path` sees it, and a `%2f` stays a
-    // single encoded segment. That is why this branch is not reached in practice. The security property
-    // does NOT depend on that unreachability: it rests on `safeResolve` being present and directly
-    // unit-tested (`spa-api.test.ts`'s `safeResolve` block, proven by deletion). This branch is kept as
-    // belt-and-braces defence — removing a guard because it "can't happen" is precisely the mistake
-    // CLAUDE.md §3 forbids.
-    /* v8 ignore next */
+    // Defence-in-depth: `safeResolve` returns null on a path that escapes the root, and we 404 it.
+    // `@hono/node-server` collapses a dot segment on the way in, so an escaping `/../` is not what
+    // arrives here; what does is a path resolving to the root DIRECTORY itself, `//` among them.
+    // Both are pinned against the real adapter by the socket-level suite in `spa-api.test.ts`
+    // ("what mountSpa is handed when a request arrives through the Node adapter"), and `safeResolve`
+    // is unit-tested on its own in the same file, proven by deletion.
     if (abs === null) return Promise.resolve(c.body(null, 404));
     // Only hashed files under the `/assets/` prefix are safe to cache immutably; everything else is
     // revalidated. A LEADING-segment check (not a `.includes`, which would also match a stray
