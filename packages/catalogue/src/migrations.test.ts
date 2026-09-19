@@ -31,6 +31,8 @@ const TABLES = [
   "product_units",
   "product_variants",
   "menu_item_variants",
+  "option_lists",
+  "option_labels",
 ];
 
 const tableList = () =>
@@ -90,6 +92,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_sections_menu_fk: "FOREIGN KEY (menu_id) REFERENCES catalogues(id) ON DELETE CASCADE",
       menu_sections_menu_id_key: "UNIQUE (menu_id, id)",
       menu_sections_pkey: "PRIMARY KEY (id)",
+      option_labels_list_fk: "FOREIGN KEY (list_id) REFERENCES option_lists(id) ON DELETE CASCADE",
+      option_labels_pkey: "PRIMARY KEY (id)",
+      option_lists_pkey: "PRIMARY KEY (id)",
       product_categories_category_fk:
         "FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT",
       product_categories_product_fk:
@@ -127,6 +132,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       category_details_parent_idx: "parent_id",
       menu_items_menu_order_idx: "menu_id, display_order",
       menu_sections_menu_order_idx: "menu_id, display_order",
+      option_labels_list_sort_idx: "list_id, sort",
       product_categories_category_idx: "category_id",
       product_units_unit_idx: "unit_id",
     });
@@ -342,6 +348,13 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       sql`insert into menu_item_variants (menu_item_id, product_id, variant_id, unit_price)
         values (${c.menuItemId}, ${c.productId}, ${c.otherVariantId}, 1)`,
       "menu_item_variants_variant_fk",
+    );
+  });
+
+  it("refuses a label whose options list does not exist", async () => {
+    await refusal(
+      sql`insert into option_labels (list_id, name) values (${missing}, 'Rare')`,
+      "option_labels_list_fk",
     );
   });
 });

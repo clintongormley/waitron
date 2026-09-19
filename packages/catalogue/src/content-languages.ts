@@ -10,20 +10,40 @@ import { eq, sql } from "drizzle-orm";
 import { contentLanguages } from "./schema/menu.js";
 import "./errors.js";
 
+/**
+ * Validate several translated maps against the venue's content languages in one pass, taking the
+ * advisory lock and reading the configuration ONCE however many maps are handed in — the lock is
+ * what makes every later read redundant, because the configuration cannot change while it is held.
+ * Returns the INDEX of the first map with no text in the default language, with that language, or
+ * null when every map is satisfied — so a caller with several fields can name which one is missing.
+ * A key that is not a language code, or a value that is not text, is still refused outright.
+ */
+export async function findContentTranslationGap(
+  tx: Transaction,
+  maps: readonly Readonly<Record<string, string>>[],
+  fallbackLanguage: string,
+): Promise<{ index: number; language: string } | null> {
+  await lockContentLanguages(tx);
+  for (const map of maps)
+    for (const [language, value] of Object.entries(map)) {
+      contentLanguageCode(language);
+      if (typeof value !== "string") throw new AppError("content.translation_invalid", {});
+    }
+  const config = await readContentLanguages(tx, fallbackLanguage);
+  const index = maps.findIndex(
+    (map) => resolveContentText(map, config.defaultLanguage, config.defaultLanguage) === "",
+  );
+  return index === -1 ? null : { index, language: config.defaultLanguage };
+}
+
+/** The single-map form: the gap is thrown rather than reported. */
 export async function validateContentTranslations(
   tx: Transaction,
   translations: Readonly<Record<string, string>>,
   fallbackLanguage: string,
 ): Promise<void> {
-  await lockContentLanguages(tx);
-  for (const [language, value] of Object.entries(translations)) {
-    contentLanguageCode(language);
-    if (typeof value !== "string") throw new AppError("content.translation_invalid", {});
-  }
-  const config = await readContentLanguages(tx, fallbackLanguage);
-  if (resolveContentText(translations, config.defaultLanguage, config.defaultLanguage) === "") {
-    throw new AppError("content.translation_required", { language: config.defaultLanguage });
-  }
+  const gap = await findContentTranslationGap(tx, [translations], fallbackLanguage);
+  if (gap) throw new AppError("content.translation_required", { language: gap.language });
 }
 
 /** Configuration edits and content validation serialize so a new default cannot invalidate a save. */
@@ -36,10 +56,11 @@ export async function listContentTranslationGaps(
   language: string,
 ): Promise<{ kind: string; id: string }[]> {
   const code = contentLanguageCode(language);
-  // A product's and a variant's customer-facing name is optional and falls back to the staff name, so
-  // a wholly-absent one (null or {}) is never a gap — only a partial one is. The other five kinds the
-  // query below emits — `category`, `unit`, `section`, `option_group` and `option` — have no such
-  // fallback and stay required, so they are never null-filtered here.
+  // `product`, `variant`, `option_list` and `option_label` are the kinds whose customer-facing name
+  // is optional, so the query filters a wholly-absent one (null or {}) out of them: absent is not a
+  // gap, only a partly filled map is. The kinds it emits unfiltered — `category`, `unit`, `section`,
+  // `option_group` and `option` — have no optional customer name; their name is the only text they
+  // have and stays required.
   const result = await tx.execute<{
     kind: string;
     id: string;
@@ -54,6 +75,10 @@ export async function listContentTranslationGaps(
     union all select 'section' as kind, id, name as translations from menu_sections
     union all select 'option_group' as kind, id, name as translations from option_groups
     union all select 'option' as kind, id, name as translations from option_group_items
+    union all select 'option_list' as kind, id, customer_name as translations from option_lists
+      where customer_name is not null and customer_name <> '{}'::jsonb
+    union all select 'option_label' as kind, id, customer_name as translations from option_labels
+      where customer_name is not null and customer_name <> '{}'::jsonb
   `);
   return result.rows
     .filter((row) => resolveContentText(row.translations, code, code) === "")

@@ -207,7 +207,7 @@ until then), and do NOT reference "modifier" — this column outlives that word.
     `active`) and `option_labels` (`id`, `list_id`, `name`, `customer_name`, `kitchen_name`,
     `available`, `sort`).
   - `interface OptionList { id; name; customerName; kitchenName; defaultLabelId: string | null;
-    labels: OptionLabel[] }` and `OptionLabel { id; name; customerName; kitchenName; available }`
+    active; labels: OptionLabel[] }` and `OptionLabel { id; name; customerName; kitchenName; available }`
     (three names = `name: string`, `customerName: Record<string,string> | null`, `kitchenName: string | null`).
   - `interface OptionListInput` (same, labels carry an optional `id` on the way in).
   - `parseOptionListInput(value: unknown): OptionListInput` — validator.
@@ -220,9 +220,19 @@ until then), and do NOT reference "modifier" — this column outlives that word.
 
 - [ ] **Step 1: Write the failing contract test** — in `option-contract.test.ts`:
 
+Assert the error CODE as data — `expect.objectContaining({ code })` as below, `toMatchObject`, or
+`error.code` — never a regular expression over the message. `AppError`'s constructor passes the code
+straight to `super(code)` (`packages/shared/src/errors.ts:118-119`), so a message regex does match
+today; what it cannot do is tell an `AppError` apart from a plain `Error` whose text happens to
+contain those words, and it checks nothing about `params`. Both styles are in the tree — this
+package's own `packages/catalogue/src/dietary.test.ts:113` asserts `/diet.invalid_origin/` by regex —
+so a grep will not hand you the convention. Assert the code here.
+
 ```ts
 it("requires a staff name on the list and each label, and rejects an unknown key", () => {
-  expect(() => parseOptionListInput({ name: "", labels: [] })).toThrow(/options\.invalid/);
+  expect(() => parseOptionListInput({ name: "", labels: [] })).toThrowError(
+    expect.objectContaining({ code: "options.invalid" }),
+  );
 });
 it("normalises customer/kitchen names and keeps label order", () => {
   const input = parseOptionListInput({
@@ -269,12 +279,17 @@ export type OptionSnapshot = {
 ```
 
 Export from `packages/shared/src/index.ts`. Note the staff name is a plain `string` on `OptionList`/
-`OptionLabel` but a `Record<string,string>` map in the snapshot (`listName`/`labelName`) — deliberate,
-mirroring `sale_lines.name` (plain) vs `descriptions` (map); freeze the plain staff name into a single-
-entry map under the venue's default language.
+`OptionLabel` but a `Record<string,string>` map in the snapshot (`listName`/`labelName`) — deliberate:
+the map is the shape the design's sample line shows (spec §2.3) and the shape the snapshot this
+replaces already uses (`ModifierSnapshot.name` and `choiceName`,
+`packages/shared/src/modifier-snapshots.ts`, where the old model's own name is a map column). Freeze
+the plain staff name into a single-entry map under the venue's default language.
 
-- [ ] **Step 6: Write CRUD** — `options.ts`. `createOptionList`/`updateOptionList` validate content
-      translations (`validateContentTranslations`) for every name; write list + labels in one
+- [ ] **Step 6: Write CRUD** — `options.ts`. `createOptionList`/`updateOptionList` check the
+      customer-facing name maps only (the staff and kitchen names are plain text): one
+      `findContentTranslationGap` call covering the list's map and every label's, then throw
+      `options.translation_required` carrying the dotted field path of the map with the gap, so the
+      editor can put the refusal beside the input; write list + labels in one
       transaction; `deleteOptionList` cascades labels and the `product_modifiers` rows that name it
       (Task 6 adds that table; for now delete cascades labels only and the product-attachment cascade
       is completed in Task 6). No advisory lock, no order check (spec §2.3). `optionListDependants`

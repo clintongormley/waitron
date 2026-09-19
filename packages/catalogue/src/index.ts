@@ -17,7 +17,9 @@ export * from "./categories.js";
 export * from "./schema/categories.js";
 
 export * from "./modifier-contract.js";
+export * from "./option-contract.js";
 export * from "./modifiers.js";
+export * from "./options.js";
 export { lockModifierDefinitions } from "./modifier-lock.js";
 
 export * from "./variants.js";

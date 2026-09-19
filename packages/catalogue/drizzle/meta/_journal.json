@@ -15,6 +15,20 @@
       "when": 1789558989320,
       "tag": "0001_catalogue_baseline_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789811664369,
+      "tag": "0002_option_lists",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789811675411,
+      "tag": "0003_option_lists_grants_sql",
+      "breakpoints": true
     }
   ]
 }

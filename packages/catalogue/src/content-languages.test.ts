@@ -8,6 +8,7 @@ import {
   readContentLanguages,
   writeContentLanguages,
   validateContentTranslations,
+  findContentTranslationGap,
   listContentTranslationGaps,
 } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
@@ -126,6 +127,45 @@ describe("site content languages", () => {
       // In en, even the partial customer name is complete → no product/variant gap.
       const enGaps = await listContentTranslationGaps(tx, "en");
       expect(enGaps).not.toContainEqual({ kind: "product", id: partial.id });
+    });
+  });
+
+  it("reports which of several maps is the first with no text in the default language", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
+
+      expect(await findContentTranslationGap(tx, [{ en: "One" }, { en: "Two" }], "en")).toBeNull();
+      expect(
+        await findContentTranslationGap(tx, [{ en: "One" }, { fr: "Deux" }, { fr: "Trois" }], "en"),
+      ).toEqual({ index: 1, language: "en" });
+      expect(await findContentTranslationGap(tx, [], "en")).toBeNull();
+      await expect(
+        findContentTranslationGap(tx, [{ en: 7 as unknown as string }], "en"),
+      ).rejects.toMatchObject({ code: "content.translation_invalid" });
+    });
+  });
+
+  it("reports a missing option list or option label customer name as a gap", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const named = await tx.execute<{ id: string }>(sql`
+        insert into option_lists (name, customer_name)
+        values ('Cooked', '{"en":"How cooked?"}'::jsonb) returning id`);
+      const plain = await tx.execute<{ id: string }>(sql`
+        insert into option_lists (name) values ('Spice') returning id`);
+      const namedLabel = await tx.execute<{ id: string }>(sql`
+        insert into option_labels (list_id, name, customer_name)
+        values (${named.rows[0]!.id}, 'Rare', '{"en":"Rare"}'::jsonb) returning id`);
+      const plainLabel = await tx.execute<{ id: string }>(sql`
+        insert into option_labels (list_id, name, customer_name)
+        values (${plain.rows[0]!.id}, 'Mild', '{}'::jsonb) returning id`);
+
+      const gaps = await listContentTranslationGaps(tx, "fr");
+
+      expect(gaps).toContainEqual({ kind: "option_list", id: named.rows[0]!.id });
+      expect(gaps).toContainEqual({ kind: "option_label", id: namedLabel.rows[0]!.id });
+      // Both names are optional and fall back to the staff name, so a wholly-absent one is no gap.
+      expect(gaps).not.toContainEqual({ kind: "option_list", id: plain.rows[0]!.id });
+      expect(gaps).not.toContainEqual({ kind: "option_label", id: plainLabel.rows[0]!.id });
     });
   });
 

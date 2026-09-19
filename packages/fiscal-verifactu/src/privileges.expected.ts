@@ -62,6 +62,8 @@ export const PRIVILEGES: Record<string, string> = {
   nodes: "S",
   option_group_items: "SIUD",
   option_groups: "SIUD",
+  option_labels: "SIUD",
+  option_lists: "SIUD",
   order_amendments: "SI",
   order_service_contexts: "SIUD",
   payment_policy: "SIU",
