@@ -4,9 +4,12 @@ import { serve } from "@hono/node-server";
 
 /**
  * The exact options object `@hono/node-server`'s `serve` accepts as its first argument —
- * `Parameters<typeof serve>[0]`, derived from the installed version rather than re-declared, so a
- * package upgrade that reshaped it would surface here as a `tsc` error instead of a runtime
- * surprise. `serve` also takes an optional `listeningListener` second argument, untouched here.
+ * `Parameters<typeof serve>[0]`, derived from the installed version rather than re-declared, so an
+ * upgrade that made the keys this file sets incompatible would surface here as a `tsc` error
+ * instead of a runtime surprise. How much that is worth is still untested: the 1.19.15 -> 2.1.1
+ * upgrade left this type alone but for one added optional key (`websocket`), so it asked nothing
+ * of the guarantee. `serve` also takes an optional `listeningListener` second argument, untouched
+ * here.
  */
 export type ServeOptions = Parameters<typeof serve>[0];
 
@@ -19,13 +22,14 @@ export interface TlsFiles {
 /**
  * Turn the plain-HTTP `serve` options into HTTPS ones when — and only when — TLS is configured.
  *
- * Confirmed against `@hono/node-server`'s installed `serve` signature
- * (`node_modules/@hono/node-server/dist/types.d.ts` and its `createAdaptorServer` in `server.js`):
- * `Options` is `{ fetch, port?, hostname?, … } & ServerOptions`, and its `createHttpsOptions`
- * member carries exactly two keys — `createServer` (defaulting to `node:http`'s `createServer`, so
- * plain HTTP unless overridden) and `serverOptions` (a `node:https.ServerOptions`). Passing
- * `node:https`'s `createServer` plus `{ key, cert }` is therefore what flips the SAME `serve` call
- * from HTTP to HTTPS — the adaptor does `options.createServer(options.serverOptions || {}, …)`.
+ * Confirmed against `@hono/node-server@2.1.1`'s installed `serve` signature
+ * (`node_modules/@hono/node-server/dist/index.d.mts` and its `createAdaptorServer` in
+ * `dist/index.mjs`): `Options` is `{ fetch, port?, hostname?, … } & ServerOptions`, where
+ * `ServerOptions` is a union of four per-transport shapes and the `node:https` one carries exactly
+ * two keys — `createServer` (defaulting to `node:http`'s `createServer`, so plain HTTP unless
+ * overridden) and `serverOptions` (a `node:https.ServerOptions`). Passing `node:https`'s
+ * `createServer` plus `{ key, cert }` is therefore what flips the SAME `serve` call from HTTP to
+ * HTTPS — the adaptor does `options.createServer(options.serverOptions || {}, …)`.
  *
  * With no `tls`, the base options are returned UNCHANGED (referentially — no file is read and no
  * `createServer` is added), which is the plain-HTTP loopback-dev path. This function is the whole of
