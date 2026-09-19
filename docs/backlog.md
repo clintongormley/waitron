@@ -3401,6 +3401,50 @@ the five it skipped bore on its own argument. Which package is NEXT is the plan'
 on the tree you are converting, never a name written here — the one that used to stand here went
 stale the moment the package it named was converted.
 
+**`packages/scheduler` converted, LANDED as #442 on 2026-09-19** (main `6fc919d9`) — the eleventh
+package of the rollout, four test files and four calls, plus the corrected `vitest.config.ts` comment
+that is why the bullets above no longer name it. FOUR REVIEW ROUNDS again, every finding in prose,
+and rounds three and four each broke sentences the round before had written. Five things to carry,
+four of them about method.
+
+**First, a package's BRANCH coverage percentage cannot be compared across runs, and this rollout
+already knew it.** A draft claimed "the same coverage figures" from one run on each side; the run-it
+seat ran both and got 97.02% on the base against 97.05% on the branch. Running the BASE twice is what
+settles it — it printed both figures itself, as did the branch. Statements, lines and functions were
+identical throughout. `docs/developers/testing-guide.md` had recorded exactly this, measured in this
+same package a day earlier ("Compare statements; do not quote a branch delta"), and the pre-landing
+docs sweep could not surface it: that grep matches a package's TEST PATHS and `vitest.config`, so a
+guide that discusses the package by name is invisible to it. **Widen the sweep, or accept that it
+misses prose about the package that never names one of its files.**
+
+**Second, "the file is not there" does not tell you it was never there.** A draft asserted that the
+plan's RLS suite "never landed", on `find packages/scheduler -name "*rls*"` returning nothing — a
+probe that reads the same whether a file was never written or was written and later deleted. It was
+deleted: `packages/scheduler/src/scheduler.rls.test.ts` landed with its plan in `11f16ac6` and went
+in `fd6da988` when row-level security was dropped. `git log --all --diff-filter=A` and
+`--diff-filter=D` on the path is the probe that discriminates.
+
+**Third, the over-correction went the other way and needed a third pass.** The fix for "never landed"
+was "the sentence was TRUE when written" — also false, because the sentence named two suites and one
+of them booted PGlite from the day it landed. What finally held was going CLAUSE BY CLAUSE and saying
+of each what it described and when that moved. A dated pointer on a finished plan is worth writing
+that way: the plan is not wrong, its subject moved.
+
+**Fourth, ask the run-it seat to measure the hooks a ceiling run cannot reach.** `--hookTimeout=50`
+with a control establishes the ceiling is in force and that the PGlite suites pass under it, and
+nothing more — the remaining hooks are simply fast. The seat injected delays into each one instead
+(200ms into the helper's `afterEach`/`afterAll`, 800ms into the seed hooks and the concurrency
+suite's `beforeAll`, 200ms into `globalSetup`, 800ms into the direct boot inside an `it`) and watched
+each behave as claimed. One hook was then DROPPED from the comment rather than asserted —
+`useTemplateDb`'s own `afterEach`, which this package cannot exercise because its one caller passes
+`resetPerTest: false`. A list is worth more when every item on it was run.
+
+**Fifth, a config comment that names `createPgliteDb` answers the diagnostic grep about itself.** The
+class of false `hookTimeout` claim above is identified by
+`grep -rlE "createPgliteDb|describeEachTarget" --include="*.ts" packages/<pkg>`, which matches a
+`.ts` config file. Scheduler's replacement comment deliberately writes neither word — the same shape
+as the bare-name trap #435 recorded, one layer along.
+
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
 only be backed up or restored separately if no row in one points at a row in the other. Six such
