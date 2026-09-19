@@ -2136,6 +2136,53 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
+**Left behind by the Stryker 9.6.1 → 10.0.0 bump (2026-09-19).** Four things the bump surfaced and
+deliberately did not settle.
+
+- **`packages/ui` and `packages/db` are on Stryker 10 with no whole-package score.** Both runs take
+  hours (db is sharded ten ways in CI for that reason), so the bump measured them two cheaper ways
+  instead: a two-file slice on both versions, and a whole-package mutant count from
+  `stryker run --dryRunOnly`. Those counts went up — ui 1998 → 2112, db 2627 → 2649 — and the review
+  then classified the new ones by running both installed instrumenters over each package's mutate
+  set: every one of them is the new deletion mutant, nothing was removed, and no pre-existing mutant
+  changed. What nobody has measured is what they do to the two scores. Neither package sets a
+  `thresholds.break`, so nothing gates on this today. `.github/workflows/mutation.yml` carries
+  `workflow_dispatch` and can be run against a branch on demand, which gets **ui** measured whole at
+  no local cost. Two caveats: the workflow takes no inputs, so a dispatch also fires the ten
+  `mutation-db` shards; and it yields a Stryker 10 number only, so the 9.6.1 side of the comparison
+  still has to come from an earlier weekly run's artifact. It does not get a db package total at
+  all — that job publishes ten per-shard slice scores and no aggregate, which is the last bullet.
+- **`packages/verifactu` and `packages/db` mutate their `src/testing/` tree, against the practice the
+  sales-spine plan set.** `docs/superpowers/plans/2026-07-20-sales-spine-data-model.md` records the
+  reason under `packages/fiscal`: a surviving mutant in a fake proves only that the fake has
+  behaviour nobody asserted, which is a property of fakes, not a defect. That plan writes the
+  `"!src/testing/**"` exclusion into the `packages/db` config it specifies, and states the rule again
+  for `packages/fiscal-verifactu`; the shipped db config carries no such exclusion. It never
+  addresses `packages/verifactu`'s own config, which predates it, so the case for excluding the fake
+  there is the plan's stated reason rather than an instruction it gave. The
+  cost is not small and not new: in verifactu, `src/testing/fake-aeat.ts` holds **43 of the package's
+  60 surviving mutants**, and recomputing that same report without the file's mutants gives 98.76%
+  against the 96.18% it scores as configured. That score gates
+  merges — `mutation-verifactu` is one of `ci`'s `needs`, and `ci` is the required check — so the
+  exclusion is a real decision, which is why the bump left it alone.
+- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** Vitest 5 was
+  abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
+  `packages/shared` 8.14% (stryker-js#6210; fix PR #6214 was open and unreleased). Stryker 10.0.0's
+  release notes mention neither issue, and nothing here was run under Vitest 5, so the question is
+  untouched rather than resolved. The dated note at the top of
+  `docs/superpowers/plans/2026-09-18-vitest-5-upgrade.md` says the same thing beside the plan it
+  qualifies; this is the backlog's pointer to it.
+- **`.github/workflows/mutation.yml`'s header comments quote counts that have drifted.** It says ui is
+  "cheap today at ~10 source files" and db "bin-packs the 41 source files"; both are far off what
+  `stryker run --dryRunOnly` reports in either package today, and they drifted from the packages
+  growing rather than from the Stryker bump. (Its "~750 database-backed mutants" is a different
+  measurement — taken with `ignoreStatic` applied — so nothing here shows that one is stale.) The
+  repo's own rule is to describe the property rather than the number, so the repair is to drop the
+  figures, not refresh them. Separately, the same file says a single merged db score is "a deliberate
+  non-goal for now (see docs/backlog.md)", and no backlog entry answered that pointer — this is the
+  entry it points at. Whether to keep it a non-goal or build the cross-shard aggregate, and gate on
+  it, is still open, and it is also the only route to the db number the first bullet wants.
+
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
 latest minor or patch release; two loose ends came with it.
 

@@ -765,8 +765,16 @@ percentage does not rule this out — it only proves a line executed, not that a
 the result. When reviewing a test, ask specifically: if the behaviour under test were deleted or
 reverted, which assertion would fail, and how? "It calls the component and doesn't throw" is not an
 answer. `pnpm --filter @waitron/ui mutation` is the tool this repo uses to check that
-systematically — a surviving mutant on a boolean flag, a comparison operator, or a conditional guard
-means some test suite member exercises that code without noticing when it's wrong.
+systematically — a surviving mutant on a boolean flag, a comparison operator, a conditional guard, or
+a whole statement deleted means some test suite member exercises that code without noticing when it's
+wrong. The deleted-statement kind arrived with Stryker 10, which replaces a call statement, or a
+`throw new …`, with an empty one and reports both under the mutator name `CallExpression`. **It only
+does so when nothing else in that statement is mutable** — the mutant is dropped again if any other
+mutant came out of the statement's subtree, so a string literal or an operator anywhere in the
+statement suppresses it, and `throw new AppError("series.not_found", {})` never gets one. Nearly every
+`throw new AppError(` in this repo passes a literal code, so do not expect this mutant to police
+them. Where it does appear it catches a side effect nobody asserts on: the shape that produced it
+here was a memo cache write whose arguments were both plain identifiers.
 
 
 ## Rejected writes assert their domain error code

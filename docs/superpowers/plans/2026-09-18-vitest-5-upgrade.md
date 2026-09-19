@@ -19,6 +19,17 @@ Worktree: `/Users/clintongormley/workspace/worktrees/waitron-chore-vitest-4-upgr
 > 5.0.1, so the `clearMocks: false` line every config now carries changes nothing on 4.1.11 and is
 > carried deliberately for the next upgrade. Vitest 5 stays open as a later item.
 
+> **Stryker was taken separately, 2026-09-19** (branch `chore/stryker-10`)**.** This plan makes the
+> `@stryker-mutator/*` 9 → 10 bump conditional — the scope line below ("ONLY if 9.6.1 will not run
+> under vitest 5 (verify first)"), section F ("If it breaks … in this branch, because mutation is a
+> gate"), and Execution step 5, which defers to F. None of that gates anything any more.
+> 9.6.1 does run under Vitest 4.1.11, which is what shipped, so the bump was never forced; it was
+> then taken on its own branch as an ordinary maintenance item, against Vitest 4 rather than 5. Read
+> those passages as the record of what was planned on 2026-09-18, not as work still outstanding here.
+> What this does NOT settle is Vitest 5: Stryker 10 was not run under it here, and stryker-js#6210 is
+> not mentioned in the 10.0.0 release notes, so a future Vitest 5 attempt must measure mutation
+> again rather than assume the major fixed it.
+
 ## Why
 
 The `test-server` shard fails intermittently with `[vitest-worker]: Timeout calling "onTaskUpdate"`
