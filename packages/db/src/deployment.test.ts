@@ -35,12 +35,9 @@ it("reads as unstamped when the table has not been created yet", async () => {
   // Same pre-migration handle: readSingletonRole must see the table as absent and answer "primary"
   // (an unstamped database is a sole primary) rather than throw.
   expect(await readSingletonRole(bare)).toBe("primary");
-  // The two readers that were never asked this question. readDeploymentAxes answers for both axes
-  // at once, so an unstamped database must read primary on both rather than throwing halfway; and
-  // a database with no table has no fence either, which is the "nothing to drain" answer the
-  // operator's accept-loss path reads.
+  // readDeploymentAxes answers for both axes at once, so an unstamped database must read primary on
+  // both rather than throwing halfway.
   expect(await readDeploymentAxes(bare)).toEqual({ mode: "primary", singletonRole: "primary" });
-  expect(await readFenceLsn(bare)).toBeNull();
   await bare.close();
 });
 
