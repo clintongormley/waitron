@@ -3185,6 +3185,41 @@ branch's commits rather than quietly rewritten. The practical lesson for the con
 count is not a receipt unless the command and the tree are beside it, and a correction deserves a
 reader who is not its author.
 
+**A FOURTH review round, and what finally forced it, from `packages/recipes` (#434, 2026-09-19).**
+The rule above — a correction deserves a reader who is not its author — held for three rounds and
+then was not enough. On this branch the code was two renamed calls and never changed; round two
+broke five sentences of the commit message, round three broke eight (five of them round two's own
+corrections), and round four broke three more, all three written by round three. What kept breaking
+by the end was one particular shape: a sentence saying which OTHER files carry the same false claim.
+Round two named a package that had never carried it; round three described a `grep -B2` window in a
+way that excluded the three files the same paragraph named; round four found two more packages named
+as carrying a claim they do not make. **The durable lesson: do not name a file as carrying a claim
+unless a literal search for the claim's own words matched it.** A pattern assembled around the claim
+— a word, a window, a file-name filter — answers a different question, and the answer reads like the
+one you asked for. Where a sweep is being deferred, leave the instruction ("read the configs") rather
+than a list or a command that pretends to be the answer.
+
+**The false claim that branch was correcting, and the twins it deliberately left.** A package's
+`hookTimeout` does NOT bound the PGlite boot and migrations: `usePgliteDb` hands `beforeAll` its own
+60-second default (`packages/db/src/testing/lifecycle.ts:22` and `:146`), and a timeout passed to a
+hook overrides the config's. Three configs still carry the sentence verbatim — found with
+`grep -rn "boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout" --include=vitest.config.ts packages apps`,
+which returns `packages/purchasing`, `packages/workforce-es` and `packages/catalogue`. A fourth
+instance sits in the package that owns the helper, `packages/db/README.md:39-40`: "Setup hooks have a
+separate `hookTimeout: 120_000` budget for booting and migrating PostgreSQL." That one is false for
+that package's `usePgliteDb` suites and true for a container suite whose hook passes no timeout
+(`packages/db/src/testing/networked-postgres.test.ts`), so correcting it means deciding what the
+sentence should say about both halves — which is why it is here rather than fixed.
+
+**And the measurement trap inside that correction, which is CLAUDE.md §1's "both answers look
+alike" in a new dress.** The obvious probe is to set `hookTimeout: 50` and see the suites still pass.
+On `packages/recipes` they sometimes do and sometimes do not: six runs failed 24, 19, 11, 10 and 8
+tests and once none at all, because the helper's per-test reset sits right on the 50ms line. The
+pass/fail count is therefore not a receipt. What reproduces is WHICH HOOK the timeouts name — always
+the `afterEach` reset (`lifecycle.ts:148`) or a suite's own `beforeEach`, never the `beforeAll`,
+which takes about a second. State the failing case first: if `hookTimeout` bounded the boot, every
+run would die in `beforeAll` before a single test ran.
+
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
 only be backed up or restored separately if no row in one points at a row in the other. Six such
@@ -3227,9 +3262,11 @@ class map is built twice**, here and in `classification-complete.test.ts`, six l
 it would mean reworking that guard's duplicate-classifier loop, which carries more risk than the
 duplication.
 
-`packages/recipes` and `packages/layouts` are no longer an open question — the owner removed them
-from the rollout list, because the tables they read belong to `packages/db` and its conversion
-already covers them. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
+`packages/recipes` and `packages/layouts` are no longer an open question for the COLUMN-VOCABULARY
+rollout (task P1b) — the owner removed them from that task's step-2 list, because the tables they
+read belong to `packages/db` and its conversion already covers them. Which rollout is now worth
+naming: `packages/recipes` was converted by the test-database-helper rollout (task P2) in #434, and
+the two lists are unrelated. **The tag `pre-sqlite-migration` marks the last commit that predates any of this
 code** (`c9d80c59`, the parent of the harness merge), so you can still read how something worked while
 everything ran on PostgreSQL. The
 [cloud-services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md) catalogues the
