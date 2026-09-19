@@ -2319,7 +2319,7 @@ declaration of its own. Two things it leaves open:
   believed when it was written and is left alone. Worth knowing for the next sweep: it is wrapped
   across two lines there, so a one-line `git grep` misses it.
 
-**Left behind by the vite 8 upgrade (2026-09-19).** `apps/dashboard`, `apps/setup`, `apps/till` and
+**Left behind by the vite 8 upgrade (#450, 2026-09-19).** `apps/dashboard`, `apps/setup`, `apps/till` and
 `packages/ui` moved from vite `^6.0.0` to `^8.0.0` (installed 8.3.0). Vite 8 swaps the bundler and
 the transformer: Rolldown and Oxc in place of Rollup and esbuild. What replaced the byte-comparison
 method above, since a bundler replacement makes it meaningless: build both, then run the SHIPPED
