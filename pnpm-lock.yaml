@@ -382,8 +382,8 @@ importers:
         specifier: ^3.2.0
         version: 3.3.3
       qrcode-generator:
-        specifier: ^1.4.4
-        version: 1.5.2
+        specifier: ^2.0.4
+        version: 2.0.4
     devDependencies:
       '@vitest/browser-playwright':
         specifier: ^4.1.11
@@ -4871,8 +4871,8 @@ packages:
     resolution: {integrity: sha512-+Owyggi9IxT1ePKGafcI87ubSmxol6smwJ+RAHDQlx9+9cPwFWDiKFFCPuWhr9ignlGpZ9vDQLw67N4dcTVFEA==}
     engines: {node: '>=20'}
 
-  qrcode-generator@1.5.2:
-    resolution: {integrity: sha512-pItrW0Z9HnDBnFmgiNrY1uxRdri32Uh9EjNYLPVC2zZ3ZRIIEqBoDgm4DkvDwNNDHTK7FNkmr8zAa77BYc9xNw==}
+  qrcode-generator@2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
 
   qrcode@1.5.4:
     resolution: {integrity: sha512-1ca71Zgiu6ORjHqFBDpnSMTR2ReToX4l1Au1VFLyVeBTFavzQnv5JxMFr3ukHVKpSrSA2MCk0lNJSykjUfz7Zg==}
@@ -8250,7 +8250,7 @@ snapshots:
     dependencies:
       hookified: 2.2.0
 
-  qrcode-generator@1.5.2: {}
+  qrcode-generator@2.0.4: {}
 
   qrcode@1.5.4:
     dependencies:

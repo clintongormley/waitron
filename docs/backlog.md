@@ -2431,6 +2431,8 @@ production bundle in real Chromium with the fixture from
 28231 bytes with the receipt text matching character for character; and `manifest.webmanifest`,
 emitted by the only custom Rollup-hook surface in the repo (`webManifest()` in
 `apps/till/vite.config.ts`, `generateBundle` + `this.emitFile`), came out identical at 434 bytes.
+(2026-09-20: that QR byte count was measured on qrcode-generator 1.5.2. The till has since moved to
+2.0.4, which draws identical bytes — see the entry below — so the number still holds.)
 Five things it leaves open:
 
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI.**
@@ -2531,6 +2533,47 @@ entities XML does not define, and it turns `&nbsp;` and `&#160;` into U+00A0 whe
 U+0020 — a difference invisible in any report. If exact XML semantics are ever wanted here, version
 5 has an `entityDecoder` hook, which is bespoke code on a fiscal path and a decision rather than a
 bump.
+
+**Left behind by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).** `apps/till`
+moved from `^1.4.4` (installed 1.5.2) to `^2.0.4`. Two majors of version number, but the drawing
+code did not change: diffing the two published CommonJS builds gives one hunk, a canvas `fillRect`
+in `renderTo2dContext` whose row and column arguments were the wrong way round, and
+`apps/till/src/qr.ts` calls `createSvgTag` and never reaches it. What version 2 adds is an
+`exports` map and an ESM build of the same code. Nine payload classes rendered through all three
+builds — version 1, version 2's CommonJS, version 2's ESM — gave byte-identical SVG for every one,
+with two controls (error-correction level M against L, cell size 4 against 5) confirming the
+comparison could see a difference. Three things it leaves open:
+
+- **The byte-count receipt in the vite 8 entry above crosses this major.** That entry records the
+  Veri*Factu QR SVG coming out of both production bundles "identical at 28231 bytes", measured on
+  qrcode-generator 1.5.2. The number still holds only because the drawn bytes did not move, which
+  this upgrade establishes and that entry has no way to state. Read the two together.
+- **The pin protects the screen path; the printed path has a stronger check of its own.** `qrSvg`
+  has one product call site, `apps/till/src/screens/till-ticket-view.ts`, the ticket the till shows
+  on screen. The PRINTED receipt's QR comes from a different library (`qrcode`, via
+  `apps/server/src/qr-matrix.ts`), and its test reads the error-correction level back out of the
+  module matrix's format-information bits (`formatInfoLevel` in `apps/server/src/qr-matrix.test.ts`,
+  ISO/IEC 18004 section 7.9) with negative controls for L, Q and H — so it asserts what art. 21.1
+  actually mandates, where the till's new digest asserts only that nothing moved. Giving the till
+  the same reader is more than moving the helper somewhere both apps can reach, which is already a
+  module-boundary decision and not a dependency bump: `formatInfoLevel` takes a boolean matrix and
+  `qrSvg` returns a string, never exposing the library's `qr` object, so the till would need a
+  matrix accessor as well. It would make a failure name what changed instead of only that something
+  did.
+- **Read it as a self-baselined pin, which is weaker than the pins already here.** Pinned output is
+  not new — `conformance.test.ts` in `packages/verifactu` pins a SHA-256 against a literal, and
+  `xml/serialize.test.ts` pins whole XML documents. But `conformance.test.ts`'s expected values are
+  AEAT's own published huella vectors (`packages/verifactu/test/vectors.ts`, "Huella spec v0.1.2"),
+  so that pin compares the code against an authority. This one compares the code against itself on
+  the day it was written. (What `serialize.test.ts` compares against was not checked here.) There is also no
+  `toMatchSnapshot`/`toMatchFileSnapshot`/`__snapshots__` anywhere in the repository, so a byte pin
+  had no house form to follow and a SHA-256 was chosen over a 27,495-character literal. A file
+  snapshot would fail with a readable diff instead of two hex strings; whether this repo wants
+  snapshot files at all is an owner decision that this one test should not settle on its own.
+
+The existing item below — two QR libraries coexisting, `qrcode` in `apps/server` and
+`qrcode-generator` in `apps/till` — is unchanged by this, except that the till's side is now on a
+version that ships ESM and an exports map.
 
 **Left behind by the passkey library upgrade (#453, 2026-09-19).** `packages/identity`, `apps/server`
 and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebauthn/browser` 13.3.0 to

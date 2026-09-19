@@ -19,7 +19,7 @@
     "@waitron/catalogue": "workspace:*",
     "@waitron/diagnostics": "workspace:*",
     "lit": "^3.2.0",
-    "qrcode-generator": "^1.4.4"
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@vitest/browser-playwright": "^4.1.11",
