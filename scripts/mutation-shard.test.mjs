@@ -130,6 +130,20 @@ describe("the CLI over the real @waitron/db tree", () => {
     expect(collected.map(fileOf)).not.toContain("src/english-only.ts");
   });
 
+  it("leaves out the globalSetup, which no test in the package can be run against", () => {
+    // Vitest runs a `globalSetup` in the MAIN process, before the workers exist, and Stryker learns
+    // which test covers a mutant from a setup file it injects into each WORKER. So nothing this
+    // file executes is attributed to any test and none of its mutants is ever run: all nine read
+    // `NoCoverage` in run 35498146363, shard 4.
+    expect(NOT_MUTATED).toContain("src/testing/global-setup.ts");
+
+    const total = 6;
+    const collected = [];
+    for (let shard = 1; shard <= total; shard++) collected.push(...shardFiles(shard, total));
+
+    expect(collected.map(fileOf)).not.toContain("src/testing/global-setup.ts");
+  });
+
   it("names only files that exist, so a rename cannot silently un-exclude one", () => {
     expect(NOT_MUTATED.filter((path) => !eligibleFiles().includes(path))).toEqual([]);
   });

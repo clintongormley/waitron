@@ -21,16 +21,22 @@ import { fileURLToPath } from "node:url";
  * paths. The shard lists leave them out, so the package's merged score (scripts/mutation-aggregate.mjs)
  * measures only mutants a test written here could kill.
  *
- * `src/english-only.ts` is the whole list today: its suite is `scripts/english-only.test.ts` in the
- * ROOT vitest project, and nothing under `packages/db` imports it — `grep -rn english-only
- * packages/db --include="*.ts"` matches that file and comments alone — so `packages/db`'s vitest
- * config never loads a test that touches it and every one of its mutants survives by construction.
- * All 119 did in weekly run 34808295788. It is excluded from this package's coverage report for the
- * same reason, stated in `packages/db/vitest.config.ts`.
+ * `src/english-only.ts`: its suite is `scripts/english-only.test.ts` in the ROOT vitest project, and
+ * nothing under `packages/db` imports it — `grep -rn english-only packages/db --include="*.ts"`
+ * matches that file and comments alone — so `packages/db`'s vitest config never loads a test that
+ * touches it and every one of its mutants survives by construction. All 119 did in weekly run
+ * 34808295788. It is excluded from this package's coverage report for the same reason, stated in
+ * `packages/db/vitest.config.ts`.
+ *
+ * `src/testing/global-setup.ts`: vitest runs a `globalSetup` in the MAIN process, before the workers
+ * exist, and Stryker records which test covers a mutant from a setup file injected into each WORKER.
+ * Nothing the main process executes is recorded against any test, so these mutants are never run at
+ * all: all nine read `NoCoverage` in run 35498146363 (shard 4). Excluded from this package's
+ * coverage report already, for the same structural reason.
  *
  * @type {string[]}
  */
-export const NOT_MUTATED = ["src/english-only.ts"];
+export const NOT_MUTATED = ["src/english-only.ts", "src/testing/global-setup.ts"];
 
 /**
  * Splits `path` into `parts` contiguous Stryker mutation ranges (`path:startLine-endLine`) covering
