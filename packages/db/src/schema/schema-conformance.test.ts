@@ -1,6 +1,9 @@
-// Every drizzle table declaration in this package, compared with the database the core migrations
-// actually build: table name, column names and SQL types, nullability, primary keys, foreign keys
-// and unique constraints.
+// Every drizzle table and enum declaration in this package, compared with the database the core
+// migrations actually build: table name, column names and SQL types, nullability, column defaults,
+// primary keys, foreign keys with the actions they take on delete and on update, unique
+// constraints, indexes, check-constraint names, and each enum's labels in order. Plus one rule the
+// database cannot state: every column spells its own name out rather than letting drizzle derive
+// one from the property key.
 //
 // Nothing else in the suite reads a declaration and checks it against the schema, so a declaration
 // that drifts from its migration — a renamed column, a foreign key pointing at the wrong table, a
@@ -23,8 +26,7 @@ import * as barrel from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-// `deployment` is deliberately not re-exported from the barrel (see its own file), so it is named
-// here rather than discovered.
+/** Every table a module exports, plus `deployment`, which is deliberately not in the barrel. */
 function tablesIn(module: Record<string, unknown>, extra: PgTable): PgTable[] {
   return [
     ...Object.values<unknown>(module).filter((value): value is PgTable => is(value, PgTable)),
@@ -38,14 +40,15 @@ function enumsIn(module: Record<string, unknown>): PgEnum<[string, ...string[]]>
   );
 }
 
-// Reloads the declarations INSIDE the calling test, which is what makes this file able to catch a
-// mutated declaration at all. A drizzle declaration runs when its module loads, not while a test
-// runs, so Stryker's `perTest` coverage credits each of those mutants to whatever test happened to
-// be running when the module first loaded — in a whole-package run, some unrelated file's test,
-// which is then the only test the mutant is ever run against. Receipt: CI run 35498146363 on this
-// branch, shard 7, where the surviving mutant in `src/schema/printers.ts` is covered-by six cases
-// in `src/testing/harness.docker.test.ts` and by none of the cases here. Re-importing in the test
-// body puts the declaration's execution inside the test, so the coverage lands here.
+// Reloads the declarations INSIDE the calling test. The comparisons below would read the same
+// values without this; what it changes is whether the MUTATION run ever runs them. A drizzle
+// declaration executes when its module loads, not while a test runs, so Stryker's `perTest`
+// coverage credits each of those mutants to whatever test happened to be running when the module
+// first loaded — in a whole-package run, some unrelated file's test, which is then the only test
+// the mutant is run against. Receipt: mutation run 35498146363 on this branch, shard 7, where the
+// surviving mutant in `src/schema/printers.ts` is covered-by six cases in
+// `src/testing/harness.docker.test.ts` and by none of the cases here, and the file scored 5.8%.
+// Re-importing in the test body puts the declaration's execution inside the test.
 async function reload(): Promise<{ tables: PgTable[]; enums: PgEnum<[string, ...string[]]>[] }> {
   vi.resetModules();
   const fresh: Record<string, unknown> = await import("./index.js");
