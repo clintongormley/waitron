@@ -538,21 +538,31 @@ to pair up a second time under a rule that could then disagree with it.
 
 Three things the review found, each measured rather than read:
 
-- **A dish that offers one product on two lists can be billed at the wrong list's price, and that
-  is older than this branch.** The run-it seat found the first half by running: one product offered
-  by two of a dish's lists at two prices, parked one off the 1.00 list and two off the 3.00 one,
-  then the two picks swapped over. Nothing on a stored child says which list offered it, so a
-  pairing knowing only the product and the quantity matched each pick to the OTHER list's row, the
-  edit was preserved, and the diner went on paying 7.00 where the new answer costs 5.00. The scoped
-  re-read of the fix then found the sibling the first fix did not cover: ONE pick moved from the
-  1.00 list to the 3.00 one, which is not a duplicate at all. Measured in a checkout of `main` at
-  `68e36c6aa` with the same fixture, that one bills 1.00 — so it is pre-existing, and the index-wise
-  comparison it replaced never caught it either. `matchExtraChildren` now refuses the pairing
-  whenever a PICKED product is offered by more than one of the dish's active lists; the edit takes
-  the replacement path and is re-priced correctly, losing only the line's price lock for a dish
-  configured that way. **What was and was not examined:** the refusal is on the held-order edit
-  path, which is where the wrong price was measured being written. Whether any OTHER path can end
-  up pairing a stored child with the wrong list's price was not looked at.
+- **A dish that offers one product on two lists can be billed at the wrong list's price.** Two
+  halves, found a round apart and with different histories. The run-it seat found the first by
+  running: one product offered by two of a dish's lists at two prices, one pick parked off the 1.00
+  list and two off the 3.00 one, then the two picks swapped over. Nothing on a stored child says
+  which list offered it, so a pairing knowing only the product and the quantity matched each pick to
+  the OTHER list's row, the edit was preserved, and the diner went on paying 7.00 where the new
+  answer costs 5.00. That half is the branch's OWN regression — the seat ran it against `main` and
+  got 5.00, because the index-wise comparison saw the quantities move at each position. The scoped
+  re-read then found the sibling: ONE pick moved from the 1.00 list to the 3.00 one, which is not a
+  duplicate at all. Measured in a checkout of `main` at `68e36c6aa` with the same fixture, that one
+  bills 1.00 there too — pre-existing, and the index-wise comparison never caught it either.
+  `matchExtraChildren` now refuses the pairing whenever a PICKED product is offered by more than one
+  of the dish's ACTIVE lists. The cost is not confined to the refused line: the replacement path
+  rewrites the whole order, so every line loses its id and its locked price.
+- **That refusal is not a complete guard, and the residue is worth knowing before anyone relies on
+  it.** It counts the offers as they are NOW, while the ambiguity is a property of the offers the
+  stored child was written against. Deactivate the second list, or take the product out of it
+  (`PATCH /management-api/modifiers/extras/:id`), between the park and the edit, and the count comes
+  back to one: the moved pick is preserved at the old row's price again. Traced, not run. Closing it
+  means the child line carrying the list it came from, which spec §3.4 rules out — so it is a
+  DESIGN decision, not a fix. **Also not examined:** the refusal sits on the held-order edit path,
+  which is where the wrong price was measured being written; whether any other path can pair a
+  stored child with the wrong list's price was not looked at. **Next action:** an owner decision on
+  whether an extras child may carry its list id, taken with Task 9, which is the next task to touch
+  what a line records.
 - **The mechanism the branch first wrote down was a third of the story, and the correction of it
   was two thirds.** THREE columns hold parts of the offered order, each re-numbered from a save's
   body: `product_modifiers.sort`, `extra_list_items.sort` (the items within one extras list, which
@@ -560,7 +570,8 @@ Three things the review found, each measured rather than read:
   round of prose named only the first; the correction named the first and third and asserted the
   third was unreachable, which is true of it and not of the second — `PUT
   /management-api/modifiers/extras/:id` reaches `writeItems`. The full table is in
-  `docs/developers/modifiers.md`; nothing else in the tree states the mechanism any more.
+  `docs/developers/modifiers.md`, and it is the only place the columns are enumerated — everywhere
+  else states the rule and points there.
 - **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
   the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 

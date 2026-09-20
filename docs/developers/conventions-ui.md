@@ -77,13 +77,16 @@ and re-prices a quantity-only edit. That is why the pairing is order-independent
 the column a product save writes: the options half and the extras half each re-issued every line
 under a new id and re-priced the dish.
 
-**A picked product that two of the dish's lists offer refuses the pairing**, and that is a defect
-found on the way rather than a cost of order-independence. A child line records the product it is,
-its quantity and the price it was sold at, and never the list that offered it — so the comparison
-cannot tell a quantity change from a pick that MOVED between two lists offering the same product at
-different prices, and it keeps the price of whichever row it lands on. Run against `main` at
-`68e36c6aa`, the same fixture billed a pick moved off a 1.00 list onto a 3.00 one at 1.00. Such an
-edit now takes the replacement path and is re-priced, correct but without the line's price lock.
+**A picked product that two of the dish's ACTIVE lists offer refuses the pairing.** A child line
+records the product it is, its quantity and the price it was sold at, and never the list that
+offered it — so the comparison cannot tell a quantity change from a pick that MOVED between two
+lists offering the same product at different prices, and it keeps the price of whichever row it
+lands on. Two picks EXCHANGED between such lists is a regression order-independence introduced, and
+was found by running; ONE pick MOVED between them predates it, and bills the old list's 1.00 in a
+checkout of `main` at `68e36c6aa`. Both now take the replacement path, which rewrites the whole
+order — every line loses its id and its locked price, not only the refused one. The refusal counts
+TODAY's offers, so it does not cover a catalogue edited between the two sends;
+`docs/developers/modifiers.md` states that gap.
 
 What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
 a quantity-only edit" raises the offer's price and the extra's price underneath the edit and asserts

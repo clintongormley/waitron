@@ -3171,9 +3171,9 @@ export async function updateHeldOrder(
         }
         // Compared by VALUES and never by either side's order: both sides are built in the OFFERED
         // order, and that order is a stored position several columns hold and a save re-numbers, so
-        // a line parked before a reorder keeps the old one. Which columns, and what else the extras
-        // comparison has to refuse, are in `sameOptionSelections` and `matchExtraChildren`
-        // (modifier-selection.ts).
+        // a line parked before a reorder keeps the old one. `docs/developers/modifiers.md` names
+        // those columns; `matchExtraChildren` (modifier-selection.ts) carries what else the extras
+        // side has to refuse, and what its refusal does not cover.
         if (!sameOptionSelections(frozen.optionSnapshots, stored.optionSnapshots)) return null;
         const paired = matchExtraChildren(
           modifiers.extrasByHolder.get(menuItemId ?? productId) ?? [],

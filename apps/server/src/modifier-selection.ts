@@ -150,8 +150,8 @@ function pairOff<Entry, Candidate>(
  * question `updateHeldOrder` asks to decide that an edit is quantity-only.
  *
  * Compared BY VALUE and without regard to either side's order, because the order both sides are
- * built in is a stored position somebody can move: see {@link matchExtraChildren} for where each
- * one comes from.
+ * built in is a stored position somebody can move — `docs/developers/modifiers.md` names the
+ * columns that carry it and what writes each.
  *
  * A RENAMED list still differs, and that is a settled decision rather than an oversight — the
  * reason, and the test that pins it, are in `docs/developers/modifiers.md`.
@@ -181,12 +181,23 @@ export function sameOptionSelections(
  * list that offered it (spec §3.4). So when two lists offer the same product at two prices, nothing
  * on the stored side says which row belongs to which list, and the pairing cannot tell a quantity
  * change from a pick that MOVED between the two — it keeps the price of whichever row it lands on.
- * That is a real bill: measured on this branch and, with the same fixture, on `main` at
- * `68e36c6aa`, one pick moved off a 1.00 list onto a 3.00 one went on being charged 1.00. Such an
- * edit now takes the replacement path and is re-priced from today's offers, which is correct at the
- * cost of the line's price lock whenever a dish offers one product twice. Pinned by "replaces the
- * line when a pick moves to another list offering the same product" and "replaces the line when two
- * lists offering the same product have their picks swapped" (working-order.test.ts).
+ * That is a real bill, and the two halves of it have different histories. Two picks EXCHANGED
+ * between the lists is this branch's own regression, which order-independence introduced: the
+ * index-wise comparison it replaced saw the quantities move at each position and replaced the line.
+ * ONE pick MOVED from one list to the other predates the branch — measured in a checkout of `main`
+ * at `68e36c6aa` with the same fixture, it bills the old list's 1.00 there too. Both now take the
+ * replacement path, which re-prices from today's offers; the cost is that the whole order is
+ * rewritten, every line losing its id and its locked price, whenever a PICKED product is offered by
+ * more than one ACTIVE list. Pinned by "replaces the line when a pick moves to another list
+ * offering the same product" and "replaces the line when two lists offering the same product have
+ * their picks swapped" (working-order.test.ts).
+ *
+ * THIS IS NOT A COMPLETE GUARD, and the gap is in the word "offers": the count is taken over the
+ * offers as they are NOW, while the ambiguity is a property of the offers the stored child was
+ * written against. A second list deactivated, or the product taken out of it, between the park and
+ * the edit brings the count back to one and the moved pick is preserved at the old row's price
+ * again. Closing that would mean the child line carrying the list it came from, which spec §3.4
+ * rules out; it is recorded in `docs/backlog.md` instead.
  *
  * Two picks naming the same product are the same rule, not a second one: `extra_list_items` holds
  * each product at most once per list (`extra_list_items_list_product_uq`, which
