@@ -245,13 +245,35 @@ architecture §6), so the two kinds of answer land differently:
   line it carries NO `product_id` — `sale_lines` has no such column. "How much bacon did we sell"
   therefore groups on the frozen name, the way the top-sellers report groups products.
 
-None of this reaches the fiscal fingerprint. `backend.recordSale` is handed `total` and
-`vatBreakdown`, never the individual lines, so a line's frozen answers have no channel into
-`computeHuella`'s input. That is asserted rather than assumed: the same basket filed before and
-after this rework produces a byte-identical huella, `ImporteTotal` and `CuotaTotal`, against values
-recorded from `main` before the change — "the extras/options rework leaves the fiscal fingerprint
-byte-identical" in `packages/fiscal-verifactu/src/write-path.e2e.test.ts`, which also records what a
-wrong answer prints.
+**The frozen ANSWERS never reach the fiscal fingerprint. A line's AMOUNTS do.** Do not read the
+first half as the second. What `backend.recordSale` is handed is the sale's `total` and its VAT
+breakdown — a list of one entry per VAT rate — and never the lines themselves, so the words a diner
+chose have no channel at all into `computeHuella`'s input. The money is a different story, and the
+channel is that breakdown, whichever of the two ways it was built. When the caller supplies none,
+`recordSale` derives it from the lines (`input.vatBreakdown ?? buildVatBreakdown(input.lines)`,
+`packages/core/src/record-sale.ts`), and `buildVatBreakdown` groups each line's `lineTotal` by its
+`vatRate`; a correction and a substitution always take that path, calling `buildVatBreakdown`
+unconditionally. When the caller supplies its own — which the till's filing routes do — it is filed
+verbatim, but it too was grouped per rate over the priced lines a moment earlier
+(`packages/catalogue/src/pricing.ts`). Either way an extras child line's base and its own VAT rate
+reach the record's `CuotaTotal`, and `CuotaTotal` is one of the fields `computeHuella` hashes
+(`packages/verifactu/src/huella.ts`).
+
+One figure moves with neither: `ImporteTotal` is `sale.total` copied straight through
+(`packages/fiscal-verifactu/src/backend.ts`), an explicit field of what the caller handed in rather
+than anything the lines add up to. So the same basket restructured into different lines can leave
+`ImporteTotal` exactly where it was while `CuotaTotal` and the huella move.
+
+That is measured rather than reasoned about. The gate is "the extras/options rework leaves the
+fiscal fingerprint byte-identical" (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`): one
+basket — a dish carrying an options answer, plus a priced extra as its own child line — files the
+same huella, `ImporteTotal` and `CuotaTotal` as that basket filed on `main` before this rework. The
+same test also reads the filed line back and asserts the answers ARE on it, so the three figures
+cannot match merely because nothing was written. And the block carries the control that was run for
+it: with the child line's VAT rate moved from 10% to 21% and nothing else touched, `CuotaTotal` and
+the huella both came back different while `ImporteTotal` did not move. That control is what shows
+the fixture can see a moved amount at all — and it is also where `ImporteTotal`'s independence from
+the lines was measured rather than assumed.
 
 The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
 CUSTOMER text at the invoice locale and falls back to the staff name, never to the kitchen name —
@@ -261,10 +283,19 @@ kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 ## Storage and integration order
 
 Generated core migration `packages/db/drizzle/0021_product_modifiers.sql` extends the existing
-group/item definitions and adds JSONB snapshots to working and sale lines. It creates NO table of
-that name, despite the file name — beware the twin: `packages/catalogue/drizzle/0010_product_modifiers.sql`
-is a different migration in a different set, and it is the one that creates the `product_modifiers`
-table. Everything in THIS SECTION is about the OLD `option_groups`/`option_group_items` model and
+group/item definitions and adds JSONB snapshots to working and sale lines.
+
+> **2026-09-20:** the sentence above is left as it stands because it records what 0021 did, and that
+> does not change. Both JSONB snapshot columns it added are gone now:
+> `working_order_lines.modifier_snapshots` was dropped by core migration
+> `packages/db/drizzle/0040_watery_victor_mancha.sql`, and `sale_lines.modifier_snapshots` by
+> `packages/db/drizzle/0041_magenta_metal_master.sql`, which added `sale_lines.option_snapshots` in
+> the same file. What the two tables carry today is under _On the filed sale_ above.
+
+0021 creates NO table of that name, despite the file name — beware the twin:
+`packages/catalogue/drizzle/0010_product_modifiers.sql` is a different migration in a different set,
+and it is the one that creates the `product_modifiers` table. Everything in THIS SECTION is about
+the OLD `option_groups`/`option_group_items` model and
 its `product_option_groups` attachment table, not that new one; the authoring section above already
 describes the new `modifiers` body field. No new tables or core-to-catalogue
 foreign keys are added here. The catalogue generation script reports no schema change. Existing
