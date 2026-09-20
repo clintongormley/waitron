@@ -55,7 +55,9 @@ import { defineConfig } from "vitest/config";
 // effort: the pre-push hook's typecheck step is SCOPED (`pnpm "$@" typecheck`), so on the
 // `packages/ui` push this whole change exists for, a root `tsconfig.json` would not be typechecked
 // either. It would buy the property back in CI's unfiltered `typecheck` job alone, at the price of
-// `typescript` and `@types/node` as root devDependencies and an inverted CLAUDE.md §2 receipt.
+// `@types/node` as a root devDependency and an inverted CLAUDE.md §2 receipt. (`typescript` was the
+// other half of that price until 2026-09-20, when the root gained it anyway: the version 6 API
+// package typescript-eslint needs now that packages compile with version 7.)
 // docs/backlog.md carries it as a follow-up.
 export default defineConfig({
   test: {

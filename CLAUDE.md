@@ -151,6 +151,12 @@ hook, or how tests are scheduled:
   A green selection guard alone does not mean a check ran.
 - **The workspace root is outside `pnpm -r`**, so root config is linted but never typechecked, and
   `eslint.config.js` is not type-aware. Proven by mutation.
+- **Two TypeScript compilers are installed on purpose, and there is no `tsc` at the ROOT.** A
+  package's `tsc` is version 7; the root resolves `typescript` to the version 6 API typescript-eslint
+  still needs, and its only binary is `tsc6`. Cost: typescript-eslint refuses version 7 by its major
+  alone, before loading its parser, so raising the root to it makes `pnpm lint` refuse to start with
+  no results at all — and version 7 rejected the one typechecked file reaching into another package by
+  relative path (`TS6059`). See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **`--frozen-lockfile` is not in the four-command gate.** Moving a dependency between `dependencies`
   and `devDependencies` fails CI at install. The hook runs it; the gate does not.
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a

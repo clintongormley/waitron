@@ -1,4 +1,4 @@
-import { probeNetwork } from "../../print-agent/src/tcp-probe.js";
+import { probeNetwork } from "@waitron/print-agent-app/tcp-probe.js";
 import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";

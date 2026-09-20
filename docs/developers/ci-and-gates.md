@@ -321,6 +321,91 @@ WHICH entries a new export competes with, list them with sizes and last-access t
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
 
+## Two TypeScript compilers are installed, and that is deliberate
+
+Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on
+this workspace that day, `time pnpm typecheck` went from 2:05.51 to 28.7s. It is doing the same
+work: a deliberate `const __probe: number = "not a number";` added to
+`packages/verifactu/src/index.ts` came back as `error TS2322`, and came back green when removed.
+
+Version 7 does **not** ship the old JavaScript API. Its `.` export is a version stub, and the API
+it does ship sits under `./unstable/*` — a different API, which no tool here reads yet:
+
+```
+$ node -e 'const ts = require("typescript"); console.log(Object.keys(ts), typeof ts.createProgram)'
+[ 'version', 'versionMajorMinor' ] undefined
+$ node -e 'console.log(Object.keys(require("typescript/package.json").exports))'
+[ './package.json', '.', './unstable/sync', './unstable/async', './unstable/fs', './unstable/proto',
+  './unstable/ast', './unstable/ast/is', './unstable/ast/factory', './unstable/ast/utils',
+  './unstable/ast/scanner', './unstable/ast/visitor', './unstable/ast/clone' ]
+```
+
+The first command alone would print the same thing whether or not `./unstable/*` existed, which is
+why the second one is here.
+
+typescript-eslint 8.70.0 does not read either API from version 7 — it refuses the version outright,
+before it loads its parser. `@typescript-eslint/parser/dist/index.js` reads `ts.versionMajorMinor` at
+import time and throws when the major is 7 or above, so the refusal would happen even if version 7
+had kept the whole old API. Its words, which are also what `pnpm lint` prints:
+
+> typescript-eslint does not support TS 7.0.
+> Please see https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0 to run typescript-eslint using the TS 6 API.
+> See also https://github.com/typescript-eslint/typescript-eslint/issues/10940 for tracking typescript-eslint's support for TS >=7.1
+
+So the ROOT `package.json` resolves the name `typescript` to `npm:@typescript/typescript6`, the
+compatibility package Microsoft published for this. Their announcement, section *Running
+Side-by-Side with TypeScript 6.0* (fetched with `curl -sL
+https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/` on 2026-09-20 and read with
+the HTML tags stripped, rather than through a summarising fetch — see the repository's rule about
+quotes that turn out to be paraphrases):
+
+> This package provides an executable named `tsc6`, so that if needed, you can install TypeScript
+> 7.0 (which ships its own `tsc` binary) side-by-side without naming conflicts. The new package also
+> re-exports the TypeScript 6.0 API, so that you can use `tsc` for TypeScript 7, while other tooling
+> can continue to rely on 6.0.
+
+The root is the only place that needs it, though not because ESLint only runs there — 47 manifests
+declare `"lint": "eslint ."`. It is because `eslint` and `typescript-eslint` are declared in the ROOT
+`package.json` and nowhere else, so whichever directory eslint is launched from, it is the root's
+install reading the root's config and resolving `typescript` from the root. Two consequences a reader
+will meet:
+
+- **There is no `tsc` at the repository root.** `pnpm exec tsc` there answers `Command "tsc" not
+  found`; the root's binary is `tsc6`. Measured 2026-09-20: root `tsc6` reports 6.0.3, every
+  package's `tsc` reports 7.0.2. Both are declared as caret ranges, so re-measure rather than
+  trusting those numbers. One reading trap: the root's `node_modules/typescript/package.json` says
+  `6.0.2`. That is the alias shim's own version; it re-exports `@typescript/old`, which is
+  `typescript@6.0.3`, and 6.0.3 is the compiler you actually get.
+- **Raising the root entry to version 7 breaks `pnpm lint`,** with the message above and no lint
+  results at all. Leave it on the alias until typescript-eslint's issue 10940 ships version 7
+  support — the message names 7.1 as its target — then collapse both back to one plain range
+  (`docs/backlog.md` → Track C).
+
+The root DOES therefore have a working TypeScript compiler API, at version 6, importable from the
+root Vitest project. Nothing uses it today. Two places had named its absence as the reason a guard
+reads text instead of parsing — the header of `scripts/dashboard-browser-purity.test.ts`, and the
+backlog note on `scripts/column-vocabulary.test.ts` — and both were corrected in the same change.
+
+Nothing else in the repository depends on which compiler is installed, because **`tsc` is never
+asked to emit here**: every use of it is `tsc --noEmit` inside a `typecheck` script, the bundles are
+esbuild's, and Vitest strips types with esbuild too — a claim the tree also makes at
+`packages/payments-stripe/src/wiring.test.ts:205`, and one you can check directly by running a
+package's suite with no `tsc` involved. That is what bounds a TypeScript bump's blast radius to
+`pnpm typecheck` and `pnpm lint`.
+
+One thing version 7 catches that 5.9.3 did not: a file imported by a relative path that climbs out
+of its own package is `error TS6059` ("not under `rootDir`"). Exactly one **typechecked** file in
+the tree did that — `apps/server/src/print-agent-e2e.test.ts`. Grepping will turn up three more
+(`apps/dashboard/vite.config.ts`, `apps/setup/vite.config.ts` and `apps/till/vite.config.ts` each
+import `../../scripts/dev-server-proxy.js`); those are silent only because all three tsconfigs set
+`"include": ["src"]`, so the compiler never opens them — not because the rule spares them. The
+compiler is the guard for this; no text-scanning guard was added.
+
+The repair, so nobody tidies it away: the climb-out became a workspace subpath import, which is why
+`apps/print-agent/package.json` carries a one-entry `exports` map naming `./tcp-probe.js` and
+`apps/server` lists `@waitron/print-agent-app` among its test-only dependencies. Delete either and
+the relative path is the only way back, along with `TS6059`.
+
 ## pnpm filter traps
 
 ### The pnpm changed-since filter silently matches nothing in a `git worktree`

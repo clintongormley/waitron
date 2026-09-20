@@ -172,10 +172,11 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     // so a direct `import "@waitron/db"` is caught), an `export` that is not `export type`/`export
     // interface` (`export const`, `export {value}`, `export default`), and a bare top-level value
     // declaration (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch an exotic
-    // top-level expression statement (`sideEffect();`) — which no type file writes; the transpile check
-    // (typescript is not a root dependency) is left to whatever next builds the dashboard bundle,
-    // which on a pull request that leaves `deploy/` alone is nothing (corrected 2026-09-19; this
-    // line used to name `bundle-smoke`, which builds no vite bundle). Prove-by-deletion:
+    // top-level expression statement (`sideEffect();`) — which no type file writes; this guard reads
+    // text rather than transpiling, so the transpile check is left to whatever next builds the
+    // dashboard bundle, which on a pull request that leaves `deploy/` alone is nothing (corrected
+    // 2026-09-19; this line used to name `bundle-smoke`, which builds no vite bundle).
+    // Prove-by-deletion:
     // add `import "@waitron/db";` or `export const x = 1;` to either leaf and it goes red.
     const LEAVES = [
       "packages/catalogue/src/product-types.ts",

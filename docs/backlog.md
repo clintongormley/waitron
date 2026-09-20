@@ -2280,6 +2280,19 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
+**Left behind by the TypeScript 7 upgrade (2026-09-20).** One follow-up, waiting on somebody else.
+
+- **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
+  Packages run `tsc` at 7.0.2; the repository root resolves the name `typescript` to
+  `npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads, because
+  version 7 does not ship the old JavaScript API, and typescript-eslint refuses the version outright
+  in any case. typescript-eslint tracks the work in its issue 10940,
+  and the message it prints today names version **7.1** as the target. When a typescript-eslint
+  release supports it, the root entry goes back to a plain `^7` range and the alias disappears. The
+  whole arrangement, with the receipts, is in
+  [ci-and-gates.md](developers/ci-and-gates.md) → *Two TypeScript compilers are installed, and that
+  is deliberate*.
+
 **Left behind by the Stryker upgrade (#447, 2026-09-19).** Four things the bump surfaced and
 deliberately did not settle.
 
@@ -2387,7 +2400,11 @@ declaration of its own. Two things it leaves open:
   else moved to 26.6.2. Measured with `tsc --noEmit --explainFiles` in `apps/dashboard`: 141 file
   mentions of 24.13.3 beside 384 of 26.6.2, where the same command on the pre-merge `main` showed
   350 of 24.13.3 alone. Nothing complains because `skipLibCheck` is on (`tsconfig.base.json:15`);
-  with `--skipLibCheck false` that program reports a duplicate `NonSharedBuffer` identifier.
+  with `--skipLibCheck false` that program reports a duplicate `NonSharedBuffer` identifier. **Both
+  numbers were taken on TypeScript 5.9.3 and both were re-run on 7.0.2 on 2026-09-20**, which is the
+  compiler `apps/dashboard` uses now: the counts moved to 146 and 542, and `--skipLibCheck false`
+  still names `NonSharedBuffer` at `buffer.buffer.d.ts(459,14)` in both copies. The problem is
+  unchanged; only the file counts are.
   `pnpm update --recursive --depth Infinity "@types/node"` does not collapse it — tried and
   reverted, it rewrote our own declarations to `"^26.6.2"` and left the transitive copy alone. The
   fix is a pnpm resolution override, which is a policy decision rather than a version bump, so it
@@ -3539,8 +3556,12 @@ consecutive comments, 5.3s at 32; the real tree scans in ~75ms either way).
 Nothing was left open by #416. One thing deliberately not done, so nobody re-derives it: the guard
 does not read `bench/`, `deploy/` or `scripts/`, and does not see a star re-export, a dynamic
 `import()`, a subpath import or a namespace import — all stated in its own header rather than fixed,
-because closing them needs a TypeScript parser and `typescript` is deliberately not a root
-dependency (the root `vitest.config.ts` header records that decision and its price).
+because closing them needs a TypeScript parser. **That obstacle is gone as of 2026-09-20**: the root
+now carries `typescript`, aliased to `@typescript/typescript6` so typescript-eslint keeps an API
+under TypeScript 7, and it is the real thing — `node -e 'console.log(typeof
+require("typescript").createProgram)'` at the root prints `function` against version 6.0.3. Whether
+to spend a parser on this guard is still an open call; the root `vitest.config.ts` header records
+what the old answer cost.
 
 Three things about the guard worth knowing before changing it. It lives under `scripts/`, in the
 ROOT Vitest project, and NOT in `packages/db/src/schema/columns.test.ts` where the plan put it: CI
