@@ -1,4 +1,4 @@
-import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
+import { customerOptionSnapshotLabels } from "./option-snapshot-labels.js";
 /**
  * Formats a filed sale into the customer's ESC/POS receipt (design §3b) — the pure byte-producing
  * half of the counter-printing slice. Like {@link formatKitchenTicket} it owns no state and touches no
@@ -62,7 +62,7 @@ import {
   type PaperWidth,
   type Resolution,
 } from "@waitron/printing";
-import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
+import { addDecimal, decimal, perDishOptionQuantity, resolveSnapshotText } from "@waitron/shared";
 
 import { qrModules } from "./qr-matrix.js";
 import { formatMoney } from "./receipt-money.js";
@@ -237,7 +237,11 @@ export function formatReceipt({
   // Goods identification (7.1.e) — the FILED composition, grouped so each option prints indented beneath
   // its dish at its own delta. A dish name's continuation lines start under the name, not the quantity.
   for (const { dish, options } of groupByParent(result.lines)) {
-    const unit = dish.unitName == null ? "" : ` ${lineName(dish.unitName, locale)}`;
+    // The unit abbreviation does NOT go through `lineName`: only `descriptions` is re-keyed onto the
+    // invoice locales, so a unit map still carries the bare content-language keys it was stored
+    // under ("es", not "es-ES") and an exact-key lookup would miss every one of them.
+    const unit =
+      dish.unitName == null ? "" : ` ${resolveSnapshotText(dish.unitName, locale, locale)}`;
     const quantity = p(`${dish.quantity}${unit}  `);
     // The name's continuation lines normally start under the name (indent = the quantity prefix width).
     // Cap that at 2 when the prefix is wider than half the paper: past there `wrapText`'s remaining room
@@ -248,7 +252,9 @@ export function formatReceipt({
       formatMoney(dish.gross, locale),
       nameIndent,
     );
-    for (const label of modifierSnapshotLabels(dish.modifierSnapshots ?? [], locale)) {
+    // The dish's frozen answers to its options lists, each under the dish it was asked about. An
+    // extras pick is NOT here: it is its own priced child line, printed by the loop below.
+    for (const label of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], locale)) {
       text(`  ${label}`, 2);
     }
     for (const option of options) {

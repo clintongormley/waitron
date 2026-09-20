@@ -2282,16 +2282,28 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const ticket = (await response.json()) as TillSaleResult;
   expect(ticket.total).toBe("4.40");
   expect(ticket.tender).toEqual({ method: "cash", change: "5.60" });
-  // A sale line's `modifierSnapshots` is empty on BOTH lines: the extras pick is its own priced child
-  // line, and the dish's options answer is frozen on its working-order line (read back below), which
-  // no fiscal projection carries.
+  // The dish's line carries the answer it froze; the extras pick is a child line of its own and
+  // answers nothing. The default content language keys the staff-name maps, so it is read back from
+  // the venue rather than assumed.
+  const { defaultLanguage } = await withTransaction(suite.admin, async (tx) => {
+    await asAppUser(tx);
+    return readContentLanguages(tx, cfg.locale);
+  });
+  const frozenAnswer = {
+    listName: { [defaultLanguage]: "Preparación" },
+    listCustomerName: null,
+    listKitchenName: null,
+    labelName: { [defaultLanguage]: "Frío" },
+    labelCustomerName: null,
+    labelKitchenName: null,
+  };
   expect(ticket.lines).toEqual([
     {
       descriptions: { [LOCALE]: "Agua mineral" },
       quantity: "2",
       gross: "3.00",
       parentLineNo: null,
-      modifierSnapshots: [],
+      optionSnapshots: [frozenAnswer],
       unitName: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
       unitPrecision: 0,
     },
@@ -2300,7 +2312,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       quantity: "4",
       gross: "1.40",
       parentLineNo: 1,
-      modifierSnapshots: [],
+      optionSnapshots: [],
       unitName: null,
       unitPrecision: null,
     },
@@ -2340,29 +2352,13 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // names copied by value; the child line answers nothing of its own.
   const frozen = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
-    const lines = await tx
+    return tx
       .select({ optionSnapshots: workingOrderLines.optionSnapshots })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, workingOrderId))
       .orderBy(workingOrderLines.lineNo);
-    return { defaultLanguage, lines };
   });
-  expect(frozen.lines).toEqual([
-    {
-      optionSnapshots: [
-        {
-          listName: { [frozen.defaultLanguage]: "Preparación" },
-          listCustomerName: null,
-          listKitchenName: null,
-          labelName: { [frozen.defaultLanguage]: "Frío" },
-          labelCustomerName: null,
-          labelKitchenName: null,
-        },
-      ],
-    },
-    { optionSnapshots: [] },
-  ]);
+  expect(frozen).toEqual([{ optionSnapshots: [frozenAnswer] }, { optionSnapshots: [] }]);
   // Rename the extra's product AFTER the sale: what a replay and a reprint read must be the names the
   // sale froze, never the catalogue's current ones.
   await withTransaction(suite.admin, async (tx) => {
@@ -2396,6 +2392,12 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // and the renamed "Manchego" does not.
   expect(text).toContain("Queso");
   expect(text).not.toContain("Manchego");
+  // The dish's options answer reached the PAPER. Nothing else in this file follows the whole chain
+  // that puts it there — the stored line read back, priced, projected onto the ticket and formatted
+  // (`readLockedLines` -> `priceLockedLines` -> `ticketLinesFrom` -> `formatReceipt` ->
+  // `customerOptionSnapshotLabels`) — and every other test of it builds a result by hand. This list
+  // and label stored no customer text, so the staff names are what a diner reads.
+  expect(text).toContain("Preparación: Frío");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);

@@ -399,7 +399,6 @@ async function priceOrderLines(
         courseId: string | null;
         note: string | null;
         doneness: Doneness | null;
-        optionSnapshots: OptionSnapshot[];
       }
     | { kind: "child"; productId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
@@ -503,6 +502,12 @@ async function priceOrderLines(
     items.push({
       product,
       quantity: line.quantity,
+      // The dish's frozen answers ride on the PRICED basket, which is the one carrier of them from
+      // here on: the `working_order_lines` row below reads them back off the priced line, and a
+      // WALK-UP is filed from this same `priced` result without re-reading the order it just wrote
+      // (`fileImmediateSale`, `apps/server/src/till-sale.ts`). Pricing copies the list through and
+      // does no arithmetic on it (`priceRows`, `packages/catalogue/src/pricing.ts`).
+      optionSnapshots,
       // The picked product's three frozen names travel as the child row's own: `name` is the staff
       // name (`working_order_lines.name` is NOT NULL), `descriptions` the customer map re-keyed onto
       // the invoice locales below, `kitchenName` what the kitchen reads.
@@ -529,7 +534,6 @@ async function priceOrderLines(
       courseId: line.courseId ?? product.courseId ?? null,
       note,
       doneness,
-      optionSnapshots,
     });
     for (const child of extraChildren) {
       lineMeta.push({
@@ -597,8 +601,8 @@ async function priceOrderLines(
   const lineRows = priced.lines.map((line, i) => {
     // `lineMeta[i]` lines up with `priced.lines[i]` (both in `priceBasketWithOptions`'s
     // parent-then-children expansion order): a PARENT row carries the dish's product, its resolved
-    // course and its options answers, and no parent link; a CHILD row carries the PICKED product and
-    // its parent's id, and no course (KDS coursing is per dish).
+    // course and no parent link; a CHILD row carries the PICKED product and its parent's id, and no
+    // course (KDS coursing is per dish).
     const meta = lineMeta[i]!;
     return {
       id: ids[i]!,
@@ -612,8 +616,10 @@ async function priceOrderLines(
       productId: meta.productId,
       name: line.name,
       descriptions: line.descriptions,
-      // The dish's options answers; a child row answers nothing of its own.
-      optionSnapshots: meta.kind === "parent" ? meta.optionSnapshots : [],
+      // Read back off the priced line rather than kept a second time here, so the row this writes and
+      // the sale a walk-up files from the same `priced` result can never describe different answers.
+      // `priceBasketWithOptions` sets no answers on a child row, so a child stores `[]`.
+      optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
       quantity: line.quantity,
@@ -669,8 +675,10 @@ async function priceOrderLines(
 }
 
 /**
- * Read a persisted order's STORED lines in `line_no` order — the columns `priceLockedLines` needs
- * (gross unit, quantity, rate, the frozen product and variant names, category), each snapshotted at add-time, PLUS `id`,
+ * Read a persisted order's STORED lines in `line_no` order — the columns `priceLockedLines` prices
+ * from (gross unit, quantity, rate) and the ones it copies through untouched (the frozen product
+ * and variant names, the dish's frozen options answers, category), each snapshotted at add-time,
+ * PLUS `id`,
  * `line_no` and `parent_line_id`, from which the returned `parentLineNo` is reconstructed so the
  * parent→child modifier linkage survives the lock round-trip (see below). THE ONE
  * reader shared by `payWorkingOrder` (a retrieved order), `placeOrder` (Mode-I's deferred file at
@@ -703,6 +711,7 @@ export async function readLockedLines(
       vatRate: workingOrderLines.vatRate,
       name: workingOrderLines.name,
       descriptions: workingOrderLines.descriptions,
+      optionSnapshots: workingOrderLines.optionSnapshots,
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -741,6 +750,9 @@ export async function readLockedLines(
     vatRate: line.vatRate,
     name: line.name,
     descriptions: line.descriptions,
+    // The dish's frozen answers to its options lists, carried from the stored row onto the filed
+    // sale line. A child row stored `[]`.
+    optionSnapshots: line.optionSnapshots,
     category: line.category,
     unitName: line.unitName,
     unitPrecision: line.unitPrecision,

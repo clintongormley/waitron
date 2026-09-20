@@ -769,14 +769,18 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
 /**
  * The sale_line → parent sale_line self-link (ordering modifiers, Task 2). `parent_line_id` is
  * presentation/reporting metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`,
- * never from `sale_lines`, so this column never reaches the fiscal fingerprint (design §4). A modifier files as
- * its own child line pointing at the dish line it belongs to; a top-level line leaves it NULL.
+ * never from `sale_lines`, so this column never reaches the fiscal fingerprint (design §4). An extras
+ * pick files as its own child line pointing at the dish line it belongs to; a top-level line leaves
+ * it NULL.
  *
- * The (parent_line_id) → sale_lines(id) FK keeps the link referential (mirrors
- * sale_lines_sale_fk); MATCH SIMPLE means a NULL parent satisfies it, so
- * ordinary lines are untouched. sale_lines carries NO reference to any option/catalogue table — the
- * "carries only the chosen variant snapshot identifier" test above guards that, and
- * `option_group_item_id` lives on the MUTABLE working_order_lines draft only, never here.
+ * The (parent_line_id) → sale_lines(id) FK keeps the link referential (mirrors sale_lines_sale_fk);
+ * MATCH SIMPLE means a NULL parent satisfies it, so ordinary lines are untouched. sale_lines carries
+ * NO reference to any extras or options table: the one catalogue-shaped id a filed line keeps is
+ * `variant_id`, the snapshot of the chosen variant, and it carries no foreign key back to the
+ * catalogue — everything else the line holds is frozen names. The
+ * "carries only the chosen variant snapshot identifier" test above guards that, and is weaker than
+ * its name: it matches sale_lines' column NAMES against a regex, so a catalogue reference added
+ * under a name that does not end in one of those words is invisible to it.
  */
 describeEachTarget("sale_lines — parent line self-link", (target) => {
   let db: Database;

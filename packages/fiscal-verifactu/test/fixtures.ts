@@ -18,7 +18,7 @@ import type { Entorno } from "../src/registro-row.js";
  * identities, never distinct tenants.
  *
  * `tillId`/`tillId2` are branded via `tillId()` (Task 13's addition) rather than left as plain
- * string literals: `registerSif`/`currentSif`/`esPrimerRegistro` (./src/registro-sif.ts) take
+ * string literals: `registerSif`/`currentSif`/`esPrimerRegistro` (../src/registro-sif.ts) take
  * `TillId`, and a plain `string` — even a `const`-literal one — is not assignable to a branded type
  * (see packages/shared/src/ids.ts's own design note on why: a string-keyed brand is forgeable, so
  * the brand is a `unique symbol` no literal can produce). `locationId`/`seriesId`/`saleId`/`sifId`
@@ -200,7 +200,7 @@ export interface SeededTillWithSif {
 
 // Module-scope, not per-call: every test file that imports `seedTenantWithSif` shares this
 // counter across its whole run, which is what keeps each call's SIF identity collision-free in
-// `registro_sif_instalacion_uq` — the identical convention `./src/testing/seed.ts`'s own `freshNif`
+// `registro_sif_instalacion_uq` — the identical convention `../src/testing/seed.ts`'s own `freshNif`
 // and `packages/core/test/fixtures.ts`'s `freshNif` already use.
 let nifSequence = 0;
 
@@ -243,11 +243,34 @@ async function insertLocationTillSeries(
  *
  * Each call mints its OWN fresh NIF and its own node so the write-path suite's `beforeEach` can
  * reseed on every test without ever truncating `registros_facturacion`'s append-only,
- * TRUNCATE-blocking table — the identical reasoning `./src/testing/seed.ts`'s `seedTill` doc
+ * TRUNCATE-blocking table — the identical reasoning `../src/testing/seed.ts`'s `seedTill` doc
  * comment already gives for the same shape.
+ *
+ * `options.nif` overrides that minting. The minted NIF comes from a module-level counter
+ * (`freshNif` above), so which one a test gets is decided by how many `seedTenantWithSif` calls ran
+ * before it in the same file. The NIF is a HASHED field (`IDEmisorFactura`,
+ * `packages/verifactu/src/huella.ts`), so a test that asserts a recorded huella literal would
+ * otherwise break whenever a test is added or removed ABOVE it. Measured: the same basket filed
+ * 16th in `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K` and to `A1AF497F…`
+ * standalone under `20000001K`; pinning the NIF made both positions agree. Pass a value no other
+ * test in the same file will mint — the counter starts at `20000001K` and climbs.
+ *
+ * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below is `where not exists`, so in a file
+ * whose earlier tests have already seeded, the override reaches `registerSif` alone and the
+ * `tenants` row keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella
+ * because the hashed `IDEmisorFactura` is read from the SIF registration, not from `tenants`:
+ * `VerifactuBackend.recordSale` sets it from `currentSif(tx, nodeId).nif`
+ * (`../src/backend.ts`, `../src/registro-sif.ts`). The only tenant value that reaches a record at all
+ * is the legal name — `taxpayer` in `../src/backend.ts` hands its callers nothing else — and the
+ * legal name is not among the eight fields `buildCadenaAlta` hashes
+ * (`packages/verifactu/src/huella.ts`). A test that needs `tenants.tax_id` itself to match must
+ * seed before anything else does.
  */
-export async function seedTenantWithSif(db: Database): Promise<SeededTillWithSif> {
-  const nif = freshNif();
+export async function seedTenantWithSif(
+  db: Database,
+  options: { nif?: string } = {},
+): Promise<SeededTillWithSif> {
+  const nif = options.nif ?? freshNif();
   return db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into tenants (id, country, tax_id, legal_name)

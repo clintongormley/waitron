@@ -50,8 +50,10 @@ menu's published choices does not reappear as another choice.
 ## Keep recorded orders intact
 
 When you park an order, its answers, labels and prices are saved. Retrieving it and changing only
-the quantity keeps those saved facts, even after you edit the definition. Kitchen views, completed
-sales and reprints display the recorded answers.
+the quantity keeps those saved facts, even after you edit the definition. Printed paper shows the
+recorded answers: the kitchen ticket prints them in the kitchen's wording, and the customer receipt
+prints them under the dish in the diner's. The till's own screens do not show them yet — not the
+basket, the kitchen and pass displays, a table's line list, or a settled ticket you open again.
 
 Deleting a modifier detaches it from every product and menu offer that uses it — those attachments
 are removed for you. Deletion is refused only while an open order still uses the modifier; the

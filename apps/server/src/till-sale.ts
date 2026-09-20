@@ -1,4 +1,4 @@
-import type { ExtraSelection, ModifierSnapshot, OptionSelection } from "@waitron/shared";
+import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-config.ts`/`config.ts` follow (a bare import, no value
@@ -155,7 +155,12 @@ export interface TillSaleLine {
    *  receipt can GROUP each option under its dish (Task 8). PRESENTATION metadata only — it groups the
    *  already-filed lines, never a fiscal figure, and the totals/desglose are read back unchanged. */
   parentLineNo?: number | null;
-  modifierSnapshots?: ModifierSnapshot[];
+  /** The diner's answers to this dish's OPTIONS lists, frozen onto the filed line and carried here
+   *  verbatim for the receipt to print under the dish. Each answer holds the list's three names and
+   *  the chosen label's three names, copied by value (`OptionSnapshot`), so a later catalogue edit
+   *  cannot rewrite what a completed sale says was ordered. An extras pick is NOT in here — it is a
+   *  child line of its own, linked by `parentLineNo`. Empty/absent for a child line. */
+  optionSnapshots?: OptionSnapshot[];
 }
 
 /** Persisted tender amounts and optional manual terminal reference. Card identity belongs on the slip. */

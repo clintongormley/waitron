@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
+import type { OptionSnapshot } from "@waitron/shared";
 import { saleLineRows } from "./sale-line-rows.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
+// The three names differ from each other so an assertion cannot pass while the wrong one is read.
+const cookedRare: OptionSnapshot = {
+  listName: { en: "Cooked" },
+  listCustomerName: { en: "How would you like it?" },
+  listKitchenName: "COOK",
+  labelName: { en: "Rare" },
+  labelCustomerName: { en: "Rare - pink throughout" },
+  labelKitchenName: "R",
+};
+
 describe("saleLineRows", () => {
-  it("carries the frozen name and the variant's customer, staff and kitchen names onto the row", () => {
+  it("carries the frozen name, the variant's three names and the frozen options answers onto the row", () => {
     const line: RecordSaleLine = {
       lineNo: 1,
       name: "Flat white",
@@ -20,7 +31,7 @@ describe("saleLineRows", () => {
       vatRate: "10.00",
       lineTotal: "3.00",
       category: "Drinks",
-      modifierSnapshots: [],
+      optionSnapshots: [cookedRare],
     };
 
     const [row] = saleLineRows("sale-1", [line]);
@@ -37,7 +48,7 @@ describe("saleLineRows", () => {
       variantName: "Large",
       variantDescriptions: { "en-GB": "Large", "en-US": "Large" },
       variantKitchenName: "LG",
-      modifierSnapshots: [],
+      optionSnapshots: [cookedRare],
       unitName: { "en-GB": "cup" },
       unitPrecision: 0,
       quantity: "1",
@@ -48,7 +59,7 @@ describe("saleLineRows", () => {
     });
   });
 
-  it("defaults the optional variant name fields to null when the line omits them", () => {
+  it("defaults the variant names to null and the options answers to an empty list when the line omits them", () => {
     const line: RecordSaleLine = {
       lineNo: 1,
       name: "Water",
@@ -73,7 +84,7 @@ describe("saleLineRows", () => {
       variantName: null,
       variantDescriptions: null,
       variantKitchenName: null,
-      modifierSnapshots: [],
+      optionSnapshots: [],
       unitName: null,
       unitPrecision: null,
       quantity: "1",

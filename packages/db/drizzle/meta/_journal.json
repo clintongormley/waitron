@@ -288,6 +288,13 @@
       "when": 1789866663717,
       "tag": "0040_watery_victor_mancha",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789887454420,
+      "tag": "0041_magenta_metal_master",
+      "breakpoints": true
     }
   ]
 }

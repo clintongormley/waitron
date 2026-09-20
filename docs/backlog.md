@@ -532,7 +532,8 @@ still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy 
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
 for a child line by a NULL product, no longer recognise one. Task 12 wires the till. The next task
-after Task 8 is Task 9, the fiscal fingerprint gate and the filed sale line.
+after Task 9 is Task 10, which takes doneness out end to end and seeds a "Cooked" options list in
+its place.
 
 Task 8 has landed too, as #465. This is what it changed. It took the preserve path's comparison out of
 `updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
@@ -591,6 +592,76 @@ Three things the review found, each measured rather than read:
   what writes it and which routes reach it. Everywhere else states the rule and points there.
 - **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
   the picked product's id, so renaming an extras list or the product itself disturbs nothing.
+
+Task 9 — a dish's frozen answers on the FILED sale line — is the plan's next one, and is on the
+branch `feat/modifiers-filed-sale-line`; add its PR number here when it lands. This is what it
+changes. `sale_lines.modifier_snapshots` is replaced by
+`sale_lines.option_snapshots` (core migration `packages/db/drizzle/0041_magenta_metal_master.sql`),
+and both filing routes now put a dish's frozen answers there: a walk-up off the basket the sale was
+priced from, a retrieved order off `working_order_lines.option_snapshots` through `readLockedLines`.
+The customer's paper receipt prints one `<list>: <label>` line indented under each dish, built by
+`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`) beside the
+kitchen-facing twin the kitchen ticket already used. `apps/server/src/modifier-snapshot-labels.ts`
+goes with the field it read.
+
+What that task carries with it:
+
+- **The column it replaced was already write-only and always empty, so the diff is smaller than it
+  looks.** Read out of the tree at `a7dd1993a`, not run: production code never SELECTed
+  `sale_lines.modifier_snapshots` — `sale_lines` is only ever inserted into (the three writers in
+  `packages/core`) and the one production query that reads the table is the top-sellers report,
+  which asks for `name` and `variant_name`; the receipt's own answers came off the PRICED lines and
+  never off the row. Nor could any PRODUCTION path put anything in it: both places that could have
+  filled it defaulted to `[]` (`packages/catalogue/src/pricing.ts`), and nothing set either —
+  `priceLockedLines` stopped supplying one when Task 7 dropped the working-order column it copied
+  from, and no `apps/server` route ever built a basket item carrying one. The only non-empty values
+  the column ever held were written by `@waitron/core`'s own tests, each passing a list through
+  `sale-line-rows.ts` and reading it straight back: `record-sale.test.ts`,
+  `record-correction.test.ts` and `record-substitution.test.ts` all do this.
+- **The fiscal gate's three literals passed unedited.** (The FILE was edited on 2026-09-20, by the
+  test-database conversion this branch was later rebased onto — the entry below records that
+  separately. What was never edited is the three recorded values.)
+  `packages/fiscal-verifactu/src/write-path.e2e.test.ts` gained
+  "the extras/options rework leaves the fiscal fingerprint byte-identical": one basket — a dish
+  carrying an options answer plus a priced extra as its own child line — files the same huella,
+  `ImporteTotal` and `CuotaTotal` as the same basket filed on `main`, where the block records the
+  three literals as taken at `2ae3baa98`, before any of this branch's code existed. Each literal was
+  written into the file once and never touched again on the branch
+  (`git log -p origin/main..HEAD` over that file shows one `+` line per value and no `-`; the older
+  citation `a7dd1993a..HEAD` stopped isolating the branch at the rebase, because that range now also
+  carries the conversion's own two-line import change), and the suite passes on the branch as it
+  stands — re-run after the rebase, on the converted helper:
+  `pnpm --filter @waitron/fiscal-verifactu test write-path`, 16 passed. The
+  block also records its own control, re-run here after the rebase and giving the same three values
+  as before it: moving the child line's VAT rate from 10% to 21% and
+  touching nothing else moved both `CuotaTotal` and the huella, while `ImporteTotal` stayed put —
+  it is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
+  `packages/fiscal-verifactu/src/backend.ts`), the caller's declared figure rather than anything the
+  lines add up to. So the control shows the fixture can see a moved VAT RATE. It does NOT show what
+  a moved line AMOUNT would do — the probe left both `lineTotal`s exactly where they were. And
+  `ImporteTotal` is independent of the line amounts in THIS TEST only, because the test hands
+  `recordSale` a hard-coded `total`. In production it is not: every till filing route passes
+  `total: priced.total` (`apps/server/src/till-sale.ts`), and `priced.total` is the sum of every
+  per-line gross (`priceRows`, `packages/catalogue/src/pricing.ts`), so a moved line amount does
+  move `ImporteTotal` on a real sale. What holds either way is the narrower thing: one of the three
+  literals is pinned against the caller's declared total instead of against the basket.
+- **A bilingual venue could have had the wrong language printed on a receipt, and the test that
+  should have caught it passed either way.** `customerOptionSnapshotLabels` looked its name maps up
+  by exact key. A frozen answer is keyed by bare content language ("es", "en") — the catalogue's
+  customer map is copied through whole and each staff name is widened under the venue's default
+  content language — while the receipt asks with the invoice locale, normally a full tag such as
+  "es-ES". With two content languages configured the lookup therefore always missed and printed
+  whichever language the stored map happened to list first, so an English receipt could print the
+  Spanish answer. Worse, a map kept because it holds text in ONE language can be blank in another,
+  and the blank was printed: with `{"en":"","es":"Tamaño"}` and `{"en":"  ","es":"Grande"}`, an
+  `es-ES` receipt printed `":   "` and both Spanish names vanished off the paper. Fixed by resolving
+  through `resolveSnapshotText` (`packages/shared/src/content-languages.ts`), which is the resolver
+  the receipt's own product names already go through, called the same way. The reason the suite was
+  green: the receipt fixture keyed every name map with a full tag, so every exact-key lookup hit and
+  the tests passed whether the code resolved a locale or not. The fixture is now keyed the way a
+  real filed line is keyed, and the negative control was run when the fix landed (`d527cd819`):
+  with that fixture and the old exact-key code, the English-receipt case fails with the Spanish
+  answer on the paper.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -739,11 +810,13 @@ What the order path (the plan's Task 7) left behind:
   attach one (Task 6 removed that section), so a fresh venue cannot; a dev database seeded before
   that change can. **Next action:** Task 12 rebuilds the till's picker and basket over extras and
   options; until then, reset a dev database rather than debugging a 400.
-- **A filed sale carries no options answers until Task 9.** `readLockedLines` no longer supplies
-  `sale_lines.modifier_snapshots`, so a sale filed from a new-path order carries `[]` there and the
-  receipt prints no options line. The column and `modifierSnapshotLabels`
-  (`apps/server/src/modifier-snapshot-labels.ts`) stay for that task to replace. Not reachable from
-  the till, which sends no answers until Task 12.
+- **A filed sale now carries its options answers, and the receipt prints them** (Task 9, slices C
+  and D). A walk-up files them off the priced basket and a retrieved order off
+  `working_order_lines.option_snapshots` via `readLockedLines`; the customer receipt prints one
+  `<list>: <label>` line under each dish, each side taking its customer text and falling back to the
+  staff name (`customerOptionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts`, beside the
+  kitchen-facing twin). `apps/server/src/modifier-snapshot-labels.ts` is deleted. Still not reachable
+  from the till, which sends no answers until Task 12.
 - **`modifierDependants(...).orders` is always 0, and `deleteModifier` no longer refuses.** An open
   order line has no column that could name a legacy modifier or one of its choices, so the refusal
   and the count that fed the dashboard's delete confirmation had nothing left to find. The whole
@@ -754,7 +827,10 @@ What the order path (the plan's Task 7) left behind:
   `apps/server/src/working-order.ts` — while `apps/till/src/api/client.ts` still declares
   `modifierSnapshots?` on its own copies of those types. Nothing crashes: the till's
   `modifierSnapshotLabels` helper (`apps/till/src/widgets/modifier-snapshot.ts`) defaults its
-  argument to `[]`, so an absent field simply renders no answers. The screens that would have shown
+  argument to `[]`, so an absent field simply renders no answers. `apps/till/src/api/client.ts:652`
+  declares the same stale `modifierSnapshots?` on its mirror of the server's `TillSaleLine`, which
+  Task 9 slice D renamed to `optionSnapshots`; the till therefore shows no answers on its own settled
+  ticket either, while the PAPER receipt prints them. The screens that would have shown
   them are `apps/till/src/widgets/station-queue.ts`, `apps/till/src/screens/till-expo-screen.ts`,
   `apps/till/src/screens/till-ticket-view.ts`,
   `apps/till/src/screens/till-table-order-screen.ts` and `apps/till/src/widgets/basket.ts`; several
@@ -767,8 +843,45 @@ What the order path (the plan's Task 7) left behind:
   instead of being skipped. Unreachable today for the same reason as the rest of this entry — the
   till sends no extras, so no child line exists for it to mis-classify, and the legacy child line
   that used to carry a null product cannot be created at all any more.
+  A THIRD thing, in the same app but on a different screen, found while fixing its paper twin and
+  NOT a consequence of the rename: `apps/till/src/screens/till-ticket-view.ts` resolves a line's
+  unit abbreviation through its own `lineName` helper, which is
+  `descriptions[locale] ?? Object.values(descriptions)[0] ?? ""` — an exact-key lookup against the
+  requested locale, then the map's first value. A filed line's `unit_name` is keyed by bare
+  content-language codes and nothing re-keys it, so the lookup misses and the screen shows the first
+  value. That is TRACED through `till-ticket-view.ts` and its `lineName`, not run.
+  What was run is the PAPER receipt, which carried the identical helper. The unit in question is
+  `EACH_UNIT` (`packages/catalogue/src/units.ts`), what a product with no `product_units` row reads
+  as and the one unit the venue seed never writes; `apps/server/src/till-api.pg.test.ts` pins its
+  five abbreviations on a real filed sale, with `toEqual`, which compares values and never key
+  order. The two filing paths carry those five in DIFFERENT key orders, and with the old exact-key
+  helper restored an `es-ES` receipt printed a different wrong answer for each, neither of them
+  `ud`. A RETRIEVED or parked order is priced from the `jsonb` column
+  `working_order_lines.unit_name`, which re-sorts its keys, and printed the CATALAN `u`. A WALK-UP
+  is filed and printed from the in-memory priced result instead (`priceBasketWithOptions` sets
+  `unitName: item.product.unit.abbreviation`, `packages/catalogue/src/pricing.ts`), so the
+  constant's own key order survives and it printed the ENGLISH `ea`.
+  The paper side is fixed (`resolveSnapshotText`); the screen still shows the wrong language's unit,
+  so paper and screen now disagree until somebody takes it. The till's own suites stay green over it
+  because each of their fixtures keys `unitName` with a full tag, which the exact-key lookup hits:
+  `apps/till/src/screens/till-ticket-view.test.ts`, `apps/till/src/screens/till-expo-screen.test.ts`
+  and `apps/till/src/widgets/station-queue.test.ts` all use `{ "es-ES": "kg" }`.
   **Next action:** Task 12 owns the till — recorded here so nobody debugs a missing line as a data
   problem, and so the child-line detection is rewritten rather than trusted.
+  **A second next action on the same task, raised by the Task 9 review and deliberately NOT taken
+  there:** the two label builders the till will need live in `apps/server` and the till cannot
+  import them. `apps/server/src/option-snapshot-labels.ts` turns a frozen answer into the
+  `<list>: <label>` string each audience reads, and its diner-facing half restates a rule that has
+  a home elsewhere — "take the customer map when it holds text in any language, else the staff
+  name" is `nonBlankTranslations(customerNames) ?? staffNames` there and
+  `nonBlankTranslations(p.customerName) ?? { [defaultLanguage]: p.name }` in
+  `customerPresentationText` (`packages/catalogue/src/product-presentation.ts`), which
+  `docs/developers/products.md` names as the one place either presentation rule lives. Its
+  kitchen-facing half does not restate anything — it calls `kitchenPresentationName` from that same
+  file. Task 12 has to show the same two labels on the till's own settled ticket, and a browser
+  consumer cannot reach into `apps/server`, so the rule is in line to be written a third time.
+  MOVE the pair into `packages/catalogue` when Task 12 needs them rather than copying them; Task 9
+  left them where they are because the server's two printers were the only callers.
 - **A dead dashboard surface is left behind by `modifierDependants(...).orders` always being 0.**
   Three consumers survive in `apps/dashboard/src/screens/modifiers-screen.ts`: the orders-block
   alert (line 403), the delete button disabled on `dependants.orders > 0` (line 545) and the
@@ -2340,6 +2453,41 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
+- **A seventh, and this one had a cause rather than a hypothesis — FIXED on #469 (2026-09-20).**
+  `test-light-b` failed `packages/catalogue/src/extras.pg.test.ts` → "leaves out a list item whose
+  product disappears between the menu view's two reads" with "timed out waiting for the menu view to
+  reach its product-price read". Not a deadlock and not the branch's doing: the branch touches no
+  file in that suite, and the identical catalogue code passed the same shard on two earlier heads of
+  the same branch. The cause is the suite's own `until` helper, whose polling bound was 5s inside a
+  30s test timeout. **The same bound on the same helper in the same track had already been raised to
+  15s**, in `packages/catalogue/src/product-modifiers.pg.test.ts`, whose comment says why in its own
+  words — "5s was not above what a HEALTHY first case costs on a loaded CI runner". The twin was left
+  behind. Raised to match, which is the shape `CLAUDE.md` §4 already carries a measured receipt for
+  (a healthy case at ~1.3s idle and 4518ms under load, against a 5000ms bound). It reproduced on no
+  local run, so the fix rests on the identified mechanism and the sibling's receipt, not on a
+  reproduction.
+- **A sixth, seen once (2026-09-20) on #469, a branch that touches no browser package at all.**
+  `test-dashboard` failed `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and
+  cancels on Escape from a focused field", at `expect(cancel).toHaveBeenCalledTimes(1)` — the Enter
+  half of the same test passed, so the form was mounted, focused and listening; only the Escape
+  produced nothing (job 106056111513, 1 failed / 2150 passed, failure screenshot retained by the
+  runner). **Established, by running:** the branch cannot be the cause — its only file that
+  `apps/dashboard` can even see is `packages/shared/src/modifier-snapshots.ts`, and that change is a
+  doc comment; `main`'s four most recent runs are green; and the case passed here three times on its
+  own and twice more in two full 142-file `test:coverage` runs of the package, so it did not
+  reproduce locally at all. **NOT established:** the cause. Two hypotheses were traced through the
+  code and NEITHER was run, so neither is a receipt. (1) The test fires `{Enter}` and `{Escape}` back
+  to back with nothing awaited between them, so a re-render provoked by the submit can land in the
+  gap and take focus off the field; `userEvent.keyboard` delivers to whatever is focused, so the key
+  would miss the dialog and no `wt-cancel` would follow. (2) `variant-form.ts` swallows Escape while
+  `busy` (`if (this.busy && event.key === "Escape") event.preventDefault()`, pinned by the sibling
+  test "holds Escape while the save it started is in flight") — but `busy` is a property the PARENT
+  sets and this test never sets it, so this one looks unlikely and is recorded only to save the next
+  reader the trace. **Next action:** on the next sighting keep the job log and the screenshot, and
+  fix it at the root — the first hypothesis is cheap to close by awaiting the component's
+  `updateComplete` between the two key presses and checking focus is still in the field. Not done
+  here: it was not reproducible, so a change would have been an unproven claim of repair, which is
+  the one thing a re-run can never establish.
 - **A fifth, with a real hypothesis this time: `test-dashboard`'s browser a11y suite fails on a stray
   `:hover` state left over from a prior test in the same shared browser page.** Seen three times the
   same day (2026-09-13), on two unrelated PRs, in code neither branch touched: `products-editor`'s CI

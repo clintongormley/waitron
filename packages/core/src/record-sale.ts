@@ -24,7 +24,7 @@ import {
 } from "@waitron/shared";
 import type {
   Decimal,
-  ModifierSnapshot,
+  OptionSnapshot,
   NodeId,
   SaleId,
   SeriesId,
@@ -66,7 +66,10 @@ export interface RecordSaleLine {
   /** The `lineNo` of this line's parent dish; `null` for a top-level line. Resolved to the parent's
    * generated id at the `sale_lines` insert (Task 5); presentation metadata only, NEVER hashed. */
   parentLineNo?: number | null;
-  modifierSnapshots?: ModifierSnapshot[];
+  /** The diner's answers to this dish's options lists, each frozen as the list's three names and
+   * the chosen label's three names. Copied onto `sale_lines.option_snapshots`; presentation only,
+   * never part of the fiscal hash. */
+  optionSnapshots?: OptionSnapshot[];
   /** Selected product variant and its presentation facts, frozen with the line. */
   variantId?: string | null;
   /** The variant's staff-facing name (the mirror of `name`); `null` when the line names no variant. */

@@ -20,7 +20,8 @@ A variant carries the same three, in `product_variants.name` (also `not null`),
 `product_variants.customer_name` and `product_variants.kitchen_name`.
 
 Two rules govern how those six fields become one displayed string, and both of them live in
-`packages/catalogue/src/product-presentation.ts`. Nothing else re-implements either one.
+`packages/catalogue/src/product-presentation.ts`. Nothing else re-implements either one, with one
+exception named under _What a sold line freezes_ below.
 
 **Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
 name falls back to Name. They do not fall back to each other, and a product with a customer-facing
@@ -58,9 +59,36 @@ rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
   then narrowed to exactly the venue's invoice languages by `toInvoiceLineDescriptions`.
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the same four
   facts for the chosen variant, plus the product's kitchen name.
+- `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
+  as the list's three names and the chosen label's three names, and no ids at all
+  (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). So this column carries
+  customer-facing text of its own, alongside the two `descriptions` columns above. An extras pick is
+  not in here: it becomes its own priced child line, which carries the picked product's names in the
+  columns above like any other line.
 
 Because both halves had their fallback applied *before* being frozen, nothing falls back again at
 render time. `joinCustomerPresentationText` only joins.
+
+**An options answer is the exception to that, deliberately.** `buildLineExtras`
+(`apps/server/src/modifier-selection.ts`) freezes the list's and the label's customer-facing map
+exactly as the catalogue row holds it — `null` included — and widens each plain staff name into a
+one-entry map under the venue's default content language. Nothing has fallen back by the time the
+row is written, so the customer-to-staff fallback for an answer runs at RENDER time instead, in
+`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`): it takes the customer
+map when `nonBlankTranslations` says that map holds text in some language and the staff map
+otherwise, then resolves whichever it picked against the locale it was asked for. The kitchen half
+does the same thing a function along, through `kitchenPresentationName`
+(`optionSnapshotLabels`, same file).
+
+That customer-to-staff step is the exception the top of this file points at — the one place the
+rule is spelled out away from `product-presentation.ts`. A list and a label carry no variant, so
+there is no whole `customerPresentationText` to call, only the same
+`nonBlankTranslations(…) ?? <the staff name>` fold written out again. Checked by following every
+use of `nonBlankTranslations` in the tree: the other callers use it to normalise a map on a write
+path and none of them falls back to a staff name. It is recorded in `docs/backlog.md` as something
+to move into `packages/catalogue` when the till needs the same two labels for its own settled
+ticket, because the till cannot import from `apps/server` and would otherwise write it a third
+time.
 
 None of these columns enters the fiscal hash, and none of them is sent to AEAT either. A filed
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
@@ -76,7 +104,8 @@ Where each one surfaces:
 | Surface | Reads | Code |
 | --- | --- | --- |
 | Receipt line — the goods identification, art. 7.1.e | the two frozen customer maps, joined | `apps/server/src/receipt-lines.ts` |
-| Kitchen ticket | the four frozen staff and kitchen names | `apps/server/src/kitchen-print.ts` |
+| Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts` |
+| Kitchen ticket | the four frozen staff and kitchen names, plus each frozen answer's kitchen names falling back to its staff names | `apps/server/src/kitchen-print.ts` |
 | Kitchen display and the expediter's pass | the same four names, through the same resolver | `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, joined server-side | `readTabLines`, `apps/server/src/working-order.ts` |
@@ -113,7 +142,12 @@ customer-facing name is **optional** — absent, what is shown is the staff name
 one (`null` or `{}`) is never a gap. Only a partly filled one is: fill in Spanish and leave English
 blank, and that is a gap, because you clearly meant to translate it and stopped. An options list's,
 an options label's and an extras list's customer-facing name is optional in the same way and is left
-out of the report for the same reason, though nothing displays those names yet. The other kinds the
+out of the report for the same reason. Two of those three now reach a surface: an options list's and
+an options label's customer-facing name are what the printed receipt puts under the dish
+(`customerOptionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts`), which is also where
+the fallback to the staff name happens, so a missing one still is not a gap. An extras list's own
+name reaches no order or receipt surface at all — a pick becomes its own line carrying the picked
+PRODUCT's names, and nothing copies the list's name onto it. The other kinds the
 query reports — `category`, `unit`, `section`, `option_group` and `option` — have no optional
 customer-facing name to fall back from and stay required. A modifier contributes two of those kinds,
 not one: the group's own name (`option_group`) and each of its choices (`option`), each with its own

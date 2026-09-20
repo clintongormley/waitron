@@ -65,12 +65,18 @@ async function lockWaiters(): Promise<number> {
 }
 
 /**
- * Poll until `condition` holds, and fail by NAME rather than hang when it never does. The bound is
- * well under this package's 30s test timeout (vitest.config.ts) and is reached in milliseconds on a
- * healthy run — it is here so a choreography that stops working reports what it was waiting for.
+ * Poll until `condition` holds, and fail by NAME rather than hang when it never does. It is reached
+ * in milliseconds on a healthy run — the bound is here so a choreography that stops working reports
+ * what it was waiting for, and it is 15s rather than the 5s it started at because 5s was not above
+ * what a HEALTHY case costs on a loaded CI runner: this test ("leaves out a list item whose product
+ * disappears between the menu view's two reads") failed the `light-b` shard on that bound while
+ * passing three times in a row locally. Its twin in `product-modifiers.pg.test.ts` was raised for
+ * the same reason and this copy was left behind. Still under this package's 30s test timeout
+ * (vitest.config.ts), which is what has to hold for the failure to be this message rather than
+ * Vitest's own.
  */
 async function until(what: string, condition: () => Promise<boolean>): Promise<void> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     if (await condition()) return;
     await new Promise((resolve) => setTimeout(resolve, 20));

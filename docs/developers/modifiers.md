@@ -5,6 +5,15 @@ Use the reusable definition for configuration and explicit selections for each o
 `@waitron/shared`. Catalogue validates definitions and selections through `modifier-contract.ts`;
 `modifiers.ts` owns transactional writes. Browser clients keep their local wire types.
 
+> **2026-09-20:** `ModifierSnapshot` is still exported, but it is no longer a type to reach for.
+> `packages/shared/src/modifier-snapshots.ts` now records it as dead, and Task 13 of
+> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` deletes it. Checked by grepping
+> the tree: the only thing importing it is that package's own barrel
+> (`packages/shared/src/index.ts`), and `apps/till` declares a separate `ModifierSnapshot` of its
+> own in `apps/till/src/api/client.ts` rather than using this one. An order or sale line's frozen
+> answers are `OptionSnapshot`s (`packages/shared/src/option-selection.ts`), and an extras pick is
+> its own line.
+
 ## Authoring
 
 `GET /management-api/modifiers` returns `{ modifiers: Modifier[] }`.
@@ -228,16 +237,81 @@ list is different: its children are compared by the picked product's id, so rena
 the product — disturbs nothing and the line is preserved.
 
 The till has not moved onto this wire yet: `apps/till` still builds and reads the old
-`modifierSelections`/`modifierSnapshots` shapes, which is a task of its own. The gap, and which
-till files it touches, is in `docs/backlog.md`.
+`modifierSelections`/`modifierSnapshots` shapes, which is a task of its own — its mirror of the
+settled ticket included. The gap, and which till files it touches, is in `docs/backlog.md`.
+
+## On the filed sale
+
+A filed sale is a snapshot and never a catalogue reference (`packages/db/src/schema/sales.ts`,
+architecture §6), so the two kinds of answer land differently:
+
+- An options answer is copied onto the DISH's own `sale_lines.option_snapshots` — the same six names
+  the open order froze, and no ids. Both filing routes supply it: a walk-up from the basket it was
+  priced from, a retrieved order from `working_order_lines.option_snapshots`, read by
+  `readLockedLines` (`apps/server/src/working-order.ts`).
+- An extras pick is already its own CHILD line, and that line IS the record: the picked product's
+  frozen name, its quantity, the price it sold at and its own VAT rate. Unlike the open order's child
+  line it carries NO `product_id` — `sale_lines` has no such column. "How much bacon did we sell"
+  therefore groups on the frozen name, the way the top-sellers report groups products.
+
+**The frozen ANSWERS never reach the fiscal fingerprint. A line's AMOUNTS do.** Do not read the
+first half as the second. What `backend.recordSale` is handed is the sale's `total` and its VAT
+breakdown — a list of one entry per VAT rate — and never the lines themselves, so the words a diner
+chose have no channel at all into `computeHuella`'s input. The money is a different story, and the
+channel is that breakdown, whichever of the two ways it was built. When the caller supplies none,
+`recordSale` derives it from the lines (`input.vatBreakdown ?? buildVatBreakdown(input.lines)`,
+`packages/core/src/record-sale.ts`), and `buildVatBreakdown` groups each line's `lineTotal` by its
+`vatRate`; a correction and a substitution always take that path, calling `buildVatBreakdown`
+unconditionally. When the caller supplies its own — which the till's filing routes do — it is filed
+verbatim, but it too was grouped per rate over the priced lines a moment earlier
+(`packages/catalogue/src/pricing.ts`). Either way an extras child line's base and its own VAT rate
+reach the record's `CuotaTotal`, and `CuotaTotal` is one of the fields `computeHuella` hashes
+(`packages/verifactu/src/huella.ts`).
+
+One figure the fiscal backend does not derive: `ImporteTotal` is `sale.total` copied straight
+through (`packages/fiscal-verifactu/src/backend.ts`), an explicit field of what the caller handed
+in. So the same basket restructured into different lines can leave `ImporteTotal` exactly where it
+was while `CuotaTotal` and the huella move. That is a fact about the BACKEND and not about the
+system: every till filing route passes `total: priced.total` (`apps/server/src/till-sale.ts`), and
+`priced.total` is the sum of every per-line gross (`priceRows`,
+`packages/catalogue/src/pricing.ts`), so on a real sale a moved line AMOUNT does move
+`ImporteTotal`. What it cannot see is a restructuring whose amounts still add up to the same
+total.
+
+That is measured rather than reasoned about. The gate is "the extras/options rework leaves the
+fiscal fingerprint byte-identical" (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`): one
+basket — a dish carrying an options answer, plus a priced extra as its own child line — files the
+same huella, `ImporteTotal` and `CuotaTotal` as that basket filed on `main` before this rework. The
+same test also reads the filed line back and asserts the answers ARE on it, so the three figures
+cannot match merely because nothing was written. And the block carries the control that was run for
+it: with the child line's VAT rate moved from 10% to 21% and nothing else touched, `CuotaTotal` and
+the huella both came back different while `ImporteTotal` did not move. That control is what shows
+the fixture can see a moved VAT RATE at all. It says nothing about a moved line AMOUNT: the probe
+left both `lineTotal`s exactly where they were. `ImporteTotal` held still there because that test
+hands `recordSale` its own `total`, which a production sale does not — so what the third literal is
+pinned against is the CALLER's declared total, not the basket.
+
+The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
+CUSTOMER text at the invoice locale and falls back to the staff name, never to the kitchen name —
+`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`), beside the
+kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage and integration order
 
 Generated core migration `packages/db/drizzle/0021_product_modifiers.sql` extends the existing
-group/item definitions and adds JSONB snapshots to working and sale lines. It creates NO table of
-that name, despite the file name — beware the twin: `packages/catalogue/drizzle/0010_product_modifiers.sql`
-is a different migration in a different set, and it is the one that creates the `product_modifiers`
-table. Everything in THIS SECTION is about the OLD `option_groups`/`option_group_items` model and
+group/item definitions and adds JSONB snapshots to working and sale lines.
+
+> **2026-09-20:** the sentence above is left as it stands because it records what 0021 did, and that
+> does not change. Both JSONB snapshot columns it added are gone now:
+> `working_order_lines.modifier_snapshots` was dropped by core migration
+> `packages/db/drizzle/0040_watery_victor_mancha.sql`, and `sale_lines.modifier_snapshots` by
+> `packages/db/drizzle/0041_magenta_metal_master.sql`, which added `sale_lines.option_snapshots` in
+> the same file. What the two tables carry today is under _On the filed sale_ above.
+
+0021 creates NO table of that name, despite the file name — beware the twin:
+`packages/catalogue/drizzle/0010_product_modifiers.sql` is a different migration in a different set,
+and it is the one that creates the `product_modifiers` table. Everything in THIS SECTION is about
+the OLD `option_groups`/`option_group_items` model and
 its `product_option_groups` attachment table, not that new one; the authoring section above already
 describes the new `modifiers` body field. No new tables or core-to-catalogue
 foreign keys are added here. The catalogue generation script reports no schema change. Existing
