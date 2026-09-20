@@ -1,6 +1,6 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
@@ -13,7 +13,7 @@ import { seedPerson } from "../test/fixtures.js";
 // that way), so nothing here is a grant assertion; a suite that wanted one would switch role first,
 // the way packages/db/src/allocate-number.test.ts does.
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });

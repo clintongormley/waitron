@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
@@ -20,7 +20,7 @@ import { codeOf, openManagementSession, seedPerson, seedTill } from "../test/fix
 // Reset per test (the default), deliberately. The last-admin guard counts every admin in the
 // database, so admins created by earlier tests would be counted too and the "only active admin"
 // test could never see a single admin.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 

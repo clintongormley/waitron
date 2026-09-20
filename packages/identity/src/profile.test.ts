@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -26,7 +26,7 @@ import {
 } from "./profile.js";
 
 // PGlite covers profile behavior; the me API's real-PG suite exercises deployment-role writes.
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 async function fixture() {
   await seedTenant(suite.db);
   const email = `${randomUUID()}@example.com`;

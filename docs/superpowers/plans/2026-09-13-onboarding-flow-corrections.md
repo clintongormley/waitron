@@ -1586,6 +1586,20 @@ Expected: a new `packages/identity/drizzle/0016_passkey_offered.sql` containing 
 
 Create `packages/identity/src/passkey-offer.test.ts`. Use the shared PGlite helper (`usePgliteDb`) — this asserts behaviour, not privileges, so the lighter target is right, and say so in a comment:
 
+> **2026-09-20 — both places this step names the helper are now out of date, and the reasoning
+> beside them is not.** The instruction above says `usePgliteDb`, and the sketch's import line below
+> calls it "the package's existing helper — match its sibling suites". The file this step created,
+> `packages/identity/src/passkey-offer.test.ts`, asks for its database through `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`), and so do its twelve sibling identity suites, so "match its
+> sibling suites" now resolves to that name; no identity suite calls the old helper any more
+> (`grep -rnE "usePgliteDb[(]" --include="*.ts" packages/identity` exits 1 on the change that added
+> this pointer). What the step argues for is unchanged: it is still the same PGlite database, and
+> the new helper takes the same options, because its whole body forwards to
+> `usePgliteDb` (`packages/db/src/testing/venue-db.ts`; plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`), so "behaviour, not privileges,
+> so the lighter target is right" and the comment the step asks for both still read true. Nothing
+> else in this document was re-checked.
+
 ```ts
 // PGlite, not real PostgreSQL: these assert what the two verbs do, not what a grant permits. Every
 // PGlite connection is a superuser, so a privilege claim here would prove nothing (CLAUDE.md §4).

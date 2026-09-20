@@ -1,6 +1,6 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateSecret, generateSync } from "otplib";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -22,7 +22,7 @@ vi.mock("./verify-password.js", async (importOriginal) => {
 // PGlite, not real Postgres: this suite tests the verifier LOGIC — the password/TOTP/suspended
 // branches and the role gate. A PGlite connection is superuser holding every grant, so a privilege
 // or trigger assertion would be a false pass here (CLAUDE.md §4); nothing below makes one.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });

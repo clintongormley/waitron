@@ -122,6 +122,26 @@ git commit -s -m "feat(identity): webauthn credential + challenge tables (FORCE 
 
 - [ ] **Step 3: Write the failing test** — `passkey.test.ts`. WebAuthn attestation cannot be synthesised in a unit test, so **mock `@simplewebauthn/server`'s verify function** and assert OUR wiring (challenge stored then consumed, credential persisted with counter, person resolved from the session):
 
+> **2026-09-20 — the sketch below names a helper the file does not call now.**
+> `packages/identity/src/passkey.test.ts` imports `useVenueDb` from
+> `@waitron/db/testing/venue-db.js` and calls that, not `usePgliteDb` from
+> `@waitron/db/testing/lifecycle.js`; no identity suite calls the old helper any more
+> (`grep -rnE "usePgliteDb[(]" --include="*.ts" packages/identity` exits 1 on the change that added
+> this pointer). The target is the same PGlite database with the same migration list, and the new
+> helper takes the same options, because its whole body forwards to `usePgliteDb`
+> (`packages/db/src/testing/venue-db.ts`; plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Task 3's later "add to
+> `passkey.test.ts`" step is unaffected.
+>
+> **What this pointer does NOT say is that the rest of the sketch matches the file.** It had already
+> drifted before this branch, which changed only the helper's name: the sketch passes
+> `setup: async (db) => { tenantId = await seedTenant(db); }` and no `resetPerTest`, where the real
+> file passes `resetPerTest: false` and no `setup` at all, and the sketch's `run` helper is
+> `withTenant(suite.db, tenantId, fn)` where the file uses `withTransaction(suite.db, fn)` — the
+> tenant column having been dropped on 2026-09-14. Those differences were noticed while writing
+> this pointer; the sketch was not audited for any others, and nothing else in this document was
+> re-checked — the library version it pins included.
+
 ```ts
 import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
