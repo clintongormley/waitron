@@ -11,6 +11,7 @@ import {
   type OptionList,
   type OptionListInput,
 } from "./option-contract.js";
+import type { OptionListDependants } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import "./errors.js";
 
@@ -286,10 +287,9 @@ export async function deleteOptionList(tx: Transaction, optionListId: string): P
   await tx.delete(optionLists).where(eq(optionLists.id, optionListId));
 }
 
-export interface OptionListDependants {
-  products: { id: string; name: string }[];
-  menus: { id: string; name: string }[];
-}
+// The shape lives in `modifier-list-types.ts`, the browser-safe LEAF the dashboard imports; this
+// file keeps the code that builds it and re-exports the type so existing imports are unchanged.
+export type { OptionListDependants } from "./modifier-list-types.js";
 
 /**
  * What deleting this list would touch — the preview a delete confirmation reads. Both sides are

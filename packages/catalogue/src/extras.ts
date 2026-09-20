@@ -18,6 +18,7 @@ import {
   type ExtraListInput,
   type MenuExtraPublication,
 } from "./extra-contract.js";
+import type { ExtraListDependants } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import "./errors.js";
 
@@ -608,10 +609,9 @@ export async function setMenuItemExtraLists(
   if (items.length > 0) await tx.insert(menuItemExtraItems).values(items);
 }
 
-export interface ExtraListDependants {
-  products: { id: string; name: string }[];
-  menus: { id: string; name: string }[];
-}
+// The shape lives in `modifier-list-types.ts`, the browser-safe LEAF the dashboard imports; this
+// file keeps the code that builds it and re-exports the type so existing imports are unchanged.
+export type { ExtraListDependants } from "./modifier-list-types.js";
 
 /**
  * What deleting this list would touch — the preview a delete confirmation reads. Both sides are

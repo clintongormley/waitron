@@ -157,8 +157,9 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
   });
 
   describe("the catalogue wire-shape leaves stay type-only (emit no runtime)", () => {
-    // `packages/catalogue/src/product-types.ts` (the product editor shapes, imported by the dashboard)
-    // and `menu-types.ts` (the sell-side shapes, imported by the till) each hold wire shapes a browser
+    // `packages/catalogue/src/product-types.ts` (the product editor shapes, imported by the dashboard),
+    // `menu-types.ts` (the sell-side shapes, imported by the till) and `modifier-list-types.ts` (the
+    // extras-list and options-list shapes, imported by the dashboard) each hold wire shapes a browser
     // app imports DIRECTLY (`@waitron/catalogue/src/<leaf>.js`). Each is a PURE type module: every
     // import is `import type`, every export is a type/interface, and it declares no value — so it
     // compiles to an empty runtime module and contributes NO code, and no runtime dependency, to any
@@ -181,6 +182,7 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     const LEAVES = [
       "packages/catalogue/src/product-types.ts",
       "packages/catalogue/src/menu-types.ts",
+      "packages/catalogue/src/modifier-list-types.ts",
     ];
 
     /** Every top-level statement in `src` that would emit runtime JS: an `import` that is not
@@ -205,8 +207,15 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       return out;
     }
 
-    it.each(LEAVES)("%s imports at least one type (not vacuous)", (leaf) => {
-      expect(/import\s+type\s/.test(readFileSync(join(REPO, leaf), "utf8"))).toBe(true);
+    // The not-vacuous check: an EMPTY file is type-only too, and so is a path that no longer names
+    // the leaf the browser imports, so the type-only assertion below passes on both. What every leaf
+    // must have instead is at least one exported type — the thing a browser app imports it FOR.
+    // (It used to read `import type`, which `modifier-list-types.ts` has none of: its shapes are
+    // built from primitives alone, so that check would have had to exempt it.)
+    it.each(LEAVES)("%s exports at least one type (not vacuous)", (leaf) => {
+      expect(/^export\s+(?:type|interface)\b/m.test(readFileSync(join(REPO, leaf), "utf8"))).toBe(
+        true,
+      );
     });
 
     it.each(LEAVES)("%s is type-only: no runtime import, export, or declaration", (leaf) => {

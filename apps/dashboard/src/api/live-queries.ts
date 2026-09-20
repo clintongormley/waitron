@@ -81,6 +81,14 @@ export const QUERY_DEPENDENCIES = {
   listOptionGroupItems: ["option_group_items", "recipe_lines", "ingredients"],
   listOptionGroups: ["option_groups", "option_group_items"],
   listProductOptionGroupIds: ["product_option_groups"],
+  // The extras and options lists. Each read is two SELECTs and nothing else: the list table, then
+  // its children (`listOptionLists`/`readOptionListsByIds` in packages/catalogue/src/options.ts,
+  // `listExtraLists`/`readExtraListsByIds` in extras.ts). Neither joins `products`,
+  // `product_modifiers` or the `menu_item_extra_*` tables, so none of those is named here.
+  listOptionLists: ["option_lists", "option_labels"],
+  getOptionList: ["option_lists", "option_labels"],
+  listExtraLists: ["extra_lists", "extra_list_items"],
+  getExtraList: ["extra_lists", "extra_list_items"],
   listDeviceProfiles: ["device_profiles", "devices", "canvases"],
   getDeviceProfile: ["device_profiles", "canvases"],
   listDevices: ["devices", "device_profiles", "tills", "kitchen_stations"],

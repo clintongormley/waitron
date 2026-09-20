@@ -1,38 +1,20 @@
 import { AppError, contentLanguageCode, isUuid } from "@waitron/shared";
+import type { OptionLabelInput, OptionList, OptionListInput } from "./modifier-list-types.js";
 import type { OptionSelection } from "@waitron/shared";
 import { nonBlankTranslations } from "./product-presentation.js";
 import "./errors.js";
 
 export type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 
-/**
- * A label and its list each carry the same three names as a product: plain staff `name`, a translated
- * `customerName` map, and a plain `kitchenName`. A null customer or kitchen name falls back to
- * `name`; only `name` is required.
- */
-export interface OptionLabel {
-  id: string;
-  name: string;
-  customerName: Record<string, string> | null;
-  kitchenName: string | null;
-  available: boolean;
-}
-
-/** A reusable list of labels the diner picks exactly one of. It owns no price, VAT or allergens. */
-export interface OptionList {
-  id: string;
-  name: string;
-  customerName: Record<string, string> | null;
-  kitchenName: string | null;
-  /** A label of THIS list, preselected when the list is asked; null when nothing is preselected. */
-  defaultLabelId: string | null;
-  active: boolean;
-  /** Presentation order: the caller writes each label's `sort` from its position here. */
-  labels: OptionLabel[];
-}
-
-export type OptionLabelInput = Omit<OptionLabel, "id"> & { id?: string };
-export type OptionListInput = Omit<OptionList, "id" | "labels"> & { labels: OptionLabelInput[] };
+// The four shapes below live in `modifier-list-types.ts`, the browser-safe LEAF the dashboard
+// imports; this file keeps the code that validates them and re-exports them so existing imports are
+// unchanged.
+export type {
+  OptionLabel,
+  OptionLabelInput,
+  OptionList,
+  OptionListInput,
+} from "./modifier-list-types.js";
 
 function invalid(field: string): never {
   throw new AppError("options.invalid", { field });

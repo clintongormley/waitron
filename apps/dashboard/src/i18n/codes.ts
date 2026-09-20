@@ -464,6 +464,37 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the group's min/max selection settings",
     es: "Revisa los ajustes de selección mínima/máxima del grupo",
   },
+  // Extras and options LISTS (the `/management-api/modifiers/{options,extras}` surface,
+  // apps/server/src/catalogue-api.ts). Six codes, three per kind and the same three both times: a
+  // malformed authoring body (400), an id naming no list (404), and a customer-facing name with no
+  // text in the venue's default content language (400). The two order-time siblings on the same
+  // STATUS map — `options.label_required` and `extras.limit_exceeded` — are deliberately absent:
+  // they are thrown only by the selection validators the TILL's order path calls, never by a
+  // management route, so the dashboard cannot be answered with them.
+  "options.invalid": {
+    en: "Check the options list's names, its labels and which label is preselected.",
+    es: "Revisa los nombres de la lista de opciones, sus etiquetas y cuál está preseleccionada.",
+  },
+  "options.not_found": {
+    en: "This options list no longer exists. Refresh the list and try again.",
+    es: "Esta lista de opciones ya no existe. Actualiza la lista e inténtalo de nuevo.",
+  },
+  "options.translation_required": {
+    en: "Enter the customer-facing name in the site's default language.",
+    es: "Introduce el nombre para clientes en el idioma predeterminado del sitio.",
+  },
+  "extras.invalid": {
+    en: "Check the extras list's name, its products, the selection limits and the prices.",
+    es: "Revisa el nombre de la lista de extras, sus productos, los límites de selección y los precios.",
+  },
+  "extras.not_found": {
+    en: "This extras list no longer exists. Refresh the list and try again.",
+    es: "Esta lista de extras ya no existe. Actualiza la lista e inténtalo de nuevo.",
+  },
+  "extras.translation_required": {
+    en: "Enter the customer-facing name in the site's default language.",
+    es: "Introduce el nombre para clientes en el idioma predeterminado del sitio.",
+  },
   // The ingredient form's own client-side validation message: a non-empty name is required (the column
   // is NOT NULL and a nameless ingredient is a UI error), surfaced via `codeMessage` from the form's
   // `validationError`. Client-only — the server stays authoritative.

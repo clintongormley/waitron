@@ -1,45 +1,21 @@
 import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
+import type { ExtraList, ExtraListItemInput, ExtraListInput } from "./modifier-list-types.js";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import "./errors.js";
 
 export type { ExtraSelection } from "@waitron/shared";
 
-/**
- * One product a list offers. The row holds nothing that duplicates the product: its three names,
- * VAT class, allergens, dietary labels and photo all come from the `products` row it names, so this
- * carries only the terms of the OFFER — how many the diner may take, whether it starts picked, and a
- * price that overrides the product's own.
- */
-export interface ExtraListItem {
-  id: string;
-  productId: string;
-  /** Per-dish cap for this product; at least 1, where 1 means "one or none". */
-  maxQuantity: number;
-  preselected: boolean;
-  /** null means "charge the product's own `unitPrice`" — see `resolveExtraPrice` in extras.ts. */
-  price: string | null;
-}
-
-/**
- * A reusable, named list of products the diner may add to a dish. `minPicks` 0 makes the list
- * optional and 1 or more makes it required; `maxPicks` null leaves it uncapped.
- */
-export interface ExtraList {
-  id: string;
-  name: string;
-  customerName: Record<string, string> | null;
-  kitchenName: string | null;
-  minPicks: number;
-  maxPicks: number | null;
-  active: boolean;
-  /** Presentation order: the caller writes each item's `sort` from its position here. */
-  items: ExtraListItem[];
-}
-
-export type ExtraListItemInput = Omit<ExtraListItem, "id"> & { id?: string };
-export type ExtraListInput = Omit<ExtraList, "id" | "items"> & { items: ExtraListItemInput[] };
+// The four shapes below live in `modifier-list-types.ts`, the browser-safe LEAF the dashboard
+// imports; this file keeps the code that validates them and re-exports them so existing imports are
+// unchanged.
+export type {
+  ExtraList,
+  ExtraListInput,
+  ExtraListItem,
+  ExtraListItemInput,
+} from "./modifier-list-types.js";
 
 function invalid(field: string): never {
   throw new AppError("extras.invalid", { field });
