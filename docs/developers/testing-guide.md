@@ -518,6 +518,27 @@ it.
 
 **Browser-mode tests**
 
+## A width you set with `commands.setViewportSize` is not a width the component rendered at.
+
+The components under test render inside vitest's own iframe. `commands.setViewportSize` resizes the
+OUTER Playwright page and leaves that iframe alone: measured on 2026-09-20 while looking at the
+dashboard's modifier screens, `window.innerWidth` inside the test read 414 — the default — after
+calling it. `page.viewport(w, h)` is what resizes the iframe; the same measurement read 390 and 1280
+through it.
+
+This is CLAUDE.md §1's "a measurement taken where both answers look alike measures nothing" with a
+helper attached: a phone-width screenshot taken through the wrong helper looks like a phone-width
+screenshot of a layout that copes, and is a desktop-width screenshot of one that may not. It cost two
+separate agents on one branch. State the width you measured, not the width you asked for — read
+`window.innerWidth` inside the test and put it in the report.
+
+A second thing a widget harness does not inherit: icons are registered in each app's `main.ts`, which
+a harness mounting one widget never loads, so `wt-icon` renders an empty box and a grip handle looks
+like a missing cell. Register the app's icon set in the harness before reading anything into a blank
+control.
+
+Nothing guards either of these.
+
 ## Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.
 
 Preloading that library before the old module mocks reproduces `startRegistration is not a spy` and
