@@ -283,8 +283,17 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           descriptions: { "es-ES": "Jamón" },
           quantity: "0.375",
           gross: "4.50",
-          // Keyed by a BARE content-language code, which is the only shape a unit abbreviation is
-          // ever stored or filed under — see the multi-language case below.
+          // Keyed by a BARE content-language code, which is what the DASHBOARD produces — a unit's
+          // abbreviation is keyed by the venue's content languages, and those are bare codes. It is
+          // not a shape anything enforces: `units.abbreviation` is a plain `jsonb NOT NULL` with no
+          // check constraint, the write path's `findContentTranslationGap`
+          // (`packages/catalogue/src/content-languages.ts`) puts each key through
+          // `contentLanguageCode` only to CHECK it — "es-ES" passes and is then stored verbatim —
+          // and neither `working_order_lines.unit_name` nor `sale_lines.unit_name` has a locale
+          // trigger (the two that exist are on `descriptions` and `variant_descriptions`).
+          // `packages/core/src/sale-line-rows.test.ts` files `{ "en-GB": "cup" }` today.
+          // `resolveSnapshotText` answers either shape, which is why the fix is a resolver and not
+          // a re-keying. See the multi-language case below.
           unitName: { es: "kg" },
           unitPrecision: 3,
         },
@@ -306,10 +315,18 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
   it("prints the unit abbreviation of the invoice language, not whichever one is stored first", () => {
     // A unit's abbreviation map is keyed by BARE content-language codes and nothing re-keys it onto
     // the venue's invoice locales, the way `toInvoiceLineDescriptions` re-keys a line's
-    // `descriptions`. This fixture is the exact map a real filed sale carries (the seeded "each"
-    // unit, `packages/catalogue/src/units.ts`; asserted on a real sale in `till-api.pg.test.ts`), so
-    // the receipt has to match the invoice TAG "es-ES" against the bare key "es". Reading the map's
-    // first entry instead prints the Catalan abbreviation on a Spanish receipt.
+    // `descriptions`, so the receipt has to match the invoice TAG "es-ES" against the bare key
+    // "es". Reading the map's first entry instead prints a non-Spanish abbreviation either way, and
+    // WHICH one depends on the filing path. The five pairs below are `EACH_UNIT`'s
+    // (`packages/catalogue/src/units.ts`) — the unit a product with no `product_units` row reads as,
+    // and the one unit the venue seed never writes; `till-api.pg.test.ts` pins the same five on a
+    // real filed sale, with `toEqual`, which compares values and never key order. A RETRIEVED or
+    // parked order is priced from `working_order_lines.unit_name`, a `jsonb` column, and jsonb
+    // re-sorts its keys — that is this fixture's order, whose first value is the Catalan "u". A
+    // WALK-UP is filed and printed from the IN-MEMORY priced result instead
+    // (`priceBasketWithOptions` sets `unitName: item.product.unit.abbreviation`,
+    // `packages/catalogue/src/pricing.ts`), so the constant's own key order survives and the first
+    // value is the English "ea".
     const result: TillSaleResult = {
       ...FILED_SALE,
       lines: [

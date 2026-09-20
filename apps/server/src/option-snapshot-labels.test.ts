@@ -82,15 +82,23 @@ describe("customerOptionSnapshotLabels", () => {
     // The case the docstring's "first non-blank value over SORTED keys" sentence is actually about.
     // `nonBlankTranslations` keeps a map that holds text in ANY language, so the map it chose can
     // still be blank in the language the receipt asked for — and printing that blank would drop the
-    // goods identification off a legal receipt while every other assertion still passed. "es" is
-    // blank on both sides here, so each side falls through to "en", which sorts first among the
-    // remaining keys.
+    // goods identification off a legal receipt while every other assertion still passed.
+    //
+    // Each map here holds TWO non-blank values, under keys whose sorted order differs from their
+    // insertion order: "es" is blank, so sorted keys (en, es, gl) reach the ENGLISH text first
+    // while insertion order (es, gl, en) would reach the Galician. The assertion therefore fails if
+    // the `.sort()` in `resolveSnapshotText` (`packages/shared/src/content-languages.ts`) is
+    // deleted — proven that way, and the deleted-sort run printed the Galician pair.
+    //
+    // Note the resolver sorts ALL the keys and then takes the first non-blank VALUE; it does not
+    // drop the blanks and sort what is left. The two orders coincide here, but a key that sorted
+    // before "en" and held only blanks would still be looked at and passed over.
     expect(
       customerOptionSnapshotLabels(
         [
           snapshot({
-            listCustomerName: { es: "", en: "Punto customer" },
-            labelCustomerName: { es: "  ", en: "Poco hecho customer" },
+            listCustomerName: { es: "", gl: "Punto galego", en: "Punto customer" },
+            labelCustomerName: { es: "  ", gl: "Pouco feito galego", en: "Poco hecho customer" },
           }),
         ],
         "es-ES",

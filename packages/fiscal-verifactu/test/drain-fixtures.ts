@@ -168,7 +168,7 @@ export async function insertPendingAlta(
  * `'pendiente'` default, `proximo_intento_en` is stamped `2026-07-21T00:00:00Z` to match this
  * task's fake AEAT's `serverNow`, so `drain` sees the batch as due.
  *
- * `sif_id`/`nif` are resolved via `currentSif` (./src/registro-sif.js) — the same function
+ * `sif_id`/`nif` are resolved via `currentSif` (`../src/registro-sif.ts`) — the same function
  * `VerifactuBackend` itself uses — rather than re-deriving them from a second, hand-written
  * `registro_sif` query.
  */
@@ -280,7 +280,7 @@ export async function appendPendingAlta(
  * ALREADY-seeded venue, with one pending alta on it at `secuencia`.
  *
  * For tests that need to prove one venue's chains are isolated from one another: Task 9's
- * `haltOpenChainClaims` (./src/drain.ts) must halt a claim on a chain with an open
+ * `haltOpenChainClaims` (`../src/drain.ts`) must halt a claim on a chain with an open
  * `rechazado`/`detenido` row WITHOUT also halting or skipping a claim on a DIFFERENT, healthy
  * chain claimed in the same batch — a property `seedPendingEnvios`'s
  * single-chain shape cannot exercise on its own.

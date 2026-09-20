@@ -775,8 +775,12 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
  *
  * The (parent_line_id) → sale_lines(id) FK keeps the link referential (mirrors sale_lines_sale_fk);
  * MATCH SIMPLE means a NULL parent satisfies it, so ordinary lines are untouched. sale_lines carries
- * NO reference to any extras or options table — a filed line holds frozen names only — and the
- * "carries only the chosen variant snapshot identifier" test above guards that.
+ * NO reference to any extras or options table: the one catalogue-shaped id a filed line keeps is
+ * `variant_id`, the snapshot of the chosen variant, and it carries no foreign key back to the
+ * catalogue — everything else the line holds is frozen names. The
+ * "carries only the chosen variant snapshot identifier" test above guards that, and is weaker than
+ * its name: it matches sale_lines' column NAMES against a regex, so a catalogue reference added
+ * under a name that does not end in one of those words is invisible to it.
  */
 describeEachTarget("sale_lines — parent line self-link", (target) => {
   let db: Database;

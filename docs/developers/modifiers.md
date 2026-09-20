@@ -5,6 +5,15 @@ Use the reusable definition for configuration and explicit selections for each o
 `@waitron/shared`. Catalogue validates definitions and selections through `modifier-contract.ts`;
 `modifiers.ts` owns transactional writes. Browser clients keep their local wire types.
 
+> **2026-09-20:** `ModifierSnapshot` is still exported, but it is no longer a type to reach for.
+> `packages/shared/src/modifier-snapshots.ts` now records it as dead, and Task 13 of
+> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` deletes it. Checked by grepping
+> the tree: the only thing importing it is that package's own barrel
+> (`packages/shared/src/index.ts`), and `apps/till` declares a separate `ModifierSnapshot` of its
+> own in `apps/till/src/api/client.ts` rather than using this one. An order or sale line's frozen
+> answers are `OptionSnapshot`s (`packages/shared/src/option-selection.ts`), and an extras pick is
+> its own line.
+
 ## Authoring
 
 `GET /management-api/modifiers` returns `{ modifiers: Modifier[] }`.
@@ -259,10 +268,15 @@ verbatim, but it too was grouped per rate over the priced lines a moment earlier
 reach the record's `CuotaTotal`, and `CuotaTotal` is one of the fields `computeHuella` hashes
 (`packages/verifactu/src/huella.ts`).
 
-One figure moves with neither: `ImporteTotal` is `sale.total` copied straight through
-(`packages/fiscal-verifactu/src/backend.ts`), an explicit field of what the caller handed in rather
-than anything the lines add up to. So the same basket restructured into different lines can leave
-`ImporteTotal` exactly where it was while `CuotaTotal` and the huella move.
+One figure the fiscal backend does not derive: `ImporteTotal` is `sale.total` copied straight
+through (`packages/fiscal-verifactu/src/backend.ts`), an explicit field of what the caller handed
+in. So the same basket restructured into different lines can leave `ImporteTotal` exactly where it
+was while `CuotaTotal` and the huella move. That is a fact about the BACKEND and not about the
+system: every till filing route passes `total: priced.total` (`apps/server/src/till-sale.ts`), and
+`priced.total` is the sum of every per-line gross (`priceRows`,
+`packages/catalogue/src/pricing.ts`), so on a real sale a moved line AMOUNT does move
+`ImporteTotal`. What it cannot see is a restructuring whose amounts still add up to the same
+total.
 
 That is measured rather than reasoned about. The gate is "the extras/options rework leaves the
 fiscal fingerprint byte-identical" (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`): one
@@ -273,9 +287,9 @@ cannot match merely because nothing was written. And the block carries the contr
 it: with the child line's VAT rate moved from 10% to 21% and nothing else touched, `CuotaTotal` and
 the huella both came back different while `ImporteTotal` did not move. That control is what shows
 the fixture can see a moved VAT RATE at all. It says nothing about a moved line AMOUNT: the probe
-left both `lineTotal`s exactly where they were, so `ImporteTotal` being independent of the line
-amounts is read off `ImporteTotal: sale.total` in `packages/fiscal-verifactu/src/backend.ts` rather
-than run.
+left both `lineTotal`s exactly where they were. `ImporteTotal` held still there because that test
+hands `recordSale` its own `total`, which a production sale does not — so what the third literal is
+pinned against is the CALLER's declared total, not the basket.
 
 The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
 CUSTOMER text at the invoice locale and falls back to the staff name, never to the kitchen name —

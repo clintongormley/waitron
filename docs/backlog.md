@@ -593,8 +593,9 @@ Three things the review found, each measured rather than read:
 - **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
   the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 
-Task 9 — a dish's frozen answers on the FILED sale line — is the plan's next one and has not
-landed yet. This is what it changed. `sale_lines.modifier_snapshots` is replaced by
+Task 9 — a dish's frozen answers on the FILED sale line — is the plan's next one, and is on the
+branch `feat/modifiers-filed-sale-line`; add its PR number here when it lands. This is what it
+changes. `sale_lines.modifier_snapshots` is replaced by
 `sale_lines.option_snapshots` (core migration `packages/db/drizzle/0041_magenta_metal_master.sql`),
 and both filing routes now put a dish's frozen answers there: a walk-up off the basket the sale was
 priced from, a retrieved order off `working_order_lines.option_snapshots` through `readLockedLines`.
@@ -603,7 +604,7 @@ The customer's paper receipt prints one `<list>: <label>` line indented under ea
 kitchen-facing twin the kitchen ticket already used. `apps/server/src/modifier-snapshot-labels.ts`
 goes with the field it read.
 
-What that task carried with it:
+What that task carries with it:
 
 - **The column it replaced was already write-only and always empty, so the diff is smaller than it
   looks.** Read out of the tree at `a7dd1993a`, not run: production code never SELECTed
@@ -631,10 +632,13 @@ What that task carried with it:
   it is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
   `packages/fiscal-verifactu/src/backend.ts`), the caller's declared figure rather than anything the
   lines add up to. So the control shows the fixture can see a moved VAT RATE. It does NOT show what
-  a moved line AMOUNT would do — the probe left both `lineTotal`s exactly where they were — so
-  `ImporteTotal` being independent of the line amounts is read off that one line of `backend.ts`,
-  not run. Either way, one of the three literals is pinned against the caller's declared total
-  instead of against the basket.
+  a moved line AMOUNT would do — the probe left both `lineTotal`s exactly where they were. And
+  `ImporteTotal` is independent of the line amounts in THIS TEST only, because the test hands
+  `recordSale` a hard-coded `total`. In production it is not: every till filing route passes
+  `total: priced.total` (`apps/server/src/till-sale.ts`), and `priced.total` is the sum of every
+  per-line gross (`priceRows`, `packages/catalogue/src/pricing.ts`), so a moved line amount does
+  move `ImporteTotal` on a real sale. What holds either way is the narrower thing: one of the three
+  literals is pinned against the caller's declared total instead of against the basket.
 - **A bilingual venue could have had the wrong language printed on a receipt, and the test that
   should have caught it passed either way.** `customerOptionSnapshotLabels` looked its name maps up
   by exact key. A frozen answer is keyed by bare content language ("es", "en") — the catalogue's
@@ -833,14 +837,29 @@ What the order path (the plan's Task 7) left behind:
   instead of being skipped. Unreachable today for the same reason as the rest of this entry — the
   till sends no extras, so no child line exists for it to mis-classify, and the legacy child line
   that used to carry a null product cannot be created at all any more.
-  A THIRD thing on the same screen, found while fixing its paper twin and NOT a consequence of the
-  rename: `apps/till/src/screens/till-ticket-view.ts` resolves a line's unit abbreviation by exact
-  key against the requested locale, while a filed line's `unit_name` is keyed by bare content-language
-  codes and nothing re-keys it. Measured on the PAPER receipt, which had the identical line: with the
-  map a real sale files (`{ ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" }`, asserted at
-  `apps/server/src/till-api.pg.test.ts`), a Spanish receipt printed the CATALAN `u` rather than `ud`.
+  A THIRD thing, in the same app but on a different screen, found while fixing its paper twin and
+  NOT a consequence of the rename: `apps/till/src/screens/till-ticket-view.ts` resolves a line's
+  unit abbreviation through its own `lineName` helper, which is
+  `descriptions[locale] ?? Object.values(descriptions)[0] ?? ""` — an exact-key lookup against the
+  requested locale, then the map's first value. A filed line's `unit_name` is keyed by bare
+  content-language codes and nothing re-keys it, so the lookup misses and the screen shows the first
+  value. That is TRACED through `till-ticket-view.ts` and its `lineName`, not run.
+  What was run is the PAPER receipt, which carried the identical helper. The unit in question is
+  `EACH_UNIT` (`packages/catalogue/src/units.ts`), what a product with no `product_units` row reads
+  as and the one unit the venue seed never writes; `apps/server/src/till-api.pg.test.ts` pins its
+  five abbreviations on a real filed sale, with `toEqual`, which compares values and never key
+  order. The two filing paths carry those five in DIFFERENT key orders, and with the old exact-key
+  helper restored an `es-ES` receipt printed a different wrong answer for each, neither of them
+  `ud`. A RETRIEVED or parked order is priced from the `jsonb` column
+  `working_order_lines.unit_name`, which re-sorts its keys, and printed the CATALAN `u`. A WALK-UP
+  is filed and printed from the in-memory priced result instead (`priceBasketWithOptions` sets
+  `unitName: item.product.unit.abbreviation`, `packages/catalogue/src/pricing.ts`), so the
+  constant's own key order survives and it printed the ENGLISH `ea`.
   The paper side is fixed (`resolveSnapshotText`); the screen still shows the wrong language's unit,
-  so paper and screen now disagree until somebody takes it.
+  so paper and screen now disagree until somebody takes it. The till's own suites stay green over it
+  because each of their fixtures keys `unitName` with a full tag, which the exact-key lookup hits:
+  `apps/till/src/screens/till-ticket-view.test.ts`, `apps/till/src/screens/till-expo-screen.test.ts`
+  and `apps/till/src/widgets/station-queue.test.ts` all use `{ "es-ES": "kg" }`.
   **Next action:** Task 12 owns the till — recorded here so nobody debugs a missing line as a data
   problem, and so the child-line detection is rewritten rather than trusted.
   **A second next action on the same task, raised by the Task 9 review and deliberately NOT taken
