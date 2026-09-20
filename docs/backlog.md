@@ -2453,6 +2453,19 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
+- **A seventh, and this one had a cause rather than a hypothesis — FIXED on #469 (2026-09-20).**
+  `test-light-b` failed `packages/catalogue/src/extras.pg.test.ts` → "leaves out a list item whose
+  product disappears between the menu view's two reads" with "timed out waiting for the menu view to
+  reach its product-price read". Not a deadlock and not the branch's doing: the branch touches no
+  file in that suite, and the identical catalogue code passed the same shard on two earlier heads of
+  the same branch. The cause is the suite's own `until` helper, whose polling bound was 5s inside a
+  30s test timeout. **The same bound on the same helper in the same track had already been raised to
+  15s**, in `packages/catalogue/src/product-modifiers.pg.test.ts`, whose comment says why in its own
+  words — "5s was not above what a HEALTHY first case costs on a loaded CI runner". The twin was left
+  behind. Raised to match, which is the shape `CLAUDE.md` §4 already carries a measured receipt for
+  (a healthy case at ~1.3s idle and 4518ms under load, against a 5000ms bound). It reproduced on no
+  local run, so the fix rests on the identified mechanism and the sibling's receipt, not on a
+  reproduction.
 - **A sixth, seen once (2026-09-20) on #469, a branch that touches no browser package at all.**
   `test-dashboard` failed `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and
   cancels on Escape from a focused field", at `expect(cancel).toHaveBeenCalledTimes(1)` — the Enter
