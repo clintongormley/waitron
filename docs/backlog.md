@@ -111,6 +111,16 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 `apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. Numbered in priority
 order; the small items at the end of each area live in Track C.
 
+**Specified, implementation deferred (owner, 2026-09-20): menus, reusable categories and home
+layouts.** [Design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md):
+ordered categories containing products and other shared categories, optional organisational groups,
+menu price overrides, immutable menu publication, and menu-owned home layouts for handhelds and
+tills. Shared edits flag affected menus; each live menu changes only when republished, apart from
+live availability. **Do not start implementation until the PostgreSQL-to-SQLite work, dependency
+upgrades, and variants/extras-as-products changes have all landed.** Then reconcile the integration
+questions in the spec with the landed code before planning. Further specifications can be written
+during the wait.
+
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
 document is the contract, and it grows as we go: each screen tends to raise a question the rules do
