@@ -340,12 +340,24 @@ it("does not keep a menu price for a product the list stopped offering while it 
     // before inserting its own. So the publisher stops there: after it has read which products the
     // list offers, and before it writes the override. That is the window this race needs, and it is
     // opened from outside rather than by pausing the code under test.
+    // The blocker signals once its lock is actually HELD, and the save does not start until then.
+    // Starting the save as soon as the blocker's promise exists is a race this script loses on a
+    // loaded machine: if the blocker has not reached its `for update` yet, the save takes the row
+    // unopposed, finishes, and nothing ever waits — so the poll below times out having proved
+    // nothing. The same fix and the same reasoning are in `product-modifiers.pg.test.ts`; this
+    // copy was left behind. Reproduced here before fixing it, by delaying the blocker 400ms so
+    // the save always wins: the case failed after the full 15s with "timed out waiting for the
+    // save to reach the row the blocker holds", which is the message CI reported on run
+    // 35510945319.
+    const acquired = latch();
     held = withTransaction(blocker, async (tx) => {
       await tx.execute(
         sql`select 1 from menu_item_extra_lists where menu_item_id = ${offer} for update`,
       );
+      acquired.open();
       await release.waited;
     });
+    await acquired.waited;
     publishing = app(publisher, (tx) =>
       setMenuItemExtraLists(tx, offer, [
         { listId: list.id, items: [{ productId: breads.sourdough, price: "0.25" }] },
