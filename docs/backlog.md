@@ -634,6 +634,14 @@ What the order path (the plan's Task 7) left behind:
   weight", `apps/server/src/working-order.test.ts`). This is a second instance of the shape the
   Units entry above already warns about. **Next action:** whoever builds Units decides which column
   answers "is this sold one at a time" and makes both paths read it.
+- **The till's own wire is now refused, not just ignored.** `apps/till/src/state/order-line.ts`
+  still builds `options: [{ optionGroupItemId }]`, and the server's options contract accepts only
+  `{ listId, labelId }` keys — so a basket line carrying a legacy modifier is answered
+  `options.invalid` naming `optionSelections.optionGroupItemId` rather than being priced. It takes a
+  product that still has a legacy option group attached to reach it, and the dashboard can no longer
+  attach one (Task 6 removed that section), so a fresh venue cannot; a dev database seeded before
+  that change can. **Next action:** Task 12 rebuilds the till's picker and basket over extras and
+  options; until then, reset a dev database rather than debugging a 400.
 - **A filed sale carries no options answers until Task 9.** `readLockedLines` no longer supplies
   `sale_lines.modifier_snapshots`, so a sale filed from a new-path order carries `[]` there and the
   receipt prints no options line. The column and `modifierSnapshotLabels`

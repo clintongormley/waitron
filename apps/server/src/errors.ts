@@ -321,28 +321,28 @@ declare module "@waitron/shared" {
      */
     "sale.unsupported_tender": { method: string };
     /**
-     * A ring-time modifier selection named an `option_group_item_id` that does not belong to any
-     * ACTIVE option group attached to the product being ordered (ordering modifiers, Task 6). The
-     * server resolves every selected option against the product's own resolved `optionGroups` (the
-     * SAME read `listAvailableProducts` returns) and refuses one that resolves to nothing — the client
-     * is never the gate, so a crafted or stale id is caught here before any line is priced or filed.
-     * An id belonging to an INACTIVE group/item, to ANOTHER product's group, or to nothing at all all
-     * report THIS one code — to a till pricing a basket they are the same fact ("that option is not
-     * offered on this dish"), the fail-closed shape `sale.unknown_product` uses.
+     * NOTHING RAISES THIS ANY MORE. It named an `option_group_item_id` that belonged to no ACTIVE
+     * option group of the product being ordered; the order path no longer takes option-group items
+     * at all, and an extras pick naming a product no offered list carries is refused by the extras
+     * contract instead (`extras.invalid` on `productId`,
+     * `packages/catalogue/src/extra-contract.ts`). Registered and kept because a shipped code is
+     * never removed; `options.in_use` beside it has the same posture.
      *
-     * `optionGroupItemId` and `productId` are caller-supplied uuids the till already holds, not
-     * secrets — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
-     * note above gives). `option.*` names the DOMAIN CONCEPT (a menu option), never the throwing
-     * package; SINGULAR because it names ONE option that was not found — the same singular/plural split
-     * `options.selection_invalid` (about the whole selection) sits beside. `@waitron/catalogue` owns
-     * the options domain, so this belongs there once a package other than this host throws it — the
-     * same note `sale.unknown_product` carries about its own placement. Mapped to 404. Never renamed
-     * once shipped.
+     * `optionGroupItemId` and `productId` were caller-supplied uuids the till already holds, not
+     * secrets. `option.*` names the DOMAIN CONCEPT (a menu option), never the throwing package;
+     * SINGULAR because it named ONE option. It is NOT in this surface's `STATUS` map, so it was
+     * answered 400 by `createErrorBoundary`'s default rather than the 404 an earlier version of this
+     * comment claimed.
      */
     "option.not_found": { optionGroupItemId: string; productId: string };
-    /** Legacy option payload validation; required groups remain required when no choices are usable. */
+    /** NOTHING RAISES THIS ANY MORE — the legacy option payload it validated is gone. An unanswered
+     *  options list is now `options.label_required` and a pick outside a list's limits is
+     *  `extras.limit_exceeded`, both from the contracts in `@waitron/catalogue`. */
     "options.selection_invalid": { productId: string; groupId: string; reason: string };
-    /** Legacy option payload validation; canonical modifiers also support fractional units. */
+    /** An extras pick on a dish that is not priced `each`. A child line is priced at the dish's
+     *  quantity times the pick count, so a dish sold by weight would bill a fraction of an extra.
+     *  Raised by `priceOrderLines` (working-order.ts); `pricingUnit` echoes what the dish resolved
+     *  to, which the two order paths read from different places (docs/backlog.md). */
     "options.unsupported_product": { productId: string; pricingUnit: string };
     /**
      * A ring-time line carried a free-text kitchen `note` longer than the 200-character limit (per-line
