@@ -4518,7 +4518,7 @@ the following `grep` correctly reported the work still to do. Pipe the file list
 instead. This is the same class as the repository's `pnpm --filter ""` and unquoted-`$PACKAGES`
 traps in `CLAUDE.md` §2, in a different shell.
 
-**`packages/payments` converted, on the branch `feat/sqlite-slice1-venue-db-payments`** — fourteen
+**`packages/payments` converted, LANDED as #464 on 2026-09-20** (main `1d056b00`) — fourteen
 test files and fourteen calls, one per file, plus one
 doc comment that named the old helper in prose (`src/node-column.test.ts:14`) and the package's
 `vitest.config.ts` comment, which the `hookTimeout` section above had been holding open for this
