@@ -92,18 +92,11 @@ export async function readOptionListsByIds(
   return withLabels(tx, lists);
 }
 
+/** One list with its labels, or `options.not_found`. The twin of `getExtraList` (extras.ts). */
 export async function getOptionList(tx: Transaction, optionListId: string): Promise<OptionList> {
-  const [list] = await tx
-    .select(listColumns)
-    .from(optionLists)
-    .where(eq(optionLists.id, optionListId));
+  const [list] = await readOptionListsByIds(tx, [optionListId]);
   if (!list) throw new AppError("options.not_found", { optionListId });
-  const labels = await tx
-    .select(labelColumns)
-    .from(optionLabels)
-    .where(eq(optionLabels.listId, optionListId))
-    .orderBy(optionLabels.sort, optionLabels.id);
-  return { ...list, labels };
+  return list;
 }
 
 async function assertOptionList(tx: Transaction, optionListId: string): Promise<void> {
