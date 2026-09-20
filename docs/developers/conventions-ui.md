@@ -64,13 +64,39 @@ reading how the request was written instead of what it said.
 Since the extras-and-options order path (2026-09-20) that comparison lives in `updateHeldOrder`
 (`apps/server/src/working-order.ts`). It rebuilds what the request's answers would freeze NOW
 (`buildLineExtras`, `apps/server/src/modifier-selection.ts`) and compares that with what the stored
-line holds, by value and index-wise — both sides are built in the OFFERED order rather than the
-order they were sent, so neither key order nor entry order can reach the result. The helper this
-replaces, `sameModifierSelections`, no longer exists.
+line holds, by value. The helper this replaces, `sameModifierSelections`, no longer exists.
 
-What covers it: `apps/server/src/working-order.test.ts`, "keeps extras rows and customisation on a
-quantity-only edit" — it raises the offer's price and the extra's price underneath the edit, then
-asserts the parent and its child line keep their original ids and their locked prices.
+**Neither side's ORDER is part of the comparison either, and the reason is worth carrying.** Both
+sides are built in the order the dish OFFERS its answers, which reads as a fixed thing and is not
+one: it is a stored position, and three columns hold parts of it, each re-numbered from the body of
+whatever save writes it. `docs/developers/modifiers.md` lists all three with what writes each. So a
+line parked before one of those saves keeps the OLD order while the rebuilt side comes back in the
+new one — and a comparison pairing the two up position by position reads that as a changed answer
+and re-prices a quantity-only edit. That is why the pairing is order-independent
+(`sameOptionSelections`, `matchExtraChildren`). Measured on 2026-09-20 for BOTH comparators, through
+the column a product save writes: the options half and the extras half each re-issued every line
+under a new id and re-priced the dish.
+
+**A picked product that two of the dish's ACTIVE lists offer refuses the pairing.** A child line
+records the product it is, its quantity and the price it was sold at, and never the list that
+offered it — so the comparison cannot tell a quantity change from a pick that MOVED between two
+lists offering the same product at different prices, and it keeps the price of whichever row it
+lands on. Two picks EXCHANGED between such lists is a regression order-independence introduced, and
+was found by running; ONE pick MOVED between them predates it, and bills the old list's 1.00 in a
+checkout of `main` at `68e36c6aa`. Both now take the replacement path, which rewrites the whole
+order — every line loses its id and its price lock, not only the refused one. The refusal counts
+TODAY's offers, so one edit escapes it: the list the stored child came off losing the product, or
+being deactivated, between the two sends. `docs/developers/modifiers.md` states that gap and what
+closing it would cost.
+
+What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
+a quantity-only edit" raises the offer's price and the extra's price underneath the edit and asserts
+the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
+two options lists change places" and "keeps each extras child on its own row when two extras lists
+change places" do the same across a reorder; "replaces the line when a pick moves to another list
+offering the same product" and "replaces the line when two lists offering the same product have
+their picks swapped" pin the refusal above, by the BILL rather than by an id — two picks exchanged
+between a 1.00 list and a 3.00 one cost 5.00, not the 7.00 a crossed pairing charges.
 
 ## A replay reports the original transaction facts; side effects are gated separately
 

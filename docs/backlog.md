@@ -522,7 +522,66 @@ still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy 
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
 for a child line by a NULL product, no longer recognise one. Task 12 wires the till. The next task
-is Task 8, held-order updates.
+is Task 8, held-order updates, and after it Task 9, the fiscal fingerprint gate and the filed sale
+line.
+
+Task 8 is that task, and this is what it changed. It took the preserve path's comparison out of
+`updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
+(`apps/server/src/modifier-selection.ts`) — and made both sides order-independent. The defect that
+paid for it, measured on both halves: a manager who REORDERS a dish's attachment lists leaves every
+parked line holding the old order, the comparison read that as a changed answer, and a quantity-only
+edit then deleted every line, re-issued it under a new id and re-priced the dish at today's menu
+price. The extras comparator answers the pairing of picks to stored child lines rather than a
+boolean, because the update moves each child's quantity and the two sides are no longer in step —
+the plan called it `sameExtraSelections` and had it answer a boolean, which the caller would have had
+to pair up a second time under a rule that could then disagree with it.
+
+Three things the review found, each measured rather than read:
+
+- **A dish that offers one product on two lists can be billed at the wrong list's price.** Two
+  halves, found a round apart and with different histories. The run-it seat found the first by
+  running: one product offered by two of a dish's lists at two prices, one pick parked off the 1.00
+  list and two off the 3.00 one, then the two picks swapped over. Nothing on a stored child says
+  which list offered it, so a pairing knowing only the product and the quantity matched each pick to
+  the OTHER list's row, the edit was preserved, and the diner went on paying 7.00 where the new
+  answer costs 5.00. That half is the branch's OWN regression — the seat ran it against `main` and
+  got 5.00, because the index-wise comparison saw the quantities move at each position. The scoped
+  re-read then found the sibling: ONE pick moved from the 1.00 list to the 3.00 one, which is not a
+  duplicate at all. Measured in a checkout of `main` at `68e36c6aa` with the same fixture, that one
+  bills 1.00 there too — pre-existing, and the index-wise comparison never caught it either.
+  `matchExtraChildren` now refuses the pairing whenever a PICKED product is offered by more than one
+  of the dish's ACTIVE lists. The cost is not confined to the refused line: the replacement path
+  rewrites the whole order, so every line loses its id and its price lock — re-priced from today's
+  offers, which changes the number only where an offer has moved.
+- **That refusal is not a complete guard, and the residue is worth knowing before anyone relies on
+  it.** It counts the offers as they are NOW, while the ambiguity is a property of the offers the
+  stored child was written against. The escape is one specific edit: the list the STORED CHILD came
+  off is deactivated, or loses the product (`PATCH /management-api/modifiers/extras/:id`), between
+  the park and the edit, so the count comes back to one, the re-sent pick names the surviving list,
+  and the line is preserved at the old row's price. Traced through the code, not run. The other
+  direction is closed by something else: a pick naming a list that no longer offers the product is
+  refused outright by `validateExtraSelections`, and the line takes the replacement path. There are
+  two ways to close the escape and neither is free — pair on the child's frozen price as well as its
+  product and quantity, which gives up the deliberate price lock that "keeps extras rows and
+  customisation on a quantity-only edit" pins; or let the child line carry the list it came off,
+  which is what spec §3.5 rules out when it says an open order's child points at the product and not
+  the list. Keeping the price lock AND closing the escape needs the second. **Also not examined:**
+  the refusal sits on the held-order edit path, which is where the wrong price was measured being
+  written; whether any other path can pair a stored child with the wrong list's price was not looked
+  at. **Next action:** an owner decision on whether an OPEN-ORDER extras child may carry its list
+  id. It is not Task 9's — that one writes the FILED sale line, where decision 11 already bans a
+  catalogue reference.
+- **The mechanism the branch first wrote down was a third of the story, and the correction of it
+  was two thirds.** THREE columns hold parts of the offered order, each re-numbered from a save's
+  body: `product_modifiers.sort`, `extra_list_items.sort` (the items within one extras list, which
+  is the order that list's picks come back in) and `menu_item_extra_lists.display_order`. The first
+  round of prose named only the first; the correction named the first and third and asserted the
+  third was unreachable, which is true of it and not of the second — `PATCH
+  /management-api/modifiers/extras/:id` reaches `writeItems`, as does the `POST` that creates a
+  list. What is single-homed, in `docs/developers/modifiers.md`, is the TABLE — each column beside
+  what writes it and which routes reach it. Everywhere else states the rule and points there.
+- **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
+  the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -627,7 +686,7 @@ What extras lists left open, and what #449 found on the way:
 
 What the order path (the plan's Task 7) left behind:
 
-- **A quantity-only edit made after a list is RENAMED re-prices the line.** `updateHeldOrder`'s
+- **A quantity-only edit made after an OPTIONS list is RENAMED re-prices the line.** `updateHeldOrder`'s
   preserve path asks whether the request's answers, resolved against the lists as they are NOW,
   equal what the line froze. An options answer freezes NAMES and no ids (spec §2.3), so after a
   rename the two sides differ, the line takes the replacement path, and it is re-priced at today's
@@ -638,10 +697,14 @@ What the order path (the plan's Task 7) left behind:
   `quantity 2.000, price 19.00, listName "Renamed"` after it, under a new id. So a rename between
   two sends can change what a saved order says the diner chose, what it costs, and which rows it is
   made of. The old model compared by id and survived a rename. Whether today's till can reach it is
-  UNVERIFIED — it sends no `extras`/`options` until Task 12. **Next action:** Task 8
-  owns held-order comparison (`sameExtraSelections` / `sameOptionSelections`) and has to settle it —
-  either by carrying ids the comparison can use, or by deciding a rename SHOULD drop the line onto
-  the replacement path.
+  UNVERIFIED — it sends no `extras`/`options` until Task 12. **SETTLED by Task 8:** a rename drops
+  the line onto the replacement path, and that is now pinned by a test rather than left as a
+  consequence ("re-prices a held line when the options list it answered was renamed between the two
+  sends", `apps/server/src/working-order.test.ts`). The other option on the table — carrying ids the
+  comparison could use — would mean putting a list or label id on the line, which is exactly what
+  spec §2.3 rules out and what makes editing or deleting a list unable to change a saved order. With
+  no id on either side there is nothing but the wording to compare, so a rename is indistinguishable
+  from a different answer.
 - **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
   order path refuses an extras pick on a dish that is not priced `each`
   (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in
