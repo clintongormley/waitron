@@ -1,10 +1,40 @@
 import { expect, test, afterEach, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
+import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 import "./wt-help-tooltip.js";
 import "./wt-dialog.js";
 
 afterEach(cleanup);
+
+// First in this file on purpose: it opens the tooltip with a synthetic click, so no real click has
+// happened in this document yet. That is the case the document keydown handler exists for — once a
+// real click has granted user activation, the browser's own popover Escape-dismiss closes the
+// tooltip anyway and the handler's work is invisible.
+test("Escape closes a tooltip that was opened without a real click, moves focus to its button and goes no further", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  const elsewhere = document.createElement("input");
+  host.append(elsewhere);
+  elsewhere.focus();
+
+  button.click();
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+  expect(document.activeElement).toBe(elsewhere);
+
+  const seenByThePage: string[] = [];
+  const record = (event: KeyboardEvent) => seenByThePage.push(event.key);
+  document.addEventListener("keydown", record);
+  try {
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  } finally {
+    document.removeEventListener("keydown", record);
+  }
+  expect(el.shadowRoot!.activeElement).toBe(button);
+  expect(seenByThePage).toEqual([]);
+});
 
 test("toggles closed on a second click and back open on a third", async () => {
   // A real click triggers an "auto" popover's light-dismiss between pointerdown and click UNLESS
@@ -135,6 +165,54 @@ test("keeps an edge-anchored tooltip inside the viewport", async () => {
   expect(box.width).toBeCloseTo(referenceTip.getBoundingClientRect().width, 0);
 });
 
+test("centres the tooltip under its trigger and sits just below it", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Short</wt-help-tooltip>');
+  // Room on every side, so neither clamp in positionTooltip() applies and the unclamped
+  // placement is what the measurements below see.
+  el.style.position = "fixed";
+  el.style.insetInlineStart = "50%";
+  el.style.insetBlockStart = "50%";
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+  const anchor = button.getBoundingClientRect();
+  const box = tip.getBoundingClientRect();
+  expect(box.left + box.width / 2).toBeCloseTo(anchor.left + anchor.width / 2, 0);
+  expect(box.top).toBeCloseTo(anchor.bottom + 4, 0);
+});
+
+test("holds a left-edge tooltip at the same margin as a right-edge one", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Short</wt-help-tooltip>');
+  // Hard against the left edge: centring alone would put the box at a negative x.
+  el.style.position = "fixed";
+  el.style.insetInlineStart = "0";
+  el.style.insetBlockStart = "0";
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+  expect(tip.getBoundingClientRect().left).toBeCloseTo(8, 0);
+});
+
+test("lifts a bottom-anchored tooltip back inside the viewport", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Short</wt-help-tooltip>');
+  // Hard against the bottom edge: placing the box below the trigger would put it off screen.
+  el.style.position = "fixed";
+  el.style.insetInlineStart = "50%";
+  el.style.insetBlockEnd = "0";
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+  const box = tip.getBoundingClientRect();
+  expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+  expect(box.top).toBeLessThan(button.getBoundingClientRect().bottom);
+});
+
 test("names the tooltip to its trigger while open", async () => {
   const el = await mount('<wt-help-tooltip aria-label="Help with province">Body</wt-help-tooltip>');
   const button = el.shadowRoot!.querySelector("button")!;
@@ -145,6 +223,9 @@ test("names the tooltip to its trigger while open", async () => {
   // taking one snapshot, and fails on its own timeout rather than hanging on a missed event.
   await vi.waitFor(() => expect(button.getAttribute("aria-expanded")).toBe("true"));
   expect(tip.id).not.toBe("");
+  // The "wt-help-tooltip-N" shape, not just non-emptiness: uniqueId() always appends a "-N"
+  // counter, so emptying the prefix still leaves a non-empty id such as "-3".
+  expect(tip.id).toMatch(/^wt-help-tooltip-\d+$/);
   expect(button.getAttribute("aria-describedby")).toBe(tip.id);
 });
 
@@ -187,4 +268,77 @@ test("closing a tooltip nested in an open modal dialog leaves the dialog open", 
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
   expect(dialog.matches(":modal")).toBe(true);
+});
+
+test("says the tooltip is shut again once it closes", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(button.getAttribute("aria-expanded")).toBe("true"));
+
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  await vi.waitFor(() => expect(button.getAttribute("aria-expanded")).toBe("false"));
+  expect(button.hasAttribute("aria-describedby")).toBe(false);
+});
+
+test("stops watching for Escape once the tooltip is closed", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  const elsewhere = document.createElement("input");
+  host.append(elsewhere);
+
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+
+  elsewhere.focus();
+  const seenByThePage: boolean[] = [];
+  const record = (event: KeyboardEvent) => seenByThePage.push(event.defaultPrevented);
+  document.addEventListener("keydown", record);
+  try {
+    await userEvent.keyboard("{Escape}");
+  } finally {
+    document.removeEventListener("keydown", record);
+  }
+  // One Escape, reaching the page untouched, and focus still where the reader put it.
+  expect(seenByThePage).toEqual([false]);
+  expect(document.activeElement).toBe(elsewhere);
+});
+
+test("leaves the tooltip open when the reader presses a key that is not Escape", async () => {
+  const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+  const seenByThePage: boolean[] = [];
+  const record = (event: KeyboardEvent) => seenByThePage.push(event.defaultPrevented);
+  document.addEventListener("keydown", record);
+  try {
+    await userEvent.keyboard("a");
+  } finally {
+    document.removeEventListener("keydown", record);
+  }
+  expect(tip.matches(":popover-open")).toBe(true);
+  expect(seenByThePage).toEqual([false]);
+});
+
+test("tells its controllers when the tooltip leaves the page", async () => {
+  // A Lit element's controllers hear about removal only through the base class's
+  // disconnectedCallback, which this component's own override has to pass the call on to.
+  const el = (await mount(
+    '<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>',
+  )) as WtHelpTooltip;
+  const stops: string[] = [];
+  el.addController({ hostDisconnected: () => stops.push("stopped") });
+
+  el.remove();
+
+  expect(stops).toEqual(["stopped"]);
 });

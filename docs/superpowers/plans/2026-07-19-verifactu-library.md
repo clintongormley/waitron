@@ -179,7 +179,7 @@ export default defineConfig({
 
 - [ ] **Step 4: Create the Stryker config**
 
-`packages/verifactu/stryker.config.json`. Unlike `packages/ui`, this one **breaks the build** below 90.
+`packages/verifactu/stryker.config.json`. Unlike `packages/ui`, this one **breaks the build** below 90. _(Superseded 2026-09-20: `packages/ui` now carries the same `break: 90`. What still differs is where it is checked — this package's on every pull request, ui's only on the weekly `mutation.yml` run. The `ci.yml` comment quoted later in this plan says the old thing too, and the live file has been corrected.)_
 
 ```json
 {
@@ -282,6 +282,8 @@ In `.github/workflows/ci.yml`, add a fourth job. Keep the existing three untouch
   # test means an unverifiable hash chain rather than a misaligned button,
   # which is why it carries a hard threshold (break: 90) while packages/ui
   # publishes a score without failing on it.
+  # (Superseded 2026-09-20: packages/ui carries break: 90 too. The live ci.yml says so; this
+  #  block reproduces the 2026-07-19 wording.)
   mutation-verifactu:
     runs-on: ubuntu-latest
     steps:

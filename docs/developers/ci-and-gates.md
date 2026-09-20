@@ -89,6 +89,35 @@ Which package holds which bar is pinned by `scripts/coverage-thresholds.test.ts`
 list, safe only because the root project is the one gate never narrowed away; moving a package is
 an edit to that list, with the reason in the commit.
 
+## Mutation floors, and where each one actually bites
+
+A mutation run makes one small change to a source file at a time and reruns the tests; a change
+nothing notices is behaviour no test is checking. `thresholds.break` turns that score into a gate.
+Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
+`packages/verifactu` and `packages/shared` since July 2026, `packages/fiscal` and `packages/ui`
+under the owner's 2026-09-19 decision that the target is 90 everywhere. `packages/db` carries none.
+
+Where each failure arrives differs, which is the part a session gets wrong:
+
+| package | what runs it | when a drop below 90 is seen |
+| --- | --- | --- |
+| `verifactu`, `shared` | `mutation-verifactu` / `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
+| `ui` | the `mutation` job in `.github/workflows/mutation.yml` | the weekly Monday run only — a branch that thins a UI test goes green and reddens on Monday |
+| `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
+| `db` | the sharded `mutation-db` matrix in `.github/workflows/mutation.yml` | never — it publishes ten per-shard scores and no aggregate |
+
+Two hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor is
+not a package-wide one. And nothing pins which package holds which threshold, the way
+`scripts/coverage-thresholds.test.ts` pins the coverage bars — a config edit that drops a threshold
+fails no guard.
+
+Receipt for the `ui` floor (2026-09-20): before the tests that branch added, the package read
+78.62% — 1658 of 2109 valid mutants — and the run exited 1 against the new threshold, which is the
+gate proving itself rather than a floor set under a number. After them, four whole-package runs read
+between 96.73% and 96.83% (2043 to 2045 of 2112) and all exited 0. Quote the range, not one figure:
+the spread is mutants that TIME OUT, which Stryker counts as detected, and how many do moves with
+whatever else the machine is running — 8 to 13 across those four runs.
+
 ## CI job layout and scheduling
 
 ### CI's shards run `test:coverage`, not `test`

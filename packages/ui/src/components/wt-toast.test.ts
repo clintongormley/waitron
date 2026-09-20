@@ -197,3 +197,115 @@ test("an info toast marks its edge with the primary token", async () => {
   host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
   expect(getComputedStyle(part(el, ".toast")!).borderInlineStartColor).toBe("rgb(4, 5, 6)");
 });
+
+test("a toast given nothing but its open state reads as information and carries no words of its own", async () => {
+  const el = (await mount("<wt-toast open></wt-toast>")) as WtToast;
+  expect(el.tone).toBe("info");
+  expect(part(el, '[role="status"] .message')!.textContent).toBe("");
+  expect(part(el, ".close")!.getAttribute("aria-label")).toBe("");
+});
+
+test("opening a toast that is already on the page starts its countdown", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  el.open = true;
+  await el.updateComplete;
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("a new message gets its own full time on screen, not what was left of the old one", async () => {
+  vi.useFakeTimers();
+  const el = (await mount(
+    '<wt-toast open message="One alert" duration="1000"></wt-toast>',
+  )) as WtToast;
+  vi.advanceTimersByTime(900);
+  el.message = "Two alerts";
+  await el.updateComplete;
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("a longer duration set on an open toast is counted from when it was set", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  vi.advanceTimersByTime(900);
+  el.duration = 3000;
+  await el.updateComplete;
+  vi.advanceTimersByTime(2_999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("switching an open toast to the error tone buys it no extra time on screen", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  vi.advanceTimersByTime(900);
+  el.tone = "error";
+  await el.updateComplete;
+  vi.advanceTimersByTime(100);
+  expect(el.open).toBe(false);
+});
+
+test("a toast with no duration waits for the reader instead of closing itself", async () => {
+  vi.useFakeTimers();
+  const el = (await mount(
+    '<wt-toast open message="Saving…" duration="0" close-label="Close"></wt-toast>',
+  )) as WtToast;
+  vi.advanceTimersByTime(60_000);
+  expect(el.open).toBe(true);
+  part(el, ".close")!.click();
+  expect(el.open).toBe(false);
+});
+
+test("a toast taken off the page stops counting down and never announces a close", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  const closed = vi.fn();
+  el.addEventListener("wt-close", closed);
+  el.remove();
+  vi.advanceTimersByTime(5_000);
+  expect(closed).not.toHaveBeenCalled();
+  expect(el.open).toBe(true);
+});
+
+test("taking a toast off the page tells a controller the consumer attached to it", async () => {
+  const el = (await mount('<wt-toast open message="Hi"></wt-toast>')) as WtToast;
+  const gone = vi.fn();
+  el.addController({ hostDisconnected: gone });
+  el.remove();
+  expect(gone).toHaveBeenCalledOnce();
+});
+
+test("a second press of the close button does not announce a second close", async () => {
+  const el = (await mount(
+    '<wt-toast open message="Hi" close-label="Close"></wt-toast>',
+  )) as WtToast;
+  const closed = vi.fn();
+  el.addEventListener("wt-close", closed);
+  const close = part(el, ".close")!;
+  close.click();
+  close.click();
+  expect(closed).toHaveBeenCalledOnce();
+});
+
+test("a toast dismissed by hand and shown again gets the full countdown, not the rest of the first", async () => {
+  vi.useFakeTimers();
+  const el = (await mount(
+    '<wt-toast open message="Hi" duration="1000" close-label="Close"></wt-toast>',
+  )) as WtToast;
+  vi.advanceTimersByTime(300);
+  part(el, ".close")!.click();
+  await el.updateComplete;
+  el.show();
+  await el.updateComplete;
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});

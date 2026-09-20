@@ -1,3 +1,4 @@
+import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TickingClock } from "./ticking-clock.js";
 
@@ -11,6 +12,17 @@ class StubHost {
     this.updates++;
   }
 }
+
+/** A real Lit host, because what the constructor has to get right is handing itself to the host:
+ * nothing here calls hostConnected, so only a registered controller ever starts ticking. */
+class TickingWidget extends LitElement {
+  readonly clock = new TickingClock(this, 1000);
+
+  override render() {
+    return html`<span>${this.clock.now}</span>`;
+  }
+}
+customElements.define("ticking-clock-widget", TickingWidget);
 
 describe("TickingClock", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -43,5 +55,22 @@ describe("TickingClock", () => {
     vi.advanceTimersByTime(3000);
     // One interval firing three times, not two intervals firing three times each (6).
     expect(host.updates).toBe(3);
+  });
+
+  it("advances a real host's rendering from the moment that host connects", async () => {
+    const widget = new TickingWidget();
+    const startedAt = Date.now();
+    document.body.append(widget);
+    try {
+      await widget.updateComplete;
+      expect(widget.shadowRoot!.textContent).toBe(String(startedAt));
+
+      vi.advanceTimersByTime(1000);
+      await widget.updateComplete;
+
+      expect(widget.shadowRoot!.textContent).toBe(String(startedAt + 1000));
+    } finally {
+      widget.remove();
+    }
   });
 });

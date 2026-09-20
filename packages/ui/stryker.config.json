@@ -13,6 +13,7 @@
     "!src/a11y-helpers.ts",
     "!src/tokens/token-test-helpers.ts"
   ],
+  "thresholds": { "high": 95, "low": 90, "break": 90 },
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "reporters": ["clear-text", "progress", "html"],

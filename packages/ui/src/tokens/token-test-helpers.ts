@@ -1,8 +1,7 @@
 import { applyTokens } from "./index.js";
 
 /**
- * Test-only helpers shared by tokens/colors.test.ts, tokens/structure.test.ts, and
- * tokens/multi-root.test.ts.
+ * Test-only helpers shared by the suites in this directory.
  *
  * Deliberately NOT src/test-helpers.ts: these suites test `applyTokens` itself, so a
  * helper that depends on it (as src/test-helpers.ts's `mount()` does) would make the

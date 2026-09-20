@@ -568,9 +568,14 @@ page, on top of whatever the next test mounts. Guard:
 `apps/dashboard/src/widgets/pointer-reset.test.ts`, proven by deleting the `beforeEach`. Cost of the
 reset, measured over the package's 1,827 tests: about 0.5s of a 6s run.
 
-`packages/ui` and `apps/till` have no such reset, and `packages/ui/src/components/wt-button.test.ts`
-ends a test hovering a button without unhovering it — the same latent failure lives there, unpaid for
-so far.
+`apps/till` gained the same reset, in its own `apps/till/src/widgets/test-helpers.ts`. `packages/ui`
+has one too, but only in `packages/ui/src/a11y-helpers.ts` — so the `*.a11y.test.ts` files get it and
+the behavioural suites, which import `packages/ui/src/test-helpers.ts` instead, do not. Two of
+`packages/ui/src/components/wt-button.test.ts`'s hover tests end with the cursor still on the button,
+and those suites drive the real cursor a lot, so the same latent failure lives there, unpaid for so
+far. `packages/media` and `packages/venue-service` are a third shape: both register
+`parkPointerCommands` in their vitest config and neither ever calls `commands.parkPointer()`, so the
+command is available and nothing uses it.
 
 ## Dispatch events when testing a `composedPath()` guard.
 

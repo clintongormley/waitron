@@ -366,3 +366,83 @@ test("pins the badge to the trigger's top trailing corner", async () => {
   expect(badge.top).toBeCloseTo(trigger.top, 0);
   expect(badge.right).toBeCloseTo(trigger.right, 0);
 });
+
+test("a menu given no label ships an unnamed button, and opens from its leading edge", async () => {
+  // Not a virtue: `label` has no wording of its own to fall back on, so an unlabelled menu renders
+  // `aria-label=""` and its button has no accessible name at all. The nearest control is
+  // wt-row-actions.a11y.test.ts's "detects a missing accessible name on the hamburger", which
+  // REMOVES the attribute rather than leaving it empty — a different DOM state with the same axe
+  // outcome. Nothing scans an unlabelled menu with axe today. What this pins is only that the
+  // empty default is what reaches the attribute, rather than some invented English.
+  const el = (await mount("<wt-row-actions></wt-row-actions>")) as WtRowActions;
+  expect(el.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe("");
+  expect(el.align).toBe("start");
+});
+
+test("show() on a menu just added to the page, before it has rendered, opens nothing", async () => {
+  const el = document.createElement("wt-row-actions");
+  document.body.append(el);
+  try {
+    // Connected, so the shadow root exists, but the first render has not run and there is no
+    // popup element to open yet.
+    expect(() => el.show()).not.toThrow();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<HTMLElement>("[popover]")!.matches(":popover-open")).toBe(
+      false,
+    );
+  } finally {
+    el.remove();
+  }
+});
+
+async function openMenuAt(position: Record<string, string>) {
+  const { el, trigger, popup } = await mountActions();
+  for (const [name, value] of Object.entries(position)) el.style.setProperty(name, value);
+  el.show();
+  return { popup: popup.getBoundingClientRect(), trigger: trigger.getBoundingClientRect() };
+}
+
+test("a menu at the right edge of the screen holds its popup exactly 8px inside that edge", async () => {
+  const edge = await openMenuAt({
+    position: "fixed",
+    "inset-inline-end": "0",
+    "inset-block-start": "0",
+  });
+  expect(edge.popup.right).toBeCloseTo(innerWidth - 8, 0);
+
+  // A menu with room on every side: a popup that merely wrapped narrower at the edge could satisfy
+  // the margin above without having been moved at all.
+  const roomy = await openMenuAt({
+    position: "fixed",
+    "inset-inline-start": "40%",
+    "inset-block-start": "40%",
+  });
+  expect(edge.popup.width).toBeCloseTo(roomy.popup.width, 0);
+});
+
+test("a menu at the bottom of the screen lifts its popup to exactly 8px above that edge", async () => {
+  const edge = await openMenuAt({
+    position: "fixed",
+    "inset-inline-start": "40%",
+    "inset-block-end": "0",
+  });
+  expect(edge.popup.bottom).toBeCloseTo(innerHeight - 8, 0);
+  expect(edge.popup.top).toBeLessThan(edge.trigger.bottom);
+});
+
+test("Escape that closes the menu goes no further, so a dialog around it stays open", async () => {
+  const { el, host, popup } = await mountActions();
+  el.show();
+  const outside = vi.fn();
+  host.addEventListener("keydown", outside);
+  const escape = new KeyboardEvent("keydown", {
+    key: "Escape",
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  popup.dispatchEvent(escape);
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(escape.defaultPrevented).toBe(true);
+  expect(outside).not.toHaveBeenCalled();
+});

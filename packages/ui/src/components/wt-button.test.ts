@@ -15,6 +15,13 @@ test("defaults to the secondary variant", async () => {
   expect(el.getAttribute("variant")).toBe("secondary");
 });
 
+test("defaults to the medium size, a centered label and the default shape", async () => {
+  const el = await mount("<wt-button>x</wt-button>");
+  expect(el.getAttribute("size")).toBe("md");
+  expect(el.getAttribute("align")).toBe("center");
+  expect(el.getAttribute("shape")).toBe("default");
+});
+
 test("centers its label by default, but left-aligns it when used as a menu item", async () => {
   const el = await mount('<wt-button style="width:200px">Account settings</wt-button>');
   const button = el.shadowRoot!.querySelector("button")!;

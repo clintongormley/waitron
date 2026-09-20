@@ -95,3 +95,47 @@ it.each([".", "..", "~.", "~..", "a/b", "Español"])(
     expect(location.pathname.split("/")).toHaveLength(3);
   },
 );
+
+/** Runs `move` and waits for the browser to finish the history navigation it triggers. */
+async function navigate(move: () => void): Promise<void> {
+  const settled = new Promise<void>((resolve) =>
+    window.addEventListener("popstate", () => resolve(), { once: true }),
+  );
+  move();
+  await settled;
+}
+
+it("re-reads the path when the browser goes back and then forward again", async () => {
+  history.replaceState(null, "", "/tabs/floor");
+  const el = (await mount("<test-url-screen></test-url-screen>")) as UrlScreen;
+  el.url.write({ tab: "counter" });
+  expect(el.selected).toBe("floor");
+  await navigate(() => history.back());
+  expect(el.selected).toBe("floor");
+  await navigate(() => history.forward());
+  expect(el.selected).toBe("counter");
+});
+
+it("replaces the current entry rather than adding another step to go back through", async () => {
+  history.replaceState(null, "", "/tabs/floor");
+  const el = (await mount("<test-url-screen></test-url-screen>")) as UrlScreen;
+  el.url.write({ tab: "counter" });
+  el.url.write({ tab: "kitchen" }, true);
+  expect(location.pathname).toBe("/tabs/kitchen");
+  await navigate(() => history.back());
+  expect(location.pathname).toBe("/tabs/floor");
+});
+
+it("ignores a navigation field left with no value after it", async () => {
+  history.replaceState(null, "", "/tabs/floor/menu");
+  const el = (await mount("<test-url-screen></test-url-screen>")) as UrlScreen;
+  expect(el.url.read("tab")).toBe("floor");
+  expect(el.url.read("menu")).toBeNull();
+});
+
+it("keeps the rest of the path when an unrecognised field carries a malformed value", async () => {
+  history.replaceState(null, "", "/tabs/floor/menu/lunch/bogus/%broken");
+  const el = (await mount("<test-url-screen></test-url-screen>")) as UrlScreen;
+  expect(el.url.read("tab")).toBe("floor");
+  expect(el.url.read("menu")).toBe("lunch");
+});

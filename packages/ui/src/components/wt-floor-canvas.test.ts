@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import type { ReactiveControllerHost } from "lit";
 import type { FloorTable, PlacementChange, PlacementClear } from "../floor.js";
+import type { FloorCanvasCopy } from "./wt-floor-canvas.js";
 import "./wt-floor-canvas.js";
 
 afterEach(cleanup);
@@ -9,6 +11,11 @@ interface Canvas extends HTMLElement {
   tables: FloorTable[];
   editable: boolean;
   gridSnap: boolean;
+  copy: Partial<FloorCanvasCopy>;
+  // Declared @state() private on the component; named here so a test can drive and read the two
+  // pieces of internal placement bookkeeping the rendered output is built from.
+  selectedId: string | null;
+  draft: { id: string; posX: number; posY: number } | null;
   updateComplete: Promise<unknown>;
 }
 
@@ -519,6 +526,339 @@ test("the canvas chrome follows a --wt-* token override on the host", async () =
   expect(getComputedStyle(canvas).borderColor).toBe("rgb(9, 8, 7)");
 });
 
+// --- Default copy, the inspector's fields and the shape palette ---
+
+test("labels the plan and every token chip from its own default copy", async () => {
+  const el = await mountCanvas([
+    oneTable("t1", { capacity: 4, pendingToServe: 2, reservedTime: "20:30" }),
+  ]);
+  expect(el.shadowRoot!.querySelector(".canvas")!.getAttribute("aria-label")).toBe("Floor plan");
+  const token = tokenEl(el, "t1").querySelector("wt-table-token")!;
+  expect(token.shadowRoot!.querySelector(".capacity")!.textContent!.trim()).toBe("4 covers");
+  expect(token.shadowRoot!.querySelector("[data-to-serve]")!.textContent!.trim()).toBe(
+    "2 to serve",
+  );
+  expect(token.shadowRoot!.querySelector("[data-reserved]")!.textContent!.trim()).toBe(
+    "Reserved 20:30",
+  );
+});
+
+test("a consumer's own words replace every default the tokens carry", async () => {
+  const el = await mountCanvas([
+    oneTable("t1", { capacity: 4, pendingToServe: 2, reservedTime: "20:30" }),
+  ]);
+  el.copy = {
+    floor: "Plano de sala",
+    covers: "plazas",
+    toServe: "por servir",
+    reserved: "Reservada",
+  };
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".canvas")!.getAttribute("aria-label")).toBe("Plano de sala");
+  const token = tokenEl(el, "t1").querySelector("wt-table-token")!;
+  expect(token.shadowRoot!.querySelector(".capacity")!.textContent!.trim()).toBe("4 plazas");
+  expect(token.shadowRoot!.querySelector("[data-to-serve]")!.textContent!.trim()).toBe(
+    "2 por servir",
+  );
+  expect(token.shadowRoot!.querySelector("[data-reserved]")!.textContent!.trim()).toBe(
+    "Reservada 20:30",
+  );
+});
+
+test("the palette offers the three shapes in order, each under its own name", async () => {
+  const el = await mountCanvas([oneTable("t1")], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const chips = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".palette .chip")];
+  expect(chips.map((chip) => chip.dataset.shape)).toEqual(["round", "square", "rect"]);
+  expect(chips.map((chip) => chip.textContent!.trim())).toEqual(["Round", "Square", "Rect"]);
+});
+
+test("the palette marks the selected table's own shape as the pressed one", async () => {
+  const el = await mountCanvas([oneTable("t1", { shape: "square" })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const pressed = () =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>(".palette .chip")].map((chip) =>
+      chip.getAttribute("aria-pressed"),
+    );
+  expect(pressed()).toEqual(["false", "true", "false"]);
+});
+
+test("a table with no shape of its own shows as round in the palette", async () => {
+  const el = await mountCanvas([oneTable("t1", { shape: null })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const chips = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".palette .chip")];
+  expect(chips.map((chip) => chip.getAttribute("aria-pressed"))).toEqual([
+    "true",
+    "false",
+    "false",
+  ]);
+});
+
+test("the inspector shows the selected table's covers, and nothing when it has none", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { capacity: 6 }), oneTable("t2", { capacity: null })],
+    {
+      editable: true,
+    },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".inspector .covers")!.textContent!.trim()).toBe("6 covers");
+  tokenEl(el, "t2").click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".inspector .covers")).toBeNull();
+});
+
+test("the zone box opens on the selected table's zone, and empty when it has none", async () => {
+  const el = await mountCanvas(
+    [oneTable("t1", { zoneId: "terrace" }), oneTable("t2", { zoneId: null })],
+    { editable: true },
+  );
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!.value).toBe("terrace");
+  tokenEl(el, "t2").click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>(".zone input")!.value).toBe("");
+});
+
+test("the inspector follows the table that was selected, not the first one", async () => {
+  const el = await mountCanvas([oneTable("first"), oneTable("second")], { editable: true });
+  tokenEl(el, "second").click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".inspector .name")!.textContent!.trim()).toBe("second");
+});
+
+test("a selected id alone opens no inspector while the plan is read-only", async () => {
+  const el = await mountCanvas([oneTable("t1")]);
+  el.selectedId = "t1";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".inspector")).toBeNull();
+});
+
+test("what a gesture reports for a table that states no shape, angle or zone", async () => {
+  // The three placement fields are left out of the object entirely, not set to null: a table the
+  // server has never placed arrives without them, and the defaults are what the gesture must send.
+  const bare: FloorTable = {
+    id: "t1",
+    label: "t1",
+    capacity: 4,
+    posX: 500,
+    posY: 500,
+    state: "free",
+    pendingToServe: 0,
+  };
+  const el = await mountCanvas([bare], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const reshaped = await withPlacementChange(el, () => {
+    el.shadowRoot!.querySelector<HTMLElement>('.palette [data-shape="square"]')!.click();
+  });
+  expect(reshaped.shape).toBe("square");
+  expect(reshaped.rotation).toBe(0);
+  expect(reshaped.zoneId).toBeNull();
+
+  const rotated = await withPlacementChange(el, () => {
+    el.shadowRoot!.querySelector<HTMLElement>(".rotate")!.click();
+  });
+  expect(rotated.shape).toBe("round");
+  expect(rotated.rotation).toBe(15);
+});
+
+test("rotating a table that already has an angle adds one more detent", async () => {
+  const el = await mountCanvas([oneTable("t1", { rotation: 15 })], { editable: true });
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const detail = await withPlacementChange(el, () => {
+    el.shadowRoot!.querySelector<HTMLElement>(".rotate")!.click();
+  });
+  expect(detail.rotation).toBe(30);
+});
+
+// --- What leaves the shadow boundary ---
+
+test("both placement events cross the shadow boundary to the app", async () => {
+  const el = (await mountInShadowRoot("<wt-floor-canvas></wt-floor-canvas>")) as Canvas;
+  el.tables = [oneTable("t1")];
+  el.editable = true;
+  await el.updateComplete;
+  tokenEl(el, "t1").click();
+  await el.updateComplete;
+  const seen: string[] = [];
+  const record = (e: Event) => seen.push(e.type);
+  document.addEventListener("wt-placement-change", record);
+  document.addEventListener("wt-placement-clear", record);
+  el.shadowRoot!.querySelector<HTMLElement>(".rotate")!.click();
+  el.shadowRoot!.querySelector<HTMLElement>(".deactivate")!.click();
+  document.removeEventListener("wt-placement-change", record);
+  document.removeEventListener("wt-placement-clear", record);
+  expect(seen).toEqual(["wt-placement-change", "wt-placement-clear"]);
+});
+
+// --- Drag bookkeeping ---
+
+test("a drag moves the token itself before it is dropped", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  const gesture = startDrag(el, "t1");
+  gesture.move({ xFrac: 0.8, yFrac: 0.2 });
+  await el.updateComplete;
+  expect(tokenEl(el, "t1").style.left).not.toBe("50%");
+  expect(tokenEl(el, "t1").style.top).not.toBe("50%");
+  gesture.up({ xFrac: 0.8, yFrac: 0.2 });
+});
+
+test("a drop reports how far the pointer travelled on both axes", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  // Opposite directions on the two axes: the same signed displacement on both would read alike
+  // whether or not the component kept them apart. Within a few permille of exact, because the
+  // token's own centre is measured from a laid-out box and carries sub-pixel rounding.
+  const detail = await drag(el, "t1", { xFrac: 0.8, yFrac: 0.2 });
+  expect(detail.posX).toBeCloseTo(800, -1);
+  expect(detail.posY).toBeCloseTo(200, -1);
+});
+
+test("a pointer event arriving with no drag in progress is ignored", async () => {
+  const el = await mountCanvas([oneTable("t1")], { editable: true });
+  const details = collectPlacements(el);
+  // No pointerdown first: the window listeners can still be reached by another component's gesture,
+  // and the guards that make that harmless only show as a thrown error if they are removed.
+  const failures: string[] = [];
+  const onError = (e: ErrorEvent) => failures.push(e.message);
+  window.addEventListener("error", onError);
+  const stray = pointerFor(el);
+  stray.move({ xFrac: 0.1, yFrac: 0.1 });
+  stray.up({ xFrac: 0.1, yFrac: 0.1 });
+  stray.cancel();
+  window.removeEventListener("error", onError);
+  expect(failures).toEqual([]);
+  expect(details).toEqual([]);
+  expect(el.draft).toBeNull();
+});
+
+test("a stray pointer's up does not drop the table the owning pointer is still dragging", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  const details = collectPlacements(el);
+  const gesture = startDrag(el, "t1");
+  gesture.move({ xFrac: 0.8, yFrac: 0.5 });
+  gesture.up({ xFrac: 0.1, yFrac: 0.1 }, 2);
+  expect(details).toEqual([]);
+  gesture.up({ xFrac: 0.8, yFrac: 0.5 });
+  expect(details.length).toBe(1);
+  expect(details[0]!.posX).toBeCloseTo(800, -1);
+});
+
+test("a stray pointer's cancel does not abort the drag the owning pointer is still running", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  const details = collectPlacements(el);
+  const gesture = startDrag(el, "t1");
+  gesture.move({ xFrac: 0.8, yFrac: 0.5 });
+  gesture.cancel(2);
+  gesture.up({ xFrac: 0.8, yFrac: 0.5 });
+  expect(details.length).toBe(1);
+});
+
+test("a stray pointer's move does not drag the table the owning pointer holds", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  const gesture = startDrag(el, "t1");
+  gesture.move({ xFrac: 0.7, yFrac: 0.5 });
+  await el.updateComplete;
+  const held = tokenEl(el, "t1").style.left;
+  gesture.move({ xFrac: 0.1, yFrac: 0.1 }, 2);
+  await el.updateComplete;
+  expect(tokenEl(el, "t1").style.left).toBe(held);
+  gesture.up({ xFrac: 0.7, yFrac: 0.5 });
+});
+
+test("taking the plan off the page mid-drag drops the gesture instead of committing it", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  const details = collectPlacements(el);
+  const gesture = startDrag(el, "t1");
+  gesture.move({ xFrac: 0.8, yFrac: 0.5 });
+  el.remove();
+  gesture.up({ xFrac: 0.8, yFrac: 0.5 });
+  expect(details).toEqual([]);
+  expect(el.draft).toBeNull();
+});
+
+test("a tap that never moved leaves no gesture behind for the next pointer move", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  const details = collectPlacements(el);
+  const gesture = startDrag(el, "t1");
+  gesture.up({ xFrac: 0.5, yFrac: 0.5 });
+  gesture.move({ xFrac: 0.9, yFrac: 0.9 });
+  gesture.up({ xFrac: 0.9, yFrac: 0.9 });
+  expect(details).toEqual([]);
+});
+
+test("a dropped table is not dragged a second time by the pointer moves after it", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], { editable: true });
+  const details = collectPlacements(el);
+  await drag(el, "t1", { xFrac: 0.8, yFrac: 0.5 });
+  const gesture = pointerFor(el);
+  gesture.move({ xFrac: 0.1, yFrac: 0.1 });
+  await el.updateComplete;
+  expect(el.draft).toBeNull();
+  gesture.up({ xFrac: 0.1, yFrac: 0.1 });
+  expect(details.length).toBe(1);
+});
+
+test("a tap on a table is not also delivered to the page behind the plan", async () => {
+  const el = (await mountInShadowRoot("<wt-floor-canvas></wt-floor-canvas>")) as Canvas;
+  el.tables = [oneTable("t1")];
+  await el.updateComplete;
+  let clicks = 0;
+  const onClick = () => {
+    clicks += 1;
+  };
+  document.addEventListener("click", onClick);
+  tokenEl(el, "t1").click();
+  document.removeEventListener("click", onClick);
+  expect(clicks).toBe(0);
+});
+
+test("pressing on a table claims the gesture from the browser's own dragging", async () => {
+  const el = await mountCanvas([oneTable("t1")], { editable: true });
+  const tok = tokenEl(el, "t1");
+  const r = tok.getBoundingClientRect();
+  const down = new PointerEvent("pointerdown", {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 1,
+    clientX: r.left + r.width / 2,
+    clientY: r.top + r.height / 2,
+  });
+  tok.dispatchEvent(down);
+  expect(down.defaultPrevented).toBe(true);
+  window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+});
+
+test("an arrow key that nudges a table is not left to scroll the page as well", async () => {
+  const el = await mountCanvas([oneTable("t1")], { editable: true });
+  const press = new KeyboardEvent("keydown", {
+    key: "ArrowRight",
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  tokenEl(el, "t1").dispatchEvent(press);
+  expect(press.defaultPrevented).toBe(true);
+});
+
+test("the plan tells its controllers when it leaves the page", async () => {
+  const el = await mountCanvas([oneTable("t1")]);
+  let disconnected = 0;
+  (el as unknown as ReactiveControllerHost).addController({
+    hostDisconnected: () => {
+      disconnected += 1;
+    },
+  });
+  el.remove();
+  expect(disconnected).toBe(1);
+});
+
 // --- helpers ---
 
 /** Runs `act`, then resolves with the next placement-change detail it triggers. */
@@ -533,45 +873,69 @@ function withPlacementChange(el: Canvas, act: () => void): Promise<PlacementChan
   });
 }
 
-/** Simulates a pointer drag of table `id` to a fraction of the canvas, returning the emitted change. */
-function drag(
-  el: Canvas,
-  id: string,
-  to: { xFrac: number; yFrac: number },
-): Promise<PlacementChange> {
-  const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!;
-  const rect = canvas.getBoundingClientRect();
+/** Collects every placement change `el` emits from here on, in order. */
+function collectPlacements(el: Canvas): PlacementChange[] {
+  const details: PlacementChange[] = [];
+  el.addEventListener("wt-placement-change", (e) => {
+    details.push((e as CustomEvent<PlacementChange>).detail);
+  });
+  return details;
+}
+
+/** Fraction of the canvas, measured from its top-left corner. */
+interface CanvasPoint {
+  xFrac: number;
+  yFrac: number;
+}
+
+/**
+ * The window events a live gesture can send next. `pointerId` defaults to the one that started the
+ * gesture; pass another to stand for a second finger the canvas is meant to ignore. The canvas
+ * geometry is read once, so a case can aim at a fraction of it without measuring anything itself.
+ */
+function pointerFor(el: Canvas, owner = 1) {
+  const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!.getBoundingClientRect();
+  const fire = (type: string, to: CanvasPoint | undefined, pointerId: number) =>
+    window.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        pointerId,
+        ...(to
+          ? {
+              clientX: canvas.left + canvas.width * to.xFrac,
+              clientY: canvas.top + canvas.height * to.yFrac,
+            }
+          : {}),
+      }),
+    );
+  return {
+    move: (to: CanvasPoint, pointerId = owner) => fire("pointermove", to, pointerId),
+    up: (to: CanvasPoint, pointerId = owner) => fire("pointerup", to, pointerId),
+    cancel: (pointerId = owner) => fire("pointercancel", undefined, pointerId),
+  };
+}
+
+/** Presses on table `id` at its own centre and hands back the rest of the gesture. */
+function startDrag(el: Canvas, id: string, owner = 1) {
   const tok = tokenEl(el, id);
   const from = tok.getBoundingClientRect();
-  const startX = from.left + from.width / 2;
-  const startY = from.top + from.height / 2;
-  const targetX = rect.left + rect.width * to.xFrac;
-  const targetY = rect.top + rect.height * to.yFrac;
+  tok.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: owner,
+      clientX: from.left + from.width / 2,
+      clientY: from.top + from.height / 2,
+    }),
+  );
+  return pointerFor(el, owner);
+}
+
+/** Simulates a pointer drag of table `id` to a fraction of the canvas, returning the emitted change. */
+function drag(el: Canvas, id: string, to: CanvasPoint): Promise<PlacementChange> {
   return withPlacementChange(el, () => {
-    tok.dispatchEvent(
-      new PointerEvent("pointerdown", {
-        bubbles: true,
-        composed: true,
-        pointerId: 1,
-        clientX: startX,
-        clientY: startY,
-      }),
-    );
-    window.dispatchEvent(
-      new PointerEvent("pointermove", {
-        bubbles: true,
-        pointerId: 1,
-        clientX: targetX,
-        clientY: targetY,
-      }),
-    );
-    window.dispatchEvent(
-      new PointerEvent("pointerup", {
-        bubbles: true,
-        pointerId: 1,
-        clientX: targetX,
-        clientY: targetY,
-      }),
-    );
+    const gesture = startDrag(el, id);
+    gesture.move(to);
+    gesture.up(to);
   });
 }
