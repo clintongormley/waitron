@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { readDeploymentEnvironment, stampDeployment, type Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
@@ -93,7 +93,7 @@ async function fiscalCounts(db: Database): Promise<FiscalCounts> {
   };
 }
 
-const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 afterEach(() => clearProvisionFixture(suite.db));
 // A fresh state dir per test so `provisionVenue`'s `writeModuleConfig(stateDir, …)` has somewhere to

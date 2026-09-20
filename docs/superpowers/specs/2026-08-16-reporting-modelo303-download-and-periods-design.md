@@ -344,8 +344,21 @@ each changed package UNFILTERED (tree-wide guards); real-PG needs `TESTCONTAINER
 > `packages/db/src/testing/venue-db.ts` — so the target, the options and the per-test reset are the
 > same; the rename exists so the coming SQLite switch replaces one body rather than every call site
 > (plan task P2 step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The
-> `apps/server` clause beside it is untouched by that rollout so far — `apps/server` has the most
-> calling files left of any package and the rollout takes the fewest first.
+> What this pointer itself said about the `apps/server` clause beside it — that the rollout had not
+> reached that package — stopped being true the same day: `apps/server` was the rollout's last
+> package. The HELPER half of that clause is unaffected either way, because it names no helper:
+> those route suites do still run PGlite in-process, now asked for through `useVenueDb`.
+>
+> **Nothing else in the paragraph above is endorsed by this pointer, and two clauses in it are dead
+> for a reason that has nothing to do with this rollout.** Both are about row-level security: the
+> `@waitron/reporting` clause's "with a real-PG harness for RLS", and the `apps/server` clause's
+> "a real-PG suite for the RLS differential". Neither is true now. RLS was removed in #255
+> (`docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md`), which is a
+> separate and EARLIER change than the tenant-column drop — the drop-tenant-id spec says so itself
+> at its line 12. Today `git grep -l "ROW LEVEL SECURITY" -- '*.sql'` and
+> `git grep -lE "enableRLS|pgPolicy" -- '*.ts'` both exit 1, and `apps/server` holds no
+> `*.rls.test.ts`. Those three commands are all that was run here; repairing the two clauses
+> belongs to that rollout, not this one.
 >
 > One more clause checked while here, NOT this rollout's to repair: the coverage bar. This document
 > says `98/98/98/95` for both packages, and `packages/reporting/vitest.config.ts` declares

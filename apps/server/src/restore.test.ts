@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -29,7 +29,7 @@ import {
 } from "./restore.js";
 
 // PGlite exercises transaction rollback here; these tests make no privilege or concurrency claim.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 120_000,

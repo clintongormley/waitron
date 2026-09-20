@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { buildCardProvider } from "./boot.js";
@@ -11,7 +11,7 @@ import { buildCardProvider } from "./boot.js";
 // (superuser, one backend) is the right target — nothing on this path depends on the deployment role
 // or on concurrency. `boot.test.ts` boots against a real container in a non-demo mode, exercising
 // only the `undefined` branch; this file reaches the simulator branch directly.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,
 });

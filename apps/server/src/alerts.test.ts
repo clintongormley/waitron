@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import { hashPin } from "@waitron/identity";
@@ -22,7 +22,7 @@ import {
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });

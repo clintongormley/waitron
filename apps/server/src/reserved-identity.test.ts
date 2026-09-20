@@ -4,7 +4,7 @@ import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credential
 import { withTransaction } from "@waitron/db";
 import { currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
@@ -26,7 +26,7 @@ const ENDORSEMENT: Endorsement = { nodeId: "n", publicKey: "p", endorsedBy: "e",
 describe("establishReservedStandbyIdentity", () => {
   // The full manifest (`manifestSets()`), not just [core, credentials, fiscal]: each module lands on
   // top of its dependencies in one ordered set — the production order.
-  const suite = usePgliteDb({
+  const suite = useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
     timeoutMs: 60_000,
   });

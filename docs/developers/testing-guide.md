@@ -60,9 +60,10 @@ rejected. Suites sharing a database clean up in a `finally`, order-independent.
 same handle, same per-test reset — so that the planned SQLite switch replaces one function body
 instead of every call site (plan `2026-09-16-sqlite-slice1-storage-swap.md`, task P2).
 
-State of the rollout, so nobody reads more into this than it says: **the conversion is under way,
-one package at a time**, so a suite you open may call either. Which files are left, and which are
-already done, are these two commands — not a list here, which would be stale by the next pull
+State of the rollout, so nobody reads more into this than it says: **every suite that called
+`usePgliteDb` now calls `useVenueDb`**, so the first command below prints nothing and exits 1 — the
+only files its own grep still finds are three of the four the exclusion then drops. Which files are
+converted is the second command — not a list here, which would be stale by the next pull
 request. Run them from the workspace root; the paths they print are relative to it, and the second
 grep in each is anchored to that form:
 
@@ -90,12 +91,12 @@ shared fixtures under a package's `test/` directory. Note also that `usePgliteDb
 door: some suites call `createPgliteDb` themselves, and `describeEachTarget`'s PGlite half is a
 third. Those are not a mechanical rename and
 are decided with the storage flip, not here.
-Until that finishes this is guidance for a converted package, not a rule — a rule with standing
-violations needs a guard, and a guard cannot pass while the violations stand. The house rule in
-`CLAUDE.md` and the guard that enforces it therefore land TOGETHER, in their own pull request AFTER
-the last conversion. That is the shape the column-vocabulary rollout ended in: #414 was the last
-conversion, and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together
-afterwards.
+The conversions are finished; the rule is not written yet, so until it is, this is guidance rather
+than something a reviewer enforces. A rule with standing violations needs a guard, and there were
+violations standing until the last conversion, which is why the house rule in `CLAUDE.md` and the
+guard that enforces it land TOGETHER, in their own pull request AFTER that conversion rather than
+before it. That is the shape the column-vocabulary rollout ended in: #414 was the last conversion,
+and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together afterwards.
 
 **Containers and Docker**
 

@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { BOOKINGS_PERMISSIONS, BOOKINGS_ROUTES } from "@waitron/bookings";
@@ -29,7 +29,7 @@ import "./errors.js";
 // the real verb opens a real `working_orders` row and the booking is marked seated with that tab id.
 // PGlite is enough — this pins a wiring edge, not a grant/concurrency property (routes.test.ts covers
 // grants against real Postgres).
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });

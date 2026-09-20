@@ -235,11 +235,12 @@ pipeline. The period is generalized to a `LiquidationPeriod` discriminated union
 > `packages/` or `apps/` (`grep -rn withTenant --include="*.ts" packages apps` returns nothing) — it
 > went with the tenant column, `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md` — and
 > that is a different rollout's to repair. And task 2c further down names `usePgliteDb` for
-> `apps/server/src/report-api.test.ts`, which is CORRECT as written: that file still imports
-> `usePgliteDb` from `@waitron/db/testing/lifecycle.js` and calls it
-> (`apps/server/src/report-api.test.ts:13` and `:123`), because `apps/server` has not been converted
-> yet — it has the most calling files left of any package, and the rollout takes the fewest first. Nothing else in this document was
-> re-checked.
+> `apps/server/src/report-api.test.ts`. This pointer used to call that correct as written; it
+> stopped being correct the same day, because `apps/server` was the rollout's last package. That
+> file now imports `useVenueDb` (`apps/server/src/report-api.test.ts:13`) and calls it (`:123`) —
+> the two line numbers did not move, only the helper's name. Task 2c's own wording is left alone
+> with the rest of the historical sketches, for the rollout's final sweep. Nothing else in this
+> document was re-checked.
 
 
 **Files:** `packages/reporting/src/vat-return.test.ts` (add a `describe`).

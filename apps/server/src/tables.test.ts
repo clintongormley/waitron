@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -52,7 +52,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 const LOCALE = "es-ES";
 // The whole manifest, not [core]: the tables here belong to several modules that FK into core, and
 // `manifestSets()` is that whole ordered set.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });

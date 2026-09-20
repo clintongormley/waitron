@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   locationId as brandLocationId,
@@ -31,7 +31,7 @@ import "./errors.js";
 // so it is the correct lighter target (CLAUDE.md §4), the same choice kitchen.test.ts / outbox.test.ts
 // make for their config/outbox verbs.
 const LOCALE = "es-ES";
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
 beforeAll(() => {
   db = suite.db;

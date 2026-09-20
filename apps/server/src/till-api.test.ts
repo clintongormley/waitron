@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction, writeNodeMembership } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPinThrottle, endSession, hashPin, loginWithPin } from "@waitron/identity";
@@ -90,7 +90,7 @@ let hiddenAguaOfferId: string;
 // real Postgres in `till-api.pg.test.ts`; here it is just the setup a place/cancel test needs.)
 let tillDeviceCookie: string;
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,

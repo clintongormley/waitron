@@ -5085,9 +5085,32 @@ harness to follow), the dashboard-alerts plan (its sketch is headed
 `// packages/fiscal-verifactu/src/submission-alerts.test.ts`), and the fiscal-none plan, whose
 step 6 sends a reader to `drain.test.ts` "for the real `db`/vault fixtures (`usePgliteDb` …)" — a
 designation, the same shape this section already records costing something in #438. The other nine
-owe nothing, and two of them are the near miss worth naming: the gated-provisioning and
+owed nothing at the time, and two of them are the near miss worth naming: the gated-provisioning and
 fiscal-restore-hook plans both sketch a `usePgliteDb` suite, and both sketches are `apps/server`
-files, which this rollout has not reached. Sweep two, `usePgliteDb` alone: 54 documents, adding
+files, which the rollout had not reached when that sweep ran. The `apps/server` conversion — the
+last one — is what made both stale: `till-config.filing.test.ts` and `restore.test.ts` call
+`useVenueDb` now. Both got a dated pointer in that same conversion's pull request, because this
+sentence had already named them and would otherwise have been left saying the opposite. **They are
+not the whole class, and that is the thing to carry.** The scan, and the SCOPE matters because this
+section already records paths and basenames as different sweeps: for every `usePgliteDb` mention
+under `docs/`, look back forty lines for one of the 56 converted PATHS. It returns SEVENTEEN
+documents. (Basenames instead return nineteen, the two extra being this file's own self-match and
+`2026-09-03-membership-slice-4-setup-adopt.md`, whose sketch heads a `packages/db` file.) Five of
+the seventeen already carry a `useVenueDb` pointer — the four the `apps/server` conversion touches,
+plus `2026-09-15-dashboard-alerts-ongoing.md`, the dashboard-alerts plan named earlier in this
+paragraph, whose converted-path mention is a coincidence of the forty-line window because its own
+sketch heads a `packages/fiscal-verifactu` file. Its similarly named neighbour
+`2026-09-14-dashboard-alerts-events.md` is a different document and is in the uncorrected list
+below. The other TWELVE hold a
+designating sketch and no pointer: the counter-pos, floor-plan-FP1, shift-planning,
+recipe-authoring, table-service TS-1, TS-2, TS-3 and TS-4, per-user-language,
+membership-promotion-R1, print-agent and dashboard-alerts-events plans. One of the twelve is a
+judgement call, and NOT for the reason a reader would guess: four of them name the helper in a
+step's prose rather than inside a fenced sketch, but three of those four name the converted file in
+the same sentence, so the designation is unambiguous. Only floor-plan-FP1's step-1 prose names no
+file at all (`:240`) — its designation rests on the task's own Files block eleven lines above.
+They go to the rollout's final sweep with the rest of the historical documents. Sweep two,
+`usePgliteDb` alone: 54 documents, adding
 NOTHING here — five of the 42 it holds that sweep one does not put `fiscal-verifactu` within six
 lines of the helper, and all five are either a generic "use the helper, never a raw teardown"
 instruction or a sketch for a file in `packages/db`, `packages/provisioning` or `apps/server`.
