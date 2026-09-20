@@ -2280,7 +2280,7 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**Left behind by the TypeScript 7 upgrade (2026-09-20).** One follow-up, waiting on somebody else.
+**Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).** Two follow-ups.
 
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
   Packages run `tsc` at 7.0.2; the repository root resolves the name `typescript` to
@@ -2292,6 +2292,20 @@ turns out to need a design moves to its track.
   whole arrangement, with the receipts, is in
   [ci-and-gates.md](developers/ci-and-gates.md) → *Two TypeScript compilers are installed, and that
   is deliberate*.
+- **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree, and the
+  review wanted it removed rather than declared.** TypeScript 7 rejected
+  `apps/server/src/print-agent-e2e.test.ts` reaching into the print agent app's source by relative
+  path (`TS6059`); #460 repaired it by declaring `@waitron/print-agent-app` as a test-only dependency
+  and exporting `./tcp-probe.js`. The reviewer's alternative was to move `tcp-probe.ts` into
+  `packages/print-agent`, where `NetworkTcpTransport` already lives and where nothing new would be
+  declared. **That was consciously not taken**, for a reason worth re-reading before anyone revisits
+  it: `tcp-probe.ts` belongs to a cohort of six device-discovery modules in the app
+  (`ipp-probe.ts`, `bluetooth.ts`, `usb.ts`, `linux-devices.ts`, `network.ts`, `sweep.ts`), and
+  moving one of the six would split the cohort and leave its siblings importing back across the
+  boundary. Moving the WHOLE cohort is the change that would actually settle it, and that is a print
+  agent layering decision, not a compiler bump. Until then no guard stops a second app-to-app edge:
+  `scripts/workspace-cycles.test.ts` looks only for loops, and `eslint.config.js`'s
+  `no-restricted-paths` zones name `packages/*` as targets, never `apps/*`.
 
 **Left behind by the Stryker upgrade (#447, 2026-09-19).** Four things the bump surfaced and
 deliberately did not settle.
