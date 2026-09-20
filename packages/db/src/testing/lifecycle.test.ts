@@ -379,6 +379,19 @@ describe.runIf(dockerAvailable())("useTemplateDb against a real container", () =
       expect((result.rows[0] as { s: boolean }).s).toBe(true);
     });
 
+    // The per-test reset, on unless a suite opts out. These two cases are a pair and run in this
+    // order: the first leaves a row behind, the second is the one that would see it.
+    it("lets a test write a row", async () => {
+      await suite.admin.execute(sql`insert into catalogues (name) values ('reset probe')`);
+      const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+      expect(result.rows[0]).toEqual({ n: 1 });
+    });
+
+    it("does not hand the next test the row the last one left", async () => {
+      const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+      expect(result.rows[0]).toEqual({ n: 0 });
+    });
+
     it("connectAs reaches a role startSharedContainer created once at the cluster", async () => {
       const asProbe = await suite.pg.connectAs("shared_probe", "probe_pw");
       try {
@@ -443,6 +456,19 @@ describe.runIf(dockerAvailable())("useRealPostgres against a real container", ()
       sql`select to_regclass('setup_marker')::text as present`,
     );
     expect((result.rows[0] as { present: string | null }).present).toBe("setup_marker");
+  });
+
+  // The per-test reset, on unless a suite opts out. These two cases are a pair and run in this
+  // order: the first leaves a row behind, the second is the one that would see it.
+  it("lets a test write a row", async () => {
+    await suite.admin.execute(sql`insert into catalogues (name) values ('reset probe')`);
+    const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 1 });
+  });
+
+  it("does not hand the next test the row the last one left", async () => {
+    const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 0 });
   });
 
   it("created the probeRole, reachable via connectAs", async () => {
