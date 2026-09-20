@@ -4054,8 +4054,11 @@ was written — `packages/credentials` corrected by #440, `packages/scheduler`, 
 and `packages/reporting` each by their own conversion, `packages/payments` by its own on 2026-09-20,
 and **`packages/fiscal-verifactu`, the one OF THE SIX still standing**, in the third bullet below.
 "Of the six" is not a hedge to drop: three more instances of the same false claim are still standing
-elsewhere in this section — `packages/purchasing`, `packages/fiscal-none`, `packages/fiscal` and
-`packages/db/README.md` — each named in the paragraphs around this one. The running
+elsewhere in this section — `packages/purchasing`, `packages/fiscal-none` and `packages/fiscal` —
+each named in the paragraphs around this one. It read four until #467 took
+`packages/db/README.md`, and that pull request's first round of corrections changed this number
+without changing the list beside it, which is the same failure one sentence later in a different
+dress. The running
 tally that used to sit here ("three do now") was left un-decremented by two successive conversions
 before anyone noticed, which is the §7 rule about counts happening to this very sentence; naming the
 one outstanding package instead is what a later conversion can actually keep true.
@@ -4732,6 +4735,83 @@ about coverage thresholds, the file's original creation, or a `git add` command 
 every non-TypeScript file), and the narrowing is safe only because it was checked:
 `git grep -l usePgliteDb -- . ':(exclude)*.ts' ':(exclude)*.md'` exits 1, so today markdown is the
 whole of it. State the path set — `CLAUDE.md` §1 — rather than letting a reader assume the wider one.
+
+**`packages/db` converted, LANDED as #467 on 2026-09-20** (main `b2a7f3d5`) — twenty test files and
+twenty-one calls (`src/node-membership.test.ts` has two), plus the package's `vitest.config.ts`
+comments and a paragraph of `packages/db/README.md`. This is the package that OWNS both helpers, so
+the four files allowed to name the PGlite one stay untouched: `src/testing/lifecycle.ts` and
+`src/testing/venue-db.ts`, which define them, and both their contract tests. After it,
+`git grep -nE "usePgliteDb[(]" -- packages/db` returns four lines and all four are allowed: the
+definition (`lifecycle.ts:129`), the wrapper's forwarding call (`venue-db.ts:26`) and the old
+helper's two contract-test calls (`lifecycle.test.ts:27` and `:68`).
+Remaining: `packages/fiscal-verifactu` 25 files, `apps/server` 56. Five things to carry.
+
+**First, the two standard controls agree EXACTLY here**, as they did in `packages/payments` and did
+not in `packages/reporting`. Each accounts for the same 21 files — the 20 converted plus
+`src/testing/venue-db.test.ts`, the seam's own contract test — and nothing else: the throw gives
+`Test Files 21 failed | 49 passed (70)`, and `{ ...options, migrations: [] }` gives the same 21
+files and `Tests 117 failed | 487 passed | 24 skipped (628)`, failing `42P01`. The negative control
+held: `src/testing/lifecycle.test.ts`, which calls the old helper directly, passed all its tests
+under the throw. Three data points now, and they do not agree on which control is wider — take both
+every time, and do not predict the result.
+
+**Second, a contract test of the helper is not automatically out of scope, and the argument to leave
+it alone is worth answering rather than assuming.** `src/testing/reset-append-only.test.ts` is a
+proof ABOUT the per-test reset and lives beside `lifecycle.test.ts` in `src/testing/`, so there was
+a real case for treating it as a fifth excluded file. It was converted, because the plan's step-5
+command selects it and the established exclusion is exactly four; inventing a fifth with no owner
+present is the wider change, not the narrower one. Converting it cost two prose corrections, below,
+both in a comment about a fiscal-critical guarantee.
+
+**Third, deleting a helper's name from a comment can widen the claim the comment makes.** That file
+opened "Proof that `usePgliteDb`'s per-test reset…", and the first rewrite dropped the qualifier
+because the file no longer called it. That word was the only thing scoping the sentence to one
+engine — and `src/testing/reset-append-only.pg.test.ts` exists precisely because `ENABLE ALWAYS` is
+the one trigger state whose effect differs by engine. It now reads "the PGlite per-test reset",
+which is what the file runs. The same paragraph also carried a false clause on BOTH sides of the
+diff — "without this file nothing exercises the disable→truncate→restore cycle" — which the Codex
+seat falsified by instrumenting `applyReset` and running `venue-db.test.ts` alone. What is unique
+there is the ASSERTION, not the cycle, and the narrowing needs its own qualifier: `buildResetPlan`
+collects TRUNCATE-level triggers only (`src/testing/lifecycle.ts:93`), so only a suite whose schema
+HAS an append-only table runs it at all.
+
+**Fourth, this package's `hookTimeout` item is closed, and it has THREE cases, not two.** The
+standing list above had `packages/db/README.md`'s sentence open because correcting it meant deciding
+what to say about both halves. Measured with `hookTimeout: 1`: a PGlite suite dies in `afterEach`
+(`lifecycle.ts:148`) and `afterAll` (`:153`) and never in `beforeAll`, which carries its own 60s
+(`:22` and `:146`); a `useTemplateDb` suite naming no `timeoutMs` dies in `beforeAll` (`:422`,
+argument at `:431`), on the template clone. **The third case is the one the first correction missed
+and then dismissed the old sentence over**: `src/testing/networked-postgres.test.ts:12` is a
+hand-written `beforeAll` that starts a Docker network and a real container and declares no budget,
+so `hookTimeout` is the only thing bounding it — image pull included, which is word for word what
+the old comment said. Every other container-booting hook in the package declares its own. The old
+sentence was true of one suite in seventy. **Correcting a false claim by deleting it deletes its
+true half**; the branch's first draft also removed that suite's name from this very section while
+"fixing" it.
+
+**Fifth, the branch's own re-read found SEVEN false claims inside its first round of corrections**,
+one of them the `hookTimeout` dismissal above. The others: a tally in this file left
+un-decremented (the same tally whose own warning sits two sentences below it); a receipt-grep that
+answers about itself, because the comment sweep returned one line outside the allowed files at the
+merge base and two afterwards, the second being a comment the change itself wrote; "every reset-ON
+PGlite suite runs the cycle" (only those with a TRUNCATE-level trigger); "15 files open no database"
+(15 call none of the five helpers, SEVEN of those reach a real PostgreSQL another way, EIGHT open
+none); "at four different moments" (three, two of them at #434); and "one file still calls
+`usePgliteDb` on purpose" (two — `venue-db.ts` IS one of them). That round has now earned its keep on
+three consecutive branches of this rollout, and on this one it was the only thing between a Critical
+false claim about a fiscal-adjacent budget and `main`.
+
+**The documentation sweep, reported per sweep**, over non-TypeScript files, whole tree. Sweep one,
+the converted files' paths with no second condition: 32 documents, 14 of which also name
+`usePgliteDb`. Five owed a dated pointer and got one — the recipes-allergen plan, the cloud-mirror
+C2b plan, membership slices 2 and 4, and membership promotion R2. This file owed a correction and
+got one: it had recorded the recipes clause as STILL TRUE, "a package this rollout has not reached",
+and this is the rollout reaching it. The other eight owe nothing; so do the 18 that name a converted
+file but never the helper, checked for `lifecycle.js`, "PGlite lifecycle" and `pglite` as well.
+Sweep two, `usePgliteDb` alone: 54 documents, adding NOTHING here — of the 40 it holds that sweep one
+does not, 13 put a `packages/db/src` path within six lines of the helper, and every one of those
+paths is a helper file, a helper's contract test, a schema source or `src/english-only.ts`, never a
+file this conversion touched.
 
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
