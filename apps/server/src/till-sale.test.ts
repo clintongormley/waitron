@@ -1401,7 +1401,7 @@ describe("ordering extras and options — parent + child lines", () => {
         tender: { method: "cash", amount: "20.00" },
       }),
     ).rejects.toMatchObject({
-      code: "options.unsupported_product",
+      code: "extras.unsupported_product",
       params: { productId: v.jamonId, pricingUnit: "weight" },
     });
 

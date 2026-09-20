@@ -339,11 +339,28 @@ declare module "@waitron/shared" {
      *  options list is now `options.label_required` and a pick outside a list's limits is
      *  `extras.limit_exceeded`, both from the contracts in `@waitron/catalogue`. */
     "options.selection_invalid": { productId: string; groupId: string; reason: string };
+    /**
+     * NOTHING RAISES THIS ANY MORE. It refused an extras pick on a dish that is not priced `each`,
+     * under the `options.` prefix the legacy option payload used. That refusal is now
+     * `extras.unsupported_product` below, which names the domain concept the pick belongs to and
+     * reads beside the rest of the `extras.*` family. Registered and kept because a shipped code is
+     * never removed; `option.not_found` and `options.selection_invalid` above have the same posture.
+     */
+    "options.unsupported_product": { productId: string; pricingUnit: string };
     /** An extras pick on a dish that is not priced `each`. A child line is priced at the dish's
      *  quantity times the pick count, so a dish sold by weight would bill a fraction of an extra.
      *  Raised by `priceOrderLines` (working-order.ts); `pricingUnit` echoes what the dish resolved
-     *  to, which the two order paths read from different places (docs/backlog.md). */
-    "options.unsupported_product": { productId: string; pricingUnit: string };
+     *  to, which the two order paths read from different places (docs/backlog.md). Neither is a
+     *  secret: both are values the caller's own request resolved to.
+     *
+     *  `extras.*` names the DOMAIN CONCEPT — the picks the line sent — never the throwing package
+     *  (`tenant.not_found`'s note above gives the rule), beside `extras.invalid`,
+     *  `extras.limit_exceeded`, `extras.not_found` and `extras.in_use`, which
+     *  `packages/catalogue/src/errors.ts` declares; this adds to that family by declaration
+     *  merging. A CLIENT request fault → 400, which is what the till surface's STATUS map default
+     *  gives it (`apps/server/src/till-api.ts` names no `extras.*` code). Never renamed once
+     *  shipped: the `options.`-prefixed code it replaces is retired above rather than deleted. */
+    "extras.unsupported_product": { productId: string; pricingUnit: string };
     /**
      * A ring-time line carried a free-text kitchen `note` longer than the 200-character limit (per-line
      * customisation, spec §2). The note is trimmed first, so trailing whitespace never trips this; a
