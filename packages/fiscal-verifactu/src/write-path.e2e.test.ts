@@ -545,3 +545,122 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
     expect(x.secuencia).toBe(1);
   });
 });
+
+describe("the extras/options rework leaves the fiscal fingerprint byte-identical", () => {
+  // THE GATE for the extras/options rework (Task 9 of
+  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`): the same basket, filed before
+  // and after the rework, must produce the SAME `Huella`, `ImporteTotal` and `CuotaTotal` — down to
+  // the byte, not merely "passes the validator". A filed record is append-only and hash-chained, so
+  // a value written wrong here stays wrong (CLAUDE.md §5).
+  //
+  // The three GOLDEN literals were recorded from `main` at `2ae3baa98`, BEFORE any of this branch's
+  // code existed, in a throwaway checkout of that commit. The capture filed this exact basket in
+  // `main`'s own line shape — the options answer on the dish line's `modifierSnapshots`, the extra
+  // as a child line at `parentLineNo: 1` — and read the three columns straight out of
+  // `registros_facturacion`.
+  //
+  // WHY THE NIF IS PINNED, and why it is not decoration. `IDEmisorFactura` is one of the eight
+  // fields the huella hashes (`packages/verifactu/src/huella.ts`), and `seedTenantWithSif` mints it
+  // from a counter that advances once per call in a file. The first capture of this basket was
+  // taken standalone and hashed to `A1AF497F…` under NIF `20000001K`; the same basket run 16th in
+  // THIS file hashed to `38CCE164…` under `20000016K`. Both are correct records of their own
+  // inputs. Without the pin, a golden literal here would fail the day anyone adds or removes a test
+  // ABOVE it — a gate that cries wolf. With it, the literal is a property of the basket: recorded
+  // at `2ae3baa98` both standalone and appended to the end of this file, the two runs agreed.
+  //
+  // WHAT A WRONG ANSWER PRINTS, so this is a measurement and not a formality: captured the same way
+  // at `2ae3baa98`, with only the child line's `vatRate` moved from "10.00" to "21.00" (its base
+  // unchanged, the settlement rebalanced to 16.51), the record came back as
+  // `3D5F2E3981F025153FFF81BF1A9B9E519F1E127472E83063BB39F2C91FFF38FA` / 14.61 / 2.54 — all three
+  // move. An extra's VAT rate is the picked product's own (spec
+  // `docs/superpowers/specs/2026-09-18-one-product-model-design.md` decision 9), which is the
+  // figure this rework could have moved, and this fixture is sensitive to it.
+  const GOLDEN = {
+    huella: "C43623FCC6F00D21DD31D4BABBDBA1A1FD05D466B84677C2F46594C31ED8536A",
+    importe_total: "14.41",
+    cuota_total: "2.31",
+  };
+
+  /** Above anything `freshNif` mints (it starts at `20000001K` and climbs one per seeded test), so
+   *  this test's hashed `IDEmisorFactura` cannot collide with another test's in this file. */
+  const PINNED_NIF = "29999999K";
+
+  /** One frozen options answer. All six names carry DIFFERENT text, so a projection that stored the
+   *  wrong one could not satisfy the assertion below. */
+  const ANSWER = {
+    listName: { "es-ES": "Punto de la carne" },
+    listCustomerName: { "es-ES": "Cómo lo quiere" },
+    listKitchenName: "PUNTO",
+    labelName: { "es-ES": "Al punto" },
+    labelCustomerName: { "es-ES": "En su punto" },
+    labelKitchenName: "AP",
+  };
+
+  it("files the same huella, ImporteTotal and CuotaTotal as main did for the same basket", async () => {
+    // Its own seed rather than the suite's `beforeEach` one, because this test pins the NIF.
+    const seeded = await seedTenantWithSif(pg.db, { nif: PINNED_NIF });
+
+    const { huella, importe_total, cuota_total } = await withTransaction(pg.db, async (tx) => {
+      await asAppUser(tx);
+      const { saleId } = await recordSale(
+        tx,
+        backend,
+        saleInput({
+          tillId: seeded.tillId,
+          nodeId: seeded.nodeId,
+          seriesId: seeded.seriesId,
+          // The `saleInput` default money, restructured into a dish carrying an options answer plus
+          // one priced extra as its child line: 10.00 base at 21%, 2.10 base at 10%, taxable total
+          // 14.41. Keeping the amounts is the point — only the SHAPE the answers travel in changed,
+          // so the figures the record hashes must not move.
+          lines: [
+            {
+              lineNo: 1,
+              name: "Café solo",
+              descriptions: { "es-ES": "Café solo" },
+              quantity: "2",
+              unitPrice: "5.00",
+              vatRate: "21.00",
+              lineTotal: "10.00",
+              optionSnapshots: [ANSWER],
+            },
+            {
+              lineNo: 2,
+              name: "Extra de queso",
+              descriptions: { "es-ES": "Extra de queso" },
+              quantity: "1",
+              unitPrice: "2.10",
+              vatRate: "10.00",
+              lineTotal: "2.10",
+              parentLineNo: 1,
+            },
+          ],
+        }),
+      );
+
+      // Self-contained guard, mirroring the two huella-invariance blocks above: without it, a
+      // regression that dropped the answers on the floor would leave the three figures equal for
+      // the wrong reason and this test would still pass. The answers must REACH the filed line and
+      // must NOT reach the hash, so both halves are asserted, here inside the writing transaction.
+      const filed = await tx
+        .select({ lineNo: saleLines.lineNo, optionSnapshots: saleLines.optionSnapshots })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, saleId));
+      expect(filed.find((line) => line.lineNo === 1)?.optionSnapshots).toEqual([ANSWER]);
+      // The extra's own child line carries no answers: a pick IS a line, never an entry in the
+      // dish's snapshot list (spec §3.4).
+      expect(filed.find((line) => line.lineNo === 2)?.optionSnapshots).toEqual([]);
+
+      const { rows } = await tx.execute<{
+        huella: string;
+        importe_total: string;
+        cuota_total: string;
+      }>(
+        sql`select huella, importe_total, cuota_total from registros_facturacion where sale_id = ${saleId}`,
+      );
+      return rows[0]!;
+    });
+
+    expect({ huella, importe_total, cuota_total }).toEqual(GOLDEN);
+  });
+});
