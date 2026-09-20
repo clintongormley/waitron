@@ -98,6 +98,12 @@ export class OptionListForm extends LitElement {
         gap: var(--wt-space-2);
         min-width: var(--wt-cell-name-max-width);
       }
+      /* A lone input in a cell has no width of its own, so the automatic table layout shrinks it to
+         wt-input's own tap-target floor and cuts the value off mid-word. The same token the stacked
+         translated names use gives it room; the table's own scroller absorbs the extra width. */
+      .cell-field {
+        min-width: var(--wt-cell-name-max-width);
+      }
       /* The preselect control is a native radio, which is far smaller than a finger. The tap target
          is the LABEL that contains it, never the radio stretched past its own box
          (design-system.md → "Hit targets must not overflow their container"). */
@@ -375,6 +381,7 @@ export class OptionListForm extends LitElement {
       <td class="handle-cell">${this.#reorder.handle(label.id)}</td>
       <td>
         <wt-input
+          class="cell-field"
           name=${`label-${index}-name`}
           label=${t("options.name")}
           required
@@ -402,6 +409,7 @@ export class OptionListForm extends LitElement {
       </td>
       <td>
         <wt-input
+          class="cell-field"
           name=${`label-${index}-kitchen-name`}
           label=${t("options.kitchen_name")}
           placeholder=${label.name}

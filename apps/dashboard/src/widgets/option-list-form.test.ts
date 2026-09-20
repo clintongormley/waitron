@@ -357,3 +357,46 @@ it("paints its own error text with the danger token and keeps the row controls t
     });
   }
 });
+
+/**
+ * Found by opening the form and reading it: the two single-input cells carried no minimum width, so
+ * the table's automatic layout collapsed each to `wt-input`'s own `--wt-tap-min` floor and a real
+ * label's name was cut off mid-word — at 1280px, with unused space to the right of the table.
+ * Measured before the fix: a 68px box around a 105px value ("Poco hecho" rendered as "Poco h"). The
+ * customer-name cell beside it was never affected, because `.cell-stack` already carries the shared
+ * sizing token. The kitchen-name field takes the same room: its placeholder is the STAFF name, so a
+ * blank one shows the same string this test measures.
+ */
+it("leaves the staff-name field wide enough for a real label name", async () => {
+  const { el } = await mount({
+    value: { ...cooked, labels: [{ ...cooked.labels[0]!, name: "Poco hecho" }] },
+  });
+  const input = field<HTMLElement>(el, "label-0-name").shadowRoot!.querySelector("input")!;
+  expect(input.value).toBe("Poco hecho");
+  // scrollWidth is what the value needs; clientWidth is what the box gives it.
+  expect({
+    needs: input.scrollWidth,
+    has: input.clientWidth,
+    fits: input.scrollWidth <= input.clientWidth,
+  }).toEqual({
+    needs: input.scrollWidth,
+    has: input.clientWidth,
+    fits: true,
+  });
+});
+
+it("sizes both single-input cells from the shared sizing token, not a literal width", async () => {
+  const { el } = await mount({ value: cooked });
+  // Read the token off the element rather than restating its number, so the comparison below can
+  // never pass on two blanks.
+  const token = getComputedStyle(el).getPropertyValue("--wt-cell-name-max-width").trim();
+  expect(token).not.toBe("");
+  const widths = ["label-0-name", "label-0-kitchen-name"].map((name) => [
+    name,
+    getComputedStyle(field(el, name)).minWidth,
+  ]);
+  expect(widths).toEqual([
+    ["label-0-name", token],
+    ["label-0-kitchen-name", token],
+  ]);
+});
