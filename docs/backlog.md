@@ -4250,6 +4250,77 @@ out. It lists FILES, not packages and not call sites.
 their own pull request, after the last conversion, as planned. With it the whole of task P2 is done.
 The entry further down carries what it found.
 
+**Task P5 — money becomes whole cents — LANDED as #475 on 2026-09-21** (main `16f24070`). Every
+money column stopped being a two-place decimal and became an eight-byte whole number of cents. The
+boundary is the database and only the database: a read turns the stored count into the exact decimal
+amount the system already worked in, a write turns it back, both at the row, and above that line the
+arithmetic, the HTTP contract, the receipts and the fiscal literals are unchanged. The measurement
+that says the boundary is in the right place is that the till, the dashboard and the setup app
+typecheck with no changes at all. The converters are `decimalToCents`, `centsToDecimal` and
+`rawCentsToDecimal` in `packages/shared/src/cents.ts`; the rule is `CLAUDE.md` §3 and its receipt is
+in [conventions-data.md](developers/conventions-data.md).
+
+The inviolable gate held: `packages/fiscal-verifactu/src/money-conversion.huella.test.ts` pins two
+whole fiscal records, amounts and hashes, as literals captured before the conversion, and that file
+has exactly one commit — the one preceding the change — so the literals cannot have been fitted to
+the new behaviour afterwards.
+
+**Six things #475 found, each of which could recur.**
+
+1. **A four-byte cast on a raw money read re-opened the band the eight-byte column exists to close.**
+   The first shape of this change cast every raw-SQL money read `::int`, to settle a disagreement
+   between the two test engines about an uncast eight-byte value. But `::int` tops out at 2147483647
+   cents, inside the twelve integer digits `assertMoney` admits, so a value the column stored was
+   refused on the way out with a bare `22003` — the branch arguing against itself. The cast is
+   `::text` now, with `rawCentsToDecimal` converting. Found by the run-it review seat, which stored
+   2147483648 cents and read it back.
+2. **`ALTER COLUMN ... SET DATA TYPE` does not re-derive what was defined over the old type.** Every
+   check over a money column read back with a cast on both sides, and one default stayed `"0.00"` on
+   a whole-number column. Behaviour was correct; what was wrong is that a migrated database stopped
+   matching the declared schema, which the flip depends on. `packages/db/src/schema/schema-conformance.test.ts`
+   reports it for the core set. **The module sets have no such guard**, so their list was taken by
+   applying the migrations and reading the database's own catalogue back. Worth a guard of its own —
+   see the open item below.
+3. **A guard had been edited to accept that drift.** Five expected values in
+   `packages/catalogue/src/migrations.test.ts` were changed earlier in the same branch to expect the
+   cast rather than report it. They now state the clean expressions. This is the shape the campaign's
+   own rule names: a test that must be edited to pass is a stop, not a fix.
+4. **A test whose mechanism the change deliberately removed.** `packages/purchasing` proved that a
+   database refusal which is not a duplicate surfaces as itself, and produced that refusal by
+   overflowing a money column with an amount the system accepts. No such amount exists any more —
+   that gap closing is the whole point of the width. It uses an out-of-range date now, proven by
+   deleting the rethrow it guards.
+5. **A name-filtered test run does not load a package's guard suites** (`CLAUDE.md` §2, paid for
+   again here). A comment added during review used a word `packages/fiscal`'s vocabulary guard
+   forbids; the run that checked that comment named one test file, so the guard never loaded. The
+   guard strips `//` and `/* */` comments but not a SQL `--` comment inside a template literal, so it
+   read the word as code.
+6. **Correction rounds bred false claims three deep.** The first fix wave corrected eight claims; a
+   re-read found eight MORE, all created by that wave; a narrow third round found six more, including
+   one where the second round's correction had turned a true `CLAUDE.md` sentence false. The shapes
+   that recurred: a sentence naming files whose comments the same wave had just deleted; a grep
+   recipe broken by the wave's own new comment (self-inclusion); a scope named wider than what was
+   examined; and a measurement citing an instrument that cannot see what it claims — a `psql` run
+   offered as evidence for a JavaScript driver's return type, when `psql` renders everything as text.
+
+**Left open by #475, with its next action.**
+
+- **No guard holds a module migration set to its declared schema.** The core set has
+  `packages/db/src/schema/schema-conformance.test.ts`; `catalogue`, `payments`, `workforce` and
+  `workforce-es` have nothing equivalent, which is why their drift had to be found by hand. A guard
+  shaped like the core one, run per module set, would have caught all nine instances. Next action:
+  read what the core guard reflects over and whether it generalises to a module's own barrel.
+- **`scripts/changed-packages.test.mjs` sits under Vitest's default five-second bound**, and every
+  test in it starts a separate process. It timed out at 5203ms on a loaded machine and passes 84/84
+  on an idle one. Next action: give that file an explicit `testTimeout` above a loaded machine's
+  worst case, in its own change.
+- **Three review suggestions deliberately not taken**, each with its reason in the pull request: a
+  helper wrapping the two-call write conversion (it would hide the validation the first call does);
+  simplifying a workforce conversion to a division (it reintroduces a floating-point division on
+  money in a file that exists to avoid one); and renaming the new container test to drop its `.pg.`
+  marker (that marker is used in thirteen packages and apps, so the two neighbours without it are the
+  deviation).
+
 **Three things #470, the last conversion, left behind.**
 
 1. **TAKEN by the final pull request on 2026-09-20, together with four more this scan could not
