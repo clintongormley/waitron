@@ -710,7 +710,7 @@ What that task carries with it:
   with that fixture and the old exact-key code, the English-receipt case fails with the Spanish
   answer on the paper.
 
-Task 11 has landed, which is the dashboard side. `/manage/modifiers` is now one screen with two
+Task 11 has landed as #476, which is the dashboard side. `/manage/modifiers` is now one screen with two
 tabs, **Extras** and **Options**, each the Categories-pattern table for its kind: a header Add
 button, a searchable and filterable table whose sort is remembered under its own session-storage
 key, a read-only detail modal with Edit and Close showing the products and menu offers carrying the
