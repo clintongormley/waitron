@@ -2538,6 +2538,15 @@ git commit -s -m "feat(print-agent-app): container host — env/state-dir config
 
 - [ ] **Step 1: Write the e2e**
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/print-agent-e2e.test.ts` asks for its database
+> through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:8`, the call at
+> `:56` — not `usePgliteDb`. It is the same PGlite database with the same options and the same
+> per-test reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
+> house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+> was re-checked; nothing else in this sketch was.**
+
 ```ts
 import net from "node:net";
 import { Hono } from "hono";

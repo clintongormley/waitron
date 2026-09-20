@@ -16,8 +16,8 @@ export default defineConfig({
     // real-PG suites' beforeAll — a CREATE DATABASE … TEMPLATE against globalSetup's already-migrated
     // `core` template, and `useTemplateDb` deliberately carries no default — and it bounds both
     // helpers' bare afterEach reset and afterAll close, the PGlite suites' included. The one database
-    // hook it does NOT bound is the PGlite boot and migrations, which run under `usePgliteDb`'s own
-    // 60s default. The container boot/image pull runs in globalSetup, outside both.
+    // hook it does NOT bound is the PGlite boot and migrations, which run under the 60s default
+    // `useVenueDb` forwards to (`packages/db/src/testing/lifecycle.ts:22`, applied at `:146`). The container boot/image pull runs in globalSetup, outside both.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

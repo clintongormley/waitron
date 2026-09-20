@@ -82,6 +82,11 @@ throughout (never a float, never a formatted string).
   heavy justification does not apply — say why in a comment. Let `usePgliteDb`/`useRealPostgres` own the
   database; guarded teardowns (`if (db !== undefined) await db.close()`) only where a suite builds its
   own resource. Prove every guard by deletion where the spec calls for it.
+  **2026-09-20: the PGlite half of that line is out of date.** A suite asks for its PGlite database
+  through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb`
+  unchanged. Naming the old helper in a `.ts` file under `packages/` or `apps/`, outside
+  `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
+  `useRealPostgres` and `useTemplateDb` are unchanged.
 
 ---
 

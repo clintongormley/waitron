@@ -562,6 +562,11 @@ Run → FAIL (three roles; bypassRls refused).
 
 - [ ] **Step 1: Measure before** (on the base worktree): `grep -rlE "useRealPostgres|describeEachTarget|startMigratedPostgres|useTemplateDb|REQUIRE_DOCKER|startPostgresContainer" packages apps --include='*.test.ts' | grep -v node_modules | wc -l` → 212 (2026-09-05). Wall clock: `time (pnpm vitest run --coverage && TESTCONTAINERS_RYUK_DISABLED=true pnpm -r --workspace-concurrency=2 test:coverage)` — alone on the machine (browser packages, CLAUDE.md §2). Record both in `.superpowers/sdd/drop-rls-step1/measurements.md`.
 - [ ] **Step 2: Move** each candidate to `usePgliteDb` when its remaining assertions need no privilege, trigger-as-a-role or concurrency; leave a one-line comment naming why it stays if it stays. Run each package's `test:coverage`.
+  **2026-09-20: this step is unchecked and following it as written now fails a guard.** Move a
+  candidate to `useVenueDb` (`@waitron/db/testing/venue-db.js`) instead, whose body forwards to
+  `usePgliteDb` unchanged, so the database, the options and the per-test reset are the same.
+  Naming the old helper in a `.ts` file under `packages/` or `apps/`, outside `packages/db`, is
+  refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
 - [ ] **Step 3: Measure after**, same two commands. Paste both pairs into the PR description and into `docs/backlog.md`'s item 3 line (Task 10).
 - [ ] **Step 4: Commit** — `git commit -s -am "test: <n> suites to PGlite now that RLS is gone; real-PG files 212 → <m>, full suite <before> → <after>"`
 

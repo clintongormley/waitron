@@ -18,6 +18,11 @@
 - **Grep the siblings before naming** an error code or a param — `apps/server/src/errors.ts` `ticket.*`/`tab.*`/`course.*` families. Codes are never renamed once shipped.
 - **`apps/server` identifiers are out of the english-only guard's scope** (`packages/db/src/english-only.ts:33-63`); no `SPANISH_WORDS` change is needed anywhere in this work.
 - **Server verb suites are PGlite** (`usePgliteDb`) for logic; **RLS/concurrency go in `working-order.rls.test.ts`** (`useTemplateDb`). PGlite serialises, so a contention test there is a false pass (CLAUDE.md §4). Real-Postgres suites need `TESTCONTAINERS_RYUK_DISABLED=true` locally.
+  **2026-09-20: the PGlite half of that line is out of date.** A suite asks for its PGlite database
+  through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb`
+  unchanged. Naming the old helper in a `.ts` file under `packages/` or `apps/`, outside
+  `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
+  `useRealPostgres` and `useTemplateDb` are unchanged.
 - **Gate before every commit:** `pnpm --filter @waitron/... test:coverage` for the touched package (not plain `test` — CI runs coverage), plus `pnpm lint && pnpm typecheck && pnpm format:check`. `apps/server` thresholds are 98/98/98/95; till (`apps/till`) is 95/95/90/88.
 - **Any new field on the server `TabLine` must be mirrored by hand into the client `TabLine`** in `apps/till/src/api/client.ts` (they are intentionally not imported across the bundle boundary).
 

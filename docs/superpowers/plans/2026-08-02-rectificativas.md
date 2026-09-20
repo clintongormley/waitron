@@ -478,6 +478,11 @@ Per slice:
   - `guarded-teardowns.test.ts` — any new suite uses `usePgliteDb`/`useRealPostgres`
     (`@waitron/db/testing/lifecycle`), never a raw `beforeAll`/`afterAll` pair, so teardown is
     guarded by construction.
+    **2026-09-20: the PGlite half of that line is out of date.** A suite asks for its PGlite
+    database through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to
+    `usePgliteDb` unchanged. Naming the old helper in a `.ts` file under `packages/` or `apps/`,
+    outside `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
+    `useRealPostgres`, and what `guarded-teardowns` itself checks, are unchanged.
   - `no-regime-vocabulary.test.ts` (`packages/fiscal`) — `recordCorrection`'s regime-neutral naming
     passes.
 - **CI reminder (CLAUDE.md §2):** run `pnpm --filter <pkg> test:coverage` (not plain `test`) per

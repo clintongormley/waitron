@@ -298,6 +298,16 @@ git commit -s -m "feat(db): writeNodeMembershipTx + setSingletonRoleTx for share
 
 - [ ] **Step 1: Write the failing test**
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/membership-seed.test.ts` asks for its database
+> through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:10`, the call at
+> `:25` — not `usePgliteDb`. It is the same PGlite database with the same options and the same
+> per-test reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). This step's own heading names
+> no file; the one it designates is the path in the sketch's first line. Asking through it is now a
+> house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+> was re-checked; nothing else in this sketch was.**
+
 ```ts
 // apps/server/src/membership-seed.test.ts
 import { sql } from "drizzle-orm";

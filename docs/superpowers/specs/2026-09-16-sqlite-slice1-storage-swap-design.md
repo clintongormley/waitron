@@ -85,8 +85,17 @@ function body rather than 211 files.
 > 2026-09-19: the number 211 is this document's original reading and was never reproduced. The plan
 > re-measured it with the commands beside it (task P2, "The count in this paragraph used to read
 > '211 files'"), and the current pair, with what it excludes and why, is in
-> `docs/developers/testing-guide.md` under "A PGlite suite is being moved behind one helper". The
+> `docs/developers/testing-guide.md` under "A PGlite suite asks for its database through one helper, and a guard enforces it". The
 > argument above does not turn on the number.
+>
+> 2026-09-20: that collapsing is DONE for the first of the three. Every suite that chose its database
+> through `usePgliteDb` now chooses through `useVenueDb`, and asking that way is a house rule
+> (`CLAUDE.md` §4) enforced by `scripts/venue-db-helper.test.ts`. `useRealPostgres` and
+> `describeEachTarget` are untouched. The paragraph above puts all three in the prepare phase;
+> what actually happened is that only the first was collapsed there. The plan's task P2 says
+> "Leave `useRealPostgres`, `useTemplateDb` and `describeEachTarget` alone" (`:2582`), which is a
+> statement about P2's scope; only `describeEachTarget` is actually routed onward, to task F1
+> step 24 (`:2586`). Where `useRealPostgres` ends up is not settled by either.
 
 Both are mechanical, reviewable, and independently valuable: they put the engine's vocabulary in one
 place, which is where it should have been anyway.

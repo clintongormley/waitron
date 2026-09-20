@@ -67,6 +67,15 @@ TS-3's `moveTabLines(tx, fromTabId, toTabId, lineNos?)` is specified to already 
 
 - [ ] **Step 2: Write the failing subset test.** Create `apps/server/src/transfer-lines.test.ts` with the shared PGlite fixture and one `moveTabLines` subset test:
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/transfer-lines.test.ts` asks for its database
+> through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:6`, the call at
+> `:41` — not `usePgliteDb`. It is the same PGlite database with the same options and the same
+> per-test reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
+> house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+> was re-checked; nothing else in this sketch was.**
+
 ```typescript
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";

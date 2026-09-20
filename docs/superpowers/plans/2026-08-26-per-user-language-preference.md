@@ -454,6 +454,18 @@ Compute the venue default once at boot (`province → country → English`, with
 
 - [ ] **Step 1: Write the failing helper test** `apps/server/src/venue-locale.test.ts`. Use the same DB seam `till-api.test.ts` uses (`usePgliteDb` with CORE+IDENTITY migrations + a `setup` that seeds a tenant with `country` and a location with `province`; read `till-api.test.ts:35-124` for the seed helpers). Assert:
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/venue-locale.test.ts` asks for its database
+> through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:5`, the call at
+> `:18` — not `usePgliteDb`. It is the same PGlite database with the same options and the same
+> per-test reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The seam it points at,
+> `apps/server/src/till-api.test.ts`, was converted too — its import is at `:7` and its call at
+> `:93`. The `:35-124` line range this step cites for that file's seed helpers was NOT re-checked.
+> Asking through it is now a house rule (`CLAUDE.md` §4), enforced by
+> `scripts/venue-db-helper.test.ts`. **Only the helper name was re-checked; nothing else in this
+> sketch was.**
+
 ```ts
 it("derives the country default when no override and no regional catalogue", async () => {
   // seed tenant country 'ES', location province 'Barcelona'

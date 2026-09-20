@@ -21,7 +21,7 @@ export default defineConfig({
     //
     // What it DOES bound is every hook that declares no budget — **this list is the expensive ones,
     // not all of them.** Both helpers' bare afterEach reset and afterAll close: the PGlite one at
-    // `lifecycle.ts:148` and `:153`, reached through `venue-db.ts:26`, and `useTemplateDb`'s own at
+    // `lifecycle.ts:148` and `:153`, reached through `venue-db.ts:31`, and `useTemplateDb`'s own at
     // `:433` and `:440`. The template clone the seven real-PG suites take without a `timeoutMs` of
     // their own (`useTemplateDb`'s `beforeAll` at `:422`, passing the caller's value at `:431`).
     // And a suite's own hook — three of them open a database per test in an untimed `beforeEach`

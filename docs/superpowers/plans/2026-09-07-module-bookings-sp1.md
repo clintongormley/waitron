@@ -25,6 +25,13 @@
 - **Gate before every commit that crosses packages:** `pnpm lint && pnpm typecheck && pnpm format:check && pnpm test`, and for a package `pnpm --filter <pkg> test:coverage` (CI runs coverage, not `test` — CLAUDE.md §2). Run the WHOLE workspace once when a value more than one suite asserts changes (the schema barrel, the error registry, `ALL_MODULES`, the seat maps).
 - **Coverage bars:** `@waitron/bookings` takes the **90/90/85/85** floor — a domain module like `@waitron/workforce` (also own-migration-set, also floor), NOT one of the owner's six high-bar packages (CLAUDE.md §2: the six are the owner's list, not a rule that derives them). `@waitron/server-kit` is also at the floor. Only `server-kit` is a genuinely new entry to reason about; neither is added to `scripts/coverage-thresholds.test.ts`'s `HIGH_BAR_PACKAGES`, and the guard auto-applies the floor to any package not on that list.
 - **Real-PG vs PGlite:** privilege / grant / trigger-as-`app_user` / two-tenant / concurrency proofs need real Postgres (Testcontainers, `TESTCONTAINERS_RYUK_DISABLED=true` locally). Pure logic uses PGlite. `usePgliteDb`/`useRealPostgres` own the DB; `usePgliteDb({ migrations })` takes a migration-set ARRAY (`packages/db/src/testing/lifecycle.ts`), so a test needing bookings passes `[CORE_MIGRATIONS, BOOKINGS_MIGRATIONS]` (CLAUDE.md §4).
+  **2026-09-20: every mention of `usePgliteDb` in this plan is out of date, here and in Step 5's
+  moved tests.** A suite asks for its PGlite database through `useVenueDb`
+  (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb` unchanged with the same
+  options, the same handle and the same per-test reset — so the migration-set ARRAY this line
+  describes is unchanged. `packages/bookings/src/bookings.test.ts` takes the seam today: the import
+  at `:7`, the call at `:37`. Naming the old helper in a `.ts` file under `packages/` or `apps/`,
+  outside `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
 
 ---
 

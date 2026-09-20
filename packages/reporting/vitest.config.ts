@@ -25,7 +25,7 @@ export default defineConfig({
     // `vitest run src/counts.test.ts src/record-daily-close.pg.test.ts --hookTimeout=1`. The PGlite
     // boot survives it: `src/counts.test.ts`'s three tests RUN, and fail in hooks that only fire
     // after a successful boot — that file's own untimed `beforeEach` (`:12`) and `lifecycle.ts:148`
-    // and `:153`, the reset and the close, each reached through `venue-db.ts:26`. A `beforeAll` that
+    // and `:153`, the reset and the close, each reached through `venue-db.ts:31`. A `beforeAll` that
     // DOES time out skips its tests instead, which is what the real-PG file in the same run does: it
     // fails in `lifecycle.ts:422`, its clone, and its four tests are skipped. Run-versus-skip is the
     // discriminator; the collected count is not, because both files collect either way.

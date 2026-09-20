@@ -9,7 +9,8 @@ export default defineConfig({
     // bounds a hook that passes no timeout of its OWN; a hook given one overrides this config (the
     // receipt is at `packages/db/src/testing/lifecycle.ts:178`). So it does not bound the container
     // suites that set a timeout at their own `beforeAll`, and it does not bound PGlite setup, which
-    // runs under `usePgliteDb`'s own 60s default.
+    // runs under the 60s default `useVenueDb` forwards to
+    // (`packages/db/src/testing/lifecycle.ts:22`, applied at `:146`).
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

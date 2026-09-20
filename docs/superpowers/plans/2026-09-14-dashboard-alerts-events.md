@@ -777,6 +777,15 @@ Open alerts sort: `error` before `warning`, then newest `since` first, `null` si
 
 - [ ] **Step 2: Write the failing tests** — `apps/server/src/alerts.test.ts`:
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/alerts.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:6`, the call at `:25` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
+> house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+> was re-checked; nothing else in this sketch was.**
+
 ```ts
 // PGlite: reads on one transaction, no concurrency and no connection-role question.
 import { sql } from "drizzle-orm";
@@ -1246,6 +1255,15 @@ from the last 30 days come back with the name of whoever handled them."
 The session's permissions are empty when its tenant is not `cfg.tenantId`. The POST order is: session (401); a session holding no alert permission at all answers 404 before any lookup, so it learns nothing about which ids exist; incident lookup in this tenant (404); that incident's area permission (403); update.
 
 - [ ] **Step 1: Write the failing tests** — `apps/server/src/alerts-api.test.ts`:
+
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/alerts-api.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:8`, the call at `:52` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
+> house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+> was re-checked; nothing else in this sketch was.**
 
 ```ts
 // PGlite: route authorization over one transaction per request; no concurrency and no

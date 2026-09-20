@@ -534,6 +534,12 @@ so the cross-cutting suites — `english-only`, the teardown guard — must load
 stay `98/98/98/95`. New suites carry **guarded teardowns** and let `usePgliteDb`/`useRealPostgres` own
 the database (`CLAUDE.md` §4). Suites that shell out are not involved here.
 
+**2026-09-20: the PGlite half of the paragraph above is out of date.** A suite asks for its PGlite
+database through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to
+`usePgliteDb` unchanged. Naming the old helper in a `.ts` file under `packages/` or `apps/`, outside
+`packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4). `useRealPostgres`
+and `useTemplateDb` are unchanged, and so is what the teardown guard checks.
+
 ---
 
 ## 10. Files (indicative, for the plans to firm up)

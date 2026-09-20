@@ -65,6 +65,16 @@
 
 - [ ] **Step 1: Write the shared PGlite scaffolding + the `moveTabLines` failing tests.** Create `apps/server/src/move-merge.test.ts`. The `setupVenue`/`asApp`/`seedTable`/`openTabOn` helpers here are reused by Tasks 2–6.
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/move-merge.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:6`, the call at `:37` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The task's `Consumes` line at
+> `:63` names the old helper for the same reason and is stale in the same way. Asking through it is
+> now a house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the
+> helper name was re-checked; nothing else in this sketch was.**
+
 ```typescript
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -1336,6 +1346,17 @@ function requireTabParam(id: string): string {
 ```
 
 - [ ] **Step 3: Write the route tests.** Create `apps/server/src/till-api.move-merge.test.ts`, mirroring `till-api.test.ts`'s harness VERBATIM: its `usePgliteDb` `suite` (migrations incl. `IDENTITY_MIGRATIONS` + `CORE_MIGRATIONS`), the `deps(db)` builder, the `collect([])` logger, and the `openSession(db)` helper that logs a real operator in and returns the cookie. Copy that scaffolding, then add the venue/table/tab seeding and the route assertions:
+
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/till-api.move-merge.test.ts` asks for its
+> database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:7`, the
+> call at `:36` — not `usePgliteDb`. It is the same PGlite database with the same options and the
+> same per-test reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The harness it tells you to
+> port verbatim, `apps/server/src/till-api.test.ts`, was converted too — its import is at `:7` and
+> its call at `:93`. Asking through it is now a house rule (`CLAUDE.md` §4), enforced by
+> `scripts/venue-db-helper.test.ts`. **Only the helper name was re-checked; nothing else in this
+> sketch was.**
 
 ```typescript
 // ... harness ported verbatim from till-api.test.ts: `suite`, `deps`, `collect`, `openSession`,

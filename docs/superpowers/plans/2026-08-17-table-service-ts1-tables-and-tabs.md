@@ -608,6 +608,17 @@ git commit -s -m "feat(db): working_orders.delivery_table_id + mutual composite 
 
 `apps/server/src/tables.test.ts`:
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/tables.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:13`, the call at `:55` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The file this step tells you
+> to mirror, `apps/server/src/working-order.test.ts`, was converted too — its import is at `:16` and
+> its call at `:91`. Asking through it is now a house rule (`CLAUDE.md` §4), enforced by
+> `scripts/venue-db-helper.test.ts`. **Only the helper name was re-checked; nothing else in this
+> sketch was.**
+
 ```typescript
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -923,6 +934,15 @@ with:
 - [ ] **Step 3: Write the failing PGlite verb test scaffolding + `openTab` cases.** Create `apps/server/src/tabs.test.ts` with a `setupVenue` that seeds two products and one table (reused by Tasks 5, 6, 9).
 
 `apps/server/src/tabs.test.ts` (initial):
+
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/tabs.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:13`, the call at `:51` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
+> house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+> was re-checked; nothing else in this sketch was.**
 
 ```typescript
 import { randomUUID } from "node:crypto";

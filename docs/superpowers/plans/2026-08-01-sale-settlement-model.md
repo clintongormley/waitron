@@ -19,6 +19,11 @@
 - **Gate unfiltered.** `pnpm --filter @waitron/db test:coverage` and `pnpm --filter @waitron/core test:coverage` — a name-filtered run skips `schema-ownership.test.ts` and `errors.reachability.test.ts`, both in play here (design §7). Coverage thresholds stay `98/98/98/95`. Tree-wide guards (`english-only`, guarded-teardowns) now live in the root Vitest project — run `pnpm vitest run --coverage` at the repo root too.
 - **Every new SQL guard proved by deletion** (design §7): remove it, watch the test fail for the claimed reason (negative control), restore it.
 - **Guarded teardowns.** New suites must not own a raw `beforeAll`/`afterAll` database; use `useRealPostgres` / `usePgliteDb` from `@waitron/db/testing/lifecycle.js`. Where a raw teardown is unavoidable, guard it: `if (db !== undefined) await db.close()`. Enforced by `scripts/guarded-teardowns.test.ts`.
+  **2026-09-20: the PGlite half of that line is out of date.** A suite asks for its PGlite database
+  through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb`
+  unchanged. Naming the old helper in a `.ts` file under `packages/` or `apps/`, outside
+  `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
+  `useRealPostgres` and `useTemplateDb` are unchanged.
 - **Error codes name the domain concept and are never renamed once shipped** (`CLAUDE.md` §3). Every file that throws a code imports its registry (`import "./errors.js"`).
 - **`git commit -s` on every commit** (DCO is enforced tree-wide).
 
