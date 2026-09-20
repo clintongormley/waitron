@@ -22,15 +22,17 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deployment } from "./deployment.js";
+import { mirrorConfig } from "./mirror-config.js";
+import { nodeMembership } from "./node-membership.js";
 import * as barrel from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
 /** Every table a module exports, plus `deployment`, which is deliberately not in the barrel. */
-function tablesIn(module: Record<string, unknown>, extra: PgTable): PgTable[] {
+function tablesIn(module: Record<string, unknown>, ...extra: PgTable[]): PgTable[] {
   return [
     ...Object.values<unknown>(module).filter((value): value is PgTable => is(value, PgTable)),
-    extra,
+    ...extra,
   ];
 }
 
@@ -53,10 +55,15 @@ async function reload(): Promise<{ tables: PgTable[]; enums: PgEnum<[string, ...
   vi.resetModules();
   const fresh: Record<string, unknown> = await import("./index.js");
   const { deployment: freshDeployment } = await import("./deployment.js");
-  return { tables: tablesIn(fresh, freshDeployment), enums: enumsIn(fresh) };
+  const { mirrorConfig: freshMirrorConfig } = await import("./mirror-config.js");
+  const { nodeMembership: freshNodeMembership } = await import("./node-membership.js");
+  return {
+    tables: tablesIn(fresh, freshDeployment, freshMirrorConfig, freshNodeMembership),
+    enums: enumsIn(fresh),
+  };
 }
 
-const declared: PgTable[] = tablesIn(barrel, deployment);
+const declared: PgTable[] = tablesIn(barrel, deployment, mirrorConfig, nodeMembership);
 
 // Foreign keys the migrations create that no declaration here carries. Each one is hand-written in
 // SQL for a stated reason at the column — most often that declaring it would make this file import
