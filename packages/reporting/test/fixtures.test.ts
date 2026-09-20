@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedSale, seedVenue } from "./fixtures.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 describe("fixtures", () => {
   it("seedVenue + seedSale insert a sale with its lines", async () => {

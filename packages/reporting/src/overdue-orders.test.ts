@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedFiredLine,
   seedFiredOrder,
@@ -15,7 +15,7 @@ import type { SeededVenue } from "../test/fixtures.js";
 import { computeOverdueOrders } from "./overdue-orders.js";
 import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let venue: SeededVenue;
 let stationId: string;

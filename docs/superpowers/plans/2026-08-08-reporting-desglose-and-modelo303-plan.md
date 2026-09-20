@@ -21,6 +21,25 @@ guard.
 **Tech Stack:** TypeScript (ESM), drizzle-orm `sql` templates, PGlite (`usePgliteDb`) + real Postgres
 (`useRealPostgres`) via Vitest. Money via `@waitron/shared`'s `Decimal` codec.
 
+> **2026-09-20 — both helper names in that line have moved on, for different reasons, and only the
+> first is this rollout's.** The PGlite half: the suites this plan builds and extends
+> (`packages/reporting/src/vat-return.test.ts` and `src/vat-summary-period.test.ts`, named in its
+> task lists below) now ask for their database through `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`), as does every other PGlite suite in the package —
+> `grep -rn usePgliteDb packages/reporting` exits 1 on the change that added this pointer, comments
+> included. The seam forwards unchanged, `return usePgliteDb(options)`
+> (`packages/db/src/testing/venue-db.ts`), so it is the same PGlite database with the same options
+> and the same per-test reset; the rename exists so the coming SQLite switch replaces one body
+> rather than every call site (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+>
+> The real-PostgreSQL half is stale too and is NOT this rollout's, named here only so a reader does
+> not follow it: `grep -rn useRealPostgres packages/reporting` also exits 1. The package's two
+> real-PostgreSQL suites, `src/record-daily-close.pg.test.ts` and
+> `src/verify-daily-close-chain.pg.test.ts`, take a database from `useTemplateDb({ template: "core" })`
+> instead, which clones a pre-migrated template out of the shared container this package's
+> `vitest.config.ts` starts in `globalSetup`. Nothing else in this document was re-checked.
+
 ## Global Constraints
 
 - **TDD, one commit per task, `-s` every commit** (`git commit -s`). Feature branch, never `main`

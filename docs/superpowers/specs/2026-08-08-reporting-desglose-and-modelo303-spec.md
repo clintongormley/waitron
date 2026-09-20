@@ -233,6 +233,41 @@ harness for the cases PGlite cannot show (`useRealPostgres` + `startRealPostgres
 `record-daily-close.rls.test.ts`). Money is `Decimal` strings throughout; reads run inside
 `withTenant` + `asAppUser`.
 
+> **2026-09-20 — the first clause of that paragraph is this rollout's, and it has moved.**
+> `@waitron/reporting` does still run PGlite by default with `[CORE_MIGRATIONS]`, but its suites ask
+> for that database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) rather than
+> `usePgliteDb`. All fourteen PGlite call sites in the package, spread over thirteen files, now read
+> `useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 })`, and
+> `grep -rn usePgliteDb packages/reporting` exits 1 on the change that added this pointer, comments
+> included. The seam forwards unchanged — its whole body is `return usePgliteDb(options)`
+> (`packages/db/src/testing/venue-db.ts`) — so the target, the options and the per-test reset this
+> paragraph chose are all the same; the rename exists so the coming SQLite switch replaces one body
+> rather than every call site (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+>
+> The rest of the paragraph is stale for reasons this rollout did not cause and has not repaired,
+> named so nobody follows it, and the first of them is stated three times rather than once: besides
+> the sentence above, `record-daily-close.rls.test.ts` is named by this document's own claim/receipt
+> table further down (the "Real-PG harness precedent in this package" row, with a `:1-45` line
+> range) and by
+> `docs/superpowers/plans/2026-08-08-reporting-desglose-and-modelo303-plan.md:230`, which instructs a
+> reader to "Mirror `record-daily-close.rls.test.ts:1-45`". Those three are the whole of it outside
+> the prose written about them: every other line `grep -rn "record-daily-close.rls"` returns over the
+> tree is inside this pointer or inside `docs/backlog.md`'s entry for the change that added it. There is no `record-daily-close.rls.test.ts`
+> in the package today; the
+> real-PostgreSQL suites are `src/record-daily-close.pg.test.ts` and
+> `src/verify-daily-close-chain.pg.test.ts`, and both take a database from
+> `useTemplateDb({ template: "core" })`, not `useRealPostgres` — `grep -rn useRealPostgres
+> packages/reporting` exits 1. `startRealPostgres` does still exist, but not for this package and
+> not where the paragraph implies: its one definition in the workspace is
+> `apps/server/src/testing/postgres.ts:16`, and the single mention of the name inside
+> `packages/reporting` is a comment at `src/testing/global-setup.ts:15` recording that the
+> per-file `startRealPostgres` this paragraph describes was removed.
+> `withTenant` no longer exists anywhere under `packages/` or `apps/`
+> (`grep -rn withTenant --include="*.ts" packages apps` returns nothing); it went with the tenant
+> column, `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`. `asAppUser` beside it does
+> still exist. The scope lists below were not re-checked.
+
 - **Scope 3 (PGlite):** a two-business-day range summing both days' per-rate figures; a range that
   excludes a day outside `[from, to]`; the per-invoice rounding preserved across a range (two invoices
   on different days at the `0.03 × 21%` boundary → `0.02`, not `0.01`); the cutover boundary at a range

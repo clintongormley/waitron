@@ -334,6 +334,39 @@ for RLS; `apps/server` route suites run PGlite in-process for mechanics + a real
 differential (CLAUDE.md §4). Coverage `98/98/98/95` on both packages; CI gates on `test:coverage`; run
 each changed package UNFILTERED (tree-wide guards); real-PG needs `TESTCONTAINERS_RYUK_DISABLED=true`.
 
+> **2026-09-20 — the helper named in that first clause is this rollout's, and it has moved.**
+> `@waitron/reporting` still runs PGlite by default with `CORE_MIGRATIONS`, but its suites ask for
+> that database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) rather than `usePgliteDb`:
+> all fourteen of its PGlite call sites, over thirteen files, read
+> `useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 })`, and
+> `grep -rn usePgliteDb packages/reporting` exits 1 on the change that added this pointer, comments
+> included. The seam forwards unchanged — its whole body is `return usePgliteDb(options)`,
+> `packages/db/src/testing/venue-db.ts` — so the target, the options and the per-test reset are the
+> same; the rename exists so the coming SQLite switch replaces one body rather than every call site
+> (plan task P2 step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The
+> `apps/server` clause beside it is untouched by that rollout so far — `apps/server` has the most
+> calling files left of any package and the rollout takes the fewest first.
+>
+> One more clause checked while here, NOT this rollout's to repair: the coverage bar. This document
+> says `98/98/98/95` for both packages, and `packages/reporting/vitest.config.ts` declares
+> `{ statements: 90, lines: 90, functions: 85, branches: 85 }`; `packages/identity` and `apps/server`
+> declare the same floor. Which package holds which bar is pinned by
+> `scripts/coverage-thresholds.test.ts`, not by this paragraph, and `CLAUDE.md` §2 lists only
+> `verifactu`, `fiscal-verifactu`, `core`, `db` and `payments` at `98/98/98/95`.
+>
+> **That figure is not stated once but twelve times across the six documents the change adding this
+> pointer had open, in three spellings, and this is the only one it names.** Of the other eleven,
+> nine read `98/98/98/95` literally, one is written out in words and one is a `thresholds:` config
+> sketch, so no single grep returns all twelve. Those eleven
+> are at `docs/superpowers/plans/2026-08-04-daily-close-reporting.md` lines 45, 64, 153 and 1250 —
+> line 45 being the words "statements 98 / lines 98 / functions 98 / branches 95" and line 153 the
+> `thresholds:` config sketch — `…/2026-08-08-reporting-desglose-and-modelo303-plan.md`
+> lines 60, 159 and 276, `…/2026-08-16-reporting-modelo303-download-and-periods.md` lines 25, 404
+> and 746 (746 names `@waitron/server`, 25 also names `@waitron/identity`), and
+> `docs/superpowers/specs/2026-08-08-reporting-desglose-and-modelo303-spec.md:298`. Naming them is
+> cheaper than eleven more pointers and more honest than naming one and walking past eleven. Whoever
+> repairs the bar should do all twelve in one pass. The case lists below were not re-checked.
+
 - **Period generalization (PGlite, `@waitron/reporting`):**
   - **Quarterly = Σ its three months** — seed sales+purchases across Jan/Feb/Mar; assert a Q1
     `computeVatReturn` equals the merged sum of the three monthly `computeVatReturn`s (byRate, totals,

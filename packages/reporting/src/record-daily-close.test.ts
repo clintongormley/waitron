@@ -8,7 +8,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
 import { seedSale, seedTender, seedTill, seedVenue } from "../test/fixtures.js";
@@ -32,7 +32,7 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let venue: SeededVenue;
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
