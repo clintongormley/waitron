@@ -32,6 +32,17 @@ const coffee: ProductEditorDraft = {
   stationId: "bar",
   courseId: null,
 };
+// One list of each kind attached, so the scan covers the Modifiers table: its reorder handles, its
+// row menus and the combobox that adds to it.
+const withModifiers: ProductEditorDraft = {
+  ...coffee,
+  modifiers: [
+    { kind: "extras", id: "sauces" },
+    { kind: "options", id: "cooked" },
+  ],
+};
+const extraLists = [{ id: "sauces", name: "Sauces" }];
+const optionLists = [{ id: "cooked", name: "Cooked" }];
 const variants: ProductEditorDraft = {
   ...coffee,
   variants: [
@@ -60,6 +71,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "errors",
     "selected",
     "variants",
+    "modifiers",
     "open-sections",
     "categories",
     "variant-window",
@@ -72,7 +84,15 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         units: [{ id: "each", name: { en: "Each" }, abbreviation: { en: "ea" } }],
         taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
         value:
-          state === "empty" || state === "errors" ? null : state === "variants" ? variants : coffee,
+          state === "empty" || state === "errors"
+            ? null
+            : state === "variants"
+              ? variants
+              : state === "modifiers"
+                ? withModifiers
+                : coffee,
+        extraLists,
+        optionLists,
         categories: [
           { id: "drinks", name: { en: "Drinks" }, image: null, color: "#3355aa", parentId: null },
           { id: "food", name: { en: "Food" }, image: null, color: null, parentId: null },
@@ -88,6 +108,10 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       await el.updateComplete;
       // Without this the scan could pass on an editor whose modal never opened.
       expect(el.shadowRoot!.querySelector("dashboard-category-membership-picker")).not.toBeNull();
+    }
+    if (state === "modifiers") {
+      // Without this the scan could pass on an editor whose Modifiers table never rendered a row.
+      expect(el.shadowRoot!.querySelectorAll("[data-test=attached-modifier]")).toHaveLength(2);
     }
     if (state === "variant-window") {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();

@@ -4,7 +4,7 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ProductEditor, productEditorField } from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft } from "./product-editor-model.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing.js";
 import { t } from "../i18n/t.js";
 
@@ -223,7 +223,16 @@ it("renders the sections in the designed order, with the VAT rate above the pric
     [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-section]")].map(
       (node) => node.dataset.section,
     ),
-  ).toEqual(["name", "categories", "available", "kitchen", "descriptors", "nutrition", "price"]);
+  ).toEqual([
+    "name",
+    "categories",
+    "available",
+    "kitchen",
+    "descriptors",
+    "nutrition",
+    "price",
+    "modifiers",
+  ]);
   const tax = el.shadowRoot!.querySelector("[name=tax]")!;
   const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
   // DOCUMENT_POSITION_FOLLOWING: the price field comes after the VAT select, never before it.
@@ -415,6 +424,212 @@ it("restores an existing allergen's presence and source when it is removed then 
     await el.updateComplete;
   }
   expect(el.currentValue.allergens).toEqual({ milk });
+});
+
+// Both kinds of modifier list, with staff, customer-facing and kitchen names that all differ: the
+// Modifiers section shows the STAFF name (docs/developers/products.md), and a fixture whose three
+// names read alike passes whether the section reads the right one or the wrong one. Each kind
+// carries a list with id "shared": the two ids live in different tables, so nothing stops them
+// colliding, and a row keyed on the bare id would move or remove the other kind's row.
+const extraLists: ExtraList[] = [
+  {
+    id: "sauces",
+    name: "Sauces",
+    customerName: { en: "Choose a sauce", es: "Elige una salsa" },
+    kitchenName: "SALSA",
+    minPicks: 0,
+    maxPicks: null,
+    active: true,
+    items: [],
+  },
+  {
+    id: "shared",
+    name: "Extra bread",
+    customerName: { en: "More bread", es: "Mas pan" },
+    kitchenName: "PAN",
+    minPicks: 0,
+    maxPicks: null,
+    active: true,
+    items: [],
+  },
+];
+const optionLists: OptionList[] = [
+  {
+    id: "cooked",
+    name: "Cooked",
+    customerName: { en: "How would you like it?", es: "Punto de la carne" },
+    kitchenName: "PUNTO",
+    defaultLabelId: null,
+    active: true,
+    labels: [],
+  },
+  {
+    id: "shared",
+    name: "Cut",
+    customerName: { en: "How shall we cut it?", es: "Como lo cortamos" },
+    kitchenName: "CORTE",
+    defaultLabelId: null,
+    active: true,
+    labels: [],
+  },
+];
+const attachedRows = (el: ProductEditor) => [
+  ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=attached-modifier]"),
+];
+const cellText = (row: HTMLElement, name: string) =>
+  row.querySelector<HTMLElement>(`[data-test=${name}]`)!.textContent!.trim();
+
+it("lists both kinds of attached modifier list in one order, by staff name and kind", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...product,
+      modifiers: [
+        { kind: "extras", id: "sauces" },
+        { kind: "options", id: "cooked" },
+        // A list the loaded set does not hold — a deleted one, or one this screen never loaded.
+        { kind: "options", id: "vanished" },
+      ],
+    },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists,
+  });
+  const rows = attachedRows(el);
+  expect(rows.map((row) => row.dataset.modifier)).toEqual([
+    "extras:sauces",
+    "options:cooked",
+    "options:vanished",
+  ]);
+  expect(rows.map((row) => cellText(row, "modifier-name"))).toEqual([
+    "Sauces",
+    "Cooked",
+    t("editor.missing_choice"),
+  ]);
+  // Extras and options are two different features under one list; a row that does not say which it
+  // is cannot be reordered sensibly against the other kind.
+  expect(rows.map((row) => cellText(row, "modifier-kind"))).toEqual([
+    t("extras.title"),
+    t("options.title"),
+    t("options.title"),
+  ]);
+});
+
+it("offers every unattached list of both kinds, and attaches the one chosen", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists,
+  });
+  const combobox = el.shadowRoot!.querySelector<
+    HTMLElement & { options: { value: string; label: string }[] }
+  >("[data-test=add-modifier]")!;
+  expect(combobox.options.map((option) => option.value)).toEqual([
+    "create-extras",
+    "create-options",
+    "extras:shared",
+    "options:cooked",
+    "options:shared",
+  ]);
+  expect(combobox.options.map((option) => option.label)).toEqual([
+    t("editor.create_extra_list"),
+    t("editor.create_option_list"),
+    `Extra bread · ${t("extras.title")}`,
+    `Cooked · ${t("options.title")}`,
+    `Cut · ${t("options.title")}`,
+  ]);
+  combobox.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "options:shared" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.modifiers).toEqual([
+    { kind: "extras", id: "sauces" },
+    { kind: "options", id: "shared" },
+  ]);
+});
+
+it("reorders and removes across kinds, telling two lists with the same id apart", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...product,
+      modifiers: [
+        { kind: "extras", id: "shared" },
+        { kind: "options", id: "shared" },
+        { kind: "extras", id: "sauces" },
+      ],
+    },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists,
+  });
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-options:shared"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.modifiers).toEqual([
+    { kind: "options", id: "shared" },
+    { kind: "extras", id: "shared" },
+    { kind: "extras", id: "sauces" },
+  ]);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-modifier-extras:shared"]')!.click();
+  await el.updateComplete;
+  expect(el.currentValue.modifiers).toEqual([
+    { kind: "options", id: "shared" },
+    { kind: "extras", id: "sauces" },
+  ]);
+});
+
+it("asks the screen to create a list of either kind, and to edit an attached one", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists,
+  });
+  const create = vi.fn();
+  const edit = vi.fn();
+  el.addEventListener("wt-create-related", create);
+  el.addEventListener("wt-edit-related", edit);
+  const combobox = el.shadowRoot!.querySelector("[data-test=add-modifier]")!;
+  for (const value of ["create-extras", "create-options"]) {
+    combobox.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  }
+  expect(create.mock.calls.map((call) => call[0].detail)).toEqual([
+    { kind: "extras" },
+    { kind: "options" },
+  ]);
+  // Each create entry is a command, not a membership: neither may attach itself to the product.
+  expect(el.currentValue.modifiers).toEqual([{ kind: "extras", id: "sauces" }]);
+  // What the screen calls back with once the nested form has saved. An id already attached must
+  // not be attached twice.
+  el.selectRelated("extras", "sauces");
+  el.selectRelated("options", "cooked");
+  await el.updateComplete;
+  expect(el.currentValue.modifiers).toEqual([
+    { kind: "extras", id: "sauces" },
+    { kind: "options", id: "cooked" },
+  ]);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-modifier-extras:sauces"]')!.click();
+  expect(edit.mock.calls[0]![0].detail).toEqual({ kind: "extras", id: "sauces" });
 });
 
 it("edits the product's categories through the membership picker's own Save", async () => {

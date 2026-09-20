@@ -20,6 +20,14 @@ export type ProductEditorDraft = ProductEditorBody & {
   stationId: string | null;
   courseId: string | null;
 };
+/** A modifier list as the product editor's Modifiers section reads one: its id and its plain STAFF
+ * name. `ExtraList` and `OptionList` (packages/catalogue/src/modifier-list-types.ts) both satisfy
+ * this; their customer-facing and kitchen names are left out because this surface shows the staff
+ * name and nothing else (docs/developers/products.md). */
+export interface ModifierListChoice {
+  id: string;
+  name: string;
+}
 export interface EditorChoice {
   id: string;
   name: LocalizedText;
