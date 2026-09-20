@@ -166,6 +166,37 @@ export const en = {
   "options.label_name_required": "Enter a name for this label.",
   "options.labels_required": "Add or enable a label, or take this list out of use.",
 
+  // Extras lists (reusable lists of PRODUCTS a dish can be added to), the Extras tab and its form.
+  // The three names mean the same three things as in the options block above. A blank price is not
+  // a price of zero: it means the item charges the product's own, which the form shows as the
+  // field's hint (2026-09-18-one-product-model-design.md §9.1).
+  "extras.create": "Create extras list",
+  "extras.edit": "Edit extras list",
+  "extras.name": "Name",
+  "extras.customer_name": "Customer-facing name",
+  "extras.kitchen_name": "Kitchen name",
+  "extras.active": "In use",
+  "extras.min_picks": "Minimum choices (0 to make the list optional)",
+  "extras.max_picks": "Maximum choices (blank for no limit)",
+  "extras.items": "Products offered",
+  "extras.product": "Product",
+  "extras.add_item": "Add product",
+  "extras.remove_item": "Remove product",
+  "extras.choose_product": "Choose a product",
+  "extras.unknown_product": "Product not found",
+  "extras.reorder": "Drag to reorder",
+  "extras.price": "Price addition",
+  "extras.max_quantity": "Maximum quantity",
+  "extras.preselected": "Preselected",
+  "extras.name_required": "Enter a name.",
+  "extras.picks_invalid": "Enter a whole number within the allowed limit.",
+  "extras.max_picks_too_low": "Raise the maximum to at least the minimum, or lower the minimum.",
+  "extras.items_required": "Add a product, or take this list out of use.",
+  "extras.quantity_invalid": "Enter a whole number of at least 1, within the allowed limit.",
+  "extras.price_invalid":
+    "Enter a price with up to two decimal places, or leave it blank to charge the product's own.",
+  "extras.duplicate_product": "This product is already on the list. Remove one of the two rows.",
+
   "nav.location_settings": "Location invoices",
   "location_settings.title": "Location invoices",
   "location_settings.description": "Invoice operation description",
@@ -1483,6 +1514,35 @@ export const es: Record<StringKey, string> = {
   "options.name_required": "Introduce un nombre.",
   "options.label_name_required": "Introduce un nombre para esta etiqueta.",
   "options.labels_required": "Añade o habilita una etiqueta, o retira esta lista del uso.",
+
+  // Ver el bloque en `en` para qué significa cada uno de los tres nombres y el precio en blanco.
+  "extras.create": "Crear lista de extras",
+  "extras.edit": "Editar lista de extras",
+  "extras.name": "Nombre",
+  "extras.customer_name": "Nombre para el cliente",
+  "extras.kitchen_name": "Nombre de cocina",
+  "extras.active": "En uso",
+  "extras.min_picks": "Selecciones mínimas (0 para que la lista sea opcional)",
+  "extras.max_picks": "Selecciones máximas (vacío para sin límite)",
+  "extras.items": "Productos ofrecidos",
+  "extras.product": "Producto",
+  "extras.add_item": "Añadir producto",
+  "extras.remove_item": "Quitar producto",
+  "extras.choose_product": "Elige un producto",
+  "extras.unknown_product": "Producto no encontrado",
+  "extras.reorder": "Arrastrar para reordenar",
+  "extras.price": "Precio adicional",
+  "extras.max_quantity": "Cantidad máxima",
+  "extras.preselected": "Preseleccionado",
+  "extras.name_required": "Introduce un nombre.",
+  "extras.picks_invalid": "Introduce un número entero dentro del límite permitido.",
+  "extras.max_picks_too_low": "Sube el máximo hasta el mínimo, o baja el mínimo.",
+  "extras.items_required": "Añade un producto, o retira esta lista del uso.",
+  "extras.quantity_invalid":
+    "Introduce un número entero de al menos 1, dentro del límite permitido.",
+  "extras.price_invalid":
+    "Introduce un precio con un máximo de dos decimales, o déjalo vacío para cobrar el del producto.",
+  "extras.duplicate_product": "Este producto ya está en la lista. Quita una de las dos filas.",
 
   "nav.location_settings": "Facturación del local",
   "location_settings.title": "Facturación del local",
