@@ -8,7 +8,7 @@ import {
   toScale,
   MONEY_SCALE,
 } from "@waitron/shared";
-import type { Decimal, ModifierSnapshot } from "@waitron/shared";
+import type { Decimal, OptionSnapshot } from "@waitron/shared";
 import type { RecordSaleLine } from "@waitron/core";
 import type { VatBreakdownLine } from "@waitron/fiscal";
 import { assertQuantityPrecision } from "./unit-validation.js";
@@ -81,7 +81,7 @@ export interface LockedLine {
    * locked-line file preserves parent→child linkage exactly as a live walk-up does. Copied onto the
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
-  modifierSnapshots?: ModifierSnapshot[];
+  optionSnapshots?: OptionSnapshot[];
   variantId?: string | null;
   variantName?: string | null;
   variantDescriptions?: Record<string, string> | null;
@@ -154,7 +154,7 @@ interface PricingRow {
   /** The `lineNo` of this row's parent dish; `null`/absent for a top-level line. Copied onto the
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
-  modifierSnapshots?: ModifierSnapshot[];
+  optionSnapshots?: OptionSnapshot[];
   variantId?: string | null;
   variantName?: string | null;
   variantDescriptions?: Record<string, string> | null;
@@ -185,7 +185,7 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       lineNo: i + 1,
       name: row.name,
       descriptions: row.descriptions,
-      modifierSnapshots: row.modifierSnapshots ?? [],
+      optionSnapshots: row.optionSnapshots ?? [],
       quantity: row.quantity,
       unitPrice: netUnit, // net, informational (record-sale.ts stores it verbatim)
       vatRate: row.rate,
@@ -267,7 +267,7 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       rate: decimal(line.vatRate),
       name: line.name,
       descriptions: line.descriptions,
-      modifierSnapshots: line.modifierSnapshots ?? [],
+      optionSnapshots: line.optionSnapshots ?? [],
       category: line.category,
       unitName: line.unitName ?? null,
       unitPrecision: line.unitPrecision ?? null,
@@ -315,7 +315,7 @@ export interface BasketItemWithOptions {
   /** The dish quantity, validated against its unit; every child option line follows it. */
   quantity: string;
   options: SelectedOption[];
-  modifierSnapshots?: ModifierSnapshot[];
+  optionSnapshots?: OptionSnapshot[];
 }
 
 /**
@@ -349,7 +349,7 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       unitName: item.product.unit.abbreviation,
       unitPrecision: item.product.unit.precision,
       parentLineNo: null,
-      modifierSnapshots: item.modifierSnapshots ?? [],
+      optionSnapshots: item.optionSnapshots ?? [],
       variantId: item.product.variantId ?? null,
       variantName: item.product.variantName ?? null,
       variantDescriptions: item.product.variantDescriptions ?? null,

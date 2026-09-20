@@ -492,27 +492,24 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
   });
 });
 
-describe("structured modifier snapshots", () => {
-  it("carries nonprice selections through live and locked pricing without changing totals", () => {
-    const modifierSnapshots = [
+describe("frozen options answers", () => {
+  it("carries the answers through live and locked pricing without changing totals", () => {
+    // Each of the six names is different text, so an assertion cannot pass while a different one
+    // is carried through.
+    const optionSnapshots = [
       {
-        modifierId: "note",
-        name: { en: "Message" },
-        type: "text" as const,
-        text: "Happy birthday",
-      },
-      {
-        modifierId: "milk",
-        name: { en: "Milk" },
-        type: "options" as const,
-        choiceId: "oat",
-        choiceName: { en: "Oat" },
+        listName: { en: "Milk" },
+        listCustomerName: { en: "Which milk?" },
+        listKitchenName: "MILK",
+        labelName: { en: "Oat" },
+        labelCustomerName: { en: "Oat milk" },
+        labelKitchenName: "OAT",
       },
     ];
     const live = priceBasketWithOptions([
-      { product: each("2.20", "reduced"), quantity: "2", options: [], modifierSnapshots },
+      { product: each("2.20", "reduced"), quantity: "2", options: [], optionSnapshots },
     ]);
-    expect(live.lines[0]).toHaveProperty("modifierSnapshots", modifierSnapshots);
+    expect(live.lines[0]).toHaveProperty("optionSnapshots", optionSnapshots);
     expect(live.total).toBe("4.40");
     const locked = priceLockedLines([
       {
@@ -522,7 +519,7 @@ describe("structured modifier snapshots", () => {
         name: "item",
         descriptions: { en: "item" },
         category: null,
-        modifierSnapshots,
+        optionSnapshots,
         unitName: { en: "ea" },
         unitPrecision: 0,
       },
