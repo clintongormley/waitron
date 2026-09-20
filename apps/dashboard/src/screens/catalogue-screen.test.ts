@@ -363,6 +363,16 @@ describe("catalogue-screen", () => {
     expect(editor(el).optionLists).toEqual(optionLists);
   });
 
+  // The products list names each attached list too, and it is this screen that holds the loaded sets;
+  // without them its Modifiers column can only print the missing-choice placeholder.
+  it("hands both kinds of modifier list to the products list as well", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect(list(el).extraLists).toEqual(extraLists);
+    expect(list(el).optionLists).toEqual(optionLists);
+  });
+
   it("creates an extras list from inside the product editor and attaches it", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });

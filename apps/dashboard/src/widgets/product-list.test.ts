@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenStateName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
@@ -6,12 +6,55 @@ import { ProductList } from "./product-list.js";
 import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
+// The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
+// a choice one test makes would otherwise be restored into the next one.
+beforeEach(() => sessionStorage.clear());
 
 async function tableRoot(el: ProductList): Promise<ShadowRoot> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   return table.shadowRoot!;
 }
+
+/** Every rendered row's key, in render order: a product's key is its id, a variant's `<product>:<variant>`. */
+function rowKeys(root: ShadowRoot): string[] {
+  return [...root.querySelectorAll("tr[data-row-key]")].map((row) =>
+    row.getAttribute("data-row-key")!,
+  );
+}
+
+/** The one cell of `rowKey` under the column whose header starts with `header` — found by header text
+ * rather than a position, so inserting a column does not silently re-aim an assertion. */
+function cellUnder(root: ShadowRoot, rowKey: string, header: string): HTMLElement {
+  const index = [...root.querySelectorAll("thead th")].findIndex((cell) =>
+    cell.textContent!.trim().startsWith(header),
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  const row = root.querySelector(`tr[data-row-key="${rowKey}"]`)!;
+  return [...row.querySelectorAll("td")][index]!;
+}
+
+/** Chooses `value` in the column's filter and waits for the narrowed render. */
+async function choose(el: ProductList, column: string, value: string): Promise<void> {
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
+    `select[data-filter="${column}"]`,
+  )!;
+  select.value = value;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await table.updateComplete;
+}
+
+/** A bun variant used by the filter tests; its own fields carry nothing the filter reads. */
+const bunVariant = {
+  id: "small",
+  name: "Small",
+  customerName: null,
+  kitchenName: null,
+  image: null,
+  unitPrice: "1.00",
+  available: true,
+};
 
 /**
  * A representative product carrying every field the list reads; individual tests override the one
@@ -119,13 +162,21 @@ describe("product-list", () => {
     expect(rows[1]!.textContent).toContain("4.00–7.50");
   });
 
-  it("shows reporting and other categories, modifier names, and no VAT column", async () => {
+  // The Modifiers column names the lists a manager attached through `Product.modifiers`. The product
+  // also still carries the OLD flat `modifierIds`, holding a DIFFERENT list id here: reading that
+  // field instead would print "Punto", and resolving an `extras` ref against the options lists would
+  // print it too, so either mistake fails on the text rather than passing on an empty cell.
+  it("shows reporting and other categories, attached modifier list names, and no VAT column", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
           primaryCategoryId: "reporting",
           categoryIds: ["reporting", "seasonal", "terrace"],
-          modifierIds: ["sauce", "note"],
+          modifiers: [
+            { kind: "extras", id: "ex-1" },
+            { kind: "options", id: "opt-1" },
+          ],
+          modifierIds: ["opt-2"],
         }),
       ],
       categories: [
@@ -133,9 +184,10 @@ describe("product-list", () => {
         { id: "seasonal", name: { es: "Temporada" }, image: null, color: null, parentId: null },
         { id: "terrace", name: { es: "Terraza" }, image: null, color: null, parentId: null },
       ],
-      modifiers: [
-        { id: "sauce", type: "text", name: { es: "Salsa" }, available: true },
-        { id: "note", type: "text", name: { es: "Nota" }, available: true },
+      extraLists: [{ id: "ex-1", name: "Salsas" }],
+      optionLists: [
+        { id: "opt-1", name: "Punto de la carne" },
+        { id: "opt-2", name: "Punto" },
       ],
     });
     const root = await tableRoot(el);
@@ -148,7 +200,31 @@ describe("product-list", () => {
     const text = root.querySelector("tbody tr")!.textContent!;
     expect(text).toContain("Comida");
     expect(text).toContain("Temporada, Terraza");
-    expect(text).toContain("Salsa, Nota");
+    expect(cellUnder(root, "prod-1", t("editor.modifiers")).textContent!.trim()).toBe(
+      "Salsas, Punto de la carne",
+    );
+  });
+
+  // A ref's `kind` is what chooses the set it is looked up in: an `extras` ref whose id exists only
+  // among the options lists names nothing, exactly like an id nobody holds.
+  it("falls back to the missing-choice placeholder for a list the loaded set does not hold", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          modifiers: [
+            { kind: "extras", id: "gone" },
+            { kind: "extras", id: "opt-1" },
+          ],
+        }),
+      ],
+      extraLists: [],
+      optionLists: [{ id: "opt-1", name: "Punto" }],
+    });
+    const cell = cellUnder(await tableRoot(el), "prod-1", t("editor.modifiers"));
+    expect(cell.textContent!.trim()).toBe(
+      `${t("editor.missing_choice")}, ${t("editor.missing_choice")}`,
+    );
+    expect(cell.textContent).not.toContain("Punto");
   });
 
   it("shows a visible placeholder instead of blank cells for unresolved category and modifier ids", async () => {
@@ -157,14 +233,103 @@ describe("product-list", () => {
         product({
           primaryCategoryId: "missing-category",
           categoryIds: ["missing-category", "missing-secondary"],
-          modifierIds: ["missing-modifier"],
+          modifiers: [{ kind: "options", id: "missing-list" }],
         }),
       ],
       categories: [],
-      modifiers: [],
+      extraLists: [],
+      optionLists: [],
     });
     const text = (await tableRoot(el)).querySelector("tbody tr")!.textContent!;
     expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(3);
+  });
+
+  // Spec §1.1/§9.2: `sold_alone` answers whether a product is offered in its own right, and the list
+  // carries the column so an ingredient or an extra-only product lives in this list rather than on a
+  // screen of its own — which only works if a manager can tell the two apart and narrow to either.
+  it("shows a sold-on-its-own badge carrying text, not colour alone", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "dish", soldAlone: true }),
+        product({ id: "topping", soldAlone: false }),
+      ],
+    });
+    const root = await tableRoot(el);
+    const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
+    expect(headers.some((header) => header.startsWith(t("product.sold_alone")))).toBe(true);
+    const badges = root.querySelectorAll<HTMLElement>("[data-test=sold-alone-badge]");
+    expect(badges.length).toBe(2);
+    expect(badges[0]!.getAttribute("data-sold-alone")).toBe("true");
+    expect(badges[1]!.getAttribute("data-sold-alone")).toBe("false");
+    expect(badges[0]!.textContent!.trim().length).toBeGreaterThan(0);
+    expect(badges[1]!.textContent!.trim().length).toBeGreaterThan(0);
+    expect(badges[0]!.textContent).not.toBe(badges[1]!.textContent);
+  });
+
+  it("narrows the list to the products that are, or are not, sold on their own", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "dish", soldAlone: true }),
+        product({ id: "topping", soldAlone: false }),
+      ],
+    });
+    const root = await tableRoot(el);
+    const select = root.querySelector<HTMLSelectElement>('select[data-filter="sold-alone"]')!;
+    expect([...select.options].map((option) => option.value)).toEqual(["", "true", "false"]);
+    await choose(el, "sold-alone", "false");
+    expect(rowKeys(root)).toEqual(["topping"]);
+    await choose(el, "sold-alone", "true");
+    expect(rowKeys(root)).toEqual(["dish"]);
+    await choose(el, "sold-alone", "");
+    expect(rowKeys(root)).toEqual(["dish", "topping"]);
+  });
+
+  // A variant row answers the filter with its PRODUCT's `sold_alone`, so the two move together.
+  // Read in packages/ui/src/components/wt-data-table.ts: `#visibleRows` judges EVERY row against the
+  // chosen value, and `#treeVisible` adds back a match's ANCESTORS only, never a match's children.
+  // Any other answer breaks one side — an empty value strands the product as a childless row that
+  // still prices a range across variants nobody can see, and a value that matched while the product
+  // did not would render the product as an ancestor-only ghost.
+  it("keeps a product and its variants together on both sides of the filter", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "dish", soldAlone: true }),
+        product({ id: "bun", soldAlone: false, variants: [bunVariant] }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    await choose(el, "sold-alone", "false");
+    expect(rowKeys(root)).toEqual(["bun"]);
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["bun", "bun:small"]);
+    await choose(el, "sold-alone", "true");
+    expect(rowKeys(root)).toEqual(["dish"]);
+  });
+
+  // The answer belongs to the product, so a variant row shows the muted dash the other product-level
+  // columns show and contributes nothing to the search box — otherwise searching the badge's words
+  // would drag variant rows in beside their product.
+  it("leaves a variant row's sold-on-its-own cell muted and out of the search", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "dish", soldAlone: true }),
+        product({ id: "bun", soldAlone: false, variants: [bunVariant] }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    const cell = cellUnder(root, "bun:small", t("product.sold_alone"));
+    expect(cell.querySelector("[data-test=sold-alone-badge]")).toBeNull();
+    expect(cell.textContent!.trim()).toBe("—");
+    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
+    search.value = t("product.not_sold_alone_badge");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["bun"]);
   });
 
   it("is searchable and expands a parent product to its variant rows", async () => {
@@ -359,10 +524,12 @@ describe("product-list", () => {
     expect(parseFloat(frame.width)).toBeGreaterThan(0);
     expect(frame.width).toBe(frame.height);
     expect(parseFloat(frame.borderTopWidth)).toBeGreaterThan(0);
-    const badge = getComputedStyle(root.querySelector<HTMLElement>("[data-test=active-badge]")!);
-    expect(badge.display).toBe("inline-flex");
-    expect(parseFloat(badge.borderTopWidth)).toBeGreaterThan(0);
-    expect(parseFloat(badge.paddingLeft)).toBeGreaterThan(0);
+    for (const test of ["active-badge", "sold-alone-badge", "allergen-state"]) {
+      const badge = getComputedStyle(root.querySelector<HTMLElement>(`[data-test=${test}]`)!);
+      expect(badge.display, test).toBe("inline-flex");
+      expect(parseFloat(badge.borderTopWidth), test).toBeGreaterThan(0);
+      expect(parseFloat(badge.paddingLeft), test).toBeGreaterThan(0);
+    }
   });
 
   it("renders a placeholder (no <img>) when image is null", async () => {

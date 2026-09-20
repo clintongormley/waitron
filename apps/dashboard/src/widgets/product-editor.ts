@@ -46,6 +46,7 @@ import type {
   DietaryLabel,
   ProductRoutingChoice,
 } from "./product-editor-model.js";
+import { modifierListName } from "./product-editor-model.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenName, vatClassName } from "../i18n/domain.js";
@@ -1027,8 +1028,7 @@ export class ProductEditor extends LitElement {
   /** The list's own STAFF name, or null when the loaded set does not hold it. This surface shows
    * exactly one of a list's three names and it is the staff one (docs/developers/products.md). */
   private modifierListName(ref: ProductModifierRef): string | null {
-    const lists = ref.kind === "extras" ? this.extraLists : this.optionLists;
-    return lists.find((list) => list.id === ref.id)?.name ?? null;
+    return modifierListName(ref, this.extraLists, this.optionLists);
   }
   /** Name and kind together — what a control that has room for only one string says, so two lists
    * of different kinds sharing a name are still told apart. */

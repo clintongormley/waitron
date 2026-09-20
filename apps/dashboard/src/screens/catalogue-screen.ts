@@ -449,7 +449,8 @@ export class CatalogueScreen extends LitElement {
           ? html`<dashboard-product-list
               .products=${this.products}
               .categories=${this.categories}
-              .modifiers=${this.modifiers}
+              .extraLists=${this.extraLists}
+              .optionLists=${this.optionLists}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId);

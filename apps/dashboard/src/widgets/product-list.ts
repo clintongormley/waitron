@@ -1,14 +1,14 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, currentContentLanguages, type DataTableColumn } from "@waitron/ui";
-import { resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
-import type { CategorySummary, Modifier, Product, ProductEditorVariant } from "../api/client.js";
+import { modifierListName, type ModifierListChoice } from "./product-editor-model.js";
+import type { CategorySummary, Product, ProductEditorVariant } from "../api/client.js";
 
 interface ProductRow {
   key: string;
@@ -60,7 +60,10 @@ export class ProductList extends LitElement {
 
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) modifiers: Modifier[] = [];
+  /** The extras and options lists a product's attachments are named from; the catalogue screen loads
+   * both and hands them down, exactly as it does to the product editor. */
+  @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
+  @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
   #emit(event: Event, name: "edit-product" | "delete-product", productId: string): void {
     event.stopPropagation();
@@ -101,16 +104,14 @@ export class ProductList extends LitElement {
       .join(", ");
   }
 
+  /** The attached extras and options lists, in the order the product carries them, by their plain
+   * STAFF names (docs/developers/products.md: one surface, one of a list's names). */
   #modifierNames(product: Product): string {
-    const language = currentContentLanguages().defaultLanguage;
-    return product.modifierIds
-      .map((id) => this.modifiers.find((modifier) => modifier.id === id))
-      .map((modifier) =>
-        modifier
-          ? resolveContentText(modifier.name, currentLocale(), language)
-          : t("editor.missing_choice"),
+    return product.modifiers
+      .map(
+        (ref) =>
+          modifierListName(ref, this.extraLists, this.optionLists) ?? t("editor.missing_choice"),
       )
-      .filter(Boolean)
       .join(", ");
   }
 
@@ -178,6 +179,43 @@ export class ProductList extends LitElement {
         cell: ({ product, variant }) =>
           variant ? html`<span part="variant-muted">—</span>` : this.#modifierNames(product),
         searchValue: ({ product, variant }) => (variant ? "" : this.#modifierNames(product)),
+      },
+      {
+        key: "sold-alone",
+        label: t("product.sold_alone"),
+        // A variant is a way of buying its product, so the answer is the PRODUCT's for every row:
+        // read in packages/ui/src/components/wt-data-table.ts, `#visibleRows` judges every row
+        // against the chosen value and `#treeVisible` restores a match's ancestors but never its
+        // children, so a variant answering anything else would either strand its product as a
+        // childless row or render it as an ancestor-only ghost. The CELL still shows the muted dash,
+        // and contributes nothing to search, like the other product-level columns.
+        cell: ({ product, variant }) => {
+          if (variant) return html`<span part="variant-muted">—</span>`;
+          return html`<span
+            part="badge"
+            data-test="sold-alone-badge"
+            data-sold-alone=${product.soldAlone ? "true" : "false"}
+            >${
+              product.soldAlone ? t("product.sold_alone_badge") : t("product.not_sold_alone_badge")
+            }</span
+          >`;
+        },
+        searchValue: ({ product, variant }) =>
+          variant
+            ? ""
+            : product.soldAlone
+              ? t("product.sold_alone_badge")
+              : t("product.not_sold_alone_badge"),
+        sortValue: ({ product }) => (product.soldAlone ? 0 : 1),
+        filter: {
+          label: t("product.sold_alone"),
+          allLabel: t("product.filter_sold_alone_all"),
+          value: ({ product }) => (product.soldAlone ? "true" : "false"),
+          options: [
+            { value: "true", label: t("product.sold_alone_badge") },
+            { value: "false", label: t("product.not_sold_alone_badge") },
+          ],
+        },
       },
       {
         key: "active",

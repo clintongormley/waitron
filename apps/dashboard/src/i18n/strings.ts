@@ -1062,6 +1062,10 @@ export const en = {
   // Product list
   "product.active_badge": "Active",
   "product.inactive_badge": "Inactive",
+  "product.sold_alone": "Sold on its own",
+  "product.sold_alone_badge": "On its own",
+  "product.not_sold_alone_badge": "Extra or ingredient only",
+  "product.filter_sold_alone_all": "All products",
   // Option-group manager (Task 12)
   "option_group.section_title": "Option groups",
   "option_group.name": "Name",
@@ -2396,6 +2400,10 @@ export const es: Record<StringKey, string> = {
   "diet.contains_remove": "Quitar",
   "product.active_badge": "Activo",
   "product.inactive_badge": "Inactivo",
+  "product.sold_alone": "Se vende por separado",
+  "product.sold_alone_badge": "Por separado",
+  "product.not_sold_alone_badge": "Solo como extra o ingrediente",
+  "product.filter_sold_alone_all": "Todos los productos",
   "option_group.section_title": "Grupos de opciones",
   "option_group.name": "Nombre",
   "option_group.min": "Mín.",

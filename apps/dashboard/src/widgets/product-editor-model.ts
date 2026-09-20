@@ -3,6 +3,7 @@ import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.j
 export type { DietaryLabel };
 import type {
   ProductEditorBody,
+  ProductModifierRef,
   ProductVariantInput,
 } from "@waitron/catalogue/src/product-types.js";
 
@@ -28,6 +29,23 @@ export interface ModifierListChoice {
   id: string;
   name: string;
 }
+
+/**
+ * The plain STAFF name of the list an attachment points at, or null when neither loaded set holds
+ * it. The ref's `kind` is what chooses the set — an `extras` ref is never resolved against the
+ * options lists — so that mapping lives here once, shared by the product editor's Modifiers section
+ * and the products list's Modifiers column. The caller supplies its own wording for null, because
+ * the two surfaces show it differently.
+ */
+export function modifierListName(
+  ref: ProductModifierRef,
+  extraLists: readonly ModifierListChoice[],
+  optionLists: readonly ModifierListChoice[],
+): string | null {
+  const lists = ref.kind === "extras" ? extraLists : optionLists;
+  return lists.find((list) => list.id === ref.id)?.name ?? null;
+}
+
 export interface EditorChoice {
   id: string;
   name: LocalizedText;
