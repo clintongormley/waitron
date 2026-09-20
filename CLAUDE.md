@@ -152,13 +152,11 @@ hook, or how tests are scheduled:
 - **The workspace root is outside `pnpm -r`**, so root config is linted but never typechecked, and
   `eslint.config.js` is not type-aware. Proven by mutation.
 - **Two TypeScript compilers are installed on purpose, and there is no `tsc` at the ROOT.** A
-  package's `tsc` is version 7, the Go rewrite, which ships no JavaScript API; the root resolves the
-  name `typescript` to `@typescript/typescript6`, the version 6 API typescript-eslint still reads,
-  whose only binary is `tsc6`. Raise the root to 7 and `pnpm lint` refuses to start with no results
-  at all. Nothing else depends on which is installed, because every `tsc` here is `tsc --noEmit` in a
-  `typecheck` script — the bundles are esbuild's and Vitest strips types with esbuild too. Version 7
-  also rejects a relative import that climbs out of its own package (`TS6059`), which version 5.9.3
-  allowed. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
+  package's `tsc` is version 7; the root resolves `typescript` to the version 6 API typescript-eslint
+  still needs, and its only binary is `tsc6`. Cost: version 7 ships no JavaScript API, so raising the
+  root to it makes `pnpm lint` refuse to start with no results at all — and version 7 rejected the one
+  typechecked file reaching into another package by relative path (`TS6059`). See
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **`--frozen-lockfile` is not in the four-command gate.** Moving a dependency between `dependencies`
   and `devDependencies` fails CI at install. The hook runs it; the gate does not.
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a

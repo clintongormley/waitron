@@ -172,9 +172,8 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     // so a direct `import "@waitron/db"` is caught), an `export` that is not `export type`/`export
     // interface` (`export const`, `export {value}`, `export default`), and a bare top-level value
     // declaration (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch an exotic
-    // top-level expression statement (`sideEffect();`) — which no type file writes; the transpile check
-    // (the root has no `tsc`: its `typescript` is the TypeScript 6 API package typescript-eslint
-    // reads, and the only binary that comes with it is `tsc6`) is left to whatever next builds the
+    // top-level expression statement (`sideEffect();`) — which no type file writes; this guard reads
+    // text rather than transpiling, so the transpile check is left to whatever next builds the
     // dashboard bundle, which on a pull request that leaves `deploy/` alone is nothing (corrected
     // 2026-09-19; this line used to name `bundle-smoke`, which builds no vite bundle).
     // Prove-by-deletion:

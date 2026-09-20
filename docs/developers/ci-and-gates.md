@@ -321,6 +321,70 @@ WHICH entries a new export competes with, list them with sizes and last-access t
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
 
+## Two TypeScript compilers are installed, and that is deliberate
+
+Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on
+this workspace that day, `time pnpm typecheck` went from 2:05.51 to 28.7s. It is doing the same
+work: a deliberate `const __probe: number = "not a number";` added to
+`packages/verifactu/src/index.ts` came back as `error TS2322`, and came back green when removed.
+
+Version 7 ships **no JavaScript API**. Receipt, from inside a package:
+
+```
+$ node -e 'const ts = require("typescript"); console.log(Object.keys(ts), typeof ts.createProgram)'
+[ 'version', 'versionMajorMinor' ] undefined
+```
+
+typescript-eslint reads that API, so with version 7 under the name `typescript` ESLint refuses to
+start at all — its own words, from `pnpm lint`:
+
+> typescript-eslint does not support TS 7.0.
+> Please see https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0 to run typescript-eslint using the TS 6 API.
+> See also https://github.com/typescript-eslint/typescript-eslint/issues/10940 for tracking typescript-eslint's support for TS >=7.1
+
+So the ROOT `package.json` resolves the name `typescript` to `npm:@typescript/typescript6`, the
+compatibility package Microsoft published for this. Their announcement, section *Running
+Side-by-Side with TypeScript 6.0* (fetched with `curl -sL
+https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/` on 2026-09-20 and read with
+the HTML tags stripped, rather than through a summarising fetch — see the repository's rule about
+quotes that turn out to be paraphrases):
+
+> This package provides an executable named `tsc6`, so that if needed, you can install TypeScript
+> 7.0 (which ships its own `tsc` binary) side-by-side without naming conflicts. The new package also
+> re-exports the TypeScript 6.0 API, so that you can use `tsc` for TypeScript 7, while other tooling
+> can continue to rely on 6.0.
+
+ESLint runs only from the root, so the root is the only place that needs it. Two consequences a
+reader will meet:
+
+- **There is no `tsc` at the repository root.** `pnpm exec tsc` there answers `Command "tsc" not
+  found`; the root's binary is `tsc6`. Measured 2026-09-20: root `tsc6` is 6.0.3 (the version
+  `@typescript/typescript6` re-exports), every package's `tsc` is 7.0.2. Both are declared as caret
+  ranges, so re-measure rather than trusting those numbers.
+- **Raising the root entry to version 7 breaks `pnpm lint`,** with the message above and no lint
+  results at all. Leave it on the alias until typescript-eslint's issue 10940 ships version 7
+  support — the message names 7.1 as its target — then collapse both back to one plain range
+  (`docs/backlog.md` → Track C).
+
+The root DOES therefore have a working TypeScript compiler API, at version 6, importable from the
+root Vitest project. Nothing uses it today, and two guards' headers previously named its absence as
+the reason they read text instead of parsing; both were corrected in the same change.
+
+Nothing else in the repository depends on which compiler is installed, because **`tsc` is never
+asked to emit here**: every use of it is `tsc --noEmit` inside a `typecheck` script, the bundles are
+esbuild's, and Vitest strips types with esbuild too — a claim the tree also makes at
+`packages/payments-stripe/src/wiring.test.ts:205`, and one you can check directly by running a
+package's suite with no `tsc` involved. That is what bounds a TypeScript bump's blast radius to
+`pnpm typecheck` and `pnpm lint`.
+
+One thing version 7 catches that 5.9.3 did not: a file imported by a relative path that climbs out
+of its own package is `error TS6059` ("not under `rootDir`"). Exactly one **typechecked** file in
+the tree did that — `apps/server/src/print-agent-e2e.test.ts`. Grepping will turn up three more
+(`apps/dashboard/vite.config.ts`, `apps/setup/vite.config.ts` and `apps/till/vite.config.ts` each
+import `../../scripts/dev-server-proxy.js`); those are silent only because all three tsconfigs set
+`"include": ["src"]`, so the compiler never opens them — not because the rule spares them. The
+compiler is the guard for this; no text-scanning guard was added.
+
 ## pnpm filter traps
 
 ### The pnpm changed-since filter silently matches nothing in a `git worktree`
@@ -349,47 +413,6 @@ CI checks the selection with `scripts/changed-packages.mjs runnable test:coverag
 Root config (`vitest.config.ts`, `scripts/`) is linted but never typechecked, and
 `eslint.config.js` is not type-aware. Proven by mutation: an exported `const x: number = "no"` in
 root config passes lint, typecheck and vitest.
-
-### Two TypeScript compilers are installed, and that is deliberate
-
-Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on
-this workspace, `time pnpm typecheck` went from 2:05.51 to 28.7s. It is doing the same work: a
-deliberate `const __probe: number = "not a number";` added to `packages/verifactu/src/index.ts` came
-back as `error TS2322`, and came back green when removed.
-
-Version 7 ships **no JavaScript API** — the published package's `.` export is a file that returns
-the version string and nothing else. typescript-eslint reads that API, so with version 7 under the
-name `typescript` ESLint refuses to start at all:
-
-> typescript-eslint does not support TS 7.0.
-> Please see https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0 to run typescript-eslint using the TS 6 API.
-> See also https://github.com/typescript-eslint/typescript-eslint/issues/10940 for tracking typescript-eslint's support for TS >=7.1
-
-So the ROOT `package.json` resolves the name `typescript` to `npm:@typescript/typescript6`, the
-compatibility package Microsoft published for this, whose own words are: *"This package provides an
-executable named `tsc6`, so that if needed, you can install TypeScript 7.0 (which ships its own
-`tsc` binary) side-by-side without naming conflicts. The new package also re-exports the TypeScript
-6.0 API, so that you can use `tsc` for TypeScript 7, while other tooling can continue to rely on
-6.0."* ESLint runs only from the root, so the root is the only place that needs it.
-
-Two consequences a reader will meet:
-
-- **There is no `tsc` at the repository root.** `pnpm exec tsc` there answers `Command "tsc" not
-  found`; the root's binary is `tsc6`, at version 6.0.3. Every package has `tsc` at 7.0.2.
-- **Raising the root entry to version 7 breaks `pnpm lint`,** with the message above and no lint
-  results at all. Leave it on the alias until typescript-eslint's issue 10940 ships version 7
-  support, then collapse both back to one plain range (`docs/backlog.md` -> Track C).
-
-Nothing else in the repository depends on which compiler is installed, because **`tsc` is never
-asked to emit here**: every use of it is `tsc --noEmit` inside a `typecheck` script, the bundles are
-esbuild's, and Vitest strips types with esbuild too — stated in the tree at
-`packages/payments-stripe/src/wiring.test.ts:205`. That is what bounds a TypeScript bump's blast
-radius to `pnpm typecheck` and `pnpm lint`.
-
-One thing version 7 catches that 5.9.3 did not: a file imported by a relative path that climbs out
-of its own package is `error TS6059` ("not under `rootDir`"). The tree had exactly one, in
-`apps/server/src/print-agent-e2e.test.ts`. The compiler is the guard for this; no text-scanning
-guard was added.
 
 ### `--frozen-lockfile` is not in the four-command gate
 

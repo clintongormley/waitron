@@ -20,7 +20,9 @@ format-checked (`ignored: false`) and takes the normal flow.
 
 **The main checkout goes stale in a way the worktrees do not** — `worktree.py new` installs
 dependencies per worktree and nothing installs here, so `tsc: command not found` can surface on a
-push that carried no TypeScript. `/land-branch` runs `pnpm install` right after `git pull --ff-only`;
+push that carried no TypeScript. That is the message from a PACKAGE's script; the same words from
+`pnpm exec tsc` at the repository ROOT mean nothing is wrong, because there is no `tsc` there by
+design ([ci-and-gates.md](ci-and-gates.md) → *Two TypeScript compilers are installed*). `/land-branch` runs `pnpm install` right after `git pull --ff-only`;
 run it yourself after any other pull. The hook skips a push that only deletes refs (all-zero local
 sha) and fails closed when stdin is empty.
 
