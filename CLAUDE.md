@@ -340,9 +340,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   emitted SQL with `.toSQL()`.
 - **An untargeted `.onConflictDoNothing()` absorbs EVERY unique conflict, not only the primary
   key's.** Name the target when the table has more than one unique constraint and the code reads an
-  empty result as a specific cause. Cost: a new extras item collided on `(list_id, product_id)` and
-  was reported as a stolen `id` the body never sent. Untargeted calls remain in the tree and nothing
-  guards this. See [conventions-data.md](docs/developers/conventions-data.md).
+  empty result as a specific cause. Untargeted calls remain in the tree and nothing guards this.
+  See [conventions-data.md](docs/developers/conventions-data.md).
 - **Rewriting rows one at a time inside a transaction can break a unique index the FINAL state
   satisfies.** Two items swapping products refused with `23505` midway through. Replacing the set —
   delete then insert — needs TWO conditions, and the `REFERENCES` grep is only the first: nothing
@@ -505,16 +504,13 @@ container or browser test** — most of these rules exist because a test passed 
   never a retry as proof of repair.
 - **A recurrent real-PG stall needs a retained log and a live database snapshot.** Locate the stalled
   operation before assigning its cause to resource contention.
-- **On Vitest 4 a project's own `maxWorkers` wins, and the outer config's is only the fallback.**
-  Measured on 4.1.11 over four test files: an outer limit of 4 with a project limit of 1 ran one file
-  at a time, and the same fixture without the project limit ran four. Configs here depend on that —
-  `packages/bookings`, `packages/payments-stripe`, `packages/payments-sumup` and
-  `packages/venue-service` each set `maxWorkers: 1` inside a project. **A cap that must apply to
-  every project still belongs on the outer config**: a project that sets none of its own falls back
-  to the outer one, and with none there to `availableParallelism() - 1` on a one-shot run, or half
-  the CPU count rounded down under `--watch` — two different numbers, never below 1. The rule this replaces came
-  from Vitest 3, where a limit moved inside a project started 17 workers on the local host. Guard: `scripts/fiscal-test-budget.test.ts`, which pins the arrangement
-  fiscal-verifactu and media chose and nothing about how Vitest resolves the limit.
+- **On Vitest 4 a project's own `maxWorkers` wins, and the outer config's is only the fallback** —
+  so `packages/bookings`, `payments-stripe`, `payments-sumup` and `venue-service` each set
+  `maxWorkers: 1` inside a project. **A cap that must apply to every project still belongs on the
+  outer config**, which a project setting none of its own falls back to. Guard:
+  `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins the arrangement
+  fiscal-verifactu and media chose, not how Vitest resolves the limit. Measurement (and the Vitest 3
+  history this replaced): [testing-guide.md](docs/developers/testing-guide.md).
 - **A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1,
   never 0.** Vitest 4 lifts a `groupOrder: 0` project that runs one isolated worker out of its group
   and appends it after every other group, so a database project numbered 0 runs AFTER the browser
@@ -528,35 +524,26 @@ container or browser test** — most of these rules exist because a test passed 
 - **A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs**, and that timeout
   defaults to 5s. It does not shorten a `spawnSync` timeout or interrupt a blocking child — the kill
   still fires — it fails the test for its duration alone. Set the bound above the longest a healthy
-  test can take, which is the SUM of its waits plus its untimed work, not the largest one. Cost: root
-  guard suites declaring 15–30s spawn timeouts ran under 5s, and `scripts/waitron-sh.test.mjs`
-  failed on a loaded machine while behaving normally — that case measures ~1.3s idle and 4518ms
-  under load, against the 5000ms default. **Under `packages/` and `apps/` the bound usually comes from
-  the package's `vitest.config.ts`, not the file** — and an `expect.poll` or `vi.waitFor` is a wait
-  like any other. Guard: `scripts/spawn-timeout-budget.test.ts`, weaker than its name in several ways
-  its comments state — it reads TEXT, cannot tell code from strings, checks only the largest SINGLE
-  wait, and declines wherever a bound or a config cannot be resolved rather than risk failing a
-  correct file.
+  test can take, which is the SUM of its waits plus its untimed work, not the largest one. **Under
+  `packages/` and `apps/` the bound usually comes from the package's `vitest.config.ts`, not the
+  file** — and an `expect.poll` or `vi.waitFor` is a wait like any other. Guard:
+  `scripts/spawn-timeout-budget.test.ts`, weaker than its name in several ways its comments state —
+  it reads TEXT, cannot tell code from strings, checks only the largest SINGLE wait, and declines
+  wherever a bound or a config cannot be resolved rather than risk failing a correct file. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included.** Getting the
   Vitest bound right says nothing about this one: the test timeout fails a healthy test for its
   duration, while the spawn timeout KILLS the child and returns `status: null`, which reads as a
-  broken test. Cost: `deploy/waitron.sh` retries a health probe for about three minutes by default,
-  against a twenty-second spawn timeout, so one probe that came back wrong burned a quarter of a
-  case's budget and enough of them killed it. The 2026-09-18 failure fits that shape; it was never
-  reproduced. Cut the WAIT, not the retrying
-  (`WAITRON_SH_HEALTH_DELAY`) — which reduces the exposure rather than removing it, since the probes'
-  own cost stays. **`scripts/spawn-timeout-budget.test.ts` does not cover this** — it
-  reads the SUITE's declared waits, never the child's, so nothing guards the rule in general.
-  Receipt: [testing-guide.md](docs/developers/testing-guide.md).
-- **A suite's executable stubs are built ONCE per file, not once per test.** Executing a freshly
-  written file costs hundreds of ms on macOS (120ms idle, 503–842ms loaded) against single-digit ms to
-  re-execute it, so a per-test stub helper pays that every case; move what each case varies into
-  environment variables the stub reads. **On Linux there is no such penalty** (0.2–0.6ms either way),
-  so this speeds up the local hook and not CI. Measure first — it only pays when the stubs are a large
-  share of the runtime, and `scripts/pre-push.test.mjs` (real `git` dominates) was measured and
-  deliberately left alone. Prove the knobs still arrive by neutralising
-  each one: a value that stops reaching a shared stub leaves it on its default, which passes.
-  Receipt: [testing-guide.md](docs/developers/testing-guide.md).
+  broken test. Cut the WAIT, not the retrying (`WAITRON_SH_HEALTH_DELAY`) — which reduces the
+  exposure rather than removing it, since the probes' own cost stays. **`scripts/spawn-timeout-budget.test.ts`
+  does not cover this** — it reads the SUITE's declared waits, never the child's, so nothing guards
+  the rule in general. Receipt (the `deploy/waitron.sh` health-probe case):
+  [testing-guide.md](docs/developers/testing-guide.md).
+- **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
+  varies into environment variables the stub reads. It pays only where the stubs are a large share of
+  the runtime, and only on macOS (no Linux penalty), so it speeds the local hook and not CI — measure
+  first. Receipt (the per-file cost table, why `scripts/pre-push.test.mjs` was left alone, and how to
+  prove the knobs still arrive): [testing-guide.md](docs/developers/testing-guide.md).
 - **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a socket dir out of
   Docker Desktop's VM gives `ECONNREFUSED` on macOS.
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
@@ -637,12 +624,9 @@ container or browser test** — most of these rules exist because a test passed 
   `toEqual` is what put `memberOf` under a matcher for the first time.
 - **A default you did not state is not a value you tested**, and a library default can be computed
   from the RUNNING runtime, where reading the types tells you the wrong answer. State it at every call
-  site that shares it — the two ends of one ceremony drift apart while each looks right. Cost:
-  `@simplewebauthn/server` 14 probes Node's Web Crypto at import and rewrites the algorithm list both
-  halves of WebAuthn registration default to; pinning only the half that OFFERS left the half that
-  ACCEPTS on the runtime's answer. Guard: the two `supportedAlgorithmIDs` assertions in
-  `packages/identity/src/passkey.test.ts`. Receipt:
-  [testing-guide.md](docs/developers/testing-guide.md).
+  site that shares it — the two ends of one ceremony drift apart while each looks right. Guard: the
+  two `supportedAlgorithmIDs` assertions in `packages/identity/src/passkey.test.ts`. Receipt (the
+  `@simplewebauthn/server` 14 case): [testing-guide.md](docs/developers/testing-guide.md).
 
 Adding a new real-PG test package: the shared-container pattern and its knobs are in
 `docs/backlog.md` → _Reference_.
