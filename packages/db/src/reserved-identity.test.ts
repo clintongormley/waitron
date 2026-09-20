@@ -80,6 +80,10 @@ describe("reserved-identity accessors", () => {
     expect(await readNodeEndorsement(suite.db, bare)).toBeNull();
   });
 
+  it("readNodeEndorsement returns null for a node that has no row at all", async () => {
+    expect(await readNodeEndorsement(suite.db, "00000000-0000-4000-8000-000000000000")).toBeNull();
+  });
+
   it("insertReservedSeriesTx inserts the reserved series at next_number 1", async () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
@@ -139,6 +143,7 @@ describe("reserved-identity accessors", () => {
     const bareNode = await seedNode(suite.db, locationId);
     const err = await captureError(() => readStandardSeriesId(suite.db, bareNode));
     expect(isAppError(err) && err.code).toBe("series.no_standard_for_node");
+    expect(isAppError(err) && err.params).toEqual({ nodeId: bareNode });
   });
 
   it("readStandardSeriesId ignores a RETIRED standard series (a cold restore retires the old one)", async () => {
