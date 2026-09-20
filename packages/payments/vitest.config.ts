@@ -11,11 +11,29 @@ export default defineConfig({
     globalSetup: ["./src/testing/global-setup.ts"],
     // PGlite boots a WASM PostgreSQL and applies two migration sets, and the real-Postgres suites
     // clone the shared container's migrated template (globalSetup, above). Each per-suite cost is
-    // paid in a beforeAll — the PGlite WASM boot + migrations, or the real-PG ~26ms clone — so
-    // hookTimeout stays generous for the PGlite boot. The container boot/pull is NOT in a
-    // beforeAll: it moved to globalSetup, which vitest does not bound by hookTimeout. testTimeout
-    // covers the ordinary risk of a migration suite booting a second database inside a single
-    // `it`.
+    // paid in a beforeAll — the PGlite WASM boot + migrations, or the real-PG ~26ms clone.
+    //
+    // `hookTimeout` does NOT bound that PGlite boot. `useVenueDb` times its own `beforeAll`
+    // (`packages/db/src/testing/lifecycle.ts:146`), and no call site in this package passes a
+    // `timeoutMs`, so the helper's own 60s default applies there and this setting never does. What
+    // it DOES bound is the hooks left untimed: the helper's per-test reset and close
+    // (`lifecycle.ts:148` and `:153`, each reached through `venue-db.ts:26`), a suite's own
+    // `beforeEach`, and the template clone the real-PG suites take without a `timeoutMs` of their
+    // own (`lifecycle.ts:422`).
+    //
+    // Measured in both directions in one run —
+    // `vitest run src/policy.test.ts src/store.pg.test.ts --hookTimeout=1`. The PGlite boot
+    // survives it: all eight of `src/policy.test.ts`'s tests RUN, and the failures land in hooks
+    // that only fire after a successful boot — that file's own `beforeEach` (`:37`) and the
+    // helper's reset and close. A `beforeAll` that really does time out SKIPS its tests instead,
+    // which is what the real-PG file in the same run does: it fails in `lifecycle.ts:422`, its
+    // clone, and all seven of its tests are skipped. Run-versus-skip is the discriminator; the
+    // collected count is not, because both files collect either way.
+    //
+    // The container boot/pull is NOT in a beforeAll: it moved to globalSetup, which vitest does not
+    // bound by hookTimeout. testTimeout covers the ordinary risk of a migration suite booting a
+    // second database inside a single `it` (`src/migrations.test.ts:27`) — a test body, which
+    // hookTimeout does not reach either.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

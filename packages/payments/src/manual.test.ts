@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
   await pg.db.execute(sql`truncate payment_refunds, payments cascade`);

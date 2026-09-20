@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   decimal,
   nodeId as brandNodeId,
@@ -34,7 +34,7 @@ import type { SeededForSale } from "../test/seed.js";
 // `fake_node_registrations`/`fake_fiscal_records` tables. Without it `registerNode`/`recordSale`
 // fail with "relation fake_fiscal_records does not exist" — the same install
 // `record-sale.test.ts` performs.
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });

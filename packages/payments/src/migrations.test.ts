@@ -8,10 +8,10 @@ import {
   pgErrorMessage,
   runMigrations,
 } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 describe("payments migrations", () => {
   it("apply cleanly after core", async () => {
