@@ -2392,6 +2392,12 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // and the renamed "Manchego" does not.
   expect(text).toContain("Queso");
   expect(text).not.toContain("Manchego");
+  // The dish's options answer reached the PAPER. Nothing else in this file follows the whole chain
+  // that puts it there — the stored line read back, priced, projected onto the ticket and formatted
+  // (`readLockedLines` -> `priceLockedLines` -> `ticketLinesFrom` -> `formatReceipt` ->
+  // `customerOptionSnapshotLabels`) — and every other test of it builds a result by hand. This list
+  // and label stored no customer text, so the staff names are what a diner reads.
+  expect(text).toContain("Preparación: Frío");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
