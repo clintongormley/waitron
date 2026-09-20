@@ -4818,13 +4818,25 @@ does not, 13 put a `packages/db/src` path within six lines of the helper, and ev
 paths is a helper file, a helper's contract test, a schema source or `src/english-only.ts`, never a
 file this conversion touched.
 
-**`packages/fiscal-verifactu` converted** — twenty-five test files and twenty-seven calls
+**`packages/fiscal-verifactu` converted, LANDED as #468 on 2026-09-20** (main `5f28943f`) — twenty-five test files and twenty-seven calls
 (`src/reserved-series.test.ts` and `src/slot.test.ts` have two each), plus three comments inside
 those files and the package's `vitest.config.ts`. Every import was a lone
 `import { usePgliteDb } from "@waitron/db/testing/lifecycle.js"`, so no import had to be split, and
 after it `git grep -nE "usePgliteDb" -- packages/fiscal-verifactu` returns ONE line, in a file this
 step does not reach. **`apps/server` (56 files) is the last package**, then the house rule and its
 guard. Four things to carry.
+
+**Two findings this pull request deliberately did NOT take, so nobody re-derives them.** The
+`simplify` lens wanted `src/registro-sif.test.ts:26` reworded, on the grounds that its contrast now
+points at a helper no live call site in the package uses; the convention reviewer argued the opposite
+and cited this file's own rule from #431 — a stray mention elsewhere in a package belongs to the
+final sweep, a pointer at a converted call belongs to the conversion — so it stays, and the final
+pull request of this rollout owns it. Separately, one twin of the retired `hookTimeout` claim is
+still standing in plain prose: `docs/superpowers/plans/2026-07-26-tenant-credential-vault.md:139`
+sketches `packages/credentials/vitest.config.ts` saying "Both costs are one-off, paid in a beforeAll."
+That one belongs to #440, whose sibling sketch in the recurring-work-scheduler plan already got a
+dated correction; it is recorded here because the sentence above about "none of the six" is about six
+CONFIG files and a reader could take it for a statement about the class.
 
 **First, the two standard controls DISAGREE here, and the disagreement has a reason.** The throw
 accounts for exactly the 25 converted files and nothing else — `Test Files 25 failed | 17 passed
