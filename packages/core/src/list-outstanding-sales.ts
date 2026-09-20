@@ -35,8 +35,12 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
   // `sales.total` counts whole cents, so both money expressions below return cents and
   // `centsToDecimal` is the one conversion, in the mapping under this query. Neither may be cast
   // to `numeric(12, 2)::text`: that renders a count of 7734 cents as "7734.00", a plausible string
-  // a hundred times the amount, and nothing fails (measured on PGlite 0.5.8, 2026-09-20). The sum
-  // is cast back to `int` so it arrives as a number, exactly as `invoice_number` alongside it does.
+  // a hundred times the amount, and nothing fails (measured on PGlite 0.5.8, 2026-09-20). BOTH are
+  // cast `::int` so both arrive as numbers: an uncast `bigint` comes back from node-postgres as a
+  // STRING, which `centsToDecimal` refuses with `shared.invalid_cents`, while PGlite returns a
+  // number and sees nothing (`./list-outstanding-sales.pg.test.ts` is the container-only case that
+  // fails without the cast on `s.total`). `::int` tops out at 2147483647 cents per value and
+  // raises `22003` loudly rather than answering wrong.
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;
@@ -50,7 +54,7 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
       s.invoice_number as invoice_number,
       s.issued_at::text as issued_at,
       s.till_id        as till_id,
-      s.total          as total,
+      s.total::int     as total,
       coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::int
         as correction_total
     from sales s
