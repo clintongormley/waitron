@@ -551,7 +551,7 @@ describe("payWorkingOrder", () => {
         quantity: "1",
         gross: "1.50",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
     ]);
@@ -603,7 +603,7 @@ describe("payWorkingOrder", () => {
         quantity: "1",
         gross: "1.50",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
       {
@@ -611,7 +611,7 @@ describe("payWorkingOrder", () => {
         quantity: "1",
         gross: "2.00",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
     ]);
@@ -659,7 +659,7 @@ describe("payWorkingOrder", () => {
         quantity: "2",
         gross: "3.00",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
     ]);
@@ -732,7 +732,7 @@ describe("payWorkingOrder", () => {
         quantity: "1",
         gross: "1.50",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
       {
@@ -740,7 +740,7 @@ describe("payWorkingOrder", () => {
         quantity: "2",
         gross: "4.00",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
     ]);
@@ -1538,7 +1538,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
         quantity: "1",
         gross: "1.50",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
       {
@@ -1546,7 +1546,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
         quantity: "1",
         gross: "2.00",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
     ]);
@@ -1731,7 +1731,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
         quantity: "1",
         gross: "1.50",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
       },
     ]);

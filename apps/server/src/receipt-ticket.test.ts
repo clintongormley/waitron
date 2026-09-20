@@ -659,43 +659,74 @@ it("prints an unpaid invoice without claiming a cash or card payment", () => {
     expect(text).not.toContain(label);
 });
 
-it("prints saved nonprice modifier labels on original and duplicate receipts", () => {
-  const result: TillSaleResult = {
-    ...FILED_SALE,
-    lines: [
-      {
-        ...FILED_SALE.lines[0]!,
-        modifierSnapshots: [
-          {
-            modifierId: "message",
-            name: { "es-ES": "Mensaje" },
-            type: "text",
-            text: "Happy birthday",
-          },
-          {
-            modifierId: "milk",
-            name: { "en-GB": "Milk" },
-            type: "options",
-            choiceId: "oat",
-            choiceName: { "en-GB": "Oat" },
-          },
-        ],
-      },
-    ],
-  };
+// Two answers on one dish: the first stores customer text, the second stores none. Every one of the
+// twelve names differs, and each side's kitchen name differs again, so an assertion here cannot pass
+// while the receipt reads the staff name where a customer name exists, or the kitchen name at all.
+const ANSWERED_DISH: TillSaleResult = {
+  ...FILED_SALE,
+  lines: [
+    {
+      ...FILED_SALE.lines[0]!,
+      optionSnapshots: [
+        {
+          listName: { "es-ES": "Tamano personal" },
+          listCustomerName: { "es-ES": "Tamano cliente", "en-GB": "Size guest" },
+          listKitchenName: "Tamano cocina",
+          labelName: { "es-ES": "Grande personal" },
+          labelCustomerName: { "es-ES": "Grande cliente", "en-GB": "Large guest" },
+          labelKitchenName: "Grande cocina",
+        },
+        {
+          listName: { "es-ES": "Coccion personal" },
+          listCustomerName: null,
+          listKitchenName: "Coccion cocina",
+          labelName: { "es-ES": "Poco hecha personal" },
+          labelCustomerName: null,
+          labelKitchenName: "Poco hecha cocina",
+        },
+      ],
+    },
+  ],
+};
+
+it("prints each options answer under its dish in the invoice locale, indented by two", () => {
+  const lines = printedLines(
+    formatReceipt({
+      result: ANSWERED_DISH,
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    }),
+  );
+  // Directly beneath the dish, in order, each indented by two: the first answer takes the stored
+  // customer text, the second has none stored and falls back to the STAFF name — never the kitchen
+  // one, which is a cook's word and has no place on a diner's receipt.
+  const dish = lines.findIndex((line) => line.includes("Menú del día"));
+  expect(dish).toBeGreaterThanOrEqual(0);
+  expect(lines.slice(dish + 1, dish + 3)).toEqual([
+    "  Tamano cliente: Grande cliente",
+    "  Coccion personal: Poco hecha personal",
+  ]);
+});
+
+it("prints the answers in the requested locale, on a duplicate as on the original", () => {
   for (const duplicate of [false, true]) {
     const paper = decodeTicket(
       formatReceipt({
-        result,
+        result: ANSWERED_DISH,
         issuer: ISSUER,
         receipt: TRIM,
-        invoiceLocale: "es-ES",
+        invoiceLocale: "en-GB",
         printer: PRINTER_80,
         duplicate,
       }),
     );
-    expect(paper).toContain("Mensaje: Happy birthday");
-    expect(paper).toContain("Milk: Oat");
+    // The requested locale picks the English customer text; the answer that stored no customer text
+    // at all still falls back to its Spanish staff name, which is the only text it has.
+    expect(paper).toContain("Size guest: Large guest");
+    expect(paper).not.toContain("Tamano cliente");
+    expect(paper).toContain("Coccion personal: Poco hecha personal");
   }
 });
 
@@ -711,7 +742,7 @@ describe("formatReceipt — printer layout", () => {
         quantity: "1",
         gross: "12.50",
         parentLineNo: null,
-        modifierSnapshots: [],
+        optionSnapshots: [],
       },
       {
         descriptions: { "es-ES": "Aceite de oliva virgen extra de la casa" },
@@ -779,9 +810,9 @@ describe("formatReceipt — printer layout", () => {
     ]);
   });
 
-  it("wraps a long modifier label, keeping every continuation line indented by two", () => {
-    // A nonprice modifier label longer than 30 columns must wrap AND keep its 2-space indent on every
-    // continuation line — the option lines sit under the dish, not flush against the paper's left edge.
+  it("wraps a long options answer, keeping every continuation line indented by two", () => {
+    // An answer line longer than 30 columns must wrap AND keep its 2-space indent on every
+    // continuation line — the answers sit under the dish, not flush against the paper's left edge.
     const result: TillSaleResult = {
       ...FILED_SALE,
       total: "10.00",
@@ -792,12 +823,14 @@ describe("formatReceipt — printer layout", () => {
           quantity: "1",
           gross: "10.00",
           parentLineNo: null,
-          modifierSnapshots: [
+          optionSnapshots: [
             {
-              modifierId: "nota",
-              name: { "es-ES": "Nota" },
-              type: "text",
-              text: "sin cebolla y con mucho tomate natural bien picado",
+              listName: { "es-ES": "Nota" },
+              listCustomerName: null,
+              listKitchenName: null,
+              labelName: { "es-ES": "sin cebolla y con mucho tomate natural bien picado" },
+              labelCustomerName: null,
+              labelKitchenName: null,
             },
           ],
         },

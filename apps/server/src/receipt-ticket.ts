@@ -1,4 +1,4 @@
-import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
+import { customerOptionSnapshotLabels } from "./option-snapshot-labels.js";
 /**
  * Formats a filed sale into the customer's ESC/POS receipt (design §3b) — the pure byte-producing
  * half of the counter-printing slice. Like {@link formatKitchenTicket} it owns no state and touches no
@@ -248,7 +248,9 @@ export function formatReceipt({
       formatMoney(dish.gross, locale),
       nameIndent,
     );
-    for (const label of modifierSnapshotLabels(dish.modifierSnapshots ?? [], locale)) {
+    // The dish's frozen answers to its options lists, each under the dish it was asked about. An
+    // extras pick is NOT here: it is its own priced child line, printed by the loop below.
+    for (const label of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], locale)) {
       text(`  ${label}`, 2);
     }
     for (const option of options) {

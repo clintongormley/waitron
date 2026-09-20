@@ -739,11 +739,13 @@ What the order path (the plan's Task 7) left behind:
   attach one (Task 6 removed that section), so a fresh venue cannot; a dev database seeded before
   that change can. **Next action:** Task 12 rebuilds the till's picker and basket over extras and
   options; until then, reset a dev database rather than debugging a 400.
-- **A filed sale carries no options answers until Task 9.** `readLockedLines` no longer supplies
-  `sale_lines.modifier_snapshots`, so a sale filed from a new-path order carries `[]` there and the
-  receipt prints no options line. The column and `modifierSnapshotLabels`
-  (`apps/server/src/modifier-snapshot-labels.ts`) stay for that task to replace. Not reachable from
-  the till, which sends no answers until Task 12.
+- **A filed sale now carries its options answers, and the receipt prints them** (Task 9, slices C
+  and D). A walk-up files them off the priced basket and a retrieved order off
+  `working_order_lines.option_snapshots` via `readLockedLines`; the customer receipt prints one
+  `<list>: <label>` line under each dish, each side taking its customer text and falling back to the
+  staff name (`customerOptionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts`, beside the
+  kitchen-facing twin). `apps/server/src/modifier-snapshot-labels.ts` is deleted. Still not reachable
+  from the till, which sends no answers until Task 12.
 - **`modifierDependants(...).orders` is always 0, and `deleteModifier` no longer refuses.** An open
   order line has no column that could name a legacy modifier or one of its choices, so the refusal
   and the count that fed the dashboard's delete confirmation had nothing left to find. The whole
@@ -754,7 +756,10 @@ What the order path (the plan's Task 7) left behind:
   `apps/server/src/working-order.ts` — while `apps/till/src/api/client.ts` still declares
   `modifierSnapshots?` on its own copies of those types. Nothing crashes: the till's
   `modifierSnapshotLabels` helper (`apps/till/src/widgets/modifier-snapshot.ts`) defaults its
-  argument to `[]`, so an absent field simply renders no answers. The screens that would have shown
+  argument to `[]`, so an absent field simply renders no answers. `apps/till/src/api/client.ts:652`
+  declares the same stale `modifierSnapshots?` on its mirror of the server's `TillSaleLine`, which
+  Task 9 slice D renamed to `optionSnapshots`; the till therefore shows no answers on its own settled
+  ticket either, while the PAPER receipt prints them. The screens that would have shown
   them are `apps/till/src/widgets/station-queue.ts`, `apps/till/src/screens/till-expo-screen.ts`,
   `apps/till/src/screens/till-ticket-view.ts`,
   `apps/till/src/screens/till-table-order-screen.ts` and `apps/till/src/widgets/basket.ts`; several

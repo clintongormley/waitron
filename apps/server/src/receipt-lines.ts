@@ -26,7 +26,9 @@ export function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
     // freezes the two customer maps in separate columns, so the label the receipt prints is the two
     // joined. The join itself belongs to `product-presentation.ts` and is never rebuilt here.
     descriptions: joinCustomerPresentationText(line.descriptions, line.variantDescriptions ?? null),
-    modifierSnapshots: line.modifierSnapshots ?? [],
+    // The dish's frozen options answers, straight off the filed line — the receipt prints them under
+    // the dish and nothing recomputes them. `?? []` keeps a line that answered nothing at exactly [].
+    optionSnapshots: line.optionSnapshots ?? [],
     quantity: trimQuantityForDisplay(line.quantity),
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
