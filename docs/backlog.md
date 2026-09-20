@@ -833,6 +833,14 @@ What the order path (the plan's Task 7) left behind:
   instead of being skipped. Unreachable today for the same reason as the rest of this entry — the
   till sends no extras, so no child line exists for it to mis-classify, and the legacy child line
   that used to carry a null product cannot be created at all any more.
+  A THIRD thing on the same screen, found while fixing its paper twin and NOT a consequence of the
+  rename: `apps/till/src/screens/till-ticket-view.ts` resolves a line's unit abbreviation by exact
+  key against the requested locale, while a filed line's `unit_name` is keyed by bare content-language
+  codes and nothing re-keys it. Measured on the PAPER receipt, which had the identical line: with the
+  map a real sale files (`{ ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" }`, asserted at
+  `apps/server/src/till-api.pg.test.ts`), a Spanish receipt printed the CATALAN `u` rather than `ud`.
+  The paper side is fixed (`resolveSnapshotText`); the screen still shows the wrong language's unit,
+  so paper and screen now disagree until somebody takes it.
   **Next action:** Task 12 owns the till — recorded here so nobody debugs a missing line as a data
   problem, and so the child-line detection is rewritten rather than trusted.
   **A second next action on the same task, raised by the Task 9 review and deliberately NOT taken
