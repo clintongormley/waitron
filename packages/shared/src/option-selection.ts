@@ -13,9 +13,9 @@ export type OptionSelection = { listId: string; labelId: string };
  * snapshot this replaces already used (`ModifierSnapshot.name` and `choiceName`,
  * `packages/shared/src/modifier-snapshots.ts`) — though there it was a straight copy, the old
  * model's single name being a map column itself (`option_groups.name`,
- * `packages/db/src/schema/catalogue.ts:129`). The widening is new, and nothing performs it yet:
- * Task 7 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` is the order path that
- * will.
+ * `packages/db/src/schema/catalogue.ts:129`). The widening is performed on the order path, by
+ * `buildLineExtras` (`apps/server/src/modifier-selection.ts`), under the venue's default content
+ * language — so each of these maps holds exactly one entry.
  */
 export type OptionSnapshot = {
   listName: Record<string, string>;

@@ -272,8 +272,14 @@ export function validateExtraSelections(
   for (const entry of value) {
     const row = record(entry, "extraSelections");
     keys(row, ["listId", "picks"], "extraSelections");
-    const listId = row.listId;
-    if (typeof listId !== "string") invalid("listId");
+    const sentListId = row.listId;
+    if (typeof sentListId !== "string") invalid("listId");
+    // Lower-cased for the same reason `id` above lower-cases an authored id: the stored rows come
+    // back from their `uuid` columns lower-cased, so a pick sent in upper case has to be folded
+    // before it is compared to them. Deliberately NOT `id()`: a value that is no uuid at all keeps
+    // the refusal it has today — `extras.invalid` naming the field, from the membership check
+    // below — rather than gaining a second way to be a shape fault.
+    const listId = sentListId.toLowerCase();
     const list = offered.get(listId);
     if (!list || answers.has(listId)) invalid("listId");
     if (!Array.isArray(row.picks)) invalid("picks");
@@ -281,8 +287,9 @@ export function validateExtraSelections(
     for (const entry of row.picks) {
       const pick = record(entry, "picks");
       keys(pick, ["productId", "quantity"], "picks");
-      const productId = pick.productId;
-      if (typeof productId !== "string") invalid("productId");
+      const sentProductId = pick.productId;
+      if (typeof sentProductId !== "string") invalid("productId");
+      const productId = sentProductId.toLowerCase();
       if (picked.has(productId)) invalid("productId");
       if (!list.items.some((item) => item.productId === productId)) invalid("productId");
       picked.set(productId, whole(pick.quantity, "quantity", 1));

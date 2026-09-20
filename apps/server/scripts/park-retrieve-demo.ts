@@ -262,8 +262,8 @@ async function main(): Promise<void> {
     const ticket = await payWorkingOrder(deps, caja2, {
       id: orderId,
       // A retrieved order IGNORES req.lines (design §2); these mirror the till round-trip only. Filter
-      // to product lines — HeldOrder.lines.productId is nullable since Task 2 (ordering modifiers), but
-      // a parked order carries only product lines today.
+      // to product lines — `HeldOrder.lines.productId` is typed nullable because the column is, not
+      // because a line here lacks a product: this demo parks dishes with no extras.
       lines: retrieved.lines.filter(
         (l): l is { productId: string; quantity: string } => l.productId !== null,
       ),

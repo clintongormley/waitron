@@ -1,28 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  asAppUser,
-  optionGroupItems,
-  optionGroups,
-  productOptionGroups,
-  saleLines,
-  sales,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { asAppUser, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createExtraList,
   createMenuItem,
   createMenuSection,
+  createOptionList,
   createProduct,
   listAvailableProducts,
+  readContentLanguages,
   setMenuVariants,
   setProductVariants,
   updateProduct,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -730,29 +725,50 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
 });
 
 /**
- * Ordering modifiers (Task 6): the till rings a dish with selected options, and `priceOrderLines`
- * expands each dish into a PARENT line plus one CHILD line per option, validating the selection
- * server-side (the client is never the gate). These are the fiscal-adjacent invariants — a filed
- * modifier sale carries parent + child `sale_lines`, and a parked-then-paid one re-prices its children
- * from their add-time lock to the same total/desglose. Real Postgres, like the sales above: the
- * chained record, the self-referential `parent_line_id`, and the app-role inserts are the point.
+ * Ordering extras and options: the till rings a dish answering the extras and options lists it
+ * attaches, and `priceOrderLines` expands each picked extra into a CHILD line under the dish's
+ * PARENT line, validating every answer server-side (the client is never the gate). These are the
+ * fiscal-adjacent invariants — a filed order carries parent + child `sale_lines`, and a
+ * parked-then-paid one re-prices its children from their add-time lock to the same total/desglose.
+ * Real Postgres, like the sales above: the chained record, the self-referential `parent_line_id`,
+ * and the app-role inserts are the point.
  */
-describe("ordering modifiers — parent + child lines", () => {
+describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {
     cfg: TillConfig;
-    available: AvailableProduct[];
+    burgerId: string;
+    menuProductId: string;
+    jamonId: string;
+    comboId: string;
+    platoId: string;
+    baconId: string;
+    quesoId: string;
+    patatasId: string;
+    /** "Extras": Bacon 0.50 at 10%, Queso 0.75 at 21%; at most three picks. */
+    extrasListId: string;
+    /** "Guarnición": at least two picks, at most three. */
+    guarnicionListId: string;
+    /** "Tamaño": an active options list, so every Menú line must answer it. */
+    sizeListId: string;
+    /** "Salsa": active, with "Alioli" WITHDRAWN and one label still available. */
+    salsaListId: string;
+    /** "Alioli" — a label the list still carries and no longer offers. */
+    salsaLabelId: string;
   }
 
   /**
-   * Stand up a fresh chained venue and seed a catalogue with two modifiable `each` dishes and one
-   * `weight` product, authored under the BARE `es` tag (feature B). Groups/items are inserted directly
-   * (no CRUD verbs exist for them yet) as the app role, then read back through `listAvailableProducts`
-   * exactly as production does — so a test resolves option ids from the SAME shape the server prices
-   * against:
-   *  - "Hamburguesa" (each, 9.00 general) + optional group "Extras" (min 0, max 3): Bacon +0.50
-   *    reduced, Queso +0.75 inherit-general.
-   *  - "Menú" (each, 12.00 general) + REQUIRED group "Tamaño" (min 1, max 1): Pequeño +0.00, Grande +2.00.
-   *  - "Jamón" (weight, 24.90 reduced), no groups — for the non-`each` rejection.
+   * Stand up a fresh chained venue and seed a catalogue with four `each` dishes and one `weight`
+   * product, plus the extras and options lists they attach:
+   *  - "Hamburguesa" (each, 9.00 general) + extras "Extras" (min 0, max 3): Bacon 0.50 at the BACON
+   *    product's own reduced rate, Queso 0.75 at general.
+   *  - "Menú" (each, 12.00 general) + options "Tamaño" (Pequeño / Grande), which must be answered.
+   *  - "Jamón" (weight, 24.90 reduced), carrying "Extras" too — a pick on a weighed dish is what the
+   *    pricing-unit refusal is about, so the list has to be genuinely offered there.
+   *  - "Combo" (each, 8.00 general) + options "Salsa", whose "Alioli" label is withdrawn.
+   *  - "Plato" (each, 10.00 general) + extras "Guarnición" (min 2, max 3): Patatas 1.00, Ensalada 1.50.
+   *
+   * An extra's price is the LIST ITEM's, never the product's own — so every extra product is priced
+   * 3.00 of itself, and a child line reading 3.00 would mean the offer was never read.
    */
   async function setupModifierVenue(): Promise<ModifierVenue> {
     const venue = await applyVenue(
@@ -789,198 +805,160 @@ describe("ordering modifiers — parent + child lines", () => {
       { db: suite.admin, modules: ALL_MODULES },
     );
     const cfg = tillConfigFromVenue(venue);
-    const available = await withTransaction(suite.admin, async (tx) => {
+    const seeded = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
+      const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
-      const burger = await createProduct(tx, {
-        catalogueId: cat.id,
-        categoryId: comida.id,
-        name: "Hamburguesa",
-        pricingUnit: "each",
-        unitPrice: "9.00",
-        vatClass: "general",
-      });
-      const menu = await createProduct(tx, {
-        catalogueId: cat.id,
-        categoryId: comida.id,
-        name: "Menú",
-        pricingUnit: "each",
-        unitPrice: "12.00",
-        vatClass: "general",
-      });
-      await createProduct(tx, {
-        catalogueId: cat.id,
-        categoryId: comida.id,
-        name: "Jamón",
-        pricingUnit: "weight",
-        unitPrice: "24.90",
-        vatClass: "reduced",
-      });
-      // "Combo" carries a REQUIRED group whose only item is INACTIVE — so it resolves to `items: []`.
-      // A required-but-empty group is an authoring bug and must NOT deadlock a sale (CLAUDE.md §5).
-      const combo = await createProduct(tx, {
-        catalogueId: cat.id,
-        categoryId: comida.id,
-        name: "Combo",
-        pricingUnit: "each",
-        unitPrice: "8.00",
-        vatClass: "general",
-      });
-      // "Plato" carries a NON-required group demanding at least TWO picks (`min_select` 2) — the
-      // `below_min` selection-invalid path (a non-required group with a floor is DB-legal).
-      const plato = await createProduct(tx, {
-        catalogueId: cat.id,
-        categoryId: comida.id,
-        name: "Plato",
-        pricingUnit: "each",
-        unitPrice: "10.00",
-        vatClass: "general",
-      });
+      const dish = (
+        name: string,
+        unitPrice: string,
+        vatClass: "general" | "reduced",
+        pricingUnit: "each" | "weight" = "each",
+      ) =>
+        createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: comida.id,
+          name,
+          pricingUnit,
+          unitPrice,
+          vatClass,
+        });
+      // The three names carry DIFFERENT text, so a surface reading the wrong one of them fails
+      // (CLAUDE.md §4).
+      const extraProduct = (name: string, vatClass: "general" | "reduced") =>
+        createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: comida.id,
+          name: `${name} staff`,
+          customerName: { [defaultLanguage]: `${name} customer` },
+          kitchenName: `${name} kitchen`,
+          pricingUnit: "each",
+          unitPrice: "3.00",
+          vatClass,
+        });
 
-      const [extras] = await tx
-        .insert(optionGroups)
-        .values({
-          name: { es: "Extras" },
-          minSelect: 0,
-          maxSelect: 3,
-          required: false,
-          sort: 0,
-        })
-        .returning({ id: optionGroups.id });
-      await tx.insert(optionGroupItems).values([
-        {
-          groupId: extras!.id,
-          name: { es: "Bacon" },
-          priceDelta: "0.50",
-          vatClass: "reduced",
-          // Per-option quantity: Bacon may be taken up to ×3 on one dish (the per-option quantity
-          // filing test rings it ×3). Queso keeps the NOT-NULL default of 1.
-          maxQuantity: 3,
-          sort: 0,
-        },
-        {
-          groupId: extras!.id,
-          name: { es: "Queso" },
-          priceDelta: "0.75",
-          vatClass: null,
-          sort: 1,
-        },
-      ]);
+      const burger = await dish("Hamburguesa", "9.00", "general");
+      const menu = await dish("Menú", "12.00", "general");
+      const jamon = await dish("Jamón", "24.90", "reduced", "weight");
+      const combo = await dish("Combo", "8.00", "general");
+      const plato = await dish("Plato", "10.00", "general");
+      const bacon = await extraProduct("Bacon", "reduced");
+      const queso = await extraProduct("Queso", "general");
+      const patatas = await extraProduct("Patatas", "general");
+      const ensalada = await extraProduct("Ensalada", "general");
 
-      const [size] = await tx
-        .insert(optionGroups)
-        .values({
-          name: { es: "Tamaño" },
-          minSelect: 1,
-          maxSelect: 1,
-          required: true,
-          sort: 0,
-        })
-        .returning({ id: optionGroups.id });
-      await tx.insert(optionGroupItems).values([
+      const extrasList = await createExtraList(
+        tx,
         {
-          groupId: size!.id,
-          name: { es: "Pequeño" },
-          priceDelta: "0",
-          vatClass: null,
-          sort: 0,
+          name: "Extras",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 3,
+          active: true,
+          items: [
+            { productId: bacon.id, maxQuantity: 3, preselected: false, price: "0.50" },
+            { productId: queso.id, maxQuantity: 1, preselected: false, price: "0.75" },
+          ],
         },
+        cfg.locale,
+      );
+      const guarnicionList = await createExtraList(
+        tx,
         {
-          groupId: size!.id,
-          name: { es: "Grande" },
-          priceDelta: "2.00",
-          vatClass: null,
-          sort: 1,
+          name: "Guarnición",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 2,
+          maxPicks: 3,
+          active: true,
+          items: [
+            { productId: patatas.id, maxQuantity: 1, preselected: false, price: "1.00" },
+            { productId: ensalada.id, maxQuantity: 1, preselected: false, price: "1.50" },
+          ],
         },
-      ]);
+        cfg.locale,
+      );
+      const sizeList = await createOptionList(
+        tx,
+        {
+          name: "Tamaño",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: null,
+          active: true,
+          labels: [
+            { name: "Pequeño", customerName: null, kitchenName: null, available: true },
+            { name: "Grande", customerName: null, kitchenName: null, available: true },
+          ],
+        },
+        cfg.locale,
+      );
+      // "Alioli" is WITHDRAWN while the list stays active — the shape a till can still send, because
+      // its menu was loaded before the withdrawal. An active list with no available label at all
+      // cannot be built here: `parseOptionListInput` refuses it (`options.invalid`, field `labels`),
+      // which is where that authoring mistake is now caught.
+      const salsaList = await createOptionList(
+        tx,
+        {
+          name: "Salsa",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: null,
+          active: true,
+          labels: [
+            { name: "Alioli", customerName: null, kitchenName: null, available: false },
+            { name: "Sin salsa", customerName: null, kitchenName: null, available: true },
+          ],
+        },
+        cfg.locale,
+      );
 
-      // An ACTIVE required group whose ONLY item is INACTIVE → resolves to `items: []` on Combo.
-      const [salsa] = await tx
-        .insert(optionGroups)
-        .values({
-          name: { es: "Salsa" },
-          minSelect: 1,
-          maxSelect: 1,
-          required: true,
-          sort: 0,
-        })
-        .returning({ id: optionGroups.id });
-      await tx.insert(optionGroupItems).values({
-        groupId: salsa!.id,
-        name: { es: "Alioli" },
-        priceDelta: "0",
-        vatClass: null,
-        sort: 0,
-        active: false,
-      });
-
-      // A non-required group with a floor of two picks (min 2, max 3) on Plato.
-      const [guarnicion] = await tx
-        .insert(optionGroups)
-        .values({
-          name: { es: "Guarnición" },
-          minSelect: 2,
-          maxSelect: 3,
-          required: false,
-          sort: 0,
-        })
-        .returning({ id: optionGroups.id });
-      await tx.insert(optionGroupItems).values([
-        {
-          groupId: guarnicion!.id,
-          name: { es: "Patatas" },
-          priceDelta: "1.00",
-          vatClass: null,
-          sort: 0,
-        },
-        {
-          groupId: guarnicion!.id,
-          name: { es: "Ensalada" },
-          priceDelta: "1.50",
-          vatClass: null,
-          sort: 1,
-        },
-      ]);
-
-      await tx.insert(productOptionGroups).values([
-        { productId: burger.id, groupId: extras!.id, sort: 0 },
-        { productId: menu.id, groupId: size!.id, sort: 0 },
-        { productId: combo.id, groupId: salsa!.id, sort: 0 },
-        {
-          productId: plato.id,
-          groupId: guarnicion!.id,
-          sort: 0,
-        },
-      ]);
+      await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extrasList.id }]);
+      await writeProductModifiers(tx, menu.id, [{ kind: "options", id: sizeList.id }]);
+      await writeProductModifiers(tx, jamon.id, [{ kind: "extras", id: extrasList.id }]);
+      await writeProductModifiers(tx, combo.id, [{ kind: "options", id: salsaList.id }]);
+      await writeProductModifiers(tx, plato.id, [{ kind: "extras", id: guarnicionList.id }]);
 
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-      return (await listAvailableProducts(tx, cfg.locationId)).products;
+      return {
+        burgerId: burger.id,
+        menuProductId: menu.id,
+        jamonId: jamon.id,
+        comboId: combo.id,
+        platoId: plato.id,
+        baconId: bacon.id,
+        quesoId: queso.id,
+        patatasId: patatas.id,
+        extrasListId: extrasList.id,
+        guarnicionListId: guarnicionList.id,
+        sizeListId: sizeList.id,
+        salsaListId: salsaList.id,
+        salsaLabelId: salsaList.labels.find((label) => label.name === "Alioli")!.id,
+      };
     });
-    return { cfg, available };
+    return { cfg, ...seeded };
   }
 
-  const burgerOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Hamburguesa")!;
-  const menuOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Menú")!;
-  const jamonOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Jamón")!;
-  const comboOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Combo")!;
-  const platoOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Plato")!;
-  const itemOf = (p: AvailableProduct, name: string) =>
-    p.optionGroups.flatMap((g) => g.items).find((i) => i.name.es === name)!;
+  /** One answer to the burger's "Extras" list, in the wire shape every order path takes. */
+  const extrasPick = (v: ModifierVenue, picks: { productId: string; quantity: number }[]) => [
+    { listId: v.extrasListId, picks },
+  ];
 
-  it("counter sale of a dish with two options files THREE sale_lines with parent/child links", async () => {
+  it("counter sale of a dish with two extras files THREE sale_lines with parent/child links", async () => {
     const v = await setupModifierVenue();
-    const burger = burgerOf(v);
-    const bacon = itemOf(burger, "Bacon"); // +0.50 reduced(10%)
-    const queso = itemOf(burger, "Queso"); // +0.75 inherit general(21%)
     const workingOrderId = randomUUID();
 
     const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
       lines: [
         {
-          productId: burger.id,
+          productId: v.burgerId,
           quantity: "1",
-          options: [{ optionGroupItemId: bacon.id }, { optionGroupItemId: queso.id }],
+          extras: extrasPick(v, [
+            { productId: v.baconId, quantity: 1 },
+            { productId: v.quesoId, quantity: 1 },
+          ]),
         },
       ],
       tender: { method: "cash", amount: "20.00" },
@@ -990,12 +968,13 @@ describe("ordering modifiers — parent + child lines", () => {
     // 9.00 dish + 0.50 bacon + 0.75 queso = 10.25 gross.
     expect(result.total).toBe("10.25");
     expect(result.tender).toEqual({ method: "cash", change: "9.75" });
-    // The receipt line list is parent + both children.
+    // The receipt line list is parent + both children, each child showing the picked product's
+    // CUSTOMER-facing text rather than its staff or kitchen name.
     expect(result.lines).toHaveLength(3);
     expect(result.lines.map((l) => l.descriptions["es-ES"])).toEqual([
       "Hamburguesa",
-      "Bacon",
-      "Queso",
+      "Bacon customer",
+      "Queso customer",
     ]);
 
     const { wol, sl } = await withTransaction(suite.admin, async (tx) => {
@@ -1006,7 +985,7 @@ describe("ordering modifiers — parent + child lines", () => {
           lineNo: workingOrderLines.lineNo,
           productId: workingOrderLines.productId,
           parentLineId: workingOrderLines.parentLineId,
-          optionGroupItemId: workingOrderLines.optionGroupItemId,
+          optionSnapshots: workingOrderLines.optionSnapshots,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, workingOrderId))
@@ -1022,40 +1001,38 @@ describe("ordering modifiers — parent + child lines", () => {
       return { wol, sl };
     });
 
-    // THREE working_order_lines: one parent (product set, no parent/option), two children (product
-    // NULL, parent_line_id → the parent's id, the source option_group_item_id).
+    // THREE working_order_lines: one parent (the dish, no parent link), two children (the PICKED
+    // product, parent_line_id → the parent's id). A child answers no options list of its own.
     expect(wol).toHaveLength(3);
     const [parent, childBacon, childQueso] = wol;
-    expect(parent!.productId).toBe(burger.id);
+    expect(parent!.productId).toBe(v.burgerId);
     expect(parent!.parentLineId).toBeNull();
-    expect(parent!.optionGroupItemId).toBeNull();
+    expect(parent!.optionSnapshots).toEqual([]);
 
-    expect(childBacon!.productId).toBeNull();
+    expect(childBacon!.productId).toBe(v.baconId);
     expect(childBacon!.parentLineId).toBe(parent!.id);
-    expect(childBacon!.optionGroupItemId).toBe(bacon.id);
+    expect(childBacon!.optionSnapshots).toEqual([]);
 
-    expect(childQueso!.productId).toBeNull();
+    expect(childQueso!.productId).toBe(v.quesoId);
     expect(childQueso!.parentLineId).toBe(parent!.id);
-    expect(childQueso!.optionGroupItemId).toBe(queso.id);
+    expect(childQueso!.optionSnapshots).toEqual([]);
 
-    // THREE filed sale_lines too, the two children carrying parent_line_id (Task 5 resolves it).
+    // THREE filed sale_lines too, the two children carrying parent_line_id.
     expect(sl).toHaveLength(3);
     expect(sl.filter((l) => l.parentLineId !== null)).toHaveLength(2);
   });
 
-  it("counter sale of a dish ×2 with an option ×3 files the child at the COMBINED quantity 6", async () => {
+  it("counter sale of a dish ×2 with a pick ×3 files the child at the COMBINED quantity 6", async () => {
     const v = await setupModifierVenue();
-    const burger = burgerOf(v);
-    const bacon = itemOf(burger, "Bacon"); // +0.50 reduced(10%), max_quantity 3
     const workingOrderId = randomUUID();
 
     const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
-      // Two burgers, each carrying Bacon ×3 → the Bacon child is priced dish(2) × option(3) = 6.
+      // Two burgers, each carrying Bacon ×3 → the Bacon child is priced dish(2) × pick(3) = 6.
       lines: [
         {
-          productId: burger.id,
+          productId: v.burgerId,
           quantity: "2",
-          options: [{ optionGroupItemId: bacon.id, quantity: 3 }],
+          extras: extrasPick(v, [{ productId: v.baconId, quantity: 3 }]),
         },
       ],
       tender: { method: "cash", amount: "30.00" },
@@ -1064,7 +1041,7 @@ describe("ordering modifiers — parent + child lines", () => {
 
     // 9.00 × 2 dish = 18.00, plus 0.50 × 6 Bacon = 3.00 → 21.00 gross.
     expect(result.total).toBe("21.00");
-    expect(result.lines).toHaveLength(2); // parent + one child (the duplicate is a single summed line)
+    expect(result.lines).toHaveLength(2); // parent + one child (the repeat is a single summed line)
 
     const { wol, sl } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
@@ -1073,7 +1050,6 @@ describe("ordering modifiers — parent + child lines", () => {
           lineNo: workingOrderLines.lineNo,
           productId: workingOrderLines.productId,
           parentLineId: workingOrderLines.parentLineId,
-          optionGroupItemId: workingOrderLines.optionGroupItemId,
           quantity: workingOrderLines.quantity,
           lineTotal: workingOrderLines.lineTotal,
         })
@@ -1097,8 +1073,8 @@ describe("ordering modifiers — parent + child lines", () => {
 
     // Parent burger ×2 unchanged; child Bacon at the COMBINED 6, priced 0.50 × 6 = 3.00 gross.
     expect(wol).toHaveLength(2);
-    expect(wol[0]).toMatchObject({ productId: burger.id, parentLineId: null, quantity: "2.000" });
-    expect(wol[1]!.optionGroupItemId).toBe(bacon.id);
+    expect(wol[0]).toMatchObject({ productId: v.burgerId, parentLineId: null, quantity: "2.000" });
+    expect(wol[1]!.productId).toBe(v.baconId);
     expect(wol[1]!.quantity).toBe("6.000");
     expect(wol[1]!.lineTotal).toBe("3.00");
 
@@ -1110,9 +1086,6 @@ describe("ordering modifiers — parent + child lines", () => {
 
   it("park → retrieve → pay re-prices children from their lock to the same total and desglose", async () => {
     const v = await setupModifierVenue();
-    const burger = burgerOf(v);
-    const bacon = itemOf(burger, "Bacon");
-    const queso = itemOf(burger, "Queso");
     const workingOrderId = randomUUID();
 
     // PARK: persist an OPEN order with parent + child lines, and capture the PREVIEW price its lines
@@ -1125,9 +1098,12 @@ describe("ordering modifiers — parent + child lines", () => {
         workingOrderId,
         [
           {
-            productId: burger.id,
+            productId: v.burgerId,
             quantity: "1",
-            options: [{ optionGroupItemId: bacon.id }, { optionGroupItemId: queso.id }],
+            extras: extrasPick(v, [
+              { productId: v.baconId, quantity: 1 },
+              { productId: v.quesoId, quantity: 1 },
+            ]),
           },
         ],
         null,
@@ -1144,8 +1120,8 @@ describe("ordering modifiers — parent + child lines", () => {
       tender: { method: "cash", amount: "20.00" },
     });
 
-    // The filed total and desglose equal the previewed ones to the céntimo — the load-bearing fiscal
-    // invariant: a locked-line filing of a modifier order never diverges from its preview.
+    // The filed total and desglose equal the previewed ones to the céntimo — the fiscal invariant a
+    // locked-line filing of a customised order must hold: it never diverges from its preview.
     expect(result.total).toBe(preview.total);
     // `result.vatBreakdown` is `{rate, base, tax}` strings (the ticket shape); the preview's bands
     // carry the same three fields (Decimals are branded strings), so compare that projection.
@@ -1155,9 +1131,9 @@ describe("ordering modifiers — parent + child lines", () => {
     // The filed record carries all three lines.
     expect(result.lines).toHaveLength(3);
 
-    // LINKAGE must survive the lock round-trip (fix round 1): the filed child sale_lines point at the
-    // filed PARENT's id, not `null`. `readLockedLines` reconstructs each child's `parentLineNo` from
-    // its stored `parent_line_id`, so the persisted-order file path preserves parent→child linkage
+    // LINKAGE must survive the lock round-trip: the filed child sale_lines point at the filed
+    // PARENT's id, not `null`. `readLockedLines` reconstructs each child's `parentLineNo` from its
+    // stored `parent_line_id`, so the persisted-order file path preserves parent→child linkage
     // exactly as a live walk-up does — a child sale_line is never orphaned by the re-price.
     const filed = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
@@ -1182,22 +1158,19 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(filedQueso!.parentLineId).toBe(filedParent!.id);
 
     // The JSON-facing `TillSaleResult.lines[i].parentLineNo` carries the SAME linkage (the till's
-    // settled-ticket view, Task 14, groups on this field) — the dish renders `null`, each child the
-    // parent's own `lineNo`, proven against the real persisted lineNo rather than an assumed constant.
+    // settled-ticket view groups on this field) — the dish renders `null`, each child the parent's
+    // own `lineNo`, proven against the real persisted lineNo rather than an assumed constant.
     expect(result.lines[0]!.parentLineNo).toBeNull();
     expect(result.lines[1]!.parentLineNo).toBe(filedParent!.lineNo);
     expect(result.lines[2]!.parentLineNo).toBe(filedParent!.lineNo);
   });
 
-  it("settling a TAB with modifiers files child sale_lines linked to their parent (the primary path)", async () => {
-    // Tabs are the PRIMARY modifier path and settle through `priceStoredOrder` (the locked-line file),
-    // so this proves the linkage survives openTab → addTabRound(options) → settle, not just the parked
-    // counter retrieve above. Provisioning already ships the venue's default 'Cocina' station (so
-    // addTabRound can fire); we add only the dining table the tab opens on.
+  it("settling a TAB with extras files child sale_lines linked to their parent (the primary path)", async () => {
+    // Tabs are the PRIMARY customisation path and settle through `priceStoredOrder` (the locked-line
+    // file), so this proves the linkage survives openTab → addTabRound(extras) → settle, not just the
+    // parked counter retrieve above. Provisioning already ships the venue's default 'Cocina' station
+    // (so addTabRound can fire); we add only the dining table the tab opens on.
     const v = await setupModifierVenue();
-    const burger = burgerOf(v);
-    const bacon = itemOf(burger, "Bacon");
-    const queso = itemOf(burger, "Queso");
 
     const tableId = randomUUID();
     await withTransaction(suite.admin, async (tx) => {
@@ -1208,15 +1181,18 @@ describe("ordering modifiers — parent + child lines", () => {
       );
     });
 
-    // Open a tab and send a round of the burger with two options.
+    // Open a tab and send a round of the burger with two extras.
     const tabId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
         {
-          productId: burger.id,
+          productId: v.burgerId,
           quantity: "1",
-          options: [{ optionGroupItemId: bacon.id }, { optionGroupItemId: queso.id }],
+          extras: extrasPick(v, [
+            { productId: v.baconId, quantity: 1 },
+            { productId: v.quesoId, quantity: 1 },
+          ]),
         },
       ]);
       return tabId;
@@ -1257,7 +1233,6 @@ describe("ordering modifiers — parent + child lines", () => {
     // `sale.empty_basket`. The sibling tab test above exercises `payWorkingOrder` directly and so
     // never saw it; this drives the SAME entry point the HTTP route does, where the guard lived.
     const v = await setupModifierVenue();
-    const burger = burgerOf(v);
 
     const tableId = randomUUID();
     const tabId = await withTransaction(suite.admin, async (tx) => {
@@ -1267,7 +1242,7 @@ describe("ordering modifiers — parent + child lines", () => {
             values (${tableId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
       );
       const { tabId } = await openTab(tx, v.cfg, { tableId });
-      await addTabRound(tx, v.cfg, tabId, [{ productId: burger.id, quantity: "1" }]);
+      await addTabRound(tx, v.cfg, tabId, [{ productId: v.burgerId, quantity: "1" }]);
       return tabId;
     });
 
@@ -1288,9 +1263,6 @@ describe("ordering modifiers — parent + child lines", () => {
     // reconstruct each child's `parentLineNo` in that position space, else a child files with a WRONG
     // `parent_line_id` (self / null / wrong sibling) — a permanent error in the append-only record.
     const v = await setupModifierVenue();
-    const burger = burgerOf(v);
-    const bacon = itemOf(burger, "Bacon");
-    const queso = itemOf(burger, "Queso");
 
     const tableId = randomUUID();
     await withTransaction(suite.admin, async (tx) => {
@@ -1307,8 +1279,16 @@ describe("ordering modifiers — parent + child lines", () => {
       await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
-        { productId: burger.id, quantity: "1", options: [{ optionGroupItemId: bacon.id }] },
-        { productId: burger.id, quantity: "1", options: [{ optionGroupItemId: queso.id }] },
+        {
+          productId: v.burgerId,
+          quantity: "1",
+          extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+        },
+        {
+          productId: v.burgerId,
+          quantity: "1",
+          extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+        },
       ]);
       await voidTabLine(tx, v.cfg, tabId, 2);
       return tabId;
@@ -1348,98 +1328,132 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(quesoChild!.parentLineId).not.toBe(dish1!.id);
   });
 
-  it("rejects unknown options, invalid selections, and legacy options on fractional products", async () => {
+  it("rejects unoffered answers, an unanswered options list, an over-cap pick and extras on a fractional product", async () => {
     const v = await setupModifierVenue();
-    const burger = burgerOf(v);
-    const menu = menuOf(v);
-    const jamon = jamonOf(v);
     const bogus = "00000000-0000-0000-0000-000000000000";
     const deps = { db: suite.admin, backend, clock };
 
-    // (a) an option id that belongs to no active group of the product → option.not_found.
+    // (a) a list the dish does not attach → extras.invalid naming the offending field.
     await expect(
       recordTillSale(deps, v.cfg, {
-        lines: [{ productId: burger.id, quantity: "1", options: [{ optionGroupItemId: bogus }] }],
+        lines: [{ productId: v.burgerId, quantity: "1", extras: [{ listId: bogus, picks: [] }] }],
         tender: { method: "cash", amount: "20.00" },
       }),
-    ).rejects.toMatchObject({
-      code: "option.not_found",
-      params: { optionGroupItemId: bogus, productId: burger.id },
-    });
+    ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "listId" } });
 
-    // (b) a REQUIRED group (Tamaño, min 1) with nothing selected → options.selection_invalid.
-    await expect(
-      recordTillSale(deps, v.cfg, {
-        lines: [{ productId: menu.id, quantity: "1", options: [] }],
-        tender: { method: "cash", amount: "20.00" },
-      }),
-    ).rejects.toMatchObject({
-      code: "options.selection_invalid",
-      params: { productId: menu.id },
-    });
-
-    // (b2) exceeding maxSelect (Tamaño max 1, two picked) → options.selection_invalid.
-    const size = menu.optionGroups[0]!;
+    // (a2) a pick naming a product the attached list does not offer → extras.invalid.
     await expect(
       recordTillSale(deps, v.cfg, {
         lines: [
           {
-            productId: menu.id,
+            productId: v.burgerId,
             quantity: "1",
-            options: size.items.map((i) => ({ optionGroupItemId: i.id })),
+            extras: extrasPick(v, [{ productId: bogus, quantity: 1 }]),
           },
         ],
         tender: { method: "cash", amount: "20.00" },
       }),
-    ).rejects.toMatchObject({ code: "options.selection_invalid", params: { productId: menu.id } });
+    ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "productId" } });
 
-    // (c) The compatibility option payload retains its original each-only contract.
+    // (b) an ACTIVE options list (Tamaño) left unanswered → options.label_required.
     await expect(
       recordTillSale(deps, v.cfg, {
-        lines: [
-          { productId: jamon.id, quantity: "0.250", options: [{ optionGroupItemId: bogus }] },
-        ],
+        lines: [{ productId: v.menuProductId, quantity: "1", options: [] }],
         tender: { method: "cash", amount: "20.00" },
       }),
     ).rejects.toMatchObject({
-      code: "options.unsupported_product",
-      params: { productId: jamon.id, pricingUnit: "weight" },
+      code: "options.label_required",
+      params: { optionListId: v.sizeListId },
     });
 
-    // (d) fewer than a non-required group's `min_select` (Guarnición demands 2, one picked) →
-    // options.selection_invalid.
-    const plato = platoOf(v);
-    const oneGuarnicion = plato.optionGroups[0]!.items[0]!;
+    // (b2) more picks than the list's own cap (Extras allows three; bacon ×3 plus queso is four) →
+    // extras.limit_exceeded.
     await expect(
       recordTillSale(deps, v.cfg, {
         lines: [
           {
-            productId: plato.id,
+            productId: v.burgerId,
             quantity: "1",
-            options: [{ optionGroupItemId: oneGuarnicion.id }],
+            extras: extrasPick(v, [
+              { productId: v.baconId, quantity: 3 },
+              { productId: v.quesoId, quantity: 1 },
+            ]),
           },
         ],
         tender: { method: "cash", amount: "20.00" },
       }),
-    ).rejects.toMatchObject({ code: "options.selection_invalid", params: { productId: plato.id } });
+    ).rejects.toMatchObject({
+      code: "extras.limit_exceeded",
+      params: { extraListId: v.extrasListId },
+    });
+
+    // (c) an extras pick on a WEIGHED dish keeps the each-only contract: a child is priced
+    // dishQuantity × pickQuantity, so 0.250 kg of ham would bill a quarter of a rasher.
+    await expect(
+      recordTillSale(deps, v.cfg, {
+        lines: [
+          {
+            productId: v.jamonId,
+            quantity: "0.250",
+            extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+          },
+        ],
+        tender: { method: "cash", amount: "20.00" },
+      }),
+    ).rejects.toMatchObject({
+      code: "extras.unsupported_product",
+      params: { productId: v.jamonId, pricingUnit: "weight" },
+    });
+
+    // (d) fewer picks than a list's floor (Guarnición demands two, one sent) → extras.limit_exceeded.
+    await expect(
+      recordTillSale(deps, v.cfg, {
+        lines: [
+          {
+            productId: v.platoId,
+            quantity: "1",
+            extras: [
+              { listId: v.guarnicionListId, picks: [{ productId: v.patatasId, quantity: 1 }] },
+            ],
+          },
+        ],
+        tender: { method: "cash", amount: "20.00" },
+      }),
+    ).rejects.toMatchObject({
+      code: "extras.limit_exceeded",
+      params: { extraListId: v.guarnicionListId },
+    });
   });
 
-  it("refuses an available required group with no usable choices", async () => {
+  it("refuses a dish answered with a WITHDRAWN option label, and one left unanswered", async () => {
     const v = await setupModifierVenue();
-    const combo = comboOf(v);
-    // The group is present on the product but carries no selectable items.
-    expect(combo.optionGroups).toHaveLength(1);
-    expect(combo.optionGroups[0]!.required).toBe(true);
-    expect(combo.optionGroups[0]!.items).toEqual([]);
+    const deps = { db: suite.admin, backend, clock };
 
+    // An active list must be answered, and a withdrawn label is not an answer — so a till holding a
+    // stale menu is refused rather than selling the dish with nothing chosen.
     await expect(
-      recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
-        lines: [{ productId: combo.id, quantity: "1", options: [] }],
+      recordTillSale(deps, v.cfg, {
+        lines: [{ productId: v.comboId, quantity: "1", options: [] }],
         tender: { method: "cash", amount: "10.00" },
       }),
     ).rejects.toMatchObject({
-      code: "options.selection_invalid",
-      params: { groupId: combo.optionGroups[0]!.id, reason: "required" },
+      code: "options.label_required",
+      params: { optionListId: v.salsaListId },
+    });
+    await expect(
+      recordTillSale(deps, v.cfg, {
+        lines: [
+          {
+            productId: v.comboId,
+            quantity: "1",
+            options: [{ listId: v.salsaListId, labelId: v.salsaLabelId }],
+          },
+        ],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    ).rejects.toMatchObject({
+      code: "options.label_required",
+      params: { optionListId: v.salsaListId },
     });
   });
 });

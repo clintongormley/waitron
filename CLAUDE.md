@@ -207,8 +207,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   [products.md](docs/developers/products.md).
 - **A replay reports the original transaction facts; side effects are gated separately.** Cost: cash
   change returned as zero on a retry, because displaying change was treated as dispensing it.
-- **Compare saved selections by values, not JSON key or selection order.** Guard:
-  `apps/server/src/modifier-selection.test.ts`; price-change receipt in
+- **Compare saved selections by values, not JSON key or selection order.** Guard: the quantity-only
+  held-order edit case in `apps/server/src/working-order.test.ts`; price-change receipt in
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A screen puts a refusal beside a field by what the error CARRIES, checked where it is thrown.**
   `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE, and one

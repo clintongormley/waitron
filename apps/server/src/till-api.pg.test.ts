@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTransaction, workingOrders } from "@waitron/db";
+import { asAppUser, sales, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -12,11 +12,13 @@ import {
   createMenuItem,
   createMenuSection,
   createProduct,
-  createModifier,
-  updateModifier,
-  setProductOptionGroups,
-  setMenuItemOptionGroups,
+  createExtraList,
+  createOptionList,
   listAvailableProducts,
+  readContentLanguages,
+  setMenuItemExtraLists,
+  updateProduct,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
@@ -44,7 +46,6 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import type { ModifierSelection, ModifierSnapshot } from "@waitron/shared";
 import type { TillSaleResult } from "./till-sale.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -141,6 +142,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  */
 async function setupVenue(): Promise<{
   cfg: TillConfig;
+  catalogueId: string;
   available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
 }> {
@@ -179,7 +181,7 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { available, operatorId } = await withTransaction(suite.admin, async (tx) => {
+  const { catalogueId, available, operatorId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
@@ -249,6 +251,7 @@ async function setupVenue(): Promise<{
       [agua.id, aguaItem.id],
     ]);
     return {
+      catalogueId: cat.id,
       available: (await listAvailableProducts(tx, cfg.locationId)).products.map((product) => ({
         ...product,
         menuItemId: menuItems.get(product.id)!,
@@ -256,7 +259,7 @@ async function setupVenue(): Promise<{
       operatorId: person.rows[0]!.id,
     };
   });
-  return { cfg, available, operatorId };
+  return { cfg, catalogueId, available, operatorId };
 }
 
 /** The till API's deps for a provisioned venue: the owner connection (routes drop to `app_user`
@@ -1416,9 +1419,10 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // snapshotted fields the KDS reads serialise null.
             note: null,
             doneness: null,
-            // No options selected on this line → an empty modifier sub-item list (ordering modifiers).
+            // No extras picked on this line → an empty modifier sub-item list, and no options list
+            // answered → an empty frozen-answer list.
             modifiers: [],
-            modifierSnapshots: [],
+            optionSnapshots: [],
             // Just fired — nowhere near the default station's 5-minute warm threshold.
             queuedAt: expect.any(String),
             band: "fresh",
@@ -2182,80 +2186,68 @@ describe("handheld sales and device capability gates", () => {
   });
 });
 
-it("files every modifier mode through cash checkout and reprints their saved facts", async () => {
-  const { cfg, available, operatorId } = await setupVenue();
+it("files an extras pick and an options answer through cash checkout and reprints their saved facts", async () => {
+  const { cfg, catalogueId, available, operatorId } = await setupVenue();
   const product = available.find((item) => item.pricingUnit === "each")!;
-  const optionId = randomUUID(),
-    extraId = randomUUID();
-  const { note, option, extra } = await withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const note = await createModifier(
-      tx,
-      { type: "text", name: { es: "Nota" }, available: true },
-      "es",
-    );
-    const option = await createModifier(
-      tx,
-      {
-        type: "options",
-        name: { es: "Preparación" },
-        available: true,
-        choices: [{ id: optionId, name: { es: "Frío" }, available: true }],
-        defaultChoiceId: optionId,
-      },
-      "es",
-    );
-    const extra = await createModifier(
-      tx,
-      {
-        type: "extras",
-        name: { es: "Extras" },
-        available: true,
-        required: false,
-        maxTotalQuantity: 2,
-        choices: [
-          {
-            id: extraId,
-            name: { es: "Queso" },
-            available: true,
-            priceDelta: "9.00",
-            vatClass: "reduced",
-            maxQuantity: 2,
-            preselected: false,
-          },
-        ],
-      },
-      "es",
-    );
-    await setProductOptionGroups(tx, product.id, [note.id, option.id, extra.id]);
-    await setMenuItemOptionGroups(tx, product.menuItemId, [
-      { groupId: note.id, options: [] },
-      { groupId: option.id, options: [{ optionId, priceDelta: "0.00" }] },
-      { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
-    ]);
-    return { note, option, extra };
-  });
-  const selections: ModifierSelection[] = [
-    { modifierId: note.id, type: "text", text: "sin sal" },
-    { modifierId: option.id, type: "options", choiceId: optionId },
-    { modifierId: extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
-  ];
-  const snapshots: ModifierSnapshot[] = [
-    { modifierId: note.id, name: { es: "Nota" }, type: "text", text: "sin sal" },
-    {
-      modifierId: option.id,
-      name: { es: "Preparación" },
-      type: "options",
-      choiceId: optionId,
-      choiceName: { es: "Frío" },
+  const { extraListId, quesoId, optionListId, labelId } = await withTransaction(
+    suite.admin,
+    async (tx) => {
+      await asAppUser(tx);
+      // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
+      // `general`, so the filed desglose has to carry two bands.
+      const queso = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Queso",
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "reduced",
+      });
+      // Three prices, one right answer: the product's own 9.00, the list's 5.00 override, and the
+      // MENU offer's 0.35 — and this sale goes through the offer, so only 0.35 can be charged.
+      const extras = await createExtraList(
+        tx,
+        {
+          name: "Extras",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          // Two of one product, which is what this sale picks: `maxPicks` counts the quantities.
+          maxPicks: 2,
+          active: true,
+          items: [{ productId: queso.id, maxQuantity: 2, preselected: false, price: "5.00" }],
+        },
+        LOCALE,
+      );
+      const options = await createOptionList(
+        tx,
+        {
+          name: "Preparación",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: null,
+          active: true,
+          labels: [{ name: "Frío", customerName: null, kitchenName: null, available: true }],
+        },
+        LOCALE,
+      );
+      await writeProductModifiers(tx, product.id, [
+        { kind: "extras", id: extras.id },
+        { kind: "options", id: options.id },
+      ]);
+      await setMenuItemExtraLists(tx, product.menuItemId, [
+        { listId: extras.id, items: [{ productId: queso.id, price: "0.35" }] },
+      ]);
+      return {
+        extraListId: extras.id,
+        quesoId: queso.id,
+        optionListId: options.id,
+        labelId: options.labels[0]!.id,
+      };
     },
-    {
-      modifierId: extra.id,
-      name: { es: "Extras" },
-      type: "extras",
-      choices: [{ choiceId: extraId, name: { es: "Queso" }, quantity: 2 }],
-    },
-  ];
+  );
+  const extras = [{ listId: extraListId, picks: [{ productId: quesoId, quantity: 2 }] }];
+  const options = [{ listId: optionListId, labelId }];
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await loginSession(app, cfg, operatorId);
@@ -2278,7 +2270,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const workingOrderId = randomUUID();
   const request = {
     workingOrderId,
-    lines: [{ menuItemId: product.menuItemId, quantity: "2", modifierSelections: selections }],
+    lines: [{ menuItemId: product.menuItemId, quantity: "2", extras, options }],
     tender: { method: "cash", amount: "10.00" },
   };
   const response = await app.request("/api/sales", {
@@ -2290,13 +2282,16 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const ticket = (await response.json()) as TillSaleResult;
   expect(ticket.total).toBe("4.40");
   expect(ticket.tender).toEqual({ method: "cash", change: "5.60" });
+  // A sale line's `modifierSnapshots` is empty on BOTH lines: the extras pick is its own priced child
+  // line, and the dish's options answer is frozen on its working-order line (read back below), which
+  // no fiscal projection carries.
   expect(ticket.lines).toEqual([
     {
       descriptions: { [LOCALE]: "Agua mineral" },
       quantity: "2",
       gross: "3.00",
       parentLineNo: null,
-      modifierSnapshots: snapshots,
+      modifierSnapshots: [],
       unitName: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
       unitPrecision: 0,
     },
@@ -2319,12 +2314,9 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     const rows = await tx.execute<{
       quantity: string;
       vat_rate: string;
-      modifier_snapshots: ModifierSnapshot[];
       unit_name: Record<string, string> | null;
       unit_precision: number | null;
-    }>(
-      sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines  order by line_no`,
-    );
+    }>(sql`select quantity,vat_rate,unit_name,unit_precision from sale_lines  order by line_no`);
     const records = await tx.select().from(registrosFacturacion);
     return { rows: rows.rows, records };
   });
@@ -2332,34 +2324,50 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     {
       quantity: "2.000",
       vat_rate: "21.00",
-      modifier_snapshots: snapshots,
       unit_name: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
       unit_precision: 0,
     },
     {
       quantity: "4.000",
       vat_rate: "10.00",
-      modifier_snapshots: [],
       unit_name: null,
       unit_precision: null,
     },
   ]);
   expect(stored.records).toHaveLength(1);
   expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
+  // The options answer IS frozen, on the DISH's working-order line, with the list's and the label's
+  // names copied by value; the child line answers nothing of its own.
+  const frozen = await withTransaction(suite.admin, async (tx) => {
+    await asAppUser(tx);
+    const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
+    const lines = await tx
+      .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+      .orderBy(workingOrderLines.lineNo);
+    return { defaultLanguage, lines };
+  });
+  expect(frozen.lines).toEqual([
+    {
+      optionSnapshots: [
+        {
+          listName: { [frozen.defaultLanguage]: "Preparación" },
+          listCustomerName: null,
+          listKitchenName: null,
+          labelName: { [frozen.defaultLanguage]: "Frío" },
+          labelCustomerName: null,
+          labelKitchenName: null,
+        },
+      ],
+    },
+    { optionSnapshots: [] },
+  ]);
+  // Rename the extra's product AFTER the sale: what a replay and a reprint read must be the names the
+  // sale froze, never the catalogue's current ones.
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    await updateModifier(
-      tx,
-      option.id,
-      {
-        type: "options",
-        name: { es: "Nueva preparación" },
-        available: true,
-        choices: [{ id: optionId, name: { es: "Nuevo frío" }, available: true }],
-        defaultChoiceId: null,
-      },
-      "es",
-    );
+    await updateProduct(tx, quesoId, { name: "Manchego" });
   });
   const replay = await app.request("/api/sales", {
     method: "POST",
@@ -2384,11 +2392,10 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   });
   expect(printed.rows).toHaveLength(1);
   const text = decodeTicket(new Uint8Array(printed.rows[0]!.payload));
-  expect(text).toContain("sin sal");
-  // The saved snapshot proves immutability directly: the option's original "Frío" appears and the
-  // renamed "Nuevo frío" does not.
-  expect(text).toContain("Frío");
-  expect(text).not.toContain("Nuevo frío");
+  // The child line's frozen name proves immutability directly: the extra's original "Queso" appears
+  // and the renamed "Manchego" does not.
+  expect(text).toContain("Queso");
+  expect(text).not.toContain("Manchego");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);

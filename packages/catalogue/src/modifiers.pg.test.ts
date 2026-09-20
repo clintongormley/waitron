@@ -7,8 +7,6 @@ import {
   optionGroupItems,
   productOptionGroups,
   withTransaction,
-  workingOrders,
-  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -340,48 +338,4 @@ it("deletes a modifier attached to a product and published on a menu, cascading 
         .where(eq(menuItemOptionGroups.groupId, modifierId)),
     })),
   ).toEqual({ products: [], menus: [] });
-});
-
-it("refuses to delete a modifier an open working order uses", async () => {
-  const { tillId, nodeId } = await seedVenue(suite.admin);
-  await seedLegacySellingUnits(suite.admin);
-  const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
-  const modifierId = await app(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Menu" });
-    const product = await createProduct(tx, {
-      catalogueId: menu.id,
-      categoryId: null,
-      name: "Coffee",
-      pricingUnit: "each",
-      unitPrice: "2.00",
-      vatClass: "reduced",
-    });
-    const modifier = await createModifier(
-      tx,
-      { type: "options", name, choices: [choice], defaultChoiceId: choice.id },
-      "en",
-    );
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({ tillId, nodeId, orderNumber: 1 })
-      .returning();
-    await tx.insert(workingOrderLines).values({
-      workingOrderId: order!.id,
-      productId: product.id,
-      lineNo: 1,
-      name: "Coffee",
-      descriptions: { "en-GB": "Coffee" },
-      optionGroupItemId: choice.id,
-      quantity: "1",
-      unitPrice: "1.82",
-      unitPriceGross: "2.00",
-      vatRate: "10.00",
-      lineTotal: "2.00",
-    });
-    return modifier.id;
-  });
-  await expect(app((tx) => deleteModifier(tx, modifierId))).rejects.toMatchObject({
-    code: "modifier.in_use",
-    params: expect.objectContaining({ dependency: "order" }),
-  });
 });

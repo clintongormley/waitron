@@ -6,7 +6,7 @@ import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
-import { catalogues, optionGroupItems, optionGroups, products } from "./catalogue.js";
+import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
@@ -37,10 +37,11 @@ const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// working_order_lines.product_id carries a foreign key to products (park &
-// retrieve, Task 1). It is NULLABLE since ordering modifiers (Task 2) — a child modifier line has no
-// product — but every PARENT dish line still needs a real product. seed() creates one priced product
-// and stores its id here; the LINE fixture uses it.
+// working_order_lines.product_id carries a foreign key to products (park & retrieve, Task 1). Both
+// kinds of line name a product today: a parent names the dish and a child extra line names the
+// PICKED product. The column stays nullable (see the schema comment on it), but nothing here
+// exercises that. seed() creates one priced product and stores its id here; the LINE fixture uses
+// it.
 let productA = "";
 // order_number is NOT NULL on working_orders. No UNIQUE constraint yet (the per-node allocator is a
 // later task), so a simple ascending counter keeps every fixture order distinct without one.
@@ -405,11 +406,13 @@ describe("working_order_lines", () => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries only product_id, variant_id and option_group_item_id as catalogue-shaped identifiers", async () => {
-    // The mutable draft keeps product_id as a pricing input and option_group_item_id for modifier
-    // authoring traceability. variant_id records which variant was selected; it is copied into the
-    // filed line as a snapshot identifier without a catalogue FK. Names and prices are snapshotted by
-    // value, so none of these identifiers lets a catalogue edit change a completed record.
+  it("carries only product_id and variant_id as catalogue-shaped identifiers", async () => {
+    // The mutable draft keeps product_id — the dish's on a top-level line, the PICKED extra's on a
+    // child line. variant_id records which variant was selected; it is copied into the filed line as a
+    // snapshot identifier without a catalogue FK. Names and prices are snapshotted by value, so
+    // neither identifier lets a catalogue edit change a completed record. The extras and options a
+    // line answered point at nothing: `option_snapshots` holds names, and a pick becomes a child line
+    // naming its product.
     const cols = await rows<{ column_name: string }>(
       db,
       sql`select column_name from information_schema.columns
@@ -419,7 +422,7 @@ describe("working_order_lines", () => {
       .map((c) => c.column_name)
       .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n))
       .sort();
-    expect(references).toEqual(["option_group_item_id", "product_id", "variant_id"]);
+    expect(references).toEqual(["product_id", "variant_id"]);
   });
 
   it("carries nullable note + doneness columns (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
@@ -469,21 +472,21 @@ describe("working_order_lines", () => {
 });
 
 /**
- * The modifier links on the MUTABLE draft line (ordering modifiers, Task 2):
+ * The links on the MUTABLE draft line:
  *
- * - `parent_line_id` — a self-link so a modifier is its own child line pointing at the dish line it
- *   belongs to. (parent_line_id) → working_order_lines(id), MATCH
- *   SIMPLE so a top-level line (NULL) passes. A child modifier line has no product, which is why
- *   `product_id` is now NULLABLE (was NOT NULL): the FK to products is null-permissive, so parent
- *   rows are unaffected.
- * - `option_group_item_id` — authoring TRACEABILITY only. (option_group_item_id)
- *   → option_group_items(id) with onDelete SET NULL: the option's price/name/VAT are
- *   snapshotted onto the line by value, so a catalogue DELETE of an option item must NOT be blocked
- *   and must NOT strip the draft's snapshot columns — it only clears this back-reference. It lives on
- *   working_order_lines only, never on the filed sale_lines (which stay decoupled from the mutable
- *   catalogue).
+ * - `parent_line_id` — a self-link so an extra is its own child line pointing at the dish line it
+ *   belongs to. (parent_line_id) → working_order_lines(id), MATCH SIMPLE so a top-level line (NULL)
+ *   passes.
+ * - `product_id` — the dish's on a top-level line and the PICKED product's on a child line, under
+ *   one `ON DELETE restrict` FK, so a product either kind of line names cannot be deleted while the
+ *   line exists (asserted below). The column is NULLABLE — a line naming NO product inserts, which
+ *   no case here exercises — but not in order to survive a deleted product, because `restrict`
+ *   makes that deletion impossible. It has no bearing on the parent FK, which is a separate constraint on a separate
+ *   column (working_order_lines_parent_fk, 0034_drop_tenant_id_after_sql.sql).
+ * - `option_snapshots` — the dish's frozen options answers, NOT NULL and defaulting to an empty list.
+ *   It names no list and no label, so deleting either cannot reach a saved order.
  */
-describe("working_order_lines — modifier links", () => {
+describe("working_order_lines — the draft line's links", () => {
   let db: Database;
 
   beforeEach(async () => {
@@ -491,48 +494,33 @@ describe("working_order_lines — modifier links", () => {
     await seed(db);
   });
 
-  // Raw insert so the RED phase fails on the missing column, not a TypeScript compile error against
-  // the drizzle `workingOrderLines` type. product_id is passed explicitly (NULL for a child line).
+  // Raw insert so a missing column fails here rather than as a TypeScript error against the drizzle
+  // `workingOrderLines` type. product_id is passed explicitly (NULL for a line naming no product).
   async function insertLine(opts: {
     workingOrderId: string;
     lineNo: number;
     productId: string | null;
     parentLineId?: string | null;
-    optionGroupItemId?: string | null;
     descriptions?: string;
   }): Promise<{ id: string }[]> {
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id) values (${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
+      sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id) values (${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
              ${descriptions}::jsonb, '1.000', '1.30', '1.43', '10.00', '1.30',
-             ${opts.parentLineId ?? null}, ${opts.optionGroupItemId ?? null}
+             ${opts.parentLineId ?? null}
            ) returning id`,
     );
   }
 
-  // A group + one item. Names are the known-safe café strings — option names are jsonb
-  // VALUES, but this package's english-only guard scans string literals in test files too.
-  async function seedOptionItem(): Promise<string> {
-    const [group] = await db
-      .insert(optionGroups)
-      .values({ name: { es: "Café solo" } })
-      .returning({ id: optionGroups.id });
-    const [item] = await db
-      .insert(optionGroupItems)
-      .values({ groupId: group.id, name: { es: "Café solo" }, priceDelta: "0.50" })
-      .returning({ id: optionGroupItems.id });
-    return item.id;
-  }
-
-  it("links a child modifier line to its parent dish line", async () => {
+  it("links a child extra line to its parent dish line, and the child names its own product", async () => {
     const orderId = await openOrder(db);
     const [parent] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
-    // A child modifier line: no product of its own, linked to the parent dish line.
+    // A child extra line: the PICKED product, linked to the parent dish line.
     const [child] = await insertLine({
       workingOrderId: orderId,
       lineNo: 2,
-      productId: null,
+      productId: productA,
       parentLineId: parent.id,
     });
     const [row] = await rows<{ parent_line_id: string; product_id: string | null }>(
@@ -540,44 +528,52 @@ describe("working_order_lines — modifier links", () => {
       sql`select parent_line_id, product_id from working_order_lines where id = ${child.id}::uuid`,
     );
     expect(row.parent_line_id).toBe(parent.id);
-    expect(row.product_id).toBeNull();
+    expect(row.product_id).toBe(productA);
   });
 
-  it("links a line to an option_group_item for authoring traceability", async () => {
+  it("refuses to delete a product an open order's child line names, and allows one nothing names", async () => {
     const orderId = await openOrder(db);
-    const itemId = await seedOptionItem();
-    const [line] = await insertLine({
+    const [parent] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
+    await insertLine({
       workingOrderId: orderId,
-      lineNo: 1,
+      lineNo: 2,
       productId: productA,
-      optionGroupItemId: itemId,
+      parentLineId: parent.id,
     });
-    const [row] = await rows<{ option_group_item_id: string }>(
-      db,
-      sql`select option_group_item_id from working_order_lines where id = ${line.id}::uuid`,
-    );
-    expect(row.option_group_item_id).toBe(itemId);
+    const error = await captureError(() => db.delete(products).where(eq(products.id, productA)));
+    // `ON DELETE restrict`, not SET NULL: a live basket line must keep naming what the kitchen is
+    // cooking (spec §3.5).
+    expect(pgErrorMessage(error)).toContain("working_order_lines_product_fk");
+
+    // The control, in the other direction: an unnamed product deletes, so the refusal above is the
+    // reference and not the delete itself failing.
+    const [spare] = await db
+      .insert(products)
+      .values({
+        catalogueId: (await db.select({ id: catalogues.id }).from(catalogues))[0]!.id,
+        name: "Café solo",
+        pricingUnit: "each",
+        unitPrice: "1.30",
+        vatClass: "general",
+      })
+      .returning({ id: products.id });
+    await db.delete(products).where(eq(products.id, spare.id));
+    expect(await db.select({ id: products.id }).from(products)).toHaveLength(1);
   });
 
-  it("nulls option_group_item_id when the catalogue item is deleted, rather than blocking", async () => {
-    // Traceability only — the option's price/name/VAT are snapshotted onto the line by value, so a
-    // catalogue DELETE must NOT be blocked (not RESTRICT) and must leave the line's own columns
-    // intact; onDelete SET NULL clears just this back-reference. The order stays open so the
-    // require_open_parent trigger admits the cascade UPDATE.
+  it("defaults option_snapshots to an empty list and refuses a null", async () => {
     const orderId = await openOrder(db);
-    const itemId = await seedOptionItem();
-    const [line] = await insertLine({
-      workingOrderId: orderId,
-      lineNo: 1,
-      productId: productA,
-      optionGroupItemId: itemId,
-    });
-    await db.delete(optionGroupItems).where(eq(optionGroupItems.id, itemId));
-    const [row] = await rows<{ option_group_item_id: string | null; line_total: string }>(
+    const [line] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
+    const [row] = await rows<{ option_snapshots: unknown }>(
       db,
-      sql`select option_group_item_id, line_total from working_order_lines where id = ${line.id}::uuid`,
+      sql`select option_snapshots from working_order_lines where id = ${line.id}::uuid`,
     );
-    expect(row.option_group_item_id).toBeNull();
-    expect(row.line_total).toBe("1.30");
+    expect(row.option_snapshots).toEqual([]);
+    const error = await captureError(() =>
+      db.execute(
+        sql`update working_order_lines set option_snapshots = null where id = ${line.id}::uuid`,
+      ),
+    );
+    expect(pgErrorMessage(error)).toContain("option_snapshots");
   });
 });

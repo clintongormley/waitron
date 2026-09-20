@@ -298,6 +298,10 @@ export interface SelectedOption {
   priceDelta: string;
   /** The option's own VAT class when it OVERRIDES the dish's, or `null` to INHERIT the dish's rate. */
   vatClass: VatClass | null;
+  /** The option's own kitchen-facing name, snapshotted at selection time; becomes the child line's
+   * `kitchenName`. Absent or null leaves the child without one — a child never borrows the dish's,
+   * which names a different thing. */
+  kitchenName?: string | null;
   /** How many of THIS option, per dish (the per-option count, author-capped by
    * `option_group_items.max_quantity`). ABSENT means 1 — a no-per-option-count option, whose child
    * line is byte-identical to before this field existed. The child is priced at
@@ -321,8 +325,8 @@ export interface BasketItemWithOptions {
  * another priced row through the ONE arithmetic core — its gross unit is the option's `priceDelta`,
  * its quantity the DISH's quantity times the option's own per-option count (`opt.quantity ?? 1`, so
  * a dish ×3 with an option ×2 prices the option 6 times), its rate the option's `vatClass` override
- * or (when `null`) the dish's own rate, its name and descriptions the option's own, and its category
- * the parent's snapshot — so
+ * or (when `null`) the dish's own rate, its name, descriptions and kitchen name the option's own,
+ * and its category the parent's snapshot — so
  * the difference-method VAT breakdown and `total` include the option amounts with no separate arithmetic.
  * With every item's `options` empty this is line-for-line identical to `priceBasket`.
  */
@@ -373,6 +377,7 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
         unitName: null,
         unitPrecision: null,
         parentLineNo,
+        kitchenName: opt.kitchenName ?? null,
       });
     }
   }

@@ -9,9 +9,10 @@
  * `OptionSelection` — an extra's frozen facts live on its child line rather than in a JSON column on
  * the parent.
  *
- * Nothing on the order path builds this yet: Task 7 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` is where the till's body reaches
- * `validateExtraSelections`.
+ * `quantity` is required, not defaulted: `validateExtraSelections`
+ * (`packages/catalogue/src/extra-contract.ts`) puts every pick's count through a whole-number check
+ * that refuses an absent one, so a request that leaves it out is answered `extras.invalid` naming
+ * `quantity`.
  */
 export type ExtraSelection = {
   listId: string;

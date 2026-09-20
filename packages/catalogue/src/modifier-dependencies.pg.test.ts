@@ -1,13 +1,6 @@
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import {
-  asAppUser,
-  withTransaction,
-  workingOrderLines,
-  workingOrders,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { ModifierInput } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
@@ -211,45 +204,6 @@ it("menu publication waits for deletion and rejects the removed attachment", asy
     reason: { code: "options.group_invalid", params: { reason: "not_attached" } },
   });
   expect((await app(suite.admin, (tx) => listMenuOffers(tx, [menu.id])))[0]!.modifiers).toEqual([]);
-});
-
-it("refuses deletion solely because an actual order retains a saved modifier snapshot", async () => {
-  const { product, modifier, item, tillId, nodeId } = await fixture();
-  const snapshots = [
-    { modifierId: modifier.id, name: modifier.name, type: "text" as const, text: "Happy birthday" },
-  ];
-  await app(suite.admin, async (tx) => {
-    await setProductOptionGroups(tx, product.id, [modifier.id]);
-    await setMenuItemOptionGroups(tx, item.id, [{ groupId: modifier.id, options: [] }]);
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({ tillId, nodeId, orderNumber: 1 })
-      .returning();
-    await tx.insert(workingOrderLines).values({
-      workingOrderId: order!.id,
-      productId: product.id,
-      lineNo: 1,
-      name: "Coffee",
-      descriptions: { "en-GB": "Coffee" },
-      modifierSnapshots: snapshots,
-      quantity: "1",
-      unitPrice: "1.82",
-      unitPriceGross: "2.00",
-      vatRate: "10.00",
-      lineTotal: "2.00",
-    });
-    await setMenuItemOptionGroups(tx, item.id, []);
-    await setProductOptionGroups(tx, product.id, []);
-  });
-  await expect(app(suite.admin, (tx) => deleteModifier(tx, modifier.id))).rejects.toMatchObject({
-    code: "modifier.in_use",
-    params: { dependency: "order" },
-  });
-  const saved = await app(suite.admin, (tx) =>
-    tx.select({ snapshots: workingOrderLines.modifierSnapshots }).from(workingOrderLines),
-  );
-  expect(saved).toEqual([{ snapshots }]);
-  expect(await app(suite.admin, (tx) => getModifier(tx, modifier.id))).toEqual(modifier);
 });
 
 it("allows simultaneous selection readers while excluding definition writes", async () => {

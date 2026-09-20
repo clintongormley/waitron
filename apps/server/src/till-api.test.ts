@@ -15,13 +15,18 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createExtraList,
   createMenuItem,
   createMenuSection,
+  createOptionList,
   createProduct,
   createModifier,
-  updateModifier,
+  readContentLanguages,
+  updateOptionList,
+  setMenuItemExtraLists,
   setProductOptionGroups,
   setMenuItemOptionGroups,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   AppError,
@@ -33,7 +38,7 @@ import {
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
-import type { Modifier, ModifierSelection, ModifierSnapshot } from "@waitron/shared";
+import type { Modifier } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -3027,6 +3032,7 @@ async function modifierOfferFixture() {
     extraId = randomUUID();
   const data = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
+    const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
     const product = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,
       categoryId: null,
@@ -3094,35 +3100,151 @@ async function modifierOfferFixture() {
       { groupId: option.id, options: [{ optionId: choiceId, priceDelta: "0.00" }] },
       { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
     ]);
-    return { product, offer, note, option, extra };
+
+    // What the ORDER path answers: an extras list the offer republishes at its own price, and an
+    // options list the product carries. The cheese's three names carry DIFFERENT text, so a line
+    // freezing the wrong one of them fails (CLAUDE.md §4), and its own 9.00 unit price is the price
+    // a child line would show if the offer's 0.35 were never read.
+    const cheese = await createProduct(tx, {
+      catalogueId: aguaProduct.catalogueId,
+      categoryId: null,
+      name: "Queso staff",
+      customerName: { [defaultLanguage]: "Queso customer" },
+      kitchenName: "Queso kitchen",
+      pricingUnit: "each",
+      unitPrice: "9.00",
+      vatClass: "general",
+    });
+    const extrasList = await createExtraList(
+      tx,
+      {
+        name: "Extras",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 2,
+        active: true,
+        items: [{ productId: cheese.id, maxQuantity: 2, preselected: false, price: "9.00" }],
+      },
+      cfg.locale,
+    );
+    // Carried by the product and NEVER published on the offer, so an offer line answering it is
+    // answering something that dish does not offer here.
+    const unpublishedList = await createExtraList(
+      tx,
+      {
+        name: "Extras sin publicar",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 1,
+        active: true,
+        items: [{ productId: cheese.id, maxQuantity: 1, preselected: false, price: "1.00" }],
+      },
+      cfg.locale,
+    );
+    const prepList = await createOptionList(
+      tx,
+      {
+        name: "Preparación staff",
+        customerName: { [defaultLanguage]: "Preparación customer" },
+        kitchenName: "Preparación kitchen",
+        defaultLabelId: null,
+        active: true,
+        labels: [
+          {
+            name: "Frío staff",
+            customerName: { [defaultLanguage]: "Frío customer" },
+            kitchenName: "Frío kitchen",
+            available: true,
+          },
+          {
+            name: "Caliente staff",
+            customerName: { [defaultLanguage]: "Caliente customer" },
+            kitchenName: "Caliente kitchen",
+            available: true,
+          },
+        ],
+      },
+      cfg.locale,
+    );
+    await writeProductModifiers(tx, product.id, [
+      { kind: "extras", id: extrasList.id },
+      { kind: "extras", id: unpublishedList.id },
+      { kind: "options", id: prepList.id },
+    ]);
+    await setMenuItemExtraLists(tx, offer.id, [
+      { listId: extrasList.id, items: [{ productId: cheese.id, price: "0.35", available: true }] },
+    ]);
+    return {
+      product,
+      offer,
+      note,
+      option,
+      extra,
+      cheese,
+      extrasList,
+      unpublishedList,
+      prepList,
+      defaultLanguage,
+    };
   });
-  const selections: ModifierSelection[] = [
-    { modifierId: data.note.id, type: "text", text: "<b>sin sal</b>" },
-    { modifierId: data.option.id, type: "options", choiceId },
-    { modifierId: data.extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
-  ];
-  const snapshots: ModifierSnapshot[] = [
-    { modifierId: data.note.id, type: "text", name: { es: "Nota" }, text: "<b>sin sal</b>" },
+  const frio = data.prepList.labels.find((label) => label.name === "Frío staff")!;
+  const caliente = data.prepList.labels.find((label) => label.name === "Caliente staff")!;
+  const language = data.defaultLanguage;
+  /** The diner's answers, in the wire shape every order route takes. */
+  const answers = {
+    extras: [{ listId: data.extrasList.id, picks: [{ productId: data.cheese.id, quantity: 2 }] }],
+    options: [{ listId: data.prepList.id, labelId: frio.id }],
+  };
+  /** The six names the dish line freezes — the list's three and the chosen label's three. */
+  const optionSnapshots = [
     {
-      modifierId: data.option.id,
-      type: "options",
-      name: { es: "Preparación" },
-      choiceId,
-      choiceName: { es: "Frío" },
+      listName: { [language]: "Preparación staff" },
+      listCustomerName: { [language]: "Preparación customer" },
+      listKitchenName: "Preparación kitchen",
+      labelName: { [language]: "Frío staff" },
+      labelCustomerName: { [language]: "Frío customer" },
+      labelKitchenName: "Frío kitchen",
     },
+  ];
+  /** The child line as the held-order read hands it back: the OFFER's price, and per-dish picks. */
+  const parkedExtras = [
     {
-      modifierId: data.extra.id,
-      type: "extras",
-      name: { es: "Extras" },
-      choices: [{ choiceId: extraId, name: { es: "Queso" }, quantity: 2 }],
+      productId: data.cheese.id,
+      name: "Queso staff",
+      descriptions: { "es-ES": "Queso customer" },
+      kitchenName: "Queso kitchen",
+      price: "0.35",
+      quantity: 2,
     },
   ];
   const app = new Hono();
   mountTillApi(app, deps(suite.db), collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${tillDeviceCookie}`;
   const headers = { "content-type": "application/json", cookie };
-  return { ...data, choiceId, otherChoiceId, extraId, selections, snapshots, app, headers };
+  return {
+    ...data,
+    choiceId,
+    otherChoiceId,
+    extraId,
+    frio,
+    caliente,
+    answers,
+    optionSnapshots,
+    parkedExtras,
+    app,
+    headers,
+  };
 }
+
+/** The held-order read's shape, as far as these tests assert on it. */
+type HeldLine = {
+  workingOrderLineId: string;
+  quantity: string;
+  optionSnapshots?: unknown;
+  extras?: unknown;
+};
 
 describe("canonical modifier HTTP serialization", () => {
   it("publishes every mode, parks explicit answers and prices published extras exactly", async () => {
@@ -3162,47 +3284,20 @@ describe("canonical modifier HTTP serialization", () => {
       headers: f.headers,
       body: JSON.stringify({
         id,
-        lines: [{ menuItemId: f.offer.id, quantity: "2", modifierSelections: f.selections }],
+        lines: [{ menuItemId: f.offer.id, quantity: "2", ...f.answers }],
       }),
     });
     expect(parked.status, await parked.clone().text()).toBe(200);
     const got = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
     expect(got.status).toBe(200);
-    const body = (await got.json()) as {
-      lines: {
-        workingOrderLineId: string;
-        modifierSelections?: ModifierSelection[];
-        modifierSnapshots?: ModifierSnapshot[];
-        quantity: string;
-      }[];
-    };
-    expect(body.lines[0]!.modifierSelections).toEqual(f.selections);
-    expect(body.lines[0]!.modifierSnapshots).toEqual(f.snapshots);
+    const body = (await got.json()) as { lines: HeldLine[] };
+    expect(body.lines[0]!.optionSnapshots).toEqual(f.optionSnapshots);
+    expect(body.lines[0]!.extras).toEqual(f.parkedExtras);
+    // 1.75 × 2 dishes = 3.50, plus the published 0.35 × (2 dishes × 2 picks) = 1.40.
     const listed = await f.app.request("/api/working-orders", { headers: f.headers });
     expect(await listed.json()).toContainEqual(expect.objectContaining({ id, total: "4.90" }));
-    await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
-      await updateModifier(
-        tx,
-        f.option.id,
-        {
-          type: "options",
-          name: { es: "Nombre nuevo" },
-          available: true,
-          choices: [
-            { id: f.choiceId, name: { es: "Nuevo frío" }, available: true },
-            { id: f.otherChoiceId, name: { es: "Caliente" }, available: true },
-          ],
-          defaultChoiceId: null,
-        },
-        "es",
-      );
-    });
-    const resumed = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
-    expect(
-      ((await resumed.json()) as { lines: { modifierSnapshots: ModifierSnapshot[] }[] }).lines[0]!
-        .modifierSnapshots,
-    ).toEqual(f.snapshots);
+
+    // A quantity-only edit keeps the frozen answers and re-prices from the stored lock alone.
     const edited = await f.app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: f.headers,
@@ -3212,80 +3307,114 @@ describe("canonical modifier HTTP serialization", () => {
             workingOrderLineId: body.lines[0]!.workingOrderLineId,
             menuItemId: f.offer.id,
             quantity: "4",
-            modifierSelections: f.selections,
+            ...f.answers,
           },
         ],
       }),
     });
     expect(edited.status, await edited.clone().text()).toBe(200);
     const afterEdit = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
-    expect(
-      ((await afterEdit.json()) as { lines: { modifierSnapshots: ModifierSnapshot[] }[] }).lines[0]!
-        .modifierSnapshots,
-    ).toEqual(f.snapshots);
+    const afterEditBody = (await afterEdit.json()) as { lines: HeldLine[] };
+    expect(afterEditBody.lines[0]!.optionSnapshots).toEqual(f.optionSnapshots);
+    expect(afterEditBody.lines[0]!.extras).toEqual(f.parkedExtras);
     const editedList = await f.app.request("/api/working-orders", { headers: f.headers });
     expect(await editedList.json()).toContainEqual(expect.objectContaining({ id, total: "9.80" }));
+
+    // The parked line holds the six names BY VALUE, so renaming the list and its labels afterwards
+    // leaves the order reading exactly what the diner was shown.
+    await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      await updateOptionList(
+        tx,
+        f.prepList.id,
+        {
+          name: "Nombre nuevo",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: null,
+          active: true,
+          labels: f.prepList.labels.map((label) => ({
+            id: label.id,
+            name: `${label.name} nuevo`,
+            customerName: null,
+            kitchenName: null,
+            available: label.available,
+          })),
+        },
+        cfg.locale,
+      );
+    });
+    const resumed = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+    expect(((await resumed.json()) as { lines: HeldLine[] }).lines[0]!.optionSnapshots).toEqual(
+      f.optionSnapshots,
+    );
   });
 
-  it.each(["unpublished", "foreign", "unavailable"] as const)(
-    "refuses a %s option through the working-order request",
-    async (kind) => {
-      const f = await modifierOfferFixture();
-      let choiceId = kind === "unpublished" ? f.otherChoiceId : randomUUID();
-      if (kind === "foreign") {
-        await seedTenant(suite.db);
-        await withTransaction(suite.db, async (tx) => {
-          await asAppUser(tx);
-          await createModifier(
-            tx,
-            {
-              type: "options",
-              name: { es: "Otro local" },
-              available: true,
-              defaultChoiceId: null,
-              choices: [{ id: choiceId, name: { es: "Otra opción" }, available: true }],
-            },
-            "es",
-          );
-        });
-      }
-      if (kind === "unavailable") {
-        choiceId = f.choiceId;
-        await withTransaction(suite.db, async (tx) => {
-          await asAppUser(tx);
-          if (f.option.type !== "options") throw new Error("options fixture");
-          const { id, ...input } = f.option;
-          await updateModifier(
-            tx,
-            id,
-            {
-              ...input,
-              choices: input.choices.map((choice) => ({
-                ...choice,
-                available: choice.id !== f.choiceId,
-              })),
-            },
-            "es",
-          );
-        });
-      }
-      const selections = f.selections.map((selection) =>
-        selection.type === "options" ? { ...selection, choiceId } : selection,
-      );
-      const response = await f.app.request("/api/working-orders", {
+  it("refuses an unpublished list, an unknown list and a withdrawn label through the working-order request", async () => {
+    const f = await modifierOfferFixture();
+    const park = (line: Record<string, unknown>) =>
+      f.app.request("/api/working-orders", {
         method: "POST",
         headers: f.headers,
         body: JSON.stringify({
           id: randomUUID(),
-          lines: [{ menuItemId: f.offer.id, quantity: "1", modifierSelections: selections }],
+          lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers, ...line }],
         }),
       });
-      expect(response.status, await response.clone().text()).toBe(400);
-      expect(await response.json()).toMatchObject({ error: { code: "modifier.invalid" } });
-    },
-  );
 
-  it("carries all modes through table opening and a later round", async () => {
+    // A list the PRODUCT carries but this offer does not publish is not on offer here.
+    const unpublished = await park({
+      extras: [
+        ...f.answers.extras,
+        { listId: f.unpublishedList.id, picks: [{ productId: f.cheese.id, quantity: 1 }] },
+      ],
+    });
+    expect(unpublished.status, await unpublished.clone().text()).toBe(400);
+    expect(await unpublished.json()).toMatchObject({
+      error: { code: "extras.invalid", params: { field: "listId" } },
+    });
+
+    // A list id nothing attaches to this dish at all.
+    const unknown = await park({
+      options: [{ listId: randomUUID(), labelId: f.frio.id }],
+    });
+    expect(unknown.status, await unknown.clone().text()).toBe(400);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "options.invalid", params: { field: "listId" } },
+    });
+
+    // A label the list still carries and no longer offers: a till holding a stale menu is refused
+    // rather than selling the dish with a withdrawn answer.
+    await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      await updateOptionList(
+        tx,
+        f.prepList.id,
+        {
+          name: f.prepList.name,
+          customerName: f.prepList.customerName,
+          kitchenName: f.prepList.kitchenName,
+          defaultLabelId: null,
+          active: true,
+          labels: f.prepList.labels.map((label) => ({
+            id: label.id,
+            name: label.name,
+            customerName: label.customerName,
+            kitchenName: label.kitchenName,
+            available: label.id !== f.frio.id,
+          })),
+        },
+        cfg.locale,
+      );
+    });
+    const withdrawn = await park({});
+    expect(withdrawn.status, await withdrawn.clone().text()).toBe(400);
+    expect(await withdrawn.json()).toMatchObject({
+      error: { code: "options.label_required", params: { optionListId: f.prepList.id } },
+    });
+  });
+
+  it("carries extras and options through table opening and a later round", async () => {
     const f = await modifierOfferFixture();
     const zone = await suite.db.execute<{ id: string }>(
       sql`insert into floor_zones (location_id,name) values (${cfg.locationId},'Modifier tables') returning id`,
@@ -3307,7 +3436,7 @@ describe("canonical modifier HTTP serialization", () => {
     });
     expect(table.status).toBe(200);
     const { id: tableId } = (await table.json()) as { id: string };
-    const line = { menuItemId: f.offer.id, quantity: "1", modifierSelections: f.selections };
+    const line = { menuItemId: f.offer.id, quantity: "1", ...f.answers };
     const opened = await f.app.request(`/api/tables/${tableId}/tab`, {
       method: "POST",
       headers: f.headers,
@@ -3323,40 +3452,51 @@ describe("canonical modifier HTTP serialization", () => {
     expect(round.status, await round.clone().text()).toBe(200);
     const got = await f.app.request(`/api/working-orders/${tabId}`, { headers: f.headers });
     expect(got.status).toBe(200);
-    const body = (await got.json()) as { lines: { modifierSnapshots: ModifierSnapshot[] }[] };
-    expect(body.lines.map((line) => line.modifierSnapshots)).toEqual([f.snapshots, f.snapshots]);
+    const body = (await got.json()) as { lines: HeldLine[] };
+    expect(body.lines.map((line) => line.optionSnapshots)).toEqual([
+      f.optionSnapshots,
+      f.optionSnapshots,
+    ]);
+    // Each dish is ONE here, so a pick of two is a child quantity of two on both rounds.
+    expect(body.lines.map((line) => line.extras)).toEqual([f.parkedExtras, f.parkedExtras]);
   });
 });
 
 describe("canonical modifier checkout refusal", () => {
   it.each(["/api/working-orders", "/api/sales"])(
-    "rejects a negative repeated extra at %s before any write",
+    "rejects a repeated negative extra pick at %s before any write",
     async (path) => {
       const f = await modifierOfferFixture();
       const id = randomUUID();
-      const selections = f.selections.map((selection) =>
-        selection.type === "extras"
-          ? {
-              ...selection,
-              choices: [
-                { choiceId: f.extraId, quantity: 2 },
-                { choiceId: f.extraId, quantity: -1 },
-              ],
-            }
-          : selection,
-      );
       const response = await f.app.request(path, {
         method: "POST",
         headers: f.headers,
         body: JSON.stringify({
           id,
           workingOrderId: id,
-          lines: [{ menuItemId: f.offer.id, quantity: "1", modifierSelections: selections }],
+          lines: [
+            {
+              menuItemId: f.offer.id,
+              quantity: "1",
+              options: f.answers.options,
+              extras: [
+                {
+                  listId: f.extrasList.id,
+                  picks: [
+                    { productId: f.cheese.id, quantity: 2 },
+                    { productId: f.cheese.id, quantity: -1 },
+                  ],
+                },
+              ],
+            },
+          ],
           tender: { method: "cash", amount: "20.00" },
         }),
       });
       expect(response.status, await response.clone().text()).toBe(400);
-      expect(await response.json()).toMatchObject({ error: { code: "modifier.invalid" } });
+      expect(await response.json()).toMatchObject({
+        error: { code: "extras.invalid", params: { field: "productId" } },
+      });
       const stored = await suite.db.execute(sql`select id from working_orders where id=${id}`);
       expect(stored.rows).toEqual([]);
     },

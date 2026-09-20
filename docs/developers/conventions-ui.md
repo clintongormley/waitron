@@ -58,10 +58,19 @@ input for the language the server named" and "marks the variant whose translatio
 ## Saved selections compare values
 
 The modifiers review on 2026-09-13 reproduced a quantity-only held-order edit repricing an extra
-from 1.00 to 9.00 when the request reordered JSON keys and modifier entries. The test
-`pnpm --filter @waitron/server exec vitest run working-order.test.ts -t 'preserves product selections'`
-reported 18.00 instead of 2.00. `sameModifierSelections` compares values while rejecting duplicates,
-changed quantities and additional fields; `modifier-selection.test.ts` covers those distinctions.
+from 1.00 to 9.00 when the request reordered JSON keys and modifier entries: the comparison was
+reading how the request was written instead of what it said.
+
+Since the extras-and-options order path (2026-09-20) that comparison lives in `updateHeldOrder`
+(`apps/server/src/working-order.ts`). It rebuilds what the request's answers would freeze NOW
+(`buildLineExtras`, `apps/server/src/modifier-selection.ts`) and compares that with what the stored
+line holds, by value and index-wise — both sides are built in the OFFERED order rather than the
+order they were sent, so neither key order nor entry order can reach the result. The helper this
+replaces, `sameModifierSelections`, no longer exists.
+
+What covers it: `apps/server/src/working-order.test.ts`, "keeps extras rows and customisation on a
+quantity-only edit" — it raises the offer's price and the extra's price underneath the edit, then
+asserts the parent and its child line keep their original ids and their locked prices.
 
 ## A replay reports the original transaction facts; side effects are gated separately
 

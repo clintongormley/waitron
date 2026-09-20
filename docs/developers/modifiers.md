@@ -102,42 +102,77 @@ the same widget during integration.
 
 ## Ordering and stored facts
 
-Send `modifierSelections` on each requested parent line. Each selection's `type` matches its
-modifier's type — `text` carries `text`, `options` carries one `choiceId`, `extras` carries a
-`choices` array of `{ choiceId, quantity }`:
+This section describes the order path as it stands after the extras-and-options change
+(2026-09-20). The `modifierSelections` body it used to document is gone: `grep -rn
+modifierSelections apps/server/src` finds nothing, and the old contract that parsed it
+(`validateModifierSelections`, `packages/catalogue/src/modifier-contract.ts`) has no production
+caller left.
+
+A requested line now carries two optional fields, `options` and `extras`. Five routes take them,
+each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`): the walk-up sale
+`POST /api/sales`, the park `POST /api/working-orders`, the held-order edit
+`PUT /api/working-orders/:id`, the tab round `POST /api/working-orders/:id/round`, and the
+integrated card pay `POST /api/pay` — the last on its WALK-UP branch only, since a retrieved or
+placed order ignores the request's lines and files its own stored ones (`IntegratedPayRequest`,
+`apps/server/src/till-sale.ts`).
+
+An `options` answer names a list and one of its labels. An `extras` answer names a list and the
+PRODUCTS picked from it, each with how many of that product this dish takes — a pick never names
+an `extra_list_items` row. Both shapes are declared in `@waitron/shared`
+(`option-selection.ts`, `extra-selection.ts`):
 
 ```json
 {
   "menuItemId": "22222222-2222-4222-8222-222222222222",
   "quantity": "2",
-  "modifierSelections": [
-    { "modifierId": "11111111-1111-4111-8111-111111111111", "type": "options",
-      "choiceId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
-    { "modifierId": "33333333-3333-4333-8333-333333333333", "type": "extras",
-      "choices": [{ "choiceId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "quantity": 1 }] },
-    { "modifierId": "44444444-4444-4444-8444-444444444444", "type": "text", "text": "No onions" }
+  "options": [
+    { "listId": "11111111-1111-4111-8111-111111111111",
+      "labelId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }
+  ],
+  "extras": [
+    { "listId": "33333333-3333-4333-8333-333333333333",
+      "picks": [{ "productId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "quantity": 1 }] }
   ]
 }
 ```
 
-Text and options become structured `modifierSnapshots` on the parent. Extras also retain
-selected IDs and quantities there, while their price stays in the existing child-line machinery.
-Never send the legacy `options` payload alongside canonical selections. Defaults are client draft
-seeds; the server does not fill in missing answers. Duplicate modifiers and duplicate extras choices
-are rejected, and every quantity is validated before summing.
+`buildLineExtras` (`apps/server/src/modifier-selection.ts`) validates both against the definitions
+the basket resolved, and decides what is stored:
 
-The resolver validates modifiers independently of the product's unit. Extras multiply by the parent
-quantity through the existing decimal pricer, including fractional quantities. Units integration
-must keep its quantity/precision validator alongside this modifier validation, not gate either one
-on `pricingUnit === "each"`.
+- Every ACTIVE options list the dish attaches must be answered with one of that list's available
+  labels. An unanswered list, or one answered with a label it does not carry, is
+  `options.label_required` carrying the list id; an answer for a list not on offer, two answers for
+  one list, or a malformed entry is `options.invalid` naming the field.
+- An answered list freezes onto the PARENT line's `option_snapshots` column as six names — the
+  list's three and the chosen label's three — and no ids at all, so renaming or deleting a list
+  afterwards cannot rewrite a saved order.
+- Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
+  that product's three frozen names, the price the offer resolved and the product's OWN VAT class.
+  The child's stored quantity is dish quantity × pick quantity.
+- A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
+  or more of one product than its `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
+  malformed pick is `extras.invalid` naming the field.
+- A pick on a dish that is not priced `each` is refused with `extras.unsupported_product`: a child
+  priced dish × pick would bill a fraction of an extra on a weighed dish. An options answer on a
+  weighed dish is still allowed.
+- Defaults are client draft seeds; the server fills in no missing answer.
 
-Held responses carry the original snapshots and explicit selections. A quantity-only update sends
-`workingOrderLineId` and the same selections, preserving the original prices. Changed answers take
-the normal new-selection validation path. `TabLine.name` and `modifierSnapshots`, receipt
-lines and kitchen lines carry stored presentation facts. Allergen and dietary information is resolved
-live from a saved choice's current declarations, never stored. The till basket and the kitchen/expo
-screens do not combine a dish with its extras into an "as-served" figure: the dish shows its own
-allergens and diet (its recipe-derived list) and each selected extra shows its own, independently.
+Reading them back, four wire types carry `optionSnapshots` — the field these four called
+`modifierSnapshots` before this change: `TabLine`, `HeldOrder.lines`, `StationQueueItem` and
+`ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
+`extras` array holding what each CHILD line froze. Those are VALUES, not a re-sendable selection:
+the child line holds no list id to name.
+
+A quantity-only edit of a held order sends the same answers with a new quantity. `updateHeldOrder`
+rebuilds what those answers would freeze NOW and compares the result with what the stored line
+holds, by value; equal, the line and its locked price are kept, otherwise the line is replaced and
+re-priced. Because an options answer freezes names and no ids, a list RENAMED between the two sends
+makes the two sides differ — the consequences are recorded in `docs/backlog.md` under what the
+order path left behind.
+
+The till has not moved onto this wire yet: `apps/till` still builds and reads the old
+`modifierSelections`/`modifierSnapshots` shapes, which is a task of its own. The gap, and which
+till files it touches, is in `docs/backlog.md`.
 
 ## Storage and integration order
 

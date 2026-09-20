@@ -4,6 +4,7 @@ import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";
 import type { ExtraList, ExtraListItem } from "./extra-contract.js";
+import type { ProductModifierRef } from "./product-modifiers.js";
 
 /**
  * A list item with its price already settled. The one difference from {@link ExtraListItem} is that
@@ -56,9 +57,14 @@ async function borrowedUnitPrices(
  * An item that has to borrow its product's price and cannot is left out: it cannot be priced, so it
  * cannot be sold. It narrows the LIST as well, so these projections can hand back an ACTIVE list
  * with no items at all — a shape `parseExtraListInput` (extra-contract.ts) refuses outright on the
- * authoring side. What that would mean for an order is not stated here: nothing calls
- * `validateExtraSelections` in production yet (the plan's Task 7), so there is no order path whose
- * behaviour could be described. `extra_list_items_product_fk` is ON DELETE RESTRICT
+ * authoring side. An order answering such a list reaches `validateExtraSelections`
+ * (extra-contract.ts) through `buildLineExtras` (apps/server/src/modifier-selection.ts), and finds
+ * nothing to pick: a list whose `minPicks` is above zero then refuses the line rather than selling
+ * the dish without the item. What pins that refusal is
+ * "does not let an omitted payload waive a required extras list the menu offer has emptied"
+ * (apps/server/src/working-order.test.ts), which reaches the same empty-ACTIVE-list shape by the
+ * other route — a menu offer withdrawing the item — rather than by an unpriceable one.
+ * `extra_list_items_product_fk` is ON DELETE RESTRICT
  * (schema/extras.ts), which forbids that state at any ONE instant — but the items and the products
  * are read by two statements with a read-committed snapshot each, so another transaction can drop
  * the item from the list and then delete the product in between. Seen that way, on a real backend,
@@ -112,8 +118,9 @@ async function resolveHeldLists(
  *
  * An INACTIVE list is returned rather than dropped, carrying its `active` flag, because the flag is
  * what `validateExtraSelections` (extra-contract.ts) reads to answer only the ACTIVE lists of the
- * set it is handed. Nothing joins the two yet: on 2026-09-19 every caller of either is a test, and
- * no production code passes this function's output to that one.
+ * set it is handed. The order path is what joins the two: `resolveBasketModifiers`
+ * (apps/server/src/working-order.ts) resolves one basket's lists through this function and hands
+ * them to `buildLineExtras` (apps/server/src/modifier-selection.ts), which calls that validator.
  *
  * A bounded number of queries whatever the number of menu items: the publications, the lists, their
  * items, this offer's overrides, and the products whose own price an item still has to borrow.
@@ -196,14 +203,28 @@ export async function readMenuExtras(
  * A bounded number of queries whatever the number of products: the attachments, the lists, their
  * items, and the products whose own price an item still has to borrow — four, one fewer than the
  * menu read, which also reads the offer's overrides.
+ *
+ * `attachments` is the answer to the FIRST of those four, when the caller has already read it for a
+ * wider set of products than this one — as the order path does, which reads `product_modifiers`
+ * once per basket for the options side too (`resolveBasketModifiers`,
+ * apps/server/src/working-order.ts). It is narrowed to `productIds` here, so a caller may hand over
+ * the map it read for a superset and still get exactly what it asked for. Omitted, the read asks
+ * the question itself, which is what every other caller does.
  */
 export async function readProductExtras(
   tx: Transaction,
   productIds: string[],
+  attachments?: ReadonlyMap<string, ProductModifierRef[]>,
 ): Promise<Map<string, ResolvedExtraList[]>> {
-  const attachments = await readProductModifiers(tx, productIds);
-  const carried = [...attachments].flatMap(([productId, refs]) =>
-    refs.flatMap((ref) => (ref.kind === "extras" ? [{ productId, listId: ref.id }] : [])),
+  // `readProductModifiers` keys its map by the LOWER-CASED form the uuid column hands back
+  // (product-modifiers.ts), so the narrowing compares in that form whatever case the caller asked
+  // in — the same rule this function's own keys follow.
+  const named = new Set(productIds.map((productId) => productId.toLowerCase()));
+  const held = attachments ?? (await readProductModifiers(tx, productIds));
+  const carried = [...held].flatMap(([productId, refs]) =>
+    named.has(productId)
+      ? refs.flatMap((ref) => (ref.kind === "extras" ? [{ productId, listId: ref.id }] : []))
+      : [],
   );
   if (carried.length === 0) return new Map();
 

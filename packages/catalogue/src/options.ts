@@ -34,13 +34,12 @@ const labelColumns = {
   available: optionLabels.available,
 };
 
-export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
-  const lists = await tx
-    .select(listColumns)
-    .from(optionLists)
-    .orderBy(optionLists.sort, optionLists.id);
+/** One query for every list's labels, never one per list, whatever the number of lists. */
+async function withLabels(
+  tx: Transaction,
+  lists: Omit<OptionList, "labels">[],
+): Promise<OptionList[]> {
   if (lists.length === 0) return [];
-  // One query for every list's labels, never one per list.
   const rows = await tx
     .select({ listId: optionLabels.listId, ...labelColumns })
     .from(optionLabels)
@@ -61,18 +60,43 @@ export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
   return lists.map((list) => ({ ...list, labels: grouped.get(list.id) ?? [] }));
 }
 
-export async function getOptionList(tx: Transaction, optionListId: string): Promise<OptionList> {
-  const [list] = await tx
+export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
+  const lists = await tx
     .select(listColumns)
     .from(optionLists)
-    .where(eq(optionLists.id, optionListId));
+    .orderBy(optionLists.sort, optionLists.id);
+  return withLabels(tx, lists);
+}
+
+/**
+ * The named lists, in the order {@link listOptionLists} returns them, each with its labels. Two
+ * queries whatever the number of ids, and none at all for an empty one. An id naming no list is
+ * simply absent from the answer.
+ *
+ * The order path wants exactly the lists one dish attaches rather than the whole catalogue's: it has
+ * to freeze a chosen label's three names onto the order line, and what it holds is the option-list
+ * ids from `readProductModifiers` (product-modifiers.ts). Reading every list instead would be a
+ * third query whose cost grows with the catalogue rather than with the dish. This is the options
+ * twin of `readExtraListsByIds` (extras.ts).
+ */
+export async function readOptionListsByIds(
+  tx: Transaction,
+  optionListIds: string[],
+): Promise<OptionList[]> {
+  if (optionListIds.length === 0) return [];
+  const lists = await tx
+    .select(listColumns)
+    .from(optionLists)
+    .where(inArray(optionLists.id, optionListIds))
+    .orderBy(optionLists.sort, optionLists.id);
+  return withLabels(tx, lists);
+}
+
+/** One list with its labels, or `options.not_found`. The twin of `getExtraList` (extras.ts). */
+export async function getOptionList(tx: Transaction, optionListId: string): Promise<OptionList> {
+  const [list] = await readOptionListsByIds(tx, [optionListId]);
   if (!list) throw new AppError("options.not_found", { optionListId });
-  const labels = await tx
-    .select(labelColumns)
-    .from(optionLabels)
-    .where(eq(optionLabels.listId, optionListId))
-    .orderBy(optionLabels.sort, optionLabels.id);
-  return { ...list, labels };
+  return list;
 }
 
 async function assertOptionList(tx: Transaction, optionListId: string): Promise<void> {

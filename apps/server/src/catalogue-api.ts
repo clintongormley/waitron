@@ -244,9 +244,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "extras.in_use": 409,
   // An order line answering an extras list with too few picks, too many, or a quantity above one
   // item's cap — thrown by `validateExtraSelections` (extra-contract.ts). NO ROUTE ON THIS SURFACE
-  // raises it: a management route takes an authoring body, never a diner's picks, and
-  // `grep -rn validateExtraSelections apps packages --include="*.ts"` on 2026-09-20 found no
-  // production caller anywhere — the order path that will call it is Task 7 of the plan. Mapped at
+  // raises it: a management route takes an authoring body, never a diner's picks. Its one
+  // production caller is on the TILL surface —
+  // `grep -rn validateExtraSelections apps packages --include="*.ts"`, 2026-09-20, finds
+  // `buildLineExtras` (`apps/server/src/modifier-selection.ts`), reached from `priceOrderLines` and
+  // `updateHeldOrder` (`apps/server/src/working-order.ts`) — and no caller under this file. Mapped at
   // 400, which is also what the default would give: it is a CLIENT request fault, the caller having
   // sent a selection the list's own published counts refuse.
   "extras.limit_exceeded": 400,

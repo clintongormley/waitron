@@ -229,8 +229,11 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
  * the one thing that tracks an item by its PRODUCT instead is cleaned up separately
  * ({@link dropStaleMenuOverrides}), and
  * the design has an open order's child line point at the PRODUCT rather than back at the item
- * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4) — a path Task 7 of the plan
- * builds, so today there is nothing at all on the order side to check.
+ * (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4), which is what the order
+ * path does: `buildLineExtras` (`apps/server/src/modifier-selection.ts`), reached from
+ * `priceOrderLines` and `updateHeldOrder` (`apps/server/src/working-order.ts`), writes a child line
+ * carrying the picked product and its three frozen names, and `working_order_lines` carries no
+ * column naming a list or an item at all — so there is still nothing on the order side to check.
  *
  * EVERY item of the list is deleted and the body's are inserted fresh, each under the id the body
  * sent or a new one, so an item keeps its identity only because the body carries that id. Editing
@@ -386,8 +389,10 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
   // (drizzle/0008_menu_extra_publication.sql:18). Run
   // rather than read off the clauses, by "takes the publication and its overrides with it when the
   // list is deleted" (extra-projection.test.ts). There is no open-order check, because the design
-  // has an open order's child line carry the product rather than the list (spec §3.5, §3.4) — and
-  // that order path is Task 7 of the plan, unbuilt today.
+  // has an open order's child line carry the product rather than the list (spec §3.5, §3.4), and
+  // that is what the order path writes today (`buildLineExtras`,
+  // `apps/server/src/modifier-selection.ts`): a child line names the picked PRODUCT and freezes its
+  // names, so deleting the list that offered it reaches no open order.
   await tx.delete(extraLists).where(eq(extraLists.id, extraListId));
 }
 

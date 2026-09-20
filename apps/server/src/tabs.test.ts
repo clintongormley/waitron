@@ -3,9 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
-  optionGroupItems,
-  optionGroups,
-  productOptionGroups,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -19,9 +16,11 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createExtraList,
   createMenuItem,
   createMenuSection,
   createProduct,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -150,6 +149,32 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
     await asAppUser(tx);
     return fn(tx);
   });
+}
+
+/** Offer `extraProductId` as an extra of `dishId` through a one-item list, returning the list id a
+ *  round line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own.
+ *  The list's customer and kitchen names are left to fall back to its staff name: no assertion in
+ *  this file reads a list name, only the picked PRODUCT a child line carries. */
+async function attachExtras(
+  tx: Transaction,
+  dishId: string,
+  extraProductId: string,
+): Promise<string> {
+  const list = await createExtraList(
+    tx,
+    {
+      name: "Extras",
+      customerName: null,
+      kitchenName: null,
+      minPicks: 0,
+      maxPicks: 2,
+      active: true,
+      items: [{ productId: extraProductId, maxQuantity: 2, preselected: false, price: "0.50" }],
+    },
+    LOCALE,
+  );
+  await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
+  return list.id;
 }
 
 /** A PLACED counter delivery to `tableId`, FIRED to the kitchen (one ticket item), not yet collected —
@@ -304,45 +329,23 @@ describe("addTabRound (append-only, no re-price)", () => {
     ]);
   });
 
-  it("appends a round with modifiers as parent + child lines, firing ONLY the parent", async () => {
-    // Ordering modifiers (Task 6) on the tab round-send path: a round line carrying `options` expands
-    // into a parent dish line plus one child line per option, and only the PARENT is fired to the
-    // kitchen (a modifier is part of its dish, not its own ticket item).
-    const { cfg, cafeId, tableId } = await setupVenue();
-    // Attach an "Extras" group with one active +0.50 item to the café.
-    const baconId = await asApp(cfg, async (tx) => {
-      const [group] = await tx
-        .insert(optionGroups)
-        .values({
-          name: { [LOCALE]: "Extras" },
-          minSelect: 0,
-          maxSelect: 2,
-          required: false,
-          sort: 0,
-        })
-        .returning({ id: optionGroups.id });
-      const [bacon] = await tx
-        .insert(optionGroupItems)
-        .values({
-          groupId: group!.id,
-          name: { [LOCALE]: "Bacon" },
-          priceDelta: "0.50",
-          vatClass: "reduced",
-          sort: 0,
-        })
-        .returning({ id: optionGroupItems.id });
-      await tx.insert(productOptionGroups).values({
-        productId: cafeId,
-        groupId: group!.id,
-        sort: 0,
-      });
-      return bacon!.id;
-    });
+  it("appends a round with extras as parent + child lines, firing ONLY the parent", async () => {
+    // Extras on the tab round-send path: a round line carrying `extras` expands into a parent dish
+    // line plus one child line per pick, and only the PARENT is fired to the kitchen (an extra is
+    // part of its dish, not its own ticket item).
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    // The café offers the agua as a +0.50 extra. Two DIFFERENT products, so an assertion about which
+    // one a row carries can fail.
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cafeId, aguaId));
 
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
       ]),
     );
 
@@ -352,7 +355,6 @@ describe("addTabRound (append-only, no re-price)", () => {
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         parentLineId: workingOrderLines.parentLineId,
-        optionGroupItemId: workingOrderLines.optionGroupItemId,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -361,9 +363,9 @@ describe("addTabRound (append-only, no re-price)", () => {
     const [parent, child] = lines;
     expect(parent!.productId).toBe(cafeId);
     expect(parent!.parentLineId).toBeNull();
-    expect(child!.productId).toBeNull();
+    // The child IS the picked product, and it hangs off the dish line.
+    expect(child!.productId).toBe(aguaId);
     expect(child!.parentLineId).toBe(parent!.id);
-    expect(child!.optionGroupItemId).toBe(baconId);
 
     // Exactly ONE ticket item — the parent dish; the child modifier was filtered out of the fire.
     const fired = await db
@@ -693,56 +695,34 @@ describe("readTabLines", () => {
     expect(agua.state).toBe("queued");
   });
 
-  it("carries state: null for a child modifier line, which has no ticket item of its own", async () => {
-    // A round line with `options` expands into a parent dish line plus one child line per option
-    // (Task 6); only the PARENT is fired to the kitchen (`fireLines` filters children out), so the
-    // child never gets a `ticket_items` row at all — `readTabLines`'s LEFT JOIN then reports `state: null`
-    // for it, distinct from a HELD parent (which has a row, state "queued", firedAt null).
-    const { cfg, cafeId, tableId } = await setupVenue();
-    const baconId = await asApp(cfg, async (tx) => {
-      const [group] = await tx
-        .insert(optionGroups)
-        .values({
-          name: { [LOCALE]: "Extras" },
-          minSelect: 0,
-          maxSelect: 2,
-          required: false,
-          sort: 0,
-        })
-        .returning({ id: optionGroups.id });
-      const [bacon] = await tx
-        .insert(optionGroupItems)
-        .values({
-          groupId: group!.id,
-          name: { [LOCALE]: "Bacon" },
-          priceDelta: "0.50",
-          vatClass: "reduced",
-          sort: 0,
-        })
-        .returning({ id: optionGroupItems.id });
-      await tx.insert(productOptionGroups).values({
-        productId: cafeId,
-        groupId: group!.id,
-        sort: 0,
-      });
-      return bacon!.id;
-    });
+  it("carries state: null for an extra's child line, which has no ticket item of its own", async () => {
+    // A round line with `extras` expands into a parent dish line plus one child line per pick; only
+    // the PARENT is fired to the kitchen (`fireLines` filters children out), so the child never gets
+    // a `ticket_items` row at all — `readTabLines`'s LEFT JOIN then reports `state: null` for it,
+    // distinct from a HELD parent (which has a row, state "queued", firedAt null).
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cafeId, aguaId));
 
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
       ]),
     );
 
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     expect(lines).toHaveLength(2);
     const parent = lines.find((l) => l.productId === cafeId)!;
-    const child = lines.find((l) => l.productId === null)!;
+    // The child carries the PICKED product, so it is told apart from the dish by product id.
+    const child = lines.find((l) => l.productId === aguaId)!;
     // Null course → auto-fires (§2b): the parent gets a fresh "queued" ticket item.
     expect(parent.firedAt).not.toBeNull();
     expect(parent.state).toBe("queued");
-    // The child modifier line has no ticket item of its own — null firedAt AND null state.
+    // The extra's child line has no ticket item of its own — null firedAt AND null state.
     expect(child.firedAt).toBeNull();
     expect(child.state).toBeNull();
   });
@@ -997,19 +977,22 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
   });
 });
 
-it("returns a tab line's stored staff names and modifier answers", async () => {
+it("returns a tab line's stored staff names and options answers", async () => {
   const { cfg, cafeId, tableId } = await setupVenue();
   await asApp(cfg, async (tx) => {
     const { tabId } = await openTab(tx, cfg, {
       tableId,
       lines: [{ productId: cafeId, quantity: "1" }],
     });
-    const modifierSnapshots = [
+    // Each of the six frozen names carries its own text, so a read of the wrong one fails.
+    const optionSnapshots = [
       {
-        modifierId: randomUUID(),
-        name: { [LOCALE]: "Message" },
-        type: "text" as const,
-        text: "Happy birthday",
+        listName: { [LOCALE]: "Cooked staff" },
+        listCustomerName: { [LOCALE]: "Cooked customer" },
+        listKitchenName: "Cooked kitchen",
+        labelName: { [LOCALE]: "Rare staff" },
+        labelCustomerName: { [LOCALE]: "Rare customer" },
+        labelKitchenName: "Rare kitchen",
       },
     ];
     // The customer-facing map is planted alongside the staff names and must NOT come back: a tab's
@@ -1021,12 +1004,12 @@ it("returns a tab line's stored staff names and modifier answers", async () => {
         variantName: "Large",
         descriptions: { [LOCALE]: "Café recién molido" },
         variantDescriptions: { [LOCALE]: "Taza grande" },
-        modifierSnapshots,
+        optionSnapshots,
       })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     expect((await readTabLines(tx, cfg, tabId))[0]).toMatchObject({
       name: "Recorded coffee · Large",
-      modifierSnapshots,
+      optionSnapshots,
     });
   });
 });

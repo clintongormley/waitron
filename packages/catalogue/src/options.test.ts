@@ -15,6 +15,7 @@ import {
   getOptionList,
   listOptionLists,
   optionListDependants,
+  readOptionListsByIds,
   updateOptionList,
 } from "./options.js";
 
@@ -114,9 +115,15 @@ describe("option list CRUD", () => {
     await fx.db.execute(sql`
       insert into option_lists (id, name, sort) values
         (${third}, 'Third', 1), (${second}, 'Second', 1), (${late}, 'Late', 5)`);
+    // The label ids are given explicitly and in the OPPOSITE order to the labels' `sort`, so this
+    // test's label assertion fails when the `sort` key is dropped. Left to `defaultRandom()` the
+    // two ids land in either order and the assertion passes about half the time — seen doing
+    // exactly that while proving `readOptionListsByIds` below by deletion.
+    const lastLabel = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const firstLabel = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     await fx.db.execute(sql`
-      insert into option_labels (list_id, name, sort) values
-        (${second}, 'Last label', 1), (${second}, 'First label', 0)`);
+      insert into option_labels (id, list_id, name, sort) values
+        (${lastLabel}, ${second}, 'Last label', 1), (${firstLabel}, ${second}, 'First label', 0)`);
 
     const lists = await run((tx) => listOptionLists(tx));
 
@@ -463,6 +470,81 @@ describe("option list CRUD", () => {
         params: { optionListId: UNKNOWN_ID },
       }),
     );
+  });
+});
+
+describe("reading the named option lists", () => {
+  /**
+   * Three lists written straight to the tables, because `sort` is not part of the authoring body and
+   * a list saved through `createOptionList` always keeps the column default. The ids are chosen so
+   * that sort order, id order and the order the ids are asked in are three DIFFERENT orders — an
+   * assertion on the names below therefore fails if the `sort` key is dropped, if the `id` tiebreak
+   * is dropped, or if the rows come back in the caller's order.
+   */
+  const late = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const second = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const third = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  const seedLists = async () => {
+    await fx.db.execute(sql`
+      insert into option_lists (id, name, sort) values
+        (${third}, 'Third', 1), (${second}, 'Second', 1), (${late}, 'Late', 5)`);
+    // The label ids are given explicitly and in the OPPOSITE order to the labels' `sort`, so the
+    // label assertion below fails if the `sort` key is dropped. Left to `defaultRandom()` the two
+    // ids land in either order and the same assertion passes about half the time — seen doing
+    // exactly that, with `optionLabels.sort` removed from the shared helper.
+    await fx.db.execute(sql`
+      insert into option_labels (id, list_id, name, sort) values
+        ('11111111-1111-4111-8111-111111111111', ${third}, 'Last label', 1),
+        ('22222222-2222-4222-8222-222222222222', ${third}, 'First label', 0)`);
+  };
+
+  it("returns only the named lists, in the catalogue's own order", async () => {
+    await seedLists();
+
+    const lists = await run((tx) => readOptionListsByIds(tx, [late, third]));
+
+    expect(lists.map((list) => list.name)).toEqual(["Third", "Late"]);
+  });
+
+  it("carries each list's labels in label order, and an empty array for a list with none", async () => {
+    await seedLists();
+
+    const lists = await run((tx) => readOptionListsByIds(tx, [second, third]));
+
+    expect(lists.map((list) => list.labels.map((label) => label.name))).toEqual([
+      [],
+      ["First label", "Last label"],
+    ]);
+  });
+
+  it("hands back exactly what getOptionList hands back for the same list", async () => {
+    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+
+    const [read] = await run((tx) => readOptionListsByIds(tx, [created.id]));
+
+    expect(read).toEqual(await run((tx) => getOptionList(tx, created.id)));
+  });
+
+  it("leaves out an id that names no list, rather than refusing", async () => {
+    await seedLists();
+
+    const lists = await run((tx) => readOptionListsByIds(tx, [UNKNOWN_ID, second]));
+
+    expect(lists.map((list) => list.name)).toEqual(["Second"]);
+  });
+
+  it("asks the database nothing for an empty id list", async () => {
+    // A `Transaction`-shaped stub whose `select` throws, so this pins "no query at all" rather than
+    // "an empty answer": against the real connection an implementation that queried anyway would
+    // still return `[]` and pass.
+    const refuses = {
+      select: () => {
+        throw new Error("readOptionListsByIds queried the database for an empty id list");
+      },
+    } as unknown as Transaction;
+
+    expect(await readOptionListsByIds(refuses, [])).toEqual([]);
   });
 });
 

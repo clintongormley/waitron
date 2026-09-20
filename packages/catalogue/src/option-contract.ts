@@ -168,10 +168,17 @@ export function validateOptionSelections(
   for (const entry of value) {
     const row = record(entry, "optionSelections");
     keys(row, ["listId", "labelId"], "optionSelections");
-    const listId = row.listId;
-    const labelId = row.labelId;
-    if (typeof listId !== "string") invalid("listId");
-    if (typeof labelId !== "string") invalid("labelId");
+    const sentListId = row.listId;
+    const sentLabelId = row.labelId;
+    if (typeof sentListId !== "string") invalid("listId");
+    if (typeof sentLabelId !== "string") invalid("labelId");
+    // Lower-cased for the same reason `id` above lower-cases an authored id: the stored rows come
+    // back from their `uuid` columns lower-cased, so an answer sent in upper case has to be folded
+    // before it is compared to them. Deliberately NOT `id()`: a `labelId` that is no uuid at all
+    // stays `options.label_required` — the list does not carry it — rather than becoming a shape
+    // fault, which is what this function's docblock promises.
+    const listId = sentListId.toLowerCase();
+    const labelId = sentLabelId.toLowerCase();
     if (!offered.has(listId) || answers.has(listId)) invalid("listId");
     answers.set(listId, labelId);
   }

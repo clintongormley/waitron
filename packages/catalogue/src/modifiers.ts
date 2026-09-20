@@ -81,17 +81,6 @@ export async function getModifier(tx: Transaction, modifierId: string): Promise<
   return found;
 }
 
-/** Predicate matching a working_order_lines row that still uses this modifier — by saved snapshot or
- * by a chosen choice. Shared by the delete refusal and the dashboard's order count so the two never
- * drift; keep them reading the identical predicate. */
-const openOrderUse = (modifierId: string) => sql`
-    (
-      modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb
-      or option_group_item_id in (
-        select id from option_group_items where group_id = ${modifierId}
-      )
-    )`;
-
 async function assertUnused(tx: Transaction, modifierId: string): Promise<void> {
   const result = await tx.execute<{ dependency: string }>(sql`
     select 'product' as dependency from product_option_groups where group_id = ${modifierId}
@@ -131,8 +120,11 @@ async function writeChoices(tx: Transaction, modifierId: string, input: Modifier
   const retained = new Set(choices.map((choice) => choice.id));
   for (const item of old) {
     if (retained.has(item.id)) continue;
-    const usage = await tx.execute(sql`select 1 from menu_item_options where option_id = ${item.id}
-      union all select 1 from working_order_lines where (option_group_item_id = ${item.id} or modifier_snapshots @> ${JSON.stringify([{ type: "options", choiceId: item.id }])}::jsonb) limit 1`);
+    // Only a menu publication can still hold a choice: an open order line names none, for the reason
+    // {@link deleteModifier} states.
+    const usage = await tx.execute(
+      sql`select 1 from menu_item_options where option_id = ${item.id} limit 1`,
+    );
     if (usage.rows.length)
       throw new AppError("modifier.in_use", { modifierId, dependency: "choice" });
     await tx.delete(optionGroupItems).where(eq(optionGroupItems.id, item.id));
@@ -195,12 +187,11 @@ export async function updateModifier(
 export async function deleteModifier(tx: Transaction, modifierId: string): Promise<void> {
   await lockModifierDefinitions(tx);
   await getModifier(tx, modifierId); // 404s an absent id
-  // A product or menu attachment is cascaded away by the delete, so neither blocks it. An OPEN order
-  // is different: its line still references this modifier — by saved snapshot or chosen item — and
-  // deleting would orphan a live, un-settled basket line, so a live reference refuses the delete.
-  const open = await tx.execute<{ one: number }>(sql`
-    select 1 as one from working_order_lines where ${openOrderUse(modifierId)} limit 1`);
-  if (open.rows[0]) throw new AppError("modifier.in_use", { modifierId, dependency: "order" });
+  // A product or menu attachment is cascaded away by the delete, so neither blocks it. NOTHING ELSE
+  // can: an open order line has no column naming a modifier or an option-group item since the order
+  // path moved to extras and options (`packages/db/src/schema/orders.ts`), so the refusal that used
+  // to stand here had nothing left to find. This whole file goes with Task 13 of
+  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
   await tx.delete(optionGroups).where(eq(optionGroups.id, modifierId));
 }
 
@@ -211,9 +202,10 @@ export interface ModifierDependants {
 }
 
 /** What deleting this modifier would touch — the preview the dashboard's delete confirmation reads.
- * Products and menus are detached (cascaded) by the delete; an open order refuses it, so `orders`
- * gates the confirm. A menu publication has no name of its own here, so it is identified by the
- * product the menu item is (its staff name). */
+ * Products and menus are detached (cascaded) by the delete. `orders` is always 0 now: an open order
+ * line no longer carries a column that could name this modifier, for the reason {@link deleteModifier}
+ * states. A menu publication has no name of its own here, so it is identified by the product the menu
+ * item is (its staff name). */
 export async function modifierDependants(
   tx: Transaction,
   modifierId: string,
@@ -237,11 +229,9 @@ export async function modifierDependants(
     .innerJoin(products, eq(products.id, menuItems.productId))
     .where(eq(menuItemOptionGroups.groupId, modifierId))
     .orderBy(menuItems.id);
-  const orders = await tx.execute<{ count: number }>(sql`
-    select count(*)::int as count from working_order_lines where ${openOrderUse(modifierId)}`);
   return {
     products: productRows,
     menus: menuRows,
-    orders: orders.rows[0]?.count ?? 0,
+    orders: 0,
   };
 }
