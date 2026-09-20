@@ -73,7 +73,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       extra_list_items_list_fk:
         "FOREIGN KEY (list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
       extra_list_items_pkey: "PRIMARY KEY (id)",
-      extra_list_items_price_ck: "CHECK (((price)::numeric >= (0)::numeric))",
+      extra_list_items_price_ck: "CHECK ((price >= 0))",
       extra_list_items_product_fk:
         "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
       extra_list_items_qty_ck: "CHECK ((max_quantity >= 1))",
@@ -83,7 +83,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_item_extra_items_list_fk:
         "FOREIGN KEY (menu_item_id, list_id) REFERENCES menu_item_extra_lists(menu_item_id, list_id) ON DELETE CASCADE",
       menu_item_extra_items_pk: "PRIMARY KEY (menu_item_id, list_id, product_id)",
-      menu_item_extra_items_price_ck: "CHECK (((price)::numeric >= (0)::numeric))",
+      menu_item_extra_items_price_ck: "CHECK ((price >= 0))",
       menu_item_extra_items_product_fk:
         "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
       menu_item_extra_lists_item_fk:
@@ -104,10 +104,10 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_item_variants_offer_fk:
         "FOREIGN KEY (menu_item_id, product_id) REFERENCES menu_items(id, product_id) ON DELETE CASCADE",
       menu_item_variants_pk: "PRIMARY KEY (menu_item_id, variant_id)",
-      menu_item_variants_price_ck: "CHECK (((unit_price)::numeric >= (0)::numeric))",
+      menu_item_variants_price_ck: "CHECK ((unit_price >= 0))",
       menu_item_variants_variant_fk:
         "FOREIGN KEY (product_id, variant_id) REFERENCES product_variants(product_id, id) ON DELETE RESTRICT",
-      menu_items_gross_price_ck: "CHECK (((gross_price)::numeric >= (0)::numeric))",
+      menu_items_gross_price_ck: "CHECK ((gross_price >= 0))",
       menu_items_id_product_key: "UNIQUE (id, product_id)",
       menu_items_menu_fk: "FOREIGN KEY (menu_id) REFERENCES catalogues(id) ON DELETE CASCADE",
       menu_items_menu_product_key: "UNIQUE (menu_id, product_id)",
@@ -140,7 +140,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       product_units_product_id_pk: "PRIMARY KEY (product_id)",
       product_units_unit_fk: "FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE RESTRICT",
       product_variants_pkey: "PRIMARY KEY (id)",
-      product_variants_price_ck: "CHECK (((unit_price)::numeric >= (0)::numeric))",
+      product_variants_price_ck: "CHECK ((unit_price >= 0))",
       product_variants_product_fk:
         "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
       product_variants_product_id_key: "UNIQUE (product_id, id)",

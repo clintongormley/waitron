@@ -288,16 +288,20 @@ describe("purchase-invoice operations", () => {
   });
 
   it("propagates a non-unique DB error from the header insert (not swallowed as a duplicate)", async () => {
-    // The rethrow branch of create's 23505 translation: an overflow on `total` is a 22003, not a
-    // 23505, so it must surface as itself, never as a spurious purchase.duplicate. `total` is a
-    // money column, which stores a count of whole cents in a 4-byte integer, so the smallest amount
-    // that overflows it is a little over 21474836.47 — an amount `assertMoney` accepts, which is
-    // what keeps the refusal on the DATABASE rather than in the cents converter. Lines are valid,
-    // so validation passes and the header insert is reached.
+    // The rethrow branch of create's 23505 translation: a database refusal that is not a duplicate
+    // must surface as itself, never as a spurious purchase.duplicate. The refusal used here is an
+    // out-of-range date, which `createPurchaseInvoice` does not validate — only the proportion and
+    // the lines are checked before the header insert — so it reaches the database and comes back as
+    // a driver error rather than an AppError.
+    //
+    // It used to be an overflow on `total`, and that mechanism is gone by design: money columns are
+    // eight bytes, so the widest amount `assertMoney` accepts (twelve integer digits) is far inside
+    // what the column holds. There is no longer any amount this system admits that the column
+    // refuses — which is the property the width was chosen for.
     const error = await asApp((tx) =>
       captureThrown(() =>
         createPurchaseInvoice(tx, {
-          header: { ...baseInput().header, total: d("99999999.99") },
+          header: { ...baseInput().header, issuedOn: "2026-02-30" },
           lines: baseInput().lines,
         }),
       ),
