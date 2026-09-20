@@ -17,7 +17,9 @@ import { nodes } from "./nodes.js";
  * on this package, so the dependency cannot run the other way. `close` is the `computeDailyClose`
  * output (VAT summary, cash-up, counts) — opaque `unknown` here, reporting owns its precise type —
  * and `cashReconciliation` is the per-till/per-node cash-variance block reporting builds at close time.
- * All money is stored as `Decimal` strings, matching the rest of the schema.
+ * The money inside `snapshot` is `Decimal` strings, NOT the whole cents a money COLUMN now
+ * holds (`money()` in columns.ts): the document is above the cents boundary, so reporting
+ * writes and reads it in decimals with no conversion.
  */
 export interface DailyCloseSnapshot {
   /** The VAT-exact `computeDailyClose` output (vat, cash, counts). Reporting owns the precise type. */

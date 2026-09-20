@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, centsToDecimal, decimal, decimalToCents } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
 import {
   extraListItems,
@@ -81,9 +81,11 @@ async function withItems(tx: Transaction, lists: Omit<ExtraList, "items">[]): Pr
     .orderBy(extraListItems.sort, extraListItems.id);
   const grouped = new Map<string, ExtraListItem[]>();
   for (const row of rows) {
-    const { listId, ...item } = row;
+    const { listId, price, ...item } = row;
     const held = grouped.get(listId) ?? [];
-    held.push(item);
+    // A null price means "inherit" and a stored zero means "free": `resolveExtraPrice` reads the
+    // two differently, so the conversion must keep them apart.
+    held.push({ ...item, price: price === null ? null : centsToDecimal(price) });
     grouped.set(listId, held);
   }
   return lists.map((list) => ({ ...list, items: grouped.get(list.id) ?? [] }));
@@ -297,7 +299,7 @@ async function writeItems(
         productId: item.productId,
         maxQuantity: item.maxQuantity,
         preselected: item.preselected,
-        price: item.price,
+        price: item.price === null ? null : decimalToCents(decimal(item.price)),
         sort,
       })
       .onConflictDoNothing({ target: extraListItems.id })
@@ -602,7 +604,7 @@ export async function setMenuItemExtraLists(
       menuItemId: offerId,
       listId: publication.listId,
       productId: item.productId,
-      price: item.price,
+      price: item.price === null ? null : decimalToCents(decimal(item.price)),
       available: item.available,
     })),
   );

@@ -315,7 +315,7 @@ describe("recordCorrection — refusals", () => {
         invoiceNumber: 500,
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
-        total: "0.00",
+        total: 0,
         // The filed per-rate desglose; `[]` — this suite asserts against the
         // registro backend.recordSale builds, not the sales row's breakdown, so the column just
         // needs a valid NOT NULL jsonb array.
@@ -415,7 +415,7 @@ describe("recordSubstitution — refusals", () => {
         invoiceNumber: 600,
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
-        total: "0.00",
+        total: 0,
         // The filed per-rate desglose; `[]` — see the invoiceNumber 500 insert above.
         vatBreakdown: [],
         locale: "es-ES",
@@ -494,7 +494,7 @@ describe("recordSale — invoice type selection", () => {
     const freshSaleId = brandSaleId("22222222-2222-4222-8222-222222222222");
     await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
-      // total is "0.00" with no tender and no settlement — the simplest possible sale row now that
+      // total is zero with no tender and no settlement — the simplest possible sale row now that
       // migration 0012 dropped `tip_amount`/`amount_charged` and retired the commit-time
       // coverage trigger (a bare, unsettled sale is a legitimate steady state, design §3) — the same
       // convention `test/fixtures.ts`'s `seedTenantTillSif` and `src/testing/seed.ts`'s `seedSale`
@@ -509,7 +509,7 @@ describe("recordSale — invoice type selection", () => {
         invoiceNumber: 999,
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
-        total: "0.00",
+        total: 0,
         // The filed per-rate desglose; `[]` — see the invoiceNumber 500 insert above.
         vatBreakdown: [],
         locale: "es-ES",
@@ -557,7 +557,7 @@ describe("recordSale — invoice type selection", () => {
         invoiceNumber,
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
-        total: "0.00",
+        total: 0,
         vatBreakdown: [],
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
@@ -710,7 +710,7 @@ describe("filedReceiptFor", () => {
         invoiceNumber: 700,
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
-        total: "110.00",
+        total: 11000,
         // The filed per-rate desglose; `[]` — see the invoiceNumber 500 insert above.
         vatBreakdown: [],
         locale: "es-ES",

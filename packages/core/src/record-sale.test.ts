@@ -271,12 +271,14 @@ describe("recordSale — the happy path", () => {
     // different from each other and from their sum, so an implementation that copied the wrong field
     // cannot produce the expected rows by coincidence.
     const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    // Read straight off the tables, so every money figure here is a count of whole cents:
+    // 1441 is 14.41, 1631 is 16.31, 190 is 1.90.
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
-    expect(row?.total).toBe("14.41");
+    expect(row?.total).toBe(1441);
 
     const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
-    expect(tender?.amount).toBe("16.31");
-    expect(tender?.tipAmount).toBe("1.90");
+    expect(tender?.amount).toBe(1631);
+    expect(tender?.tipAmount).toBe(190);
   });
 
   it("snapshots the locale list as at issuance", async () => {
@@ -702,7 +704,7 @@ describe("recordSale — settlement modes", () => {
           cashTendered: r.cashTendered,
           settledAt: new Date(r.settledAt).getTime(),
         }))
-        .sort((x, y) => x.amount.localeCompare(y.amount));
+        .sort((x, y) => x.amount - y.amount);
     const aTenders = normalize(
       await suite.db.select().from(tenders).where(eq(tenders.saleId, a.saleId)),
     );
@@ -710,11 +712,12 @@ describe("recordSale — settlement modes", () => {
       await suite.db.select().from(tenders).where(eq(tenders.saleId, b.saleId)),
     );
     expect(aTenders).toHaveLength(2);
+    // Read straight off the table, so these are counts of whole cents, not decimal literals.
     expect(aTenders).toContainEqual({
       method: "cash",
-      amount: "6.31",
-      cashTendered: "10.00",
-      tipAmount: "0.00",
+      amount: 631,
+      cashTendered: 1000,
+      tipAmount: 0,
       settledAt: BASE.getTime(),
     });
     expect(aTenders).toEqual(bTenders);
@@ -805,7 +808,8 @@ describe("recordSale — numbering", () => {
           invoiceNumber: 1,
           issuedAt: BASE.toISOString(),
           issuedOffsetMinutes: 60,
-          total: "1.00",
+          // A money column holds whole cents: 100 is 1.00.
+          total: 100,
           // The filed per-rate breakdown; `[]` — supplied so the insert reaches the
           // duplicate-invoice-number unique violation (23505) under test rather than tripping the
           // column's own NOT NULL (23502) first.

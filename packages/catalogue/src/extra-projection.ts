@@ -1,5 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
+import { centsToDecimal } from "@waitron/shared";
 import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";
@@ -48,7 +49,9 @@ async function borrowedUnitPrices(
     .select({ id: products.id, unitPrice: products.unitPrice })
     .from(products)
     .where(inArray(products.id, named));
-  return new Map(rows.map((product) => [product.id, { unitPrice: product.unitPrice }]));
+  return new Map(
+    rows.map((product) => [product.id, { unitPrice: centsToDecimal(product.unitPrice) }]),
+  );
 }
 
 /**
@@ -151,7 +154,9 @@ export async function readMenuExtras(
   const overrides = new Map(
     overrideRows.map((row) => [
       key(row.menuItemId, row.listId, row.productId),
-      { price: row.price, available: row.available },
+      // A null override price means "no menu price", which is not the same offer as a price of
+      // zero: the chain below falls through on null and stops on 0.00.
+      { price: row.price === null ? null : centsToDecimal(row.price), available: row.available },
     ]),
   );
 

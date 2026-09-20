@@ -33,17 +33,18 @@ describe("recordManualCardPayment", () => {
     const rows = await pg.db.execute<{
       provider: string;
       state: string;
-      amount: string;
+      amount: number;
       external_ref: string | null;
       settled_at: string | null;
     }>(sql`
       select provider, state, amount, external_ref, settled_at
       from payments where payment_ref = ${result.paymentRef}
     `);
+    // Read straight from the column, so the amount is the stored count of cents, not "12.10".
     expect(rows.rows[0]).toMatchObject({
       provider: "manual",
       state: "captured",
-      amount: "12.10",
+      amount: 1210,
       external_ref: "OP-000123",
     });
     expect(rows.rows[0].settled_at).not.toBeNull();
@@ -84,12 +85,12 @@ describe("recordManualRefund", () => {
     );
     expect(refunded.state).toBe("refunded");
 
-    const rows = await pg.db.execute<{ provider: string; amount: string }>(sql`
+    const rows = await pg.db.execute<{ provider: string; amount: number }>(sql`
       select provider, amount from payment_refunds
       where payment_ref = ${paid.paymentRef}
     `);
     expect(rows.rows).toHaveLength(1);
-    expect(rows.rows[0]).toMatchObject({ provider: "manual", amount: "20.00" });
+    expect(rows.rows[0]).toMatchObject({ provider: "manual", amount: 2000 });
   });
 
   it("exposes the sentinel provider id as MANUAL_PROVIDER", () => {

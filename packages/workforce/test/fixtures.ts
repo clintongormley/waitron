@@ -67,7 +67,7 @@ export async function seedEmployment(
     insert into employments (
       person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
     ) values (${params.personId},
-      ${params.contractedMinutesPerWeek ?? 2400}, 'full_time', '2026-01-01', '15.00'
+      ${params.contractedMinutesPerWeek ?? 2400}, 'full_time', '2026-01-01', 1500
     )
     returning id`);
   return result.rows[0]!.id;

@@ -300,7 +300,8 @@ describe("recordVoid — numbering", () => {
           invoiceNumber: 1,
           issuedAt: BASE.toISOString(),
           issuedOffsetMinutes: 60,
-          total: "1.00",
+          // A money column holds whole cents: 100 is 1.00.
+          total: 100,
           // The filed per-rate breakdown; `[]` — supplied so the insert reaches the
           // duplicate-invoice-number unique violation (23505) under test rather than tripping the
           // column's own NOT NULL (23502) first.

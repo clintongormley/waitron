@@ -68,7 +68,7 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
 /**
  * The slice of one product row the dashboard reads out of `GET /management-api/catalogues/:id/products`
  * — the whole `Product` catalogue's `operations.ts` returns. `unitPrice` is a GROSS (VAT-inclusive)
- * `numeric(12,2)` decimal STRING, never a number; `image` is a bare `<sha256>.<ext>` filename served at
+ * two-place decimal STRING, never a number; `image` is a bare `<sha256>.<ext>` filename served at
  * `/media/<image>`, or null when there is no picture.
  */
 export interface Product {

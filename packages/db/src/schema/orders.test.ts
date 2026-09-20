@@ -78,7 +78,7 @@ async function seed(db: Database): Promise<void> {
       catalogueId: catA.id,
       name: "Café solo",
       pricingUnit: "each",
-      unitPrice: "1.30",
+      unitPrice: 130,
       vatClass: "general",
     })
     .returning({ id: products.id });
@@ -99,11 +99,12 @@ const LINE = {
   name: "Café solo",
   descriptions: { es: "Café solo", ca: "Cafè sol" },
   quantity: "1.000",
-  unitPrice: "1.30",
-  // The GROSS (VAT-inclusive) unit locked at add time (unit_price_gross, 7c): 1.30 net at 10% VAT.
-  unitPriceGross: "1.43",
+  unitPrice: 130,
+  // The GROSS (VAT-inclusive) unit locked at add time (unit_price_gross, 7c): 1.30 net at 10% VAT,
+  // in whole cents.
+  unitPriceGross: 143,
   vatRate: "10.00",
-  lineTotal: "1.30",
+  lineTotal: 130,
 };
 
 describe("working_orders", () => {
@@ -140,13 +141,13 @@ describe("working_orders", () => {
       .values({ ...LINE, productId: productA, lineNo: 2, workingOrderId: id });
     await db
       .update(workingOrderLines)
-      .set({ quantity: "2.000", lineTotal: "2.60" })
+      .set({ quantity: "2.000", lineTotal: 260 })
       .where(eq(workingOrderLines.workingOrderId, id));
     const found = await db
       .select({ total: workingOrderLines.lineTotal })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    expect(found.map((r) => r.total)).toEqual(["2.60", "2.60"]);
+    expect(found.map((r) => r.total)).toEqual([260, 260]);
   });
 
   it("settles an open order and stamps settled_at", async () => {
@@ -442,7 +443,7 @@ describe("working_order_lines", () => {
     ]);
   });
 
-  it("stores every monetary column as numeric(12, 2)", async () => {
+  it("stores every monetary column as integer, a whole count of cents", async () => {
     const cols = await rows<{
       column_name: string;
       data_type: string;
@@ -457,9 +458,13 @@ describe("working_order_lines", () => {
     );
     expect(cols).toHaveLength(3);
     for (const col of cols) {
-      expect(col.data_type).toBe("numeric");
-      expect(col.numeric_precision).toBe(12);
-      expect(col.numeric_scale).toBe(2);
+      // A money column counts whole cents (`money()` in packages/db/src/schema/columns.ts):
+      // PostgreSQL reports `bigint` as precision 64, scale 0, so a column that slipped back to
+      // numeric(12, 2) fails all three, and one narrowed to a four-byte integer fails the
+      // precision.
+      expect(col.data_type).toBe("bigint");
+      expect(col.numeric_precision).toBe(64);
+      expect(col.numeric_scale).toBe(0);
     }
   });
 });
@@ -500,7 +505,7 @@ describe("working_order_lines — the draft line's links", () => {
     return rows<{ id: string }>(
       db,
       sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id) values (${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
-             ${descriptions}::jsonb, '1.000', '1.30', '1.43', '10.00', '1.30',
+             ${descriptions}::jsonb, '1.000', 130, 143, '10.00', 130,
              ${opts.parentLineId ?? null}
            ) returning id`,
     );
@@ -546,7 +551,7 @@ describe("working_order_lines — the draft line's links", () => {
         catalogueId: (await db.select({ id: catalogues.id }).from(catalogues))[0]!.id,
         name: "Café solo",
         pricingUnit: "each",
-        unitPrice: "1.30",
+        unitPrice: 130,
         vatClass: "general",
       })
       .returning({ id: products.id });

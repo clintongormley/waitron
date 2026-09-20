@@ -47,7 +47,7 @@ describe("payments.reader_id", () => {
         readerId,
         provider: "sumup",
         paymentRef: "pay_1",
-        amount: "10.00",
+        amount: 1000, // the column counts whole cents
         state: "captured",
       });
     });
@@ -71,7 +71,7 @@ describe("payments.reader_id", () => {
           readerId: randomUUID(),
           provider: "sumup",
           paymentRef: "pay_missing_reader",
-          amount: "10.00",
+          amount: 1000,
           state: "captured",
         });
       }),

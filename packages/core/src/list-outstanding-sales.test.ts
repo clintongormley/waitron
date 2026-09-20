@@ -39,8 +39,9 @@ async function settleDirectly(saleId: SaleId): Promise<void> {
     await tx.insert(tenders).values({
       saleId,
       method: "cash",
-      amount: "70.00",
-      tipAmount: "0.00",
+      // Money columns hold whole cents: 7000 is the 70.00 that covers `seedBareSale`'s default.
+      amount: 7000,
+      tipAmount: 0,
       settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
     });
     await tx.insert(saleSettlements).values({

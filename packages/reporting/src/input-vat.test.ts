@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -132,6 +133,46 @@ describe("computeInputVat", () => {
     expect((await run({ year: 2026, month: 8 })).byRate).toEqual([
       { rate: "21.00", base: "200.00", tax: "21.00", kind: "ordinary" },
     ]);
+  });
+
+  it("rounds the deductible cuota to the whole cent per line, half away from zero", async () => {
+    // Half a cent, in the direction the rule has to settle: 5 cents at 50% is 2.5 cents, which
+    // rounds AWAY from zero to 3. Rounded PER LINE and only then summed, two such invoices report
+    // 0.06; rounding the 10-cent sum instead would report 0.05, and truncating would report 0.04.
+    for (const number of ["H1", "H2"]) {
+      await seedPurchaseInvoice(suite.db, {
+        supplierInvoiceNumber: number,
+        issuedOn: "2026-08-01",
+        receivedOn: "2026-08-05",
+        total: "0.29",
+        deductibleProportion: "50.00",
+        lines: [{ rate: "21.00", base: "0.24", tax: "0.05" }],
+      });
+    }
+    expect((await run({ year: 2026, month: 8 })).byRate).toEqual([
+      { rate: "21.00", base: "0.48", tax: "0.06", kind: "ordinary" },
+    ]);
+  });
+
+  it("reads base and tax as counts of whole cents, summed then converted once", async () => {
+    // Written straight to the tables as INTEGERS, past `seedPurchaseInvoice`'s own decimalToCents,
+    // so this pins what the columns hold rather than what the fixture does with them. Two lines of
+    // 2099 cents sum to 4198 = 41.98 at a full 100% proportion; a query that read the columns as
+    // euros — which a `::numeric(12, 2)::text` cast does without error — would report "4198.00".
+    const [invoice] = (
+      await suite.db.execute<{ id: string }>(sql`
+        insert into purchase_invoices
+          (supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total)
+        values ('B00000000', 'Proveedor', 'RAW1', '2026-08-01', '2026-08-05', 24198)
+        returning id`)
+    ).rows;
+    await suite.db.execute(sql`
+      insert into purchase_invoice_vat (purchase_invoice_id, rate, base, tax, kind) values
+        (${invoice!.id}, '21.00', 10000, 2099, 'ordinary'),
+        (${invoice!.id}, '21.00', 10000, 2099, 'ordinary')`);
+    const ret = await run({ year: 2026, month: 8 });
+    expect(ret.byRate).toEqual([{ rate: "21.00", base: "200.00", tax: "41.98", kind: "ordinary" }]);
+    expect(ret).toMatchObject({ baseTotal: "200.00", taxTotal: "41.98" });
   });
 
   it("returns zeros for a month with no received invoices", async () => {

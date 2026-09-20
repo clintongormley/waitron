@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { AppError, saleId as brandSaleId } from "@waitron/shared";
+import { AppError, saleId as brandSaleId, decimal, decimalToCents } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
@@ -28,6 +28,10 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
  * `amount_charged` was dropped in migration 0012), and `node_id` is NOT NULL (node-id rekey).
  * `correctsSaleId` defaults to NULL for an ordinary sale; pass it to seed a corrective invoice correcting
  * another sale (its negative/positive total is what `sales_total_ck` permits once it is set).
+ *
+ * `total` is given as the decimal amount a reader of these cases recognises and converted to the
+ * count of whole cents the column stores on the way in, so this fixture is the same edge
+ * `recordSale` is.
  */
 async function seedSale(
   db: Database,
@@ -43,7 +47,7 @@ async function seedSale(
       invoiceNumber: overrides.invoiceNumber ?? 1,
       issuedAt: new Date("2026-08-01T11:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
-      total: overrides.total ?? "65.00",
+      total: decimalToCents(decimal(overrides.total ?? "65.00")),
       // The filed per-rate breakdown; `[]` — this file exercises settlement, not the
       // breakdown, and the column just needs a valid NOT NULL jsonb array.
       vatBreakdown: [],
@@ -103,12 +107,13 @@ describe("settleSale — the happy path", () => {
       .from(tenders)
       .where(eq(tenders.saleId, saleId));
     expect(tenderRows).toHaveLength(1);
-    expect(tenderRows[0]!.amount).toBe("70.00");
-    expect(tenderRows[0]!.tipAmount).toBe("5.00");
-    expect(tenderRows[0]!.cashTendered).toBe("100.00");
+    // Read straight off the table, so these are counts of whole cents, not decimal literals.
+    expect(tenderRows[0]!.amount).toBe(7000);
+    expect(tenderRows[0]!.tipAmount).toBe(500);
+    expect(tenderRows[0]!.cashTendered).toBe(10000);
     const mutation = await captureError(() =>
       postgres.admin.execute(
-        sql`update tenders set cash_tendered = '200.00' where sale_id = ${saleId}`,
+        sql`update tenders set cash_tendered = 20000 where sale_id = ${saleId}`,
       ),
     );
     expect(pgErrorCode(mutation)).toBe("WT001");
@@ -406,11 +411,12 @@ describe("settleSale — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          // 1: the sale row (total + folded corrections); 2: sale_voids (none); 3: settlement (none).
+          // 1: the sale row (total + folded corrections, both counts of whole cents as the
+          // money columns store them); 2: sale_voids (none); 3: settlement (none).
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "0.00", corrections: "0.00" }])
+              ? Promise.resolve([{ tillId: "t", total: 0, corrections: 0 }])
               : Promise.resolve([]);
           },
         }),
@@ -445,11 +451,12 @@ describe("settleSale — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          // 1: the sale row (total 65.00, no corrections); 2: sale_voids (none); 3: settlement (none).
+          // 1: the sale row (6500 cents = 65.00, no corrections); 2: sale_voids (none);
+          // 3: settlement (none).
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "65.00", corrections: "0.00" }])
+              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: 0 }])
               : Promise.resolve([]);
           },
         }),
@@ -491,7 +498,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "65.00", corrections: "0.00" }])
+              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: 0 }])
               : Promise.resolve([]);
           },
         }),
@@ -521,8 +528,9 @@ async function settleDirect(db: Database, saleId: SaleId, amount: string): Promi
     await tx.insert(tenders).values({
       saleId,
       method: "cash",
-      amount,
-      tipAmount: "0.00",
+      // Money columns hold whole cents; `amount` arrives as the decimal amount the case reads as.
+      amount: decimalToCents(decimal(amount)),
+      tipAmount: 0,
       settledAt: SETTLED_AT.toISOString(),
     });
     await tx.insert(saleSettlements).values({ saleId, settledAt: SETTLED_AT.toISOString() });

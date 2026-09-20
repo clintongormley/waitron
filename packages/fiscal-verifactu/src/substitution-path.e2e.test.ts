@@ -117,7 +117,7 @@ async function recordTicket(invoiceNumber: number): Promise<string> {
 async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, counterparty_tax_id, counterparty_legal_name, counterparty_country_code, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${substitutionSeriesId}, ${invoiceNumber},
-            '2026-03-02T12:05:00+01:00', 60, '123.45', '[]'::jsonb,
+            '2026-03-02T12:05:00+01:00', 60, 12345, '[]'::jsonb,
             ${RECIPIENT.taxId}, ${RECIPIENT.legalName}, ${RECIPIENT.countryCode},
             'es', array['es'], 'verifactu', 'recorded')
     returning id

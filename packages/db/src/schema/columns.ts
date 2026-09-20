@@ -73,8 +73,17 @@ export const json = <T>(name: string) => jsonb(name).$type<T>();
  * exact decimal type, and a float cannot hold a cent exactly. The name says cents so a caller
  * cannot read the number as units. Decimal arithmetic and the decimal literals a receipt or a
  * fiscal record carries live at the edges, in `@waitron/shared`'s money module.
+ *
+ * Eight bytes, not four, and that is the whole reason this is not `count`. The money bound the
+ * rest of the system states is twelve integer digits (`MAX_MONEY_INTEGER_DIGITS`, enforced by
+ * `assertMoney` and by the price validators in `packages/catalogue`), which is 99999999999999
+ * cents. Measured on the development PostgreSQL: `2147483647::integer` succeeds and
+ * `2147483648::integer` gives `integer out of range` — so a four-byte column would stop at
+ * 21474836.47 and leave a wide band of amounts the converters accept and the column refuses with
+ * a bare `22003`. `bigint` holds the whole declared range, and is read back as a number because
+ * 99999999999999 is well inside the 9007199254740991 a number counts exactly.
  */
-export const money = (name: string) => integer(name);
+export const money = (name: string) => bigint(name, { mode: "number" });
 
 /** A quantity: three decimal places, so 0.005 kg is representable. */
 export const quantity = (name: string) => numeric(name, { precision: 12, scale: 3 });

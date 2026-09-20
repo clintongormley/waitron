@@ -339,8 +339,9 @@ describe("recordCorrection — the corrective sale", () => {
 
     const { saleId: correctiveId } = await correct(backend, originalId);
 
+    // Read straight off `sales`, so the total is a count of whole cents: -1441 is -14.41.
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
-    expect(row?.total).toBe("-14.41");
+    expect(row?.total).toBe(-1441);
     expect(row?.correctsSaleId).toBe(originalId);
     expect(row?.fiscalState).toBe("recorded");
     // Inherited from the original (spec §9: a corrective invoice inherits the original list), never
@@ -384,7 +385,8 @@ describe("recordCorrection — the corrective sale", () => {
 
     const lines = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, correctiveId));
     expect(lines).toHaveLength(2);
-    expect(lines.map((l) => l.lineTotal).sort()).toEqual(["-10.00", "-2.10"]);
+    // Whole cents off the table, and a numeric sort: the default one orders numbers as text.
+    expect(lines.map((l) => l.lineTotal).sort((x, y) => x - y)).toEqual([-1000, -210]);
   });
 
   it("asks the backend for a correction record referencing the original", async () => {
@@ -536,9 +538,9 @@ describe("recordCorrection — no fiscal condition blocks a correction (§5)", (
     expect(rows).toHaveLength(1);
     expect(rows[0]?.code).toBe("clock.degraded");
     expect(rows[0]?.severity).toBe("warning");
-    // The correction itself still landed.
+    // The correction itself still landed: -1441 cents is -14.41.
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
-    expect(row?.total).toBe("-14.41");
+    expect(row?.total).toBe(-1441);
   });
 
   it("records nothing to incidents when verification and the clock are both clean", async () => {

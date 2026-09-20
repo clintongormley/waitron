@@ -1,5 +1,13 @@
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
-import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
+import {
+  AppError,
+  addDecimal,
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  decimalToCents,
+  sumDecimals,
+} from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
@@ -7,9 +15,10 @@ import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { CardDetails, PaymentState } from "./provider.js";
 
-/** A payment row as the store reads it back. `state` is a `PaymentState`; `amount`/`settledAt` are
- * the raw column strings (numeric/timestamptz), left as strings so no float or timezone
- * normalisation happens on the way through. */
+/** A payment row as the store reads it back. `state` is a `PaymentState`; `settledAt` is the raw
+ * timestamptz string, left as a string so no timezone normalisation happens on the way through,
+ * and `amount` is the exact decimal literal for the column's count of cents — never a float
+ * either way. */
 export interface PaymentRow {
   id: string;
   state: PaymentState;
@@ -47,6 +56,17 @@ interface NewPayment {
   card?: CardDetails;
 }
 
+/**
+ * Cross the storage boundary for one row: a money column counts whole cents, and every amount
+ * this module hands back is the exact decimal literal for it. Nothing above this line sees a
+ * count of cents.
+ */
+function withDecimalAmount<T extends { amount: number }>(
+  row: T,
+): Omit<T, "amount"> & { amount: Decimal } {
+  return { ...row, amount: centsToDecimal(row.amount) };
+}
+
 const PAYMENT_COLUMNS = {
   id: payments.id,
   state: payments.state,
@@ -70,7 +90,7 @@ async function insertPayment(
     workingOrderId: params.workingOrderId,
     provider: params.provider,
     paymentRef: params.paymentRef,
-    amount: params.amount,
+    amount: decimalToCents(params.amount),
     externalRef: params.externalRef ?? null,
     cardScheme: params.card?.scheme ?? null,
     cardLast4: params.card?.last4 ?? null,
@@ -165,7 +185,7 @@ async function resolveAttempting(
       paymentRef: params.paymentRef,
     });
   }
-  return row;
+  return withDecimalAmount(row);
 }
 
 /** Reverse a captured payment in full — a same-day void, distinct from a refund (which records a
@@ -201,7 +221,7 @@ export async function recordRefund(
     .select({ amount: paymentRefunds.amount })
     .from(paymentRefunds)
     .where(and(eq(paymentRefunds.paymentId, row.id), eq(paymentRefunds.state, "succeeded")));
-  const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
+  const alreadyRefunded = sumDecimals(prior.map((r) => centsToDecimal(r.amount)));
   const afterThis = addDecimal(alreadyRefunded, params.amount);
   const captured = decimal(row.amount);
   if (compareDecimal(afterThis, captured) > 0) {
@@ -216,7 +236,7 @@ export async function recordRefund(
     paymentId: row.id,
     provider: params.provider,
     paymentRef: params.paymentRef,
-    amount: params.amount,
+    amount: decimalToCents(params.amount),
     state: "succeeded",
     authorizedBy: params.authorizedBy ?? null,
   });
@@ -248,7 +268,7 @@ export async function recordFailedRefund(
     paymentId: row.id,
     provider: params.provider,
     paymentRef: params.paymentRef,
-    amount: params.amount,
+    amount: decimalToCents(params.amount),
     state: "failed",
     authorizedBy: params.authorizedBy ?? null,
   });
@@ -299,18 +319,19 @@ export async function getPaymentByRef(
   params: Key,
 ): Promise<PaymentRow | undefined> {
   const [row] = await tx.select(PAYMENT_COLUMNS).from(payments).where(keyWhere(params));
-  return row;
+  return row === undefined ? undefined : withDecimalAmount(row);
 }
 
 /** A captured (or offline-accepted) payment found for a working order — the §4 capture-idempotency
  * pre-check's result. `saleId` NULL is the "collect committed, P3 never ran" recovery window; set
  * means the sale is already filed and the pay is a replay. `amount`/`settledAt`/`externalRef` are the
- * raw column strings, so the recovery path can reconstruct the tender and associate this exact row. */
+ * settled-at string as read and the exact decimal literal for the stored amount, so the recovery
+ * path can reconstruct the tender and associate this exact row. */
 export interface CapturedPaymentForOrder {
   id: string;
   paymentRef: string;
   provider: string;
-  amount: string; // numeric(12,2) as text
+  amount: string;
   saleId: string | null;
   externalRef: string | null;
   settledAt: string | null; // always set for captured/accepted_offline, but typed nullable like the column
@@ -375,7 +396,7 @@ async function selectCapturedForWorkingOrder(
     )
     .orderBy(sql`${payments.settledAt} desc nulls last`)
     .limit(1);
-  return row as CapturedPaymentForOrder | undefined;
+  return row === undefined ? undefined : (withDecimalAmount(row) as CapturedPaymentForOrder);
 }
 
 /** The captured/accepted-offline payment for a working order, WITHOUT filtering by provider, for
@@ -403,7 +424,7 @@ export async function findPaymentByRef(
     .from(payments)
     .where(and(eq(payments.provider, provider), eq(payments.paymentRef, paymentRef)))
     .limit(1);
-  return row;
+  return row === undefined ? undefined : withDecimalAmount(row);
 }
 
 /** One accepted-offline payment claimed for a forward pass. `saleId` is null only for an orphan
@@ -442,12 +463,13 @@ export async function claimAcceptedOffline(
   tx: Transaction,
   provider: string,
 ): Promise<ForwardablePayment[]> {
-  return tx
+  const rows = await tx
     .select(FORWARDABLE_COLUMNS)
     .from(payments)
     .where(forwardableWhere(provider))
     .orderBy(payments.createdAt)
     .for("update", { skipLocked: true });
+  return rows.map(withDecimalAmount);
 }
 
 /** Like `claimAcceptedOffline` but WITHOUT the row lock — the T1 read a real adapter's `forward` uses
@@ -460,11 +482,12 @@ export async function listAcceptedOffline(
   tx: Transaction,
   provider: string,
 ): Promise<ForwardablePayment[]> {
-  return tx
+  const rows = await tx
     .select(FORWARDABLE_COLUMNS)
     .from(payments)
     .where(forwardableWhere(provider))
     .orderBy(payments.createdAt);
+  return rows.map(withDecimalAmount);
 }
 
 /** One in-flight payment as `resolvePending` reads it. `externalRef` is the processor's POLL key
@@ -487,7 +510,7 @@ export async function listAttempting(
   tx: Transaction,
   provider: string,
 ): Promise<AttemptingPayment[]> {
-  return tx
+  const rows = await tx
     .select({
       paymentRef: payments.paymentRef,
       workingOrderId: payments.workingOrderId,
@@ -498,6 +521,7 @@ export async function listAttempting(
     .from(payments)
     .where(and(eq(payments.provider, provider), eq(payments.state, "attempting")))
     .orderBy(payments.createdAt);
+  return rows.map(withDecimalAmount);
 }
 
 /** Stamp the processor's poll key onto an `attempting` row (T1.5 — after the create call returned,
@@ -586,7 +610,7 @@ export async function settleInitiated(
       amount: payments.amount,
       paymentRef: payments.paymentRef,
     });
-  return row ?? null;
+  return row === undefined ? null : withDecimalAmount(row);
 }
 
 /** Advance a hosted payment still `initiated` -> `failed` (the customer abandoned / it expired).
@@ -666,7 +690,7 @@ export async function assertReversible(
     .select({ amount: paymentRefunds.amount })
     .from(paymentRefunds)
     .where(and(eq(paymentRefunds.paymentId, row.id), eq(paymentRefunds.state, "succeeded")));
-  const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
+  const alreadyRefunded = sumDecimals(prior.map((r) => centsToDecimal(r.amount)));
   const requested = params.amount ?? decimal(row.amount);
   if (compareDecimal(addDecimal(alreadyRefunded, requested), decimal(row.amount)) > 0) {
     throw new AppError("payment.refund_exceeds_capture", {
@@ -757,22 +781,26 @@ export async function listReconcilable(
       .from(payments)
       .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId));
 
-  const held = await auditable().where(
-    and(
-      eq(payments.provider, provider),
-      inArray(payments.state, ["captured", "settled"]),
-      gte(payments.settledAt, from),
-      lt(payments.settledAt, to),
-    ),
-  );
-  const pending = await auditable().where(
-    and(
-      eq(payments.provider, provider),
-      eq(payments.state, "initiated"),
-      gte(payments.createdAt, from),
-      lt(payments.createdAt, to),
-    ),
-  );
+  const held = (
+    await auditable().where(
+      and(
+        eq(payments.provider, provider),
+        inArray(payments.state, ["captured", "settled"]),
+        gte(payments.settledAt, from),
+        lt(payments.settledAt, to),
+      ),
+    )
+  ).map(withDecimalAmount);
+  const pending = (
+    await auditable().where(
+      and(
+        eq(payments.provider, provider),
+        eq(payments.state, "initiated"),
+        gte(payments.createdAt, from),
+        lt(payments.createdAt, to),
+      ),
+    )
+  ).map(withDecimalAmount);
 
   // Code-unit comparison of `${created_at}|${payment_ref}` — no locale collation, no branch on the
   // three-way result. `payment_ref` is unique per provider, so the key is total.
@@ -892,5 +920,5 @@ async function requireRowForUpdate(tx: Transaction, params: Key): Promise<Paymen
       paymentRef: params.paymentRef,
     });
   }
-  return row;
+  return withDecimalAmount(row);
 }

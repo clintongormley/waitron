@@ -4,6 +4,8 @@ import {
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  decimal,
+  decimalToCents,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { sales } from "@waitron/db";
@@ -102,6 +104,9 @@ export async function seedRectificativeSeries(
  * planted under another node or series). Written on the current schema: `total` is the
  * only money column. `correctsSaleId` defaults to NULL for an ordinary original; pass it to seed a
  * rectificativa instead (its negative/positive total is what `sales_total_ck` permits once it is set).
+ *
+ * `total` is given as the decimal amount a caller reads — "65.00" — and converted to the count of
+ * whole cents the column stores on the way in, so this fixture is the same edge `recordSale` is.
  */
 export async function seedBareSale(
   db: Database,
@@ -122,7 +127,7 @@ export async function seedBareSale(
       invoiceNumber: overrides.invoiceNumber ?? 1,
       issuedAt: new Date("2026-03-01T12:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
-      total: overrides.total ?? "65.00",
+      total: decimalToCents(decimal(overrides.total ?? "65.00")),
       // The filed per-rate desglose. Defaults to `[]`: a bare original planted for a
       // correction test carries no line detail here, and the correction's OWN breakdown is what those
       // tests exercise (via recordCorrection). Overridable for a test that needs a specific one.

@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
-import { compareDecimal, decimal } from "@waitron/shared";
+import { centsToDecimal, compareDecimal, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { paymentPolicy } from "./schema/payment-policy.js";
 
-/** The venue's offline policy as the store reads it back. `offlineAmountCap` is the raw
- * numeric-column string (never a float). */
+/** The venue's offline policy as the store reads it back. `offlineAmountCap` is an exact decimal
+ * literal such as "50.00" (never a float), converted from the column's count of cents by the read
+ * below. */
 export interface PaymentPolicyRow {
   offlineMode: "accept_offline" | "cash_only";
   offlineAmountCap: string;
@@ -21,7 +22,12 @@ export async function getPaymentPolicy(tx: Transaction): Promise<PaymentPolicyRo
     })
     .from(paymentPolicy)
     .where(eq(paymentPolicy.id, 1));
-  return row as PaymentPolicyRow | undefined;
+  if (row === undefined) return undefined;
+  // The cap column holds cents; every comparison above this line is on the decimal type.
+  return {
+    ...row,
+    offlineAmountCap: centsToDecimal(row.offlineAmountCap),
+  } as PaymentPolicyRow;
 }
 
 /**

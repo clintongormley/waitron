@@ -6,6 +6,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
   decimal,
+  decimalToCents,
   percentOf,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
@@ -27,6 +28,13 @@ import {
 import type { Database } from "@waitron/db";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
+
+/**
+ * Money crosses into the database as a count of whole cents (`columns.ts`'s `money`), so every
+ * fixture below takes the decimal literal a test reads and writes `decimalToCents` of it. Keeping
+ * the literals here means a reporting test still states the amount it seeds and the amount it
+ * expects in the same form, and the conversion under test is the one the READ does.
+ */
 
 export interface SeededVenue {
   locationId: string;
@@ -154,7 +162,7 @@ export async function seedSale(
       invoiceNumber: opts.invoiceNumber,
       issuedAt: opts.issuedAt,
       issuedOffsetMinutes: opts.issuedOffsetMinutes ?? 0,
-      total: opts.total,
+      total: decimalToCents(decimal(opts.total)),
       vatBreakdown: opts.vatBreakdown ?? breakdownFromLines(opts.lines),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
@@ -173,9 +181,9 @@ export async function seedSale(
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
       quantity: line.quantity ?? "1.000",
-      unitPrice: line.lineTotal,
+      unitPrice: decimalToCents(decimal(line.lineTotal)),
       vatRate: line.vatRate,
-      lineTotal: line.lineTotal,
+      lineTotal: decimalToCents(decimal(line.lineTotal)),
     })),
   );
   return saleId;
@@ -189,8 +197,8 @@ export async function seedTender(
   await db.insert(tenders).values({
     saleId: ref.saleId,
     method: opts.method,
-    amount: opts.amount,
-    tipAmount: opts.tipAmount ?? "0.00",
+    amount: decimalToCents(decimal(opts.amount)),
+    tipAmount: decimalToCents(decimal(opts.tipAmount ?? "0.00")),
     settledAt: opts.settledAt,
   });
 }
@@ -236,7 +244,7 @@ export async function seedPurchaseInvoice(
       supplierInvoiceNumber: opts.supplierInvoiceNumber,
       issuedOn: opts.issuedOn,
       receivedOn: opts.receivedOn,
-      total: opts.total,
+      total: decimalToCents(decimal(opts.total)),
       regime: opts.regime,
       deductibleProportion: opts.deductibleProportion,
     })
@@ -246,8 +254,8 @@ export async function seedPurchaseInvoice(
     opts.lines.map((l) => ({
       purchaseInvoiceId: id,
       rate: l.rate,
-      base: l.base,
-      tax: l.tax,
+      base: decimalToCents(decimal(l.base)),
+      tax: decimalToCents(decimal(l.tax)),
       kind: l.kind,
     })),
   );
@@ -302,7 +310,7 @@ export async function seedFiredLine(
       catalogueId: catalogue!.id,
       name: "Item",
       pricingUnit: "each",
-      unitPrice: "1.00",
+      unitPrice: decimalToCents(decimal("1.00")),
       vatClass: "general",
     })
     .returning({ id: products.id });
@@ -315,10 +323,10 @@ export async function seedFiredLine(
       name: "Item",
       descriptions: { "es-ES": "Item" },
       quantity: "1.000",
-      unitPrice: "1.00",
-      unitPriceGross: "1.00",
+      unitPrice: decimalToCents(decimal("1.00")),
+      unitPriceGross: decimalToCents(decimal("1.00")),
       vatRate: "10.00",
-      lineTotal: "1.00",
+      lineTotal: decimalToCents(decimal("1.00")),
       servedAt: opts.served ? sql`now()` : null,
     })
     .returning({ id: workingOrderLines.id });

@@ -107,7 +107,7 @@ export async function insertPendingAlta(
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
-      '0.00', '[]'::jsonb,
+      0, '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     )
     returning id

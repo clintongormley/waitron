@@ -125,7 +125,7 @@ export const menuItemOptions = table(
     menuItemId: id("menu_item_id").notNull(),
     groupId: id("group_id").notNull(),
     optionId: id("option_id").notNull(),
-    priceDelta: money("price_delta").notNull().default("0"),
+    priceDelta: money("price_delta").notNull().default(0),
   },
   (t) => [
     primaryKey({

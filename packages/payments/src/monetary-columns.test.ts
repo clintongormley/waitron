@@ -6,17 +6,20 @@ import { describe, expect, it } from "vitest";
 import { paymentPolicy, paymentRefunds, payments } from "./schema/index.js";
 
 /**
- * Every money column this package owns must be `numeric(12, 2)` — the same shape
- * `packages/db`'s `sales`/`sale_lines`/`tenders` amount columns carry (see #14, "Exact-decimal
- * amounts: remove float from the fiscal-amount path") — and never `real`, `double precision`, or
- * any other float width. `payments.amount`/`payment_refunds.amount` carry currency and feed
- * straight into the captured-vs-refunded balance `payments.state` reflects; a binary float here
- * reintroduces the exact drift class that commit was written to remove.
+ * Every money column this package owns must be `bigint` — a count of whole cents, the shape
+ * `packages/db/src/schema/columns.ts`'s `money` helper emits, eight bytes wide so the whole
+ * twelve-integer-digit range fits — and never `real`, `double precision`, or any other float
+ * width. `payments.amount`/`payment_refunds.amount` carry currency and feed straight into the
+ * captured-vs-refunded balance `payments.state` reflects; a binary float here reintroduces the
+ * drift class exact amounts exist to remove.
+ *
+ * Whole cents rather than an exact decimal because the storage engine this column vocabulary is
+ * being moved to has no exact decimal type. The decimal arithmetic itself did not move: it stays
+ * above the column in `@waitron/shared`, and `store.ts` converts at the row.
  *
  * Unlike `fiscal-verifactu`'s own `monetary-columns.test.ts` — where `cuota_total`/`importe_total`
  * are deliberately `text`, because the fiscal fingerprint hashes those bytes verbatim — this package's amount
- * columns have no hash-chain constraint, so `numeric(12, 2)` is the correct, exact-decimal type
- * here, not merely the default `payments.ts`/`payment-refunds.ts` happened to pick.
+ * columns have no hash-chain constraint, so nothing here depends on the stored bytes.
  */
 const OWNED_TABLES = { payments, payment_refunds: paymentRefunds } as const;
 const MONEY_COLUMN = "amount";
@@ -30,7 +33,23 @@ function generatedSql(): string {
     .join("\n");
 }
 
-describe("payments/payment_refunds monetary columns are numeric(12, 2), never float", () => {
+/**
+ * The column types the whole migration set leaves behind, read from drizzle's own latest snapshot
+ * rather than from the migration TEXT: a column's type can be set by a `create table` in one file
+ * and changed by an `alter table` in a later one, so no single statement states the answer.
+ */
+function latestSnapshotColumnType(table: string, column: string): string | undefined {
+  const snapshots = readdirSync(join(drizzleDir, "meta"))
+    .filter((f) => f.endsWith("_snapshot.json"))
+    .sort();
+  const latest = snapshots[snapshots.length - 1];
+  const parsed = JSON.parse(readFileSync(join(drizzleDir, "meta", latest), "utf8")) as {
+    tables: Record<string, { columns: Record<string, { type: string }> }>;
+  };
+  return parsed.tables[`public.${table}`]?.columns[column]?.type;
+}
+
+describe("payments/payment_refunds monetary columns count whole cents, never float", () => {
   for (const [tableName, table] of Object.entries(OWNED_TABLES)) {
     const columns = getTableColumns(table);
     const amountColumn = Object.values(columns).find((c) => c.name === MONEY_COLUMN);
@@ -41,25 +60,25 @@ describe("payments/payment_refunds monetary columns are numeric(12, 2), never fl
       expect(amountColumn).toBeDefined();
     });
 
-    it(`${tableName}.amount is numeric(12, 2) in the Drizzle schema`, () => {
-      expect(amountColumn?.columnType).toBe("PgNumeric");
-      expect((amountColumn as { precision?: number } | undefined)?.precision).toBe(12);
-      expect((amountColumn as { scale?: number } | undefined)?.scale).toBe(2);
-      expect(amountColumn?.getSQLType()).toBe("numeric(12, 2)");
+    it(`${tableName}.amount is bigint, read back as a number, in the Drizzle schema`, () => {
+      expect(amountColumn?.columnType).toBe("PgBigInt53");
+      expect(amountColumn?.getSQLType()).toBe("bigint");
     });
   }
 
-  it('generated migration declares "amount" numeric(12, 2) not null for both tables', () => {
-    const sqlText = generatedSql();
+  it("the migration set leaves every money column bigint", () => {
     for (const tableName of Object.keys(OWNED_TABLES)) {
-      // Non-greedy up to the table's own closing paren: the amount column line always precedes it
-      // within the same CREATE TABLE statement, so this cannot accidentally match a later table.
-      const tablePattern = new RegExp(
-        `create table "${tableName}" \\([\\s\\S]*?"amount" numeric\\(12, 2\\) not null[\\s\\S]*?\\);`,
-        "i",
-      );
-      expect(sqlText).toMatch(tablePattern);
+      expect(latestSnapshotColumnType(tableName, "amount")).toBe("bigint");
     }
+    expect(latestSnapshotColumnType("payment_policy", "offline_amount_cap")).toBe("bigint");
+  });
+
+  it("has teeth: the snapshot read finds a column that is there and nothing that is not", () => {
+    // The reader resolves real names rather than answering a constant: a column that is there
+    // comes back with its own type, and a name that is not there comes back undefined.
+    expect(latestSnapshotColumnType("payments", "provider")).toBe("text");
+    expect(latestSnapshotColumnType("payments", "no_such_column")).toBeUndefined();
+    expect(latestSnapshotColumnType("no_such_table", "amount")).toBeUndefined();
   });
 
   it("generated migration contains no real/double precision/float column anywhere", () => {
@@ -77,14 +96,12 @@ describe("payments/payment_refunds monetary columns are numeric(12, 2), never fl
     expect(offendingSql.toLowerCase()).toMatch(/double precision/);
   });
 
-  it("payment_policy.offline_amount_cap is numeric(12, 2) in the Drizzle schema", () => {
+  it("payment_policy.offline_amount_cap is bigint in the Drizzle schema", () => {
     const cap = Object.values(getTableColumns(paymentPolicy)).find(
       (c) => c.name === "offline_amount_cap",
     );
     expect(cap).toBeDefined(); // positive control
-    expect(cap?.columnType).toBe("PgNumeric");
-    expect((cap as { precision?: number } | undefined)?.precision).toBe(12);
-    expect((cap as { scale?: number } | undefined)?.scale).toBe(2);
-    expect(cap?.getSQLType()).toBe("numeric(12, 2)");
+    expect(cap?.columnType).toBe("PgBigInt53");
+    expect(cap?.getSQLType()).toBe("bigint");
   });
 });

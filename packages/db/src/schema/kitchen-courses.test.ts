@@ -45,7 +45,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
         catalogueId: cat!.id,
         name: "Café solo",
         pricingUnit: "each",
-        unitPrice: "1.00",
+        unitPrice: 100,
         vatClass: "general",
       })
       .returning({ id: products.id });

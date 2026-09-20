@@ -40,7 +40,7 @@ async function insertPayment(
 ): Promise<{ node_id: string | null }[]> {
   const { rows } = await pg.db.execute<{ node_id: string | null }>(sql`
     insert into payments (working_order_id, node_id, provider, payment_ref, amount, state)
-    values (${seeded.workingOrderId}, ${nodeId}, 'fake', ${paymentRef}, '10.00', 'captured')
+    values (${seeded.workingOrderId}, ${nodeId}, 'fake', ${paymentRef}, 1000, 'captured')
     returning node_id`);
   return rows;
 }

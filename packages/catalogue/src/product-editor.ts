@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, centsToDecimal } from "@waitron/shared";
 import { readProductCategories, replaceProductCategories } from "./categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
@@ -41,6 +41,7 @@ export async function readProductEditor(
   const categories = await readProductCategories(tx, productId);
   return {
     ...row,
+    unitPrice: centsToDecimal(row.unitPrice),
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     unitId: await readProductUnitId(tx, productId),

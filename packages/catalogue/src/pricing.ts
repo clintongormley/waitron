@@ -293,7 +293,7 @@ export interface SelectedOption {
   name: string;
   /** locale -> text, snapshotted at selection time; becomes the child line's `descriptions`. */
   descriptions: Record<string, string>;
-  /** GROSS (VAT-inclusive) price change this option adds to the dish, as a `numeric(12,2)` literal.
+  /** GROSS (VAT-inclusive) price change this option adds to the dish, as a two-place decimal string.
    * `"0.00"` for a free option (which then contributes a zero-base child line). */
   priceDelta: string;
   /** The option's own VAT class when it OVERRIDES the dish's, or `null` to INHERIT the dish's rate. */

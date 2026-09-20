@@ -233,7 +233,7 @@ export async function seedNodesForSifContention(
  * Writes BOTH `till_id` (where the sale rang) AND `node_id` (which node chained it) — the two the
  * node-id rekey (2026-08-03) keeps side by side on `sales`.
  *
- * `total` is `'0.00'` and NO tender or `sale_settlements` row is written: migration 0012 dropped
+ * `total` is zero and NO tender or `sale_settlements` row is written: migration 0012 dropped
  * `tip_amount`/`amount_charged` from `sales` and retired the old commit-time
  * `sales_assert_tenders_cover` deferred trigger, so a bare, unsettled sale is a legitimate steady
  * state (design §3) and nothing checks coverage against it — the same convention this package's own
@@ -251,7 +251,7 @@ export async function seedSale(
   const { rows } = await db.execute<{ id: string }>(sql`
     insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${till.seriesId}, ${invoiceNumber},
             '2026-07-20T19:20:30+02:00', 120,
-            '0.00', '[]'::jsonb,
+            0, '[]'::jsonb,
             'es', array['es'], 'verifactu', 'recorded')
     returning id
   `);

@@ -567,7 +567,7 @@ describe("what the database refuses under an extras list", () => {
     const error = await captureError(() =>
       fx.db.execute(
         sql`insert into extra_list_items (list_id, product_id, price)
-            values (${created.id}, ${breads.sourdough}, '-1.00')`,
+            values (${created.id}, ${breads.sourdough}, -100)`,
       ),
     );
 

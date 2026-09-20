@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { SaleForFiscalRecord } from "@waitron/fiscal";
-import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
+import {
+  decimal,
+  decimalToCents,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+} from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -103,11 +109,11 @@ async function recordOriginal(): Promise<string> {
 async function seedCorrectiveRow(
   invoiceNumber: number,
   correctsSaleId: string,
-  total: string,
+  total: Decimal,
 ): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, corrects_sale_id, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${rectificativeSeriesId}, ${invoiceNumber},
-            '2026-03-02T12:05:00+01:00', 60, ${total}, '[]'::jsonb, ${correctsSaleId},
+            '2026-03-02T12:05:00+01:00', 60, ${decimalToCents(total)}, '[]'::jsonb, ${correctsSaleId},
             'es', array['es'], 'verifactu', 'recorded')
     returning id
   `);
@@ -123,7 +129,7 @@ async function correct(
   overrides: Partial<SaleForFiscalRecord> = {},
 ): Promise<string> {
   const invoiceNumber = overrides.invoiceNumber ?? 1;
-  const total = overrides.total ?? "-123.45";
+  const total = overrides.total ?? decimal("-123.45");
   const correctiveId = await seedCorrectiveRow(invoiceNumber, correctsSaleId, total);
   const sale = { ...correctiveSaleFor(correctiveId, invoiceNumber), ...overrides };
   await withTransaction(suite.admin, async (tx) => {
@@ -250,7 +256,9 @@ describe("recordCorrection under real chain contention", () => {
   it("commits several concurrent corrections into one gap-free, correctly-chained sequence", async () => {
     const originalId = await recordOriginal();
     const correctiveIds = await Promise.all(
-      Array.from({ length: RACERS }, (_, i) => seedCorrectiveRow(i + 2, originalId, "-123.45")),
+      Array.from({ length: RACERS }, (_, i) =>
+        seedCorrectiveRow(i + 2, originalId, decimal("-123.45")),
+      ),
     );
 
     const dbs = await Promise.all(Array.from({ length: RACERS }, () => suite.pg.connect()));

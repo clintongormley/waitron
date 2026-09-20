@@ -141,7 +141,7 @@ describe("the D1a time & attendance tables", () => {
       suite.db.execute(sql`
         insert into employments (
           person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
-        ) values (${personId}, -1, 'full_time', '2026-01-01', '15.00')`),
+        ) values (${personId}, -1, 'full_time', '2026-01-01', 1500)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/employments_contracted_minutes_ck/);
@@ -154,7 +154,7 @@ describe("the D1a time & attendance tables", () => {
         insert into employments (
           person_id, contracted_minutes_per_week, contract_type,
           start_date, end_date, pay_rate
-        ) values (${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', '15.00')`),
+        ) values (${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', 1500)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/employments_dates_ck/);

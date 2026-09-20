@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { addDecimal, decimal, tillId as brandTillId } from "@waitron/shared";
+import { addDecimal, centsToDecimal, decimal, tillId as brandTillId } from "@waitron/shared";
 import { businessDayClause, nodeScopeClause } from "./business-day.js";
 import type {
   CashUp,
@@ -19,17 +19,23 @@ import type {
  * scope (tenders are always positive).
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
+  // `tenders.amount` and `tenders.tip_amount` count whole cents, so these sums are exact counts of
+  // cents and `centsToDecimal` below is the one conversion to an amount. `::int` keeps each sum in
+  // the width the column itself has and hands it back as a number, as `counts.ts` does for its
+  // record counts; a day whose tenders overflow that width raises 22003 rather than reporting a
+  // wrong figure. Casting to `numeric(12, 2)` instead would render 12000 cents as "12000.00" — a
+  // plausible string a hundred times the amount, which nothing in this package's types would catch.
   const { rows } = await tx.execute<{
     till_id: string;
     method: TenderMethod;
-    amount: string;
-    tip: string;
+    amount: number;
+    tip: number;
   }>(sql`
     select
       s.till_id::text as till_id,
       t.method as method,
-      sum(t.amount)::numeric(12, 2)::text as amount,
-      sum(t.tip_amount)::numeric(12, 2)::text as tip
+      sum(t.amount)::int as amount,
+      sum(t.tip_amount)::int as tip
     from tenders t
     join sales s on s.id = t.sale_id
     where ${businessDayClause(sql`t.settled_at`, input)}
@@ -46,8 +52,8 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
   for (const r of rows) {
     const line: TenderMethodLine = {
       method: r.method,
-      amount: decimal(r.amount),
-      tip: decimal(r.tip),
+      amount: centsToDecimal(r.amount),
+      tip: centsToDecimal(r.tip),
     };
     const existing = tills.get(r.till_id);
     if (existing === undefined) tills.set(r.till_id, [line]);

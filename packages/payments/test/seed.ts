@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { nodeId as brandNodeId } from "@waitron/shared";
+import { decimal, decimalToCents, nodeId as brandNodeId } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
@@ -54,6 +54,9 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  * `associatePaymentWithSale` needs to point a payment at, without going through `@waitron/core`'s
  * full `recordSale` (that full path is exercised in the Task 10 wiring test).
  *
+ * A money column counts whole cents, so the 10.00 sale and the tender covering it are written as
+ * 1000.
+ *
  * `total` is the only money column on `sales` now — `tip_amount`/`amount_charged` were dropped in
  * migration 0012 (the tip moved to `tenders.tip_amount`). No `sale_settlements` row is declared, so
  * this is a legitimate UNSETTLED sale (design §3) and NO coverage check runs against it: migration
@@ -74,11 +77,11 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
   return db.transaction(async (tx) => {
     const sale = await tx.execute<{ id: string }>(sql`
       insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${seeded.tillId}, ${seeded.nodeId}, ${seriesId}, 1, now(), 60,
-        '10.00', '[]'::jsonb, 'es', array['es'], 'fake', 'not_applicable'
+        1000, '[]'::jsonb, 'es', array['es'], 'fake', 'not_applicable'
       ) returning id`);
     const saleId = sale.rows[0].id;
     await tx.execute(sql`
-      insert into tenders (sale_id, method, amount, settled_at) values (${saleId}, 'card', '10.00', now())`);
+      insert into tenders (sale_id, method, amount, settled_at) values (${saleId}, 'card', 1000, now())`);
     return saleId;
   });
 }
@@ -113,12 +116,14 @@ export async function seedForSale(
   return { ...seeded, seriesId };
 }
 
-/** Seeds the venue's one `payment_policy` row (`id = 1`) through the fixture connection. */
+/** Seeds the venue's one `payment_policy` row (`id = 1`) through the fixture connection. `cap` is
+ * a decimal literal such as "50.00"; the column holds its count of cents. */
 export async function seedPaymentPolicy(
   db: Database,
   mode: "accept_offline" | "cash_only",
   cap: string,
 ): Promise<void> {
   await db.execute(sql`
-    insert into payment_policy (offline_mode, offline_amount_cap) values (${mode}, ${cap})`);
+    insert into payment_policy (offline_mode, offline_amount_cap)
+    values (${mode}, ${decimalToCents(decimal(cap))})`);
 }

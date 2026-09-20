@@ -48,7 +48,7 @@ export interface TopSeller {
   name: string;
   /** Σ line quantity over the range (numeric(12,3)); corrections net in, so it can fall. */
   quantity: Decimal;
-  /** Σ line_total over the range (numeric(12,2)); corrections net in. */
+  /** Σ line_total over the range, as an amount; corrections net in. */
   total: Decimal;
 }
 

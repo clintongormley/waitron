@@ -7,7 +7,7 @@ import {
   productOptionGroups,
   type Transaction,
 } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, centsToDecimal, decimal, decimalToCents } from "@waitron/shared";
 import { menuItems, menuItemOptionGroups } from "./schema/menu.js";
 import {
   parseModifierInput,
@@ -54,7 +54,10 @@ export async function listModifiers(tx: Transaction): Promise<Modifier[]> {
         suitableFor: item.dietarySuitability ?? [],
         ...(group.type === "extras"
           ? {
-              priceDelta: item.priceDelta,
+              // The `as ModifierChoice[]` below widens this object, so the compiler never checks
+              // this conversion. What does: "saves complete definitions as app_user, preserving ids
+              // and order" (modifiers.pg.test.ts), which asserts the decimal string read back.
+              priceDelta: centsToDecimal(item.priceDelta),
               maxQuantity: item.maxQuantity,
               preselected: item.preselected,
               ...(item.vatClass === null
@@ -134,7 +137,8 @@ async function writeChoices(tx: Transaction, modifierId: string, input: Modifier
       name: choice.name,
       active: choice.available,
       sort,
-      priceDelta: input.type === "extras" ? (choice as ExtraChoice).priceDelta : "0.00",
+      priceDelta:
+        input.type === "extras" ? decimalToCents(decimal((choice as ExtraChoice).priceDelta)) : 0,
       maxQuantity: input.type === "extras" ? (choice as ExtraChoice).maxQuantity : 1,
       preselected: input.type === "extras" ? (choice as ExtraChoice).preselected : false,
       vatClass: input.type === "extras" ? ((choice as ExtraChoice).vatClass ?? null) : null,

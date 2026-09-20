@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, centsToDecimal } from "@waitron/shared";
 import type { OvertimeModel, WorkTimeRuleset } from "@waitron/workforce";
 import { convenioConfig } from "./schema/convenio-config.js";
 // Side-effect: registers this package's convenio.* code so `new AppError(...)` below type-checks
@@ -14,9 +14,18 @@ const DB_TO_OVERTIME_MODEL: Record<"daily_accrual" | "period_net", OvertimeModel
   period_net: "period-net",
 };
 
-/** `numeric` comes back as a string (or null); the ruleset carries it as a number-or-null. */
+/** A rate column comes back as a string (or null); the ruleset carries it as a number-or-null. */
 function num(value: string | null): number | null {
   return value === null ? null : Number(value);
+}
+
+/**
+ * A money column comes back as a count of cents; the ruleset carries a per-day amount in the
+ * tenant's currency, as a number. Rendering the literal first and reading that is the same value
+ * the ruleset has always carried, and it keeps the cents form from leaking past this boundary.
+ */
+function moneyNum(cents: number | null): number | null {
+  return cents === null ? null : Number(centsToDecimal(cents));
 }
 
 /**
@@ -61,11 +70,12 @@ export async function resolveWorkTimeRuleset(
   // The `.select({...})` above aliases every column to its exact `WorkTimeRuleset` field name and
   // narrows to precisely the ruleset's columns (no id/createdAt), so `...row` supplies all
   // but the three fields that need a transform: the DB enum → the hyphenated `OvertimeModel`, and the
-  // two `numeric`-as-string premiums → number-or-null.
+  // night premium (a rate, still a string) and the split-shift premium (a count of cents) →
+  // number-or-null.
   return {
     ...row,
     overtimeModel: DB_TO_OVERTIME_MODEL[row.overtimeModel],
     nightPremiumPct: num(row.nightPremiumPct),
-    splitShiftPremium: num(row.splitShiftPremium),
+    splitShiftPremium: moneyNum(row.splitShiftPremium),
   };
 }

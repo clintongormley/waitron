@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { asAppUser, purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
 import { usePurchasingDb } from "../test/fixtures.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hasCode, isAppError } from "@waitron/shared";
@@ -142,12 +143,37 @@ describe("purchase-invoice operations", () => {
     expect(augustOnly[0]?.lines).toHaveLength(1);
   });
 
+  it("stores a money amount as a count of whole cents", async () => {
+    // Reading the columns raw, because every assertion that goes through a purchasing function
+    // round-trips both conversions and so passes whatever the units are. `rate` is not money and
+    // stays a decimal literal.
+    const rows = await asApp(async (tx) => {
+      const c = await createPurchaseInvoice(tx, baseInput());
+      const [header] = await tx
+        .select({ total: purchaseInvoices.total })
+        .from(purchaseInvoices)
+        .where(eq(purchaseInvoices.id, c.id));
+      const lines = await tx
+        .select({
+          rate: purchaseInvoiceVat.rate,
+          base: purchaseInvoiceVat.base,
+          tax: purchaseInvoiceVat.tax,
+        })
+        .from(purchaseInvoiceVat)
+        .where(eq(purchaseInvoiceVat.purchaseInvoiceId, c.id));
+      return { header, lines };
+    });
+    expect(rows.header).toEqual({ total: 24200 });
+    expect(rows.lines).toEqual([{ rate: "21.00", base: 20000, tax: 4200 }]);
+  });
+
   it("updates header fields without touching the lines", async () => {
     const after = await asApp(async (tx) => {
       const c = await createPurchaseInvoice(tx, baseInput());
       await updatePurchaseInvoice(tx, c.id, {
         header: {
           supplierName: "Renombrado SL",
+          total: d("300.50"),
           deductibleProportion: d("50.00"),
           note: "prorrata",
         },
@@ -155,6 +181,9 @@ describe("purchase-invoice operations", () => {
       return getPurchaseInvoice(tx, c.id);
     });
     expect(after?.supplierName).toBe("Renombrado SL");
+    // `total` is the patch's one money field and takes the update path's own conversion, separate
+    // from create's.
+    expect(after?.total).toBe("300.50");
     expect(after?.deductibleProportion).toBe("50.00");
     expect(after?.note).toBe("prorrata");
     expect(after?.lines).toHaveLength(1); // untouched
@@ -259,14 +288,16 @@ describe("purchase-invoice operations", () => {
   });
 
   it("propagates a non-unique DB error from the header insert (not swallowed as a duplicate)", async () => {
-    // The rethrow branch of create's 23505 translation: a numeric overflow on `total` (> 12 integer
-    // digits for numeric(12,2)) is a 22003, not a 23505, so it must surface as itself, never as a
-    // spurious purchase.duplicate. Lines are valid, so validation passes and the header insert is
-    // reached.
+    // The rethrow branch of create's 23505 translation: an overflow on `total` is a 22003, not a
+    // 23505, so it must surface as itself, never as a spurious purchase.duplicate. `total` is a
+    // money column, which stores a count of whole cents in a 4-byte integer, so the smallest amount
+    // that overflows it is a little over 21474836.47 — an amount `assertMoney` accepts, which is
+    // what keeps the refusal on the DATABASE rather than in the cents converter. Lines are valid,
+    // so validation passes and the header insert is reached.
     const error = await asApp((tx) =>
       captureThrown(() =>
         createPurchaseInvoice(tx, {
-          header: { ...baseInput().header, total: d("1000000000000.00") },
+          header: { ...baseInput().header, total: d("99999999.99") },
           lines: baseInput().lines,
         }),
       ),

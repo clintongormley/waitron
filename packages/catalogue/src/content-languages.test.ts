@@ -214,7 +214,7 @@ describe("site content languages", () => {
         sql`insert into catalogues (name) values ('Lunch') returning id`,
       );
       await tx.execute(
-        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', '{"en":"Bread","fr-FR":"Pain"}'::jsonb, 'each', '2.00', 'general')`,
+        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', '{"en":"Bread","fr-FR":"Pain"}'::jsonb, 'each', 200, 'general')`,
       );
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] }),
@@ -261,7 +261,7 @@ describe("site content languages", () => {
         sql`insert into catalogues (name) values ('Lunch') returning id`,
       );
       await tx.execute(
-        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', '2.00', 'general')`,
+        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', 200, 'general')`,
       );
     });
     await expect(

@@ -874,7 +874,7 @@ describe("publishing on a menu offer as the non-superuser application role", () 
         sql`update menu_item_extra_lists set display_order = 1 where menu_item_id = ${offers.burger}`,
       );
       await tx.execute(
-        sql`update menu_item_extra_items set price = '1.50' where menu_item_id = ${offers.burger}`,
+        sql`update menu_item_extra_items set price = 150 where menu_item_id = ${offers.burger}`,
       );
       expect(baconPrice(await readMenuExtras(tx, [offers.burger]))).toBe("1.50");
 

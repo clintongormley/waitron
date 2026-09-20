@@ -51,7 +51,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
         catalogueId: cat.id,
         name: "Café solo",
         pricingUnit: "each",
-        unitPrice: "1.30",
+        unitPrice: 130,
         vatClass: "general",
       })
       .returning({ id: products.id });
@@ -74,10 +74,10 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
       variantKitchenName: "CAFE GR",
       descriptions: { es: "Café solo", ca: "Cafè sol" },
       quantity: "1.000",
-      unitPrice: "1.30",
-      unitPriceGross: "1.43",
+      unitPrice: 130,
+      unitPriceGross: 143,
       vatRate: "10.00",
-      lineTotal: "1.43",
+      lineTotal: 143,
       ...overrides,
     };
   }

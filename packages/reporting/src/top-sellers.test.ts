@@ -65,6 +65,34 @@ describe("computeTopSellers", () => {
     await expect(run({ limit: -1 })).rejects.toThrow(/limit/i);
   });
 
+  it("totals sub-euro line amounts exactly — the money column counts whole cents", async () => {
+    // Amounts with a non-zero cents part, and two lines of the same product so the sum is taken in
+    // cents and converted once: 1234 + 1 = 1235 cents is 12.35. Every other case in this file uses
+    // whole euros, which a wrongly-scaled read can still render plausibly.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "12.35",
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "12.34",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "1.000",
+        },
+        {
+          vatRate: "10.00",
+          lineTotal: "0.01",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "1.000",
+        },
+      ],
+    });
+    expect(await run()).toEqual([{ name: coffeeName, quantity: "2.000", total: "12.35" }]);
+  });
+
   it("ranks products by summed quantity desc and respects the limit, labelled with the STAFF name", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,

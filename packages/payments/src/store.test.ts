@@ -159,11 +159,12 @@ describe("recordRefund", () => {
     expect(result.state).toBe("refunded");
     const row = await getRow(key);
     expect(row?.state).toBe("refunded");
-    const refunds = await pg.db.execute<{ amount: string }>(
+    const refunds = await pg.db.execute<{ amount: number }>(
       sql`select amount from payment_refunds where payment_ref = ${"p5"}`,
     );
     expect(refunds.rows).toHaveLength(1);
-    expect(refunds.rows[0].amount).toBe("20.00");
+    // Read straight from the column: the stored count of cents for 20.00.
+    expect(refunds.rows[0].amount).toBe(2000);
   });
 
   it("writes authorized_by when supplied, and NULL when omitted", async () => {
@@ -506,7 +507,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     await pg.db.execute(sql`
       insert into payments (working_order_id, provider, payment_ref, amount, state, settled_at)
-      values (${key.workingOrderId}, ${key.provider}, 'null-settled', '3.00', 'captured', null)
+      values (${key.workingOrderId}, ${key.provider}, 'null-settled', 300, 'captured', null)
     `);
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {

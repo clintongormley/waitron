@@ -155,7 +155,7 @@ it("a variant round-trips staff name, customer name, kitchen name and image thro
   const { id: productId } = (
     await suite.admin.execute<{ id: string }>(
       sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+          values (${catalogueId}, 'Coffee', 'each', 900, 'reduced') returning id`,
     )
   ).rows[0]!;
   await app(suite.admin, async (tx) => {
@@ -259,7 +259,7 @@ it("round-trips a variant's new name, customer_name, kitchen_name and image colu
   );
   const { id: productId } = await one<{ id: string }>(
     sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+        values (${catalogueId}, 'Coffee', 'each', 900, 'reduced') returning id`,
   );
   const row = await one<{
     name: string;
@@ -269,7 +269,7 @@ it("round-trips a variant's new name, customer_name, kitchen_name and image colu
   }>(
     sql`insert into product_variants
           (product_id, name, customer_name, kitchen_name, image, unit_price)
-        values (${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', '2.00')
+        values (${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', 200)
         returning name, customer_name, kitchen_name, image`,
   );
   expect(row).toEqual({

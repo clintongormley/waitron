@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { addDecimal, decimal, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
+import {
+  addDecimal,
+  centsToDecimal,
+  saleId as brandSaleId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import type { Decimal, SaleId, TillId } from "@waitron/shared";
 
 /**
@@ -27,21 +32,26 @@ export interface OutstandingSale {
  * voided. This is a plain read over the database's one taxpayer.
  */
 export async function listOutstandingSales(tx: Transaction): Promise<OutstandingSale[]> {
+  // `sales.total` counts whole cents, so both money expressions below return cents and
+  // `centsToDecimal` is the one conversion, in the mapping under this query. Neither may be cast
+  // to `numeric(12, 2)::text`: that renders a count of 7734 cents as "7734.00", a plausible string
+  // a hundred times the amount, and nothing fails (measured on PGlite 0.5.8, 2026-09-20). The sum
+  // is cast back to `int` so it arrives as a number, exactly as `invoice_number` alongside it does.
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;
     issued_at: string;
     till_id: string;
-    total: string;
-    correction_total: string;
+    total: number;
+    correction_total: number;
   }>(sql`
     select
       s.id             as sale_id,
       s.invoice_number as invoice_number,
       s.issued_at::text as issued_at,
       s.till_id        as till_id,
-      s.total::text    as total,
-      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::numeric(12, 2)::text
+      s.total          as total,
+      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::int
         as correction_total
     from sales s
     where s.corrects_sale_id is null
@@ -52,8 +62,8 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
   `);
 
   return result.rows.map((r) => {
-    const total = decimal(r.total);
-    const correctionTotal = decimal(r.correction_total);
+    const total = centsToDecimal(r.total);
+    const correctionTotal = centsToDecimal(r.correction_total);
     return {
       saleId: brandSaleId(r.sale_id),
       invoiceNumber: r.invoice_number,

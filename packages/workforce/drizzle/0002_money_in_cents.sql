@@ -1,0 +1,1 @@
+ALTER TABLE "employments" ALTER COLUMN "pay_rate" SET DATA TYPE bigint;
