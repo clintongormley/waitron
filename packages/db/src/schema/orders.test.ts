@@ -37,10 +37,11 @@ const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// working_order_lines.product_id carries a foreign key to products (park &
-// retrieve, Task 1). It is NULLABLE since ordering modifiers (Task 2) — a child modifier line has no
-// product — but every PARENT dish line still needs a real product. seed() creates one priced product
-// and stores its id here; the LINE fixture uses it.
+// working_order_lines.product_id carries a foreign key to products (park & retrieve, Task 1). Both
+// kinds of line name a product today: a parent names the dish and a child extra line names the
+// PICKED product. The column stays nullable (see the schema comment on it), but nothing here
+// exercises that. seed() creates one priced product and stores its id here; the LINE fixture uses
+// it.
 let productA = "";
 // order_number is NOT NULL on working_orders. No UNIQUE constraint yet (the per-node allocator is a
 // later task), so a simple ascending counter keeps every fixture order distinct without one.
@@ -477,8 +478,11 @@ describe("working_order_lines", () => {
  *   belongs to. (parent_line_id) → working_order_lines(id), MATCH SIMPLE so a top-level line (NULL)
  *   passes.
  * - `product_id` — the dish's on a top-level line and the PICKED product's on a child line, under
- *   one `ON DELETE restrict` FK. NULLABLE, so a line whose product is unknown to the catalogue still
- *   inserts, which is what lets the parent FK stay null-permissive.
+ *   one `ON DELETE restrict` FK, so a product either kind of line names cannot be deleted while the
+ *   line exists (asserted below). The column is NULLABLE — a line naming NO product inserts, which
+ *   no case here exercises — but not in order to survive a deleted product, because `restrict`
+ *   makes that deletion impossible. It has no bearing on the parent FK, which is a separate constraint on a separate
+ *   column (working_order_lines_parent_fk, 0034_drop_tenant_id_after_sql.sql).
  * - `option_snapshots` — the dish's frozen options answers, NOT NULL and defaulting to an empty list.
  *   It names no list and no label, so deleting either cannot reach a saved order.
  */

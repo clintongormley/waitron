@@ -613,23 +613,30 @@ What the order path (the plan's Task 7) left behind:
   preserve path asks whether the request's answers, resolved against the lists as they are NOW,
   equal what the line froze. An options answer freezes NAMES and no ids (spec §2.3), so after a
   rename the two sides differ, the line takes the replacement path, and it is re-priced at today's
-  price and re-frozen with the new wording — a rename can therefore change what a saved order says
-  the diner chose and what it costs. The old model compared by id and survived a rename. Nothing
-  reaches this today: the till sends no `extras`/`options` until Task 12. **Next action:** Task 8
+  price and re-frozen with the new wording. The LINE IDENTITY goes with it: the replacement path
+  deletes every line of the order and inserts fresh rows, so the parent and its children all come
+  back under new ids. The run-it review seat measured a parent reading
+  `quantity 1.000, price 2.50, listName "Cook list staff"` before the edit and
+  `quantity 2.000, price 19.00, listName "Renamed"` after it, under a new id. So a rename between
+  two sends can change what a saved order says the diner chose, what it costs, and which rows it is
+  made of. The old model compared by id and survived a rename. Whether today's till can reach it is
+  UNVERIFIED — it sends no `extras`/`options` until Task 12. **Next action:** Task 8
   owns held-order comparison (`sameExtraSelections` / `sameOptionSelections`) and has to settle it —
   either by carrying ids the comparison can use, or by deciding a rename SHOULD drop the line onto
   the replacement path.
 - **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
   order path refuses an extras pick on a dish that is not priced `each`
-  (`options.unsupported_product`, the code the legacy option payload used), because a child is priced
+  (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in
+  `apps/server/src/errors.ts` rather than deleted), because a child is priced
   `dishQuantity × pickQuantity` and a fraction of a dish would bill a fraction of an extra. But the
   two order paths read that fact from different places: the MENU-OFFER path derives it from the unit
   the offer carries (`priceOrderLines`, `offer.unit.hardwareUnit === null ? "each" : "weight"`),
   while the plain PRODUCT path reads `products.pricing_unit` — and `assignProductUnit`
   (`packages/catalogue/src/units.ts`) writes `product_units` without touching that column. So one
   product, moved onto the kg unit that way, is refused through its menu offer and billed
-  fractionally through its product id. Measured on this branch: the same fixture failed with
-  `options.unsupported_product` on the offer path and went through on the product path. Only the
+  fractionally through its product id. Measured on this branch: the same fixture was refused on the
+  offer path — under the code's earlier name, `options.unsupported_product` — and went through on
+  the product path. Only the
   refusing half is pinned by a test ("refuses an extras pick on a menu offer whose dish is sold by
   weight", `apps/server/src/working-order.test.ts`). This is a second instance of the shape the
   Units entry above already warns about. **Next action:** whoever builds Units decides which column
@@ -651,6 +658,56 @@ What the order path (the plan's Task 7) left behind:
   order line has no column that could name a legacy modifier or one of its choices, so the refusal
   and the count that fed the dashboard's delete confirmation had nothing left to find. The whole
   file goes with Task 13.
+- **The till's READ surfaces go blank too, not just its send side.** The server renamed the frozen
+  options answers from `modifierSnapshots` to `optionSnapshots` on four wires — `TabLine`,
+  `StationQueueItem`, `ExpoItem` and `HeldOrder.lines`, all declared in
+  `apps/server/src/working-order.ts` — while `apps/till/src/api/client.ts` still declares
+  `modifierSnapshots?` on its own copies of those types. Nothing crashes: the till's
+  `modifierSnapshotLabels` helper (`apps/till/src/widgets/modifier-snapshot.ts`) defaults its
+  argument to `[]`, so an absent field simply renders no answers. The screens that would have shown
+  them are `apps/till/src/widgets/station-queue.ts`, `apps/till/src/screens/till-expo-screen.ts`,
+  `apps/till/src/screens/till-ticket-view.ts`,
+  `apps/till/src/screens/till-table-order-screen.ts` and `apps/till/src/widgets/basket.ts`; several
+  doc comments there still describe a mirror of the server type and answers being rendered.
+  A second, larger half of the same break: the till identifies a CHILD line by `productId === null`
+  — at `apps/till/src/screens/till-table-order-screen.ts` lines 554, 717 and 889, and described in
+  the comments at lines 693, 708 and 885 and at `apps/till/src/api/client.ts:1346`. A child extras
+  line now carries the PICKED product, so none of those guards matches it: such a row would be
+  named, offered a Send action and a course picker, and swept into the split and pay filters
+  instead of being skipped. Unreachable today for the same reason as the rest of this entry — the
+  till sends no extras, so no child line exists for it to mis-classify, and the legacy child line
+  that used to carry a null product cannot be created at all any more.
+  **Next action:** Task 12 owns the till — recorded here so nobody debugs a missing line as a data
+  problem, and so the child-line detection is rewritten rather than trusted.
+- **A dead dashboard surface is left behind by `modifierDependants(...).orders` always being 0.**
+  Three consumers survive in `apps/dashboard/src/screens/modifiers-screen.ts`: the orders-block
+  alert (line 403), the delete button disabled on `dependants.orders > 0` (line 545) and the
+  `dependency === "order"` refusal mapping (line 187). With them go two translations that can no
+  longer appear (`modifiers.delete_orders_block`, English and Spanish, in
+  `apps/dashboard/src/i18n/strings.ts`) and a test asserting a refusal the server can no longer
+  send (`apps/dashboard/src/screens/modifiers-screen.test.ts`, `params: { dependency: "order" }`).
+  **Next action:** Task 13 removes this surface; widening this branch into the dashboard is what
+  this entry avoids.
+- **A dead projection on the sale path.** `priceOrderLines` (`apps/server/src/working-order.ts`)
+  still maps every offer's `optionGroups` into its `available` projection and carries
+  `offer.modifiers` alongside, and nothing reads either: the projection feeds
+  `priceBasketWithOptions` (`packages/catalogue/src/pricing.ts`), which touches neither field, and
+  the only other mentions of those two fields in the file are `[] as const` placeholders
+  (`modifiers` also appears there as the unrelated `QueueModifier` type, which is live). It stays because both fields
+  are REQUIRED on the shared `AvailableProduct` contract (`packages/catalogue/src/menu-types.ts`),
+  so dropping them from one branch of the ternary alone would either break the type or leave the
+  two branches disagreeing. **Next action:** Task 13, with the rest of the old model.
+- **The new definition reads take no lock while their writers serialise.** `priceOrderLines` still
+  calls `lockModifierDefinitions(tx, "read")`, which covers the OLD `option_groups` tables the
+  offer projection reads — but the four new reads take nothing: `readMenuExtras`,
+  `readProductExtras`, `readProductModifiers` and `readOptionListsByIds`. Their writers serialise
+  deliberately (`lockExtraList`'s `for update` in `packages/catalogue/src/extras.ts`, and
+  `writeProductModifiers`'s per-list `for key share` in
+  `packages/catalogue/src/product-modifiers.ts`), so a list edit committing mid-read could give one
+  order a snapshot mixing pre- and post-edit wording. NOT MEASURED — no probe was run, and nothing
+  establishes the window is reachable. **Next action:** decide it deliberately rather than slipping
+  a lock in: adding one late is its own deadlock risk, which Task 6 of this plan already paid for
+  once (`40P01` from lock ordering, recorded below).
 
 What the product attachment (#456, the plan's Task 6) left behind:
 

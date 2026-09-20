@@ -143,9 +143,12 @@ export const workingOrderLines = table(
     // CHILD EXTRA line (parent_line_id set) carries the PICKED product here, which is what the
     // kitchen cooks and the diner is charged for; its price and its three names are still
     // snapshotted onto the line by value, so deleting the list that offered it cannot rewrite the
-    // order. NULLABLE all the same: a child line whose product has gone is still a line, and the
-    // FK is declared in extraConfig below (null-permissive under MATCH SIMPLE), so this column
-    // carries no `.references()` of its own.
+    // order. NULLABLE, but NOT so a line can outlive the product it names: the FK below is
+    // `ON DELETE restrict`, so a product any line names cannot be deleted while that line exists.
+    // What the nullability leaves open is a line naming NO product at all: the column permits it
+    // and no production writer does it today. The FK is declared in
+    // extraConfig below (null-permissive under MATCH SIMPLE), so this column carries no
+    // `.references()` of its own.
     productId: id("product_id"),
     variantId: id("variant_id"),
     // Frozen variant staff name — plain text; null when the line names no variant.

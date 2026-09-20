@@ -1123,8 +1123,9 @@ describe("cross-till end-to-end", () => {
     const paid = await payWorkingOrder(deps, tillB, {
       id: orderId,
       // A retrieved order IGNORES req.lines (design §2); these are passed only to mirror the till
-      // round-trip. Filter to product lines — HeldOrder.lines.productId is nullable since Task 2 made
-      // working_order_lines.product_id nullable, but a parked order carries only product lines today.
+      // round-trip. Filter to product lines — `HeldOrder.lines.productId` is typed nullable because
+      // the column is, not because a line here lacks a product: this order carries one dish and no
+      // extras, so the filter keeps every line it has.
       lines: retrieved.lines.filter(
         (l): l is { productId: string; quantity: string } => l.productId !== null,
       ),
