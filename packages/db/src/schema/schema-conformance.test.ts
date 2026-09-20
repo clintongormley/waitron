@@ -56,34 +56,54 @@ const declared: PgTable[] = tablesIn(barrel, deployment);
 // it is being declared. They are listed rather than ignored so that dropping one from a migration
 // fails this test.
 const SQL_ONLY_FOREIGN_KEYS: Readonly<Record<string, readonly string[]>> = {
-  categories: ["station_id -> kitchen_stations(id)"],
-  device_profiles: ["canvas_id -> canvases(id)"],
+  categories: ["station_id -> kitchen_stations(id) on delete no action on update no action"],
+  device_profiles: ["canvas_id -> canvases(id) on delete restrict on update no action"],
   devices: [
-    "device_profile_id -> device_profiles(id)",
-    "receipt_printer_id -> printers(id)",
-    "station_id -> kitchen_stations(id)",
-    "till_id -> tills(id)",
+    "device_profile_id -> device_profiles(id) on delete restrict on update no action",
+    "receipt_printer_id -> printers(id) on delete restrict on update no action",
+    "station_id -> kitchen_stations(id) on delete no action on update no action",
+    "till_id -> tills(id) on delete restrict on update no action",
   ],
-  dining_tables: ["tab_id -> working_orders(id)", "zone_id -> floor_zones(id)"],
-  drawer_opens: ["sale_id -> sales(id)", "till_id -> tills(id)"],
-  location_catalogues: ["catalogue_id -> catalogues(id)", "location_id -> locations(id)"],
-  locations: ["catalogue_id -> catalogues(id)"],
-  print_jobs: ["claimed_by -> print_agents(id)", "printer_id -> printers(id)"],
-  products: ["course_id -> kitchen_courses(id)", "station_id -> kitchen_stations(id)"],
-  sale_lines: ["parent_line_id -> sale_lines(id)"],
-  station_printers: ["printer_id -> printers(id)", "station_id -> kitchen_stations(id)"],
+  dining_tables: [
+    "tab_id -> working_orders(id) on delete no action on update no action",
+    "zone_id -> floor_zones(id) on delete no action on update no action",
+  ],
+  drawer_opens: [
+    "sale_id -> sales(id) on delete no action on update no action",
+    "till_id -> tills(id) on delete no action on update no action",
+  ],
+  location_catalogues: [
+    "catalogue_id -> catalogues(id) on delete no action on update no action",
+    "location_id -> locations(id) on delete no action on update no action",
+  ],
+  locations: ["catalogue_id -> catalogues(id) on delete no action on update no action"],
+  print_jobs: [
+    "claimed_by -> print_agents(id) on delete no action on update no action",
+    "printer_id -> printers(id) on delete no action on update no action",
+  ],
+  products: [
+    "course_id -> kitchen_courses(id) on delete no action on update no action",
+    "station_id -> kitchen_stations(id) on delete no action on update no action",
+  ],
+  sale_lines: ["parent_line_id -> sale_lines(id) on delete no action on update no action"],
+  station_printers: [
+    "printer_id -> printers(id) on delete no action on update no action",
+    "station_id -> kitchen_stations(id) on delete no action on update no action",
+  ],
   ticket_items: [
-    "course_id -> kitchen_courses(id)",
-    "node_id -> nodes(id)",
-    "station_id -> kitchen_stations(id)",
-    "working_order_line_id -> working_order_lines(id)",
+    "course_id -> kitchen_courses(id) on delete no action on update no action",
+    "node_id -> nodes(id) on delete no action on update no action",
+    "station_id -> kitchen_stations(id) on delete no action on update no action",
+    "working_order_line_id -> working_order_lines(id) on delete cascade on update no action",
   ],
-  tills: ["receipt_printer_id -> printers(id)"],
+  tills: ["receipt_printer_id -> printers(id) on delete no action on update no action"],
   working_order_lines: [
-    "course_id -> kitchen_courses(id)",
-    "parent_line_id -> working_order_lines(id)",
+    "course_id -> kitchen_courses(id) on delete no action on update no action",
+    "parent_line_id -> working_order_lines(id) on delete no action on update no action",
   ],
-  working_orders: ["delivery_table_id -> dining_tables(id)"],
+  working_orders: [
+    "delivery_table_id -> dining_tables(id) on delete no action on update no action",
+  ],
 };
 
 // Unique indexes and check constraints the migrations create that no declaration here carries —
@@ -143,7 +163,11 @@ function fromDeclaration(table: PgTable): TableShape {
     ...config.foreignKeys.map((key) => {
       const reference = key.reference();
       const target = getTableConfig(reference.foreignTable);
-      return `${reference.columns.map((column) => column.name).join(",")} -> ${target.name}(${reference.foreignColumns.map((column) => column.name).join(",")})`;
+      // The two referential actions are part of the key: dropping `onDelete: "restrict"` turns a
+      // refused delete into one PostgreSQL performs. A key that declares neither gets the SQL
+      // default, which is `no action`.
+      const actions = `on delete ${key.onDelete ?? "no action"} on update ${key.onUpdate ?? "no action"}`;
+      return `${reference.columns.map((column) => column.name).join(",")} -> ${target.name}(${reference.foreignColumns.map((column) => column.name).join(",")}) ${actions}`;
     }),
   ].sort();
   const uniques = [
@@ -183,7 +207,18 @@ interface ConstraintRow {
   columns: string[];
   foreign_table: string | null;
   foreign_columns: string[] | null;
+  delete_action: string | null;
+  update_action: string | null;
 }
+
+/** `pg_constraint.confdeltype` / `confupdtype`, in the words drizzle uses for the same actions. */
+const REFERENTIAL_ACTION: Readonly<Record<string, string>> = {
+  a: "no action",
+  r: "restrict",
+  c: "cascade",
+  n: "set null",
+  d: "set default",
+};
 
 interface IndexRow {
   name: string;
@@ -212,6 +247,8 @@ async function fromDatabase(db: Database, name: string): Promise<TableShape> {
       select
         c.contype as kind,
         c.conname as name,
+        c.confdeltype as delete_action,
+        c.confupdtype as update_action,
         (
           select array_agg(a.attname order by k.ord)
           from unnest(c.conkey) with ordinality k(attnum, ord)
@@ -239,7 +276,7 @@ async function fromDatabase(db: Database, name: string): Promise<TableShape> {
     .filter((row) => row.kind === "f")
     .map(
       (row) =>
-        `${row.columns.join(",")} -> ${row.foreign_table}(${(row.foreign_columns ?? []).join(",")})`,
+        `${row.columns.join(",")} -> ${row.foreign_table}(${(row.foreign_columns ?? []).join(",")}) on delete ${REFERENTIAL_ACTION[row.delete_action ?? "a"]} on update ${REFERENTIAL_ACTION[row.update_action ?? "a"]}`,
     )
     .sort();
   const uniques = constraintRows
