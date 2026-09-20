@@ -99,7 +99,7 @@ out one database per SUITE with a truncate between tests, a different isolation 
 at length in `Target`'s own doc comment — so both are decided with the storage flip, in task F1,
 not here. The guard's header carries the commands that count them and the rest of its hedges.
 
-**The rule and the guard arrive AFTER the last conversion, deliberately.** A rule with standing
+**The rule and the guard landed AFTER the last conversion (#473), deliberately.** A rule with standing
 violations needs a guard, and the guard could not pass while a single suite still called the old
 helper. That is the shape the column-vocabulary rollout ended in too: #414 was the last conversion,
 and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together afterwards.

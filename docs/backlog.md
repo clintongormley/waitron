@@ -4121,9 +4121,9 @@ command listing the files that take the seam. That command, not a number written
 anyone checks: a number here went stale in one pull request, which is the whole reason #423 took it
 out. It lists FILES, not packages and not call sites.
 
-**And the house rule and its guard, which step 5 does not include, land with the pull request that
-adds this sentence — their own, after the last conversion, as planned.** When it merges the whole of
-task P2 is done. The entry further down carries what it found.
+**And the house rule and its guard, which step 5 does not include, LANDED as #473 on 2026-09-20** —
+their own pull request, after the last conversion, as planned. With it the whole of task P2 is done.
+The entry further down carries what it found.
 
 **Three things #470, the last conversion, left behind.**
 
@@ -4199,8 +4199,9 @@ the wrong place to change what a fixture guarantees, so it is recorded here rath
 anyone takes it, the question to answer first is whether any such fixture relies on the truncate
 running BEFORE the first test, where the helper's reset has not yet run at all.
 
-**TASK P2 IS FINISHED WITH THIS PULL REQUEST.** The house rule naming `useVenueDb` and the guard
-that enforces it land here, after the last conversion — the shape the vocabulary rollout
+**TASK P2 IS COMPLETE, finished by #473 on 2026-09-20** (main `0e14439a`). The house rule naming
+`useVenueDb` and the guard that enforces it landed there, after the last conversion — the shape the
+vocabulary rollout
 ended in (#414 last conversion, #416 the guard and the rule), and for the same reason: a rule with
 standing violations needs a guard, and the guard could not pass while one suite still called the old
 helper. The rule is `CLAUDE.md` §4 and the guard is `scripts/venue-db-helper.test.ts`, whose own
@@ -4211,9 +4212,8 @@ accessor too early still gets the error
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
 
-**The rule, the guard and the final sweep — the pull request this entry arrives in. Its
-finding is about SCOPE, which is what every earlier round of this rollout also got
-wrong.** The rule is one line in `CLAUDE.md` §4;
+**The rule, the guard and the final sweep, LANDED as #473 on 2026-09-20. Its finding is about
+SCOPE, which is what every earlier round of this rollout also got wrong.** The rule is one line in `CLAUDE.md` §4;
 the guard is `scripts/venue-db-helper.test.ts`, a root-project check that reports any `.ts` file
 under `packages/` or `apps/`, outside `packages/db/`, which NAMES `usePgliteDb`. **It forbids the
 NAME, not the call, and that decision is the whole of why it was worth writing.** `useVenueDb`'s body
@@ -4244,6 +4244,28 @@ under `docs/superpowers/` carry a dated pointer as a result — everything that 
 there except the slice-1 plan itself, whose task P2 it closed. **Take the lesson, not the command:** a sweep built from the
 artefacts of the change (here, the converted paths) finds what the change touched; a sweep built from
 the CLAIM finds what is wrong.
+
+**What #473 deliberately did NOT take, so nobody has to re-derive it.** Three `vitest.config.ts`
+files still carry the false `hookTimeout` claim named further down this section —
+`packages/purchasing`, `packages/fiscal-none` and `packages/fiscal` — and none of them has a
+conversion left to catch it, so somebody has to take them deliberately. The dead exported test
+helper `seedTenantWithSumUpKey` in `apps/server/src/card-provider-pool.test.ts` is still exported
+and still called by nothing. And `docs/superpowers/plans/2026-09-03-membership-slice-3-distribution.md`
+designates `apps/server/src/membership-adopt.test.ts`, which does NOT exist on this tree and whose
+verb `adoptMembership` no test names; #473 recorded that in the document rather than working out what
+became of that step.
+
+**The number the review rounds produced, because it is the argument for budgeting them.** #473's
+guard is a `String.includes` and one early return, and its logic did not change after the first
+commit. Everything after that was prose, and four successive reading rounds found nine, nine, six and
+four false or over-wide claims, each round inside the previous round's corrections; the last ran on a
+different model. The shapes that kept recurring are worth more than the count: a self-inclusion (a
+count of "other files like this one" that includes this one, three times); a scope substitution
+(quoting a command and then reporting a number belonging to a different predicate); an attribution
+(crediting a claim to a paragraph, step or pull request that does not make it — twice, once blaming
+this branch for a line move that #470 had made); and a prediction in the indicative (saying the work
+had landed when it had not, corrected twice and reintroduced once by its own correction). A wave like
+this converges; it does not come out clean in two rounds.
 
 **Two things the pre-landing documentation sweep still cannot do, both measured on
 `packages/catalogue` (#454, 2026-09-19).** The sweep is two greps over the whole tree — the converted
@@ -4289,7 +4311,7 @@ Both of the plan's lists now name it (#429 corrected them in place). Nothing to 
 the next converter meeting a real-PostgreSQL suite does not have to work it out again.
 
 **A third thing for that last pull request, found while converting `packages/bookings` (#428) —
-TAKEN by this pull request; the guard now refuses the bare name in a `.ts` file under `packages/` or
+TAKEN by #473; the guard now refuses the bare name in a `.ts` file under `packages/` or
 `apps/` outside `packages/db`, so this class cannot come back there.** Converting a package does not
 remove the old helper's name from its PROSE, and the grep pair that used to sit in the testing guide
 could not see what was left: its still-to-convert command matched `usePgliteDb[(]`, with a
@@ -5102,7 +5124,7 @@ twenty-one calls (`src/node-membership.test.ts` has two), plus the package's `vi
 comments and a paragraph of `packages/db/README.md`. This is the package that OWNS both helpers, so
 the four files the rollout's grep exclusion lists stay untouched: `src/testing/lifecycle.ts` and
 `src/testing/venue-db.ts`, which define them, and both their contract tests. (Permission is wider
-than that four, and the guard in the pull request that adds this parenthesis is what settles it:
+than that four, and the guard #473 added is what settles it:
 `packages/db` is exempt whole.) After it,
 `git grep -nE "usePgliteDb[(]" -- packages/db` returns four lines and all four are allowed: the
 definition (`lifecycle.ts:129`), the wrapper's forwarding call (`venue-db.ts:26`) and the old
