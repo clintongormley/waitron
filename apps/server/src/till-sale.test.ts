@@ -750,6 +750,10 @@ describe("ordering extras and options — parent + child lines", () => {
     guarnicionListId: string;
     /** "Tamaño": an active options list, so every Menú line must answer it. */
     sizeListId: string;
+    /** "Grande" — an available label of "Tamaño", the one answer these tests send. */
+    sizeLabelGrandeId: string;
+    /** The venue's default content language, the key every frozen staff-name map is stored under. */
+    defaultLanguage: string;
     /** "Salsa": active, with "Alioli" WITHDRAWN and one label still available. */
     salsaListId: string;
     /** "Alioli" — a label the list still carries and no longer offers. */
@@ -883,14 +887,21 @@ describe("ordering extras and options — parent + child lines", () => {
       const sizeList = await createOptionList(
         tx,
         {
-          name: "Tamaño",
-          customerName: null,
-          kitchenName: null,
+          // Six DIFFERENT strings across the list's and the labels' three names, so a surface that
+          // prints or files the wrong one of them cannot match (CLAUDE.md §4).
+          name: "Tamaño staff",
+          customerName: { [defaultLanguage]: "Tamaño customer" },
+          kitchenName: "Tamaño kitchen",
           defaultLabelId: null,
           active: true,
           labels: [
             { name: "Pequeño", customerName: null, kitchenName: null, available: true },
-            { name: "Grande", customerName: null, kitchenName: null, available: true },
+            {
+              name: "Grande staff",
+              customerName: { [defaultLanguage]: "Grande customer" },
+              kitchenName: "Grande kitchen",
+              available: true,
+            },
           ],
         },
         cfg.locale,
@@ -934,6 +945,8 @@ describe("ordering extras and options — parent + child lines", () => {
         extrasListId: extrasList.id,
         guarnicionListId: guarnicionList.id,
         sizeListId: sizeList.id,
+        sizeLabelGrandeId: sizeList.labels.find((label) => label.name === "Grande staff")!.id,
+        defaultLanguage,
         salsaListId: salsaList.id,
         salsaLabelId: salsaList.labels.find((label) => label.name === "Alioli")!.id,
       };
@@ -1082,6 +1095,151 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(sl).toHaveLength(2);
     const child = sl.find((l) => l.parentLineId !== null)!;
     expect(child.quantity).toBe("6.000");
+  });
+
+  /** The six frozen strings one answer to "Tamaño" carries, under the venue's default content
+   *  language. Every name differs, so an assertion cannot pass while the wrong one was copied. */
+  const grandeSnapshot = (defaultLanguage: string) => ({
+    listName: { [defaultLanguage]: "Tamaño staff" },
+    listCustomerName: { [defaultLanguage]: "Tamaño customer" },
+    listKitchenName: "Tamaño kitchen",
+    labelName: { [defaultLanguage]: "Grande staff" },
+    labelCustomerName: { [defaultLanguage]: "Grande customer" },
+    labelKitchenName: "Grande kitchen",
+  });
+
+  /** The filed lines of the one sale this working order produced, in `line_no` order. */
+  async function filedLinesOf(workingOrderId: string) {
+    return withTransaction(suite.admin, async (tx) => {
+      await asAppUser(tx);
+      const [sale] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, workingOrderId));
+      return tx
+        .select({
+          lineNo: saleLines.lineNo,
+          name: saleLines.name,
+          quantity: saleLines.quantity,
+          unitPrice: saleLines.unitPrice,
+          vatRate: saleLines.vatRate,
+          lineTotal: saleLines.lineTotal,
+          parentLineId: saleLines.parentLineId,
+          optionSnapshots: saleLines.optionSnapshots,
+        })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, sale!.id))
+        .orderBy(saleLines.lineNo);
+    });
+  }
+
+  it("a WALK-UP files the dish's options answers onto the dish's own sale_line", async () => {
+    const v = await setupModifierVenue();
+    const workingOrderId = randomUUID();
+
+    await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+      lines: [
+        {
+          productId: v.menuProductId,
+          quantity: "1",
+          options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
+        },
+      ],
+      tender: { method: "cash", amount: "20.00" },
+      workingOrderId,
+    });
+
+    // A walk-up never touches the stored lock: it is filed from the live `priceBasketWithOptions`
+    // result `createOpenOrder` returns, so the answers have to ride on THAT and not only on the
+    // working-order row this same call writes.
+    const filed = await filedLinesOf(workingOrderId);
+    expect(filed.map((line) => line.optionSnapshots)).toEqual([
+      [grandeSnapshot(v.defaultLanguage)],
+    ]);
+  });
+
+  it("a RETRIEVED order files the options answers its working-order line stored", async () => {
+    const v = await setupModifierVenue();
+    const workingOrderId = randomUUID();
+
+    await withTransaction(suite.admin, async (tx) => {
+      await asAppUser(tx);
+      await createOpenOrder(
+        tx,
+        v.cfg,
+        workingOrderId,
+        [
+          {
+            productId: v.menuProductId,
+            quantity: "1",
+            options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
+          },
+        ],
+        null,
+      );
+    });
+
+    // The till sends no basket, so this files from `readLockedLines` — the answers reach the sale
+    // only if that reader selects `working_order_lines.option_snapshots` and carries it.
+    await payWorkingOrder({ db: suite.admin, backend, clock }, v.cfg, {
+      id: workingOrderId,
+      lines: [],
+      tender: { method: "cash", amount: "20.00" },
+    });
+
+    const filed = await filedLinesOf(workingOrderId);
+    expect(filed.map((line) => line.optionSnapshots)).toEqual([
+      [grandeSnapshot(v.defaultLanguage)],
+    ]);
+  });
+
+  it("files an extras pick as a snapshot-only child line, with no catalogue reference on the table", async () => {
+    const v = await setupModifierVenue();
+    const workingOrderId = randomUUID();
+
+    await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+      lines: [
+        {
+          productId: v.burgerId,
+          quantity: "2",
+          extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+        },
+      ],
+      tender: { method: "cash", amount: "30.00" },
+      workingOrderId,
+    });
+
+    // Bacon is offered at 0.50 by the list and is a 3.00 product in its own right, at its OWN reduced
+    // rate where the burger is general — so name, quantity, price and VAT each come from the frozen
+    // pick rather than from the catalogue row or the dish. 0.50 gross at 10% is 0.45 net per unit,
+    // 0.91 for the two.
+    const filed = await filedLinesOf(workingOrderId);
+    expect(filed).toHaveLength(2);
+    const child = filed.find((line) => line.parentLineId !== null)!;
+    expect(child).toMatchObject({
+      name: "Bacon staff",
+      quantity: "2.000",
+      unitPrice: "0.45",
+      vatRate: "10.00",
+      lineTotal: "0.91",
+      optionSnapshots: [],
+    });
+
+    // The structural half of the same rule (spec decision 11, and `sale_lines`'s own "snapshotted
+    // values, never catalogue references" header): there is no column for the picked product at all,
+    // so no future write can put one there without this failing first. Same instrument as
+    // `packages/fiscal-verifactu/src/write-path.e2e.test.ts`'s note/doneness guard.
+    const columns = await withTransaction(suite.admin, async (tx) => {
+      await asAppUser(tx);
+      const { rows } = await tx.execute<{ column_name: string }>(
+        sql`select column_name from information_schema.columns where table_name = 'sale_lines'`,
+      );
+      return rows.map((row) => row.column_name);
+    });
+    expect(columns).toContain("option_snapshots");
+    expect(columns).not.toContain("product_id");
+    expect(columns).not.toContain("menu_item_id");
+    expect(columns).not.toContain("extra_list_item_id");
   });
 
   it("park → retrieve → pay re-prices children from their lock to the same total and desglose", async () => {
