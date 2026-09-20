@@ -209,10 +209,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   change returned as zero on a retry, because displaying change was treated as dispensing it.
 - **Compare saved selections by values — not by JSON key order, not by the order they were sent, and
   not by the order they were OFFERED in either.** The offered order reads as fixed and is a stored
-  position two different columns hold, each re-numbered from the body of a save, so a line parked
-  before a reorder holds the old one. Cost: a quantity-only held-order edit deleted every line,
-  re-issued it under a new id and re-priced the dish. Guard: the quantity-only held-order edit case
-  in `apps/server/src/working-order.test.ts`; that receipt and the price-change one in
+  position a save re-numbers. Cost: a quantity-only held-order edit deleted every line, re-issued it
+  under a new id and re-priced the dish. Then: a comparison that cannot see which LIST a stored row
+  came from bills a moved pick at the other list's price. Guard: the quantity-only held-order edit
+  case in `apps/server/src/working-order.test.ts`; both receipts in
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A screen puts a refusal beside a field by what the error CARRIES, checked where it is thrown.**
   `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE, and one

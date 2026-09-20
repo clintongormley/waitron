@@ -121,8 +121,12 @@ export function buildLineExtras(
  * from the two sides: two entries that could take the same candidate match exactly the same set of
  * candidates, so no early choice can strand a later entry. A predicate that merely OVERLAPS —
  * "close enough", a range — would need a real bipartite matching, and this helper would be wrong
- * for it. Key equality is also not enough on its own: see {@link matchExtraChildren}, which has to
- * rule out two entries sharing a key before it can trust the pairing it gets back.
+ * for it.
+ *
+ * Exact is not the same as MEANINGFUL, and the difference is a caller's problem, not this helper's:
+ * when two candidates share a key but differ in something the key leaves out, either pairing is
+ * exact and only one of them is right. {@link matchExtraChildren} rules that case out before it
+ * asks.
  */
 function pairOff<Entry, Candidate>(
   entries: readonly Entry[],
@@ -168,31 +172,45 @@ export function sameOptionSelections(
  * STORED dish count — the one the child was written against, not the one being asked for.
  *
  * Neither side's ORDER is part of the pairing. The order both sides come back in is a stored
- * position, and two different columns hold it: `product_modifiers.sort`, which
- * `writeProductModifiers` re-numbers from the body of a product save, orders a dish's options lists
- * and — on a line naming a plain product — its extras lists; `menu_item_extra_lists.display_order`,
- * which `setMenuItemExtraLists` re-numbers from the body it is given, orders the extras lists of a
- * line naming a MENU OFFER. Only the first is reachable from a shipping route today: no file
- * outside `packages/catalogue` and its tests calls `setMenuItemExtraLists`.
+ * position, and THREE columns hold parts of it, each re-numbered from the body of a save — the full
+ * list, with what writes each one, is in `docs/developers/modifiers.md`. Two of the three are
+ * reachable from a shipping route today.
  *
- * TWO PICKS OF THE SAME PRODUCT REFUSE THE PAIRING, whichever lists offered them. A child line
- * records the product it is, its quantity and the price it was sold at, and never the list that
- * offered it (spec §3.4) — so when one product is offered by two of a dish's lists at two prices,
- * nothing on the stored side says which row belongs to which list, and a pairing built on the
- * product and the quantity can hand a row the pick made off the OTHER list. Such an edit takes the
- * replacement path and is re-priced from today's offers, which is correct but loses the line's
- * price lock. Pinned by "replaces the line when two lists offering the same product have their
- * picks swapped" (working-order.test.ts).
+ * A PICKED PRODUCT THAT MORE THAN ONE OF THE DISH'S ACTIVE LISTS OFFERS REFUSES THE PAIRING. A
+ * child line records the product it is, its quantity and the price it was sold at, and never the
+ * list that offered it (spec §3.4). So when two lists offer the same product at two prices, nothing
+ * on the stored side says which row belongs to which list, and the pairing cannot tell a quantity
+ * change from a pick that MOVED between the two — it keeps the price of whichever row it lands on.
+ * That is a real bill: measured on this branch and, with the same fixture, on `main` at
+ * `68e36c6aa`, one pick moved off a 1.00 list onto a 3.00 one went on being charged 1.00. Such an
+ * edit now takes the replacement path and is re-priced from today's offers, which is correct at the
+ * cost of the line's price lock whenever a dish offers one product twice. Pinned by "replaces the
+ * line when a pick moves to another list offering the same product" and "replaces the line when two
+ * lists offering the same product have their picks swapped" (working-order.test.ts).
+ *
+ * Two picks naming the same product are the same rule, not a second one: `extra_list_items` holds
+ * each product at most once per list (`extra_list_items_list_product_uq`, which
+ * `packages/catalogue/src/extras.ts` names in `writeItems`), so a product picked twice is a product
+ * two lists offer. A separate check for it was written, then deleted once removing it left every
+ * case of these two suites green.
  *
  * The pairing is what the caller needs, not just its truth value: it updates each child's quantity
  * from its own pick, and the two sides are no longer index-aligned.
  */
 export function matchExtraChildren<Child extends { productId: string | null; quantity: string }>(
+  offered: readonly ResolvedExtraList[],
   picks: readonly ExtraChild[],
   children: readonly Child[],
   dishQuantity: string,
 ): { pick: ExtraChild; child: Child }[] | null {
-  if (new Set(picks.map((pick) => pick.productId)).size !== picks.length) return null;
+  const offerCounts = new Map<string, number>();
+  for (const list of offered) {
+    if (!list.active) continue;
+    for (const item of list.items) {
+      offerCounts.set(item.productId, (offerCounts.get(item.productId) ?? 0) + 1);
+    }
+  }
+  if (picks.some((pick) => (offerCounts.get(pick.productId) ?? 0) > 1)) return null;
   // Each pick's expected stored quantity, computed once rather than once per probe.
   const dish = decimal(dishQuantity);
   const wanted = picks.map((pick) => ({

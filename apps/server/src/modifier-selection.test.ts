@@ -406,7 +406,7 @@ describe("matchExtraChildren", () => {
       { productId: "product-wine", quantity: "3.000", unitPriceGross: "4.50" },
     ];
 
-    const paired = matchExtraChildren(extraChildren, children, "3");
+    const paired = matchExtraChildren([drinks, breads], extraChildren, children, "3");
 
     expect(paired?.map(({ pick, child }) => [pick.productId, child.unitPriceGross])).toEqual([
       ["product-wine", "4.50"],
@@ -422,6 +422,7 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
+        [breads],
         extraChildren,
         [{ productId: "product-sourdough", quantity: "6.000" }],
         "3",
@@ -429,6 +430,7 @@ describe("matchExtraChildren", () => {
     ).not.toBeNull();
     expect(
       matchExtraChildren(
+        [breads],
         extraChildren,
         [{ productId: "product-sourdough", quantity: "4.000" }],
         "3",
@@ -444,6 +446,7 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
+        [breads],
         extraChildren,
         [{ productId: "product-sourdough", quantity: "1.000" }],
         "1",
@@ -472,6 +475,7 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
+        [drinks, premiumDrinks],
         extraChildren,
         [
           { productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" },
@@ -492,6 +496,7 @@ describe("matchExtraChildren", () => {
     // so dropping a pick has to take the replacement path instead.
     expect(
       matchExtraChildren(
+        [breads],
         extraChildren,
         [
           { productId: "product-sourdough", quantity: "1.000" },
@@ -520,10 +525,43 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
+        [breads],
         extraChildren,
         [{ productId: "product-sourdough", quantity: "1.000" }],
         "1",
       ),
     ).toBeNull();
+  });
+
+  it("refuses a pairing when two of the dish's lists offer the picked product", () => {
+    // ONE pick, so nothing here is ambiguous on the picks side — the ambiguity is in the OFFER, and
+    // a pick that moved from one of these lists to the other looks exactly like this one.
+    const premiumDrinks: ResolvedExtraList = {
+      ...drinks,
+      id: "list-drinks-premium",
+      items: [{ ...drinks.items[0]!, id: "item-wine-premium", price: "9.00" }],
+    };
+    const { extraChildren } = freeze(
+      { extras: [drinks, premiumDrinks] },
+      { extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }] },
+    );
+
+    expect(
+      matchExtraChildren(
+        [drinks, premiumDrinks],
+        extraChildren,
+        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
+        "1",
+      ),
+    ).toBeNull();
+    // The same pick against the same stored child pairs when only ONE list offers the wine.
+    expect(
+      matchExtraChildren(
+        [drinks],
+        extraChildren,
+        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
+        "1",
+      ),
+    ).not.toBeNull();
   });
 });

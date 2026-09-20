@@ -67,34 +67,32 @@ Since the extras-and-options order path (2026-09-20) that comparison lives in `u
 line holds, by value. The helper this replaces, `sameModifierSelections`, no longer exists.
 
 **Neither side's ORDER is part of the comparison either, and the reason is worth carrying.** Both
-sides are built in the order the dish OFFERS its lists, which reads as a fixed thing and is not one:
-it is a stored position somebody can move, and two different columns hold it. `product_modifiers.sort`
-orders a dish's options lists, and its extras lists on a line naming a plain product;
-`writeProductModifiers` re-numbers it from the body of a product save.
-`menu_item_extra_lists.display_order` orders the extras lists of a line naming a MENU OFFER, and
-`setMenuItemExtraLists` re-numbers it from the body it is given. So a line parked before a reorder
-keeps the OLD order while the rebuilt side comes back in the new one — and a comparison pairing the
-two up position by position reads that as a changed answer and re-prices a quantity-only edit. That
-was measured on both halves on 2026-09-20 and is why the pairing is order-independent
-(`sameOptionSelections`, `matchExtraChildren`). Only the first of the two columns is reachable from
-a shipping route today: no file outside `packages/catalogue` and its tests calls
-`setMenuItemExtraLists`.
+sides are built in the order the dish OFFERS its answers, which reads as a fixed thing and is not
+one: it is a stored position, and three columns hold parts of it, each re-numbered from the body of
+whatever save writes it. `docs/developers/modifiers.md` lists all three with what writes each. So a
+line parked before one of those saves keeps the OLD order while the rebuilt side comes back in the
+new one — and a comparison pairing the two up position by position reads that as a changed answer
+and re-prices a quantity-only edit. That is why the pairing is order-independent
+(`sameOptionSelections`, `matchExtraChildren`). Measured on 2026-09-20 for BOTH comparators, through
+the column a product save writes: the options half and the extras half each re-issued every line
+under a new id and re-priced the dish.
 
-**Order-independence has a price, and it is paid rather than hidden.** A child line records the
-product it is, its quantity and the price it was sold at, and never the list that offered it — so
-when one product is offered by two of a dish's lists at two prices, nothing on the stored side says
-which row belongs to which list. `matchExtraChildren` refuses the pairing whenever two picks name
-the same product; such an edit takes the replacement path and is re-priced from today's offers,
-correct but without the line's price lock.
+**A picked product that two of the dish's lists offer refuses the pairing**, and that is a defect
+found on the way rather than a cost of order-independence. A child line records the product it is,
+its quantity and the price it was sold at, and never the list that offered it — so the comparison
+cannot tell a quantity change from a pick that MOVED between two lists offering the same product at
+different prices, and it keeps the price of whichever row it lands on. Run against `main` at
+`68e36c6aa`, the same fixture billed a pick moved off a 1.00 list onto a 3.00 one at 1.00. Such an
+edit now takes the replacement path and is re-priced, correct but without the line's price lock.
 
 What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
 a quantity-only edit" raises the offer's price and the extra's price underneath the edit and asserts
 the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
 two options lists change places" and "keeps each extras child on its own row when two extras lists
-change places" do the same across a reorder; "replaces the line when two lists offering the same
-product have their picks swapped" pins the refusal above, by the BILL rather than by an id — the
-same two picks exchanged between a 1.00 list and a 3.00 one cost 5.00, not the 7.00 a crossed
-pairing charges.
+change places" do the same across a reorder; "replaces the line when a pick moves to another list
+offering the same product" and "replaces the line when two lists offering the same product have
+their picks swapped" pin the refusal above, by the BILL rather than by an id — two picks exchanged
+between a 1.00 list and a 3.00 one cost 5.00, not the 7.00 a crossed pairing charges.
 
 ## A replay reports the original transaction facts; side effects are gated separately
 

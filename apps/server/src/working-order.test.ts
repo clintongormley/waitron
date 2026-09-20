@@ -5411,11 +5411,13 @@ describe("order path — extras and options", () => {
 /**
  * Which edits `updateHeldOrder` preserves the stored lines for, and which it replaces them for.
  *
- * The first two cases are the ones that paid for the comparison being order-independent: a dish's
- * attachment list has an ORDER, a product save re-numbers it from the body (`writeProductModifiers`,
- * packages/catalogue/src/product-modifiers.ts), and both halves of the preserve check are built in
- * that order while a line stored before the reorder keeps the OLD one. A comparison pairing the two
- * sides up index by index reads that as a changed answer and re-prices a quantity-only edit.
+ * The reorder cases are the ones that paid for the comparison being order-independent: the order a
+ * dish's lists are offered in is a stored position a save re-numbers, so a line parked before a
+ * reorder keeps the OLD one while the rebuilt side comes back in the new one, and a comparison
+ * pairing the two up position by position reads that as a changed answer and re-prices a
+ * quantity-only edit. These two cases reorder through `writeProductModifiers`
+ * (`packages/catalogue/src/product-modifiers.ts`), which is one of the three columns that carry
+ * that position — `docs/developers/modifiers.md` lists all three.
  */
 describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line's id and locked price when two options lists change places", async () => {
@@ -5617,6 +5619,76 @@ describe("what a held-order edit preserves and what it replaces", () => {
     ).toEqual(["2.00", "3.00"]);
   });
 
+  it("replaces the line when a pick moves to another list offering the same product", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      const cheap = await addExtraList(tx, catalogueId, cafeId, "Vino", { price: "1.00" });
+      const dear = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Vino premium list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Vino premium list customer" },
+          kitchenName: "Vino premium list kitchen",
+          minPicks: 0,
+          maxPicks: null,
+          active: true,
+          items: [
+            { productId: cheap.productId, maxQuantity: 3, preselected: false, price: "3.00" },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: dear.id });
+      return { wineId: cheap.productId, cheapListId: cheap.listId, dearListId: dear.id };
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [
+            { listId: seeded.cheapListId, picks: [{ productId: seeded.wineId, quantity: 1 }] },
+          ],
+        },
+      ],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(
+      before.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
+    ).toEqual(["1.00"]);
+
+    // ONE pick, moved off the 1.00 list onto the 3.00 one. The product and the count are the same,
+    // and neither is what changed.
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before[0]!.id,
+          productId: cafeId,
+          quantity: "1",
+          extras: [
+            { listId: seeded.dearListId, picks: [{ productId: seeded.wineId, quantity: 1 }] },
+          ],
+        },
+      ],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(
+      after.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
+    ).toEqual(["3.00"]);
+  });
+
   it("replaces the line when the answer itself changed, re-pricing it from today's offer", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
@@ -5719,9 +5791,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
   });
 
   /**
-   * The settled behaviour, not an oversight — see `sameOptionSelections` (modifier-selection.ts) for
-   * why a names-only snapshot cannot tell a rename from a different answer, and `docs/backlog.md`
-   * for the decision.
+   * The settled behaviour, not an oversight: `docs/developers/modifiers.md` carries the reason a
+   * names-only snapshot cannot tell a rename from a different answer, and why giving the comparison
+   * an id to use would mean putting one on the line.
    */
   it("re-prices a held line when the options list it answered was renamed between the two sends", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();

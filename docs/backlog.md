@@ -538,22 +538,29 @@ to pair up a second time under a rule that could then disagree with it.
 
 Three things the review found, each measured rather than read:
 
-- **Order-independence bought a way to charge the wrong bill, and the fix is a refusal.** The
-  run-it seat built one product offered by TWO of a dish's lists at two prices, parked one off the
-  1.00 list and two off the 3.00 one, then swapped the two picks over. Nothing on a stored child
-  says which list offered it, so a pairing that knows only the product and the quantity matched each
-  pick to the OTHER list's row: the edit was preserved and the diner kept paying 7.00 where the new
-  answer costs 5.00. The seat ran the same case against `main` and got 5.00, so this was the
-  branch's own regression and not a pre-existing one. `matchExtraChildren` now refuses the pairing
-  whenever two picks name the same product, whichever lists offered them; the edit takes the
-  replacement path and is re-priced correctly, losing only the line's price lock.
-- **The mechanism the branch first wrote down was half the story.** Two columns hold the offered
-  order, not one: `product_modifiers.sort` orders a dish's options lists and a plain product line's
-  extras lists, while `menu_item_extra_lists.display_order` orders a MENU OFFER line's extras lists
-  and is written by `setMenuItemExtraLists`, which `readProductModifiers` never consults. Both
-  reading seats found it independently. Corrected wherever it was stated. Worth knowing:
-  `setMenuItemExtraLists` has no caller outside `packages/catalogue` and its tests, so the second
-  column cannot be moved from any shipping route today.
+- **A dish that offers one product on two lists can be billed at the wrong list's price, and that
+  is older than this branch.** The run-it seat found the first half by running: one product offered
+  by two of a dish's lists at two prices, parked one off the 1.00 list and two off the 3.00 one,
+  then the two picks swapped over. Nothing on a stored child says which list offered it, so a
+  pairing knowing only the product and the quantity matched each pick to the OTHER list's row, the
+  edit was preserved, and the diner went on paying 7.00 where the new answer costs 5.00. The scoped
+  re-read of the fix then found the sibling the first fix did not cover: ONE pick moved from the
+  1.00 list to the 3.00 one, which is not a duplicate at all. Measured in a checkout of `main` at
+  `68e36c6aa` with the same fixture, that one bills 1.00 — so it is pre-existing, and the index-wise
+  comparison it replaced never caught it either. `matchExtraChildren` now refuses the pairing
+  whenever a PICKED product is offered by more than one of the dish's active lists; the edit takes
+  the replacement path and is re-priced correctly, losing only the line's price lock for a dish
+  configured that way. **What was and was not examined:** the refusal is on the held-order edit
+  path, which is where the wrong price was measured being written. Whether any OTHER path can end
+  up pairing a stored child with the wrong list's price was not looked at.
+- **The mechanism the branch first wrote down was a third of the story, and the correction of it
+  was two thirds.** THREE columns hold parts of the offered order, each re-numbered from a save's
+  body: `product_modifiers.sort`, `extra_list_items.sort` (the items within one extras list, which
+  is the order that list's picks come back in) and `menu_item_extra_lists.display_order`. The first
+  round of prose named only the first; the correction named the first and third and asserted the
+  third was unreachable, which is true of it and not of the second — `PUT
+  /management-api/modifiers/extras/:id` reaches `writeItems`. The full table is in
+  `docs/developers/modifiers.md`; nothing else in the tree states the mechanism any more.
 - **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
   the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 
@@ -660,7 +667,7 @@ What extras lists left open, and what #449 found on the way:
 
 What the order path (the plan's Task 7) left behind:
 
-- **A quantity-only edit made after a list is RENAMED re-prices the line.** `updateHeldOrder`'s
+- **A quantity-only edit made after an OPTIONS list is RENAMED re-prices the line.** `updateHeldOrder`'s
   preserve path asks whether the request's answers, resolved against the lists as they are NOW,
   equal what the line froze. An options answer freezes NAMES and no ids (spec §2.3), so after a
   rename the two sides differ, the line takes the replacement path, and it is re-priced at today's

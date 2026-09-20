@@ -170,25 +170,35 @@ re-priced.
 
 Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
 `apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
-lists, and that order is a stored position somebody can move. TWO columns hold it:
-`product_modifiers.sort`, which `writeProductModifiers` re-numbers from the body of a product save,
-orders a dish's options lists and — on a line naming a plain product — its extras lists;
-`menu_item_extra_lists.display_order`, which `setMenuItemExtraLists` re-numbers from the body it is
-given, orders the extras lists of a line naming a MENU OFFER. Only the first is reachable from a
-shipping route today: no file outside `packages/catalogue` and its tests calls
-`setMenuItemExtraLists`. The extras comparator answers the PAIRING of picks to stored child lines
-rather than a yes or no, because the update moves each child's quantity and the two sides are no
-longer in step.
+answers, which reads as a fixed thing and is not one: it is a stored position, and THREE columns
+hold parts of it, each re-numbered from the body of whatever save writes it.
 
-**Two picks of the same product refuse the pairing**, whichever lists offered them. A child line
-records the product it is, its quantity and the price it was sold at, never the list that offered it
-(§3.4 of the design), so when one product is offered by two of a dish's lists at two prices nothing
-on the stored side says which row belongs to which list — and a pairing built on the product and the
-quantity can hand a row the pick made off the other list. Such an edit takes the replacement path
-and is re-priced from today's offers, which is correct but loses the line's price lock. Pinned by
-"replaces the line when two lists offering the same product have their picks swapped"
-(`apps/server/src/working-order.test.ts`), which asserts the BILL: the same two picks exchanged
-between a 1.00 list and a 3.00 one cost 5.00, where a crossed pairing charges 7.00.
+| Column | What it orders | Written by | A route reaches it |
+| --- | --- | --- | --- |
+| `product_modifiers.sort` | a dish's options lists, and its extras lists on a line naming a plain PRODUCT | `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), from the product save's body | yes — the product write |
+| `extra_list_items.sort` | the items WITHIN one extras list, which is the order its picks come back in | `writeItems` (`packages/catalogue/src/extras.ts`), from the list save's body | yes — `PUT /management-api/modifiers/extras/:id` |
+| `menu_item_extra_lists.display_order` | the extras lists of a line naming a MENU OFFER | `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`), from the publication body | no — nothing outside `packages/catalogue` and the test suites calls it |
+
+So a line parked before any of those saves keeps the old order while the rebuilt side comes back in
+the new one, and a comparison pairing the two up position by position reads that as a changed answer
+and re-prices a quantity-only edit. The extras comparator answers the PAIRING of picks to stored
+child lines rather than a yes or no, because the update moves each child's quantity and the two
+sides are no longer in step.
+
+**A picked product that more than one of the dish's active lists offers refuses the pairing.** A
+child line records the product it is, its quantity and the price it was sold at, never the list that
+offered it (§3.4 of the design). So when two lists offer the same product at two prices, nothing on
+the stored side says which row belongs to which list, and the comparison cannot tell a quantity
+change from a pick that MOVED between the two — it keeps the price of whichever row it lands on.
+That is a real bill, and it was there before order-independence: the same fixture run against `main`
+at `68e36c6aa` billed a pick moved off a 1.00 list onto a 3.00 one at 1.00. Such an edit now takes
+the replacement path and is re-priced from today's offers, which is correct at the cost of the
+line's price lock whenever a dish offers one product twice. Pinned in
+`apps/server/src/working-order.test.ts` by two cases that assert the BILL rather than the line ids,
+because the ids were right while the money was wrong: "replaces the line when a pick moves to
+another list offering the same product", and "replaces the line when two lists offering the same
+product have their picks swapped", where two picks exchanged between a 1.00 list and a 3.00 one cost
+5.00 against the 7.00 a crossed pairing charges.
 
 An OPTIONS list RENAMED between the two sends does make the two sides differ, and the line is
 replaced and re-priced. That is a decision, not an omission: an options answer freezes six names and
