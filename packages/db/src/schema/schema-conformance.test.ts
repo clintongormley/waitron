@@ -5,8 +5,15 @@
 // Nothing else in the suite reads a declaration and checks it against the schema, so a declaration
 // that drifts from its migration — a renamed column, a foreign key pointing at the wrong table, a
 // money column declared as free text — is invisible until a query fails at runtime.
-import { is, sql } from "drizzle-orm";
-import { getTableConfig, isPgEnum, PgTable, type PgEnum } from "drizzle-orm/pg-core";
+import { is, SQL, sql } from "drizzle-orm";
+import {
+  getTableConfig,
+  isPgEnum,
+  PgDialect,
+  type PgColumn,
+  PgTable,
+  type PgEnum,
+} from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -128,9 +135,31 @@ const SQL_ONLY_CHECKS: Readonly<Record<string, readonly string[]>> = {
 // barrel.
 const STORED_TYPE: Readonly<Record<string, string>> = { "deployment.fence_lsn": "pg_lsn" };
 
+const dialect = new PgDialect();
+
+/**
+ * The default the declaration asks the DATABASE for, in the words the database renders it back in
+ * — `undefined` where it asks for none. A default drizzle computes in JavaScript (`$defaultFn`) is
+ * one the database does not hold, so it reads as none here.
+ */
+function declaredDefault(column: PgColumn): string | undefined {
+  if (!column.hasDefault || column.defaultFn !== undefined) return undefined;
+  const value = column.default;
+  if (value === undefined) return undefined;
+  if (is(value, SQL)) return normaliseDefault(dialect.sqlToQuery(value).sql);
+  if (typeof value === "object") return normaliseDefault(JSON.stringify(value));
+  return normaliseDefault(String(value));
+}
+
+/** Drops the type cast PostgreSQL renders on a stored default, and the quotes around a literal. */
+function normaliseDefault(expression: string): string {
+  const withoutCast = expression.replace(/::[a-z0-9_ ".]+(\[\])?$/i, "");
+  return withoutCast.replace(/^'([\s\S]*)'$/, "$1");
+}
+
 interface TableShape {
   readonly name: string;
-  readonly columns: Record<string, { type: string; notNull: boolean }>;
+  readonly columns: Record<string, { type: string; notNull: boolean; default?: string }>;
   readonly primaryKey: readonly string[];
   readonly foreignKeys: readonly string[];
   readonly uniques: readonly string[];
@@ -148,12 +177,15 @@ function normaliseType(type: string): string {
 
 function fromDeclaration(table: PgTable): TableShape {
   const config = getTableConfig(table);
-  const columns: Record<string, { type: string; notNull: boolean }> = {};
-  for (const column of config.columns)
+  const columns: Record<string, { type: string; notNull: boolean; default?: string }> = {};
+  for (const column of config.columns) {
+    const value = declaredDefault(column);
     columns[column.name] = {
       type: STORED_TYPE[`${config.name}.${column.name}`] ?? normaliseType(column.getSQLType()),
       notNull: column.notNull,
+      ...(value === undefined ? {} : { default: value }),
     };
+  }
   const primaryKey = [
     ...config.columns.filter((column) => column.primary).map((column) => column.name),
     ...config.primaryKeys.flatMap((key) => key.columns.map((column) => column.name)),
@@ -199,6 +231,7 @@ interface ColumnRow {
   name: string;
   type: string;
   not_null: boolean;
+  column_default: string | null;
 }
 
 interface ConstraintRow {
@@ -235,8 +268,13 @@ async function fromDatabase(db: Database, name: string): Promise<TableShape> {
   const columnRows = await rows<ColumnRow>(
     db,
     sql`
-      select a.attname as name, format_type(a.atttypid, a.atttypmod) as type, a.attnotnull as not_null
+      select
+        a.attname as name,
+        format_type(a.atttypid, a.atttypmod) as type,
+        a.attnotnull as not_null,
+        pg_get_expr(d.adbin, d.adrelid) as column_default
       from pg_attribute a
+      left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
       where a.attrelid = ${`public.${name}`}::regclass and a.attnum > 0 and not a.attisdropped
       order by a.attnum
     `,
@@ -265,9 +303,15 @@ async function fromDatabase(db: Database, name: string): Promise<TableShape> {
       where c.conrelid = ${`public.${name}`}::regclass and c.contype in ('p', 'f', 'u', 'c')
     `,
   );
-  const columns: Record<string, { type: string; notNull: boolean }> = {};
+  const columns: Record<string, { type: string; notNull: boolean; default?: string }> = {};
   for (const column of columnRows)
-    columns[column.name] = { type: normaliseType(column.type), notNull: column.not_null };
+    columns[column.name] = {
+      type: normaliseType(column.type),
+      notNull: column.not_null,
+      ...(column.column_default === null
+        ? {}
+        : { default: normaliseDefault(column.column_default) }),
+    };
   const primaryKey = constraintRows
     .filter((row) => row.kind === "p")
     .flatMap((row) => row.columns)
