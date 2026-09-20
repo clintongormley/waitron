@@ -9,6 +9,7 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  rawCentsToDecimal,
   sumDecimals,
 } from "@waitron/shared";
 import type { SaleId } from "@waitron/shared";
@@ -32,17 +33,14 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   //
-  // `sales.total` counts whole cents, so this sums cents and hands back cents; the one conversion
-  // to a decimal amount is `centsToDecimal` below. `sum()` over an integer column widens to
-  // `bigint`, and the `::int` cast narrows it back to the width `total` itself has, so the value
-  // arrives as a number. It must NOT be cast to `numeric(12, 2)` — that renders a count of 7734
-  // cents as "7734.00", a plausible string a hundred times the amount, and nothing fails
-  // (measured on PGlite 0.5.8, 2026-09-20).
+  // The subquery is a count of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment. `sales.total` beside it is a typed drizzle column,
+  // so the column's own mapping converts that one and it needs no cast.
   const [sale] = await tx
     .select({
       tillId: sales.tillId,
       total: sales.total,
-      corrections: sql<number>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::int`,
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::text`,
     })
     .from(sales)
     .where(eq(sales.id, input.saleId));
@@ -88,7 +86,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // its amountDue.
   const due = sumDecimals([
     centsToDecimal(sale.total),
-    centsToDecimal(sale.corrections),
+    rawCentsToDecimal(sale.corrections),
     ...input.tenders.map((t) => decimal(t.tipAmount)),
   ]);
   const charged = sumDecimals(input.tenders.map((t) => decimal(t.amount)));

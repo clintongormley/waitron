@@ -910,6 +910,23 @@ hold 52 columns between them — 6 in `categories.ts`, 22 in `menu.ts`, 9 in `un
 date, time, smallint, bigint or binary column — which is why the `ts`/`tsString` trap has no surface
 here, read off the diff rather than assumed.
 
+**Corrected in place on 2026-09-20, and read the paragraph above as true of THIS task and no
+later one.** Task P5 gave this package bigint columns — as at 2026-09-20, six, every one declared
+through `money()`, which is `bigint(name, { mode: "number" })`:
+`packages/catalogue/src/schema/menu.ts` (`gross_price`, `price_delta`),
+`packages/catalogue/src/schema/extras.ts` (`price` twice) and
+`packages/catalogue/src/schema/variants.ts` (`unit_price` twice). Two of them are not P5's doing at
+all — `extras.ts` landed on 2026-09-19 in #449 — so the file list above is a snapshot as well.
+
+Be exact about which trap that reopens. The `ts`/`tsString` pair itself still has no surface here:
+`grep -rn "timestamp" packages/catalogue/src/schema` returns nothing on 2026-09-20. What DOES now
+have a surface is the SHAPE that pair stands for — a builder whose `mode` changes the JavaScript
+value a caller receives while leaving the emitted SQL type identical. `money()`'s
+`{ mode: "number" }` and the `{ mode: "bigint" }` it could have been are exactly that, which is why
+`packages/db/src/schema/columns.test.ts` carries a read-mode case beside its type case ("gives
+money the number reading, so a count of cents arrives as a number") and says in its own comment
+that the type assertion alone cannot tell a mode swap from a correct column.
+
 Two things the conversion did NOT absorb, and the second one is the more useful.
 
 The first is the check-constraint carve-out: `units.hardware_unit` became a plain `label()` beside
@@ -1569,8 +1586,15 @@ folder reads 100% on every measure after the conversion, and the package as a wh
 `convenio_config`, the Spain-specific configuration surface that supplies the overtime rule and the
 working-time guardrails as data. The builders it used were `uuid`, `integer`, `numeric` in two
 shapes (`numeric(5, 2)` and `numeric(12, 2)` — the same scale, different precisions), `boolean` and
-`timestamp` in string mode, every one of which has a vocabulary equivalent. _Two superlatives were cut from this
-paragraph in review._ It is not "the smallest conversion in the rollout", and it is false in both
+`timestamp` in string mode, every one of which has a vocabulary equivalent. _Corrected in place on
+2026-09-20: the `numeric(12, 2)` half of that is now historical. Task P5 turned the single money
+column, `split_shift_premium` (`packages/workforce-es/src/schema/convenio-config.ts:77`), into a
+`bigint` counting whole cents, and left the single `numeric(5, 2)` rate column,
+`night_premium_pct`, alone — checked against
+`packages/workforce-es/drizzle/0002_money_in_cents.sql`, whose one statement names
+`split_shift_premium` and nothing else. So the table no longer holds `numeric` in two shapes:
+`night_premium_pct` is the only `numeric` column left in it._
+_Two superlatives were cut from this paragraph in review._ It is not "the smallest conversion in the rollout", and it is false in both
 directions: four packages still unconverted are smaller, `packages/credentials` being one table of
 six columns, and behind it P1b's third pull request (#396) converted a single column. And it is not
 "the first in a country module" either: `packages/fiscal-verifactu` was converted first, in the
@@ -3131,12 +3155,22 @@ refuses a band of amounts the converters accept, with a bare `22003`, and
 whole declared range and 99999999999999 is well inside the 9007199254740991 a JavaScript number
 counts exactly. Under SQLite an INTEGER is 64-bit, so the flip is unaffected.
 
-**And one trap that goes with it:** on real PostgreSQL through `pg`, a `bigint` column read by RAW
-SQL comes back as a STRING, and so does a `::bigint` cast, while PGlite returns a number for both
-(measured 2026-09-20 against `postgres:18-alpine`; nothing in this repository sets an int8 type
-parser). Drizzle's typed `.select()` is safe because the column maps the value. A raw-SQL sum of
-money must therefore cast `::int`, whose ceiling is 2147483647 cents per aggregate and which
-raises `22003` loudly rather than returning a wrong number.
+**And one trap that goes with it:** on real PostgreSQL through `pg`, an UNCAST `bigint` column
+read by RAW SQL comes back as a STRING, while PGlite returns a number (re-measured 2026-09-20 with
+a node script printing `typeof`, through `pg` 8.23 against `waitron-db-1` at server version 18.6
+and through the PGlite 0.5.8 API; nothing in this repository sets an int8 type parser). Drizzle's
+typed `.select()` is safe because the column maps the value.
+
+**This paragraph first said the raw-SQL cast was `::int`. Corrected 2026-09-20 in the same pass:
+the cast is `::text`, and the value goes to `rawCentsToDecimal` (`packages/shared/src/cents.ts`).**
+`::int` agrees on the TYPE and nothing else: four bytes stop at 2147483647 cents, €21,474,836.47,
+which sits INSIDE the twelve integer digits `assertMoney` admits, so it refuses on the way out —
+with a bare `22003` — a value the column accepted on the way in. That is the band the column is
+eight bytes to carry, reopened one query at a time. A note on the instrument, because it is easy
+to get wrong: `psql` renders every value as text and so cannot tell a driver returning a string
+from one returning a number, which is why the string-versus-number half of the paragraph above
+was re-measured through a JavaScript client. The rule and its measurements now live in
+`docs/developers/conventions-data.md` → _A money column holds a count of whole cents_.
 
 - [x] **Step 4: Find every place that reads or writes a money value** — done 2026-09-20, package by package, `apps/server` last. One site survived every compiler and every PGlite suite: `packages/core/src/list-outstanding-sales.ts` read `sales.total` in raw SQL with no cast, which node-postgres hands back as a string. It cost five red tests in `apps/server`'s container suites and is now covered by a container test of its own.
 

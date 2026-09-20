@@ -23,10 +23,10 @@ import type { VenueResult } from "@waitron/provisioning";
 import { asAppUser, drawerOpens, printJobs, withTransaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
-  centsToDecimal,
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  rawCentsToDecimal,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -340,29 +340,29 @@ async function stationQueueOrderIds(stationId: string): Promise<string[]> {
 async function tendersFor(
   workingOrderId: string,
 ): Promise<{ method: string; amount: string; tipAmount: string }[]> {
-  // `amount` and `tip_amount` count whole cents; the helper hands its callers the AMOUNTS, so
-  // their assertions read the same decimal literals they always did. The ::int casts make the
-  // counts numbers on any driver — an uncast bigint arrives as a string from node-postgres.
-  const { rows } = await suite.admin.execute<{ method: string; amount: number; tip: number }>(sql`
-    select t.method, t.amount::int as amount, t.tip_amount::int as tip
+  // Both count whole cents, read raw and converted by `rawCentsToDecimal`; the helper hands its
+  // callers the AMOUNTS, so their assertions read the same decimal literals they always did.
+  const { rows } = await suite.admin.execute<{ method: string; amount: string; tip: string }>(sql`
+    select t.method, t.amount::text as amount, t.tip_amount::text as tip
     from tenders t join sales s on s.id = t.sale_id
     where s.working_order_id = ${workingOrderId}
     order by t.method
   `);
   return rows.map((r) => ({
     method: r.method,
-    amount: centsToDecimal(r.amount),
-    tipAmount: centsToDecimal(r.tip),
+    amount: rawCentsToDecimal(r.amount),
+    tipAmount: rawCentsToDecimal(r.tip),
   }));
 }
 
 /** The filed `sales.total` (ex-tip) for this order's sale. */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  // `sales.total` counts whole cents; the helper returns the amount its callers assert on.
-  const { rows } = await suite.admin.execute<{ total: number }>(
-    sql`select total::int as total from sales where working_order_id = ${workingOrderId}`,
+  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
+  // returns the amount its callers assert on.
+  const { rows } = await suite.admin.execute<{ total: string }>(
+    sql`select total::text as total from sales where working_order_id = ${workingOrderId}`,
   );
-  return centsToDecimal(rows[0]!.total);
+  return rawCentsToDecimal(rows[0]!.total);
 }
 
 /** The `payments` rows for this order — provider/state/external_ref, plus whether `sale_id` points at

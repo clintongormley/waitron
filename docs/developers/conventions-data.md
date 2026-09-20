@@ -311,10 +311,16 @@ all is what the grants refuse one operation at a time (`docs/backlog.md` → B9)
 ## A money column holds a count of whole cents, and the conversion happens at the row
 
 Landed 2026-09-20 as task P5 of the SQLite storage swap
-(`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Twenty-five columns declared
-through `money()` stopped being `numeric(12, 2)` and became integers counting cents: the storage
-engine the vocabulary exists to switch to has no exact decimal type, and a float cannot hold a
-cent exactly.
+(`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). EVERY column declared through
+`money()` stopped being `numeric(12, 2)` and became an integer counting cents: the storage engine
+the vocabulary exists to switch to has no exact decimal type, and a float cannot hold a cent
+exactly. The property is the rule, not a number — the set grows, and a number written here would be
+wrong the next time a table lands. To see today's set:
+`grep -rn '\bmoney(' packages apps --include='*.ts' | grep -v '\.test\.ts'` — read the lines rather
+than counting them. The pattern matches any line naming the helper, so a COMMENT that mentions
+`money()` is a hit like a declaration, and the next comment to mention it will be another one:
+check each line is a column. The prose hits as this is written are
+`packages/db/src/schema/daily-closes.ts` and `packages/fiscal/src/testing/fake-backend.ts`.
 
 **Where the boundary is, and why it is there.** The database is the edge and only the database.
 A read turns the stored count into the exact `Decimal` that `packages/shared/src/money.ts`
@@ -330,54 +336,156 @@ float-shaped operation in it, including the number constructor; keeping that che
 worth more than one module. `cents.ts` has its own version of the check, which allows the number
 conversion it exists for and forbids the rest.
 
-**The width is eight bytes, and that is a measurement, not a preference.** On the development
-PostgreSQL, with a control in both directions: `2147483647::integer` succeeds and
-`2147483648::integer` gives `integer out of range`. As cents that is a ceiling of 21,474,836.47,
-while the bound the rest of the system states is twelve integer digits
-(`MAX_MONEY_INTEGER_DIGITS`, enforced by `assertMoney` and by `packages/catalogue`'s price
-validators) — 99999999999999 cents. A four-byte column leaves a band of amounts the converters
+**The width is eight bytes, and that is a measurement, not a preference.** Re-run 2026-09-20
+against the development PostgreSQL container, `waitron-db-1` (`show server_version` reports 18.6),
+with a control in both directions:
+
+```
+docker exec waitron-db-1 psql -U postgres -Atc "select 2147483647::integer"
+# 2147483647          (exit 0)
+docker exec waitron-db-1 psql -U postgres -Atc "select 2147483648::integer"
+# ERROR:  integer out of range   (exit 1)
+```
+
+As cents that is a ceiling of 21,474,836.47, while the bound the rest of the system states is
+twelve integer digits (`MAX_MONEY_INTEGER_DIGITS`, enforced by `assertMoney` and by
+`packages/catalogue`'s price validators) — 99999999999999 cents. A four-byte column leaves a band of amounts the converters
 accept and the column refuses with a bare `22003`, which is what turned
 `packages/catalogue/src/modifier-projection.test.ts` red. 99999999999999 is well inside the
 9007199254740991 a JavaScript number counts exactly, so nothing in range loses a cent to the
 number type. Under SQLite an INTEGER is 64-bit, so the flip is unaffected.
 
-**A `bigint` reads differently on the two test targets.** Measured 2026-09-20 against a real
-`postgres:18-alpine` through the `pg` client, and the same query under PGlite 0.5.8:
+**An uncast `bigint` COLUMN reads differently on the two test targets; cast `::text` and they
+agree.** Re-measured 2026-09-20 over a table `probe(amount bigint not null, dec numeric(12, 2) not
+null)` holding (1234, 6.75) and (2147483648, 6.75).
 
-| expression | real PostgreSQL via `pg` | PGlite |
+**What the instrument can see matters here, so it is named rather than summarised.** The probe is
+a node script that prints `typeof` beside every value, run through two clients: this repository's
+own `pg` (8.23.0) against the development container `waitron-db-1`, where `show server_version`
+reports 18.6, and the `@electric-sql/pglite` 0.5.8 JavaScript API. It cannot be `psql`. psql
+renders every value as text, so no psql output can tell a driver returning a JavaScript string
+from one returning a number — a psql run is evidence about what PostgreSQL RENDERS and what it
+ACCEPTS, and about nothing on this table.
+
+| expression | `pg` 8.23 / PostgreSQL 18.6 | PGlite 0.5.8 |
 | --- | --- | --- |
-| `select amount` on a `bigint` column | `"1234"`, a string | `1234`, a number |
-| `sum(amount)::bigint` | `"1234"`, a string | `1234`, a number |
-| `select n` on an `integer` column | `1234`, a number | `1234`, a number |
-| `sum(amount)::int` | `1234`, a number | `1234`, a number |
+| `select amount::text` | `"1234"`, a string | `"1234"`, a string |
+| `sum(amount)::text` | `"2147484882"`, a string | `"2147484882"`, a string |
+| `coalesce(sum(amount), 0)::text` over no rows | `"0"`, a string | `"0"`, a string |
+| `sum(round(dec, 0))::text` | `"14"`, a string | `"14"`, a string |
+| `select amount` — CONTROL, no cast | `"1234"`, a STRING | `1234`, a NUMBER |
+| `select sum(amount)` — CONTROL, no cast | `"2147484882"`, a string | `"2147484882"`, a string |
+| `sum(dec)::text` — CONTROL, unrounded | `"13.50"`, a string | `"13.50"`, a string |
 
-Nothing in this repository sets an int8 type parser (`grep -rn "setTypeParser"` returns nothing),
-so this is the driver default. Drizzle's typed `.select()` is safe — the column maps the value,
-pinned by the read-mode assertion in `packages/db/src/schema/columns.test.ts`, which is there
-because `money` and `bigCount` emit the SAME SQL type and only the mode test can tell them apart.
-Raw SQL is not safe: a money sum casts `::int`, whose ceiling is 2147483647 cents per aggregate
-and which raises `22003` loudly rather than returning a wrong number, and a raw money READ on
-PGlite is a false pass for what real PostgreSQL will hand back.
+The uncast COLUMN is the control that makes the rest of the table mean anything: without a cast
+the two engines really do differ, so a raw money read that a PGlite suite passes on a number
+arrives as a string against the real server. The uncast AGGREGATE narrows that rather than
+widening it — `sum()` over a `bigint` is a `numeric`, which BOTH drivers render as a string, so
+the disagreement is about the int8 column and not about raw reads in general. The remaining rows
+are the cases a reader would reasonably worry about: an empty aggregate, which gives `"0"` rather
+than a null or an empty string; a rounded `numeric`, which gives `"14"` with no decimal point; and
+the unrounded `numeric` sum, which keeps its scale in the text and is what a dropped `round(…, 0)`
+would look like. Nothing in this repository sets an int8 type parser (`grep -rn "setTypeParser"`
+over `packages`, `apps`, `scripts` and `deploy` returns nothing), so the difference in the control
+row is the driver's default and not something we chose.
+
+Drizzle's typed `.select()` needs no cast at all: the column maps the value, pinned by the
+read-mode assertion in `packages/db/src/schema/columns.test.ts`, which exists because `money` and
+`bigCount` emit the SAME SQL type and only the mode test can tell a mode swap from a correct
+column. Those call sites hand the number straight to `centsToDecimal`.
+
+**Raw SQL is not safe, and a raw read that produces an AMOUNT casts `::text`.** A raw money read
+— a `tx.execute`, or a `sql` fragment inside a select list, both untyped at each end — whose value
+becomes an amount casts the expression `::text` and passes the string to `rawCentsToDecimal`
+(`packages/shared/src/cents.ts`), which checks the shape, refuses anything past a safe integer
+with `shared.invalid_cents`, and returns the exact `Decimal`. Product source obeys that.
+
+**A test asserting the stored COUNT is not reading an amount, and several cast `::int`.** The
+shape is `select unit_price_gross::int as unit_price_gross` followed by
+`expect(...).toEqual([{ unit_price_gross: 325 }])` (`apps/server/src/working-order.test.ts`);
+`till-api.test.ts`, `till-sale.test.ts`, `till-api.transfer.test.ts` and
+`apps/server/scripts/demo-seed/seed.test.ts` each carry one or two of the same shape. Nothing converts, so there is no
+amount to get wrong, and the cast is there only to give the assertion a number on both drivers.
+What keeps it safe is that the literal is small — the largest is 1100 — and that `::int` fails
+LOUDLY rather than quietly: over 2147483647 cents PostgreSQL raises `22003`, so a test that
+outgrew four bytes would go red, not wrong. A test that converts an amount is a different thing
+and casts `::text` like production: `apps/server/scripts/demo-seed/seed-sales.test.ts` is the live
+example.
+
+**Why not `::int`, which is what this branch cast first.** It agrees on the TYPE — a number on both
+drivers — and that is all it does. Four bytes stop at 2147483647 cents, €21,474,836.47, which sits
+INSIDE the twelve integer digits `assertMoney` admits, so the cast refuses on the way out, with a
+bare `22003`, a value the column accepted on the way in. That is the same band the columns are
+eight bytes to carry, reopened one query at a time. The other wrong cast,
+`::numeric(12, 2)::text`, is the quiet one, and it is the first of the three classes below.
 
 **What the compiler could not see.** Three classes, each found by hand and each worth re-checking
 whenever a money column is added:
 
 - A cast of a money sum to `::numeric(12, 2)::text` still succeeds on an integer column and
-  returns a plausible decimal string one hundred times too small. `packages/core`,
-  `packages/reporting` and `apps/server` each carried some. In `core` and `reporting` each was
-  checked by restoring the old cast and watching tests go red — nineteen of twenty-seven in
-  reporting, five in core.
+  returns a plausible decimal string a hundred times too LARGE — a stored 7734 cents is €77.34 and
+  renders as `"7734.00"`, which a consumer reads as €7734.00. The direction is worth getting right:
+  too large is a bill a hundred times the price, not a rounding slip. That sentence is written
+  once, in `rawCentsToDecimal`'s doc comment (`packages/shared/src/cents.ts`) — the near-duplicates
+  that had grown beside the converted call sites were deleted in favour of a pointer to it, so
+  `grep -rn "hundred times" packages apps --include='*.ts' | grep -v '\.test\.ts'` returns that one
+  line; `packages/core`, `packages/reporting` and `apps/server` each carried one or more of the
+  deleted duplicates. **What was actually run:** in `core` and
+  `reporting` the old cast was restored and tests went red, recorded as nineteen of twenty-seven in
+  `reporting` and five in `core`. What those two figures count is not written down anywhere, so read
+  them as "the control fired in both packages" and not as per-cast coverage. `apps/server`'s two —
+  the held-order list and the table-state query, both in `apps/server/src/working-order.ts` — were
+  converted without being put through that control at all.
 - Raw-SQL inserts. A quoted decimal now fails loudly with `22P02`, but **a bare whole number
-  succeeds and means cents** — `offline_amount_cap` seeded as `50` used to be fifty euros and is
-  now fifty cents, with nothing red. That is the shape to look for.
+  succeeds and means cents**, with nothing red. That is the shape to look for. One instance was found
+  and corrected on this branch: a fixture inserting `('cash_only', 50)` into `payment_policy` had
+  meant an offline cap of fifty euros and silently became fifty cents. It reads `('cash_only', 5000)`
+  today — `apps/server/src/configuration-transfer.test.ts:271`. Whether that was the only one in the
+  tree is not established; what was run was a hand sweep, not a check anything re-runs.
 - Money held as strings inside a `jsonb` document — `sales.vat_breakdown` and the hashed
-  `daily_closes.snapshot`. Both are above the line and stay decimal strings.
+  `daily_closes.snapshot`. Both are above the line and stay decimal strings, so a raw sum of one
+  correctly STAYS DECIMAL: `packages/reporting/src/vat-summary.ts` sums as `numeric` and renders
+  `sum((b->>'base')::numeric(12, 2))::numeric(12, 2)::text`, whose text is a decimal literal and
+  not a count of cents, so it never reaches `rawCentsToDecimal`. A reader applying the cents rule
+  to it would break working code.
+
+  Staying decimal is what is correct there. The WIDTH it uses is a separate and narrower thing
+  that this branch did not change — `git show origin/main:packages/reporting/src/vat-summary.ts`
+  carries the same two casts. `numeric(12, 2)` is twelve TOTAL digits, ten integer and two scale,
+  while `assertMoney` admits twelve INTEGER digits.
+  `packages/fiscal-verifactu/src/monetary-columns.test.ts` states that split in its own comment,
+  but it does not hold it down — it neither imports `assertMoney` nor reads
+  `MAX_MONEY_INTEGER_DIGITS`; what it would catch is those two fiscal columns ceasing to be `text`.
+  The bound itself is pinned in `packages/shared/src/money.test.ts`. Which means a period sum past
+  ten integer digits would raise the same bare `22003` this branch removed elsewhere — a
+  consequence of the two widths, not something run here. Pre-existing on the evidence of that `git show`: not a
+  defect this branch introduced, and not one it fixed.
 
 **Every document written before 2026-09-20 that states a money column as `numeric(12, 2)`
 describes the old storage.** There are dozens, nearly all dated plans and specs recording what was
-true when written; they were not rewritten. The two that instructed a reader rather than recording
-history were corrected in place: the modifiers plan's conventions block, and this file plus
-`CLAUDE.md` §3, which carry the rule.
+true when written; they were not rewritten.
+
+The documents corrected in place are named here rather than described as a class, because the
+class was not swept: `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`'s
+conventions block, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` and
+`docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` where they tell a future
+session what a money column is or what a package contains, and this file plus `CLAUDE.md` §3,
+which carry the rule.
+
+**Other dated plans still state the retired type, including ones that instruct.** Two that a
+reader will meet: `docs/superpowers/plans/2026-08-30-ordering-modifiers.md:24` still opens its
+conventions block with "Money is GROSS (VAT-inclusive) `numeric(12,2)`", and
+`docs/superpowers/plans/2026-08-29-dashboard-sales-takings.md` — around sixty of its steps still
+unchecked — states `line_total numeric(12,2)` at line 130 and
+`sum(sl.line_total)::numeric(12, 2)::text as total` at line 189. They were left as the records
+they are. The rule for the class is stated once, here and in `CLAUDE.md` §3, rather than by
+editing each plan; a session picking one of those up reads this section first.
+
+A second pass on 2026-09-20 did the same for source comments that still named the retired column
+type in `apps/till` (`src/api/client.ts`, `src/state/working-order.ts`) and
+`apps/server/scripts` (`demo-seed/menu.ts`) — the same sentence restated somewhere the first sweep
+did not look. `till-demo.ts` is in this branch for the cast, not for that sweep: it never named the
+column type (`git grep -n numeric HEAD~1 -- apps/server/scripts/till-demo.ts` returns nothing).
 
 **The migration rounds, and that is deliberate.** `ALTER COLUMN ... SET DATA TYPE bigint` casts an
 existing decimal by rounding, so a development database that held rows ends up holding whole

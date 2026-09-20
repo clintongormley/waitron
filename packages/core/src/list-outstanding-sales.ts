@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   addDecimal,
-  centsToDecimal,
+  rawCentsToDecimal,
   saleId as brandSaleId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -32,30 +32,23 @@ export interface OutstandingSale {
  * voided. This is a plain read over the database's one taxpayer.
  */
 export async function listOutstandingSales(tx: Transaction): Promise<OutstandingSale[]> {
-  // `sales.total` counts whole cents, so both money expressions below return cents and
-  // `centsToDecimal` is the one conversion, in the mapping under this query. Neither may be cast
-  // to `numeric(12, 2)::text`: that renders a count of 7734 cents as "7734.00", a plausible string
-  // a hundred times the amount, and nothing fails (measured on PGlite 0.5.8, 2026-09-20). BOTH are
-  // cast `::int` so both arrive as numbers: an uncast `bigint` comes back from node-postgres as a
-  // STRING, which `centsToDecimal` refuses with `shared.invalid_cents`, while PGlite returns a
-  // number and sees nothing (`./list-outstanding-sales.pg.test.ts` is the container-only case that
-  // fails without the cast on `s.total`). `::int` tops out at 2147483647 cents per value and
-  // raises `22003` loudly rather than answering wrong.
+  // Both money expressions are counts of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment for why the cast is there and why it is not `::int`.
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;
     issued_at: string;
     till_id: string;
-    total: number;
-    correction_total: number;
+    total: string;
+    correction_total: string;
   }>(sql`
     select
       s.id             as sale_id,
       s.invoice_number as invoice_number,
       s.issued_at::text as issued_at,
       s.till_id        as till_id,
-      s.total::int     as total,
-      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::int
+      s.total::text    as total,
+      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::text
         as correction_total
     from sales s
     where s.corrects_sale_id is null
@@ -66,8 +59,8 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
   `);
 
   return result.rows.map((r) => {
-    const total = centsToDecimal(r.total);
-    const correctionTotal = centsToDecimal(r.correction_total);
+    const total = rawCentsToDecimal(r.total);
+    const correctionTotal = rawCentsToDecimal(r.correction_total);
     return {
       saleId: brandSaleId(r.sale_id),
       invoiceNumber: r.invoice_number,

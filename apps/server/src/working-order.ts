@@ -20,6 +20,7 @@ import {
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
+  rawCentsToDecimal,
   type SaleId,
   type StationThresholds,
   subtractDecimal,
@@ -2878,14 +2879,9 @@ export async function listHeldOrders(
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
         itemCount: sql<number>`count(${workingOrderLines.id})::int`,
-        // `line_total` counts whole cents, so this sums cents and `centsToDecimal` below is the one
-        // conversion to the amount the list shows. It must NOT be cast to `numeric(12, 2)` — that
-        // renders a count of 7734 cents as "7734.00", a plausible string a hundred times the
-        // amount, and nothing fails (measured on PGlite 0.5.8, 2026-09-20). `::int` narrows the
-        // `bigint` `sum()` widens to back to a number on both drivers; a raw `bigint` arrives as a
-        // STRING from node-postgres and as a number from PGlite, which would pass here and fail on
-        // the real thing.
-        total: sql<number>`coalesce(sum(${workingOrderLines.lineTotal}), 0)::int`,
+        // A count of whole cents read raw, cast `::text` and converted by `rawCentsToDecimal` —
+        // see its doc comment.
+        total: sql<string>`coalesce(sum(${workingOrderLines.lineTotal}), 0)::text`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)
@@ -2901,7 +2897,7 @@ export async function listHeldOrders(
         workingOrders.openedAt,
       )
       .orderBy(workingOrders.orderNumber);
-    return rows.map((row) => ({ ...row, total: centsToDecimal(row.total) }));
+    return rows.map((row) => ({ ...row, total: rawCentsToDecimal(row.total) }));
   });
 }
 
@@ -4495,7 +4491,7 @@ export async function listTablesWithState(
     capacity: number | null;
     tab_id: string | null;
     tab_line_count: number;
-    tab_total: number | null;
+    tab_total: string | null;
     pending_to_serve: number;
     ready_to_serve: number;
     en_route: number;
@@ -4546,13 +4542,9 @@ export async function listTablesWithState(
              -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
              -- en-camino > listos precedence off the two counts.
              (count(*) filter (where ti.away_at is not null and wol.served_at is null))::int as en_route,
-             -- line_total counts whole cents, so this sums cents and centsToDecimal in the mapping
-             -- below is the one conversion to an amount. It must NOT be cast to numeric(12, 2) --
-             -- that renders a count of 7734 cents as "7734.00", a plausible string a hundred times
-             -- the amount, and nothing fails. The ::int cast narrows the bigint that sum() widens
-             -- to, and arrives as a number on both drivers; an uncast bigint comes back as a STRING
-             -- from node-postgres and as a number from PGlite.
-             coalesce(sum(wol.line_total), 0)::int as tab_total,
+             -- A count of whole cents read raw, cast ::text and converted by rawCentsToDecimal in
+             -- the mapping below -- see its doc comment.
+             coalesce(sum(wol.line_total), 0)::text as tab_total,
              -- KDS order-timing alerts (design §3/§6): the raw age + thresholds of each unserved, FIRED
              -- (ti.id is not null) line, one JSON object per line -- the age is computed here on the DB
              -- clock (never a band label; §3's "authoritative on the DB clock, classified in JS" split),
@@ -4642,7 +4634,7 @@ export async function listTablesWithState(
         ? {
             tabId: r.tab_id!,
             tabLineCount: Number(r.tab_line_count),
-            tabTotal: centsToDecimal(r.tab_total!),
+            tabTotal: rawCentsToDecimal(r.tab_total!),
           }
         : {}),
     };

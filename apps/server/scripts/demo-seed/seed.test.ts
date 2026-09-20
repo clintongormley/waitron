@@ -150,8 +150,8 @@ describe("seedDemoRestaurant", () => {
         menu_name: string;
         gross_price: number;
       }>(sql`
-        -- gross_price counts whole cents; ::int hands it back as a number on any driver, where an
-        -- uncast bigint arrives as a string from node-postgres and as a number from PGlite.
+        -- gross_price counts whole cents, and the assertion below is on that COUNT, not on an
+        -- amount: ::int only normalises it to a number, and raises 22003 rather than answering wrong.
         select mi.product_id, c.name as menu_name, mi.gross_price::int as gross_price
         from menu_items mi
         join products p on p.id = mi.product_id

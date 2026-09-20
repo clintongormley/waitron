@@ -1815,9 +1815,9 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       }),
     });
     expect(allowed.status).toBe(200);
-    // Read straight from the column, which counts whole cents: 175 is the stored 1.75. The ::int
-    // cast hands it back as a number on any driver — an uncast bigint arrives as a string from
-    // node-postgres and as a number from PGlite.
+    // Read straight from the column, which counts whole cents: 175 is the stored 1.75. Nothing
+    // converts here, so this asserts the stored COUNT; the ::int cast only normalises it to a
+    // number for the assertion, and would raise 22003 rather than answer wrong on a big one.
     const priced = await suite.db.execute<{ unit_price_gross: number }>(sql`
       select unit_price_gross::int as unit_price_gross
       from working_order_lines where working_order_id = ${allowedId}`);

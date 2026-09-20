@@ -411,12 +411,13 @@ describe("settleSale — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          // 1: the sale row (total + folded corrections, both counts of whole cents as the
-          // money columns store them); 2: sale_voids (none); 3: settlement (none).
+          // 1: the sale row — `total` as the typed column hands it back (a count of whole cents)
+          // and `corrections` as the raw `::text` subquery does (that count as a STRING);
+          // 2: sale_voids (none); 3: settlement (none).
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 0, corrections: 0 }])
+              ? Promise.resolve([{ tillId: "t", total: 0, corrections: "0" }])
               : Promise.resolve([]);
           },
         }),
@@ -456,7 +457,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: 0 }])
+              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: "0" }])
               : Promise.resolve([]);
           },
         }),
@@ -498,7 +499,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: 0 }])
+              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: "0" }])
               : Promise.resolve([]);
           },
         }),

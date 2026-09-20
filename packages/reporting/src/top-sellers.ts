@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import type { Transaction } from "@waitron/db";
-import { centsToDecimal, decimal } from "@waitron/shared";
+import { decimal, rawCentsToDecimal } from "@waitron/shared";
 import {
   activeSalesClause,
   businessDayRangeClause,
@@ -44,21 +44,20 @@ export async function computeTopSellers(
   }
   const nodeClause = nodeScopeClause(input.nodeId);
   // Deterministic order: quantity desc, then the staff name/variant text as a stable tiebreak for ties.
-  // `sale_lines.line_total` counts whole cents, so its sum is a count of cents that `centsToDecimal`
-  // turns into the amount; `::int` keeps that sum in the column's own width and hands it back as a
-  // number (an overflow raises 22003 rather than reporting a wrong figure). `quantity` is a
-  // `numeric(12, 3)` and keeps its text cast — it is not money and did not move to cents.
+  // The total is a count of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment. `quantity` is a `numeric(12, 3)` and keeps its own
+  // text cast: it is not money and did not move to cents.
   const { rows } = await tx.execute<{
     name: string;
     variant_name: string | null;
     quantity: string;
-    total: number;
+    total: string;
   }>(sql`
     select
       sl.name as name,
       sl.variant_name as variant_name,
       sum(sl.quantity)::numeric(12, 3)::text as quantity,
-      sum(sl.line_total)::int as total
+      sum(sl.line_total)::text as total
     from sale_lines sl
     join sales s on s.id = sl.sale_id
     where ${businessDayRangeClause(sql`s.issued_at`, input)}
@@ -71,6 +70,6 @@ export async function computeTopSellers(
   return rows.map((r) => ({
     name: staffPresentationName({ name: r.name, variantName: r.variant_name }),
     quantity: decimal(r.quantity),
-    total: centsToDecimal(r.total),
+    total: rawCentsToDecimal(r.total),
   }));
 }

@@ -292,8 +292,8 @@ describe("recordTillSale", () => {
       variant_descriptions: Record<string, string> | null;
       unit_price_gross?: number | null;
     }>(sql`
-      -- unit_price_gross counts whole cents; ::int hands it back as a number on any driver, where
-      -- an uncast bigint arrives as a string from node-postgres and as a number from PGlite.
+      -- unit_price_gross counts whole cents, and the assertion below is on that COUNT, not on an
+      -- amount: ::int only normalises it to a number, and raises 22003 rather than answering wrong.
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, unit_price_gross::int as unit_price_gross
       from working_order_lines

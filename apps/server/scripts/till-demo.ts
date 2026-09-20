@@ -28,9 +28,9 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import {
-  centsToDecimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  rawCentsToDecimal,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -307,11 +307,10 @@ async function main(): Promise<void> {
     const cardTicket = (await cardSaleRes.json()) as TillSaleResult;
 
     // Read the filed tender and its payment through the owner connection.
-    // `tenders.amount` stores a count of whole cents, and this is a real PostgreSQL connection,
-    // where an uncast bigint arrives as a STRING. The ::int cast makes it a number on any driver;
-    // `centsToDecimal` below turns it into the amount this demo prints.
-    const { rows: cardTenders } = await db.execute<{ method: string; amount: number }>(sql`
-      select t.method, t.amount::int as amount
+    // `tenders.amount` counts whole cents, read raw and printed through `rawCentsToDecimal` below
+    // — see its doc comment.
+    const { rows: cardTenders } = await db.execute<{ method: string; amount: string }>(sql`
+      select t.method, t.amount::text as amount
       from tenders t
       join sales s on s.id = t.sale_id
       where s.working_order_id = ${cardWorkingOrderId}`);
@@ -328,10 +327,10 @@ async function main(): Promise<void> {
     const { rows: cardPayments } = await db.execute<{
       provider: string;
       state: string;
-      amount: number;
+      amount: string;
       linked: boolean;
     }>(sql`
-      select p.provider, p.state, p.amount::int as amount, (p.sale_id is not null and p.sale_id = s.id) as linked
+      select p.provider, p.state, p.amount::text as amount, (p.sale_id is not null and p.sale_id = s.id) as linked
       from payments p
       join sales s on s.working_order_id = p.working_order_id
       where p.working_order_id = ${cardWorkingOrderId}`);
@@ -362,9 +361,11 @@ async function main(): Promise<void> {
       console.log(`    rate ${line.rate}%  base ${line.base}  tax ${line.tax}`);
     }
     console.log(`  qr:            ${cardTicket.qr}`);
-    console.log(`  tenders row:   method=${tender.method} amount=${centsToDecimal(tender.amount)}`);
     console.log(
-      `  payments row:  provider=${payment.provider} state=${payment.state} amount=${centsToDecimal(payment.amount)} linkedToSale=${payment.linked}`,
+      `  tenders row:   method=${tender.method} amount=${rawCentsToDecimal(tender.amount)}`,
+    );
+    console.log(
+      `  payments row:  provider=${payment.provider} state=${payment.state} amount=${rawCentsToDecimal(payment.amount)} linkedToSale=${payment.linked}`,
     );
   } finally {
     await db.close();

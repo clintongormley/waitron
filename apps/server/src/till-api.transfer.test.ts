@@ -240,8 +240,8 @@ describe("POST /api/tabs/:id/transfer", () => {
       quantity: string;
       unit_price_gross: number;
     }>(
-      // unit_price_gross counts whole cents, so 150 is the locked 1.50; ::int hands it back as a
-      // number on any driver.
+      // unit_price_gross counts whole cents, so 150 is the locked 1.50. The assertion is on that
+      // COUNT, not on an amount: ::int only normalises it to a number for the assertion.
       sql`select line_no, product_id, quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
     expect(b.rows).toEqual([

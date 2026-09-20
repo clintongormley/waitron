@@ -31,4 +31,29 @@ describe("listOutstandingSales on real PostgreSQL", () => {
       amountDue: "70.00",
     });
   });
+
+  it("reads an amount past the four-byte ceiling", async () => {
+    // 2147483648 cents is one past what a four-byte integer renders, and an ordinary amount for a
+    // column that stores twelve integer digits. Under the `::int` cast this read failed with
+    // `22003` / "integer out of range" — a value the column had already accepted on the way in
+    // being refused on the way out, which is the band the columns were widened to `bigint` to
+    // carry. The container is the decider: PGlite hands an uncast `bigint` back as a number and
+    // would pass either way.
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedBareSale(postgres.admin, seed, {
+      total: "21474836.48",
+      invoiceNumber: 2,
+    });
+
+    const out = await withTransaction(postgres.admin, async (tx) => {
+      await asAppUser(tx);
+      return listOutstandingSales(tx);
+    });
+
+    expect(out.find((r) => r.saleId === saleId)).toMatchObject({
+      total: "21474836.48",
+      correctionTotal: "0.00",
+      amountDue: "21474836.48",
+    });
+  });
 });

@@ -202,9 +202,13 @@ export function toScale(value: Decimal, scale: number): Decimal {
 }
 
 /**
- * Guards the magnitude a `numeric(12, 2)` column accepts. Checks the integer digits only —
- * scaling to two places is `toScale`'s job, and fusing the two would make it impossible to hold
- * an intermediate at full precision while still bounding it.
+ * Guards the magnitude a money amount may carry: twelve integer digits, `MAX_MONEY_INTEGER_DIGITS`.
+ * That is this system's own bound, not a column type's — a money column holds a count of whole
+ * cents in an eight-byte integer, and `numeric(12, 2)`, which an older version of this comment
+ * named, admits only TEN integer digits anyway (`packages/fiscal-verifactu/src/monetary-columns.test.ts`).
+ *
+ * Checks the integer digits only — scaling to two places is `toScale`'s job, and fusing the two
+ * would make it impossible to hold an intermediate at full precision while still bounding it.
  */
 export function assertMoney(value: Decimal): Decimal {
   const { units, scale } = partsOf(value);

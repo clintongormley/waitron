@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { addDecimal, centsToDecimal, compareDecimal, decimal } from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal, rawCentsToDecimal } from "@waitron/shared";
 import { periodDateFilter, validatePeriod, type LiquidationPeriod } from "./period.js";
 import type { InputVatRateLine, InputVatReturn, PurchaseVatKind } from "./types.js";
 
@@ -53,9 +53,9 @@ export async function computeInputVat(
   // amount this reports is the amount it reported before. It is still rounded PER invoice line and
   // only then summed, which is the per-invoice exactness rule the output side follows.
   //
-  // `::int` on each sum keeps it in the width the money column itself has and hands it back as a
-  // number; `centsToDecimal` below is the one conversion to an amount. A `numeric(12, 2)` cast
-  // would print 4198 cents as "4198.00", a plausible figure a hundred times the cuota.
+  // Each sum is a count of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment. `round(numeric, 0)` renders no decimal point, so
+  // the tax sum's text is a plain integer like the base's (measured on both engines, 2026-09-20).
   //
   // The rate is grouped as `numeric(5,2)::text` so two spellings of one rate cannot split into two
   // lines (defensive; production rates are already 2-dp literals), exactly as `aggregateVatByRate`
@@ -63,14 +63,14 @@ export async function computeInputVat(
   const { rows } = await tx.execute<{
     rate: string;
     kind: PurchaseVatKind;
-    base: number;
-    tax: number;
+    base: string;
+    tax: string;
   }>(sql`
     select
       (v.rate)::numeric(5, 2)::text as rate,
       v.kind as kind,
-      sum(v.base)::int as base,
-      sum(round(v.tax * p.deductible_proportion / 100, 0))::int as tax
+      sum(v.base)::text as base,
+      sum(round(v.tax * p.deductible_proportion / 100, 0))::text as tax
     from purchase_invoice_vat v
     join purchase_invoices p on p.id = v.purchase_invoice_id
     where p.regime = 'general'
@@ -81,8 +81,8 @@ export async function computeInputVat(
   const lines: InputVatRateLine[] = rows
     .map((r) => ({
       rate: decimal(r.rate),
-      base: centsToDecimal(r.base),
-      tax: centsToDecimal(r.tax),
+      base: rawCentsToDecimal(r.base),
+      tax: rawCentsToDecimal(r.tax),
       kind: r.kind,
     }))
     .sort((a, b) => {

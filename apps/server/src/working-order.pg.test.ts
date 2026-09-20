@@ -20,12 +20,15 @@ import { asAppUser, verifyAmendmentChain, withTransaction } from "@waitron/db";
 import type { Transaction, VerifiableAmendment } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import {
-  centsToDecimal,
+  addDecimal,
+  decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  rawCentsToDecimal,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readOrderFlow } from "./till-config.js";
@@ -246,13 +249,12 @@ async function saleCount(workingOrderId: string): Promise<number> {
  * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  // `sales.total` counts whole cents; the helper returns the AMOUNT, so its callers' assertions
-  // read the same decimal literals they always did. The ::int cast hands the count back as a
-  // number on any driver — an uncast bigint arrives as a string from node-postgres.
-  const { rows } = await suite.admin.execute<{ total: number }>(sql`
-    select total::int as total from sales where working_order_id = ${workingOrderId}
+  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
+  // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
+  const { rows } = await suite.admin.execute<{ total: string }>(sql`
+    select total::text as total from sales where working_order_id = ${workingOrderId}
   `);
-  return centsToDecimal(rows[0]!.total);
+  return rawCentsToDecimal(rows[0]!.total);
 }
 
 /**
@@ -292,15 +294,16 @@ async function registroCount(workingOrderId: string): Promise<number> {
  * Ordered by method so a multi-tender assertion is stable.
  */
 async function tendersFor(workingOrderId: string): Promise<{ method: string; amount: string }[]> {
-  // `tenders.amount` counts whole cents; the helper hands back the amount its callers assert on.
-  const { rows } = await suite.admin.execute<{ method: string; amount: number }>(sql`
-    select t.method, t.amount::int as amount
+  // `tenders.amount` counts whole cents, read raw and converted by `rawCentsToDecimal`; the
+  // helper hands back the amount its callers assert on.
+  const { rows } = await suite.admin.execute<{ method: string; amount: string }>(sql`
+    select t.method, t.amount::text as amount
     from tenders t
     join sales s on s.id = t.sale_id
     where s.working_order_id = ${workingOrderId}
     order by t.method
   `);
-  return rows.map((r) => ({ method: r.method, amount: centsToDecimal(r.amount) }));
+  return rows.map((r) => ({ method: r.method, amount: rawCentsToDecimal(r.amount) }));
 }
 
 /**
@@ -315,12 +318,12 @@ async function paymentsFor(
   const { rows } = await suite.admin.execute<{
     provider: string;
     state: string;
-    amount: number;
+    amount: string;
     linked: boolean;
   }>(sql`
-    -- payments.amount counts whole cents; ::int hands it back as a number on any driver and the
-    -- mapping below returns the amount the callers assert on.
-    select p.provider, p.state, p.amount::int as amount,
+    -- payments.amount counts whole cents, read raw and converted by rawCentsToDecimal in the
+    -- mapping below, which returns the amount the callers assert on.
+    select p.provider, p.state, p.amount::text as amount,
            (p.sale_id is not null and p.sale_id = s.id) as linked
     from payments p
     join sales s on s.working_order_id = p.working_order_id
@@ -330,7 +333,7 @@ async function paymentsFor(
   return rows.map((r) => ({
     provider: r.provider,
     state: r.state,
-    amount: centsToDecimal(r.amount),
+    amount: rawCentsToDecimal(r.amount),
     linkedToSale: r.linked,
   }));
 }
@@ -495,16 +498,19 @@ async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
 /**
  * A parked order's line count and summed `line_total` (the GROSS draft total the held list shows) —
  * read as the owner and summed in JS, NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total`
- * aggregate is validated rather than restated (CLAUDE.md §1). `line_total` counts whole cents, so
- * the sum is over integers — exact by construction — and `centsToDecimal` turns it into the amount
- * the caller compares with the list's. The ::int cast makes each count a number on any driver; an
- * uncast bigint arrives as a string from node-postgres.
+ * aggregate is validated rather than restated (CLAUDE.md §1). `line_total` counts whole cents, read
+ * raw and converted per row by `rawCentsToDecimal`, then added exactly — giving the amount the
+ * caller compares with the list's. The empty case is "0.00", the same literal `listHeldOrders`
+ * renders for an order with no lines.
  */
 async function draftAggregate(id: string): Promise<{ itemCount: number; total: string }> {
-  const { rows } = await suite.admin.execute<{ line_total: number }>(sql`
-    select line_total::int as line_total from working_order_lines where working_order_id = ${id}
+  const { rows } = await suite.admin.execute<{ line_total: string }>(sql`
+    select line_total::text as line_total from working_order_lines where working_order_id = ${id}
   `);
-  const total = centsToDecimal(rows.reduce((sum, r) => sum + r.line_total, 0));
+  const total = rows.reduce<Decimal>(
+    (sum, r) => addDecimal(sum, rawCentsToDecimal(r.line_total)),
+    decimal("0.00"),
+  );
   return { itemCount: rows.length, total };
 }
 

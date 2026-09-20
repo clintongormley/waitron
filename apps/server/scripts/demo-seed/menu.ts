@@ -67,7 +67,8 @@ export interface SeedProduct {
     available: boolean;
   }[];
   pricingUnit: PricingUnit;
-  /** GROSS (VAT-inclusive): per item for `each`, per kg for `weight`. A `numeric(12,2)` string. */
+  /** GROSS (VAT-inclusive): per item for `each`, per kg for `weight`. A two-place decimal string;
+   * `createProduct` converts it to a count of whole cents at the row. */
   unitPrice: string;
   vatClass: VatClass;
   /** The committed PNG basename (e.g. `"jamon-iberico.png"`), unique across both catalogues. */

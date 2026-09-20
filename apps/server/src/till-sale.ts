@@ -12,6 +12,7 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
+  rawCentsToDecimal,
   saleId as brandSaleId,
   subtractDecimal,
   workingOrderId as brandWorkingOrderId,
@@ -780,14 +781,10 @@ async function readOutstandingSaleForOrder(
     .select({
       id: sales.id,
       total: sales.total,
-      // `sales.total` counts whole cents, so this sums cents and the `centsToDecimal` pair below is
-      // the one conversion. It must NOT be cast to `numeric(12, 2)` — that renders a count of 7734
-      // cents as "7734.00", a plausible string a hundred times the amount, and nothing fails.
-      // `::int` narrows the `bigint` that `sum()` widens to and arrives as a number on both drivers;
-      // an uncast `bigint` comes back as a STRING from node-postgres and as a number from PGlite,
-      // which would pass a PGlite suite and throw `shared.invalid_cents` on the real thing. This is
-      // the same cast `settleSale` and `listOutstandingSales` make over the same subquery.
-      corrections: sql<number>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::int`,
+      // The subquery is a count of whole cents read raw, cast `::text` and converted by
+      // `rawCentsToDecimal` — see its doc comment. `sales.total` above is a typed drizzle column
+      // and needs no cast.
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::text`,
     })
     .from(sales)
     .where(eq(sales.workingOrderId, workingOrderId));
@@ -796,7 +793,7 @@ async function readOutstandingSaleForOrder(
   }
   return {
     saleId: brandSaleId(row.id),
-    amountDue: addDecimal(centsToDecimal(row.total), centsToDecimal(row.corrections)),
+    amountDue: addDecimal(centsToDecimal(row.total), rawCentsToDecimal(row.corrections)),
   };
 }
 

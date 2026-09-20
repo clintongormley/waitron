@@ -76,6 +76,14 @@ export class FakeFiscalBackend implements FiscalBackend {
         sequence integer not null,
         kind text not null,
         invoice_number integer not null,
+        -- numeric(12, 2) on purpose, and it reads like a miss because it is the only money-shaped
+        -- column still declared that way outside the generated migrations -- checked 2026-09-20 by
+        -- grepping packages and apps for that type in .ts files. The money-in-cents change of that
+        -- date converted the columns declared through money() in packages/db/src/schema/columns.ts;
+        -- this fake's own bookkeeping table is not one of them. It stores exactly what the interface
+        -- hands it, which is already the decimal literal a fiscal record files and hashes
+        -- (total: Decimal, packages/fiscal/src/backend.ts:72). No backticks in this comment: it sits
+        -- inside a template literal.
         total numeric(12, 2) not null,
         state text not null,
         -- The filed VAT breakdown, stored so filedReceiptFor can hand back the EXACT figures the

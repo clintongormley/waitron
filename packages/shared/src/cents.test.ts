@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
-import { centsToDecimal, decimalToCents } from "./cents.js";
+import { centsToDecimal, decimalToCents, rawCentsToDecimal } from "./cents.js";
 import { decimal, MAX_MONEY_INTEGER_DIGITS } from "./money.js";
 
 describe("centsToDecimal", () => {
@@ -66,5 +66,52 @@ describe("decimalToCents", () => {
     expect(() => decimalToCents(decimal("1" + "0".repeat(MAX_MONEY_INTEGER_DIGITS)))).toThrow(
       AppError,
     );
+  });
+});
+
+describe("rawCentsToDecimal", () => {
+  it("reads the plain integer string a `::text` cast hands back", () => {
+    expect(rawCentsToDecimal("1234")).toBe("12.34");
+  });
+
+  it("reads a count above the four-byte ceiling", () => {
+    // 2147483648 cents is one past what `::int` can render, and it is a perfectly ordinary
+    // amount for a money column that stores 12 integer digits: €21,474,836.48. A `::int` cast
+    // refuses this row on READ with a bare 22003, which is the defect this function exists to
+    // remove.
+    expect(rawCentsToDecimal("2147483648")).toBe("21474836.48");
+  });
+
+  it("reads the widest amount the money bound admits", () => {
+    // 12 integer digits is the widest amount `assertMoney` lets through, and it is 99999999999999
+    // cents — inside `Number.isSafeInteger`, so no digit is lost on the way through.
+    expect(rawCentsToDecimal("99999999999999")).toBe("999999999999.99");
+  });
+
+  it("reads zero, and an empty `sum()` that `coalesce`d to zero", () => {
+    expect(rawCentsToDecimal("0")).toBe("0.00");
+  });
+
+  it("keeps a negative count negative", () => {
+    expect(rawCentsToDecimal("-5")).toBe("-0.05");
+  });
+
+  it("refuses a count that is not a whole number of cents", () => {
+    // A `numeric` cast to text renders a decimal point. That means the expression was not a
+    // count of cents at all, so converting it would be a hundredfold error reported as success.
+    expect(() => rawCentsToDecimal("7734.00")).toThrow(AppError);
+  });
+
+  it("refuses anything that is not a plain integer string", () => {
+    for (const bad of ["", " 12", "12 ", "1e3", "0x10", "+12", "12.", "abc", "NaN", "Infinity"]) {
+      expect(() => rawCentsToDecimal(bad)).toThrow(AppError);
+    }
+  });
+
+  it("refuses a magnitude beyond what a number counts exactly", () => {
+    // Longer than the money bound admits, so no stored amount reaches this — but a digit
+    // silently dropped by the number type is the one failure this file must never produce.
+    expect(() => rawCentsToDecimal("9007199254740993")).toThrow(AppError);
+    expect(() => rawCentsToDecimal("-9007199254740993")).toThrow(AppError);
   });
 });

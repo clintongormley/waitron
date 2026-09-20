@@ -87,11 +87,23 @@ declare module "@waitron/shared" {
      * has: `credentials.unknown_purpose` is `{ purpose, known }`
      * (`packages/credentials/src/errors.ts:64`) — it names the CONCEPT. So do both `deployment.*`
      * siblings: `{stamped, requested}` (`packages/db/src/errors.ts:44`) and
-     * `{databaseEnvironment, hostEnvironment}` (`apps/server/src/errors.ts:120`). Every param named
-     * `value` in the whole registry belongs instead to a code about an input that failed a FORMAT
-     * check — `shared.invalid_id`, `shared.invalid_decimal`, `shared.decimal_overflow`,
-     * `server.config_invalid`, `sif.id_sistema_invalid`, and `provisioning.invalid_identifier`
-     * below — where there is no concept left to name. `staging` is a well-formed string that names
+     * `{databaseEnvironment, hostEnvironment}` (`apps/server/src/errors.ts:120`). Nearly every param
+     * named `value` in the registry belongs instead to a code about an input that failed a FORMAT
+     * check, where there is no concept left to name: `shared.invalid_id`,
+     * `shared.invalid_decimal`, `shared.decimal_overflow`, `shared.invalid_cents`
+     * (`packages/shared/src/errors.ts:89`, added by the money-in-cents change),
+     * `server.config_invalid`, `sif.id_sistema_invalid`, and `provisioning.invalid_identifier` and
+     * `provisioning.invalid_country` below — the second of which says in its own comment that it is
+     * the same format-check family. The one that does NOT fit is `diet.invalid_label`
+     * (`packages/catalogue/src/errors.ts:50`, `{ field, value }`): a membership refusal that has a
+     * concept to name, names it in `field`, and still echoes the rejected word as `value`. So the
+     * sentence above is a strong default, not something every sibling obeys.
+     *
+     * A hand-copied cross-package list goes stale in silence, and this one had — it was missing
+     * both `shared.invalid_cents` and `provisioning.invalid_country`. Re-listed 2026-09-20 with
+     * `grep -rn 'value[?]\?:' --include=errors.ts packages apps`, whose output also contains lines
+     * that are not code declarations at all — prose in comments, and a function parameter
+     * (`isAppError(value: unknown)` in `packages/shared/src/errors.ts`); read past those. `staging` is a well-formed string that names
      * no environment, which is the other case. Written as `value` here and renamed while renaming
      * was still free: this code has not shipped. */
     "deployment.unknown_environment": { environment: string; known: string[] };
