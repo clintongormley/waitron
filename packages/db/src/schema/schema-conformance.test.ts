@@ -267,6 +267,58 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
   return Array.isArray(result) ? result : result.rows;
 }
 
+/** A schema nothing else uses, where a copy of a table can be given the declared constraints. */
+const SCRATCH_SCHEMA = "schema_conformance_scratch";
+
+/**
+ * Every check constraint on one table, keyed by name, in the words `pg_get_constraintdef` renders
+ * it back in.
+ */
+async function checkExpressionsIn(
+  db: Database,
+  schema: string,
+  name: string,
+): Promise<Record<string, string>> {
+  const found = await rows<{ name: string; def: string }>(
+    db,
+    sql`
+      select c.conname as name, pg_get_constraintdef(c.oid) as def
+      from pg_constraint c
+      where c.conrelid = ${`${schema}."${name}"`}::regclass and c.contype = 'c'
+    `,
+  );
+  return Object.fromEntries(found.map((row) => [row.name, row.def]));
+}
+
+/**
+ * The check expressions the declaration asks for, put through the SAME renderer the database side
+ * is read with: a bare copy of the table in a scratch schema, given the declared constraints, read
+ * back with `pg_get_constraintdef`. Comparing the two rendered forms compares what the expressions
+ * MEAN — PostgreSQL rewrites `in (…)` into `= ANY (ARRAY[…])` and `between` into a pair of
+ * comparisons — where comparing the text as typed would differ on wording alone.
+ */
+async function declaredCheckExpressions(
+  db: Database,
+  table: PgTable,
+): Promise<Record<string, string>> {
+  const config = getTableConfig(table);
+  if (config.checks.length === 0) return {};
+  await db.execute(sql.raw(`create schema ${SCRATCH_SCHEMA}`));
+  try {
+    const copy = `${SCRATCH_SCHEMA}."${config.name}"`;
+    await db.execute(sql.raw(`create table ${copy} (like public."${config.name}")`));
+    for (const check of config.checks) {
+      const expression = dialect.sqlToQuery(check.value).sql;
+      await db.execute(
+        sql.raw(`alter table ${copy} add constraint "${check.name}" check (${expression})`),
+      );
+    }
+    return await checkExpressionsIn(db, SCRATCH_SCHEMA, config.name);
+  } finally {
+    await db.execute(sql.raw(`drop schema ${SCRATCH_SCHEMA} cascade`));
+  }
+}
+
 async function fromDatabase(db: Database, name: string): Promise<TableShape> {
   const columnRows = await rows<ColumnRow>(
     db,
@@ -419,6 +471,14 @@ describe("the drizzle schema matches the database the core migrations build", ()
       expect(derived.map((column) => column.name)).toEqual([]);
       const shape = fromDeclaration(tables[index]);
       await expect(fromDatabase(suite.db, shape.name)).resolves.toEqual(shape);
+      // The shape above compares check constraints by NAME. This compares what each declared one
+      // SAYS with what the migration built, so a permitted value dropped from a list, a bound
+      // moved, or a comparison flipped is caught rather than passing on a matching name.
+      const expressions = await declaredCheckExpressions(suite.db, tables[index]);
+      const built = await checkExpressionsIn(suite.db, "public", shape.name);
+      expect(expressions).toEqual(
+        Object.fromEntries(Object.keys(expressions).map((name) => [name, built[name]])),
+      );
     },
   );
 });
