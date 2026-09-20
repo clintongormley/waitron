@@ -1,4 +1,8 @@
 :where([data-wt-theme-root]) {
+  /* Native controls the app does not paint itself — radios, checkboxes, scrollbars — are drawn by
+     the user agent, which reads this property and never `data-theme`. Without it the dark theme got
+     the light drawing, and an unchecked radio came out a solid white dot. */
+  color-scheme: light;
   --wt-color-bg: #f7f7f8;
   --wt-color-surface: #ffffff;
   --wt-color-surface-raised: #ffffff;
@@ -18,6 +22,7 @@
 
 @media (prefers-color-scheme: dark) {
   :where([data-wt-theme-root]) {
+    color-scheme: dark;
     --wt-color-bg: #101216;
     --wt-color-surface: #191c22;
     --wt-color-surface-raised: #22262e;
@@ -37,6 +42,7 @@
 }
 
 :where([data-wt-theme-root][data-theme="light"]) {
+  color-scheme: light;
   --wt-color-bg: #f7f7f8;
   --wt-color-surface: #ffffff;
   --wt-color-surface-raised: #ffffff;
@@ -55,6 +61,7 @@
 }
 
 :where([data-wt-theme-root][data-theme="dark"]) {
+  color-scheme: dark;
   --wt-color-bg: #101216;
   --wt-color-surface: #191c22;
   --wt-color-surface-raised: #22262e;
