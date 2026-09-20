@@ -1841,18 +1841,20 @@ targets for 30 seconds and each agent works out the remaining time against its o
 
 ### A4. Till, displays and devices
 
-- **Service dashboard workflow: design in progress (owner, 2026-09-20).** For table service, after
-  unlocking you land on the floor plan or a flat list of tables. Distinguish
-  unoccupied tables and show occupied tables' current state, particularly action needed soon,
-  such as taking an order, collecting food or drinks ready for delivery, late food, or a requested
-  bill. Tapping a table opens its tab details on Ordering, with a second Current orders view
-  showing submitted orders and their states. For deli/counter service, the owner proposes a flat
-  list of tabs rather than a table layout, including tabs not attached to a table. The exact landing
-  view selection, status derivation, timing and detailed interactions
-  remain to be designed. This is a future workflow brief, not a claim about current behaviour.
-  Implementation waits for the SQLite migration, dependency upgrades and variants/extras-as-products
-  changes to land, alongside the
-  [menu design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md).
+- **Service, ordering and billing: specified; implementation deferred (owner, 2026-09-20).**
+  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) covers floor/table/tab
+  dashboards and station collection signals, separate staff drafts with takeover, selectable firing
+  groups, editable held work, paper/KDS status limits, guest access, shared bills and contributions,
+  tips, adjustments and approval/reporting. Named courses only organise the initial draft; later
+  additions default to Fire now or explicitly join a held group. Also records public/staff-only/not
+  sold separately ordering, future inventory rules, and the direction away from a general canvas
+  editor toward source-coded screens. Fiscal Q19 remains open. This specifies intended behaviour,
+  not verified features. Wait for SQLite, dependency upgrades and variants/extras-as-products to
+  land, alongside the [menu design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md),
+  then resolve the listed integration questions before planning.
+- **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
+  this is designed. For now, orders remain at table/tab level and staff select items manually
+  when splitting bills; seat assignment is not a prerequisite for the service workflow.
 - **Later: staff-to-table assignments (owner, 2026-09-20).** Design assigning responsibility for
   tables to staff, including handover and how assignments appear on the floor dashboard. The
   current workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.

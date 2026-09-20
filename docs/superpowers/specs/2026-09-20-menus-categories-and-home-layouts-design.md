@@ -2,6 +2,11 @@
 
 **Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
 
+**Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
+adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership
+still controls what staff can order; one menu can serve staff and guests without exposing its
+staff-only products to guest ordering. Its snapshot and filtering integration remains to be planned.
+
 You should be able to assemble menus from your existing products and categories, adjust prices,
 and arrange the products staff need most often without maintaining several copies of the same
 catalogue. Publishing gives you control over when those shared edits reach each live menu.
