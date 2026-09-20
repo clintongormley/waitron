@@ -98,10 +98,12 @@ jobs:
   # it mutates anything, and that map cannot be shared across independent jobs. Cheap for a weekly,
   # non-gating job. `fail-fast: false` so one shard's failure does not cancel the rest.
   #
-  # No thresholds.break is configured, so each shard publishes its slice's score rather than failing;
-  # the ten per-shard report artifacts are what a human reads. A single merged score is a deliberate
-  # non-goal for now (see docs/backlog.md). Docker is present on ubuntu-latest, so the real-Postgres
-  # target runs here too.
+  # No thresholds.break is configured HERE, and that is on purpose: a break in
+  # packages/db/stryker.config.json would gate each SHARD's own slice, so a shard holding the
+  # well-tested files passes while the package as a whole sits far below the bar. The package is
+  # gated once, on the merged score, by the `mutation-db-aggregate` job below (2026-09-20 — before
+  # that date this comment said a merged score was a deliberate non-goal). Docker is present on
+  # ubuntu-latest, so the real-Postgres target runs here too.
   mutation-db:
     strategy:
       fail-fast: false
@@ -148,3 +150,28 @@ jobs:
           name: mutation-report-db-shard-${{ matrix.shard }}
           path: packages/db/reports/mutation/
           retention-days: 30
+
+  # The PACKAGE's gate. Each shard above publishes `mutation.json` beside its html report;
+  # this job adds the ten together and fails below 90, the score the owner set for every package
+  # on 2026-09-19. It refuses to score at all when a shard's report is missing, because a shard
+  # that crashed takes its own survivors with it and the remaining nine read higher than the truth.
+  # `if: always()` so a red shard still gets its slice counted rather than skipping the gate.
+  mutation-db-aggregate:
+    needs: mutation-db
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Download every shard report
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mutation-report-db-shard-*
+          path: mutation-reports
+
+      - name: Score the package
+        run: node scripts/mutation-aggregate.mjs mutation-reports --shards 10 --break 90
