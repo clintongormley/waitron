@@ -4026,12 +4026,41 @@ storage switch replaces one function body instead of every call site. Its export
 asserts the row the second wrote is gone, and with the helper's body changed to
 `resetPerTest: false` exactly that case fails and the other two stay green.
 
-**The conversion is under way**, one pull request per package, fewest calling files first;
-`packages/fiscal-none` was the first, LANDED as #423 on 2026-09-19. How many files are left is the
-grep pair in `docs/developers/testing-guide.md`, never a number written here — a number here went
-stale in one pull request, which is the whole reason #423 took it out and this sentence is the
-second attempt at the same paragraph. The pair needs the exclusion that drops the four files allowed
-to name either helper, and it lists FILES, not packages and not call sites.
+**The conversion is COMPLETE as of 2026-09-20.** It ran one pull request per package, fewest
+calling files first; `packages/fiscal-none` was the first, LANDED as #423 on 2026-09-19, and
+`apps/server` was the last, LANDED as #470. Every suite that called `usePgliteDb` now calls
+`useVenueDb`, and the still-to-convert half of the grep pair in
+`docs/developers/testing-guide.md` exits 1 across the tree. That pair, not a number written here, is
+still how anyone checks: a number here went stale in one pull request, which is the whole reason
+#423 took it out. The pair needs the exclusion that drops the four files allowed to name either
+helper, and it lists FILES, not packages and not call sites.
+
+**What step 5 finished does NOT mean the task is done.** The house rule and its guard are still
+owed, in their own pull request — see the paragraph below that keeps them open.
+
+**Three things #470, the last conversion, left behind.**
+
+1. **Twelve documents hold a designating `usePgliteDb` sketch for a file that conversion converted,
+   and got no pointer.** A designating sketch is one whose step tells an implementer to write or
+   rework that exact file, which is the class earlier conversions gave a dated pointer to in the same
+   pull request. #470 corrected only the two `docs/backlog.md` had already named by name, and the
+   sentence recording them (further down this section) now carries the scan, the scope and the whole
+   list. The twelve belong to the final sweep. The SCAN, because paths and basenames are different
+   sweeps here: for every `usePgliteDb` mention under `docs/`, look back forty lines for one of the
+   56 converted PATHS — seventeen documents, five already carrying a `useVenueDb` pointer.
+2. **A dead exported test helper, found by a seam control and deliberately not fixed.**
+   `apps/server/src/card-provider-pool.test.ts:86` exports `seedTenantWithSumUpKey`, and
+   `grep -rn seedTenantWithSumUpKey apps packages --include="*.ts"` returns that definition and
+   nothing else. It is why that file, and `boot-card-provider.test.ts` beside it, pass the
+   `migrations: []` control while failing the throw control: nothing they execute touches a table.
+   Removing it is somebody's tidy-up, not that conversion's.
+3. **The cross-pull-request tally of which packages ran BOTH seam controls is retired, not carried
+   forward.** #468 recorded "four packages, two agreeing and two not"; two attempts to restate that
+   in #470 were wrong in OPPOSITE directions, because "has run both controls" is a scope question
+   that needs every earlier commit message re-read to settle. What survives is the property, which is
+   checkable from any one message: reporting (#463) and fiscal-verifactu (#468) saw the two controls
+   disagree, payments (#464) and db (#467) saw them agree exactly, and `apps/server` (#470)
+   disagreed. Run both and predict neither.
 
 One follow-up the rollout found and did not take (#424): the spec
 `docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` carries "211 files" in six
@@ -4072,11 +4101,13 @@ the wrong place to change what a fixture guarantees, so it is recorded here rath
 anyone takes it, the question to answer first is whether any such fixture relies on the truncate
 running BEFORE the first test, where the helper's reset has not yet run at all.
 
-Two more things left deliberately open. The house rule naming `useVenueDb`, and the guard that would
-enforce it, are NOT added yet — a rule with standing violations needs a guard and a guard cannot
-pass while the violations stand, so both land together in their own pull request after the last
-conversion, which is the shape the vocabulary rollout ended in (#414 last conversion, #416 the guard
-and the rule). And a converted suite that reads its accessor too early still gets the error
+Two more things left deliberately open, and the FIRST of them is now the whole of what task P2 still
+owes. The house rule naming `useVenueDb`, and the guard that would enforce it, are NOT added yet — a
+rule with standing violations needs a guard, and there were violations standing until the last
+conversion, so both land together in their own pull request afterwards, which is the shape the
+vocabulary rollout ended in (#414 last conversion, #416 the guard and the rule). That conversion has
+now happened (#470), so nothing blocks this pull request any more; it also owns the rollout's final
+documentation sweep, described three paragraphs down. And a converted suite that reads its accessor too early still gets the error
 `usePgliteDb: database not started`, naming a function its own file does not call; the cheapest fix
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
