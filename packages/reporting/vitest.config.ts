@@ -11,12 +11,28 @@ export default defineConfig({
     // whole package (that file's header explains the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
     // Most suites here boot PGlite (a WASM PostgreSQL) and apply `@waitron/db`'s migrations, longer
-    // than Vitest's 5s default on a cold CI runner; the real-PG suites now clone the shared
-    // container's migrated `core` template (globalSetup, above). Each per-suite cost is paid in a
-    // beforeAll — the PGlite WASM boot + migrations, or the real-PG ~26ms clone — so hookTimeout stays
-    // generous for the PGlite boot. The container boot/pull is NOT in a beforeAll: it moved to
-    // globalSetup, which vitest does not bound by hookTimeout. testTimeout covers a migration suite
-    // booting a second database inside a single `it`.
+    // than Vitest's 5s default on a cold CI runner; the real-PG suites clone the shared container's
+    // migrated `core` template (globalSetup, above).
+    //
+    // `hookTimeout` does NOT bound that PGlite boot. `useVenueDb` times its own `beforeAll`
+    // (`packages/db/src/testing/lifecycle.ts:146`) and all fourteen call sites in this package pass
+    // `timeoutMs: 60_000`, so 60s is the number that applies there and this one never is. What it
+    // DOES bound is the hooks left untimed: the helpers' per-test reset and close, this package's
+    // own `beforeEach` seeds, and the template clone the two real-PG suites take without a
+    // `timeoutMs` of their own.
+    //
+    // Measured in both directions in one run —
+    // `vitest run src/counts.test.ts src/record-daily-close.pg.test.ts --hookTimeout=1`. The PGlite
+    // boot survives it: `src/counts.test.ts`'s three tests RUN, and fail in hooks that only fire
+    // after a successful boot — that file's own untimed `beforeEach` (`:12`) and `lifecycle.ts:148`
+    // and `:153`, the reset and the close, each reached through `venue-db.ts:26`. A `beforeAll` that
+    // DOES time out skips its tests instead, which is what the real-PG file in the same run does: it
+    // fails in `lifecycle.ts:422`, its clone, and its four tests are skipped. Run-versus-skip is the
+    // discriminator; the collected count is not, because both files collect either way.
+    //
+    // The container boot/pull is NOT in a beforeAll: it moved to globalSetup, which vitest does not
+    // bound by hookTimeout. testTimeout covers a migration suite booting a second database inside a
+    // single `it`.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     // Run the whole suite in ONE fork. This is here for the @vitest/coverage-v8 branch-merge artifact,

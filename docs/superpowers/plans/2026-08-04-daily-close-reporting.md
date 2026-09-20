@@ -8,6 +8,29 @@
 
 **Tech Stack:** TypeScript (ESM), drizzle-orm `sql` templates, PGlite for tests (`usePgliteDb`), Vitest. Money via `@waitron/shared`'s `Decimal` BigInt codec.
 
+> **2026-09-20 — every place this document names the PGlite test helper now names a function these
+> suites no longer call.** Thirteen places: three in prose — the **Tech Stack** line above, the Global Constraints bullet beginning "Tests use
+> `usePgliteDb({ migrations: [CORE_MIGRATIONS] })`", and the "Consumed signatures" bullet that
+> imports it from `@waitron/db/testing/lifecycle.js` — and TWO in each of the five test sketches,
+> an import and a `const suite = usePgliteDb(…)` line, for
+> `test/fixtures.test.ts`, `src/vat-summary.test.ts`, `src/cash-up.test.ts`, `src/counts.test.ts`
+> and `src/daily-close.test.ts`. The check: `grep -c usePgliteDb` on this file returns eighteen,
+> five of which are this pointer's own prose. Those five files, and every other PGlite suite in
+> `packages/reporting`, now ask for their database through `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`): on the change that added this pointer,
+> `grep -rn usePgliteDb packages/reporting` exits 1, comments included. **What the document argues is
+> unchanged**, because the seam's whole body is `return usePgliteDb(options)`
+> (`packages/db/src/testing/venue-db.ts`) — the same PGlite database, the same options and the same
+> per-test reset. The point of the rename is that the coming SQLite switch replaces that one body
+> instead of every call site (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+>
+> One clause in the same bullets that this rollout does NOT own, named so nobody follows it: those
+> bullets also say reads run inside `withTenant`, and `withTenant` no longer exists anywhere under
+> `packages/` or `apps/` (`grep -rn withTenant --include="*.ts" packages apps` returns nothing) — it
+> went with the tenant column, `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`.
+> `asAppUser` beside it does still exist. Nothing else in this document was re-checked.
+
 ## Global Constraints
 
 Copied verbatim from the design ([2026-08-04-daily-close-reporting-design.md](../specs/2026-08-04-daily-close-reporting-design.md)). Every task's requirements implicitly include these:

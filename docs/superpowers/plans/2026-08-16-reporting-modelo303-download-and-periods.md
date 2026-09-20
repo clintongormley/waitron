@@ -220,6 +220,28 @@ pipeline. The period is generalized to a `LiquidationPeriod` discriminated union
 
 ### Task 1c — quarterly aggregation (TDD, PGlite)
 
+> **2026-09-20 — the sentence below that describes `vat-return.test.ts` as "a `usePgliteDb` suite"
+> names a function that file no longer calls.** It takes its database from `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`) now, as does every other PGlite suite in
+> `packages/reporting`: `grep -rn usePgliteDb packages/reporting` exits 1 on the change that added
+> this pointer, comments included. That is the only clause this pointer owns, and it changes nothing
+> about the step — the seam's whole body is `return usePgliteDb(options)`
+> (`packages/db/src/testing/venue-db.ts`), so the suite gets the same PGlite database, with the same
+> options and the same per-test reset, and "follow the existing PGlite seed helper" still reads true
+> (plan task P2 step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+>
+> Two things in scope for this pointer and deliberately NOT changed. The same sentence says the
+> suite "reads via `withTenant`+`asAppUser`"; `withTenant` no longer exists anywhere under
+> `packages/` or `apps/` (`grep -rn withTenant --include="*.ts" packages apps` returns nothing) — it
+> went with the tenant column, `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md` — and
+> that is a different rollout's to repair. And task 2c further down names `usePgliteDb` for
+> `apps/server/src/report-api.test.ts`, which is CORRECT as written: that file still imports
+> `usePgliteDb` from `@waitron/db/testing/lifecycle.js` and calls it
+> (`apps/server/src/report-api.test.ts:13` and `:123`), because `apps/server` has not been converted
+> yet — it has the most calling files left of any package, and the rollout takes the fewest first. Nothing else in this document was
+> re-checked.
+
+
 **Files:** `packages/reporting/src/vat-return.test.ts` (add a `describe`).
 
 **Steps:**

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   businessDayClause,
   businessDayOf,
@@ -52,7 +52,7 @@ describe("validateBusinessDay", () => {
 });
 
 describe("businessDayRangeClause", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
   const TZ = "Europe/Madrid";
   const CUTOVER = "05:00";
@@ -85,7 +85,7 @@ describe("businessDayRangeClause", () => {
 });
 
 describe("currentBusinessDay / businessDayOf", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
   it("shifts a pre-cutover instant to the PREVIOUS business day (deterministic literal clock)", async () => {
     // 2026-03-01 04:30 UTC = 05:30 Madrid (CET, UTC+1 in winter, before the last-Sunday-of-March DST

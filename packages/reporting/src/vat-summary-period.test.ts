@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNodeAndSeries, seedSale, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatSummaryForPeriod } from "./vat-summary.js";
 import type { PeriodVatInput, VatSummary } from "./types.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let venue: SeededVenue;
 const TZ = "Europe/Madrid";

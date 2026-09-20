@@ -3951,12 +3951,17 @@ was written; three do now — `packages/credentials` was corrected by #440, `pac
 successive corrections inside #438 got this wrong in opposite directions. Read each config against its own package and ask where the boot
 actually sits:
 
-- False for the same reason (every PGlite boot in the package goes through `usePgliteDb`, so
+- False for the same reason (every PGlite boot in the package goes through the one helper, so
   `hookTimeout` bounds none of them — `grep -rlE "createPgliteDb|describeEachTarget" --include="*.ts"
-  packages/<pkg>` exits 1): `packages/reporting/vitest.config.ts:15-16`.
+  packages/<pkg>` exits 1): `packages/reporting/vitest.config.ts`, **corrected by that package's own
+  conversion on 2026-09-20, so this entry is now a record rather than work outstanding**.
   `packages/credentials`'s was one of these; the conversion of that package corrected it, in the
   same way #438 corrected `packages/workforce-es`'s and the `packages/workforce` conversion
-  corrected its own.
+  corrected its own. One thing reporting's correction had to get right that the earlier ones did
+  not: `hookTimeout` is not idle in that package. Its two real-PostgreSQL suites call
+  `useTemplateDb` with no `timeoutMs` of their own, so the template clone at
+  `packages/db/src/testing/lifecycle.ts:422` IS bounded by it — saying "it bounds nothing here"
+  would have been the over-correction this section already records in the other direction.
 - ALSO false, and this is where the first correction went wrong: `packages/payments/vitest.config.ts:14`
   and `packages/scheduler`'s, the latter corrected while converting scheduler. That grep returns a file
   for each of the two, which a draft took as a reason to spare them both — but the one out-of-helper
@@ -4378,6 +4383,112 @@ runs. The round-three read over those corrections then found four more inside th
 sentence that generalised two verified sketches to a third which does not have the feature
 described. The code was thirteen import lines and thirteen calls and was right the first time; every
 defect on this branch, in both waves, was in prose.
+
+**`packages/reporting` converted, on the branch `feat/sqlite-slice1-venue-db-reporting`** — thirteen
+test files and fourteen calls (`src/business-day.test.ts` has two, one per database-backed
+`describe`), plus the package's `vitest.config.ts` comment, which this section had been holding open
+for exactly this conversion. No comment in the package named the old helper, so
+`grep -rn usePgliteDb packages/reporting` exits 1 after it. All twenty of the package's test files
+are accounted for: thirteen converted, two taking a real PostgreSQL database through
+`useTemplateDb({ template: "core" })` and left alone, five opening no database at all
+(`grep -rLE "useVenueDb|useTemplateDb" --include="*.test.ts" src test`). There is no other door
+either — `grep -rnE "createPgliteDb|describeEachTarget|useRealPostgres" --include="*.ts" packages/reporting`
+exits 1. Coverage identical on both sides, measured on `9e23b5dc` with the thirteen files put back
+and then restored: 20 files, 204 tests, statements 100% against a bar of 90, lines 100% against 90,
+functions 100% against 85, branches 100% against 85. Remaining after it, same command:
+`payments` 14 files, `db` 20, `fiscal-verifactu` 25, `apps/server` 56. Seven things to carry.
+
+**First, the two standard controls both ran, and only the THROW one covers every converted file.**
+Making the seam's body `throw` fails exactly the thirteen converted files at collection — 0 tests
+each, 13 failed / 7 passed, and every one of the thirteen stacks names
+`useVenueDb ../db/src/testing/venue-db.ts:26` above the suite's own line — while
+`packages/db/src/testing/lifecycle.test.ts`, which calls the old helper directly, passes all 29 of
+its tests under the same mutation. Forwarding `{ ...options, migrations: [] }` instead fails only
+twelve of the thirteen, 105 of the 204 tests. The thirteenth is `src/business-day.test.ts`, whose
+two converted suites evaluate SQL date expressions and never read a migrated table, so an unmigrated
+database answers them correctly. **That is the general shape, not a quirk of this package:** the
+migrations control reaches only suites that read a migrated table, so run the throw as well, and
+expect it to be the one that accounts for every file.
+
+**Second, a `--hookTimeout=50` receipt on the PGlite half is TIMING-DEPENDENT, and an independent
+seat falsified one.** This branch first recorded that a 50ms ceiling over `src/counts.test.ts` and
+`src/record-daily-close.pg.test.ts` failed both, the PGlite one naming
+`packages/db/src/testing/lifecycle.ts:148` through `venue-db.ts:26`. The run-it reviewer re-ran the
+same ceiling and got only the `useTemplateDb` clone at `lifecycle.ts:422`; `counts.test.ts` passed.
+Both runs happened; what nobody measured is why they differ, so do not explain it — the checkable
+part is that two runs of the same ceiling disagreed. **`--hookTimeout=1` is the deterministic version
+and says more**, because it discriminates in both directions in ONE run, and both halves are in the
+same output. The positive half: the PGlite `beforeAll` survives, so `src/counts.test.ts`'s three
+tests RUN — they fail, but only in hooks that fire after a successful boot: the file's OWN untimed
+`beforeEach` (`src/counts.test.ts:12`, a seed) and `lifecycle.ts:148` and `:153`, the helper's reset
+and close, each stack naming `venue-db.ts:26`. The negative half, printed by the same run: the
+real-PostgreSQL file's `beforeAll` DOES time out, at `lifecycle.ts:422`, its clone, and its four
+tests are SKIPPED. **Run-versus-skip is the discriminator; the collected count is NOT** — both files
+collect their tests either way, because each calls its helper at module top level, so a receipt
+resting on the collected count would read the same whichever answer were true. (It is also why the
+throw control prints something different again: it aborts module evaluation, so those files collect
+nothing at all.) Use 1, not 50, report the named hooks — a suite's own hooks among them, not the
+helper's alone — and say whether the tests ran or were skipped.
+
+**Third, correcting a package's `hookTimeout` comment is not the same job in a package that has both
+kinds of suite.** The standing bullet above named `packages/reporting/vitest.config.ts` as false for
+the usual reason, and it was: every one of the fourteen call sites passes `timeoutMs: 60_000`, so the
+helper's own `beforeAll` timeout applies and the config's 180s never does. But "so `hookTimeout`
+bounds nothing here" would have been the over-correction, because this package's two real-PostgreSQL
+suites call `useTemplateDb` with no `timeoutMs` of their own, and `lifecycle.ts:422` passes
+`options.timeoutMs` straight through — undefined, so Vitest falls back to `hookTimeout`, which is why
+the clone is what the 1ms run kills. The corrected comment says which hooks each budget reaches and
+carries the one command that shows both.
+
+**Fourth, the sweep reported PER SWEEP, which is the thing #440, #451 and #459 each got wrong.** Run
+on the base `9e23b5dc`, over the whole tree, non-TypeScript files only, with no second condition:
+
+- **Sweep 1, the converted files' paths — nine documents**, four of which owe a pointer and got one:
+  the daily-close plan, the desglose plan and its spec, and the modelo 303 plan. The other five owe
+  nothing. `docs/superpowers/plans/2026-08-07-vat-exact-daily-close.md`,
+  `…/2026-08-29-dashboard-sales-takings.md` and `…/2026-08-30-kds-order-timing-alerts.md` name a
+  converted file but say nothing about which helper it uses; root `CLAUDE.md` names
+  `src/top-sellers.test.ts` for the three-product-names rule, which this change does not touch; and
+  `…/2026-08-06-counter-pos-prepare-collect.md` names `src/daily-close.test.ts` only in "Modify"
+  instructions, two of them, its one helper sentence being the generic one described below.
+- **Sweep 2, `usePgliteDb` alone — fifty-four documents**, which is the rollout-wide set rather than
+  this package's. Read for what they say about `packages/reporting`, it adds three to sweep 1, and
+  the first two are the reason the pointer count is six rather than four — **neither DESIGN spec is
+  in sweep 1 at all**, because neither writes out a converted file's path: the daily-close design
+  spec and the modelo 303 design spec, both pointered here, and
+  `docs/superpowers/specs/2026-08-06-counter-pos-prepare-collect-design.md`, which owes nothing.
+- **Sweep 3, the converted files' basenames — ten documents**, adding exactly one to sweep 1:
+  `docs/superpowers/specs/2026-08-29-dashboard-sales-takings-design.md`, which contains no PGlite
+  mention at all and owes nothing.
+
+**Fifth, the "generic discipline sentence" class is a GREP, not a count.** The sentence that tells a
+reader to let the helpers own the database, rather than describing any particular suite, is spread
+across several plans and both house-rule documents. Two carry it in the wording this sweep met —
+`docs/superpowers/plans/2026-08-06-counter-pos-prepare-collect.md:82` and its design spec at `:534`;
+root `CLAUDE.md:440` and `docs/developers/testing-guide.md:51` say the same thing in different words;
+and `git grep -nE "usePgliteDb.?/.?useRealPostgres|useRealPostgres.?/.?usePgliteDb" -- . ':(exclude)*.ts'`
+finds four more plans besides. None of them describes a reporting suite, and this section has already
+decided the class belongs to the last pull request, the one that writes the house rule and its guard,
+so all of them are deliberately left. **Give the grep rather than a number** — the first draft of
+this paragraph said "four", which is the same over-narrow shape it was written to warn about.
+
+**Sixth, a twin count, for whoever repairs either of these.** Two clauses this branch raises in one document
+each are stated many more times across the six it had open. It names where, inside the pointer that
+raises each, rather than scattering the same note through documents that already carry a pointer.
+`record-daily-close.rls.test.ts`, a file that no longer exists, is named three times: the desglose
+spec's §7 paragraph and its claim/receipt table, and the desglose plan's instruction to "Mirror
+`record-daily-close.rls.test.ts:1-45`". The `98/98/98/95` coverage bar is stated twelve times in
+three spellings — ten as that literal, one as "statements 98 / lines 98 / functions 98 / branches 95"
+and one as a `thresholds:` config sketch — though `packages/reporting`, `packages/identity` and
+`apps/server` all declare `{ statements: 90, lines: 90, functions: 85, branches: 85 }`.
+
+**Last, a shell trap that silently edited nothing and read like a missing path.** `zsh` does not
+word-split an unquoted parameter, so `perl -pi -e '…' $FILES` with a newline-separated file list
+passes ONE argument containing newlines; perl then prints a `Can't open …` line naming each path,
+which looks exactly like running from the wrong directory. Nothing was modified, exit status 0, and
+the following `grep` correctly reported the work still to do. Pipe the file list into `xargs`
+instead. This is the same class as the repository's `pnpm --filter ""` and unquoted-`$PACKAGES`
+traps in `CLAUDE.md` §2, in a different shell.
 
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can

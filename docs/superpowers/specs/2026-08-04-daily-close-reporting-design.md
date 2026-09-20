@@ -239,6 +239,22 @@ run inside `withTenant` + `asAppUser` so RLS is exercised as the app role — th
 > (`docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`), so the RLS shape this paragraph
 > describes is not what the file does today. The cases listed below were not re-checked here.
 
+> **2026-09-20 — the clause that pointer left standing is now stale too, for this spec's OWN
+> package.** The paragraph's `usePgliteDb` names the helper the suites this spec designed took their
+> database from; every PGlite suite in `packages/reporting` now takes it from `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`) instead — the five this spec's plan sketched
+> (`test/fixtures.test.ts`, `src/vat-summary.test.ts`, `src/cash-up.test.ts`, `src/counts.test.ts`,
+> `src/daily-close.test.ts`) and eight more. On the change that added this pointer,
+> `grep -rn usePgliteDb packages/reporting` exits 1, comments included. The seam forwards unchanged
+> — its whole body is `return usePgliteDb(options)`, `packages/db/src/testing/venue-db.ts` — so the
+> target and the isolation this paragraph chose are the same; only the name moved (plan task P2
+> step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+>
+> A third clause, checked while here and NOT this rollout's to repair: no suite in
+> `packages/reporting` migrates `FISCAL_MIGRATIONS` either — all fourteen of its PGlite call sites,
+> spread over thirteen files, read `{ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 }` and nothing
+> else, and `grep -rn FISCAL_MIGRATIONS packages/reporting` returns nothing. The cases listed below still have not been re-checked.
+
 Cases:
 
 - multi-rate VAT (e.g. 21% + 10%) → one `VatRateLine` each, correct base and cuota;
