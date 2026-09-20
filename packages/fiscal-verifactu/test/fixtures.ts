@@ -254,6 +254,16 @@ async function insertLocationTillSeries(
  * 16th in `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K` and to `A1AF497F…`
  * standalone under `20000001K`; pinning the NIF made both positions agree. Pass a value no other
  * test in the same file will mint — the counter starts at `20000001K` and climbs.
+ *
+ * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below is `where not exists`, so in a file
+ * whose earlier tests have already seeded, the override reaches `registerSif` alone and the
+ * `tenants` row keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella
+ * because the hashed `IDEmisorFactura` is read from the SIF registration, not from `tenants`:
+ * `VerifactuBackend.recordSale` sets it from `currentSif(tx, nodeId).nif`
+ * (`./src/backend.ts`, `./src/registro-sif.ts`), and the one field it does take off `tenants` —
+ * `NombreRazonEmisor`, the legal name — is not one of the eight fields `buildCadenaAlta` hashes
+ * (`packages/verifactu/src/huella.ts`). A test that needs `tenants.tax_id` itself to match must
+ * seed before anything else does.
  */
 export async function seedTenantWithSif(
   db: Database,

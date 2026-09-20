@@ -229,15 +229,15 @@ export const saleLines = table(
     // value is frozen onto the line at sale time so a roll-up sums one canonical bucket and a later
     // taxonomy edit can never reach back into a completed record.
     category: label("category"),
-    // The parent line this line modifies (ordering modifiers, Task 2) — a filed MODIFIER child line
-    // points at the dish line it belongs to; a top-level line leaves it NULL. Presentation/reporting
-    // metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`, never from
-    // `sale_lines`, so this never reaches the fiscal fingerprint (design §4). Bare NULLABLE uuid: the
+    // The dish line this line belongs to — a filed EXTRAS pick is a line of its own and points at
+    // the dish it was picked for; a top-level line leaves it NULL. Presentation/reporting metadata
+    // ONLY — the fiscal record is built from `total` + `vat_breakdown`, never from `sale_lines`, so
+    // this never reaches the fiscal fingerprint (design §4). Bare NULLABLE uuid: the
     // self-FK (parent_line_id) → sale_lines(id) is
     // hand-written in the --custom migration (the same split sales_corrects_fk uses). MATCH SIMPLE
-    // means a NULL parent satisfies it. NO option/catalogue reference is added here: filed records
-    // stay decoupled from the mutable catalogue (option_group_item_id lives on working_order_lines
-    // only). Write-once at sale time and immutable table-wide like every other column here.
+    // means a NULL parent satisfies it. Nothing here points at the extras or options list the pick
+    // or the answer came from: a filed line carries frozen names only, so a catalogue edit cannot
+    // reach it. Write-once at sale time and immutable table-wide like every other column here.
     parentLineId: id("parent_line_id"),
   },
   (t) => [

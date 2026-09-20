@@ -554,10 +554,14 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // a value written wrong here stays wrong (CLAUDE.md §5).
   //
   // The three GOLDEN literals were recorded from `main` at `2ae3baa98`, BEFORE any of this branch's
-  // code existed, in a throwaway checkout of that commit. The capture filed this exact basket in
-  // `main`'s own line shape — the options answer on the dish line's `modifierSnapshots`, the extra
-  // as a child line at `parentLineNo: 1` — and read the three columns straight out of
-  // `registros_facturacion`.
+  // code existed, in a throwaway `git worktree` detached at that commit. The capture appended a
+  // temporary test to this same file which seeded `seedTenantWithSif(pg.db, { nif: PINNED_NIF })`,
+  // filed this exact basket in `main`'s own line shape — the options answer on the dish line's
+  // `modifierSnapshots`, the extra as a child line at `parentLineNo: 1` — and read
+  // `huella, importe_total, cuota_total` straight out of `registros_facturacion`. The command run
+  // there, verbatim:
+  //
+  //     pnpm --filter @waitron/fiscal-verifactu test write-path
   //
   // WHY THE NIF IS PINNED, and why it is not decoration. `IDEmisorFactura` is one of the eight
   // fields the huella hashes (`packages/verifactu/src/huella.ts`), and `seedTenantWithSif` mints it

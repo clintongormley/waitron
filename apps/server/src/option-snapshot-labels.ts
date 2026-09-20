@@ -51,18 +51,28 @@ export function optionSnapshotLabels(snapshots: readonly OptionSnapshot[]): stri
  * two cannot disagree about a map of blanks.
  *
  * The chosen map is then resolved by `resolveSnapshotText`
- * (`packages/shared/src/content-languages.ts`), called the same way
- * `joinCustomerPresentationText` calls it for a line's own name — requested language and default
- * alike, because a frozen answer has no default of its own to fall back to. Two things that
- * resolver does and an exact-key lookup does not, each of which decides what a diner reads:
- * it matches a full tag ("es-ES") against a map keyed by bare content-language codes, which is how
- * `buildLineExtras` keys BOTH maps (`apps/server/src/modifier-selection.ts` copies the catalogue
- * row's customer map through whole and widens each staff name under the venue's default content
- * language); and when the requested language holds no text it takes the first non-blank value over
- * SORTED keys, so a map `nonBlankTranslations` kept for text in one language cannot print a blank
- * from another. A line's `descriptions` need neither: `toInvoiceLineDescriptions`
- * (`packages/catalogue/src/invoice-descriptions.ts`) has already re-keyed them onto the venue's
- * invoice locales, and nothing re-keys an options answer.
+ * (`packages/shared/src/content-languages.ts`), called the same way `joinCustomerPresentationText`
+ * (`packages/catalogue/src/product-presentation.ts`) calls it for a line's own name — the requested
+ * language given as the default too, because a frozen answer carries no default of its own. Two
+ * things that resolver does and an exact-key lookup does not, and each of them decides what a diner
+ * reads.
+ *
+ * It matches a REQUESTED TAG against a map keyed by a bare language code. `locale` here is the
+ * invoice locale, normally a full tag ("es-ES"); neither map was ever re-keyed to match it.
+ * `buildLineExtras` (`apps/server/src/modifier-selection.ts`) widens each plain staff name under
+ * the venue's default content language — bare, because the two paths that STORE it put it through
+ * `contentLanguageCode` first (`writeContentLanguages`,
+ * `packages/catalogue/src/content-languages.ts`, and `packages/catalogue/src/provisioning.ts`) —
+ * and copies the catalogue row's customer map through whole, under whatever languages the list was
+ * translated into. A line's `descriptions` are the contrast: `toInvoiceLineDescriptions`
+ * (`packages/catalogue/src/invoice-descriptions.ts`) re-keys every priced line's onto the venue's
+ * invoice locales (`priceOrderLines`, `apps/server/src/working-order.ts`), which is why the
+ * receipt's own `lineName` can match a tag exactly. Nothing does that for an options answer.
+ *
+ * And when the requested language holds no text it takes the first non-blank value over SORTED
+ * keys. `nonBlankTranslations` keeps a map that has text in ANY language, so the map it hands back
+ * can still be blank in the one asked for, and printing that blank would drop a name off a legal
+ * receipt.
  */
 export function customerOptionSnapshotLabels(
   snapshots: readonly OptionSnapshot[],
