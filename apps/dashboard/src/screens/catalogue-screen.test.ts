@@ -116,9 +116,8 @@ const value: ProductEditorValue = {
   variants: [],
   categoryIds: ["c1"],
   primaryCategoryId: "c1",
-  // An attachment the editor has no section for today: the product editor's option-group section
-  // went with the new model, and Task 11 builds its replacement. It is here so the tests below can
-  // show an unrelated save carrying it back untouched rather than wiping it.
+  // One attachment the editor's Modifiers section shows, so the tests below can tell an unrelated
+  // save carrying it back untouched from one that wipes it.
   modifiers: [{ kind: "options", id: "opt-list-1" }],
   allergens: {},
   dietaryDeclarations: ["vegetarian"],
@@ -444,6 +443,94 @@ describe("catalogue-screen", () => {
     expect(api.createExtraList).not.toHaveBeenCalled();
     // Editing a list attached to the product changes the list, never what the product carries.
     expect(editor(el).currentValue.modifiers).toEqual([{ kind: "options", id: "opt-list-1" }]);
+  });
+
+  // Both nested forms show a refused save themselves, keyed by the field path the server named —
+  // the same wiring the Modifiers screen gives them. Without it the form stays open saying nothing,
+  // because the modal covers this screen's own banner.
+  it("gives a refused nested list write back to the form that sent it", async () => {
+    const refusal = {
+      code: "extras.translation_required",
+      params: { field: "customerName", language: "es" },
+      status: 400,
+    };
+    const api = stubApi({
+      createExtraList: vi.fn().mockRejectedValue(refusal),
+      createOptionList: vi.fn().mockRejectedValue({ ...refusal, code: "options.invalid" }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "extras" });
+    await el.updateComplete;
+    const extras = el.shadowRoot!.querySelector("dashboard-extra-list-form")!;
+    emit(extras, "wt-submit", { value: extraInput });
+    await flush(el);
+    expect(extras.open).toBe(true);
+    expect(extras.fieldErrors).toEqual({
+      customerName: codeMessage("extras.translation_required"),
+    });
+    // Nothing was attached and nothing was said behind the modal.
+    expect(editor(el).currentValue.modifiers).toEqual([{ kind: "options", id: "opt-list-1" }]);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+
+    emit(extras, "wt-cancel", {});
+    await flush(el);
+    // A refusal belongs to the form that earned it: reopening a form must not inherit the last one.
+    expect([extras.open, extras.fieldErrors, editor(el).childOpen]).toEqual([false, {}, false]);
+    emit(editor(el), "wt-create-related", { kind: "options" });
+    await el.updateComplete;
+    const options = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
+    expect([options.open, options.fieldErrors, editor(el).childOpen]).toEqual([true, {}, true]);
+    emit(options, "wt-submit", { value: optionInput });
+    await flush(el);
+    expect([options.open, options.fieldErrors]).toEqual([
+      true,
+      { customerName: codeMessage("options.invalid") },
+    ]);
+  });
+
+  // One dismissal produces TWO `wt-cancel`s: the form's own, then the `<dialog>`'s native `close` a
+  // task later. Found by running — the second one arrived while the options form was open and
+  // closed it, taking the refusal it was showing with it.
+  it("ignores a closed form's second cancel, which by then belongs to another form", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "extras" });
+    await el.updateComplete;
+    const extras = el.shadowRoot!.querySelector("dashboard-extra-list-form")!;
+    emit(extras, "wt-cancel", {});
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "options" });
+    await el.updateComplete;
+    const options = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
+    expect(options.open).toBe(true);
+    emit(extras, "wt-cancel", {});
+    await flush(el);
+    expect([options.open, extras.open, editor(el).childOpen]).toEqual([true, false, true]);
+  });
+
+  it("reports a refused attachment inside the editor, not behind it", async () => {
+    const api = stubApi({
+      updateProductEditor: vi.fn().mockRejectedValue({
+        code: "product.invalid",
+        params: { field: "modifiers.0.id" },
+        status: 400,
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value });
+    await flush(el);
+    expect(editor(el).open).toBe(true);
+    expect(editor(el).fieldErrors).toEqual({ modifier: t("editor.field_rejected") });
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
   it("reports a refused save beside the field the server named, and clears it on the next product", async () => {

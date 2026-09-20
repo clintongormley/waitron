@@ -46,7 +46,7 @@ import type {
   DietaryLabel,
   ProductRoutingChoice,
 } from "./product-editor-model.js";
-import { modifierListName } from "./product-editor-model.js";
+import { modifierKey, modifierListName, modifierListNames } from "./product-editor-model.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenName, vatClassName } from "../i18n/domain.js";
@@ -66,11 +66,9 @@ const CREATE_OPTION_LIST = "create-options";
  * same thing wherever it is named. */
 const KIND_TITLE = { extras: "extras.title", options: "options.title" } as const;
 
-/** A row's identity, unique ACROSS the two kinds. The kinds are separate tables with their own ids,
- * so one uuid can name an extras list AND an options list; keyed on the bare id, a move or a remove
- * would take whichever of the two came first. */
-function modifierKey(ref: ProductModifierRef): string {
-  return `${ref.kind}:${ref.id}`;
+/** A list named for a control with room for one string: its name, then which kind it is. */
+function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
+  return `${name}${SUMMARY_SEPARATOR}${t(KIND_TITLE[kind])}`;
 }
 
 /** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
@@ -110,6 +108,10 @@ const SERVER_FIELDS: Record<string, string> = {
 export function productEditorField(field: string, defaultLanguage: string): string | null {
   const variant = /^variants\.(\d+)\.(name|unitPrice)$/.exec(field);
   if (variant) return `variant-${variant[1]}-${variant[2] === "name" ? "name" : "price"}`;
+  // A refused attachment (`modifiers.<n>.id`, thrown by packages/catalogue/src/product-modifiers.ts
+  // when a list was deleted or is named twice) points at the Modifiers section's one control,
+  // whatever position it names: the attached rows are a table with no input of their own.
+  if (/^modifiers\.\d+\.id$/.test(field)) return "modifier";
   const mapped = SERVER_FIELDS[field];
   if (mapped === undefined) return null;
   return mapped.endsWith("-") ? `${mapped}${defaultLanguage}` : mapped;
@@ -179,6 +181,7 @@ export class ProductEditor extends LitElement {
     baseStyles,
     selectStyles,
     ReorderController.styles,
+    ReorderController.tableStyles,
     css`
       :host {
         display: block;
@@ -274,38 +277,23 @@ export class ProductEditor extends LitElement {
         border-radius: var(--wt-radius-sm);
         font-size: var(--wt-font-size-sm);
       }
-      /* The attached-lists table may be wider than the form; its own scroller keeps the dialog from
-         scrolling sideways at phone width. */
-      .wrap {
-        overflow-x: auto;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      th,
-      td {
-        padding: var(--wt-space-2) var(--wt-space-1);
-        text-align: start;
-        vertical-align: middle;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
       th {
         font-weight: var(--wt-font-weight-bold);
       }
+      /* Every cell of the attached-lists table holds one line of text or one tap-target-tall
+         control, so the shared block's top alignment — which suits the two modifier-list
+         forms, whose cells stack labelled inputs — leaves the name and the type reading above their
+         own grip and row menu. Centre them instead; the handle's own override then changes nothing
+         here. Guard: the one-line row test in product-editor.test.ts. */
+      th,
+      td {
+        vertical-align: middle;
+      }
+      /* The name column is the one that grows; capping it keeps the actions on screen at phone
+         width. The token is used in three different directions across the dashboard, which
+         packages/ui/src/tokens/structure.css describes. */
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
-      }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
       }
     `,
   ];
@@ -343,6 +331,9 @@ export class ProductEditor extends LitElement {
   private generation = 0;
   /** The field to put focus in once the update that reported an error has rendered. */
   #focusField: string | null = null;
+  /** The loaded lists' names, ready to look up: the Modifiers section reads one per attached row
+   * and the combobox offers every unattached list, on each of this form's renders. */
+  #listNames: ReadonlyMap<string, string> = new Map();
 
   readonly #reorder = new ReorderController(this, {
     order: () => this.draft.modifiers.map(modifierKey),
@@ -362,6 +353,8 @@ export class ProductEditor extends LitElement {
   } satisfies ReorderModel);
 
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("extraLists") || changed.has("optionLists"))
+      this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("value") || (changed.has("open") && this.open)) {
       this.draft = this.value ? structuredClone(this.value) : emptyDraft();
       this.generation++;
@@ -558,8 +551,10 @@ export class ProductEditor extends LitElement {
    * Put focus back on the control that opened a child form, once that form closes.
    *
    * Both kinds of modifier list are added from the ONE combobox the Modifiers section renders, so
-   * both return focus there. "modifier" reaches no control at all, for the reason
-   * {@link selectRelated} gives.
+   * both return focus there. So does "modifier": the editor has no control of its own that opens
+   * that form ({@link selectRelated} says why), and the Modifiers section is what replaced option
+   * groups, so it is the nearest thing to the form that closed — and leaving focus on the body
+   * after a dialog closes is worse than landing it one control away.
    */
   returnRelatedFocus(kind: ProductChildKind): void {
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
@@ -1025,29 +1020,29 @@ export class ProductEditor extends LitElement {
     </fieldset>`;
   }
 
-  /** The list's own STAFF name, or null when the loaded set does not hold it. This surface shows
-   * exactly one of a list's three names and it is the staff one (docs/developers/products.md). */
-  private modifierListName(ref: ProductModifierRef): string | null {
-    return modifierListName(ref, this.extraLists, this.optionLists);
+  /** The list's own STAFF name. This surface shows exactly one of a list's three names and it is
+   * the staff one (docs/developers/products.md). */
+  private modifierListName(ref: ProductModifierRef): string {
+    return modifierListName(ref, this.#listNames);
   }
   /** Name and kind together — what a control that has room for only one string says, so two lists
    * of different kinds sharing a name are still told apart. */
   private modifierLabel(ref: ProductModifierRef): string {
-    const name = this.modifierListName(ref) ?? t("editor.missing_choice");
-    return `${name}${SUMMARY_SEPARATOR}${t(KIND_TITLE[ref.kind])}`;
+    return kindLabel(this.modifierListName(ref), ref.kind);
   }
 
   private renderModifierRow(ref: ProductModifierRef) {
     const key = modifierKey(ref);
-    const name = this.modifierListName(ref) ?? t("editor.missing_choice");
+    const name = this.modifierListName(ref);
+    const kind = t(KIND_TITLE[ref.kind]);
     return html`<tr data-test="attached-modifier" data-modifier=${key}>
       <td>${this.#reorder.handle(key)}</td>
       <td data-test="modifier-name">${name}</td>
-      <td data-test="modifier-kind">${t(KIND_TITLE[ref.kind])}</td>
+      <td data-test="modifier-kind">${kind}</td>
       <td>
         <wt-row-actions
           align="end"
-          label=${`${t("editor.modifier_actions")}: ${this.modifierLabel(ref)}`}
+          label=${`${t("editor.modifier_actions")}: ${name}${SUMMARY_SEPARATOR}${kind}`}
           ><wt-button
             variant="secondary"
             data-test=${`edit-modifier-${key}`}
@@ -1091,12 +1086,13 @@ export class ProductEditor extends LitElement {
    */
   private renderModifiers() {
     const attached = this.draft.modifiers;
+    const held = new Set(attached.map(modifierKey));
     const offered = (kind: ProductModifierRef["kind"]) =>
       (kind === "extras" ? this.extraLists : this.optionLists)
-        .filter((list) => !attached.some((ref) => ref.kind === kind && ref.id === list.id))
+        .filter((list) => !held.has(modifierKey({ kind, id: list.id })))
         .map((list) => ({
           value: modifierKey({ kind, id: list.id }),
-          label: `${list.name}${SUMMARY_SEPARATOR}${t(KIND_TITLE[kind])}`,
+          label: kindLabel(list.name, kind),
         }));
     const options = [
       { value: CREATE_EXTRA_LIST, label: t("editor.create_extra_list") },
@@ -1108,7 +1104,12 @@ export class ProductEditor extends LitElement {
       <span class="group-label">${t("editor.modifiers")}</span>
       ${
         attached.length
-          ? html`<div class="wrap">
+          ? html`<div
+              class="table-wrap"
+              tabindex="0"
+              role="region"
+              aria-label=${t("editor.modifiers")}
+            >
               <table>
                 <caption class="visually-hidden">
                   ${t("editor.modifiers")}
@@ -1143,9 +1144,17 @@ export class ProductEditor extends LitElement {
         .disabled=${this.suspended}
         .options=${options}
         .value=${""}
+        .error=${this.error("modifier")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           const chosen = event.detail.value;
+          // A chosen row is a command, spent where it is chosen: one opens a nested form, the rest
+          // attach a list to the table above. So the control returns to its placeholder — and it
+          // has to be told to ON the element, because `wt-combobox` sets its own `value` when a row
+          // is picked and Lit never re-commits the unchanged constant bound above
+          // (docs/developers/conventions-ui.md measured that). Assigning rather than replacing the
+          // element keeps the focus the pick just returned to the trigger.
+          (event.currentTarget as HTMLElement & { value: string }).value = "";
           if (chosen === "") return;
           if (chosen === CREATE_EXTRA_LIST) this.related(event, "extras");
           else if (chosen === CREATE_OPTION_LIST) this.related(event, "options");

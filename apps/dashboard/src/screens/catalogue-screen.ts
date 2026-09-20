@@ -340,6 +340,23 @@ export class CatalogueScreen extends LitElement {
     return {};
   }
 
+  /**
+   * A refused nested list write, keyed by the field path the server named — which is the key both
+   * list forms map onto their own inputs — or `_form` when it names none. The Modifiers screen
+   * reads the same refusals the same way (`#fieldOf`, `modifiers-screen.ts`).
+   *
+   * Empty while nothing has been refused: the create controller clears its error whenever a form
+   * opens or is cancelled, so one form never shows what another one earned. Without this the modal
+   * covers the screen's own banner and a refused create says nothing at all.
+   */
+  #childFieldErrors(): Record<string, string> {
+    const error = this.#child.error;
+    if (error === null || error === undefined) return {};
+    const params = (error as { params?: { field?: unknown } }).params ?? {};
+    const field = typeof params.field === "string" ? params.field : "_form";
+    return { [field]: codeMessage(codeOf(error)) };
+  }
+
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
     if (kind === "unit") this.units = await this.api.background.listUnits();
     if (kind === "category") this.categories = await this.api.background.listCategories();
@@ -417,8 +434,23 @@ export class CatalogueScreen extends LitElement {
     this.#child.open(kind);
   }
 
+  /**
+   * One list form's Cancel, honoured only while a form of that KIND is the open one. A dismissal
+   * produces a SECOND `wt-cancel` later: the `<dialog>` this screen just closed delivers its native
+   * `close` event a task afterwards, `wt-dialog.ts` turns that into `wt-close`, and the form answers
+   * with another cancel. By then a different form can be open, and an unchecked handler closes that
+   * one. What this check does NOT separate is the same kind reopened inside that one task — for that
+   * it would need a generation counter, as `modifiers-screen.ts` uses for its own reopen case.
+   */
+  #cancelList(kind: "extras" | "options"): void {
+    if (this.#child.kind !== kind) return;
+    this.editingList = null;
+    this.#child.cancel();
+  }
+
   override render() {
     const locales = this.contentLanguages?.languages ?? [];
+    const childErrors = this.#childFieldErrors();
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
@@ -551,11 +583,9 @@ export class CatalogueScreen extends LitElement {
                 .languages=${this.contentLanguages}
                 .value=${this.editingList?.kind === "extras" ? (this.editingList.value as ExtraList) : null}
                 .products=${this.products}
+                .fieldErrors=${childErrors}
                 @wt-submit=${this.#submitExtraList}
-                @wt-cancel=${() => {
-                  this.editingList = null;
-                  this.#child.cancel();
-                }}
+                @wt-cancel=${() => this.#cancelList("extras")}
               ></dashboard-extra-list-form>
               <dashboard-option-list-form
                 .open=${this.#child.kind === "options"}
@@ -566,11 +596,9 @@ export class CatalogueScreen extends LitElement {
                     ? (this.editingList.value as OptionList)
                     : null
                 }
+                .fieldErrors=${childErrors}
                 @wt-submit=${this.#submitOptionList}
-                @wt-cancel=${() => {
-                  this.editingList = null;
-                  this.#child.cancel();
-                }}
+                @wt-cancel=${() => this.#cancelList("options")}
               ></dashboard-option-list-form>`
           : nothing
       }

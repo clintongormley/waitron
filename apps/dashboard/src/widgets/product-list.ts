@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, currentContentLanguages, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -7,7 +7,11 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
-import { modifierListName, type ModifierListChoice } from "./product-editor-model.js";
+import {
+  modifierListName,
+  modifierListNames,
+  type ModifierListChoice,
+} from "./product-editor-model.js";
 import type { CategorySummary, Product, ProductEditorVariant } from "../api/client.js";
 
 interface ProductRow {
@@ -65,6 +69,15 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
+  /** The loaded lists' names, ready to look up. The Modifiers column resolves one per attachment
+   * per product row, and does it twice — as the cell and as the row's search text. */
+  #listNames: ReadonlyMap<string, string> = new Map();
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("extraLists") || changed.has("optionLists"))
+      this.#listNames = modifierListNames(this.extraLists, this.optionLists);
+  }
+
   #emit(event: Event, name: "edit-product" | "delete-product", productId: string): void {
     event.stopPropagation();
     this.dispatchEvent(
@@ -107,12 +120,7 @@ export class ProductList extends LitElement {
   /** The attached extras and options lists, in the order the product carries them, by their plain
    * STAFF names (docs/developers/products.md: one surface, one of a list's names). */
   #modifierNames(product: Product): string {
-    return product.modifiers
-      .map(
-        (ref) =>
-          modifierListName(ref, this.extraLists, this.optionLists) ?? t("editor.missing_choice"),
-      )
-      .join(", ");
+    return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
 
   #price(product: Product): string {
