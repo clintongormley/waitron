@@ -256,6 +256,46 @@ The till has not moved onto this wire yet: `apps/till` still builds and reads th
 `modifierSelections`/`modifierSnapshots` shapes, which is a task of its own — its mirror of the
 settled ticket included. The gap, and which till files it touches, is in `docs/backlog.md`.
 
+## What a till is offered
+
+The two sell-side reads — `listAvailableProducts` and `listMenuOffers`
+(`packages/catalogue/src/operations.ts`) — each carry an `offeredModifiers` array: the ordered
+extras and options lists a dish puts in front of a diner, already resolved. It is built by
+`readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) and the shapes are declared
+beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
+`OfferedOptionsList`, `OfferedExtraItem`).
+
+The legacy `optionGroups` and `modifiers` fields on those two payloads are untouched and still
+carry the old `option_groups` model; Task 13 of
+`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. As of 2026-09-21 no
+till screen reads EITHER field.
+
+Five things it is worth knowing about that payload:
+
+- **The order is the product's own `product_modifiers.sort`, on both reads** (spec §5). A menu
+  offer changes what is inside an extras entry, and whether the entry is there at all, but not
+  where it sits — so `menu_item_extra_lists.display_order` decides nothing here. It still decides
+  the order in which the order path builds a line's answers, which is the table above.
+- **An extras entry on a MENU offer is that offer's own version** — items withdrawn and repriced by
+  `menu_item_extra_items` (spec §3.2) — and a list the offer does not publish is left out of the
+  walk entirely.
+- **Every price is settled**: the menu's price, then the list item's, then the product's
+  `unit_price` (spec §3.3). A till has no way to walk that chain itself, because the last rung is
+  not on the list item.
+- **Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels** — which
+  is exactly the set `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
+  (`option-contract.ts`) will accept an answer from. That agreement is the reason the order path
+  and these two reads resolve their lists through ONE body, `resolveAttachedModifiers` in the same
+  file: a required list the picker never drew would refuse the order with `options.label_required`
+  or `extras.limit_exceeded`, and an offered list the server does not know about would be refused
+  as `options.invalid`.
+- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its own VAT class,
+  its allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
+  them (spec §3.1). The two declaration fields take the names a CHILD LINE uses on the kitchen and
+  expo screens — `addAllergens` and `suitableFor`, the same two values `readQueueSubItems`
+  (`apps/server/src/working-order.ts`) hands those screens — because a pick is what becomes such a
+  line. Shown beside the dish's own, never folded into them (spec §3.4).
+
 ## On the filed sale
 
 A filed sale is a snapshot and never a catalogue reference (`packages/db/src/schema/sales.ts`,

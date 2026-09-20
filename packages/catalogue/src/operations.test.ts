@@ -1784,6 +1784,7 @@ describe("catalogue operations", () => {
       catalogueName: "Deli",
       optionGroups: [],
       modifiers: [],
+      offeredModifiers: [],
     };
     const priceable = toPriceable(sample);
     // A blank customer name falls back to the staff name for the snapshotted line text.

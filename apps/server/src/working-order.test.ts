@@ -1966,10 +1966,18 @@ describe("basket-wide modifier resolution (perf)", () => {
 
   // CLAUDE.md §3: shared catalogue data is resolved ONCE before the line loop, never per line.
   // Each basket below is three lines — the same dish twice, then a second dish — so a resolver that
-  // moved inside the loop would call each reader three times instead of once. Behaviour alone
-  // cannot tell the two apart (the same order comes out either way), so the readers are spied on.
-  // Proven by mutation: moving the `resolveBasketModifiers` call in `priceOrderLines` inside the
-  // line loop takes both cases from 1 to 3.
+  // moved inside the loop would resolve three times instead of once. Behaviour alone cannot tell
+  // the two apart (the same order comes out either way), so the resolver is spied on. Proven by
+  // mutation: moving the `resolveBasketModifiers` call in `priceOrderLines` inside the line loop
+  // takes every case here from 1 to 3.
+  //
+  // What is spied on is `resolveAttachedModifiers`, the one body this basket and the two reads a
+  // till sells from share (packages/catalogue/src/offered-modifiers.ts). The four readers it calls
+  // are no longer reachable from here: it calls them through its own relative imports, which are
+  // different namespace objects from the `@waitron/catalogue` index these spies replace bindings
+  // on. Which reader each side of a basket reaches, and that the attachments map is handed on
+  // rather than read twice, moved with the code — "one shared resolution for a set of dishes"
+  // (packages/catalogue/src/offered-modifiers.test.ts).
 
   it("reads each PRODUCT-side definition once for a walk-up basket", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
@@ -1981,10 +1989,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       const agua = await addOptionList(tx, aguaId, "Tamano");
       return { cafe, agua };
     });
-    const menuExtras = vi.spyOn(catalogue, "readMenuExtras");
-    const productExtras = vi.spyOn(catalogue, "readProductExtras");
-    const attachments = vi.spyOn(catalogue, "readProductModifiers");
-    const optionLists = vi.spyOn(catalogue, "readOptionListsByIds");
+    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
     await parkOrder({ db }, cfg, {
       id: randomUUID(),
@@ -2007,22 +2012,14 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(productExtras).toHaveBeenCalledTimes(1);
-    expect(optionLists).toHaveBeenCalledTimes(1);
-    expect(attachments).toHaveBeenCalledTimes(1);
-    // No line names a menu offer, so the menu-side read is never reached.
-    expect(menuExtras).not.toHaveBeenCalled();
-
-    // `readProductExtras` reads the same `product_modifiers` rows as its own first statement, so
-    // the basket hands it the map it just read. The spies above cannot see that second read: they
-    // replace the bindings on the `@waitron/catalogue` INDEX namespace, and `extra-projection.ts`
-    // calls `readProductModifiers` through its own `./product-modifiers.js` import, which is a
-    // different namespace object — with the resolve deliberately left duplicated, `attachments`
-    // still reported 1. What is checkable from here is the WIRING, by identity; that supplying
-    // the map skips the query is
-    // "takes attachments the caller already read rather than reading them again"
-    // (packages/catalogue/src/extra-projection.test.ts).
-    expect(productExtras.mock.calls[0]![2]).toBe(await attachments.mock.results[0]!.value);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    // One entry per line, every one of them on the PRODUCT side: no line names a menu offer, so
+    // nothing the resolver is handed can send it to the menu-side read.
+    expect(resolve.mock.calls[0]![1]).toEqual([
+      { productId: cafeId, menuItemId: null },
+      { productId: cafeId, menuItemId: null },
+      { productId: aguaId, menuItemId: null },
+    ]);
   });
 
   it("does not resolve the catalogue twice for an edit that cannot be preserved", async () => {
@@ -2041,8 +2038,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     const held = await getHeldOrder({ db }, cfg, id);
 
     const contentLanguages = vi.spyOn(catalogue, "readContentLanguages");
-    const productExtras = vi.spyOn(catalogue, "readProductExtras");
-    const attachments = vi.spyOn(catalogue, "readProductModifiers");
+    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
     // A changed note is not a quantity-only edit, so this takes the replacement path and is
     // re-priced from the current offer. The preserve check that runs first decides that from the
@@ -2061,8 +2057,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
 
     expect(contentLanguages).toHaveBeenCalledTimes(1);
-    expect(productExtras).toHaveBeenCalledTimes(1);
-    expect(attachments).toHaveBeenCalledTimes(1);
+    expect(resolve).toHaveBeenCalledTimes(1);
 
     const stored = await db
       .select({ note: workingOrderLines.note })
@@ -2096,10 +2091,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       const agua = await addOptionList(tx, aguaId, "Tamano");
       return { aguaOfferId: aguaOffer.id, cafe, agua };
     });
-    const menuExtras = vi.spyOn(catalogue, "readMenuExtras");
-    const productExtras = vi.spyOn(catalogue, "readProductExtras");
-    const attachments = vi.spyOn(catalogue, "readProductModifiers");
-    const optionLists = vi.spyOn(catalogue, "readOptionListsByIds");
+    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
     await parkOrder({ db }, cfg, {
       id: randomUUID(),
@@ -2123,11 +2115,14 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(menuExtras).toHaveBeenCalledTimes(1);
-    expect(attachments).toHaveBeenCalledTimes(1);
-    expect(optionLists).toHaveBeenCalledTimes(1);
-    // Every line names an offer, so the product-side extras read is never reached.
-    expect(productExtras).not.toHaveBeenCalled();
+    expect(resolve).toHaveBeenCalledTimes(1);
+    // One entry per line, every one of them carrying the OFFER it was ordered through, so nothing
+    // the resolver is handed can send it to the product-side read.
+    expect(resolve.mock.calls[0]![1]).toEqual([
+      { productId: cafeId, menuItemId: cafeOfferId },
+      { productId: cafeId, menuItemId: cafeOfferId },
+      { productId: aguaId, menuItemId: seeded.aguaOfferId },
+    ]);
   });
 });
 

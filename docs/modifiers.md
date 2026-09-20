@@ -71,9 +71,10 @@ An extras entry declares its allergens and its dietary suitability through the p
 you maintain those on that product under **Products**, not here. An options label declares neither —
 it is wording, not something eaten.
 
-> **Not finished yet (2026-09-20).** The till does not offer these two kinds of list to an operator
-> yet. The read behind its menu still resolves only the older attachments
-> (`listAvailableProducts`), so a dish carrying an extras or options list is sold without the
-> question being asked. Wiring the till is Task 12 of
+> **Not finished yet (2026-09-21).** The till does not offer these two kinds of list to an operator
+> yet, so a dish carrying an extras or options list is still sold without the question being asked.
+> Half of the wiring has landed: the reads behind the till's menu now hand it every list a dish
+> carries, in the order you arranged them, with each extra already priced. What is still missing is
+> the till screen that draws them. That is the rest of Task 12 of
 > `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. Until it lands, treat this page
 > as a guide to building lists in the dashboard rather than to selling with them.

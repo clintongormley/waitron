@@ -5,13 +5,15 @@
 // other staff-facing name in `menu.ts` is, and a staff name is one plain string that is never
 // translated at read time, so an English one would show in English on the Spanish demo.
 //
-// What that does NOT yet mean, measured rather than assumed: the TILL does not offer the list to an
-// operator. `listAvailableProducts` — the read the till uses — still resolves the LEGACY attachments
-// through `readLegacyProductModifiers` (`packages/catalogue/src/operations.ts:1477`); only
-// `listProducts` (`:1054`) reads the new `product_modifiers` rows this file writes. Asked for the
-// steak straight after this seed, that read answers `optionGroups: ["Extras", "Cooking"]` and no
-// `Punto`. Wiring the till is Task 12 of
-// `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+// What that does NOT yet mean: the TILL does not offer the list to an operator. The paragraph that
+// stood here said `listAvailableProducts` read the legacy attachments alone, and half of that is no
+// longer true — as of 2026-09-21 it carries the new `product_modifiers` rows this file writes too,
+// resolved and in the product's own order, in an `offeredModifiers` field beside the legacy
+// `optionGroups` (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`, pinned by
+// "listAvailableProducts carries the product-side walk" in its test file). What is still true is the
+// part that matters here: no till SCREEN draws that field — `apps/till` was not touched by that
+// change — so the seeded `Punto` list is still never put to an operator. Drawing it is the rest of
+// Task 12 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
 //
 // A file of its own, not part of `seed-options.ts`, on purpose: that file seeds the LEGACY option
 // groups, whose tables Task 13 of

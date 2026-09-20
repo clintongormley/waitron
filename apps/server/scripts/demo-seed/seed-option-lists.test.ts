@@ -2,11 +2,12 @@
 // generic replacement for the deleted built-in `doneness` field — and attaches it to the steak, so
 // the demo data still carries the question "how do you want it cooked?".
 //
-// What this does NOT establish is that a TILL asks it. `listAvailableProducts`, the read the till
-// uses, resolves the LEGACY attachments (it calls `readLegacyProductModifiers`,
-// packages/catalogue/src/operations.ts:1477); only `listProducts` (:1054) reads the
-// `product_modifiers` rows this seed writes, and that is the read asserted below. Wiring the till
-// to the new mechanism is a separate task.
+// What this does NOT establish is that a TILL asks it. The read asserted below is `listProducts`,
+// which has always read the `product_modifiers` rows this seed writes. Its sibling
+// `listAvailableProducts` reads them too since 2026-09-21, under `offeredModifiers`
+// (`packages/catalogue/src/offered-modifiers.ts`) — where this header previously said it read only
+// the legacy attachments — but no till SCREEN draws that field, so nothing here says an operator is
+// asked the question. Drawing it is a separate task.
 //
 // Real Postgres, not PGlite, and NOT because of the grants. The reason first given here — that
 // PGlite cannot check them — is false, and CLAUDE.md §4 says so plainly: grants ARE enforced once

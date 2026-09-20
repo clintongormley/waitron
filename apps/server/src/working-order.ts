@@ -57,10 +57,7 @@ import {
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
-  readMenuExtras,
-  readOptionListsByIds,
-  readProductExtras,
-  readProductModifiers,
+  resolveAttachedModifiers,
   toInvoiceLineDescriptions,
   readContentLanguages,
   selectMenuVariant,
@@ -69,16 +66,15 @@ import {
   staffPresentationName,
 } from "@waitron/catalogue";
 import type {
+  AttachedModifiers,
   BasketItemWithOptions,
   AvailableProduct,
   ProductPresentation,
   DietaryLabel,
   DietProfile,
   LockedLine,
-  OptionList,
   PricedLines,
   ProductAllergens,
-  ResolvedExtraList,
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
@@ -137,14 +133,13 @@ export type LineExtras = { note?: string; variantId?: string };
  * Every extras and options definition the dishes in one basket offer, read ONCE before the line
  * loop. Reading them per line is the shape CLAUDE.md §3 forbids. Guard: "basket-wide modifier
  * resolution (perf)" in `apps/server/src/working-order.test.ts`.
+ *
+ * The two list maps are `resolveAttachedModifiers`'s own (packages/catalogue), shared with the two
+ * sell-side reads a till draws its picker from (`listAvailableProducts` and `listMenuOffers`, via
+ * `readOfferedModifiers`). One body, deliberately: what the till is OFFERED has to be exactly the
+ * set the validators below answer, or a required list the picker never drew refuses the order.
  */
-interface BasketModifiers {
-  /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
-   * the offer when there is one and held by the product when there is not (spec §3.2). */
-  extrasByHolder: ReadonlyMap<string, ResolvedExtraList[]>;
-  /** Keyed by the underlying PRODUCT id on both paths: an options list is attached to the product
-   * and a menu offer neither republishes nor narrows one (spec §3.1). */
-  optionsByProduct: ReadonlyMap<string, OptionList[]>;
+interface BasketModifiers extends AttachedModifiers {
   /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child. */
   extraProducts: ReadonlyMap<string, ExtraProductFacts>;
 }
@@ -162,52 +157,8 @@ async function resolveBasketModifiers(
   dishes: readonly { productId: string; menuItemId: string | null }[],
   defaultLanguage: string,
 ): Promise<BasketModifiers> {
-  const productIds = [...new Set(dishes.map((dish) => dish.productId))];
-  const menuItemIds = [
-    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [] : [dish.menuItemId]))),
-  ];
-  const productOnlyIds = [
-    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [dish.productId] : []))),
-  ];
-  // Every dish's attachments, read ONCE: the options side below needs them for the whole basket,
-  // and `readProductExtras` would otherwise ask the same table for the same ids on the same
-  // transaction as its own first statement. Awaited in turn with the reads below, never in
-  // parallel (CLAUDE.md §3).
-  const attachments = await readProductModifiers(tx, productIds);
-
-  // Each dish is read on the side its own identity puts it on, so a basket mixing offer lines with
-  // plain product lines resolves both. The two key spaces are distinct ids, so nothing collides.
-  const extrasByHolder = new Map<string, ResolvedExtraList[]>();
-  if (menuItemIds.length > 0) {
-    for (const [holder, lists] of await readMenuExtras(tx, menuItemIds)) {
-      extrasByHolder.set(holder, lists);
-    }
-  }
-  if (productOnlyIds.length > 0) {
-    for (const [holder, lists] of await readProductExtras(tx, productOnlyIds, attachments)) {
-      extrasByHolder.set(holder, lists);
-    }
-  }
-  const optionLists = new Map(
-    (
-      await readOptionListsByIds(tx, [
-        ...new Set(
-          [...attachments.values()].flatMap((refs) =>
-            refs.flatMap((ref) => (ref.kind === "options" ? [ref.id] : [])),
-          ),
-        ),
-      ])
-    ).map((list) => [list.id, list]),
-  );
-  const optionsByProduct = new Map(
-    [...attachments].map(([productId, refs]): [string, OptionList[]] => [
-      productId,
-      refs.flatMap((ref) => {
-        const list = ref.kind === "options" ? optionLists.get(ref.id) : undefined;
-        return list === undefined ? [] : [list];
-      }),
-    ]),
-  );
+  const attached = await resolveAttachedModifiers(tx, dishes);
+  const { extrasByHolder } = attached;
 
   const offeredProductIds = [
     ...new Set(
@@ -250,7 +201,7 @@ async function resolveBasketModifiers(
       });
     }
   }
-  return { extrasByHolder, optionsByProduct, extraProducts };
+  return { ...attached, extraProducts };
 }
 
 /**

@@ -575,11 +575,15 @@ guard, and the failing SET changed between two consecutive runs of the same code
 machine the same tree is 46/46. Load, not the branch — and the control is the quiet run, not a
 re-run past to green.
 
-STILL OPEN after this task, precisely. The till does not yet OFFER the seeded list:
-`listAvailableProducts` resolves the legacy attachments while only `listProducts` reads
-`product_modifiers`. Task 12 wires it — and because Task 12 lands BEFORE Task 13 deletes the legacy
-tables, there is a window in which the demo steak asks how it should be cooked twice; whoever takes
-Task 12 removes the legacy group in the same change or accepts the duplicate knowingly. Whether a
+STILL OPEN after this task, precisely. The till does not yet OFFER the seeded list. Half of that is
+closed as of 2026-09-21: `listAvailableProducts` and `listMenuOffers` now carry the
+`product_modifiers` attachments too, resolved and in the product's own order, in a new
+`offeredModifiers` field beside the legacy `optionGroups` (`readOfferedModifiers`,
+`packages/catalogue/src/offered-modifiers.ts`). No till SCREEN reads that field yet, so nothing an
+operator sees has changed. Because Task 12 lands BEFORE Task 13 deletes the legacy tables, there is
+a window in which the demo steak asks how it should be cooked twice; whoever writes the till's
+picker removes the legacy group from the seed in the same change or accepts the duplicate
+knowingly. That window is still SHUT today, because the picker reads neither field. Whether a
 `+ <list>: <label>` sub-line is prominent enough on a kitchen ticket to replace the old
 `** MEDIUM RARE **` framing is an open question nobody has put to a real cook.
 
@@ -2174,15 +2178,17 @@ ongoing overhaul listed at the top of Track A.
   / `MUY HECHO`. **Open, and worth a cook's eye before a real service:** whether a `+` sub-line is
   enough for something a cook must not miss, or whether an options answer deserves its own
   prominent form on the ticket. Nobody has watched a real kitchen read one.
-  **Still owed:** the till does not OFFER the seeded list yet — `listAvailableProducts` resolves the
-  legacy attachments (`packages/catalogue/src/operations.ts:1477`) while only `listProducts` (`:1054`)
-  reads `product_modifiers`. Task 12 of the modifiers plan wires it.
+  **Still owed:** the till does not OFFER the seeded list yet. The catalogue half landed 2026-09-21 —
+  `listAvailableProducts` and `listMenuOffers` now also carry the `product_modifiers` attachments,
+  resolved, under `offeredModifiers` (`packages/catalogue/src/offered-modifiers.ts`) — and no till
+  screen draws that field. The rest of Task 12 of the modifiers plan is the picker.
   **A window nobody had written down, found by the review wave:** the demo steak now carries the
   cooking question TWICE — the legacy "Cooking" option group and the new list, side by side. That is
-  invisible today because the till reads only the legacy attachments. But Task 12 (wire the till)
-  lands BEFORE Task 13 (delete the legacy tables), so between those two tasks a demo steak will ask
-  the diner how it should be cooked twice over. Whoever takes Task 12 should either pull the legacy
-  group out of the seed in the same change or accept the duplicate knowingly.
+  still invisible today: as of 2026-09-21 the catalogue read offers BOTH, but the till's picker
+  draws neither, so no operator is asked anything twice. Task 12 (wire the till) lands BEFORE Task 13
+  (delete the legacy tables), so once the picker reads the new field a demo steak will ask the diner
+  how it should be cooked twice over. Whoever writes that picker should either pull the legacy group
+  out of the seed in the same change or accept the duplicate knowingly.
 - **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and
   it reproduces itself** (found by the review wave on the doneness removal, 2026-09-20). What
   `backend.recordSale` is actually handed is twelve fields
