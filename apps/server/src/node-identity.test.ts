@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { CORE_MIGRATIONS, readMembershipTrustSet, type Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { signBytes, verifyBytes } from "@waitron/membership";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -18,7 +18,7 @@ const RING: KeyRing = loadKeyRing({
 });
 
 describe("node identity establishment", () => {
-  const suite = usePgliteDb({
+  const suite = useVenueDb({
     resetPerTest: false,
     migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
     timeoutMs: 60_000,

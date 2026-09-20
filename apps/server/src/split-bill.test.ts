@@ -9,7 +9,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -43,7 +43,7 @@ import "./errors.js";
 // backend proves. The FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the
 // real-Postgres job of the split-bill fiscal suite (CLAUDE.md §4).
 const LOCALE = "es-ES";
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });

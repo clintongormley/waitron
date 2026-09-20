@@ -28,12 +28,12 @@ contention. Set `TESTCONTAINERS_RYUK_DISABLED=true` for local container runs.
 
 `useVenueDb` (`./src/testing/venue-db.ts`) forwards to `usePgliteDb` unchanged, so the planned
 SQLite switch replaces that one body rather than every call site (plan
-`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P2). Suites are moving onto
-it a package at a time, so until that rollout finishes some still call `usePgliteDb` directly. Which
-files are left is the grep pair in `docs/developers/testing-guide.md` under "A PGlite suite is being
-moved behind one helper"; it needs the exclusion that pair carries, or the four files allowed to
-name either helper — the two that define them and their two contract tests — come back as work still
-to do.
+`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P2). Every suite that called
+`usePgliteDb` now calls `useVenueDb` instead; what shows that is the grep pair in
+`docs/developers/testing-guide.md` under "A PGlite suite is being moved behind one helper", and it
+needs the exclusion that pair carries, or the four files allowed to name either helper — the two
+that define them and their two contract tests — come back as work still to do. Calling `useVenueDb`
+is not yet a written rule: the rule and its guard land in their own pull request.
 
 Keep `testTimeout: 30_000` in `vitest.config.ts` for the database-backed tests; do not replace it
 with the usual 5 s default. **Neither that budget nor the `hookTimeout: 120_000` beside it bounds

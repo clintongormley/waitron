@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ForwardResult, PaymentProvider } from "@waitron/payments";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { connectedCardProviderSweep, withPendingSweep } from "./boot.js";
@@ -193,7 +193,7 @@ describe("withPendingSweep", () => {
 // a `tenant_credentials` table. PGlite is right here: the enumerator only reads the credential
 // PRESENCE (metadata, no decrypt) and pool behaviour is faked, so nothing depends on the deployment
 // role or on concurrency.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,
 });

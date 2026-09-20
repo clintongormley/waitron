@@ -2548,7 +2548,7 @@ pnpm --filter @waitron/db test -- venue-db.test.ts
 
 Expected: PASS, all three.
 
-- [ ] **Step 5: Convert package by package**
+- [x] **Step 5: Convert package by package** — done 2026-09-20, one package per pull request, the last of them `apps/server`. Every suite that called `usePgliteDb` now calls `useVenueDb`; the guide's still-to-convert command exits 1. The house rule and its guard are NOT part of this step and are still owed, in their own pull request.
 
 Order: by how many of a package's FILES call it, fewest first, so each pull request is a clean
 checkpoint. That is not the same as a call-site count. Measured on the branch that converted
@@ -2585,13 +2585,13 @@ One pull request per package. Replace `usePgliteDb(` with `useVenueDb(` and fix 
 
 But its PGlite half is still not a candidate for this helper, and the first correction said it was. `pgliteTarget.create()` boots a FRESH WASM cluster PER TEST, called from each test's own `beforeEach`; `usePgliteDb` hands out ONE database per SUITE with a per-test TRUNCATE. Those are different isolation contracts, and `Target`'s own doc comment argues for the per-test one at length — including that there is deliberately no `target.db` accessor. Routing that half through here would change what the harness guarantees, so it is F1's question, as part of the 66-test disposition (task F1 step 24), not a mechanical conversion.
 
-- [ ] **Step 6: Verify each package**
+- [x] **Step 6: Verify each package** — done per pull request, each one green on its own `test:coverage` before it landed.
 
 ```bash
 pnpm --filter <package> test:coverage
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit** — done per pull request.
 
 ```bash
 git commit -s -m "Ask for a test database through one helper in <package>

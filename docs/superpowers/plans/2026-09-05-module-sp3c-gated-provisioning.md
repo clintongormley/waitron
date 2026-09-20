@@ -1602,6 +1602,22 @@ describe("makeFiscalBackend", () => {
 
 `till-config.test.ts` is env-parsing only (no database), so `readFilingModule` gets its own file, `apps/server/src/till-config.filing.test.ts`:
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file
+> it heads, so the name matters.** `apps/server/src/till-config.filing.test.ts` asks for its
+> database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:3`, the
+> call at `:12` — not `usePgliteDb`. It is the same PGlite database with the same options and the
+> same per-test reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2
+> step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, whose `apps/server`
+> conversion is what made this sketch stale). **Only the helper name was re-checked; nothing else
+> in this sketch was.** Several other lines in it are stale for a different reason, named only so a
+> reader is not surprised: the tenant column went, and with it the `TenantId` the sketch imports
+> from `@waitron/shared` (`grep -rn TenantId packages/shared/src` now returns nothing), the
+> `tenantId` the sketch awaits from `seedTenant` (which returns `Promise<void>` now, so there is
+> nothing to bind — `packages/db/src/testing/seed.ts:23`), and the `tenant_id` column its three raw
+> inserts name.
+> That is `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`'s rollout to repair, not
+> this one's.
+
 ```ts
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

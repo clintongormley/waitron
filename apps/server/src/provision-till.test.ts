@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, TillId } from "@waitron/shared";
@@ -18,7 +18,7 @@ const ABSENT = "00000000-0000-0000-0000-000000000000";
 
 // The full manifest (`manifestSets()`), not just [core, fiscal]: each module lands on top of its
 // dependencies in one ordered set — the production migration order.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });

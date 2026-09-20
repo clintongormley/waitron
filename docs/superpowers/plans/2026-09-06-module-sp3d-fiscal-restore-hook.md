@@ -1104,6 +1104,15 @@ Rework `apps/server/src/restore.test.ts`:
 
 1. Module-level: a PGlite suite migrated with the whole manifest, one seeded identity, a `trading.env` body, an `openDb` seam, and a helper that gives fake hooks to REAL descriptors (every module keeps its real `migrations`, which the gate and the migrate step both resolve; the real fiscal hook is stripped so no SIF is needed):
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file
+> it reworks, so the name matters.** `apps/server/src/restore.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:6`, the call at `:32` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, whose `apps/server` conversion
+> is what made this sketch stale). **Only the helper name was re-checked; nothing else in this
+> sketch or in that file was.**
+
 ```ts
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";

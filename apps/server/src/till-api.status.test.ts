@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -36,7 +36,7 @@ let TABLE_ID: string;
 let STATUS_ID: string;
 let INACTIVE_STATUS_ID: string;
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   // The whole manifest: the tables here span modules that FK into core, so the shared ordered set is
   // the fixture.

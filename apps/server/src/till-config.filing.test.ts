@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -9,7 +9,7 @@ import { readFilingModule } from "./till-config.js";
 
 // PGlite (superuser) is enough: this proves the column read and the null case, not the role path
 // — `readOrderFlow`, its sibling, is proven under the app role by the boot suites.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
 });

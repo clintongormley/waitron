@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { asAppUser, printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Doneness, Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -44,7 +44,7 @@ import "./errors.js";
 // independence (ruling R-D), and never-block (no socket). PGlite is in-process WASM, so "no socket
 // opened" is a clean structural proof, exactly as outbox.test.ts relies on.
 const LOCALE = "es-ES";
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });

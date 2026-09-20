@@ -1,10 +1,10 @@
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { buildManifest } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 
-const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 describe("buildManifest", () => {
   it("stamps environment, createdAt, and a version per module", async () => {

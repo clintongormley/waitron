@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_TIME_ZONE, asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   locationId as brandLocationId,
@@ -23,7 +23,7 @@ import "./errors.js";
 // apps/server — a module cannot import apps/server, so the SEAM they exercise (core's read-model calling
 // the module's annotator) can only be pinned here. The pure per-table annotator scenarios live in
 // `@waitron/bookings`'s `floor.test.ts`. PGlite is enough: a correlated read, no privilege/concurrency.
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });

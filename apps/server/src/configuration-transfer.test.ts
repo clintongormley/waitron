@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
@@ -34,8 +34,8 @@ import {
 // TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
 // production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
 // target the bundle is imported into.
-const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const targetSuite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const targetSuite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 function venue(taxId: string): VenueRequest {
   return {

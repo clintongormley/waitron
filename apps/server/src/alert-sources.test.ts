@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, CORE_MIGRATIONS, type Database, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
 import {
@@ -104,7 +104,7 @@ describe("awaitingCertAlertSource", () => {
 // The printing source reads three real tables (printers, print_agents, print_jobs), so it runs on
 // PGlite as the app role — a grant assertion that forgot `asAppUser(tx)` would silently pass as the
 // owner (CLAUDE.md §4). PGlite fits: these are plain SELECTs with no contention to prove.
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** Minutes before NOW as an ISO string — the shape `last_seen_at` / `created_at` compare against. */
 function minsAgo(mins: number): string {
@@ -296,7 +296,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
 // The battery source reads `card_readers` (a payments-module table) and calls the card-provider seat,
 // so this suite migrates the payments set on top of core and runs as the app role, like the printing
 // block. The provider is a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
-const batterySuite = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const batterySuite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 async function seedReader(t: {
   provider?: string;
