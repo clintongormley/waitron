@@ -593,9 +593,8 @@ Three things the review found, each measured rather than read:
 - **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
   the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 
-Task 9 — a dish's frozen answers on the FILED sale line — is the plan's next one, and is on the
-branch `feat/modifiers-filed-sale-line`; add its PR number here when it lands. This is what it
-changes. `sale_lines.modifier_snapshots` is replaced by
+Task 9 — a dish's frozen answers on the FILED sale line — has landed too, as #469 (main
+`fc125dd08`, its own CI run green). This is what it changed. `sale_lines.modifier_snapshots` is replaced by
 `sale_lines.option_snapshots` (core migration `packages/db/drizzle/0041_magenta_metal_master.sql`),
 and both filing routes now put a dish's frozen answers there: a walk-up off the basket the sale was
 priced from, a retrieved order off `working_order_lines.option_snapshots` through `readLockedLines`.
