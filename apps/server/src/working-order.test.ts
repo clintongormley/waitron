@@ -5407,3 +5407,177 @@ describe("order path — extras and options", () => {
     });
   });
 });
+
+/**
+ * A dish's attachment list has an ORDER, and a product save re-numbers it from the body
+ * (`writeProductModifiers`, packages/catalogue/src/product-modifiers.ts). Both halves of the
+ * preserve check are built in that order, but a line stored before the reorder keeps the OLD one —
+ * so a comparison that pairs the two sides up index by index reads a reorder as a changed answer and
+ * re-prices a quantity-only edit.
+ */
+describe("a held-order edit after the dish's lists are reordered", () => {
+  it("keeps the line's id and locked price when two options lists change places", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      const punto = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
+      const taza = await addOptionList(tx, cafeId, "Taza", ["Grande"]);
+      return { punto, taza };
+    });
+    const options = [
+      { listId: seeded.punto.listId, labelId: seeded.punto.labelIds[0]! },
+      { listId: seeded.taza.listId, labelId: seeded.taza.labelIds[0]! },
+    ];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1", options }],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(before).toHaveLength(1);
+
+    // The manager swaps the two lists over, and the menu price moves, so a line that took the
+    // replacement path would be visibly re-priced rather than merely re-issued.
+    await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      await catalogue.writeProductModifiers(tx, cafeId, [
+        { kind: "options", id: seeded.taza.listId },
+        { kind: "options", id: seeded.punto.listId },
+      ]);
+    });
+    await db.execute(sql`
+      update menu_items set gross_price = 99.00 where id = ${premiumCafeOfferId}`);
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before[0]!.id,
+          menuItemId: premiumCafeOfferId,
+          quantity: "2",
+          options,
+        },
+      ],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({
+      id: before[0]!.id,
+      quantity: "2.000",
+      unitPriceGross: before[0]!.unitPriceGross,
+    });
+    expect(after[0]!.optionSnapshots).toEqual(before[0]!.optionSnapshots);
+  });
+
+  it("keeps each extras child on its own row when two extras lists change places", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      const bacon = await addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
+      const leche = await addExtraList(tx, catalogueId, cafeId, "Leche", { price: "0.30" });
+      return { bacon, leche };
+    });
+    const extras = [
+      { listId: seeded.bacon.listId, picks: [{ productId: seeded.bacon.productId, quantity: 1 }] },
+      { listId: seeded.leche.listId, picks: [{ productId: seeded.leche.productId, quantity: 1 }] },
+    ];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1", extras }],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(before).toHaveLength(3);
+
+    await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      await catalogue.writeProductModifiers(tx, cafeId, [
+        { kind: "extras", id: seeded.leche.listId },
+        { kind: "extras", id: seeded.bacon.listId },
+      ]);
+    });
+    await db.execute(sql`update products set unit_price = 99.00 where id = ${cafeId}`);
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [{ workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "2", extras }],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    // Every row keeps its id and the price it was sold at; only the quantities move, each child
+    // following its own dish at dish × picks.
+    expect(after.map((line) => [line.id, line.quantity, line.unitPriceGross])).toEqual([
+      [before[0]!.id, "2.000", before[0]!.unitPriceGross],
+      [before[1]!.id, "2.000", before[1]!.unitPriceGross],
+      [before[2]!.id, "2.000", before[2]!.unitPriceGross],
+    ]);
+  });
+
+  /**
+   * The settled behaviour, not an oversight — see `sameOptionSelections` (modifier-selection.ts) for
+   * why a names-only snapshot cannot tell a rename from a different answer, and `docs/backlog.md`
+   * for the decision.
+   */
+  it("re-prices a held line when the options list it answered was renamed between the two sends", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const punto = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      return addOptionList(tx, cafeId, "Punto", ["Solo"]);
+    });
+    const options = [{ listId: punto.listId, labelId: punto.labelIds[0]! }];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1", options }],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+
+    await db.execute(sql`update option_lists set name = 'Renamed staff' where id = ${punto.listId}`);
+    await db.execute(sql`
+      update menu_items set gross_price = 99.00 where id = ${premiumCafeOfferId}`);
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before[0]!.id,
+          menuItemId: premiumCafeOfferId,
+          quantity: "2",
+          options,
+        },
+      ],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after).toHaveLength(1);
+    expect(after[0]!.id).not.toEqual(before[0]!.id);
+    expect(after[0]!.unitPriceGross).toEqual("99.00");
+    expect(after[0]!.optionSnapshots[0]).toMatchObject({
+      listName: { [CONTENT_LANGUAGE]: "Renamed staff" },
+    });
+  });
+});

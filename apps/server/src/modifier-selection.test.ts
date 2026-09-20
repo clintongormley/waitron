@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { OptionLabel, OptionList, ResolvedExtraList } from "@waitron/catalogue";
-import { buildLineExtras, type ExtraProductFacts } from "./modifier-selection.js";
+import {
+  buildLineExtras,
+  matchExtraChildren,
+  sameOptionSelections,
+  type ExtraProductFacts,
+} from "./modifier-selection.js";
 
 // Every name in these fixtures reads differently from every other name in them, so an assertion
 // cannot pass by reading the wrong one of a list's, a label's or a product's three names
@@ -280,5 +285,185 @@ describe("buildLineExtras", () => {
       "Cooked staff",
       "Sauce staff",
     ]);
+  });
+});
+
+// The two comparators below decide whether a held-order edit is quantity-only. Both sides of each
+// comparison are built by `buildLineExtras` here rather than written out by hand, so a fixture
+// cannot drift from the shape the order path actually freezes.
+const freeze = (
+  offered: { extras?: ResolvedExtraList[]; options?: OptionList[] },
+  requested: { extras?: unknown; options?: unknown },
+) =>
+  buildLineExtras(
+    { extras: offered.extras ?? [], options: offered.options ?? [] },
+    products,
+    requested,
+    "en",
+  );
+
+describe("sameOptionSelections", () => {
+  it("matches the same two answers whichever order each side lists them in", () => {
+    const stored = freeze(
+      { options: [cooked, sauce] },
+      {
+        options: [
+          { listId: cooked.id, labelId: mediumRare.id },
+          { listId: sauce.id, labelId: "label-pepper" },
+        ],
+      },
+    ).optionSnapshots;
+    // What the SAME answers freeze to after the dish's attachment list is reordered: both
+    // validators answer in the offered order, so the two arrays hold the same entries transposed.
+    const frozen = freeze(
+      { options: [sauce, cooked] },
+      {
+        options: [
+          { listId: cooked.id, labelId: mediumRare.id },
+          { listId: sauce.id, labelId: "label-pepper" },
+        ],
+      },
+    ).optionSnapshots;
+
+    expect(sameOptionSelections(frozen, stored)).toBe(true);
+  });
+
+  it("differs when the label chosen from one list changed", () => {
+    const stored = freeze(
+      { options: [cooked] },
+      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
+    ).optionSnapshots;
+    const frozen = freeze(
+      { options: [cooked] },
+      { options: [{ listId: cooked.id, labelId: "label-well-done" }] },
+    ).optionSnapshots;
+
+    expect(sameOptionSelections(frozen, stored)).toBe(false);
+  });
+
+  it("differs when one side repeats an answer the other gives once", () => {
+    const [cookedAnswer] = freeze(
+      { options: [cooked] },
+      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
+    ).optionSnapshots;
+    const [sauceAnswer] = freeze(
+      { options: [sauce] },
+      { options: [{ listId: sauce.id, labelId: "label-pepper" }] },
+    ).optionSnapshots;
+
+    expect(sameOptionSelections([cookedAnswer!, cookedAnswer!], [cookedAnswer!, sauceAnswer!])).toBe(
+      false,
+    );
+  });
+
+  it("differs when the line froze an answer the edit no longer gives", () => {
+    const [cookedAnswer] = freeze(
+      { options: [cooked] },
+      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
+    ).optionSnapshots;
+    const [sauceAnswer] = freeze(
+      { options: [sauce] },
+      { options: [{ listId: sauce.id, labelId: "label-pepper" }] },
+    ).optionSnapshots;
+
+    expect(sameOptionSelections([cookedAnswer!], [cookedAnswer!, sauceAnswer!])).toBe(false);
+  });
+
+  it("differs when a list's own wording changed, the picks being all the line remembers", () => {
+    const stored = freeze(
+      { options: [cooked] },
+      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
+    ).optionSnapshots;
+    const frozen = freeze(
+      { options: [{ ...cooked, name: "Renamed staff" }] },
+      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
+    ).optionSnapshots;
+
+    expect(sameOptionSelections(frozen, stored)).toBe(false);
+  });
+});
+
+describe("matchExtraChildren", () => {
+  it("pairs each pick with its own stored child whichever order the two sides are in", () => {
+    const { extraChildren } = freeze(
+      { extras: [drinks, breads] },
+      {
+        extras: [
+          { listId: breads.id, picks: [{ productId: "product-sourdough", quantity: 2 }] },
+          { listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] },
+        ],
+      },
+    );
+    // The stored rows are in the order the lists were offered BEFORE the reorder — breads first —
+    // while `extraChildren` now comes back drinks first.
+    const children = [
+      { productId: "product-sourdough", quantity: "6.000", unitPriceGross: "1.50" },
+      { productId: "product-wine", quantity: "3.000", unitPriceGross: "4.50" },
+    ];
+
+    const paired = matchExtraChildren(extraChildren, children, "3");
+
+    expect(paired?.map(({ pick, child }) => [pick.productId, child.unitPriceGross])).toEqual([
+      ["product-wine", "4.50"],
+      ["product-sourdough", "1.50"],
+    ]);
+  });
+
+  it("reads a stored child's quantity as the dish count times the picks per dish", () => {
+    const { extraChildren } = freeze(
+      { extras: [breads] },
+      { extras: [{ listId: breads.id, picks: [{ productId: "product-sourdough", quantity: 2 }] }] },
+    );
+
+    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "6.000" }], "3")).not.toBeNull();
+    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "4.000" }], "3")).toBeNull();
+  });
+
+  it("refuses a pairing when a pick names a product no stored child holds", () => {
+    const { extraChildren } = freeze(
+      { extras: [breads] },
+      { extras: [{ listId: breads.id, picks: [{ productId: "product-rye", quantity: 1 }] }] },
+    );
+
+    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "1.000" }], "1")).toBeNull();
+  });
+
+  it("refuses a pairing when the stored line holds a child the edit no longer picks", () => {
+    const { extraChildren } = freeze(
+      { extras: [breads] },
+      { extras: [{ listId: breads.id, picks: [{ productId: "product-sourdough", quantity: 1 }] }] },
+    );
+
+    // Leaving a stored child unpaired would leave its row's quantity behind on the preserve path,
+    // so dropping a pick has to take the replacement path instead.
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [
+          { productId: "product-sourdough", quantity: "1.000" },
+          { productId: "product-rye", quantity: "1.000" },
+        ],
+        "1",
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses a pairing when the stored line holds fewer children than there are picks", () => {
+    const { extraChildren } = freeze(
+      { extras: [breads] },
+      {
+        extras: [
+          {
+            listId: breads.id,
+            picks: [
+              { productId: "product-sourdough", quantity: 1 },
+              { productId: "product-rye", quantity: 1 },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "1.000" }], "1")).toBeNull();
   });
 });

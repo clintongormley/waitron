@@ -1,5 +1,5 @@
 import { lockModifierDefinitions } from "@waitron/catalogue";
-import { buildLineExtras } from "./modifier-selection.js";
+import { buildLineExtras, matchExtraChildren, sameOptionSelections } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -8,7 +8,6 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
@@ -3139,8 +3138,10 @@ export async function updateHeldOrder(
      * never per line. A preserved line is by definition one whose dish has not changed, so the
      * stored line's own product and offer are the right holders to resolve against — no zone read.
      */
-    let rebuilt: ({ stored: StoredLine; children: StoredLine[]; picks: ExtraChild[] } | null)[] =
-      [];
+    let rebuilt: ({
+      stored: StoredLine;
+      paired: { pick: ExtraChild; child: StoredLine }[];
+    } | null)[] = [];
     if (sameBasket) {
       const contentConfig = await readContentLanguages(tx, cfg.locale);
       const modifiers = await resolveBasketModifiers(
@@ -3168,29 +3169,24 @@ export async function updateHeldOrder(
         } catch {
           return null;
         }
-        // Compared by VALUES, and index-wise because both sides are built in the OFFERED order —
-        // the validators answer in their lists' own order, never the wire's.
-        if (!isDeepStrictEqual(frozen.optionSnapshots, stored.optionSnapshots)) return null;
-        const children = childrenByParent.get(stored.id) ?? [];
-        if (children.length !== frozen.extraChildren.length) return null;
-        const same = children.every((child, childIndex) => {
-          const pick = frozen.extraChildren[childIndex]!;
-          return (
-            child.productId === pick.productId &&
-            compareDecimal(
-              multiplyDecimal(decimal(stored.quantity), decimal(String(pick.quantity))),
-              decimal(child.quantity),
-            ) === 0
-          );
-        });
-        return same ? { stored, children, picks: frozen.extraChildren } : null;
+        // Compared by VALUES and never by either side's order: both sides are built in the OFFERED
+        // order, and that order is not fixed — a product save re-numbers the dish's attachment
+        // positions, so a line stored before a reorder keeps the old one (`sameOptionSelections`,
+        // `matchExtraChildren`, modifier-selection.ts).
+        if (!sameOptionSelections(frozen.optionSnapshots, stored.optionSnapshots)) return null;
+        const paired = matchExtraChildren(
+          frozen.extraChildren,
+          childrenByParent.get(stored.id) ?? [],
+          stored.quantity,
+        );
+        return paired === null ? null : { stored, paired };
       });
     }
     const preservesEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
     if (preservesEveryLine) {
       for (let index = 0; index < req.lines.length; index++) {
         const requested = req.lines[index]!;
-        const { stored, children, picks } = rebuilt[index]!;
+        const { stored, paired } = rebuilt[index]!;
         await tx
           .update(workingOrderLines)
           .set({
@@ -3201,13 +3197,12 @@ export async function updateHeldOrder(
             and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, stored.id)),
           );
         // Each child follows its dish: the same `dishQuantity × pickQuantity` the pricer applies,
-        // recomputed from the STORED gross so the price the line was sold at is untouched. `picks[i]`
-        // is the child at `children[i]` — the two were matched index-wise above.
-        for (let childIndex = 0; childIndex < children.length; childIndex++) {
-          const child = children[childIndex]!;
+        // recomputed from the STORED gross so the price the line was sold at is untouched. Each
+        // child is taken with the pick `matchExtraChildren` paired it to, which is not its position.
+        for (const { pick, child } of paired) {
           const childQuantity = multiplyDecimal(
             decimal(requested.quantity),
-            decimal(String(picks[childIndex]!.quantity)),
+            decimal(String(pick.quantity)),
           );
           await tx
             .update(workingOrderLines)
