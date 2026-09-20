@@ -206,9 +206,12 @@ function fromDeclaration(table: PgTable): TableShape {
     }),
   ].sort();
   const uniques = [
-    ...config.columns.filter((column) => column.isUnique).map((column) => column.name),
-    ...config.uniqueConstraints.map((constraint) =>
-      constraint.columns.map((column) => column.name).join(","),
+    ...config.columns
+      .filter((column) => column.isUnique)
+      .map((column) => `${column.uniqueName ?? ""}(${column.name})`),
+    ...config.uniqueConstraints.map(
+      (constraint) =>
+        `${constraint.name}(${constraint.columns.map((column) => column.name).join(",")})`,
     ),
   ].sort();
   const indexes = [
@@ -380,7 +383,7 @@ async function fromDatabase(db: Database, name: string): Promise<TableShape> {
     .sort();
   const uniques = constraintRows
     .filter((row) => row.kind === "u")
-    .map((row) => row.columns.join(","))
+    .map((row) => `${row.name}(${row.columns.join(",")})`)
     .sort();
   const checks = constraintRows
     .filter((row) => row.kind === "c")
