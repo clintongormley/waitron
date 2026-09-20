@@ -1,15 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  asAppUser,
-  optionGroupItems,
-  optionGroups,
-  productOptionGroups,
-  withTransaction,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { asAppUser, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -18,8 +10,10 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createExtraList,
   createProduct,
   updateProduct,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -53,9 +47,13 @@ interface Seeded {
   cfg: TillConfig;
   cafeId: string;
   aguaId: string;
+  /** "Bacon" — sold only as another dish's extra here, so a child line's product id can never be
+   *  mistaken for a dish's. */
+  baconId: string;
 }
 
-/** A fresh tenant/location/till/node + a two-product catalogue (Café 1.50, Agua 2.00, both general). */
+/** A fresh tenant/location/till/node + a three-product catalogue (Café 1.50, Agua 2.00, both general;
+ *  Bacon 0.50, reduced). */
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
   await db.execute(sql`
@@ -79,7 +77,7 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const { cafeId, aguaId } = await withTransaction(db, async (tx) => {
+  const { cafeId, aguaId, baconId } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
@@ -99,10 +97,18 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "2.00",
       vatClass: "general",
     });
+    const bacon = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      name: "Bacon",
+      pricingUnit: "each",
+      unitPrice: "0.50",
+      vatClass: "reduced",
+    });
     await assignCatalogueToLocation(tx, locationId, cat.id);
-    return { cafeId: cafe.id, aguaId: agua.id };
+    return { cafeId: cafe.id, aguaId: agua.id, baconId: bacon.id };
   });
-  return { cfg, cafeId, aguaId };
+  return { cfg, cafeId, aguaId, baconId };
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -563,51 +569,45 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     expect(await tabIdOf(tInto)).toBe(intoTab); // intoTab's own table unchanged
   });
 
-  it("preserves a moved modifier line's parent linkage on merge (child points at the moved parent, not NULL)", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("preserves a moved extra child line's parent linkage on merge (child points at the moved parent, not NULL)", async () => {
+    const { cfg, cafeId, baconId } = await setupVenue();
     // addTabRound fires the round (→ fireLines), which needs a default kitchen station to route to.
     await seedKitchenStation(db, { locationId: cfg.locationId });
     const tInto = await seedTable(cfg, "MOD-into");
     const tFrom = await seedTable(cfg, "MOD-from");
 
-    // Attach an "Extras" group with a "Bacon" item to the café so the source tab can carry a parent
-    // dish line + a child modifier line (parent_line_id set) — the same shape tabs.test.ts builds.
-    const baconId = await asApp(cfg, async (tx) => {
-      const [group] = await tx
-        .insert(optionGroups)
-        .values({
-          name: { [LOCALE]: "Extras" },
-          minSelect: 0,
-          maxSelect: 2,
-          required: false,
-          sort: 0,
-        })
-        .returning({ id: optionGroups.id });
-      const [bacon] = await tx
-        .insert(optionGroupItems)
-        .values({
-          groupId: group!.id,
-          name: { [LOCALE]: "Bacon" },
-          priceDelta: "0.50",
-          vatClass: "reduced",
-          sort: 0,
-        })
-        .returning({ id: optionGroupItems.id });
-      await tx.insert(productOptionGroups).values({
-        productId: cafeId,
-        groupId: group!.id,
-        sort: 0,
-      });
-      return bacon!.id;
+    // Offer the Bacon as an extra of the café so the source tab can carry a parent dish line + a
+    // child line (parent_line_id set) — the same shape tabs.test.ts builds. `minPicks: 0` keeps the
+    // list optional, so the plain café ordered on intoTab below still passes.
+    const extraListId = await asApp(cfg, async (tx) => {
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Extras",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 2,
+          active: true,
+          items: [{ productId: baconId, maxQuantity: 2, preselected: false, price: "0.50" }],
+        },
+        LOCALE,
+      );
+      await writeProductModifiers(tx, cafeId, [{ kind: "extras", id: list.id }]);
+      return list.id;
     });
 
-    // intoTab: a plain café. fromTab: a café WITH the Bacon modifier (added via a round, the path that
-    // takes `options`) → a parent dish line + a child modifier line pointing at it.
+    // intoTab: a plain café. fromTab: a café WITH the Bacon extra (added via a round, the path that
+    // takes `extras`) → a parent dish line + a child line pointing at it.
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, []);
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, fromTab, [
-        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: baconId }] },
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: extraListId, picks: [{ productId: baconId, quantity: 1 }] }],
+        },
       ]),
     );
     const ticketBefore = await db.execute<{
@@ -619,18 +619,18 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
 
     await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
 
-    // The moved child modifier line keeps pointing at the same stable parent id.
+    // The moved child line keeps pointing at the same stable parent id. The child is the row carrying
+    // the PICKED extra product, the café dish the row carrying the dish's own.
     const dest = await db
       .select({
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         parentLineId: workingOrderLines.parentLineId,
-        optionGroupItemId: workingOrderLines.optionGroupItemId,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, intoTab))
       .orderBy(workingOrderLines.lineNo);
-    const child = dest.find((l) => l.optionGroupItemId === baconId);
+    const child = dest.find((l) => l.productId === baconId);
     expect(child).toBeDefined();
     expect(child!.parentLineId).not.toBeNull();
     // Its parent is another MOVED line on the destination: a top-level café dish (product set,
@@ -639,7 +639,6 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     expect(parent).toBeDefined();
     expect(parent!.productId).toBe(cafeId);
     expect(parent!.parentLineId).toBeNull();
-    expect(parent!.optionGroupItemId).toBeNull();
     const ticketAfter = await db.execute<{
       id: string;
       working_order_line_id: string;

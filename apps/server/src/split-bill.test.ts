@@ -17,6 +17,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  readContentLanguages,
 } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -484,20 +485,24 @@ describe("unjoinTable", () => {
   });
 });
 
-it("retains the structured modifier snapshots and the frozen names when a dish quantity is split onto a check", async () => {
+it("retains the frozen options answers and the frozen names when a dish quantity is split onto a check", async () => {
   const { cfg, aguaId, tableId } = await setupVenue();
   await asApp(cfg, async (tx) => {
     const { tabId } = await openTab(tx, cfg, {
       tableId,
       lines: [{ productId: aguaId, quantity: "3" }],
     });
-    const modifierSnapshots = [
+    // A frozen options answer is keyed by CONTENT language, which is what the order path widens the
+    // list's and label's plain staff names under (`buildLineExtras`, modifier-selection.ts).
+    const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
+    const optionSnapshots = [
       {
-        modifierId: randomUUID(),
-        name: { [LOCALE]: "Milk" },
-        type: "options" as const,
-        choiceId: "oat",
-        choiceName: { [LOCALE]: "Oat" },
+        listName: { [defaultLanguage]: "Milk" },
+        listCustomerName: { [defaultLanguage]: "Your milk" },
+        listKitchenName: "MILK",
+        labelName: { [defaultLanguage]: "Oat" },
+        labelCustomerName: { [defaultLanguage]: "Oat drink" },
+        labelKitchenName: "OAT",
       },
     ];
     // Frozen names the seeded product does not itself carry, so the split has something to lose:
@@ -510,13 +515,22 @@ it("retains the structured modifier snapshots and the frozen names when a dish q
     };
     await tx
       .update(workingOrderLines)
-      .set({ modifierSnapshots, ...names })
+      .set({ optionSnapshots, ...names })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     const { checkId } = await splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
     const source = await priceStoredOrder(tx, tabId);
     const check = await priceStoredOrder(tx, checkId);
-    expect(source.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
-    expect(check.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    // The answers are read off the LINES: `priceStoredOrder` projects the locked per-unit values a
+    // sale is filed from, and the options answers are not among them.
+    const answersOn = async (orderId: string) =>
+      (
+        await tx
+          .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId))
+      ).map((row) => row.optionSnapshots);
+    expect(await answersOn(tabId)).toEqual([optionSnapshots]);
+    expect(await answersOn(checkId)).toEqual([optionSnapshots]);
     expect(check.lines[0]).toMatchObject({ name: "Agua", ...names });
     expect(source.lines[0]).toMatchObject({ name: "Agua", ...names });
     expect(source.lines[0]!.quantity).toBe("2.000");

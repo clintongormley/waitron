@@ -1,14 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  asAppUser,
-  optionGroupItems,
-  optionGroups,
-  productOptionGroups,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { asAppUser, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -17,13 +10,16 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createExtraList,
   createProduct,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  type ExtraSelection,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
@@ -59,6 +55,9 @@ interface Seeded {
   aguaId: string;
   /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
   jamonId: string;
+  /** "Bacon" — each, 0.50 gross, reduced(10%). Sold only as another dish's extra here, so a child
+   *  line's product id can never be mistaken for a dish's. */
+  baconId: string;
   tableAId: string;
   tableBId: string;
 }
@@ -111,10 +110,25 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "24.90",
       vatClass: "reduced",
     });
+    const bacon = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      name: "Bacon",
+      pricingUnit: "each",
+      unitPrice: "0.50",
+      vatClass: "reduced",
+    });
     await assignCatalogueToLocation(tx, locationId, cat.id);
     const a = await createTable(tx, cfg, { label: "A" });
     const b = await createTable(tx, cfg, { label: "B" });
-    return { cafeId: cafe.id, aguaId: agua.id, jamonId: jamon.id, tableAId: a.id, tableBId: b.id };
+    return {
+      cafeId: cafe.id,
+      aguaId: agua.id,
+      jamonId: jamon.id,
+      baconId: bacon.id,
+      tableAId: a.id,
+      tableBId: b.id,
+    };
   });
   return { cfg, ...seeded };
 }
@@ -523,43 +537,37 @@ describe("transferLines — duplicate line_no in the batch", () => {
   });
 });
 
-describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", () => {
-  /** Attach a single-item option group to `productId`, returning the item id. */
-  async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
-    const [group] = await tx
-      .insert(optionGroups)
-      .values({
-        name: { [LOCALE]: `${name} group` },
-        minSelect: 0,
-        maxSelect: 1,
-        required: false,
-        sort: 0,
-      })
-      .returning({ id: optionGroups.id });
-    const [item] = await tx
-      .insert(optionGroupItems)
-      .values({
-        groupId: group!.id,
-        name: { [LOCALE]: name },
-        priceDelta: "0.50",
-        vatClass: "reduced",
-        sort: 0,
-      })
-      .returning({ id: optionGroupItems.id });
-    await tx.insert(productOptionGroups).values({
-      productId,
-      groupId: group!.id,
-      sort: 0,
-    });
-    return item!.id;
+describe("transferLines — extras children (FIX 2 cascade / FIX 4 split)", () => {
+  /** Offer `extraProductId` as an extra of `dishId` through a one-item list, returning the list id a
+   *  line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
+  async function addExtra(
+    tx: Transaction,
+    dishId: string,
+    extraProductId: string,
+  ): Promise<string> {
+    const list = await createExtraList(
+      tx,
+      {
+        name: "Extras",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 1,
+        active: true,
+        items: [{ productId: extraProductId, maxQuantity: 1, preselected: false, price: "0.50" }],
+      },
+      LOCALE,
+    );
+    await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
+    return list.id;
   }
 
-  /** Open an OPEN order with modifier lines and point `tableId` at it → a real tab (`lockOpenTab` needs
-   *  the back-pointer). `openTab` does not thread `options`, so build the tab directly here. No fire. */
-  async function openModifierTab(
+  /** Open an OPEN order with extras lines and point `tableId` at it → a real tab (`lockOpenTab` needs
+   *  the back-pointer). `openTab` does not thread `extras`, so build the tab directly here. No fire. */
+  async function openExtrasTab(
     cfg: TillConfig,
     tableId: string,
-    lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
+    lines: { productId: string; quantity: string; extras?: ExtraSelection[] }[],
   ): Promise<string> {
     return asApp(cfg, async (tx) => {
       const id = randomUUID();
@@ -569,14 +577,14 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
     });
   }
 
-  /** Lines of a tab with the modifier-linkage columns, owner-read, by `line_no`. */
+  /** Lines of a tab with the parent↔child linkage columns, owner-read, by `line_no`. A child line is
+   *  the one carrying the PICKED extra product and a parent link. */
   async function modLinesOf(tabId: string): Promise<
     {
       id: string;
       lineNo: number;
       productId: string | null;
       parentLineId: string | null;
-      optionGroupItemId: string | null;
     }[]
   > {
     return db
@@ -585,42 +593,49 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
         lineNo: workingOrderLines.lineNo,
         productId: workingOrderLines.productId,
         parentLineId: workingOrderLines.parentLineId,
-        optionGroupItemId: workingOrderLines.optionGroupItemId,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
   }
 
-  it("carries a parent dish's modifier children along on a whole-line transfer", async () => {
-    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
+  it("carries a parent dish's extras children along on a whole-line transfer", async () => {
+    const { cfg, cafeId, aguaId, baconId, tableAId, tableBId } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => addExtra(tx, cafeId, baconId));
     // Tab A: café (parent, line 1) + bacon child (line 2). Tab B: agua (line 1).
-    const tabA = await openModifierTab(cfg, tableAId, [
-      { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
+    const tabA = await openExtrasTab(cfg, tableAId, [
+      {
+        productId: cafeId,
+        quantity: "1",
+        extras: [{ listId: extraListId, picks: [{ productId: baconId, quantity: 1 }] }],
+      },
     ]);
-    const tabB = await openModifierTab(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    const tabB = await openExtrasTab(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
 
     // Transfer the PARENT dish (line 1) whole — its child must follow, not orphan on the source.
     await asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1 }]));
 
     expect(await modLinesOf(tabA)).toEqual([]); // both left the source
     const b = await modLinesOf(tabB);
-    expect(b.map((l) => l.productId)).toEqual([aguaId, cafeId, null]);
+    expect(b.map((l) => l.productId)).toEqual([aguaId, cafeId, baconId]);
     const parent = b.find((l) => l.productId === cafeId)!;
-    const child = b.find((l) => l.optionGroupItemId === bacon)!;
+    const child = b.find((l) => l.productId === baconId)!;
     // The moved child points at the moved dish's NEW id (remapped), never null.
     expect(child.parentLineId).toBe(parent.id);
     expect(child.parentLineId).not.toBeNull();
   });
 
-  it("refuses transferring a modifier CHILD line on its own (tab.transfer_modifier_line)", async () => {
-    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
-    const tabA = await openModifierTab(cfg, tableAId, [
-      { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
+  it("refuses transferring an extra's CHILD line on its own (tab.transfer_modifier_line)", async () => {
+    const { cfg, cafeId, aguaId, baconId, tableAId, tableBId } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => addExtra(tx, cafeId, baconId));
+    const tabA = await openExtrasTab(cfg, tableAId, [
+      {
+        productId: cafeId,
+        quantity: "1",
+        extras: [{ listId: extraListId, picks: [{ productId: baconId, quantity: 1 }] }],
+      },
     ]);
-    const tabB = await openModifierTab(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    const tabB = await openExtrasTab(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
 
     await expect(
       asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 2 }])),
@@ -633,14 +648,18 @@ describe("transferLines — ordering modifiers (FIX 2 cascade / FIX 4 split)", (
     expect((await modLinesOf(tabB)).map((l) => l.productId)).toEqual([aguaId]);
   });
 
-  it("refuses a partial split of a dish that carries modifiers (tab.transfer_modifier_line)", async () => {
-    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
-    const bacon = await asApp(cfg, (tx) => addOption(tx, cafeId, "Bacon"));
+  it("refuses a partial split of a dish that carries extras (tab.transfer_modifier_line)", async () => {
+    const { cfg, cafeId, aguaId, baconId, tableAId, tableBId } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => addExtra(tx, cafeId, baconId));
     // café ×2 (parent, line 1) + bacon child (line 2).
-    const tabA = await openModifierTab(cfg, tableAId, [
-      { productId: cafeId, quantity: "2", options: [{ optionGroupItemId: bacon }] },
+    const tabA = await openExtrasTab(cfg, tableAId, [
+      {
+        productId: cafeId,
+        quantity: "2",
+        extras: [{ listId: extraListId, picks: [{ productId: baconId, quantity: 1 }] }],
+      },
     ]);
-    const tabB = await openModifierTab(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    const tabB = await openExtrasTab(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
 
     await expect(
       asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }])),

@@ -1,5 +1,4 @@
-import type { ModifierSelection } from "@waitron/shared";
-import type { ModifierSnapshot } from "@waitron/shared";
+import type { ExtraSelection, ModifierSnapshot, OptionSelection } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-config.ts`/`config.ts` follow (a bare import, no value
@@ -84,11 +83,10 @@ export interface TillTender {
  * that order's own id here, so the settle lands on the retrieved order rather than a fresh walk-up one.
  */
 export interface TillSaleRequest {
-  /** The walk-up basket. A line MAY carry selected modifier `options` (ordering modifiers, Task 6) —
-   *  each an `optionGroupItemId` chosen from the product's attached option groups; the server validates
-   *  them and files the dish as a parent line plus one child line per option. Absent = a plain line. An
-   *  option MAY carry `quantity` (a small positive integer, absent = 1) — the per-option count, capped
-   *  by the item's `max_quantity` and priced per dish (`dishQty × optionQty`); the server is the gate.
+  /** The walk-up basket. A line MAY carry `options` — one `{ listId, labelId }` answer per ACTIVE
+   *  options list its dish attaches, frozen onto the dish line — and `extras`, whose picks each become
+   *  a child line carrying the picked product at the offer's price and that product's own VAT. The
+   *  server validates both against the dish's own definitions and is the gate.
    *
    *  A line MAY also carry per-line `LineExtras` (NON-FISCAL) — validated and persisted server-side and
    *  never threaded into any sale/fiscal projection. Declared here because the till already sends them
@@ -97,8 +95,8 @@ export interface TillSaleRequest {
     productId?: string;
     menuItemId?: string;
     quantity: string;
-    options?: { optionGroupItemId: string; quantity?: number }[];
-    modifierSelections?: ModifierSelection[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
   } & LineExtras)[];
   /**
    * How the customer paid. `cash` (7a) and `card` (this slice) are the two supported methods:
@@ -260,16 +258,16 @@ export interface PayWorkingOrderRequest {
   id: string;
   /** The walk-up basket to price and file; IGNORED for a retrieved order, which files its stored
    *  locked lines (see this interface's doc comment). A walk-up line MAY carry selected modifier
-   *  `options` (ordering modifiers, Task 6), threaded to `createOpenOrder` → `priceOrderLines`; each
-   *  option MAY carry a per-option `quantity` (absent = 1), validated + priced server-side. A line MAY
+   *  `extras` and `options` (spec §2.3, §3.4), threaded to `createOpenOrder` → `priceOrderLines`, which
+   *  validates both against the dish's own definitions and prices each pick per dish. A line MAY
    *  also carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never threaded
    *  into a fiscal projection. Declared here because the till already sends them on this wire. */
   lines: ({
     productId?: string;
     menuItemId?: string;
     quantity: string;
-    options?: { optionGroupItemId: string; quantity?: number }[];
-    modifierSelections?: ModifierSelection[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
   } & LineExtras)[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
@@ -294,9 +292,16 @@ export interface PayWorkingOrderRequest {
 export interface IntegratedPayRequest {
   id: string;
   /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock).
-   *  A line MAY carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never
-   *  threaded into a fiscal projection. Declared here because the till already sends them on this wire. */
-  lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+   *  A line MAY carry `extras` and `options` (spec §2.3, §3.4) and per-line `LineExtras` (NON-FISCAL),
+   *  all validated server-side; the customisation is never threaded into a fiscal projection. Declared
+   *  here because the till already sends them on this wire. */
+  lines: ({
+    productId?: string;
+    menuItemId?: string;
+    quantity: string;
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
+  } & LineExtras)[];
   /** The selected service zone for a new counter order. Existing orders use their stored context. */
   zoneId?: string;
   /** The card reader to charge on, when the caller overrides the paying device's default (Task 17's

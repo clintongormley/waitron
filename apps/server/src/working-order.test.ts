@@ -4,11 +4,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
   captureError,
-  optionGroupItems,
-  optionGroups,
   pgErrorCode,
   printJobs,
-  productOptionGroups,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -24,19 +21,18 @@ import {
   createCategory,
   createMenuItem,
   createMenuSection,
-  createOptionGroup,
-  createOptionGroupItem,
   createProduct,
   listAvailableProducts,
   priceBasket,
   replaceProductCategories,
-  setMenuItemOptionGroups,
   setMenuVariants,
   setProductVariants,
   updateCategory,
   EACH_UNIT,
 } from "@waitron/catalogue";
 import * as catalogue from "@waitron/catalogue";
+import type { DietaryLabel } from "@waitron/catalogue";
+import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -239,6 +235,115 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     eachUnitId,
     kgUnitId,
   };
+}
+
+/**
+ * The venue's default content language — what the order path widens a plain staff name under when it
+ * freezes an options answer, and the key a product's customer-name map has to use to be read back.
+ */
+const CONTENT_LANGUAGE = "es";
+
+/** Attach one more list to a product without dropping what it already carries: `writeProductModifiers`
+ *  replaces the whole set. */
+async function attachModifierList(
+  tx: Transaction,
+  productId: string,
+  ref: { kind: "extras" | "options"; id: string },
+): Promise<void> {
+  const carried = (await catalogue.readProductModifiers(tx, [productId])).get(productId) ?? [];
+  await catalogue.writeProductModifiers(tx, productId, [
+    ...carried.map((each) => ({ kind: each.kind, id: each.id })),
+    ref,
+  ]);
+}
+
+/**
+ * An extras list offering ONE product, attached to `dishId`. Its three names all differ, and so do
+ * the offered product's, so a surface reading the wrong one of the six fails (CLAUDE.md §4).
+ *
+ * `price` is the list item's own — `null` makes it borrow the offered product's `unitPrice`, which is
+ * deliberately different, so a child priced at `unitPrice` when a `price` was given means the offer
+ * was never read.
+ */
+async function addExtraList(
+  tx: Transaction,
+  catalogueId: string,
+  dishId: string,
+  label: string,
+  opts: {
+    price?: string | null;
+    unitPrice?: string;
+    vatClass?: "general" | "reduced" | "super_reduced" | "zero";
+    maxQuantity?: number;
+    minPicks?: number;
+    maxPicks?: number | null;
+    active?: boolean;
+  } = {},
+): Promise<{ listId: string; productId: string }> {
+  const offered = await createProduct(tx, {
+    catalogueId,
+    categoryId: null,
+    name: `${label} staff`,
+    customerName: { [CONTENT_LANGUAGE]: `${label} customer` },
+    kitchenName: `${label} kitchen`,
+    pricingUnit: "each",
+    unitPrice: opts.unitPrice ?? "9.99",
+    vatClass: opts.vatClass ?? "general",
+  });
+  const list = await catalogue.createExtraList(
+    tx,
+    {
+      name: `${label} list staff`,
+      customerName: { [CONTENT_LANGUAGE]: `${label} list customer` },
+      kitchenName: `${label} list kitchen`,
+      minPicks: opts.minPicks ?? 0,
+      maxPicks: opts.maxPicks === undefined ? null : opts.maxPicks,
+      active: opts.active ?? true,
+      items: [
+        {
+          productId: offered.id,
+          maxQuantity: opts.maxQuantity ?? 1,
+          preselected: false,
+          price: opts.price === undefined ? "0.50" : opts.price,
+        },
+      ],
+    },
+    LOCALE,
+  );
+  await attachModifierList(tx, dishId, { kind: "extras", id: list.id });
+  return { listId: list.id, productId: offered.id };
+}
+
+/**
+ * An options list of one or more labels, attached to `dishId`. Every ACTIVE options list a dish
+ * carries MUST be answered, so a fixture that adds one commits every line ordering that dish to
+ * answering it.
+ */
+async function addOptionList(
+  tx: Transaction,
+  dishId: string,
+  label: string,
+  labelNames: string[] = [label],
+): Promise<{ listId: string; labelIds: string[] }> {
+  const list = await catalogue.createOptionList(
+    tx,
+    {
+      name: `${label} list staff`,
+      customerName: { [CONTENT_LANGUAGE]: `${label} list customer` },
+      kitchenName: `${label} list kitchen`,
+      defaultLabelId: null,
+      active: true,
+      labels: labelNames.map((each) => ({
+        name: `${each} staff`,
+        customerName: { [CONTENT_LANGUAGE]: `${each} customer` },
+        kitchenName: `${each} kitchen`,
+        available: true,
+      })),
+    },
+    LOCALE,
+  );
+  await attachModifierList(tx, dishId, { kind: "options", id: list.id });
+  return { listId: list.id, labelIds: list.labels.map((each) => each.id) };
 }
 
 /**
@@ -1122,27 +1227,24 @@ describe("getHeldOrder", () => {
     ]);
   });
 
-  it("reconstructs a parked offer with its modifiers, customisation and locked display prices", async () => {
-    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
-    const optionId = await withTransaction(db, async (tx) => {
+  it("reconstructs a parked offer with its extras, customisation and locked display prices", async () => {
+    const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const group = await createOptionGroup(tx, {
-        name: { [LOCALE]: "Extras" },
-        maxSelect: 2,
-      });
-      const option = await createOptionGroupItem(tx, group.id, {
-        name: { [LOCALE]: "Leche extra" },
-        priceDelta: "0.10",
+      const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
+        price: "0.10",
         maxQuantity: 2,
+        maxPicks: 2,
       });
-      await tx.insert(productOptionGroups).values({
-        productId: cafeId,
-        groupId: group.id,
-      });
-      await setMenuItemOptionGroups(tx, premiumCafeOfferId, [
-        { groupId: group.id, options: [{ optionId: option.id, priceDelta: "0.75" }] },
+      // The OFFER reprices what the list charges, so a child at 0.10 would mean the menu's own
+      // override was never read.
+      await catalogue.setMenuItemExtraLists(tx, premiumCafeOfferId, [
+        {
+          listId: attached.listId,
+          items: [{ productId: attached.productId, price: "0.75", available: true }],
+        },
       ]);
-      return option.id;
+      return attached;
     });
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
@@ -1152,7 +1254,7 @@ describe("getHeldOrder", () => {
         {
           menuItemId: premiumCafeOfferId,
           quantity: "2",
-          options: [{ optionGroupItemId: optionId, quantity: 2 }],
+          extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 2 }] }],
           note: "Sin espuma",
           doneness: "medium",
         },
@@ -1169,11 +1271,13 @@ describe("getHeldOrder", () => {
         quantity: "2.000",
         note: "Sin espuma",
         doneness: "medium",
-        options: [
+        extras: [
           {
-            optionGroupItemId: optionId,
-            name: { [LOCALE]: "Leche extra" },
-            priceDelta: "0.75",
+            productId: extra.productId,
+            name: "Leche staff",
+            descriptions: { [LOCALE]: "Leche customer" },
+            kitchenName: "Leche kitchen",
+            price: "0.75",
             quantity: 2,
           },
         ],
@@ -1254,8 +1358,8 @@ describe("getHeldOrder", () => {
       orderNumber: 1,
       label: "Mesa 7",
       lines: [
-        { productId: cafeId, quantity: "1.000", modifierSnapshots: [] },
-        { productId: aguaId, quantity: "3.000", modifierSnapshots: [] },
+        { productId: cafeId, quantity: "1.000", optionSnapshots: [] },
+        { productId: aguaId, quantity: "3.000", optionSnapshots: [] },
       ],
     });
   });
@@ -1293,28 +1397,25 @@ describe("getHeldOrder", () => {
 });
 
 describe("updateHeldOrder", () => {
-  it("keeps modifier rows and customisation on a quantity-only edit", async () => {
-    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
-    const optionId = await withTransaction(db, async (tx) => {
+  it("keeps extras rows and customisation on a quantity-only edit", async () => {
+    const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const group = await createOptionGroup(tx, {
-        name: { [LOCALE]: "Extras" },
-        maxSelect: 2,
-      });
-      const option = await createOptionGroupItem(tx, group.id, {
-        name: { [LOCALE]: "Leche extra" },
+      const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
+        price: "0.10",
         maxQuantity: 2,
+        maxPicks: 2,
       });
-      await tx.insert(productOptionGroups).values({
-        productId: cafeId,
-        groupId: group.id,
-      });
-      await setMenuItemOptionGroups(tx, premiumCafeOfferId, [
-        { groupId: group.id, options: [{ optionId: option.id, priceDelta: "0.75" }] },
+      await catalogue.setMenuItemExtraLists(tx, premiumCafeOfferId, [
+        {
+          listId: attached.listId,
+          items: [{ productId: attached.productId, price: "0.75", available: true }],
+        },
       ]);
-      return option.id;
+      return attached;
     });
     const id = randomUUID();
+    const picks = [{ productId: extra.productId, quantity: 2 }];
     await parkOrder({ db }, cfg, {
       id,
       zoneId,
@@ -1322,7 +1423,7 @@ describe("updateHeldOrder", () => {
         {
           menuItemId: premiumCafeOfferId,
           quantity: "1",
-          options: [{ optionGroupItemId: optionId, quantity: 2 }],
+          extras: [{ listId: extra.listId, picks }],
           note: "Sin espuma",
           doneness: "medium",
         },
@@ -1339,14 +1440,14 @@ describe("updateHeldOrder", () => {
     await db.execute(sql`
       update menu_items set gross_price = 9.00 where id = ${premiumCafeOfferId}`);
     await db.execute(sql`
-      update menu_item_options set price_delta = 4.00 where menu_item_id = ${premiumCafeOfferId}`);
+      update menu_item_extra_items set price = 4.00 where menu_item_id = ${premiumCafeOfferId}`);
     await updateHeldOrder({ db }, cfg, id, {
       lines: [
         {
           workingOrderLineId: before.rows[0]!.id,
           menuItemId: premiumCafeOfferId,
           quantity: "3",
-          options: [{ optionGroupItemId: optionId, quantity: 2 }],
+          extras: [{ listId: extra.listId, picks }],
           note: "Sin espuma",
           doneness: "medium",
         },
@@ -1737,7 +1838,8 @@ async function placeOrderWith(
   lines: {
     productId: string;
     quantity: string;
-    options?: { optionGroupItemId: string }[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
     note?: string;
     doneness?: Doneness;
   }[],
@@ -1760,47 +1862,47 @@ async function placeOrderWith(
   return { id };
 }
 
-/** Attach a fresh single-item option group to `productId` and return the option-item id — the shape a
- *  line's `options: [{ optionGroupItemId }]` selects, for the modifier sub-item tests. */
-async function addOption(
+/** Attach a fresh one-product extras list to `dishId`, priced 0.50 at the reduced rate — the shape a
+ *  line's `extras: [{ listId, picks: [{ productId }] }]` picks from, for the child-line tests.
+ *
+ *  The extra's OWN allergens and dietary labels live on the PRODUCT the list offers, which is where
+ *  the kitchen and expo reads take them from. Omitted leaves `allergens` null and the declarations
+ *  empty. */
+async function addExtra(
   tx: Transaction,
-  productId: string,
+  catalogueId: string,
+  dishId: string,
   name: string,
-  // The option's OWN allergens and positive dietary suitability. Omitted for a plain option (the modifier
-  // sub-item tests), so `add_allergens` stays null and `dietary_suitability` an empty list.
   overlay?: {
     add?: AllergenMap;
-    suitableFor?: string[] | null;
+    suitableFor?: DietaryLabel[];
   },
-): Promise<string> {
-  const [group] = await tx
-    .insert(optionGroups)
-    .values({
-      name: { [LOCALE]: `${name} group` },
-      minSelect: 0,
-      maxSelect: 1,
-      required: false,
-      sort: 0,
-    })
-    .returning({ id: optionGroups.id });
-  const [item] = await tx
-    .insert(optionGroupItems)
-    .values({
-      groupId: group!.id,
-      name: { [LOCALE]: name },
-      priceDelta: "0.50",
-      vatClass: "reduced",
-      sort: 0,
-      addAllergens: overlay?.add ?? null,
-      dietarySuitability: overlay?.suitableFor ?? [],
-    })
-    .returning({ id: optionGroupItems.id });
-  await tx.insert(productOptionGroups).values({
-    productId,
-    groupId: group!.id,
-    sort: 0,
+): Promise<{ listId: string; productId: string }> {
+  const offered = await createProduct(tx, {
+    catalogueId,
+    categoryId: null,
+    name,
+    pricingUnit: "each",
+    unitPrice: "9.99",
+    vatClass: "reduced",
+    ...(overlay?.add === undefined ? {} : { allergens: overlay.add }),
+    ...(overlay?.suitableFor === undefined ? {} : { dietaryDeclarations: overlay.suitableFor }),
   });
-  return item!.id;
+  const list = await catalogue.createExtraList(
+    tx,
+    {
+      name: `${name} list`,
+      customerName: null,
+      kitchenName: null,
+      minPicks: 0,
+      maxPicks: 1,
+      active: true,
+      items: [{ productId: offered.id, maxQuantity: 1, preselected: false, price: "0.50" }],
+    },
+    LOCALE,
+  );
+  await attachModifierList(tx, dishId, { kind: "extras", id: list.id });
+  return { listId: list.id, productId: offered.id };
 }
 
 /** The order's ticket items joined back to each line's product, for asserting where each line routed. */
@@ -2346,19 +2448,22 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("attaches a parent's selected options as modifier sub-items on listStationQueue and listExpoQueue", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("attaches a parent's picked extras as sub-items on listStationQueue and listExpoQueue", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      // Café with TWO selected options — each a child modifier line, never its own ticket item.
-      const grande = await addOption(tx, cafeId, "Grande");
-      const avena = await addOption(tx, cafeId, "Leche avena");
+      // Café with TWO picked extras — each a child line, never its own ticket item.
+      const grande = await addExtra(tx, catalogueId, cafeId, "Grande");
+      const avena = await addExtra(tx, catalogueId, cafeId, "Leche avena");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
           productId: cafeId,
           quantity: "1",
-          options: [{ optionGroupItemId: grande }, { optionGroupItemId: avena }],
+          extras: [
+            { listId: grande.listId, picks: [{ productId: grande.productId, quantity: 1 }] },
+            { listId: avena.listId, picks: [{ productId: avena.productId, quantity: 1 }] },
+          ],
         },
       ]);
 
@@ -2464,9 +2569,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
       });
-      const gfBun = await addOption(tx, burger.id, "Pan sin gluten");
+      const gfBun = await addExtra(tx, catalogueId, burger.id, "Pan sin gluten");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
-        { productId: burger.id, quantity: "1", options: [{ optionGroupItemId: gfBun }] },
+        {
+          productId: burger.id,
+          quantity: "1",
+          extras: [{ listId: gfBun.listId, picks: [{ productId: gfBun.productId, quantity: 1 }] }],
+        },
       ]);
       // The parent dish line (parentLineId IS NULL) — the key the queue item is attached under.
       const [parent] = await tx
@@ -2502,9 +2611,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
-      const opt = await addOption(tx, dish, "Extra");
+      const opt = await addExtra(tx, catalogueId, dish, "Extra");
       await placeOrderWith(tx, cfg, [
-        { productId: dish, quantity: "1", options: [{ optionGroupItemId: opt }] },
+        {
+          productId: dish,
+          quantity: "1",
+          extras: [{ listId: opt.listId, picks: [{ productId: opt.productId, quantity: 1 }] }],
+        },
       ]);
       const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(item.asServed.pending).toBe(true);
@@ -2551,11 +2664,15 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
       });
-      const nuts = await addOption(tx, dish.id, "Con nueces", {
+      const nuts = await addExtra(tx, catalogueId, dish.id, "Con nueces", {
         add: { nuts: { presence: "contains" } },
       });
       await placeOrderWith(tx, cfg, [
-        { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: nuts }] },
+        {
+          productId: dish.id,
+          quantity: "1",
+          extras: [{ listId: nuts.listId, picks: [{ productId: nuts.productId, quantity: 1 }] }],
+        },
       ]);
       const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(item.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
@@ -2577,11 +2694,17 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         dietaryDeclarations: ["vegan"],
       });
-      const dairyFree = await addOption(tx, dish.id, "Sin lácteos", {
+      const dairyFree = await addExtra(tx, catalogueId, dish.id, "Sin lácteos", {
         suitableFor: [],
       });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
-        { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: dairyFree }] },
+        {
+          productId: dish.id,
+          quantity: "1",
+          extras: [
+            { listId: dairyFree.listId, picks: [{ productId: dairyFree.productId, quantity: 1 }] },
+          ],
+        },
       ]);
       const [parent] = await tx
         .select({ id: workingOrderLines.id })
@@ -2623,12 +2746,16 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         dietaryDeclarations: ["vegan"],
       });
-      const bacon = await addOption(tx, dish.id, "Con bacon", {
+      const bacon = await addExtra(tx, catalogueId, dish.id, "Con bacon", {
         add: { milk: { presence: "contains" } },
         suitableFor: ["halal"],
       });
       await placeOrderWith(tx, cfg, [
-        { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: bacon }] },
+        {
+          productId: dish.id,
+          quantity: "1",
+          extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
+        },
       ]);
 
       const stationItem = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
@@ -3664,7 +3791,7 @@ describe("addTabRound hold-on-send (A3)", () => {
       );
       const modified = await makeProduct(tx, cfg, catalogueId, {});
       const plain = await makeProduct(tx, cfg, catalogueId, {});
-      const extra = await addOption(tx, modified, "Extra");
+      const extra = await addExtra(tx, catalogueId, modified, "Extra");
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
 
@@ -3672,7 +3799,7 @@ describe("addTabRound hold-on-send (A3)", () => {
         {
           productId: modified,
           quantity: "1",
-          options: [{ optionGroupItemId: extra }],
+          extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] }],
           hold: false,
         },
         { productId: plain, quantity: "1", hold: true },
@@ -4092,47 +4219,48 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 // paths are covered by the SAME code. PGlite: plain SQL + the by-id FK, no privilege or
 // concurrency dimension.
 // ---------------------------------------------------------------------------------------------------
-describe("voidTabLine modifier cascade (FIX 2)", () => {
-  /** Attach a maxSelect≥2 option group whose item allows ×2 to `productId`, returning the first item's
-   *  id. A group that ACCEPTS a tally of two AND an item cap of two, so a doubled selection now SUMS to
-   *  a per-option quantity of 2 (per-option quantity) rather than being dropped, and is valid. */
-  async function addMultiOption(tx: Transaction, productId: string, name: string): Promise<string> {
-    const [group] = await tx
-      .insert(optionGroups)
-      .values({
-        name: { [LOCALE]: `${name} group` },
-        minSelect: 0,
-        maxSelect: 2,
-        required: false,
-        sort: 0,
-      })
-      .returning({ id: optionGroups.id });
-    const [item] = await tx
-      .insert(optionGroupItems)
-      .values({
-        groupId: group!.id,
-        name: { [LOCALE]: name },
-        priceDelta: "0.50",
-        vatClass: "reduced",
-        maxQuantity: 2,
-        sort: 0,
-      })
-      .returning({ id: optionGroupItems.id });
-    await tx.insert(productOptionGroups).values({
-      productId,
-      groupId: group!.id,
-      sort: 0,
+describe("voidTabLine extras cascade (FIX 2)", () => {
+  /** Attach an extras list whose one product may be picked TWICE, returning the ids the wire needs. A
+   *  list that ACCEPTS a tally of two AND an item cap of two, so a doubled pick SUMS to a per-dish
+   *  quantity of 2 rather than being dropped, and is valid. */
+  async function addMultiExtra(
+    tx: Transaction,
+    catalogueId: string,
+    dishId: string,
+    name: string,
+  ): Promise<{ listId: string; productId: string }> {
+    const offered = await createProduct(tx, {
+      catalogueId,
+      categoryId: null,
+      name,
+      pricingUnit: "each",
+      unitPrice: "9.99",
+      vatClass: "reduced",
     });
-    return item!.id;
+    const list = await catalogue.createExtraList(
+      tx,
+      {
+        name: `${name} list`,
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 2,
+        active: true,
+        items: [{ productId: offered.id, maxQuantity: 2, preselected: false, price: "0.50" }],
+      },
+      LOCALE,
+    );
+    await attachModifierList(tx, dishId, { kind: "extras", id: list.id });
+    return { listId: list.id, productId: offered.id };
   }
 
-  /** Open an OPEN order with modifier lines and point a fresh table at it → a real tab (`lockOpenTab`
+  /** Open an OPEN order with extras lines and point a fresh table at it → a real tab (`lockOpenTab`
    *  needs the `dining_tables.tab_id` back-pointer). Skips firing, so no station is required. */
-  async function openModifierTab(
+  async function openExtrasTab(
     tx: Transaction,
     cfg: TillConfig,
     tableId: string,
-    lines: { productId: string; quantity: string; options?: { optionGroupItemId: string }[] }[],
+    lines: { productId: string; quantity: string; extras?: ExtraSelection[] }[],
   ): Promise<string> {
     const id = randomUUID();
     await createOpenOrder(tx, cfg, id, lines, null);
@@ -4140,44 +4268,19 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     return id;
   }
 
-  async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
-    const [group] = await tx
-      .insert(optionGroups)
-      .values({
-        name: { [LOCALE]: `${name} group` },
-        minSelect: 0,
-        maxSelect: 1,
-        required: false,
-        sort: 0,
-      })
-      .returning({ id: optionGroups.id });
-    const [item] = await tx
-      .insert(optionGroupItems)
-      .values({
-        groupId: group!.id,
-        name: { [LOCALE]: name },
-        priceDelta: "0.50",
-        vatClass: "reduced",
-        sort: 0,
-      })
-      .returning({ id: optionGroupItems.id });
-    await tx.insert(productOptionGroups).values({
-      productId,
-      groupId: group!.id,
-      sort: 0,
-    });
-    return item!.id;
-  }
-
-  it("voiding a PARENT dish removes its modifier children too (no orphan FK 23503)", async () => {
-    const { cfg, cafeId, aguaId } = await setupVenue();
+  it("voiding a PARENT dish removes its extras children too (no orphan FK 23503)", async () => {
+    const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addOption(tx, cafeId, "Bacon");
+      const bacon = await addExtra(tx, catalogueId, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child), line 3 = agua (plain).
-      const tabId = await openModifierTab(tx, cfg, tableId, [
-        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
+      const tabId = await openExtrasTab(tx, cfg, tableId, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
+        },
         { productId: aguaId, quantity: "1" },
       ]);
       await voidTabLine(tx, cfg, tabId, 1);
@@ -4196,15 +4299,19 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     });
   });
 
-  it("voiding a CHILD modifier line removes only that line (its dish stays)", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("voiding a CHILD extras line removes only that line (its dish stays)", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addOption(tx, cafeId, "Bacon");
+      const bacon = await addExtra(tx, catalogueId, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child).
-      const tabId = await openModifierTab(tx, cfg, tableId, [
-        { productId: cafeId, quantity: "1", options: [{ optionGroupItemId: bacon }] },
+      const tabId = await openExtrasTab(tx, cfg, tableId, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
+        },
       ]);
       await voidTabLine(tx, cfg, tabId, 2);
       const remaining = await tx
@@ -4215,17 +4322,52 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      // Only the child left; the dish is untouched.
+      // Only the dish left; the child is the one that went.
       expect(remaining.map((r) => r.lineNo)).toEqual([1]);
       expect(remaining[0]!.productId).toBe(cafeId);
     });
   });
 
-  it("SUMS a repeated optionGroupItemId in one line into ONE child at the summed quantity (per-option quantity)", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("REFUSES a product picked twice in one list rather than dropping or doubling it", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addMultiOption(tx, cafeId, "Bacon"); // maxSelect 2, item maxQuantity 2
+      const bacon = await addMultiExtra(tx, catalogueId, cafeId, "Bacon");
+      // The same product named twice in one list's picks — reachable via a crafted client. A count
+      // belongs in `quantity`, so two entries for one product are a malformed answer and neither
+      // entry may be quietly dropped (which would serve and cook an extra unbilled).
+      const error = await captureError(() =>
+        createOpenOrder(
+          tx,
+          cfg,
+          randomUUID(),
+          [
+            {
+              productId: cafeId,
+              quantity: "1",
+              extras: [
+                {
+                  listId: bacon.listId,
+                  picks: [
+                    { productId: bacon.productId, quantity: 1 },
+                    { productId: bacon.productId, quantity: 1 },
+                  ],
+                },
+              ],
+            },
+          ],
+          null,
+        ),
+      );
+      expect(error).toMatchObject({ code: "extras.invalid", params: { field: "productId" } });
+    });
+  });
+
+  it("prices ONE child at the picked per-dish quantity", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      const bacon = await addMultiExtra(tx, catalogueId, cafeId, "Bacon"); // maxPicks 2, item cap 2
       const id = randomUUID();
       await createOpenOrder(
         tx,
@@ -4235,9 +4377,9 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
           {
             productId: cafeId,
             quantity: "1",
-            // The SAME option named twice on a multi-select group — reachable via a crafted client.
-            // Each entry contributes 1, so the summed per-option quantity is 2 (NOT silently dropped).
-            options: [{ optionGroupItemId: bacon }, { optionGroupItemId: bacon }],
+            extras: [
+              { listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 2 }] },
+            ],
           },
         ],
         null,
@@ -4246,120 +4388,91 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
         .select({
           lineNo: workingOrderLines.lineNo,
           parentLineId: workingOrderLines.parentLineId,
-          optionGroupItemId: workingOrderLines.optionGroupItemId,
+          productId: workingOrderLines.productId,
           quantity: workingOrderLines.quantity,
           lineTotal: workingOrderLines.lineTotal,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
-      // ONE parent + ONE child — the duplicate SUMS to quantity 2, not two identical children and not
-      // one dropped: the child is priced/persisted as 2 (dish ×1 × option ×2), 0.50 × 2 = 1.00 gross.
+      // ONE parent + ONE child at quantity 2 (dish ×1 × pick ×2), 0.50 × 2 = 1.00 gross.
       expect(lines).toHaveLength(2);
       expect(lines[0]!.parentLineId).toBeNull();
       expect(lines.filter((l) => l.parentLineId !== null)).toHaveLength(1);
-      expect(lines[1]!.optionGroupItemId).toBe(bacon);
+      expect(lines[1]!.productId).toBe(bacon.productId);
       expect(lines[1]!.quantity).toBe("2.000");
       expect(lines[1]!.lineTotal).toBe("1.00");
     });
   });
 });
 
-describe("priceOrderLines per-option quantity (resolve loop)", () => {
-  /** Attach an option group to `productId` with a configurable per-group max_select and per-item
-   *  max_quantity; returns the single item's id. `priceDelta` is 0.50 reduced, like the other helpers. */
-  async function addQtyOption(
+describe("priceOrderLines extras quantities (resolve loop)", () => {
+  /** An extras list offering ONE product at 0.50, with a configurable per-list `maxPicks` and
+   *  per-item `maxQuantity`. */
+  async function addQtyExtra(
     tx: Transaction,
-    productId: string,
+    catalogueId: string,
+    dishId: string,
     name: string,
-    opts: {
-      minSelect?: number;
-      maxSelect?: number;
-      required?: boolean;
-      maxQuantity?: number;
-    } = {},
-  ): Promise<string> {
-    const [group] = await tx
-      .insert(optionGroups)
-      .values({
-        name: { [LOCALE]: `${name} group` },
-        minSelect: opts.minSelect ?? 0,
-        maxSelect: opts.maxSelect ?? 1,
-        required: opts.required ?? false,
-        sort: 0,
-      })
-      .returning({ id: optionGroups.id });
-    const [item] = await tx
-      .insert(optionGroupItems)
-      .values({
-        groupId: group!.id,
-        name: { [LOCALE]: name },
-        priceDelta: "0.50",
-        vatClass: "reduced",
-        maxQuantity: opts.maxQuantity ?? 1,
-        sort: 0,
-      })
-      .returning({ id: optionGroupItems.id });
-    await tx.insert(productOptionGroups).values({
-      productId,
-      groupId: group!.id,
-      sort: 0,
+    opts: { maxPicks?: number | null; maxQuantity?: number } = {},
+  ): Promise<{ listId: string; productId: string }> {
+    return addExtraList(tx, catalogueId, dishId, name, {
+      price: "0.50",
+      vatClass: "reduced",
+      maxPicks: opts.maxPicks === undefined ? null : opts.maxPicks,
+      maxQuantity: opts.maxQuantity ?? 1,
     });
-    return item!.id;
   }
 
-  /** Attach a group with TWO items (each priceDelta 0.50), configurable max_select/max_quantity;
-   *  returns both item ids. For the max_select-tally cases with distinct picks. */
-  async function addTwoItemGroup(
+  /** An extras list offering TWO products (each 0.50), for the maxPicks-tally cases with distinct
+   *  picks. */
+  async function addTwoProductList(
     tx: Transaction,
-    productId: string,
-    opts: { maxSelect?: number; maxQuantity?: number } = {},
-  ): Promise<[string, string]> {
-    const [group] = await tx
-      .insert(optionGroups)
-      .values({
-        name: { [LOCALE]: "Extras group" },
-        minSelect: 0,
-        maxSelect: opts.maxSelect ?? 2,
-        required: false,
-        sort: 0,
-      })
-      .returning({ id: optionGroups.id });
-    const rows = await tx
-      .insert(optionGroupItems)
-      .values([
-        {
-          groupId: group!.id,
-          name: { [LOCALE]: "Uno" },
-          priceDelta: "0.50",
+    catalogueId: string,
+    dishId: string,
+    opts: { maxPicks?: number; maxQuantity?: number } = {},
+  ): Promise<{ listId: string; uno: string; dos: string }> {
+    const offered = [];
+    for (const name of ["Uno", "Dos"]) {
+      offered.push(
+        await createProduct(tx, {
+          catalogueId,
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice: "9.99",
           vatClass: "reduced",
+        }),
+      );
+    }
+    const list = await catalogue.createExtraList(
+      tx,
+      {
+        name: "Extras list",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: opts.maxPicks ?? 2,
+        active: true,
+        items: offered.map((product) => ({
+          productId: product.id,
           maxQuantity: opts.maxQuantity ?? 1,
-          sort: 0,
-        },
-        {
-          groupId: group!.id,
-          name: { [LOCALE]: "Dos" },
-          priceDelta: "0.50",
-          vatClass: "reduced",
-          maxQuantity: opts.maxQuantity ?? 1,
-          sort: 1,
-        },
-      ])
-      .returning({ id: optionGroupItems.id });
-    await tx.insert(productOptionGroups).values({
-      productId,
-      groupId: group!.id,
-      sort: 0,
-    });
-    return [rows[0]!.id, rows[1]!.id];
+          preselected: false,
+          price: "0.50",
+        })),
+      },
+      LOCALE,
+    );
+    await attachModifierList(tx, dishId, { kind: "extras", id: list.id });
+    return { listId: list.id, uno: offered[0]!.id, dos: offered[1]!.id };
   }
 
-  it("prices & persists an option ×2 on a dish ×3 as a child of combined quantity 6, dish unchanged", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("prices & persists a pick ×2 on a dish ×3 as a child of combined quantity 6, dish unchanged", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
-        maxSelect: 5,
+      const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
+        maxPicks: 5,
         maxQuantity: 5,
       });
       const id = randomUUID();
@@ -4367,7 +4480,13 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
         tx,
         cfg,
         id,
-        [{ productId: cafeId, quantity: "3", options: [{ optionGroupItemId: shot, quantity: 2 }] }],
+        [
+          {
+            productId: cafeId,
+            quantity: "3",
+            extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 2 }] }],
+          },
+        ],
         null,
       );
       const lines = await tx
@@ -4375,7 +4494,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
           id: workingOrderLines.id,
           productId: workingOrderLines.productId,
           parentLineId: workingOrderLines.parentLineId,
-          optionGroupItemId: workingOrderLines.optionGroupItemId,
           quantity: workingOrderLines.quantity,
           unitPriceGross: workingOrderLines.unitPriceGross,
           lineTotal: workingOrderLines.lineTotal,
@@ -4384,30 +4502,29 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
       expect(lines).toHaveLength(2);
-      // Parent dish row is UNCHANGED: its product, no option link, quantity still 3.
+      // Parent dish row is UNCHANGED: its own product, no parent link, quantity still 3.
       expect(lines[0]).toMatchObject({
         productId: cafeId,
         parentLineId: null,
-        optionGroupItemId: null,
         quantity: "3.000",
       });
-      // Child option row: combined 3 × 2 = 6, per-unit gross the bare delta 0.50, total 0.50 × 6 = 3.00.
+      // Child row: combined 3 × 2 = 6, per-unit gross the offer's 0.50, total 0.50 × 6 = 3.00.
       expect(lines[1]!.parentLineId).toBe(lines[0]!.id);
-      expect(lines[1]!.optionGroupItemId).toBe(shot);
+      expect(lines[1]!.productId).toBe(shot.productId);
       expect(lines[1]!.quantity).toBe("6.000");
       expect(lines[1]!.unitPriceGross).toBe("0.50");
       expect(lines[1]!.lineTotal).toBe("3.00");
     });
   });
 
-  it("rejects a per-option quantity above the item's max_quantity with quantity_invalid", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("rejects a pick quantity above the item's maxQuantity", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      // Cap 2, but max_select 5 so a tally of 3 does NOT trip above_max first — the quantity cap is what
-      // must reject it.
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
-        maxSelect: 5,
+      // Item cap 2, but list maxPicks 5 so a tally of 3 does NOT trip the list cap first — the
+      // per-item cap is what must reject it.
+      const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
+        maxPicks: 5,
         maxQuantity: 2,
       });
       await expect(
@@ -4419,121 +4536,63 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
             {
               productId: cafeId,
               quantity: "1",
-              options: [{ optionGroupItemId: shot, quantity: 3 }],
+              extras: [
+                { listId: shot.listId, picks: [{ productId: shot.productId, quantity: 3 }] },
+              ],
             },
           ],
           null,
         ),
       ).rejects.toMatchObject({
-        code: "options.selection_invalid",
-        params: { productId: cafeId, reason: "quantity_invalid" },
+        code: "extras.limit_exceeded",
+        params: { extraListId: shot.listId },
       });
     });
   });
 
-  it("rejects a per-option quantity of 0 with quantity_invalid", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("rejects a pick quantity of 0, a fraction, or none at all", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
-        maxSelect: 5,
+      const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
+        maxPicks: 5,
         maxQuantity: 5,
       });
-      await expect(
-        createOpenOrder(
-          tx,
-          cfg,
-          randomUUID(),
-          [
-            {
-              productId: cafeId,
-              quantity: "1",
-              options: [{ optionGroupItemId: shot, quantity: 0 }],
-            },
-          ],
-          null,
-        ),
-      ).rejects.toMatchObject({
-        code: "options.selection_invalid",
-        params: { productId: cafeId, reason: "quantity_invalid" },
-      });
-    });
-  });
-
-  it("rejects a non-integer per-option quantity with quantity_invalid", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
-        maxSelect: 5,
-        maxQuantity: 5,
-      });
-      await expect(
-        createOpenOrder(
-          tx,
-          cfg,
-          randomUUID(),
-          [
-            {
-              productId: cafeId,
-              quantity: "1",
-              options: [{ optionGroupItemId: shot, quantity: 1.5 }],
-            },
-          ],
-          null,
-        ),
-      ).rejects.toMatchObject({
-        code: "options.selection_invalid",
-        params: { productId: cafeId, reason: "quantity_invalid" },
-      });
-    });
-  });
-
-  it("rejects an invalid per-entry quantity even when duplicate entries SUM to a valid integer", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
-        maxSelect: 5,
-        maxQuantity: 5,
-      });
-      // Crafted duplicates whose components are individually invalid (a negative; a fraction) but whose
-      // SUM is a valid integer must still be refused — each entry is validated before summing, so an
-      // invalid component cannot be washed out by the total.
-      for (const options of [
-        [
-          { optionGroupItemId: shot, quantity: 2 },
-          { optionGroupItemId: shot, quantity: -1 },
-        ],
-        [
-          { optionGroupItemId: shot, quantity: 1.5 },
-          { optionGroupItemId: shot, quantity: 0.5 },
-        ],
-      ]) {
+      // A count is a whole number of at least one, and it is not optional: an absent count is a
+      // malformed answer rather than a silent ×1, so a client cannot leave the server to guess how
+      // many of something it is serving.
+      for (const pick of [
+        { productId: shot.productId, quantity: 0 },
+        { productId: shot.productId, quantity: 1.5 },
+        { productId: shot.productId },
+      ] as { productId: string; quantity: number }[]) {
         await expect(
           createOpenOrder(
             tx,
             cfg,
             randomUUID(),
-            [{ productId: cafeId, quantity: "1", options }],
+            [
+              {
+                productId: cafeId,
+                quantity: "1",
+                extras: [{ listId: shot.listId, picks: [pick] }],
+              },
+            ],
             null,
           ),
-        ).rejects.toMatchObject({
-          code: "options.selection_invalid",
-          params: { productId: cafeId, reason: "quantity_invalid" },
-        });
+        ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "quantity" } });
       }
     });
   });
 
-  it("counts the per-option quantity toward max_select: one item ×3 in a max_select 2 group is above_max", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("counts a pick's quantity toward maxPicks: one product ×3 in a maxPicks 2 list is refused", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      // max_quantity 5 so the ×3 passes the per-option cap; the group's max_select 2 is what the summed
-      // tally (3) must exceed — proving the tally is the SUM of quantities, not the distinct-item count.
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
-        maxSelect: 2,
+      // Item cap 5 so the ×3 passes the per-item cap; the list's maxPicks 2 is what the summed tally
+      // (3) must exceed — proving the tally is the SUM of quantities, not the distinct-product count.
+      const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
+        maxPicks: 2,
         maxQuantity: 5,
       });
       await expect(
@@ -4545,27 +4604,29 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
             {
               productId: cafeId,
               quantity: "1",
-              options: [{ optionGroupItemId: shot, quantity: 3 }],
+              extras: [
+                { listId: shot.listId, picks: [{ productId: shot.productId, quantity: 3 }] },
+              ],
             },
           ],
           null,
         ),
       ).rejects.toMatchObject({
-        code: "options.selection_invalid",
-        params: { productId: cafeId, reason: "above_max" },
+        code: "extras.limit_exceeded",
+        params: { extraListId: shot.listId },
       });
     });
   });
 
-  it("two distinct items ×1 each fit max_select 2, but one taken ×2 tips the summed tally to above_max", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("two distinct products ×1 each fit maxPicks 2, but one taken ×2 tips the summed tally over", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const [uno, dos] = await addTwoItemGroup(tx, cafeId, {
-        maxSelect: 2,
+      const list = await addTwoProductList(tx, catalogueId, cafeId, {
+        maxPicks: 2,
         maxQuantity: 5,
       });
-      // one ×1 + one ×1 → tally 2 ≤ max_select 2 → OK (two child lines).
+      // one ×1 + one ×1 → tally 2 ≤ maxPicks 2 → OK (two child lines).
       const okId = randomUUID();
       await createOpenOrder(
         tx,
@@ -4575,9 +4636,14 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
           {
             productId: cafeId,
             quantity: "1",
-            options: [
-              { optionGroupItemId: uno, quantity: 1 },
-              { optionGroupItemId: dos, quantity: 1 },
+            extras: [
+              {
+                listId: list.listId,
+                picks: [
+                  { productId: list.uno, quantity: 1 },
+                  { productId: list.dos, quantity: 1 },
+                ],
+              },
             ],
           },
         ],
@@ -4589,7 +4655,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
         .where(eq(workingOrderLines.workingOrderId, okId));
       expect(okLines.filter((l) => l.parentLineId !== null)).toHaveLength(2);
 
-      // same two items, but uno ×2 → tally 2 + 1 = 3 > max_select 2 → above_max.
+      // same two products, but uno ×2 → tally 2 + 1 = 3 > maxPicks 2 → refused.
       await expect(
         createOpenOrder(
           tx,
@@ -4599,27 +4665,32 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
             {
               productId: cafeId,
               quantity: "1",
-              options: [
-                { optionGroupItemId: uno, quantity: 2 },
-                { optionGroupItemId: dos, quantity: 1 },
+              extras: [
+                {
+                  listId: list.listId,
+                  picks: [
+                    { productId: list.uno, quantity: 2 },
+                    { productId: list.dos, quantity: 1 },
+                  ],
+                },
               ],
             },
           ],
           null,
         ),
       ).rejects.toMatchObject({
-        code: "options.selection_invalid",
-        params: { productId: cafeId, reason: "above_max" },
+        code: "extras.limit_exceeded",
+        params: { extraListId: list.listId },
       });
     });
   });
 
-  it("omitting quantity behaves exactly as ×1 (regression guard)", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("a pick of ×1 on a dish ×2 gives a child of 2", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
-        maxSelect: 1,
+      const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
+        maxPicks: 1,
         maxQuantity: 1,
       });
       const id = randomUUID();
@@ -4627,14 +4698,19 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
         tx,
         cfg,
         id,
-        // No `quantity` on the option — the common case; must behave as ×1.
-        [{ productId: cafeId, quantity: "2", options: [{ optionGroupItemId: shot }] }],
+        [
+          {
+            productId: cafeId,
+            quantity: "2",
+            extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 1 }] }],
+          },
+        ],
         null,
       );
       const lines = await tx
         .select({
           parentLineId: workingOrderLines.parentLineId,
-          optionGroupItemId: workingOrderLines.optionGroupItemId,
+          productId: workingOrderLines.productId,
           quantity: workingOrderLines.quantity,
           lineTotal: workingOrderLines.lineTotal,
         })
@@ -4642,8 +4718,8 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
       expect(lines).toHaveLength(2);
-      // Child combined = dish ×2 × option ×1 = 2; 0.50 × 2 = 1.00 — identical to a plain single option.
-      expect(lines[1]!.optionGroupItemId).toBe(shot);
+      // Child combined = dish ×2 × pick ×1 = 2; 0.50 × 2 = 1.00.
+      expect(lines[1]!.productId).toBe(shot.productId);
       expect(lines[1]!.quantity).toBe("2.000");
       expect(lines[1]!.lineTotal).toBe("1.00");
     });
@@ -4743,10 +4819,9 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   });
 });
 
-// A nonprice option (oat, removing milk) is selected on a dish that declares milk + vegan. The fold is
-// gone: the station/expo snapshots show the DISH's OWN milk allergen and its OWN vegan declaration, and
-// the option is shown separately (later task).
-it("shows the dish's own allergens and diet for a nonprice option selection (no fold)", async () => {
+// An options answer is frozen onto a dish that declares milk + vegan. The dish's own allergens and its
+// own vegan declaration are what the station and expo snapshots show; the answer rides beside them.
+it("shows the dish's own allergens and diet beside a frozen options answer", async () => {
   const { cfg, catalogueId } = await setupVenue();
   await withTransaction(db, async (tx) => {
     await asAppUser(tx);
@@ -4761,99 +4836,53 @@ it("shows the dish's own allergens and diet for a nonprice option selection (no 
       allergens: { milk: { presence: "contains" } },
       dietaryDeclarations: ["vegan"],
     });
-    const choiceId = await addOption(tx, product.id, "Oat", {
-      suitableFor: [],
-    });
+    const milk = await addOptionList(tx, product.id, "Milk", ["Oat"]);
     const { id: orderId } = await placeOrderWith(tx, cfg, [
-      { productId: product.id, quantity: "1" },
-    ]);
-    const modifierSnapshots = [
       {
-        modifierId: randomUUID(),
-        name: { [LOCALE]: "Milk" },
-        type: "options" as const,
-        choiceId,
-        choiceName: { [LOCALE]: "Oat" },
+        productId: product.id,
+        quantity: "1",
+        options: [{ listId: milk.listId, labelId: milk.labelIds[0]! }],
+      },
+    ]);
+    void orderId;
+    const optionSnapshots = [
+      {
+        listName: { [CONTENT_LANGUAGE]: "Milk list staff" },
+        listCustomerName: { [CONTENT_LANGUAGE]: "Milk list customer" },
+        listKitchenName: "Milk list kitchen",
+        labelName: { [CONTENT_LANGUAGE]: "Oat staff" },
+        labelCustomerName: { [CONTENT_LANGUAGE]: "Oat customer" },
+        labelKitchenName: "Oat kitchen",
       },
     ];
-    await tx
-      .update(workingOrderLines)
-      .set({ modifierSnapshots })
-      .where(eq(workingOrderLines.workingOrderId, orderId));
     const own = { allergens: { milk: { presence: "contains" } }, pending: false };
     const ownDiet = { vegan: "yes", vegetarian: "yes", contains: [] };
     const queue = await listStationQueue(tx, station.id);
     expect(queue[0]!.items[0]!.asServed).toEqual(own);
-    expect(queue[0]!.items[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    expect(queue[0]!.items[0]!.optionSnapshots).toEqual(optionSnapshots);
     expect(queue[0]!.items[0]!.asServedDiet).toEqual(ownDiet);
     const expo = await listExpoQueue(tx, cfg);
     expect(expo[0]!.courses[0]!.items[0]!.asServed).toEqual(own);
-    expect(expo[0]!.courses[0]!.items[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    expect(expo[0]!.courses[0]!.items[0]!.optionSnapshots).toEqual(optionSnapshots);
     expect(expo[0]!.courses[0]!.items[0]!.asServedDiet).toEqual(ownDiet);
   });
 });
 
-describe("canonical modifier selections", () => {
+describe("frozen answers through a fractional quantity edit", () => {
   it.each(["menu", "product"])(
-    "preserves %s selections and prices through a fractional quantity edit",
+    "preserves %s answers and the locked price when a weighed dish's quantity changes",
     async (source) => {
       const { cfg, cafeId, cafeOfferId, zoneId, kgUnitId } = await setupVenue();
-      const choiceId = randomUUID();
-      const optionId = randomUUID();
-      const definitions = await withTransaction(db, async (tx) => {
+      // A WEIGHED dish: the quantity edit below moves a fraction, which is where the decimal
+      // arithmetic behind the preserve path is most likely to go wrong. The answer is an OPTIONS one
+      // because it makes no child line — an extras pick on a dish sold by weight is refused, by the
+      // test below this one.
+      const taza = await withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        const definitions = [];
-        for (const input of [
-          { type: "text", name: { es: "Mensaje" } },
-          {
-            type: "text",
-            name: { es: "Caliente" },
-          },
-          {
-            type: "options",
-            name: { es: "Taza" },
-            choices: [{ id: optionId, name: { es: "Grande" } }],
-          },
-          {
-            type: "extras",
-            name: { es: "Extras" },
-            maxTotalQuantity: null,
-            choices: [{ id: choiceId, name: { es: "Bacon" }, priceDelta: "1.00", maxQuantity: 2 }],
-          },
-        ])
-          definitions.push(await catalogue.createModifier(tx, input, "es"));
-        await catalogue.setProductOptionGroups(
-          tx,
-          cafeId,
-          definitions.map((d) => d.id),
-        );
         await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
-        await catalogue.setMenuItemOptionGroups(
-          tx,
-          cafeOfferId,
-          definitions.map((d) => ({
-            groupId: d.id,
-            options:
-              d.type === "options" || d.type === "extras"
-                ? d.choices.map((choice) => ({
-                    optionId: choice.id,
-                    priceDelta: d.type === "extras" ? "1.00" : "0.00",
-                  }))
-                : [],
-          })),
-        );
-        return definitions;
+        return addOptionList(tx, cafeId, "Taza", ["Grande"]);
       });
-      const modifierSelections = [
-        { modifierId: definitions[0]!.id, type: "text" as const, text: " <b>hello</b> " },
-        { modifierId: definitions[1]!.id, type: "text" as const, text: "extra" },
-        { modifierId: definitions[2]!.id, type: "options" as const, choiceId: optionId },
-        {
-          modifierId: definitions[3]!.id,
-          type: "extras" as const,
-          choices: [{ choiceId, quantity: 2 }],
-        },
-      ];
+      const options = [{ listId: taza.listId, labelId: taza.labelIds[0]! }];
       const result = await parkOrder({ db }, cfg, {
         id: randomUUID(),
         ...(source === "menu" ? { zoneId } : {}),
@@ -4861,92 +4890,42 @@ describe("canonical modifier selections", () => {
           {
             ...(source === "menu" ? { menuItemId: cafeOfferId } : { productId: cafeId }),
             quantity: "0.500",
-            modifierSelections,
+            options,
           },
         ],
       });
       const held = await getHeldOrder({ db }, cfg, result.id);
       expect(held.lines).toHaveLength(1);
-      expect(held.lines[0]).toMatchObject({
-        modifierSelections,
-        modifierSnapshots: [
-          { type: "text", text: " <b>hello</b> " },
-          { type: "text", text: "extra" },
-          { type: "options", choiceId: optionId, choiceName: { es: "Grande" } },
-          { type: "extras", choices: [{ choiceId, quantity: 2 }] },
-        ],
-      });
+      const frozen = [
+        {
+          listName: { [CONTENT_LANGUAGE]: "Taza list staff" },
+          listCustomerName: { [CONTENT_LANGUAGE]: "Taza list customer" },
+          listKitchenName: "Taza list kitchen",
+          labelName: { [CONTENT_LANGUAGE]: "Grande staff" },
+          labelCustomerName: { [CONTENT_LANGUAGE]: "Grande customer" },
+          labelKitchenName: "Grande kitchen",
+        },
+      ];
+      expect(held.lines[0]).toMatchObject({ optionSnapshots: frozen });
       const stored = await db
         .select()
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, result.id))
         .orderBy(workingOrderLines.lineNo);
-      expect(stored).toHaveLength(2);
-      expect(stored[1]).toMatchObject({
-        quantity: "1.000",
-        unitPriceGross: "1.00",
-        lineTotal: "1.00",
-      });
-      await withTransaction(db, async (tx) => {
-        await asAppUser(tx);
-        await catalogue.updateModifier(
-          tx,
-          definitions[3]!.id,
-          {
-            type: "extras",
-            name: { es: "Changed" },
-            choices: [
-              {
-                id: choiceId,
-                name: { es: "Changed" },
-                priceDelta: "9.00",
-                maxQuantity: 2,
-                preselected: false,
-              },
-            ],
-          },
-          "es",
-        );
-        if (source === "product") {
-          await catalogue.setProductOptionGroups(tx, cafeId, []);
-          await catalogue.setMenuItemOptionGroups(tx, cafeOfferId, []);
-          await catalogue.updateModifier(
-            tx,
-            definitions[0]!.id,
-            {
-              type: "options",
-              name: { es: "Changed type" },
-              choices: [{ id: randomUUID(), name: { es: "Elección" } }],
-              defaultChoiceId: null,
-            },
-            "es",
-          );
-          await expect(
-            catalogue.updateModifier(
-              tx,
-              definitions[3]!.id,
-              {
-                type: "extras",
-                name: { es: "Extras" },
-                choices: [],
-              },
-              "es",
-            ),
-          ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "choice" } });
-        }
-      });
+      expect(stored).toHaveLength(1);
+      const lockedGross = stored[0]!.unitPriceGross;
+
+      // The catalogue moves under the parked order; the locked line must not follow it.
+      await db.execute(sql`update products set unit_price = 99.00 where id = ${cafeId}`);
+      await db.execute(sql`update menu_items set gross_price = 99.00 where id = ${cafeOfferId}`);
+
       await updateHeldOrder({ db }, cfg, result.id, {
         lines: [
           {
             workingOrderLineId: held.lines[0]!.workingOrderLineId,
             ...(source === "menu" ? { menuItemId: cafeOfferId } : { productId: cafeId }),
             quantity: "1.000",
-            modifierSelections: [...modifierSelections]
-              .reverse()
-              .map(
-                (selection) =>
-                  Object.fromEntries(Object.entries(selection).reverse()) as typeof selection,
-              ),
+            options,
           },
         ],
       });
@@ -4955,40 +4934,71 @@ describe("canonical modifier selections", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, result.id))
         .orderBy(workingOrderLines.lineNo);
-      expect(updated[1]).toMatchObject({
-        quantity: "2.000",
-        unitPriceGross: "1.00",
-        lineTotal: "2.00",
+      expect(updated).toHaveLength(1);
+      expect(updated[0]).toMatchObject({
+        quantity: "1.000",
+        unitPriceGross: lockedGross,
+        // One unit of the locked gross, so the total is that gross unchanged.
+        lineTotal: lockedGross,
       });
-      expect(updated[0]!.modifierSnapshots).toEqual(stored[0]!.modifierSnapshots);
+      expect(updated[0]!.optionSnapshots).toEqual(frozen);
     },
   );
+
+  it("refuses an extras pick on a menu offer whose dish is sold by weight", async () => {
+    const { cfg, cafeId, catalogueId, cafeOfferId, zoneId, kgUnitId } = await setupVenue();
+    const bacon = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
+      const attached = await addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
+      await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
+        {
+          listId: attached.listId,
+          items: [{ productId: attached.productId, price: "1.00", available: true }],
+        },
+      ]);
+      return attached;
+    });
+    // A child is priced at `dishQuantity × pickQuantity`, so half a kilo of dish carrying one extra
+    // would bill half an extra. THE OFFER PATH IS THE ONLY ONE THAT REFUSES IT: it reads the dish's
+    // pricing unit off the unit the dish carries, while the plain product path reads
+    // `products.pricing_unit`, which `assignProductUnit` leaves on `each`. The disagreement is
+    // recorded in docs/backlog.md; this pins the half that refuses.
+    await expect(
+      parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [
+          {
+            menuItemId: cafeOfferId,
+            quantity: "0.500",
+            extras: [
+              { listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "options.unsupported_product",
+      params: { productId: cafeId, pricingUnit: "weight" },
+    });
+  });
 });
 
-it("does not let an omitted canonical payload waive an empty required menu extras group", async () => {
-  const { cfg, cafeId, cafeOfferId, zoneId } = await setupVenue();
-  const choiceId = randomUUID();
-  const modifier = await withTransaction(db, async (tx) => {
+it("does not let an omitted payload waive a required extras list the menu offer has emptied", async () => {
+  const { cfg, cafeId, catalogueId, cafeOfferId, zoneId } = await setupVenue();
+  const bacon = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const modifier = await catalogue.createModifier(
-      tx,
+    // The list REQUIRES one pick, and the offer withdraws its only product — so the offer publishes a
+    // list nothing can satisfy. Sending no answer at all must not waive it.
+    const attached = await addExtraList(tx, catalogueId, cafeId, "Bacon", { minPicks: 1 });
+    await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
       {
-        type: "extras",
-        name: { es: "Extras" },
-        required: true,
-        choices: [{ id: choiceId, name: { es: "Shot" } }],
+        listId: attached.listId,
+        items: [{ productId: attached.productId, price: null, available: false }],
       },
-      "es",
-    );
-    await catalogue.setProductOptionGroups(tx, cafeId, [modifier.id]);
-    await catalogue.setMenuItemOptionGroups(tx, cafeOfferId, [
-      { groupId: modifier.id, options: [{ optionId: choiceId, priceDelta: "0.50" }] },
     ]);
-    await tx
-      .update(optionGroupItems)
-      .set({ active: false })
-      .where(eq(optionGroupItems.id, choiceId));
-    return modifier;
+    return attached;
   });
   await expect(
     parkOrder({ db }, cfg, {
@@ -4997,7 +5007,233 @@ it("does not let an omitted canonical payload waive an empty required menu extra
       lines: [{ menuItemId: cafeOfferId, quantity: "1" }],
     }),
   ).rejects.toMatchObject({
-    code: "options.selection_invalid",
-    params: { groupId: modifier.id, reason: "required" },
+    code: "extras.limit_exceeded",
+    params: { extraListId: bacon.listId },
+  });
+});
+
+/**
+ * Task 7 — the order path for the new model: a dish's OPTIONS answers freeze onto the dish line as
+ * `option_snapshots`, and its EXTRAS picks become child lines carrying the picked PRODUCT.
+ *
+ * Every name in the fixture carries its own text, so a read of the wrong one of the six fails
+ * (CLAUDE.md §4).
+ */
+describe("order path — extras and options", () => {
+  interface Seeded {
+    cfg: TillConfig;
+    dishId: string;
+    wineId: string;
+    extraListId: string;
+    optionListId: string;
+    labelId: string;
+    defaultLanguage: string;
+  }
+
+  /** A 10% dish offering a 21% wine as an extra and one options list that must be answered. */
+  async function seedDish(maxPicks: number | null = 1): Promise<Seeded> {
+    const { cfg, catalogueId } = await setupVenue();
+    return withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      const { defaultLanguage } = await catalogue.readContentLanguages(tx, cfg.locale);
+      const dish = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Pizza",
+        pricingUnit: "each",
+        unitPrice: "10.00",
+        vatClass: "reduced",
+      });
+      const wine = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Vino staff",
+        customerName: { [defaultLanguage]: "Vino customer" },
+        kitchenName: "Vino kitchen",
+        pricingUnit: "each",
+        // The list item's own price outranks this, so a child priced at 3.00 would mean the offer
+        // was never read.
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      const extraList = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Vinos staff",
+          customerName: { [defaultLanguage]: "Vinos customer" },
+          kitchenName: "Vinos kitchen",
+          minPicks: 0,
+          maxPicks,
+          active: true,
+          items: [{ productId: wine.id, maxQuantity: 2, preselected: false, price: "4.50" }],
+        },
+        cfg.locale,
+      );
+      const optionList = await catalogue.createOptionList(
+        tx,
+        {
+          name: "Cooked staff",
+          customerName: { [defaultLanguage]: "Cooked customer" },
+          kitchenName: "Cooked kitchen",
+          defaultLabelId: null,
+          active: true,
+          labels: [
+            {
+              name: "Rare staff",
+              customerName: { [defaultLanguage]: "Rare customer" },
+              kitchenName: "Rare kitchen",
+              available: true,
+            },
+          ],
+        },
+        cfg.locale,
+      );
+      await catalogue.writeProductModifiers(tx, dish.id, [
+        { kind: "extras", id: extraList.id },
+        { kind: "options", id: optionList.id },
+      ]);
+      return {
+        cfg,
+        dishId: dish.id,
+        wineId: wine.id,
+        extraListId: extraList.id,
+        optionListId: optionList.id,
+        labelId: optionList.labels[0]!.id,
+        defaultLanguage,
+      };
+    });
+  }
+
+  it("freezes the list's and the chosen label's three names onto the dish line", async () => {
+    const seeded = await seedDish();
+    const id = randomUUID();
+    await parkOrder({ db }, seeded.cfg, {
+      id,
+      lines: [
+        {
+          productId: seeded.dishId,
+          quantity: "1",
+          options: [{ listId: seeded.optionListId, labelId: seeded.labelId }],
+        },
+      ],
+    });
+    const lines = await db
+      .select({
+        lineNo: workingOrderLines.lineNo,
+        optionSnapshots: workingOrderLines.optionSnapshots,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.optionSnapshots).toEqual([
+      {
+        listName: { [seeded.defaultLanguage]: "Cooked staff" },
+        listCustomerName: { [seeded.defaultLanguage]: "Cooked customer" },
+        listKitchenName: "Cooked kitchen",
+        labelName: { [seeded.defaultLanguage]: "Rare staff" },
+        labelCustomerName: { [seeded.defaultLanguage]: "Rare customer" },
+        labelKitchenName: "Rare kitchen",
+      },
+    ]);
+  });
+
+  it("an extra child line carries product_id and the extra product's OWN vat rate", async () => {
+    const seeded = await seedDish();
+    const id = randomUUID();
+    await parkOrder({ db }, seeded.cfg, {
+      id,
+      lines: [
+        {
+          productId: seeded.dishId,
+          quantity: "2",
+          extras: [
+            { listId: seeded.extraListId, picks: [{ productId: seeded.wineId, quantity: 1 }] },
+          ],
+          options: [{ listId: seeded.optionListId, labelId: seeded.labelId }],
+        },
+      ],
+    });
+    const lines = await db
+      .select({
+        lineNo: workingOrderLines.lineNo,
+        parentLineId: workingOrderLines.parentLineId,
+        productId: workingOrderLines.productId,
+        name: workingOrderLines.name,
+        descriptions: workingOrderLines.descriptions,
+        kitchenName: workingOrderLines.kitchenName,
+        quantity: workingOrderLines.quantity,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        vatRate: workingOrderLines.vatRate,
+        lineTotal: workingOrderLines.lineTotal,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toHaveLength(2);
+    const [dish, child] = lines;
+    expect(dish!.vatRate).toBe("10.00");
+    expect(child!.parentLineId).toBe(
+      (
+        await db
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, id),
+              eq(workingOrderLines.lineNo, dish!.lineNo),
+            ),
+          )
+      )[0]!.id,
+    );
+    // The child IS the wine, by id — the whole point of the column that replaced
+    // `option_group_item_id`.
+    expect(child!.productId).toBe(seeded.wineId);
+    // The wine's three names, frozen: staff on `name`, customer re-keyed onto the venue's invoice
+    // locale, kitchen on `kitchen_name`.
+    expect(child!.name).toBe("Vino staff");
+    expect(child!.descriptions).toEqual({ [LOCALE]: "Vino customer" });
+    expect(child!.kitchenName).toBe("Vino kitchen");
+    // The extra PRODUCT's own VAT, never the 10% dish's (spec §3.3, decision 9).
+    expect(child!.vatRate).toBe("21.00");
+    // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2.
+    expect(child!.unitPriceGross).toBe("4.50");
+    expect(child!.quantity).toBe("2.000");
+    expect(child!.lineTotal).toBe("9.00");
+  });
+
+  it("refuses a dish whose options list is left unanswered", async () => {
+    const seeded = await seedDish();
+    await expect(
+      parkOrder({ db }, seeded.cfg, {
+        id: randomUUID(),
+        lines: [{ productId: seeded.dishId, quantity: "1" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "options.label_required",
+      params: { optionListId: seeded.optionListId },
+    });
+  });
+
+  it("refuses more picks than the extras list allows", async () => {
+    const seeded = await seedDish();
+    await expect(
+      parkOrder({ db }, seeded.cfg, {
+        id: randomUUID(),
+        lines: [
+          {
+            productId: seeded.dishId,
+            quantity: "1",
+            extras: [
+              { listId: seeded.extraListId, picks: [{ productId: seeded.wineId, quantity: 2 }] },
+            ],
+            options: [{ listId: seeded.optionListId, labelId: seeded.labelId }],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "extras.limit_exceeded",
+      params: { extraListId: seeded.extraListId },
+    });
   });
 });

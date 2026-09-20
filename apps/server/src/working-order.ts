@@ -1,16 +1,14 @@
 import { lockModifierDefinitions } from "@waitron/catalogue";
-import {
-  snapshotSelections,
-  selectionsFromSnapshots,
-  sameModifierSelections,
-} from "./modifier-selection.js";
-import type { ModifierSelection, ModifierSnapshot } from "@waitron/shared";
+import { buildLineExtras } from "./modifier-selection.js";
+import type { ExtraProductFacts } from "./modifier-selection.js";
+import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
@@ -20,7 +18,6 @@ import {
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
-  resolveSnapshotText,
   type SaleId,
   type StationThresholds,
   subtractDecimal,
@@ -41,7 +38,6 @@ import {
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
-  optionGroupItems,
   products,
   sales,
   ticketItems,
@@ -59,6 +55,10 @@ import {
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
+  readMenuExtras,
+  readOptionListsByIds,
+  readProductExtras,
+  readProductModifiers,
   toInvoiceLineDescriptions,
   readContentLanguages,
   selectMenuVariant,
@@ -73,8 +73,11 @@ import type {
   DietaryLabel,
   DietProfile,
   LockedLine,
+  OptionList,
   PricedLines,
   ProductAllergens,
+  ResolvedExtraList,
+  VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FloorAnnotator, PreparationRoute } from "@waitron/module";
@@ -129,6 +132,122 @@ type PricedBasket = PricedLines;
 export type LineExtras = { note?: string; doneness?: Doneness; variantId?: string };
 
 /**
+ * Every extras and options definition the dishes in one basket offer, read ONCE before the line
+ * loop. Reading them per line is the shape CLAUDE.md §3 forbids, guarded by
+ * `apps/server/src/working-order.test.ts`.
+ */
+interface BasketModifiers {
+  /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
+   * the offer when there is one and held by the product when there is not (spec §3.2). */
+  extrasByHolder: ReadonlyMap<string, ResolvedExtraList[]>;
+  /** Keyed by the underlying PRODUCT id on both paths: an options list is attached to the product
+   * and a menu offer neither republishes nor narrows one (spec §3.1). */
+  optionsByProduct: ReadonlyMap<string, OptionList[]>;
+  /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child. */
+  extraProducts: ReadonlyMap<string, ExtraProductFacts>;
+}
+
+/**
+ * Resolve {@link BasketModifiers} for one basket: a bounded number of queries whatever the number of
+ * lines, and none of them inside the line loop.
+ *
+ * Only an ACTIVE list's products are read, because only an active list can be answered at all
+ * (`validateExtraSelections`, `packages/catalogue/src/extra-contract.ts`), so no other product can
+ * reach a child line.
+ */
+async function resolveBasketModifiers(
+  tx: Transaction,
+  dishes: readonly { productId: string; menuItemId: string | null }[],
+  defaultLanguage: string,
+): Promise<BasketModifiers> {
+  const productIds = [...new Set(dishes.map((dish) => dish.productId))];
+  const menuItemIds = [
+    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [] : [dish.menuItemId]))),
+  ];
+  const productOnlyIds = [
+    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [dish.productId] : []))),
+  ];
+  // Each dish is read on the side its own identity puts it on, so a basket mixing offer lines with
+  // plain product lines resolves both. The two key spaces are distinct ids, so nothing collides.
+  const extrasByHolder = new Map<string, ResolvedExtraList[]>();
+  if (menuItemIds.length > 0) {
+    for (const [holder, lists] of await readMenuExtras(tx, menuItemIds)) {
+      extrasByHolder.set(holder, lists);
+    }
+  }
+  if (productOnlyIds.length > 0) {
+    for (const [holder, lists] of await readProductExtras(tx, productOnlyIds)) {
+      extrasByHolder.set(holder, lists);
+    }
+  }
+
+  const attachments = await readProductModifiers(tx, productIds);
+  const optionLists = new Map(
+    (
+      await readOptionListsByIds(tx, [
+        ...new Set(
+          [...attachments.values()].flatMap((refs) =>
+            refs.flatMap((ref) => (ref.kind === "options" ? [ref.id] : [])),
+          ),
+        ),
+      ])
+    ).map((list) => [list.id, list]),
+  );
+  const optionsByProduct = new Map(
+    [...attachments].map(([productId, refs]): [string, OptionList[]] => [
+      productId,
+      refs.flatMap((ref) => {
+        const list = ref.kind === "options" ? optionLists.get(ref.id) : undefined;
+        return list === undefined ? [] : [list];
+      }),
+    ]),
+  );
+
+  const offeredProductIds = [
+    ...new Set(
+      [...extrasByHolder.values()].flatMap((lists) =>
+        lists.flatMap((list) => (list.active ? list.items.map((item) => item.productId) : [])),
+      ),
+    ),
+  ];
+  const extraProducts = new Map<string, ExtraProductFacts>();
+  if (offeredProductIds.length > 0) {
+    const rows = await tx
+      .select({
+        id: products.id,
+        name: products.name,
+        customerName: products.customerName,
+        kitchenName: products.kitchenName,
+        vatClass: products.vatClass,
+      })
+      .from(products)
+      .where(inArray(products.id, offeredProductIds));
+    for (const row of rows) {
+      extraProducts.set(row.id, {
+        id: row.id,
+        name: row.name,
+        // The dish's own customer text takes this same fallback a few lines below, from the one home
+        // of the blank-falls-back-to-the-staff-name rule.
+        descriptions: customerPresentationText(
+          {
+            name: row.name,
+            customerName: row.customerName,
+            kitchenName: row.kitchenName,
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
+          defaultLanguage,
+        ).product,
+        kitchenName: row.kitchenName,
+        vatClass: row.vatClass as VatClass,
+      });
+    }
+  }
+  return { extrasByHolder, optionsByProduct, extraProducts };
+}
+
+/**
  * Price requested lines from a zone's menu offers, or from the legacy location catalogue when the
  * order has no service context. Return both the
  * insertable line snapshots and the basket result so a caller filing the same basket
@@ -141,13 +260,12 @@ async function priceOrderLines(
   // KDS-2 (§2b): each line MAY carry an optional `courseId` OVERRIDE. Absent = fall to the product's
   // default course; present (incl. `null`) = the line-level override. Only the tab round-send threads a
   // value today (a future course picker); park/update pass none, so their lines take the product default.
-  // Ordering modifiers (Task 6): a line MAY carry selected `options`, each naming an
-  // `optionGroupItemId` chosen from one of the product's attached ACTIVE option groups. The server
-  // resolves + validates every selection against the product's own `optionGroups` (the SAME read below
-  // returns — no extra query), then expands the line into a PARENT dish row plus one CHILD row per
-  // option. Absent/empty `options` = a plain single line, unchanged from before. Per-option quantity:
-  // an option MAY carry `quantity` (a small positive integer, absent = 1) — the count of THIS option
-  // per dish, capped by the item's `max_quantity`; the child is priced at `dishQty × optionQty`.
+  // Extras and options (spec §2.3, §3.4): a line MAY carry `options` — one answer per ACTIVE options
+  // list its dish attaches, frozen onto the dish row as `option_snapshots` — and `extras`, whose picks
+  // each become a CHILD row carrying the picked PRODUCT, its three frozen names, the offer's resolved
+  // price and that product's OWN vat class. Both are validated against the definitions resolved for the
+  // whole basket above. Absent/empty = a plain single line, except that an ACTIVE options list must
+  // still be answered.
   //
   // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note` and a
   // `doneness`. Both are NON-FISCAL. The note is trimmed and length-capped (`working_order.note_too_long`);
@@ -159,8 +277,8 @@ async function priceOrderLines(
     menuItemId?: string;
     quantity: string;
     courseId?: string | null;
-    options?: { optionGroupItemId: string; quantity?: number }[];
-    modifierSelections?: ModifierSelection[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
   } & LineExtras)[],
   zoneId?: string,
 ): Promise<{
@@ -256,11 +374,20 @@ async function priceOrderLines(
   }));
   const byId = new Map(available.map((p) => [p.id, p]));
 
+  // ONE read per definition kind for the WHOLE basket, before the line loop below (CLAUDE.md §3).
+  const modifiers = await resolveBasketModifiers(
+    tx,
+    lines.map((line) => ({
+      productId: offerBySelectionId.get(line.productId)?.productId ?? line.productId,
+      menuItemId: line.menuItemId ?? null,
+    })),
+    contentConfig.defaultLanguage,
+  );
+
   // Build the priceable basket AND, in lockstep, the per-PRICED-LINE metadata `priceBasketWithOptions`
-  // does not itself carry: which productId/courseId a PARENT row takes and which source
-  // `option_group_item_id` a CHILD row traces back to. `priceBasketWithOptions` expands each item to a
-  // parent row then its option rows IN THIS SAME ORDER (see its doc), so `lineMeta[i]` lines up with
-  // `priced.lines[i]` one-for-one below.
+  // does not itself carry: which product/course a PARENT row takes, and which PICKED product a CHILD
+  // row is. `priceBasketWithOptions` expands each item to a parent row then its option rows IN THIS
+  // SAME ORDER (see its doc), so `lineMeta[i]` lines up with `priced.lines[i]` one-for-one below.
   type LineMeta =
     | {
         kind: "parent";
@@ -269,20 +396,11 @@ async function priceOrderLines(
         courseId: string | null;
         note: string | null;
         doneness: Doneness | null;
-        modifierSnapshots: ModifierSnapshot[];
+        optionSnapshots: OptionSnapshot[];
       }
-    | { kind: "child"; optionGroupItemId: string; menuItemId: string | null };
+    | { kind: "child"; productId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
-  // Per-SELECTION cache of `optionGroupItemId → { item, groupId }`, built once per distinct sellable row rather
-  // than once per LINE: ordering N lines of the same product (e.g. 3× the same burger with different
-  // modifiers) resolved this map N times before. Same resolved values either way — pure de-duplication
-  // of in-memory work. A row id is a product id on the legacy path and a menu-item id on the offer path.
-  type OptionItemRow = (typeof available)[number]["optionGroups"][number]["items"][number];
-  const itemByIdByProduct = new Map<
-    string,
-    Map<string, { item: OptionItemRow; groupId: string }>
-  >();
   for (const line of lines) {
     const baseProduct = byId.get(line.productId);
     if (baseProduct === undefined) {
@@ -352,165 +470,51 @@ async function priceOrderLines(
     }
     const doneness = line.doneness ?? null;
 
-    const selected = line.options ?? [];
-    const canonical =
-      line.modifierSelections !== undefined ||
-      (product.modifiers ?? []).some((modifier) => modifier.type !== "extras");
-    if (canonical && selected.length > 0)
-      throw new AppError("modifier.invalid", { field: "modifierSelections" });
-    const resolved = canonical
-      ? snapshotSelections(product.modifiers ?? [], line.modifierSelections ?? [])
-      : null;
-    const modifierSnapshots = resolved?.snapshots ?? [];
+    // Validate and freeze this dish's answers against the definitions resolved for the whole basket:
+    // the options answers become the dish row's `option_snapshots`, and each extras pick becomes a
+    // child row carrying the picked product. Extras are held by the OFFER when there is one and by
+    // the product when there is not, which is why the key differs; options are always the product's.
+    const { extraChildren, optionSnapshots } = buildLineExtras(
+      {
+        extras: modifiers.extrasByHolder.get(line.menuItemId ?? underlyingProductId) ?? [],
+        options: modifiers.optionsByProduct.get(underlyingProductId) ?? [],
+      },
+      modifiers.extraProducts,
+      { extras: line.extras, options: line.options },
+      contentConfig.defaultLanguage,
+    );
 
-    // The compatibility option payload retains its original each-only contract. Canonical modifiers
-    // are validated above and support every selected unit.
-    if (!canonical && selected.length > 0 && product.pricingUnit !== "each") {
+    // A child is priced at `dishQuantity × pickQuantity` (`priceBasketWithOptions`), so a dish sold by
+    // WEIGHT would charge a fraction of each extra — 0.333 kg of fish carrying "one lemon" would bill
+    // 0.333 lemons. The legacy option payload refused the same shape with this same code. Only a pick
+    // makes a child, so an options answer on a weighed dish stays allowed. NOTE the signal is the
+    // product's own `pricing_unit`, which `assignProductUnit` does not move — a product left on
+    // `each` while carrying a kg unit reaches the arithmetic above (docs/backlog.md).
+    if (extraChildren.length > 0 && product.pricingUnit !== "each") {
       throw new AppError("options.unsupported_product", {
         productId: underlyingProductId,
         pricingUnit: product.pricingUnit,
       });
     }
 
-    // Resolve legacy choices against this product's published definitions before pricing them.
-    const selectedOptions: {
-      id: string;
-      name: Record<string, string>;
-      priceDelta: string;
-      vatClass: (typeof product.optionGroups)[number]["items"][number]["vatClass"];
-      quantity: number;
-    }[] = resolved?.extras ?? [];
-    if (!canonical) {
-      let itemById = itemByIdByProduct.get(product.id);
-      if (itemById === undefined) {
-        itemById = new Map(
-          product.optionGroups.flatMap((group) =>
-            group.items.map((item) => [item.id, { item, groupId: group.id }] as const),
-          ),
-        );
-        itemByIdByProduct.set(product.id, itemById);
-      }
-      // Per-option quantity: SUM each wire entry's `quantity` (absent = 1) per `optionGroupItemId`
-      // instead of collapse-deduping. A crafted request naming the same id twice now SUMS to that
-      // combined count — the summed value is then validated (`1 ≤ qty ≤ max_quantity`), so a doubled
-      // pick beyond the item's cap is still refused (the anti-overcharge intent FIX 3 protected), and a
-      // legitimate ×N goes through. `firstSeenOrder` preserves the wire's first-seen order so the child
-      // rows keep a stable order. The client is never the gate.
-      const qtyById = new Map<string, number>();
-      const firstSeenOrder: string[] = [];
-      for (const sel of selected) {
-        const found = itemById.get(sel.optionGroupItemId);
-        if (found === undefined) {
-          throw new AppError("option.not_found", {
-            optionGroupItemId: sel.optionGroupItemId,
-            productId: underlyingProductId,
-          });
-        }
-        // Validate EACH wire entry's quantity is a positive integer BEFORE summing, so a crafted
-        // request cannot wash out an invalid component (a negative, a fraction) against a duplicate
-        // whose total lands on a valid integer. The SUMMED cap (`≤ max_quantity`) is checked below.
-        const entryQty = sel.quantity ?? 1;
-        if (!Number.isInteger(entryQty) || entryQty < 1) {
-          throw new AppError("options.selection_invalid", {
-            productId: underlyingProductId,
-            groupId: found.groupId,
-            reason: "quantity_invalid",
-          });
-        }
-        if (!qtyById.has(sel.optionGroupItemId)) {
-          firstSeenOrder.push(sel.optionGroupItemId);
-        }
-        qtyById.set(sel.optionGroupItemId, (qtyById.get(sel.optionGroupItemId) ?? 0) + entryQty);
-      }
-      // The per-group TALLY is the SUM of quantities (not the distinct-item count): a per-option
-      // quantity COUNTS toward `max_select` (product decision). Applied consistently to required /
-      // min_select / max_select below.
-      const tallyByGroup = new Map<string, number>();
-      for (const optionGroupItemId of firstSeenOrder) {
-        // `found` and each entry's positive-integer validity were established in the summing loop
-        // above (every id in `firstSeenOrder` resolved there), so only the SUMMED cap can still fail
-        // here — duplicate entries summing PAST the item's `max_quantity`.
-        const found = itemById.get(optionGroupItemId)!;
-        const qty = qtyById.get(optionGroupItemId)!;
-        if (qty > found.item.maxQuantity) {
-          throw new AppError("options.selection_invalid", {
-            productId: underlyingProductId,
-            groupId: found.groupId,
-            reason: "quantity_invalid",
-          });
-        }
-        tallyByGroup.set(found.groupId, (tallyByGroup.get(found.groupId) ?? 0) + qty);
-        selectedOptions.push({
-          id: found.item.id,
-          name: found.item.name,
-          priceDelta: found.item.priceDelta,
-          vatClass: found.item.vatClass,
-          quantity: qty,
-        });
-      }
-      // An available required group without usable choices is a configuration failure.
-      for (const group of product.optionGroups) {
-        const count = tallyByGroup.get(group.id) ?? 0;
-        if (group.required && count === 0) {
-          throw new AppError("options.selection_invalid", {
-            productId: underlyingProductId,
-            groupId: group.id,
-            reason: "required",
-          });
-        }
-        if (count < group.minSelect) {
-          throw new AppError("options.selection_invalid", {
-            productId: underlyingProductId,
-            groupId: group.id,
-            reason: "below_min",
-          });
-        }
-        if (count > group.maxSelect) {
-          throw new AppError("options.selection_invalid", {
-            productId: underlyingProductId,
-            groupId: group.id,
-            reason: "above_max",
-          });
-        }
-      }
-      // The legacy menu projection omits groups with no usable choices; the definition still
-      // requires a selection, so an omitted canonical payload cannot waive that requirement.
-      for (const modifier of product.modifiers ?? []) {
-        if (
-          modifier.type === "extras" &&
-          modifier.available &&
-          modifier.required &&
-          (tallyByGroup.get(modifier.id) ?? 0) === 0
-        ) {
-          throw new AppError("options.selection_invalid", {
-            productId: underlyingProductId,
-            groupId: modifier.id,
-            reason: "required",
-          });
-        }
-      }
-    }
-
     items.push({
       product,
       quantity: line.quantity,
-      modifierSnapshots,
-      options: selectedOptions.map((option) => ({
-        // A child modifier line has no product to take a staff name from, and
-        // `working_order_lines.name` is NOT NULL, so the option's OWN label — resolved in the venue's
-        // default content language — is that line's name. Pricing cannot do this itself: it holds no
-        // default language.
-        name: resolveSnapshotText(
-          option.name,
-          contentConfig.defaultLanguage,
-          contentConfig.defaultLanguage,
-        ),
-        descriptions: option.name,
-        priceDelta: option.priceDelta,
-        vatClass: option.vatClass,
-        // The per-option count threads into `priceBasketWithOptions`, which prices the child at
+      // The picked product's three frozen names travel as the child row's own: `name` is the staff
+      // name (`working_order_lines.name` is NOT NULL), `descriptions` the customer map re-keyed onto
+      // the invoice locales below, `kitchenName` what the kitchen reads.
+      options: extraChildren.map((child) => ({
+        name: child.name,
+        descriptions: child.descriptions,
+        kitchenName: child.kitchenName,
+        // Already the GROSS price of ONE of this extra, resolved by the projection.
+        priceDelta: child.price,
+        // The extra PRODUCT's own class, never the dish's (spec §3.3, decision 9) — never null, so
+        // the dish's rate is never inherited.
+        vatClass: child.vatClass,
+        // The per-dish pick count threads into `priceBasketWithOptions`, which prices the child at
         // `dishQuantity × quantity` and stores that COMBINED quantity on the child line.
-        quantity: option.quantity,
+        quantity: child.quantity,
       })),
     });
     // The parent row's course is the ring-time resolver `<override> ?? product.course_id` (§2b); a
@@ -522,12 +526,12 @@ async function priceOrderLines(
       courseId: line.courseId ?? product.courseId ?? null,
       note,
       doneness,
-      modifierSnapshots,
+      optionSnapshots,
     });
-    for (const option of selectedOptions) {
+    for (const child of extraChildren) {
       lineMeta.push({
         kind: "child",
-        optionGroupItemId: option.id,
+        productId: child.productId,
         menuItemId: line.menuItemId ?? null,
       });
     }
@@ -589,9 +593,9 @@ async function priceOrderLines(
   const byLineNo = new Map(priced.lines.map((line, i) => [line.lineNo, ids[i]!]));
   const lineRows = priced.lines.map((line, i) => {
     // `lineMeta[i]` lines up with `priced.lines[i]` (both in `priceBasketWithOptions`'s
-    // parent-then-children expansion order): a PARENT row carries the dish's product + resolved course
-    // and no option/parent link; a CHILD row carries its source `option_group_item_id` and its parent's
-    // id, and NO product/course (a modifier has no product row and no independent kitchen course).
+    // parent-then-children expansion order): a PARENT row carries the dish's product, its resolved
+    // course and its options answers, and no parent link; a CHILD row carries the PICKED product and
+    // its parent's id, and no course (KDS coursing is per dish).
     const meta = lineMeta[i]!;
     return {
       id: ids[i]!,
@@ -600,14 +604,13 @@ async function priceOrderLines(
       // NULL for a top-level line; the parent dish's own pre-generated id for a child option line —
       // resolved from `line.parentLineNo` (the parent's `lineNo`) via `byLineNo`.
       parentLineId: line.parentLineNo == null ? null : byLineNo.get(line.parentLineNo)!,
-      // Authoring traceability back to the catalogue option (child only); NULL for a parent.
-      optionGroupItemId: meta.kind === "child" ? meta.optionGroupItemId : null,
-      // The priced product this draft line was built from — a PARENT dish only; a CHILD modifier has no
-      // product (its price/name are snapshotted onto the line by value), so NULL.
-      productId: meta.kind === "parent" ? meta.productId : null,
+      // A PARENT row's dish, a CHILD row's picked extra — both are products, and the child's is what
+      // the kitchen cooks and the diner is charged for (spec §3.4).
+      productId: meta.productId,
       name: line.name,
       descriptions: line.descriptions,
-      modifierSnapshots: line.modifierSnapshots ?? [],
+      // The dish's options answers; a child row answers nothing of its own.
+      optionSnapshots: meta.kind === "parent" ? meta.optionSnapshots : [],
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
       quantity: line.quantity,
@@ -697,7 +700,6 @@ export async function readLockedLines(
       vatRate: workingOrderLines.vatRate,
       name: workingOrderLines.name,
       descriptions: workingOrderLines.descriptions,
-      modifierSnapshots: workingOrderLines.modifierSnapshots,
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -736,7 +738,6 @@ export async function readLockedLines(
     vatRate: line.vatRate,
     name: line.name,
     descriptions: line.descriptions,
-    modifierSnapshots: line.modifierSnapshots ?? [],
     category: line.category,
     unitName: line.unitName,
     unitPrecision: line.unitPrecision,
@@ -821,8 +822,8 @@ export interface ParkOrderRequest {
     productId?: string;
     menuItemId?: string;
     quantity: string;
-    options?: { optionGroupItemId: string; quantity?: number }[];
-    modifierSelections?: ModifierSelection[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
   } & LineExtras)[];
   zoneId?: string;
   label?: string;
@@ -863,8 +864,8 @@ export async function createOpenOrder(
     productId?: string;
     menuItemId?: string;
     quantity: string;
-    options?: { optionGroupItemId: string; quantity?: number }[];
-    modifierSelections?: ModifierSelection[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
   } & LineExtras)[],
   label: string | null,
   // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
@@ -1586,8 +1587,8 @@ export async function addTabRound(
     menuItemId?: string;
     quantity: string;
     courseId?: string | null;
-    options?: { optionGroupItemId: string; quantity?: number }[];
-    modifierSelections?: ModifierSelection[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
     hold?: boolean;
   } & LineExtras)[],
 ): Promise<void> {
@@ -1987,7 +1988,8 @@ export interface TabLine {
    * A table tab's line list is what a waiter reads while serving, so it carries the same name the
    * till's product buttons and basket carry, not the customer-facing text a receipt prints. */
   name: string;
-  modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
+  /** The dish's frozen options answers; empty on a line that answered none and on every child. */
+  optionSnapshots?: OptionSnapshot[];
   lineNo: number;
   // Nullable since ordering modifiers (Task 2): a child modifier line has no product. Child-line
   // rendering on the tab lands in Task 6; today every tab line still carries a product.
@@ -2046,7 +2048,7 @@ export async function readTabLines(
       lineNo: workingOrderLines.lineNo,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
-      modifierSnapshots: workingOrderLines.modifierSnapshots,
+      optionSnapshots: workingOrderLines.optionSnapshots,
       productId: workingOrderLines.productId,
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
@@ -2408,18 +2410,17 @@ async function carveOffLines(
 ): Promise<void> {
   // Read ALL of fromTab's lines ONCE, under the lock, into a map — not just the named ones: the
   // parent↔child structure (FIX 2/4) needs the WHOLE tab to know which named lines are dishes carrying
-  // modifiers and which are modifier children. `id`/`parentLineId`/`optionGroupItemId` come too. The
-  // per-unit locked values a split INHERITS also come from here — never a catalogue re-read.
+  // modifiers and which are modifier children. `id` and `parentLineId` come too. The per-unit locked
+  // values a split INHERITS also come from here — never a catalogue re-read.
   const sourceLines = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
-      optionGroupItemId: workingOrderLines.optionGroupItemId,
       productId: workingOrderLines.productId,
       name: workingOrderLines.name,
       descriptions: workingOrderLines.descriptions,
-      modifierSnapshots: workingOrderLines.modifierSnapshots,
+      optionSnapshots: workingOrderLines.optionSnapshots,
       quantity: workingOrderLines.quantity,
       unitPrice: workingOrderLines.unitPrice,
       unitPriceGross: workingOrderLines.unitPriceGross,
@@ -2551,14 +2552,12 @@ async function carveOffLines(
         workingOrderId: toTabId,
         lineNo: maxLineNo! + i + 1,
         productId: line.productId,
-        // FIX 4: carry the catalogue traceability across, as `moveTabLines` does — a split must not
-        // drop `option_group_item_id`. `parent_line_id` is deliberately NOT carried: the refusal above
-        // guarantees a splittable line is top-level (no parent, no children), so it is always NULL here;
-        // carrying the source's raw id would (were the refusal relaxed) point at a line on the SOURCE.
-        optionGroupItemId: line.optionGroupItemId,
+        // `parent_line_id` is deliberately NOT carried: the refusal above guarantees a splittable line
+        // is top-level (no parent, no children), so it is always NULL here; carrying the source's raw
+        // id would (were the refusal relaxed) point at a line on the SOURCE.
         name: line.name,
         descriptions: line.descriptions,
-        modifierSnapshots: line.modifierSnapshots ?? [],
+        optionSnapshots: line.optionSnapshots ?? [],
         quantity,
         unitPrice: line.unitPrice,
         unitPriceGross: line.unitPriceGross,
@@ -2777,17 +2776,22 @@ export interface HeldOrder {
    * remain readable while older order paths are migrated to menu-item identity.
    */
   lines: {
-    modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
-    modifierSelections?: ModifierSelection[];
+    /** The dish's frozen options answers — the six names per answered list, no ids (spec §2.3). */
+    optionSnapshots?: OptionSnapshot[];
     workingOrderLineId?: string;
     menuItemId?: string;
     productId: string | null;
     quantity: string;
-    options?: {
-      optionGroupItemId: string;
-      name: Record<string, string>;
-      priceDelta: string;
-      quantity?: number;
+    /** The dish's extras, one entry per CHILD line, each carrying what that line froze: the picked
+     * product, its three names, the price it was sold at and how many per dish. These are VALUES, not
+     * a re-sendable selection — the child holds no list id to name (spec §3.4). */
+    extras?: {
+      productId: string | null;
+      name: string;
+      descriptions: Record<string, string>;
+      kitchenName: string | null;
+      price: string;
+      quantity: number;
     }[];
     note?: string;
     doneness?: Doneness;
@@ -2898,11 +2902,10 @@ export async function getHeldOrder(
         quantity: workingOrderLines.quantity,
         descriptions: workingOrderLines.descriptions,
         variantDescriptions: workingOrderLines.variantDescriptions,
-        modifierSnapshots: workingOrderLines.modifierSnapshots,
+        optionSnapshots: workingOrderLines.optionSnapshots,
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
-        optionGroupItemId: workingOrderLines.optionGroupItemId,
         note: workingOrderLines.note,
         doneness: workingOrderLines.doneness,
         variantId: workingOrderLines.variantId,
@@ -2936,37 +2939,28 @@ export async function getHeldOrder(
           return {
             productId: line.productId,
             quantity: line.quantity,
-            modifierSnapshots: line.modifierSnapshots,
-            ...(line.modifierSnapshots.length
-              ? {
-                  workingOrderLineId: line.id,
-                  modifierSelections: selectionsFromSnapshots(line.modifierSnapshots),
-                }
-              : {}),
+            optionSnapshots: line.optionSnapshots,
+            ...(line.optionSnapshots.length ? { workingOrderLineId: line.id } : {}),
           };
         }
-        const options = (childrenByParent.get(line.id) ?? []).flatMap((child) => {
-          if (child.optionGroupItemId === null) return [];
-          const optionQuantity = Number(child.quantity) / Number(line.quantity);
-          return [
-            {
-              optionGroupItemId: child.optionGroupItemId,
-              name: child.descriptions,
-              priceDelta: child.unitPriceGross,
-              ...(optionQuantity === 1 ? {} : { quantity: optionQuantity }),
-            },
-          ];
-        });
+        // Each child line's own frozen facts. The per-dish pick count is the child's stored quantity
+        // divided by the dish's, which is how it was written (`dishQuantity × pickQuantity`,
+        // `priceBasketWithOptions`).
+        const extras = (childrenByParent.get(line.id) ?? []).map((child) => ({
+          productId: child.productId,
+          name: child.name,
+          descriptions: child.descriptions,
+          kitchenName: child.kitchenName,
+          price: child.unitPriceGross,
+          quantity: Number(child.quantity) / Number(line.quantity),
+        }));
         return {
           workingOrderLineId: line.id,
-          modifierSnapshots: line.modifierSnapshots,
-          ...(line.modifierSnapshots.length
-            ? { modifierSelections: selectionsFromSnapshots(line.modifierSnapshots) }
-            : {}),
+          optionSnapshots: line.optionSnapshots,
           menuItemId: context.menuItemId,
           productId: line.productId,
           quantity: line.quantity,
-          ...(options.length === 0 ? {} : { options }),
+          ...(extras.length === 0 ? {} : { extras }),
           ...(line.note === null ? {} : { note: line.note }),
           ...(line.doneness === null ? {} : { doneness: line.doneness }),
           ...(line.variantId === null ? {} : { variantId: line.variantId }),
@@ -3020,8 +3014,8 @@ export interface UpdateHeldOrderRequest {
     productId?: string;
     menuItemId?: string;
     quantity: string;
-    options?: { optionGroupItemId: string; quantity?: number }[];
-    modifierSelections?: ModifierSelection[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
   } & LineExtras)[];
   label?: string;
 }
@@ -3063,17 +3057,16 @@ export async function updateHeldOrder(
 
     // A quantity-only edit keeps the line's commercial lock and stable id. The client identifies the
     // stored parent line explicitly; every line must still name the same product/offer, remain in the
-    // same order, and have identical modifier selections and customisations. Anything else takes the
-    // replacement path below and is priced from the current offer.
+    // same order, and answer its dish's extras and options exactly as the stored line did. Anything
+    // else takes the replacement path below and is priced from the current offer.
     const storedRows = await tx
       .select({
         id: workingOrderLines.id,
-        modifierSnapshots: workingOrderLines.modifierSnapshots,
+        optionSnapshots: workingOrderLines.optionSnapshots,
         parentLineId: workingOrderLines.parentLineId,
         productId: workingOrderLines.productId,
         unitPriceGross: workingOrderLines.unitPriceGross,
         quantity: workingOrderLines.quantity,
-        optionGroupItemId: workingOrderLines.optionGroupItemId,
         note: workingOrderLines.note,
         doneness: workingOrderLines.doneness,
       })
@@ -3094,64 +3087,85 @@ export async function updateHeldOrder(
         line,
       ]),
     );
-    const preservesEveryLine =
-      req.lines.length === storedParents.length &&
-      req.lines.every((line, index) => {
-        const stored = storedParents[index];
-        if (
-          stored === undefined ||
-          line.workingOrderLineId !== stored.id ||
-          (line.note?.trim() ?? null) !== stored.note ||
-          (line.doneness ?? null) !== stored.doneness
-        ) {
-          return false;
-        }
-        const sameIdentity =
-          line.menuItemId !== undefined
-            ? contextByLine.get(stored.id)?.menuItemId === line.menuItemId &&
-              line.productId === undefined
-            : line.productId === stored.productId && line.menuItemId === undefined;
-        if (!sameIdentity) return false;
-        if (line.modifierSelections !== undefined || stored.modifierSnapshots.length > 0) {
-          if (!sameModifierSelections(line.modifierSelections ?? [], stored.modifierSnapshots))
-            return false;
-        }
-        const requestedOptions = new Map<string, number>();
-        for (const option of line.modifierSelections === undefined
-          ? (line.options ?? [])
-          : line.modifierSelections.flatMap((selection) =>
-              selection.type === "extras"
-                ? selection.choices.map((choice) => ({
-                    optionGroupItemId: choice.choiceId,
-                    quantity: choice.quantity,
-                  }))
-                : [],
-            )) {
-          const quantity = option.quantity ?? 1;
-          if (!Number.isInteger(quantity) || quantity < 1) return false;
-          requestedOptions.set(
-            option.optionGroupItemId,
-            (requestedOptions.get(option.optionGroupItemId) ?? 0) + quantity,
-          );
-        }
-        const children = childrenByParent.get(stored.id) ?? [];
-        if (children.length !== requestedOptions.size) return false;
-        return children.every((child) => {
-          if (child.optionGroupItemId === null) return false;
-          const optionQuantity = requestedOptions.get(child.optionGroupItemId);
-          return (
-            optionQuantity !== undefined &&
-            compareDecimal(
-              multiplyDecimal(decimal(stored.quantity), decimal(String(optionQuantity))),
-              decimal(child.quantity),
-            ) === 0
-          );
-        });
+
+    // The definitions the STORED dishes offer, read once for the whole basket. A preserved line is
+    // by definition one whose dish has not changed, so the stored line's own product and offer are
+    // the right holders to resolve against — no zone read, and none of this inside the loop.
+    const contentConfig = await readContentLanguages(tx, cfg.locale);
+    const modifiers = await resolveBasketModifiers(
+      tx,
+      storedParents.flatMap((stored) =>
+        stored.productId === null
+          ? []
+          : [
+              {
+                productId: stored.productId,
+                menuItemId: contextByLine.get(stored.id)?.menuItemId ?? null,
+              },
+            ],
+      ),
+      contentConfig.defaultLanguage,
+    );
+
+    /**
+     * What a requested line would freeze if it were re-priced now, or `null` when it is not the same
+     * line at all. An invalid selection answers `null` too: the replacement path below re-validates
+     * it and raises the authoritative refusal, so nothing is swallowed.
+     */
+    const rebuilt = req.lines.map((line, index) => {
+      const stored = storedParents[index];
+      if (
+        stored === undefined ||
+        line.workingOrderLineId !== stored.id ||
+        (line.note?.trim() ?? null) !== stored.note ||
+        (line.doneness ?? null) !== stored.doneness ||
+        stored.productId === null
+      ) {
+        return null;
+      }
+      const context = contextByLine.get(stored.id);
+      const sameIdentity =
+        line.menuItemId !== undefined
+          ? context?.menuItemId === line.menuItemId && line.productId === undefined
+          : line.productId === stored.productId && line.menuItemId === undefined;
+      if (!sameIdentity) return null;
+      let frozen;
+      try {
+        frozen = buildLineExtras(
+          {
+            extras: modifiers.extrasByHolder.get(context?.menuItemId ?? stored.productId) ?? [],
+            options: modifiers.optionsByProduct.get(stored.productId) ?? [],
+          },
+          modifiers.extraProducts,
+          { extras: line.extras, options: line.options },
+          contentConfig.defaultLanguage,
+        );
+      } catch {
+        return null;
+      }
+      // Compared by VALUES, and index-wise because both sides are built in the OFFERED order — the
+      // validators answer in their lists' own order, never the wire's.
+      if (!isDeepStrictEqual(frozen.optionSnapshots, stored.optionSnapshots)) return null;
+      const children = childrenByParent.get(stored.id) ?? [];
+      if (children.length !== frozen.extraChildren.length) return null;
+      const same = children.every((child, childIndex) => {
+        const pick = frozen.extraChildren[childIndex]!;
+        return (
+          child.productId === pick.productId &&
+          compareDecimal(
+            multiplyDecimal(decimal(stored.quantity), decimal(String(pick.quantity))),
+            decimal(child.quantity),
+          ) === 0
+        );
       });
+      return same ? { stored, children, picks: frozen.extraChildren } : null;
+    });
+    const preservesEveryLine =
+      req.lines.length === storedParents.length && rebuilt.every((entry) => entry !== null);
     if (preservesEveryLine) {
       for (let index = 0; index < req.lines.length; index++) {
         const requested = req.lines[index]!;
-        const stored = storedParents[index]!;
+        const { stored, children, picks } = rebuilt[index]!;
         await tx
           .update(workingOrderLines)
           .set({
@@ -3161,26 +3175,14 @@ export async function updateHeldOrder(
           .where(
             and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, stored.id)),
           );
-        const optionQuantityById = new Map<string, number>();
-        for (const option of requested.modifierSelections === undefined
-          ? (requested.options ?? [])
-          : requested.modifierSelections.flatMap((selection) =>
-              selection.type === "extras"
-                ? selection.choices.map((choice) => ({
-                    optionGroupItemId: choice.choiceId,
-                    quantity: choice.quantity,
-                  }))
-                : [],
-            )) {
-          optionQuantityById.set(
-            option.optionGroupItemId,
-            (optionQuantityById.get(option.optionGroupItemId) ?? 0) + (option.quantity ?? 1),
-          );
-        }
-        for (const child of childrenByParent.get(stored.id) ?? []) {
+        // Each child follows its dish: the same `dishQuantity × pickQuantity` the pricer applies,
+        // recomputed from the STORED gross so the price the line was sold at is untouched. `picks[i]`
+        // is the child at `children[i]` — the two were matched index-wise above.
+        for (let childIndex = 0; childIndex < children.length; childIndex++) {
+          const child = children[childIndex]!;
           const childQuantity = multiplyDecimal(
             decimal(requested.quantity),
-            decimal(String(optionQuantityById.get(child.optionGroupItemId!)!)),
+            decimal(String(picks[childIndex]!.quantity)),
           );
           await tx
             .update(workingOrderLines)
@@ -3694,7 +3696,8 @@ export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
-  modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
+  /** The dish's frozen options answers (spec §2.3); empty when it answered none. */
+  optionSnapshots?: OptionSnapshot[];
   /** The dish's frozen KITCHEN label — `kitchen_name` falling back to `name`, joined to the variant's
    * with " · ". The same name the printed kitchen ticket carries (`apps/server/src/kitchen-print.ts`):
    * a cook reads one name whether the ticket came off a printer or off a screen. */
@@ -3810,19 +3813,20 @@ async function readQueueSubItems(
   >();
   if (parentLineIds.length === 0) return { modifiersByParent, asServedByParent };
 
-  // ONE child read: the modifier descriptions from the child modifier lines (LEFT join on the nullable
-  // `option_group_item_id`), in `line_no` (selection) order — the indented sub-text the KDS renders
-  // under each dish, plus each EXTRA's OWN allergens and dietary suitability (from the joined option),
-  // shown beside the dish's own. No fold: the dish's figures and each extra's are independent.
+  // ONE child read: the extras' descriptions from the child lines, in `line_no` (selection) order —
+  // the indented sub-text the KDS renders under each dish, plus each EXTRA's OWN allergens and
+  // dietary labels, taken from the PRODUCT the child line names (LEFT join, so a child whose product
+  // row has gone still renders its frozen text). Shown beside the dish's own; no fold, because the
+  // dish's figures and each extra's are independent.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
       descriptions: workingOrderLines.descriptions,
-      addAllergens: optionGroupItems.addAllergens,
-      suitableFor: optionGroupItems.dietarySuitability,
+      addAllergens: products.allergens,
+      dietaryDeclarations: products.dietaryDeclarations,
     })
     .from(workingOrderLines)
-    .leftJoin(optionGroupItems, eq(optionGroupItems.id, workingOrderLines.optionGroupItemId))
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .where(inArray(workingOrderLines.parentLineId, parentLineIds))
     .orderBy(workingOrderLines.lineNo);
   for (const child of childRows) {
@@ -3831,7 +3835,8 @@ async function readQueueSubItems(
     mods.push({
       descriptions: child.descriptions,
       addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
-      suitableFor: child.suitableFor ?? [],
+      // The dish's own row a few lines below expands its declarations the same way.
+      suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
     });
     modifiersByParent.set(child.parentLineId!, mods);
   }
@@ -3884,7 +3889,7 @@ export async function listStationQueue(
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
-      modifierSnapshots: workingOrderLines.modifierSnapshots,
+      optionSnapshots: workingOrderLines.optionSnapshots,
       quantity: workingOrderLines.quantity,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -3982,7 +3987,7 @@ export async function listStationQueue(
       // One label per queue item: the line's frozen kitchen names, each falling back to its staff
       // name, joined — the same resolver the printed kitchen ticket uses.
       name: kitchenPresentationName(row),
-      modifierSnapshots: row.modifierSnapshots,
+      optionSnapshots: row.optionSnapshots,
       quantity: row.quantity,
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
@@ -4031,7 +4036,8 @@ export async function listStationQueue(
  *  resolved server-side by `kitchenPresentationName`, the same call `StationQueueItem.name` uses — a
  *  pre-flattened string, not a locale map. */
 export interface ExpoItem {
-  modifierSnapshots?: import("@waitron/shared").ModifierSnapshot[];
+  /** The dish's frozen options answers (spec §2.3); empty when it answered none. */
+  optionSnapshots?: OptionSnapshot[];
   id: string;
   /** The dish's frozen KITCHEN label — the same one {@link StationQueueItem.name} carries, so the pass
    * and the stations it is expediting read identical names. */
@@ -4166,7 +4172,7 @@ export async function listExpoQueue(
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
-      modifierSnapshots: workingOrderLines.modifierSnapshots,
+      optionSnapshots: workingOrderLines.optionSnapshots,
       quantity: workingOrderLines.quantity,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -4310,7 +4316,7 @@ export async function listExpoQueue(
       // One label per pass item: the line's frozen kitchen names, resolved exactly as the station
       // queue and the printed ticket resolve them.
       name: kitchenPresentationName(row),
-      modifierSnapshots: row.modifierSnapshots,
+      optionSnapshots: row.optionSnapshots,
       qty: row.quantity,
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,

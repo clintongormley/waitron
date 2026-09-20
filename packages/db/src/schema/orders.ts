@@ -1,4 +1,4 @@
-import type { ModifierSnapshot } from "@waitron/shared";
+import type { OptionSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
 import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
@@ -139,12 +139,13 @@ export const workingOrderLines = table(
     lineNo: count("line_no").notNull(),
     // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.
     name: label("name").notNull(),
-    // The priced product this draft line was built from — the pricing input described above.
-    // NULLABLE (ordering modifiers, Task 2): a top-level dish line always carries a product, but a
-    // CHILD MODIFIER line (parent_line_id set) has none — its price/name are snapshotted onto the
-    // line by value, not resolved from a product. The FK is declared in extraConfig below
-    // (null-permissive under MATCH SIMPLE, so a NULL product_id skips it and parent rows are
-    // unaffected), so this column carries no `.references()` of its own.
+    // The priced product this draft line was built from — the pricing input described above. A
+    // CHILD EXTRA line (parent_line_id set) carries the PICKED product here, which is what the
+    // kitchen cooks and the diner is charged for; its price and its three names are still
+    // snapshotted onto the line by value, so deleting the list that offered it cannot rewrite the
+    // order. NULLABLE all the same: a child line whose product has gone is still a line, and the
+    // FK is declared in extraConfig below (null-permissive under MATCH SIMPLE), so this column
+    // carries no `.references()` of its own.
     productId: id("product_id"),
     variantId: id("variant_id"),
     // Frozen variant staff name — plain text; null when the line names no variant.
@@ -157,7 +158,11 @@ export const workingOrderLines = table(
     variantKitchenName: label("variant_kitchen_name"),
     kitchenName: label("kitchen_name"),
     descriptions: json<Record<string, string>>("descriptions").notNull(),
-    modifierSnapshots: json<ModifierSnapshot[]>("modifier_snapshots").notNull().default([]),
+    // The diner's answers to this dish's OPTIONS lists, each frozen as the list's three names and
+    // the chosen label's three names — no id points back at either, so editing or deleting a list
+    // cannot rewrite a saved order (spec §2.3). EXTRAS are not here: a pick becomes its own child
+    // line, carrying its product.
+    optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
     // Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
@@ -189,7 +194,6 @@ export const workingOrderLines = table(
     servedAt: tsString("served_at"),
     courseId: id("course_id"),
     parentLineId: id("parent_line_id"),
-    optionGroupItemId: id("option_group_item_id"),
     note: label("note"),
     doneness: doneness("doneness"),
   },

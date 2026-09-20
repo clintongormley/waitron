@@ -607,6 +607,43 @@ What extras lists left open, and what #449 found on the way:
   id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
   worth knowing if extras lists turn out to be much longer.
 
+What the order path (the plan's Task 7) left behind:
+
+- **A quantity-only edit made after a list is RENAMED re-prices the line.** `updateHeldOrder`'s
+  preserve path asks whether the request's answers, resolved against the lists as they are NOW,
+  equal what the line froze. An options answer freezes NAMES and no ids (spec §2.3), so after a
+  rename the two sides differ, the line takes the replacement path, and it is re-priced at today's
+  price and re-frozen with the new wording — a rename can therefore change what a saved order says
+  the diner chose and what it costs. The old model compared by id and survived a rename. Nothing
+  reaches this today: the till sends no `extras`/`options` until Task 12. **Next action:** Task 8
+  owns held-order comparison (`sameExtraSelections` / `sameOptionSelections`) and has to settle it —
+  either by carrying ids the comparison can use, or by deciding a rename SHOULD drop the line onto
+  the replacement path.
+- **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
+  order path refuses an extras pick on a dish that is not priced `each`
+  (`options.unsupported_product`, the code the legacy option payload used), because a child is priced
+  `dishQuantity × pickQuantity` and a fraction of a dish would bill a fraction of an extra. But the
+  two order paths read that fact from different places: the MENU-OFFER path derives it from the unit
+  the offer carries (`priceOrderLines`, `offer.unit.hardwareUnit === null ? "each" : "weight"`),
+  while the plain PRODUCT path reads `products.pricing_unit` — and `assignProductUnit`
+  (`packages/catalogue/src/units.ts`) writes `product_units` without touching that column. So one
+  product, moved onto the kg unit that way, is refused through its menu offer and billed
+  fractionally through its product id. Measured on this branch: the same fixture failed with
+  `options.unsupported_product` on the offer path and went through on the product path. Only the
+  refusing half is pinned by a test ("refuses an extras pick on a menu offer whose dish is sold by
+  weight", `apps/server/src/working-order.test.ts`). This is a second instance of the shape the
+  Units entry above already warns about. **Next action:** whoever builds Units decides which column
+  answers "is this sold one at a time" and makes both paths read it.
+- **A filed sale carries no options answers until Task 9.** `readLockedLines` no longer supplies
+  `sale_lines.modifier_snapshots`, so a sale filed from a new-path order carries `[]` there and the
+  receipt prints no options line. The column and `modifierSnapshotLabels`
+  (`apps/server/src/modifier-snapshot-labels.ts`) stay for that task to replace. Not reachable from
+  the till, which sends no answers until Task 12.
+- **`modifierDependants(...).orders` is always 0, and `deleteModifier` no longer refuses.** An open
+  order line has no column that could name a legacy modifier or one of its choices, so the refusal
+  and the count that fed the dashboard's delete confirmation had nothing left to find. The whole
+  file goes with Task 13.
+
 What the product attachment (#456, the plan's Task 6) left behind:
 
 - **A delete-then-insert of rows that REFERENCE another table can deadlock with a delete of the

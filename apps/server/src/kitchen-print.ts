@@ -1,4 +1,4 @@
-import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
+import { optionSnapshotLabels } from "./option-snapshot-labels.js";
 // KDS-4 print-on-fire (design §3c) — the DB-facing half that turns a freshly-fired set of ticket items
 // into kitchen print jobs. It lives OUTSIDE working-order.ts so that (already large) module gains only a
 // call, not the whole routing/formatting body. Called from inside `fireLines`/`fireCourse` on the
@@ -175,7 +175,7 @@ async function buildTicketItems(
       lineNo: workingOrderLines.lineNo,
       quantity: workingOrderLines.quantity,
       name: workingOrderLines.name,
-      modifierSnapshots: workingOrderLines.modifierSnapshots,
+      optionSnapshots: workingOrderLines.optionSnapshots,
       unitName: workingOrderLines.unitName,
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
@@ -190,9 +190,9 @@ async function buildTicketItems(
     .where(inArray(workingOrderLines.id, lineIds));
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
 
-  // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed
-  // by `parent_line_id` over the fired parents' ids, printed as indented `+ <name>` sub-text
-  // beneath each dish. Ordered by `line_no` so the options print in selection order.
+  // The CHILD extra lines of the fired parents — one grouped read, keyed by `parent_line_id` over
+  // the fired parents' ids, printed as indented `+ <name>` sub-text beneath each dish. Ordered by
+  // `line_no` so the picks print in the order they were offered.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
@@ -203,14 +203,14 @@ async function buildTicketItems(
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.parentLineId, lineIds))
     .orderBy(workingOrderLines.lineNo);
-  // parent line id → its option strings in line_no order. Per-option quantity is recovered from the filed
-  // COMBINED child quantity (see perDishOptionQuantity); a per-dish count > 1 appends an ASCII " xN"
+  // parent line id → its extras strings in line_no order. The per-dish pick count is recovered from the
+  // stored COMBINED child quantity (see perDishOptionQuantity); a count > 1 appends an ASCII " xN"
   // suffix, matching kitchen-ticket.ts's `qty x name` convention. Every child's parent is in `lineById`.
   const modifiersByParent = new Map<string, string[]>();
   for (const child of childRows) {
     const parent = lineById.get(child.parentLineId!)!;
     const perDish = perDishOptionQuantity(child.quantity, parent.quantity);
-    // A modifier sub-line prints the staff name the child line froze — its own label.
+    // An extras sub-line prints the staff name the child line froze — the picked product's own.
     const name = child.name;
     const label = perDish > 1 ? `${name} x${perDish}` : name;
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
@@ -231,7 +231,7 @@ async function buildTicketItems(
         doneness: row.doneness ?? undefined,
         note: row.note ?? undefined,
         modifiers: [
-          ...modifierSnapshotLabels(row.modifierSnapshots, cfg.locale),
+          ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),
         ],
       },

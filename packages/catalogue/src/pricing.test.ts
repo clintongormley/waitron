@@ -241,6 +241,23 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
     expect(priced.total.toString()).toBe("3.40");
   });
 
+  it("carries the option's own kitchen name onto its child line", () => {
+    const priced = priceBasketWithOptions([
+      {
+        product: each("2.50", "reduced", "Drinks"),
+        quantity: "1",
+        options: [
+          {
+            ...opt("4.50", "general", "Vino staff", { es: "Vino customer" }),
+            kitchenName: "Vino kitchen",
+          },
+        ],
+      },
+    ]);
+    // The dish's own kitchen name is absent here, so a child reading the parent's would read null.
+    expect(priced.lines[1]!.kitchenName).toBe("Vino kitchen");
+  });
+
   it("emits THREE lines; both children carry the dish's lineNo as parentLineNo, and a free option bases to 0", () => {
     const priced = priceBasketWithOptions([
       {

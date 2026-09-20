@@ -1,12 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import {
-  asAppUser,
-  withTransaction,
-  workingOrders,
-  workingOrderLines,
-  type Transaction,
-} from "@waitron/db";
+import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { createModifier, modifierDependants } from "./modifiers.js";
 import {
@@ -39,8 +33,8 @@ const optionsGroup = (choice: {
   defaultChoiceId: choice.id,
 });
 
-it("reports products, menus and the open-order count a delete would touch", async () => {
-  const { tillId, nodeId } = await seedVenue(suite.admin);
+it("reports the products and menus a delete would touch", async () => {
+  await seedVenue(suite.admin);
   await seedLegacySellingUnits(suite.admin);
   const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
   const seeded = await app(async (tx) => {
@@ -79,23 +73,6 @@ it("reports products, menus and the open-order count a delete would touch", asyn
     await setMenuItemOptionGroups(tx, itemQ.id, [
       { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
     ]);
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({ tillId, nodeId, orderNumber: 1 })
-      .returning();
-    await tx.insert(workingOrderLines).values({
-      workingOrderId: order!.id,
-      productId: productQ.id,
-      lineNo: 1,
-      name: "Tea",
-      descriptions: { "en-GB": "Tea" },
-      optionGroupItemId: choice.id,
-      quantity: "1",
-      unitPrice: "1.82",
-      unitPriceGross: "2.00",
-      vatRate: "10.00",
-      lineTotal: "2.00",
-    });
     return { modifierId: modifier.id, productP, productQ, itemQ };
   });
   const dependants = await app((tx) => modifierDependants(tx, seeded.modifierId));
@@ -105,5 +82,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
   expect(dependants.products.map((p) => p.name)).toContain("Coffee");
   expect(dependants.menus.map((m) => m.id)).toContain(seeded.itemQ.id);
   expect(dependants.menus.map((m) => m.name)).toContain("Tea");
-  expect(dependants.orders).toBe(1);
+  // Always zero: an open order line carries no column that could name a modifier or one of its
+  // choices, so nothing can make this anything else (`deleteModifier`, modifiers.ts).
+  expect(dependants.orders).toBe(0);
 });

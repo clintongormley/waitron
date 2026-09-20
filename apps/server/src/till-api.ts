@@ -1,4 +1,4 @@
-import type { ModifierSelection } from "@waitron/shared";
+import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
@@ -1261,9 +1261,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = await requireSession(deps, c);
       const body = await readJsonBody<{
         id: string;
-        // A parked line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `parkOrder` →
-        // `priceOrderLines`, which validates + persists them on the parent dish line.
-        lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+        // A parked line MAY carry `extras` and `options` (spec §2.3, §3.4) and per-line `LineExtras`
+        // (NON-FISCAL) — all forwarded to `parkOrder` → `priceOrderLines`, which validates them
+        // against the dish's own definitions.
+        lines: ({
+          productId?: string;
+          menuItemId?: string;
+          quantity: string;
+          extras?: ExtraSelection[];
+          options?: OptionSelection[];
+        } & LineExtras)[];
         zoneId?: string;
         label?: string;
       }>(c);
@@ -1333,9 +1340,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const body = await readJsonBody<{
-        // A line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `updateHeldOrder` →
-        // `priceOrderLines`, which validates + persists them on the parent dish line.
-        lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
+        // A line MAY carry `extras` and `options` (spec §2.3, §3.4) and per-line `LineExtras`
+        // (NON-FISCAL) — all forwarded to `updateHeldOrder`, which compares them against what the
+        // stored line froze before deciding whether the edit is quantity-only.
+        lines: ({
+          productId?: string;
+          menuItemId?: string;
+          quantity: string;
+          extras?: ExtraSelection[];
+          options?: OptionSelection[];
+        } & LineExtras)[];
         label?: string;
       }>(c);
       await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
@@ -1929,10 +1943,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // picker set — the ring-time resolver applies `<override> ?? product.course_id` (`addTabRound` →
       // `priceOrderLines`). Absent (the picker left on the product default) = the product's default course.
       const body = await readJsonBody<{
-        // A round line MAY carry selected modifier `options` (ordering modifiers) — threaded through
-        // `addTabRound` → `priceOrderLines`, which expands each into a parent + child rows. Optional, so
-        // a plain `{productId, quantity}` round is unchanged. An option MAY carry a per-option `quantity`
-        // (absent = 1), validated + priced server-side against the item's `max_quantity`. A round line
+        // A round line MAY carry `extras` and `options` — threaded through `addTabRound` →
+        // `priceOrderLines`, which validates both against the dish's own definitions and expands each
+        // pick into a child row. Optional, so a plain `{productId, quantity}` round is unchanged. A round
+        // line
         // MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
         // line and snapshotted onto its ticket item at fire. Coursing editing (A3): a round line MAY carry
         // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
@@ -1942,8 +1956,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           menuItemId?: string;
           quantity: string;
           courseId?: string | null;
-          options?: { optionGroupItemId: string; quantity?: number }[];
-          modifierSelections?: ModifierSelection[];
+          extras?: ExtraSelection[];
+          options?: OptionSelection[];
           hold?: boolean;
         } & LineExtras)[];
       }>(c);

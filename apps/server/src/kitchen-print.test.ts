@@ -2,20 +2,19 @@ import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  asAppUser,
-  optionGroupItems,
-  optionGroups,
-  printJobs,
-  productOptionGroups,
-  ticketItems,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { asAppUser, printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Doneness, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
+import {
+  assignCatalogueToLocation,
+  createCatalogue,
+  createExtraList,
+  createProduct,
+  readContentLanguages,
+  writeProductModifiers,
+} from "@waitron/catalogue";
+import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
@@ -180,7 +179,8 @@ async function fireNewOrder(
   lines: {
     productId: string;
     quantity: string;
-    options?: { optionGroupItemId: string; quantity?: number }[];
+    extras?: ExtraSelection[];
+    options?: OptionSelection[];
     // Order-line customisation (spec §2/§3): a parent line MAY carry a note/doneness, snapshotted at fire.
     note?: string;
     doneness?: Doneness;
@@ -204,45 +204,56 @@ async function fireNewOrder(
   return id;
 }
 
-/** Attach a fresh single-item option group to `productId` and return the option-item id — the shape a
- *  round line's `options: [{ optionGroupItemId }]` selects. Each call mints its OWN group (minSelect 0,
- *  maxSelect 1), so two calls give two independently-selectable options on one dish. The option carries
- *  NO station — a modifier never routes to its own station (that is the point of the parent-only rule). */
-async function addOption(
+/** Offer one OPTIONAL extras list (`minPicks` 0, uncapped) on `dishId`, one item per entry, and
+ *  return the list id with the offered products' ids in the order offered — the shape a round line's
+ *  `extras: [{ listId, picks }]` picks from. Each item is a product of its own, created here, so a
+ *  pick becomes a CHILD line carrying that product. `maxQuantity` is the per-dish cap a pick's own
+ *  quantity is checked against. None of these products is routed to a station: a child line never
+ *  resolves one, which is the point of the parent-only rule. */
+async function addExtras(
   tx: Transaction,
-  productId: string,
-  name: string,
-  maxQuantity = 1,
-): Promise<string> {
-  const [group] = await tx
-    .insert(optionGroups)
-    .values({
-      name: { [LOCALE]: `${name} group` },
-      minSelect: 0,
-      // Per-option quantity counts toward maxSelect (working-order.ts), so a maxQuantity>1 option needs
-      // headroom here for its combined count to be accepted.
-      maxSelect: maxQuantity,
-      required: false,
-      sort: 0,
-    })
-    .returning({ id: optionGroups.id });
-  const [item] = await tx
-    .insert(optionGroupItems)
-    .values({
-      groupId: group!.id,
-      name: { [LOCALE]: name },
-      priceDelta: "0.50",
+  cfg: TillConfig,
+  catalogueId: string,
+  dishId: string,
+  items: { name: string; customerName?: string; kitchenName?: string; maxQuantity?: number }[],
+): Promise<{ listId: string; productIds: string[] }> {
+  const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
+  const productIds: string[] = [];
+  for (const item of items) {
+    const { id } = await createProduct(tx, {
+      catalogueId,
+      categoryId: null,
+      name: item.name,
+      ...(item.customerName === undefined
+        ? {}
+        : { customerName: { [defaultLanguage]: item.customerName } }),
+      ...(item.kitchenName === undefined ? {} : { kitchenName: item.kitchenName }),
+      pricingUnit: "each",
+      unitPrice: "0.50",
       vatClass: "reduced",
-      maxQuantity,
-      sort: 0,
-    })
-    .returning({ id: optionGroupItems.id });
-  await tx.insert(productOptionGroups).values({
-    productId,
-    groupId: group!.id,
-    sort: 0,
-  });
-  return item!.id;
+    });
+    productIds.push(id);
+  }
+  const list = await createExtraList(
+    tx,
+    {
+      name: "Extras",
+      customerName: null,
+      kitchenName: null,
+      minPicks: 0,
+      maxPicks: null,
+      active: true,
+      items: productIds.map((productId, index) => ({
+        productId,
+        maxQuantity: items[index]!.maxQuantity ?? 1,
+        preselected: false,
+        price: null,
+      })),
+    },
+    cfg.locale,
+  );
+  await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
+  return { listId: list.id, productIds };
 }
 
 /** Spy the single chokepoint every outbound TCP open funnels through (outbox.test.ts's proof): if the
@@ -597,26 +608,28 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
 });
 
 describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, child sub-text)", () => {
-  it("fires a dish with two options as ONE ticket_item (the parent), never one per child", async () => {
+  it("fires a dish with two extras as ONE ticket_item (the parent), never one per child", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
-      // A dish with TWO options — even with a DEFAULT station present (so a child would otherwise route
-      // to it), only the parent must become a ticket item.
+      // A dish with TWO extras picked — even with a DEFAULT station present (so a child would otherwise
+      // route to it), only the parent must become a ticket item.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cortado, "Grande");
-      const avena = await addOption(tx, cortado, "Leche avena");
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
+        { name: "Nata" },
+        { name: "Leche avena" },
+      ]);
 
       const orderId = await fireNewOrder(tx, cfg, [
         {
           productId: cortado,
           quantity: "1",
-          options: [{ optionGroupItemId: grande }, { optionGroupItemId: avena }],
+          extras: [{ listId, picks: productIds.map((productId) => ({ productId, quantity: 1 })) }],
         },
       ]);
-      // The persisted lines: one parent (product set, parent_line_id null) + two children.
+      // The persisted lines: one parent (parent_line_id null) + one child per pick.
       const lines = await tx
         .select({
           id: workingOrderLines.id,
@@ -626,7 +639,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId))
         .orderBy(workingOrderLines.lineNo);
-      expect(lines).toHaveLength(3); // parent + two child modifier lines
+      expect(lines).toHaveLength(3); // parent + two child extra lines
       const parent = lines.find((l) => l.parentLineId === null)!;
       const ticketItemRows = await tx
         .select({ workingOrderLineId: ticketItems.workingOrderLineId })
@@ -640,21 +653,25 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(orderId).toBeTruthy();
   });
 
-  it("renders the dish then its two options as indented '+' sub-text on the kitchen ticket", async () => {
+  it("renders the dish then its two extras as indented '+' sub-text on the kitchen ticket", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cortado, "Grande");
-      const avena = await addOption(tx, cortado, "Leche avena");
+      // Each extra carries three DIFFERENT names, so a sub-line that read the customer-facing text
+      // instead of the staff name the child line froze reads differently (CLAUDE.md §4).
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
+        { name: "Nata", customerName: "Nata montada", kitchenName: "NAT" },
+        { name: "Leche avena", customerName: "Bebida de avena", kitchenName: "AVE" },
+      ]);
 
       await fireNewOrder(tx, cfg, [
         {
           productId: cortado,
           quantity: "1",
-          options: [{ optionGroupItemId: grande }, { optionGroupItemId: avena }],
+          extras: [{ listId, picks: productIds.map((productId) => ({ productId, quantity: 1 })) }],
         },
       ]);
       return { printerId, jobs: await printJobsFor(tx) };
@@ -664,10 +681,13 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
     expect(ticket).toContain("Cortado"); // the parent dish line
-    expect(ticket).toContain("+ Grande"); // each option as indented sub-text beneath the parent
+    expect(ticket).toContain("+ Nata"); // each pick as indented sub-text beneath the parent
     expect(ticket).toContain("+ Leche avena");
-    // The options appear BELOW the dish, and each sub-text row carries the "+ " marker.
-    expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Grande"));
+    // A cook reads the staff name, never the diner's wording.
+    expect(ticket).not.toContain("Nata montada");
+    expect(ticket).not.toContain("Bebida de avena");
+    // The picks appear BELOW the dish, and each sub-text row carries the "+ " marker.
+    expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Nata"));
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Leche avena"));
   });
 
@@ -697,27 +717,38 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(ticket.indexOf("MEDIUM RARE")).toBeLessThan(ticket.indexOf("* sin sal"));
   });
 
-  it("badges a modifier's PER-DISH count when it exceeds one, leaving a plain modifier's line unchanged", async () => {
-    // Per-option quantity (landed feature): a modifier taken ×N per dish is filed as a CHILD line whose
-    // stored `quantity` is the COMBINED count = dishQuantity × perOptionQuantity. The kitchen ticket
-    // shows the per-dish count (childQuantity ÷ parentDishQuantity) as an ASCII "xN" suffix on the
-    // modifier line ONLY when it exceeds 1 — so a plain modifier prints `  + <name>` exactly as before.
+  it("badges an extra's PER-DISH count when it exceeds one, leaving a single pick's line unchanged", async () => {
+    // Per-pick quantity: an extra taken ×N per dish is filed as a CHILD line whose stored `quantity` is
+    // the COMBINED count = dishQuantity × pickQuantity. The kitchen ticket shows the per-dish count
+    // (childQuantity ÷ parentDishQuantity) as an ASCII "xN" suffix on the child line ONLY when it
+    // exceeds 1 — so a single pick prints `  + <name>` exactly as before.
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cortado, "Grande", 3); // maxQuantity 3 admits a ×2
-      const avena = await addOption(tx, cortado, "Leche avena"); // plain (max 1)
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
+        { name: "Nata", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
+        { name: "Leche avena" }, // single pick (cap 1)
+      ]);
+      const [nata, avena] = productIds;
 
-      // Dish quantity 1; the "Grande" option taken ×2 → child quantity 2 (per-dish 2 → "x2"); the
-      // "Leche avena" option taken once → child quantity 1 (per-dish 1 → no suffix).
+      // Dish quantity 1; "Nata" picked ×2 → child quantity 2 (per-dish 2 → "x2"); "Leche avena" picked
+      // once → child quantity 1 (per-dish 1 → no suffix).
       await fireNewOrder(tx, cfg, [
         {
           productId: cortado,
           quantity: "1",
-          options: [{ optionGroupItemId: grande, quantity: 2 }, { optionGroupItemId: avena }],
+          extras: [
+            {
+              listId,
+              picks: [
+                { productId: nata!, quantity: 2 },
+                { productId: avena!, quantity: 1 },
+              ],
+            },
+          ],
         },
       ]);
       return { printerId, jobs: await printJobsFor(tx) };
@@ -727,28 +758,35 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
     expect(ticket).toContain("Cortado");
-    expect(ticket).toContain("+ Grande x2"); // per-dish count badged with an ASCII "x"
-    expect(ticket).toContain("+ Leche avena"); // plain modifier — unchanged, no suffix
-    expect(ticket).not.toContain("Leche avena x"); // the plain modifier carries NO count
-    // Proven by contrast: without the badge the Grande line would read `+ Grande`, like the control.
-    expect(ticket).not.toMatch(/\+ Grande(?! x)/u);
+    expect(ticket).toContain("+ Nata x2"); // per-dish count badged with an ASCII "x"
+    expect(ticket).toContain("+ Leche avena"); // single pick — unchanged, no suffix
+    expect(ticket).not.toContain("Leche avena x"); // the single pick carries NO count
+    // Proven by contrast: without the badge the Nata line would read `+ Nata`, like the control.
+    expect(ticket).not.toMatch(/\+ Nata(?! x)/u);
   });
 
-  it("never station-resolves a child line: a dish-with-options fires with NO default station", async () => {
-    // The child modifier line carries no product and no station of its own. With no venue default
-    // station, an independently-resolved child would fail LOUD with `station.no_default`. The parent-only
-    // filter means the child is never resolved — the fire succeeds and the parent uses its OWN station.
+  it("never station-resolves a child line: a dish-with-extras fires with NO default station", async () => {
+    // The child line carries the picked extra's product, which routes nowhere of its own. With no venue
+    // default station, an independently-resolved child would fail LOUD with `station.no_default`. The
+    // parent-only filter means the child is never resolved — the fire succeeds and the parent uses its
+    // OWN station.
     const { cfg, catalogueId } = await setupVenue();
     const { stationId, ticketItemRows } = await asApp(cfg, async (tx) => {
       // A NON-default station: the product routes to it explicitly; there is NO is_default station, so a
       // line that resolves neither a product nor category route has nowhere to go (station.no_default).
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
-      const grande = await addOption(tx, cafe, "Grande");
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cafe, [
+        { name: "Nata" },
+      ]);
 
       // This must NOT throw station.no_default — the child is filtered before station resolution.
       const orderId = await fireNewOrder(tx, cfg, [
-        { productId: cafe, quantity: "1", options: [{ optionGroupItemId: grande }] },
+        {
+          productId: cafe,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 1 }] }],
+        },
       ]);
       const ticketItemRows = await tx
         .select({
@@ -848,7 +886,7 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from print_jobs`);
 });
 
-it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", async () => {
+it("prints a line's stored options answers, each side taking its KITCHEN name", async () => {
   const { cfg, catalogueId } = await setupVenue();
   const jobs = await asApp(cfg, async (tx) => {
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
@@ -858,22 +896,30 @@ it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", asy
     const orderId = randomUUID();
     const { lineRows } = await createOpenOrder(tx, cfg, orderId, [line(productId)], null);
     const parent = lineRows[0]!;
+    // A frozen answer's two staff names are keyed by CONTENT language, which is what the order path
+    // widens them under (`buildLineExtras`, modifier-selection.ts).
+    const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
     await tx
       .update(workingOrderLines)
       .set({
-        modifierSnapshots: [
+        optionSnapshots: [
+          // Six names, six different texts: the ticket can only print the kitchen pair.
           {
-            modifierId: "message",
-            name: { [LOCALE]: "Message" },
-            type: "text",
-            text: "Happy birthday",
+            listName: { [defaultLanguage]: "Leche staff" },
+            listCustomerName: { [defaultLanguage]: "Leche cliente" },
+            listKitchenName: "LECHE",
+            labelName: { [defaultLanguage]: "Avena staff" },
+            labelCustomerName: { [defaultLanguage]: "Avena cliente" },
+            labelKitchenName: "AVENA",
           },
+          // Neither side has a kitchen name: a cook reads the STAFF name, never the diner's wording.
           {
-            modifierId: "milk",
-            name: { [LOCALE]: "Milk" },
-            type: "options",
-            choiceId: "oat",
-            choiceName: { [LOCALE]: "Oat" },
+            listName: { [defaultLanguage]: "Azucar" },
+            listCustomerName: { [defaultLanguage]: "Azucar cliente" },
+            listKitchenName: null,
+            labelName: { [defaultLanguage]: "Sin" },
+            labelCustomerName: { [defaultLanguage]: "Sin cliente" },
+            labelKitchenName: null,
           },
         ],
       })
@@ -885,8 +931,10 @@ it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", asy
   });
   expect(jobs).toHaveLength(1);
   const paper = decodeTicket(jobs[0]!.payload);
-  expect(paper).toContain("Message: Happy birthday");
-  expect(paper).toContain("Milk: Oat");
+  expect(paper).toContain("+ LECHE: AVENA");
+  expect(paper).not.toContain("Leche staff");
+  expect(paper).toContain("+ Azucar: Sin");
+  expect(paper).not.toContain("cliente");
 });
 
 /**
