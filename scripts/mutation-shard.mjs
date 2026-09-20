@@ -5,9 +5,12 @@ import { fileURLToPath } from "node:url";
 /**
  * Splits the mutation targets across N CI shards so each fits GitHub's 6h job limit.
  *
- * Stryker over @waitron/db is ~10h on one 2-vCPU runner because it mutates ~750 database-backed
- * mutants serially-ish; sharded across a matrix, each job mutates only its slice and runs in
- * parallel. `assignShards` decides the slices, `--mutate`d one list per shard.
+ * Stryker over @waitron/db was ~10h on one 2-vCPU runner because it mutates thousands of
+ * database-backed mutants serially-ish; sharded across a matrix, each job mutates only its slice
+ * and runs in parallel. `assignShards` decides the slices, `--mutate`d one list per shard. That
+ * ~10h is a FLOOR rather than a current figure — it was Stryker's ETA at 749 mutants and the set
+ * has grown since — which is why the counts live in dated receipts in
+ * `.github/workflows/mutation.yml` rather than in this sentence.
  *
  * The unit of a slice is usually a whole file, but a single file can dominate a shard when its
  * mutants are covered by ~the whole suite (measured: src/schema/sales.ts alone ran 186min while
@@ -15,6 +18,28 @@ import { fileURLToPath } from "node:url";
  * `file.ts:startLine-endLine` mutation-range syntax — by `splitRanges`, so its cost spreads across
  * shards too. HEAVY_FILES (in the CLI below) names them and into how many parts.
  */
+
+/**
+ * Files under `packages/db/src` that this package's own Stryker run cannot score, as `src/`-relative
+ * paths. The shard lists leave them out, so the package's merged score (scripts/mutation-aggregate.mjs)
+ * measures only mutants a test written here could kill.
+ *
+ * `src/english-only.ts`: its suite is `scripts/english-only.test.ts` in the ROOT vitest project, and
+ * nothing under `packages/db` imports it — `grep -rn english-only packages/db --include="*.ts"`
+ * matches that file and comments alone — so `packages/db`'s vitest config never loads a test that
+ * touches it and every one of its mutants survives by construction. All 119 did in weekly run
+ * 34808295788. It is excluded from this package's coverage report for the same reason, stated in
+ * `packages/db/vitest.config.ts`.
+ *
+ * `src/testing/global-setup.ts`: vitest runs a `globalSetup` in the MAIN process, before the workers
+ * exist, and Stryker records which test covers a mutant from a setup file injected into each WORKER.
+ * Nothing the main process executes is recorded against any test, so these mutants are never run at
+ * all: all nine read `NoCoverage` in run 35498146363 (shard 4). Excluded from this package's
+ * coverage report already, for the same structural reason.
+ *
+ * @type {string[]}
+ */
+export const NOT_MUTATED = ["src/english-only.ts", "src/testing/global-setup.ts"];
 
 /**
  * Splits `path` into `parts` contiguous Stryker mutation ranges (`path:startLine-endLine`) covering
@@ -98,6 +123,7 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-shard.mjs")) {
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
         const path = join("src", relative(dbSrc, full));
+        if (NOT_MUTATED.includes(path)) continue;
         const parts = HEAVY_FILES[path];
         if (parts) {
           seenHeavy.add(path);

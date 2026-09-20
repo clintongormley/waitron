@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   execOrThrow,
   startRealWireguardNode,
@@ -339,5 +339,47 @@ describe.runIf(dockerAvailable())("two-node WireGuard fixture", () => {
     // completed.
     const timestamp = Number(output.trim().split(/\s+/).at(-1));
     expect(timestamp).toBeGreaterThan(0);
+  });
+});
+
+// The Docker-absent refusal, which no run on a machine with Docker reaches — and this package
+// requires one — so neither of the two messages it can raise was read by anything. They are the
+// whole of what a person sees when the fixture will not start.
+describe("startTwoNodeWireguardCluster without Docker", () => {
+  async function refusalWithoutDocker(dockerRequired: boolean): Promise<string> {
+    vi.resetModules();
+    vi.doMock("./harness.js", async () => ({
+      ...(await vi.importActual<typeof import("./harness.js")>("./harness.js")),
+      dockerAvailable: () => false,
+    }));
+    let refusal: string | undefined;
+    try {
+      const { startTwoNodeWireguardCluster: start } = await import("./two-node-wireguard.js");
+      // The refusal is the whole point, so a call that RETURNS leaves `refusal` unset and the
+      // caller says so — rather than the sentinel throw landing in this function's own catch and
+      // being compared with the message as if the fixture had refused.
+      await start({ dockerRequired });
+    } catch (error) {
+      refusal = (error as Error).message;
+    } finally {
+      vi.doUnmock("./harness.js");
+      vi.resetModules();
+    }
+    if (refusal === undefined)
+      throw new Error("startTwoNodeWireguardCluster returned instead of refusing");
+    return refusal;
+  }
+
+  it("says what it needs and that it cannot do without it, when Docker is required", async () => {
+    await expect(refusalWithoutDocker(true)).resolves.toBe(
+      "The two-node WireGuard fixture requires a running Docker daemon to start two PostgreSQL " +
+        "containers on a shared network; it cannot degrade to a hermetic run.",
+    );
+  });
+
+  it("states the fact plainly when Docker is not required", async () => {
+    await expect(refusalWithoutDocker(false)).resolves.toBe(
+      "Docker is not available; the two-node WireGuard cluster cannot start.",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   startTwoNodeCluster,
   type ReplNode,
@@ -416,5 +416,47 @@ describe.runIf(dockerAvailable())("two-node fixture — custom postgres command"
       );
       expect(row!.max_slot_wal_keep_size).toBe("8MB");
     }
+  });
+});
+
+// The Docker-absent refusal. It cannot be reached on a machine that has Docker — which is every CI
+// runner and every dev machine this package requires — unless `dockerAvailable` is replaced, so the
+// two refusals it can raise went unread. They are what a person sees when the fixture cannot start,
+// and the two say different things: one is a demand, the other a plain statement of fact.
+describe("startTwoNodeCluster without Docker", () => {
+  async function refusalWithoutDocker(dockerRequired: boolean): Promise<string> {
+    vi.resetModules();
+    vi.doMock("./harness.js", async () => ({
+      ...(await vi.importActual<typeof import("./harness.js")>("./harness.js")),
+      dockerAvailable: () => false,
+    }));
+    let refusal: string | undefined;
+    try {
+      const { startTwoNodeCluster: start } = await import("./two-node.js");
+      // The refusal is the whole point, so a call that RETURNS leaves `refusal` unset and the
+      // caller says so — rather than the sentinel throw landing in this function's own catch and
+      // being compared with the message as if the fixture had refused.
+      await start({ dockerRequired, migrate: async () => {} });
+    } catch (error) {
+      refusal = (error as Error).message;
+    } finally {
+      vi.doUnmock("./harness.js");
+      vi.resetModules();
+    }
+    if (refusal === undefined) throw new Error("startTwoNodeCluster returned instead of refusing");
+    return refusal;
+  }
+
+  it("says what it needs and that it cannot do without it, when Docker is required", async () => {
+    await expect(refusalWithoutDocker(true)).resolves.toBe(
+      "The two-node logical-replication fixture requires a running Docker daemon to start two " +
+        "PostgreSQL containers on a shared network; it cannot degrade to a hermetic run.",
+    );
+  });
+
+  it("states the fact plainly when Docker is not required", async () => {
+    await expect(refusalWithoutDocker(false)).resolves.toBe(
+      "Docker is not available; the two-node cluster cannot start.",
+    );
   });
 });

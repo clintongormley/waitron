@@ -229,9 +229,9 @@ export async function startTwoNodeWireguardCluster(
   const migrate = options.migrate ?? (async () => {});
   const mutex = options.mutex ?? clusterMutex;
 
-  /* v8 ignore start -- Docker-absent branch: unreachable in any Docker-present run (every CI runner
-     and dev machine this package requires), gated to the REAL primitives so a seam-injecting test
-     drives cleanup without a daemon, and callers gate the suite on `dockerAvailable()`. */
+  // The Docker-absent refusal, the twin of the one in `two-node.ts` and reached the same way: a
+  // Docker-present run never gets here, and the "startTwoNodeWireguardCluster without Docker"
+  // cases in the suite beside this file replace `dockerAvailable` with a module mock to read it.
   if (options.startNetwork === undefined && options.startNode === undefined && !dockerAvailable()) {
     throw new Error(
       options.dockerRequired
@@ -240,7 +240,6 @@ export async function startTwoNodeWireguardCluster(
         : "Docker is not available; the two-node WireGuard cluster cannot start.",
     );
   }
-  /* v8 ignore stop */
 
   // Every resource that has come up, in acquisition order; teardown reverses it (nodes before the
   // network) and swallows each failure so one wedged stop can never strand the rest.

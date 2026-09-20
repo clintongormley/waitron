@@ -54,6 +54,18 @@ it("pgErrorMessage throws when neither .cause.message nor .message is a string",
   expect(() => pgErrorMessage({})).toThrow(/neither \.cause\.message nor \.message/);
 });
 
+it("pgErrorMessage says what it received and why it will not guess", () => {
+  // The whole message, once. The pattern above matches its first clause, which leaves the part a
+  // reader actually needs — what arrived, and the reason a String(error) fallback is refused —
+  // free to be deleted.
+  expect(() => pgErrorMessage("plain string rejection")).toThrow(
+    "pgErrorMessage: neither .cause.message nor .message is a string on this error " +
+      "(received: plain string rejection) — refusing to fall back to String(error), which would " +
+      'reproduce a DrizzleQueryError\'s generic "Failed query: <sql>" text and let an ' +
+      "assertion on it pass for the wrong reason",
+  );
+});
+
 it("captureError returns the rejection when fn rejects", async () => {
   const error = await captureError(() => Promise.reject(new Error("boom")));
   expect(error).toBeInstanceOf(Error);

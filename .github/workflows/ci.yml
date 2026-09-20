@@ -1503,7 +1503,9 @@ jobs:
   # packages/verifactu — so its break: 90 is checked on a pull request whose resolved scope contains
   # it (the paragraph below), rather than only on a weekly run the way packages/ui's identical
   # threshold is. Contrast packages/db, where every test boots PGlite, whose cost puts it on the same
-  # weekly footing as packages/ui and which is the one package left carrying no break threshold.
+  # weekly footing as packages/ui — and whose bar of 90 is not in its own stryker config at all,
+  # because its run is split into ten shards; it is checked once on the merged score, by the
+  # mutation-db-aggregate job in mutation.yml.
   #
   # It gated every pull request until this gate was added; it now gates the ones whose resolved
   # scope contains packages/shared, by the same membership mechanism as mutation-verifactu above.

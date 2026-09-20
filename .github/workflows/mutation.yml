@@ -73,24 +73,28 @@ jobs:
           path: packages/ui/reports/mutation/
           retention-days: 30
 
-  # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates ~750 database-backed
-  # mutants (every test here boots a Postgres and applies a schema), which on ONE 2-vCPU runner is
-  # ~10h — past GitHub's 6h job limit, so the job never once completed. Measured on run 32374126111:
+  # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of
+  # database-backed mutants (every test here boots a Postgres and applies a schema), which on ONE
+  # 2-vCPU runner was ~10h — past GitHub's 6h job limit, so the job never once completed. Treat
+  # ~10h as a FLOOR, not a current figure: it was Stryker's own ETA at 749 mutants, and the set
+  # has grown a great deal since (a whole-package `--dryRunOnly` read 2649 on 2026-09-19). That
+  # is why the count lives in dated receipts rather than in this sentence.
+  # Measured on run 32374126111:
   # `ignoreStatic` dropped 1545 → 749 mutants and the dry run finished in 6m48s (both stryker keys
   # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
   #
   # The fix is parallelism, not a faster suite: mutation cost is mutants ÷ concurrency, and a matrix
-  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs bin-packs the 41 source files
-  # by size into one `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
+  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs bin-packs the package's source
+  # files by size into one `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
   # so N is defined once — here in the matrix list — and the two cannot drift.
   #
   # TEN shards, not fewer, because the per-mutant cost is WILDLY uneven and clusters. Measured on run
   # 32380395996 (an N=6 attempt): shards ran 53min → 4h50. A surviving mutant in a widely-covered
-  # file — the core-table schema (orders/tenants/sales/daily-closes/incidents) and
-  # testing/global-setup, exercised by nearly every test — reruns a huge covering set, while a
+  # file — the core-table schema (orders/tenants/sales/daily-closes/incidents), exercised by nearly
+  # every test — reruns a huge covering set, while a
   # leaf-file mutant is cheap. Byte size is a rough proxy that at N=6 unluckily put orders+tenants in
   # one shard (the 4h50 one). At N=10 the bin-packing isolates each expensive file in its OWN shard
-  # (verified: sales/orders/tenants/daily-closes/incidents/global-setup each land alone), so the
+  # (verified: sales/orders/tenants/daily-closes/incidents each land alone), so the
   # slowest shard is bounded by the single priciest FILE. More shards past that don't lower the floor
   # (a file isn't split), which is why 10 is the knee rather than an arbitrary bump.
   #
@@ -98,10 +102,11 @@ jobs:
   # it mutates anything, and that map cannot be shared across independent jobs. Cheap for a weekly,
   # non-gating job. `fail-fast: false` so one shard's failure does not cancel the rest.
   #
-  # No thresholds.break is configured, so each shard publishes its slice's score rather than failing;
-  # the ten per-shard report artifacts are what a human reads. A single merged score is a deliberate
-  # non-goal for now (see docs/backlog.md). Docker is present on ubuntu-latest, so the real-Postgres
-  # target runs here too.
+  # No thresholds.break is configured HERE, and that is on purpose: a break in
+  # packages/db/stryker.config.json would gate each SHARD's own slice, so a shard holding the
+  # well-tested files passes while the package as a whole sits far below the bar. The package is
+  # gated once, on the merged score, by the `mutation-db-aggregate` job below. Docker is present on
+  # ubuntu-latest, so the real-Postgres target runs here too.
   mutation-db:
     strategy:
       fail-fast: false
@@ -148,3 +153,32 @@ jobs:
           name: mutation-report-db-shard-${{ matrix.shard }}
           path: packages/db/reports/mutation/
           retention-days: 30
+
+  # The PACKAGE's gate. Each shard above publishes `mutation.json` beside its html report;
+  # this job adds the ten together and fails below 90, the score the owner set for every package
+  # on 2026-09-19. It refuses to score at all when a shard's report is missing, because a shard
+  # that crashed takes its own survivors with it and the remaining nine read higher than the truth.
+  # `if: always()` so a red shard still gets its slice counted rather than skipping the gate.
+  mutation-db-aggregate:
+    needs: mutation-db
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # No pnpm on this runner and none needed: the scorer is one plain `node` script over the
+      # downloaded reports, and it installs nothing. setup-node caches the package manager by
+      # default, which shells out to pnpm and fails the job before it starts.
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Download every shard report
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mutation-report-db-shard-*
+          path: mutation-reports
+
+      - name: Score the package
+        run: node scripts/mutation-aggregate.mjs mutation-reports --shards 10 --break 90

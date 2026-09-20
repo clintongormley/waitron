@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { assignShards, splitRanges } from "./mutation-shard.mjs";
+import { assignShards, NOT_MUTATED, splitRanges } from "./mutation-shard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dbSrc = join(here, "..", "packages", "db", "src");
@@ -104,7 +104,9 @@ describe("the CLI over the real @waitron/db tree", () => {
     const collected = [];
     for (let shard = 1; shard <= total; shard++) collected.push(...shardFiles(shard, total));
 
-    expect([...new Set(collected.map(fileOf))].sort()).toEqual(eligibleFiles()); // every file covered
+    expect([...new Set(collected.map(fileOf))].sort()).toEqual(
+      eligibleFiles().filter((path) => !NOT_MUTATED.includes(path)),
+    ); // every file covered but the ones nothing here can kill
 
     const ranges = collected.filter((e) => /:\d+-\d+$/.test(e));
     const wholes = collected.filter((e) => !/:\d+-\d+$/.test(e));
@@ -112,6 +114,57 @@ describe("the CLI over the real @waitron/db tree", () => {
     expect([...new Set(ranges.map(fileOf))]).toEqual(["src/schema/sales.ts"]); // only sales is split
     expect(ranges).toHaveLength(3); // into 3 ranges
     expect([...new Set(collected.map(fileOf))]).not.toContain(""); // ranges kept their path
+  });
+
+  it("leaves out a file whose only suite is in another vitest project", () => {
+    // `src/english-only.ts` is imported by `scripts/english-only.test.ts` in the ROOT project and by
+    // nothing under `packages/db`, so this package's own run cannot kill a single one of its
+    // mutants — all 119 survived in weekly run 34808295788 — and counting them drags the package
+    // score down by something no test written here could ever fix.
+    expect(NOT_MUTATED).toContain("src/english-only.ts");
+
+    const total = 6;
+    const collected = [];
+    for (let shard = 1; shard <= total; shard++) collected.push(...shardFiles(shard, total));
+
+    expect(collected.map(fileOf)).not.toContain("src/english-only.ts");
+  });
+
+  it("leaves out the globalSetup, which no test in the package can be run against", () => {
+    // Vitest runs a `globalSetup` in the MAIN process, before the workers exist, and Stryker learns
+    // which test covers a mutant from a setup file it injects into each WORKER. So nothing this
+    // file executes is attributed to any test and none of its mutants is ever run: all nine read
+    // `NoCoverage` in run 35498146363, shard 4.
+    expect(NOT_MUTATED).toContain("src/testing/global-setup.ts");
+
+    const total = 6;
+    const collected = [];
+    for (let shard = 1; shard <= total; shard++) collected.push(...shardFiles(shard, total));
+
+    expect(collected.map(fileOf)).not.toContain("src/testing/global-setup.ts");
+  });
+
+  it("names only files that exist, so a rename cannot silently un-exclude one", () => {
+    expect(NOT_MUTATED.filter((path) => !eligibleFiles().includes(path))).toEqual([]);
+  });
+
+  it("excludes exactly what packages/db's own stryker config excludes", () => {
+    // Two lists decide what gets mutated and only one of them is ever used at a time: CI passes
+    // `--mutate "$FILES"` built from NOT_MUTATED, which REPLACES the config's patterns, while a
+    // local `pnpm --filter @waitron/db mutation` uses the config. Left to drift, CI and a
+    // developer's own run measure different sets — and it is CI's set the 90 bar is computed over.
+    //
+    // Narrower than it sounds: it reads only literal `!path` entries out of the config, so an
+    // exclusion written as a glob would be invisible to it and the two lists could still drift.
+    const config = JSON.parse(
+      readFileSync(join(here, "..", "packages", "db", "stryker.config.json"), "utf8"),
+    );
+    const excluded = config.mutate
+      .filter((pattern) => pattern.startsWith("!") && !pattern.includes("*"))
+      .map((pattern) => pattern.slice(1))
+      .sort();
+
+    expect(excluded).toEqual([...NOT_MUTATED].sort());
   });
 
   it("splits the heavy file across distinct shards (not clustered in one)", () => {

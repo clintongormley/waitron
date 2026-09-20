@@ -182,6 +182,17 @@ describeEachTarget("the deployment stamp", (target) => {
     expect(await readSingletonRole(db)).toBe("secondary"); // NOT reset by the mode write
   });
 
+  it("setDeploymentMode('primary') leaves a sole primary holding the singletons", async () => {
+    // The other half of the case above, and the one that matters more: there the node was already
+    // a secondary, so a mode write that wrongly co-set singleton_role to 'secondary' would have
+    // written the value that was there anyway and nothing would have noticed. Here the node holds
+    // the singletons, so the same wrong write demotes it — a venue whose only node stops being the
+    // one that sells.
+    await stampDeployment(db, "preproduction");
+    await setDeploymentMode(db, "primary");
+    expect(await readSingletonRole(db)).toBe("primary");
+  });
+
   it("refuses singleton_role='primary' on a mirror (deployment_role_valid_ck)", async () => {
     await stampDeployment(db, "preproduction");
     await setDeploymentMode(db, "mirror");

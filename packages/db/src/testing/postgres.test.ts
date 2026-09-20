@@ -7,6 +7,7 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { dockerAvailable } from "./harness.js";
 import {
   databaseUrl,
+  POSTGRES_IMAGE,
   roleUrl,
   runMigrationSets,
   startMigratedPostgres,
@@ -129,6 +130,23 @@ describe.runIf(dockerAvailable())("against a real container", () => {
 
   afterAll(async () => {
     if (pg !== undefined) await pg.stop();
+  });
+
+  // The version the repository's receipts are written against — "proven on PostgreSQL 18" is a
+  // claim about the server these containers run, and nothing checked it. POSTGRES_IMAGE is the one
+  // place that version is named, so this reads it back off the running server rather than off the
+  // constant.
+  it("runs the major version POSTGRES_IMAGE names", async () => {
+    const major = POSTGRES_IMAGE.split(":")[1].split("-")[0];
+    expect(major).toBe("18");
+    const db = await pg.connect();
+    try {
+      const result = await db.execute(sql`show server_version`);
+      const rows = result as unknown as { rows: { server_version: string }[] };
+      expect(rows.rows[0].server_version.split(".")[0]).toBe(major);
+    } finally {
+      await db.close();
+    }
   });
 
   it("stamps its container with the com.waitron.reapable label the reaper filters on", () => {

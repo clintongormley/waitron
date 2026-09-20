@@ -2785,9 +2785,13 @@ deliberately did not settle.
   `stryker run --dryRunOnly`. That count went up, 2627 → 2649, and the review classified the new
   ones by running both installed instrumenters over the package's mutate set: every one is the new
   deletion mutant, nothing was removed, and no pre-existing mutant changed. What nobody has measured
-  is what they do to the score, and `packages/db/stryker.config.json` sets no `thresholds.break`.
-  The db job publishes ten per-shard slice scores and no aggregate, so a dispatch does not yield a
-  package total at all — which is the last bullet.
+  is what they do to the score.
+  _(Answered 2026-09-20 on `chore/db-mutation-gate`: the package now has a whole-package score and
+  a gate. `scripts/mutation-aggregate.mjs` merges the ten shard reports into one number and the
+  `mutation-db-aggregate` job fails below 90. Run 35504169506, ten shards, read 93.30% of 2165
+  valid mutants. The bar stays out of `packages/db/stryker.config.json` on purpose — CI passes each
+  shard its own `--mutate` list, so a `thresholds.break` there would gate a slice — and
+  `scripts/mutation-break-thresholds.test.mjs` pins that arrangement.)_
   `packages/ui` used to sit in this bullet. It came out on 2026-09-20: a whole-package Stryker 10
   run turned out to take 10 to 16 minutes locally at `--concurrency 8`, not hours, which is what
   made measuring it cheap. It read 78.62% (1658 of 2109 valid) and was raised to between 96.73% and
@@ -2826,6 +2830,18 @@ deliberately did not settle.
   non-goal for now (see docs/backlog.md)", and no backlog entry answered that pointer — this is the
   entry it points at. Whether to keep it a non-goal or build the cross-shard aggregate, and gate on
   it, is still open, and it is also the only route to the db number the first bullet wants.
+  _(Answered 2026-09-20 on `chore/db-mutation-gate`: the aggregate is built —
+  `scripts/mutation-aggregate.mjs` merges the ten shard reports and the `mutation-db-aggregate` job
+  fails below 90 — so a merged db score is no longer a non-goal, and the workflow's header says so.
+  The "41 source files" figure and the `testing/global-setup` example went with the same change, the
+  first dropped rather than refreshed, the second because that file is no longer mutated at all.
+  The "~750 database-backed mutants" figure went too, in both places that carried it, and the
+  parenthetical above — that nothing showed it stale — no longer holds: the whole-package
+  `stryker run --dryRunOnly` count in the first bullet, 2649, is the like-for-like reading, and it
+  is more than three times 749. (Run 35504169506's 2165 is a different measurement again: valid
+  mutants after a full sharded run, so ignored and errored ones are out.) The prose now says
+  "thousands" and leaves the numbers in their dated receipts, which is the repair this bullet
+  asks for.)_
 
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
 latest minor or patch release; two loose ends came with it.

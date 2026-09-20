@@ -965,7 +965,10 @@ export default defineConfig({
 }
 ```
 
-Two deliberate differences from `packages/verifactu`. `timeoutMS` is raised from Stryker's 5000ms default because every test in this package boots PGlite before it asserts anything, and Stryker would otherwise score a slow boot as a killed mutant — a false positive that inflates the score while proving nothing. And there is **no `thresholds.break`**: this package follows `packages/ui`'s weekly, publish-a-score model, for the reason Step 11 sets out. _(Superseded 2026-09-20 for the model it names, not for this package: `packages/ui` now carries `"thresholds": { "high": 95, "low": 90, "break": 90 }` and its weekly job fails below 90. `packages/db` still has no break threshold.)_
+Two deliberate differences from `packages/verifactu`. `timeoutMS` is raised from Stryker's 5000ms default because every test in this package boots PGlite before it asserts anything, and Stryker would otherwise score a slow boot as a killed mutant — a false positive that inflates the score while proving nothing. And there is **no `thresholds.break`**: this package follows `packages/ui`'s weekly, publish-a-score model, for the reason Step 11 sets out. _(Superseded 2026-09-20: `packages/ui` now carries `"thresholds": { "high": 95, "low": 90, "break": 90 }` and its weekly job fails below 90, and `packages/db` is gated too — not here, because CI passes each of its ten shards its own `--mutate` list, so a threshold in this config would gate a slice rather than the package. Its bar is 90 on the merged score, in the `mutation-db-aggregate` job. The `mutate` list and the
+reporters in the block above moved in the same change: `src/english-only.ts` and
+`src/testing/global-setup.ts` are excluded — nothing in this package can kill either file's
+mutants — and a `json` reporter was added, which is the file `mutation-db-aggregate` reads.)_
 
 - [ ] **Step 3: Create the Drizzle config**
 
@@ -1629,7 +1632,7 @@ The plan-1 handoff records the rule as "pure-Node packages can afford the per-PR
 
 The handoff's rule is a proxy for the real variable, which is not "browser or not" but per-test setup cost. `packages/verifactu` is 305 tests over pure functions with no setup at all, and a full Stryker run takes about 2m45s in CI. Every test in `packages/db` boots a WASM PostgreSQL and applies a schema first — the fresh-database figure from `docs/research/2026-07-20-pglite-throughput.md`. Multiply that figure by the number of test executions a Stryker run performs (mutants × covering tests, even with `coverageAnalysis: "perTest"` narrowing it) and the boot cost alone dominates the run. `packages/db`'s cost profile is `packages/ui`'s, arrived at by a different route: `packages/ui` pays a real Chromium per test, this package pays a real PostgreSQL.
 
-So `packages/db` follows the `packages/ui` model — **weekly, publishes a score, no break threshold** — and `stryker.config.json` in Step 2 accordingly omits `thresholds`. Add to `.github/workflows/mutation.yml`, alongside the existing `mutation` job: _(Superseded 2026-09-20: `packages/ui` gained `break: 90`; `packages/db` has not, so what db follows is now its own arrangement rather than ui's.)_
+So `packages/db` follows the `packages/ui` model — **weekly, publishes a score, no break threshold** — and `stryker.config.json` in Step 2 accordingly omits `thresholds`. Add to `.github/workflows/mutation.yml`, alongside the existing `mutation` job: _(Superseded 2026-09-20: both gained a bar of 90. `packages/ui` fails in its own weekly job; `packages/db` fails in `mutation-db-aggregate`, which merges the ten shard reports and scores the package once. The weekly-rather-than-per-PR reasoning below still holds.)_
 
 ```yaml
   # packages/db. Weekly rather than per-PR for the same reason packages/ui is
@@ -1641,7 +1644,9 @@ So `packages/db` follows the `packages/ui` model — **weekly, publishes a score
   #
   # No thresholds.break is configured, so this publishes a score rather than
   # failing. Docker is present on ubuntu-latest, so the real-Postgres target
-  # runs here too.
+  # runs here too. (Superseded 2026-09-20: still no threshold on the shard, but
+  # the package is gated at 90 by the mutation-db-aggregate job, which merges
+  # the ten shard reports.)
   mutation-db:
     runs-on: ubuntu-latest
     env:
@@ -1719,7 +1724,7 @@ standalone, real PostgreSQL in the cloud. **One dialect.** There is no SQLite pa
 | `pnpm test` | Vitest. Skips the real-Postgres target if Docker is absent, loudly. |
 | `pnpm test:coverage` | The same, under V8 coverage thresholds. What CI runs. |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm mutation` | Stryker. Weekly in CI, not a merge gate. |
+| `pnpm mutation` | Stryker. Weekly in CI, not a merge gate. _(Still true of a merge as of 2026-09-20 — the workflow runs on a schedule and on dispatch, never on a pull request. What changed: the WEEKLY run gates. Its `mutation-db-aggregate` job merges the ten shard reports and fails below 90; a local `pnpm mutation` prints a score and fails at nothing.)_ |
 | `pnpm db:generate` | Regenerates `drizzle/` from `src/schema/*.ts`. |
 | `pnpm db:generate:custom` | An empty numbered migration for hand-written SQL (triggers, RLS). |
 

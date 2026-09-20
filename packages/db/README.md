@@ -57,7 +57,10 @@ the suites and where each died. Shared-fixture suites migrate once.
   and enforces the package thresholds. Locally, `pnpm test:coverage` runs the package with those
   thresholds in one invocation. Plain `pnpm test` does not measure coverage.
 - `pnpm mutation` runs Stryker. DB mutation testing is scheduled weekly or dispatched through
-  `mutation.yml`; it is not a merge gate.
+  `mutation.yml`; it is not a merge gate. The weekly run DOES gate: its `mutation-db-aggregate` job
+  merges the ten shard reports and fails below 90. A local `pnpm mutation` prints a score and
+  fails at nothing — the bar is deliberately not in this package's stryker config, because CI
+  passes each shard its own `--mutate` list and a bar there would gate one slice.
 - `db:generate` and `db:generate:custom` create migration artifacts; they are authoring commands,
   not CI test commands.
 

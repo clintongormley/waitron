@@ -1,12 +1,13 @@
 // Real PostgreSQL: tests real database lifecycle helpers and authentication as a probe role.
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import {
   assertSafeIdentifier,
   cloneTemplate,
   pickTemplate,
   probeRoleStatement,
+  nextCloneName,
   resolveSharedHandle,
   usePgliteDb,
   useRealPostgres,
@@ -51,6 +52,21 @@ describe("usePgliteDb", () => {
   it("yields the same handle throughout the suite", () => {
     expect(pg.db).toBe(pg.db);
   });
+
+  // The per-test reset, which is on unless a suite opts out, and which nothing asserted. These two
+  // cases are a pair and run in this order: the first leaves a row behind, the second is the one
+  // that would see it. Without the reset the second fails - which is the whole reason a suite can
+  // write a row without cleaning up after itself.
+  it("lets a test write a row", async () => {
+    await pg.db.execute(sql`insert into catalogues (name) values ('reset probe')`);
+    const result = await pg.db.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 1 });
+  });
+
+  it("does not hand the next test the row the last one left", async () => {
+    const result = await pg.db.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 0 });
+  });
 });
 
 /**
@@ -83,6 +99,50 @@ describe("usePgliteDb assigns its handle before setup can throw", () => {
 });
 
 // Role-statement generation is pure: both membership shapes can be checked without a container.
+/**
+ * The two container helpers refuse a handle read before their `beforeAll` has run, the same way
+ * `usePgliteDb` does — and neither refusal needs a container, because the state under test is the
+ * one where nothing has started. Each helper is called inside a suite that never runs, so its
+ * hooks are registered and never fire; the READ is then done inside a test, where a broken guard
+ * fails the case rather than the collection.
+ */
+let unstartedReal!: ReturnType<typeof useRealPostgres>;
+describe.skip("useRealPostgres, registered but never started", () => {
+  unstartedReal = useRealPostgres({
+    start: () => {
+      throw new Error("this suite never runs, so start() is never called");
+    },
+  });
+  it("never runs", () => {
+    expect.unreachable();
+  });
+});
+
+let unstartedTemplate!: ReturnType<typeof useTemplateDb>;
+describe.skip("useTemplateDb, registered but never started", () => {
+  unstartedTemplate = useTemplateDb({
+    template: "core",
+    getHandle: () => {
+      throw new Error("this suite never runs, so getHandle() is never called");
+    },
+  });
+  it("never runs", () => {
+    expect.unreachable();
+  });
+});
+
+describe("a handle read before the helper has started", () => {
+  it("useRealPostgres names itself in both refusals", () => {
+    expect(() => unstartedReal.pg).toThrow("useRealPostgres: container not started");
+    expect(() => unstartedReal.admin).toThrow("useRealPostgres: container not started");
+  });
+
+  it("useTemplateDb names itself in both refusals", () => {
+    expect(() => unstartedTemplate.pg).toThrow("useTemplateDb: clone not started");
+    expect(() => unstartedTemplate.admin).toThrow("useTemplateDb: clone not started");
+  });
+});
+
 describe("probeRoleStatement", () => {
   it("grants membership when inRole is given", () => {
     expect(probeRoleStatement({ name: "probe", password: "pw", inRole: "app_user" })).toBe(
@@ -111,6 +171,21 @@ describe("probeRoleStatement", () => {
     ["inRole", { name: "probe", password: "pw", inRole: ["app_user", 'report_reader"'] }],
   ])("refuses an unsafe %s", (field, probe) => {
     expect(() => probeRoleStatement(probe)).toThrowError(new RegExp(`unsafe ${field}`));
+  });
+
+  // Every case above puts its bad character in the MIDDLE of the value, which leaves both ends of
+  // the rule — that a token starts where it starts and ends where it ends — unchecked. These two
+  // put it at each end instead. They reload the module inside the case on purpose: the rule is a
+  // module-level constant, so it is built when the module loads rather than while a test runs, and
+  // a mutation test only runs a case it saw the code execute in.
+  it.each([
+    ["starting with a digit", "1probe"],
+    ["ending in a semicolon", "probe;"],
+  ])("refuses a name %s", async (_shape, name) => {
+    vi.resetModules();
+    const { probeRoleStatement: fresh } = await import("./identifiers.js");
+    expect(() => fresh({ name, password: "pw" })).toThrowError("unsafe name");
+    vi.resetModules();
   });
 });
 
@@ -176,7 +251,27 @@ describe("resolveSharedHandle", () => {
     // (`src/testing/global-setup.ts`) that path returns a real handle — the seam is the honest way to
     // reach the throw. The default-inject path is exercised for real by describeEachTarget and every
     // converted useTemplateDb suite in this package.
-    expect(() => resolveSharedHandle(() => undefined)).toThrowError(/no shared container in scope/);
+    // The whole message, not a phrase of it: the half that says WHAT TO DO — wire the package's
+    // globalSetup to a file that calls startSharedContainer and provides the handle — is the half
+    // this error exists for, and a phrase match leaves it free to be deleted.
+    expect(() => resolveSharedHandle(() => undefined)).toThrowError(
+      "useTemplateDb: no shared container in scope. Wire the package's vitest `globalSetup` to a " +
+        'file that calls `startSharedContainer` and `provide("sharedPg", handle)`.',
+    );
+  });
+});
+
+/**
+ * The one place `clone_<pid>_<n>` is minted. What it has to guarantee is that no two clones alive at
+ * the same moment share a name; the counter is per module and the pid separates concurrent workers.
+ */
+describe("nextCloneName", () => {
+  it("mints clone_<pid>_<n>, counting up", () => {
+    const first = nextCloneName();
+    const second = nextCloneName();
+    expect(first).toMatch(new RegExp(`^clone_${process.pid}_\\d+$`));
+    const number = (name: string): number => Number(name.slice(`clone_${process.pid}_`.length));
+    expect(number(second)).toBe(number(first) + 1);
   });
 });
 
@@ -284,6 +379,19 @@ describe.runIf(dockerAvailable())("useTemplateDb against a real container", () =
       expect((result.rows[0] as { s: boolean }).s).toBe(true);
     });
 
+    // The per-test reset, on unless a suite opts out. These two cases are a pair and run in this
+    // order: the first leaves a row behind, the second is the one that would see it.
+    it("lets a test write a row", async () => {
+      await suite.admin.execute(sql`insert into catalogues (name) values ('reset probe')`);
+      const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+      expect(result.rows[0]).toEqual({ n: 1 });
+    });
+
+    it("does not hand the next test the row the last one left", async () => {
+      const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+      expect(result.rows[0]).toEqual({ n: 0 });
+    });
+
     it("connectAs reaches a role startSharedContainer created once at the cluster", async () => {
       const asProbe = await suite.pg.connectAs("shared_probe", "probe_pw");
       try {
@@ -348,6 +456,19 @@ describe.runIf(dockerAvailable())("useRealPostgres against a real container", ()
       sql`select to_regclass('setup_marker')::text as present`,
     );
     expect((result.rows[0] as { present: string | null }).present).toBe("setup_marker");
+  });
+
+  // The per-test reset, on unless a suite opts out. These two cases are a pair and run in this
+  // order: the first leaves a row behind, the second is the one that would see it.
+  it("lets a test write a row", async () => {
+    await suite.admin.execute(sql`insert into catalogues (name) values ('reset probe')`);
+    const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 1 });
+  });
+
+  it("does not hand the next test the row the last one left", async () => {
+    const result = await suite.admin.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 0 });
   });
 
   it("created the probeRole, reachable via connectAs", async () => {

@@ -59,6 +59,41 @@ describe("computeAmendmentHash", () => {
   });
 });
 
+describe("the canonical string the amendment hash digests", () => {
+  // The two digests below are RECORDED from this implementation on 2026-09-20, not published by
+  // anyone. They cannot tell you the format is right; they can only tell you it has changed — which
+  // is the property that matters here, because a stored chain is verified by recomputing these
+  // digests and an amendment chain that no longer recomputes cannot be repaired.
+  //
+  // Everything the canonical string is made of is inside them: each field's NAME, the order the
+  // fields are written in, the `=` between a name and its value, the `&` between pairs, the empty
+  // string a null reason or a genesis predecessor contributes, and the uppercase hex. Before these
+  // two assertions existed, every one of those could be changed and the whole suite stayed green —
+  // the other tests here compare one hash with another, so they agree with each other whatever the
+  // format is.
+  //
+  // If one of them fails, the format moved. Restoring it is the fix; editing the expected digest is
+  // only correct alongside a decision to re-hash every chain that exists.
+  it("digests the genesis shape to a recorded value", () => {
+    expect(computeAmendmentHash(base)).toBe(
+      "C0718201CE76EEBE28FA2EB5AE0D474CEEDB55E496F709F4AB621177CF65D447",
+    );
+  });
+
+  it("digests a linked entry with a reason to a recorded value", () => {
+    // The other half of the pair: a reason and a predecessor that are both present, so the two
+    // fallbacks in the canonical string are pinned in both directions.
+    expect(
+      computeAmendmentHash({
+        ...base,
+        sequenceNo: 2,
+        reason: "cancelled by customer",
+        prevEntryHash: "A".repeat(64),
+      }),
+    ).toBe("C39A5B233D3CD70E6DE4EDF87D54CFE1913DA497A271DB4CDF5374E81A1E9783");
+  });
+});
+
 describe("verifyAmendmentChain", () => {
   it("accepts a genuine 2-entry chain and rejects content tampering", () => {
     const e1: VerifiableAmendment = {
