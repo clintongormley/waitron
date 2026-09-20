@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFileClusterMutex, isProcessAlive, type ClusterMutex } from "./cluster-mutex.js";
+import {
+  createFileClusterMutex,
+  DEFAULT_LOCK_DIR,
+  isProcessAlive,
+  type ClusterMutex,
+} from "./cluster-mutex.js";
 
 // The cross-process mutex is pure fs/pid logic — no Docker. It backs BOTH two-node fixtures so only
 // ONE cluster of either kind is alive machine-wide at a time; these tests pin the properties a
@@ -138,6 +143,9 @@ describe("createFileClusterMutex", () => {
       // The rest of what the message is for. Whoever reads it is a person looking at a suite that
       // will not start, so it has to say which lock, how long it has been held, and what to delete.
       expect(error?.message).toContain(lockDir);
+      // And what to DO about it. A person reading this is looking at a suite that will not start;
+      // without this sentence the message says a lock is held and not that it can be deleted.
+      expect(error?.message).toContain(`this is a leaked lock — remove ${lockDir}.`);
       const age = Number(/for (\d+)ms/.exec(error?.message ?? "")?.[1]);
       expect(age).toBeGreaterThanOrEqual(0);
       expect(age).toBeLessThan(60_000); // an age, not a clock reading
@@ -300,6 +308,12 @@ describe("createFileClusterMutex", () => {
     });
     const release = await mutex.acquire();
     await release(); // release is also a no-op — it must NOT remove the held lock
+  });
+});
+
+describe("DEFAULT_LOCK_DIR", () => {
+  it("is one named path in the OS temp dir, so every process on the box picks the same lock", () => {
+    expect(DEFAULT_LOCK_DIR).toBe(join(tmpdir(), "waitron-two-node-cluster.lock"));
   });
 });
 
