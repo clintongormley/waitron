@@ -17,10 +17,12 @@ import { describe, expect, it } from "vitest";
  * Measured on this tree, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` lists six
  * packages and `@waitron/db` is not among them — so the scoped run for a pull request adding a suite
  * in `packages/bookings` would not have reached a check that lived there. Two paths do still reach
- * it, and neither is the case this guard is for: a push whose scope the classifier does NOT call
- * `packages`, which makes CI emit every gate true (`.github/workflows/ci.yml:273`) and so run the
- * `test-heavy` shard (`:580`, `pnpm --filter "@waitron/db" test:shard`), and a pull request that
- * changes `packages/db` itself. The PRE-PUSH HOOK is not one of those paths, and it is the natural
+ * it, and neither is the case this guard is for: a push whose scope the classifier calls `global`,
+ * which makes CI emit every gate true (`.github/workflows/ci.yml:273`) and so run the `test-heavy`
+ * shard (gated at `:580`, running `pnpm --filter "@waitron/db" test:shard` at `:620`), and a pull
+ * request that changes `packages/db` itself. `global` is the narrow word and `not packages` would
+ * be the wrong one: the `documentation` and `root` scopes also take that branch at `:273`, and
+ * `test-heavy`'s gate needs `code` as well as `heavy`, which those two do not set. The PRE-PUSH HOOK is not one of those paths, and it is the natural
  * thing to assume: it runs no package tests at all (CLAUDE.md §2), so its unfiltered run reaches a
  * TYPECHECK of `packages/db`, never a suite living there. The root project needs none of this —
  * ci.yml's `lint` job and `.husky/pre-push` both run it on every non-documentation push.

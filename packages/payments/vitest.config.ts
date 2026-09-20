@@ -17,7 +17,7 @@ export default defineConfig({
     // (`packages/db/src/testing/lifecycle.ts:146`), and no call site in this package passes a
     // `timeoutMs`, so the helper's own 60s default applies there and this setting never does. What
     // it DOES bound is the hooks left untimed: the helper's per-test reset and close
-    // (`lifecycle.ts:148` and `:153`, each reached through `venue-db.ts:26`), a suite's own
+    // (`lifecycle.ts:148` and `:153`, each reached through `venue-db.ts:31`), a suite's own
     // `beforeEach`, and the template clone the real-PG suites take without a `timeoutMs` of their
     // own (`lifecycle.ts:422`).
     //

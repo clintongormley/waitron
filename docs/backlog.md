@@ -4126,8 +4126,8 @@ accessor too early still gets the error
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
 
-**The rule, the guard and the final sweep — the pull request this entry arrives in, opened
-2026-09-20. Its finding is about SCOPE, which is what every earlier round of this rollout also got
+**The rule, the guard and the final sweep — the pull request this entry arrives in. Its
+finding is about SCOPE, which is what every earlier round of this rollout also got
 wrong.** The rule is one line in `CLAUDE.md` §4;
 the guard is `scripts/venue-db-helper.test.ts`, a root-project check that reports any `.ts` file
 under `packages/` or `apps/`, outside `packages/db/`, which NAMES `usePgliteDb`. **It forbids the
@@ -4797,11 +4797,14 @@ and then restored: 20 files, 204 tests, statements 100% against a bar of 90, lin
 functions 100% against 85, branches 100% against 85. Remaining after it, same command:
 `payments` 14 files, `db` 20, `fiscal-verifactu` 25, `apps/server` 56. Seven things to carry.
 
-> 2026-09-20: every `venue-db.ts:26` below is the line as it READ when the output quoted here was
-> produced. The pull request that added `scripts/venue-db-helper.test.ts` rewrote that file's doc
-> comment and moved the forwarding call to `:31`. The quotes are left alone because rewriting output
-> nobody re-ran would falsify the record; `git grep -nE "usePgliteDb[(]" -- packages/db` is the
-> command that answers where it is today.
+> 2026-09-20: `venue-db.ts:26` appears seven times below and the forwarding call is no longer there.
+> It moved TWICE, and not mostly by the pull request that noticed: #470 took it from `:26` to `:30`,
+> before that branch existed, so these citations were already stale on `main`; the branch that added
+> `scripts/venue-db-helper.test.ts` then rewrote the file's doc comment and took it to `:31`. Five of
+> the seven quote a stack trace and one quotes `git grep` output — those are left alone, because
+> rewriting output nobody re-ran would falsify the record. The seventh, in the import-chain
+> parenthesis further down, is a live pointer and is simply stale. `git grep -nE "usePgliteDb[(]" --
+> packages/db` is the command that answers where the call is today.
 
 **First, the two standard controls both ran, and only the THROW one covers every converted file.**
 Making the seam's body `throw` fails exactly the thirteen converted files at collection — 0 tests
