@@ -8,10 +8,15 @@ import { describe, expect, it } from "vitest";
  * than every call site.
  *
  * It lives in the ROOT Vitest project rather than beside the helper in `packages/db`, for the same
- * reason `scripts/column-vocabulary.test.ts` does: CI expands a changed package to its DEPENDENTS,
- * and most packages do not list `@waitron/db`, so a check living there would not run on the pull
- * request that adds a suite somewhere else. The root project is ungated — ci.yml's `lint` job and
- * `.husky/pre-push` both run it on every non-documentation push.
+ * reason `scripts/column-vocabulary.test.ts` does, and the reason runs in the direction a reader
+ * easily gets backwards: both gates expand a changed package to its DEPENDENTS (`--filter "...<pkg>"`
+ * — `scripts/changed-packages.mjs` and `.husky/pre-push`), so a check inside `packages/db` runs only
+ * when `@waitron/db` is a dependent of something the pull request changed, which is to say only when
+ * `db` DEPENDS on it. It depends on three workspace packages, so it is almost never pulled in.
+ * Measured on this tree, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` lists six
+ * packages and `@waitron/db` is not among them — so a pull request adding a suite in
+ * `packages/bookings` would never have run a check that lived there. The root project is ungated —
+ * ci.yml's `lint` job and `.husky/pre-push` both run it on every non-documentation push.
  *
  * **It forbids the NAME, not just the call, and that is the deliberate part.** `useVenueDb`'s whole
  * body is `return usePgliteDb(options)`, so a comment elsewhere in the tree pointing a reader at
@@ -21,15 +26,17 @@ import { describe, expect, it } from "vitest";
  * have looked. `docs/backlog.md` asked whoever wrote this guard to decide about comments
  * deliberately and say so: it reads them, because they are the class that kept recurring.
  *
- * Five gaps, stated here because a failing test can never restore a missing hedge:
+ * Five things it does not do, stated here because a failing test can never restore a missing hedge.
+ * The first is an OVER-report rather than a blind spot; the other four are blind spots:
  *
  * 1. **It reads TEXT.** The name inside a string literal, a regular expression or prose is reported
  *    exactly like a call. That is the point rather than a flaw, but it means a file that needs to
  *    DISCUSS the old helper cannot, outside the package that owns it.
  * 2. **`packages/db/` is exempt WHOLE**, not file by file. It defines both helpers, tests them, and
- *    documents them in its README and its vitest config, so a per-file list there would be four
- *    entries that go stale on the next refactor. The price: a suite inside that package could call
- *    `usePgliteDb` directly and this guard would not see it.
+ *    documents them in its own vitest config and README, and `git grep -l usePgliteDb --
+ *    packages/db` returns SIX files on this tree — a per-file list would be six entries that go
+ *    stale on the next refactor. The price: a suite inside that package could call `usePgliteDb`
+ *    directly and this guard would not see it.
  * 3. **It sees one of the three doors to a PGlite database.** `createPgliteDb` called directly and
  *    `describeEachTarget`'s PGlite half are the other two, and neither is reported. On `e596fea4f`,
  *    `comm -23 <(grep -rlE "createPgliteDb\(" --include="*.test.ts" packages apps | sort)
@@ -54,6 +61,16 @@ const OWNER = "packages/db/";
 const OLD_HELPER = "usePgliteDb";
 const SEAM = "packages/db/src/testing/venue-db.ts";
 
+/**
+ * Every `.ts` file under `dir`, discovered rather than listed. The same walk four other root guards
+ * use, kept as a copy per house convention rather than shared.
+ *
+ * The shape to keep is that the DIRECTORY branch is taken first: a failing browser test writes its
+ * screenshot into a directory named after the test file, and a walk that dispatched on the
+ * extension would hand that directory to `readFileSync` and die with `EISDIR` instead of reporting
+ * on the repository (root `CLAUDE.md` §4). The `isFile()` call then only has to drop an entry
+ * `statSync` reports as neither file nor directory.
+ */
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -66,6 +83,7 @@ function sourceFilesIn(dir: string): string[] {
   return out;
 }
 
+/** Every `.ts` file under `packages/` and `apps/`, as repo-relative paths. */
 function allSources(): string[] {
   return ROOTS.flatMap((root) => sourceFilesIn(join(repoRoot, root)))
     .map((file) => relative(repoRoot, file))
@@ -96,6 +114,17 @@ describe("a suite asks for its PGlite database through useVenueDb", () => {
   it("the seam the rule points at still exists", () => {
     const seam = readFileSync(join(repoRoot, SEAM), "utf8");
     expect(seam).toContain("export function useVenueDb(");
+  });
+
+  it("the whole-package exemption is still earned", () => {
+    // An exemption for something a package no longer does is an exemption nobody will notice
+    // covering the next offender. If this fails, narrow `OWNER` to the files that still need it
+    // rather than deleting the assertion.
+    const named = allSources().filter(
+      (file) =>
+        file.startsWith(OWNER) && readFileSync(join(repoRoot, file), "utf8").includes(OLD_HELPER),
+    );
+    expect(named).not.toEqual([]);
   });
 
   it("reaches both roots", () => {

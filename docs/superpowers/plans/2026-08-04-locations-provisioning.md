@@ -98,8 +98,10 @@ pnpm workspace; TypeScript (ESM, `node24`); Drizzle ORM `0.45.2` + drizzle-kit; 
   **2026-09-20: the PGlite half of that instruction is out of date, and it is an instruction rather
   than a record, so it would otherwise still be followed.** A suite asks for its PGlite database
   through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb`
-  unchanged; naming the old helper anywhere outside `packages/db` is refused by
-  `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4). `useRealPostgres` is unchanged.
+  unchanged. Naming the old helper in a `.ts` file under `packages/` or `apps/`, outside
+  `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4) — this document is
+  markdown and is outside that guard's scope, which is why the note is here by hand.
+  `useRealPostgres` is unchanged.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** (`series.not_found`, not
   `db.series_not_found`). Codes are **never renamed once shipped**. Every file that throws a code
   imports its registry (`import "./errors.js"` / the owning package's barrel) directly.
@@ -972,8 +974,8 @@ login role can each INSERT a node under the tenant GUC.
   **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
   creates, so the name matters.** `packages/provisioning/src/venue-apply.test.ts` asks for its
   database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:7`, the
-  call at `:20` — not `usePgliteDb`, and this step's closing note names the old helper again for the
-  same reason. It is the same PGlite database with the same options and the same per-test reset: the
+  call at `:20` — not `usePgliteDb`. Step 3's closing note, at `:1176`, names the old helper again
+  for the same reason. It is the same PGlite database with the same options and the same per-test reset: the
   new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
   `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
   house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name

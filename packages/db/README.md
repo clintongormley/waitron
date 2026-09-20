@@ -31,10 +31,11 @@ SQLite switch replaces that one body rather than every call site (plan
 `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P2). Asking for a PGlite
 database through it is now a written rule (`CLAUDE.md` §4), enforced by
 `scripts/venue-db-helper.test.ts`: outside this package, no `.ts` file under `packages/` or `apps/`
-may NAME `usePgliteDb`. Which files take the seam is the grep in
-`docs/developers/testing-guide.md` under "A PGlite suite asks for its database through one helper, and a guard enforces it", and it
-needs the exclusion that grep carries, or the four files allowed to name either helper — the two
-that define them and their two contract tests — come back as work still to do.
+may NAME `usePgliteDb`; inside this package the name is allowed, and six files use it. Which files
+take the seam is the grep in `docs/developers/testing-guide.md` under "A PGlite suite asks for its
+database through one helper, and a guard enforces it". Its exclusion is about that command's output
+rather than about permission: without it the list also returns `src/testing/venue-db.ts` and its
+contract test, which take the seam without being anyone's conversion.
 
 Keep `testTimeout: 30_000` in `vitest.config.ts` for the database-backed tests; do not replace it
 with the usual 5 s default. **Neither that budget nor the `hookTimeout: 120_000` beside it bounds

@@ -451,16 +451,15 @@ container or browser test** — most of these rules exist because a test passed 
   justification does not apply, and say why in a comment.
 - **A grant assertion must call `asAppUser(tx)` before the query under test.** Without it the test
   runs as the owner and asserts nothing, however much it asserts.
-- **A PGlite suite asks for its database through `useVenueDb`, and nothing outside `packages/db`
-  names `usePgliteDb` at all.** That helper is the one body the SQLite switch replaces, so the
-  switch is one function rather than every call site. Guard: `scripts/venue-db-helper.test.ts`,
-  weaker than its name in ways its header lists — among them, it sees ONE of the three doors to a
-  PGlite database, so a suite reaching one through `createPgliteDb` or `describeEachTarget` is
-  outside it (both are task F1's), and it reads `.ts` under `packages/` and `apps/` alone, so a plan
-  or a runbook naming the old helper is invisible to it. Cost: the rule could not be written until
-  the last suite was converted — a rule with standing violations needs a guard, and the guard could
-  not pass — and by then seven comments pointed a reader at a function their own file no longer
-  called, five of them in a `vitest.config.ts`, where a call-shaped grep never looks. Receipt:
+- **A suite that asks a shared helper for a PGlite database asks `useVenueDb`, and no `.ts` file
+  under `packages/` or `apps/` outside `packages/db` NAMES `usePgliteDb`.** That helper is the one
+  body the SQLite switch replaces. Guard: `scripts/venue-db-helper.test.ts`, weaker than its name in
+  ways its header lists — it sees ONE of the three doors to a PGlite database, so a suite reaching
+  one through `createPgliteDb` or `describeEachTarget` is outside the rule as well as the guard
+  (both are task F1's), and markdown is outside its scope entirely. Cost: the rule had to wait for
+  the last conversion, because a rule with standing violations needs a guard and the guard could not
+  pass; by then seven comments named a helper no suite in their own package called any more, five of
+  them in a `vitest.config.ts`, where a call-shaped grep never looks. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md).
 - **Don't own a database in a suite — let a helper own it** (`useVenueDb` / `useRealPostgres`). Raw
   `beforeAll`/`afterAll` only when the suite legitimately builds its own resource, and then guarded.

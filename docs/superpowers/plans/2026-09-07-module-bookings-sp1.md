@@ -30,8 +30,8 @@
   (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb` unchanged with the same
   options, the same handle and the same per-test reset — so the migration-set ARRAY this line
   describes is unchanged. `packages/bookings/src/bookings.test.ts` takes the seam today: the import
-  at `:7`, the call at `:37`. Naming the old helper outside `packages/db` is refused by
-  `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
+  at `:7`, the call at `:37`. Naming the old helper in a `.ts` file under `packages/` or `apps/`,
+  outside `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4).
 
 ---
 

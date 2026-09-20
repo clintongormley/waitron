@@ -4029,14 +4029,16 @@ asserts the row the second wrote is gone, and with the helper's body changed to
 **The conversion is COMPLETE as of 2026-09-20.** It ran one pull request per package, fewest
 calling files first; `packages/fiscal-none` was the first, LANDED as #423 on 2026-09-19, and
 `apps/server` was the last, LANDED as #470. Every suite that called `usePgliteDb` now calls
-`useVenueDb`, and the still-to-convert half of the grep pair in
-`docs/developers/testing-guide.md` exits 1 across the tree. That pair, not a number written here, is
-still how anyone checks: a number here went stale in one pull request, which is the whole reason
-#423 took it out. The pair needs the exclusion that drops the four files allowed to name either
-helper, and it lists FILES, not packages and not call sites.
+`useVenueDb`. The still-to-convert grep that used to sit beside it in
+`docs/developers/testing-guide.md` is GONE, replaced on 2026-09-20 by the guard that does the same
+job on every push (`scripts/venue-db-helper.test.ts`); what the guide still carries is the one
+command listing the files that take the seam. That command, not a number written here, is how
+anyone checks: a number here went stale in one pull request, which is the whole reason #423 took it
+out. It lists FILES, not packages and not call sites.
 
-**What step 5 finished does NOT mean the task is done.** The house rule and its guard are still
-owed, in their own pull request — see the paragraph below that keeps them open.
+**And the house rule and its guard, which step 5 does not include, LANDED on 2026-09-20 in their own
+pull request afterwards — so the whole of task P2 is done.** The entry further down carries what
+that pull request found.
 
 **Three things #470, the last conversion, left behind.**
 
@@ -4080,10 +4082,14 @@ left counts itself among them.
 
 **The part of P2 that is NOT a mechanical rename, found by this branch's review and worth carrying
 because the plan's step 5 does not reach it.** `usePgliteDb` is not the only door to a PGlite
-database. Counted over `*.test.ts` under `packages/` and `apps/` on 2026-09-18: 11 suites call
-`createPgliteDb` themselves with no helper at all (`packages/db/src/index.test.ts` does it inside the
-`it`), and 7 more get theirs from `describeEachTarget`'s PGlite half. Replacing `usePgliteDb(` with
-`useVenueDb(` reaches none of those 18, and `describeEachTarget`'s half in particular cannot simply
+database. Two other doors open onto one, and the commands that count them are now in
+`scripts/venue-db-helper.test.ts`'s header rather than here, because a number here goes stale in a
+pull request and a command does not: on `e596fea4f` they return 10 suites taking `createPgliteDb`
+and nothing else (`packages/db/src/index.test.ts` does it inside the `it`) and 7 taking
+`describeEachTarget`'s PGlite half. The figure that used to stand here, 11 and 18, was measured on
+2026-09-18 under a scope nobody wrote down, and the two disagree by one — which is this section's
+own lesson about counts, happening to this very sentence. Replacing `usePgliteDb(` with
+`useVenueDb(` reaches neither door, and `describeEachTarget`'s half in particular cannot simply
 move: `pgliteTarget.create()` hands out a fresh cluster PER TEST where the helper hands out one
 database per SUITE with a truncate between tests, which is a different isolation contract and one
 `Target`'s own doc comment argues for at length. They belong with F1's 66-test disposition, and the
@@ -4128,19 +4134,24 @@ and five in a `vitest.config.ts` (`credentials`, `printing`, `provisioning`, `re
 file no sweep over SUITES would ever have opened. That is the receipt for the comment decision this
 section asked whoever wrote the guard to make deliberately.
 
-**The documentation sweep found FOUR documents the twelve-document list above does not contain, and
-each one is the scope gap this section had already named.** The list of twelve came from one scan:
-`usePgliteDb` mentions under `docs/` with one of `apps/server`'s 56 converted paths in the preceding
-forty lines. Re-run with the SAME window over all 211 converted paths it returns 36 documents and
-adds `2026-08-04-locations-provisioning.md`, whose step 1 sketches
-`packages/provisioning/src/venue-apply.test.ts`; re-run over the converted files' BASENAMES — the
-third grep this section says is wanted if anyone wants one — it adds `2026-08-02-f3-canje.md`,
-`2026-08-02-rectificativas.md` and `2026-09-07-module-bookings-sp1.md`. All four were pointed, along
-with the twelve; after the sweep both legs return NOTHING without a `useVenueDb` pointer. **The three
-the basename leg found are a different shape from the twelve and the more dangerous one**: they are
-generic INSTRUCTIONS — "any new suite uses `usePgliteDb`/`useRealPostgres`" — rather than a sketch of
-one file, so a reader following them would have written a fresh violation rather than a stale
-reference. `2026-08-04-locations-provisioning.md` carries one of each.
+**The final sweep threw away this section's two grep legs and read the whole class instead, and THAT
+is the finding.** The twelve-document list above came from one scan: `usePgliteDb` mentions under
+`docs/` with one of `apps/server`'s 56 converted paths in the preceding forty lines. Widening it —
+same forty-line window, all 211 converted paths — returns 36 documents and adds
+`2026-08-04-locations-provisioning.md`; the BASENAME leg this section says is the third grep anyone
+would want adds three more. That is four the list could not see, and it still was not the class.
+**Both legs are shaped around a converted FILE, and the worst instances name no file at all**: a
+plan's conventions block saying "any new suite uses `usePgliteDb`/`useRealPostgres`" is an
+INSTRUCTION, so a reader following it writes a fresh violation rather than repeating a stale
+reference — and neither leg returns it. The branch's own first draft claimed closure on the strength
+of the two legs; a review seat listed seven such documents still standing, all of them invisible to
+both. What the sweep finally used is the predicate the class actually has: **every markdown file
+under `docs/` that names `usePgliteDb` and has no `useVenueDb` anywhere in it.** That returns nothing
+now, and unlike the legs it needs no list of converted paths to stay true. Twenty-four documents
+under `docs/superpowers/` carry a dated pointer as a result — everything that pull request changed
+there except the slice-1 plan itself, whose task P2 it closed. **Take the lesson, not the command:** a sweep built from the
+artefacts of the change (here, the converted paths) finds what the change touched; a sweep built from
+the CLAIM finds what is wrong.
 
 **Two things the pre-landing documentation sweep still cannot do, both measured on
 `packages/catalogue` (#454, 2026-09-19).** The sweep is two greps over the whole tree — the converted
@@ -4154,8 +4165,10 @@ What NEITHER reaches is a document that writes a converted file's path **package
 heading that supplies the package**. `docs/superpowers/plans/2026-09-12-product-categories.md:86` is
 a table row headed `catalogue` listing `src/content-languages.test.ts src/integration.test.ts` and
 four more, and `grep -c usePgliteDb` on it returns 0. That one needs nothing — it is a historical run
-record — but nothing found it, and the gap grows with the package: `apps/server` has 56 files left to
-convert and is named package-relative all over the plans. If a third grep is wanted, it is the
+record — but nothing found it, and the gap grew with the package: when this was written `apps/server`
+had 56 files still to convert and is named package-relative all over the plans. It was the last
+conversion (#470) and has none left, so what is preserved here is the SHAPE of the gap, not work
+outstanding. If a third grep is wanted, it is the
 converted files' BASENAMES, read with their surrounding heading.
 
 And a count of how many stale claims a document carries has to come from a grep over the WHOLE
@@ -4191,17 +4204,14 @@ comment that writes the bare name is invisible to it. `packages/bookings` is con
 `grep -rlE "usePgliteDb[(]" --include="*.ts" packages/bookings` exits 1, yet
 `packages/bookings/src/migrations.ts:5` still tells a reader that a test's `usePgliteDb` applies the
 migration descriptor — true, because `useVenueDb`'s whole body is `return usePgliteDb(options)`, but
-a pointer to a caller the package no longer has. Comment mentions of the helper today, run on
-`ceeae219`:
-`grep -rnE "^[[:space:]]*(//|\*|/\*).*usePgliteDb" --include="*.ts" packages apps` returns 21 lines
-— 12 in `packages/db`, which owns the function and is not a dead pointer, and the rest spread over
-`bookings`, `fiscal-verifactu`, `identity`, `payments`, `provisioning` and `workforce`. Each
-conversion turns that package's share into dead pointers, so the sweep belongs with the house rule
-and its guard rather than with any one conversion. Whoever writes the guard should decide
-deliberately whether it reads comments at all; if it does not, say so in its header, because a guard
-narrower than its name is the thing this repository's §7 asks to be stated. **It does: the guard
-matches the bare NAME, so a comment is reported exactly like a call, and its header states the five
-things it still cannot see.**
+a pointer to a caller the package no longer has. The running tally of such mentions that used to sit
+here — 21 lines on `ceeae219`, spread over six named packages — is DELETED rather than restated,
+because the conversions that followed retired it package by package and the six it named are not the
+seven the final sweep actually corrected. What replaces it is the guard, which is a command that
+cannot go stale: on 2026-09-20 its first run against the converted tree named seven files outside
+`packages/db`, and there are none now. **It reads comments**, which is the decision this paragraph
+asked for: it matches the bare NAME, so a comment is reported exactly like a call, and its header
+lists the five things it still does not do.
 
 **One exception to "defer the sweep", set by `packages/provisioning` (#431, 2026-09-19).** That
 conversion renamed a comment mention rather than leaving it, and the line it drew is worth keeping:

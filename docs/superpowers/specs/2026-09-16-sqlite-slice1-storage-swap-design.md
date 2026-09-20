@@ -87,6 +87,11 @@ function body rather than 211 files.
 > '211 files'"), and the current pair, with what it excludes and why, is in
 > `docs/developers/testing-guide.md` under "A PGlite suite asks for its database through one helper, and a guard enforces it". The
 > argument above does not turn on the number.
+>
+> 2026-09-20: that collapsing is DONE for the first of the three. Every suite that chose its database
+> through `usePgliteDb` now chooses through `useVenueDb`, and asking that way is a house rule
+> (`CLAUDE.md` §4) enforced by `scripts/venue-db-helper.test.ts`. `useRealPostgres` and
+> `describeEachTarget` are untouched and are still the flip's, as this paragraph says.
 
 Both are mechanical, reviewable, and independently valuable: they put the engine's vocabulary in one
 place, which is where it should have been anyway.

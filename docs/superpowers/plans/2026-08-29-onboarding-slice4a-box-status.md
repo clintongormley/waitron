@@ -8,6 +8,12 @@
 
 **Tech Stack:** TypeScript, Hono, Drizzle, Node's built-in `node:crypto` `X509Certificate` (no new dependency), Vitest with `@waitron/db/testing/lifecycle` (`usePgliteDb` / `useRealPostgres` / `useTemplateDb`).
 
+**2026-09-20: `usePgliteDb` in that line is out of date.** A suite asks for its PGlite database
+through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb`
+unchanged. Naming the old helper in a `.ts` file under `packages/` or `apps/`, outside
+`packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4). The other two
+helpers named there are unchanged.
+
 **Spec:** `docs/superpowers/specs/2026-08-26-appliance-onboarding-design.md` (slice 4, §12/§13/§16), constrained by `docs/superpowers/specs/2026-08-29-promotion-failover-and-node-lifecycle-design.md` (§5.1 durability surface — the replication field is the seam that surface later grows from).
 
 ## Global Constraints

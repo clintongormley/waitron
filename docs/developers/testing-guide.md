@@ -48,8 +48,9 @@ target (see the rule further down this file), and nothing here changes the concu
 
 ## Don't own a database in a suite — let a helper own it.
 
-`usePgliteDb` / `useRealPostgres` (`@waitron/db/testing/lifecycle.js`) register their own hooks and
-return an accessor that throws before setup. Raw `beforeAll`/`afterAll` only when the suite
+`useVenueDb` (`@waitron/db/testing/venue-db.js`) and `useRealPostgres`
+(`@waitron/db/testing/lifecycle.js`) register their own hooks and return an accessor that throws
+before setup. Raw `beforeAll`/`afterAll` only when the suite
 legitimately builds its own resource, and then guarded (`if (db !== undefined) await db.close()`) —
 enforced by `scripts/guarded-teardowns.test.ts`, whose header records why an ESLint rule was
 rejected. Suites sharing a database clean up in a `finally`, order-independent.
@@ -70,21 +71,25 @@ the PGlite boot — a file no call-shaped grep over suites would ever have opene
 check reads text rather than calls, and its header says so rather than leaving a reader to find out.
 
 Which files take the seam is a grep rather than a list here, because a list is stale by the next
-pull request. Run it from the workspace root; the paths it prints are relative to it, and the second
-grep is anchored to that form:
+pull request. Run it from the workspace root; the paths it prints are relative to it, and the
+`grep -v` is anchored to that form:
 
 ```bash
 grep -rlE "useVenueDb[(]" --include="*.ts" packages apps \
   | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)([.]test)?[.]ts$"
 ```
 
-The exclusion names the four files allowed to name either helper: `lifecycle.ts` and `venue-db.ts`,
-which define them, and `lifecycle.test.ts` and `venue-db.test.ts`, which are their contract tests.
-`lifecycle.test.ts` is the one that matters —
-`packages/db/src/testing/lifecycle.test.ts:26` is `describe("usePgliteDb")`, so converting it would
-delete the coverage for the function being wrapped. That command lists FILES, not packages and not
-call sites, and not every file it lists is a suite: some are shared fixtures under a package's
-`test/` directory.
+That exclusion is about the OUTPUT of this one command, not about permission — and the difference is
+worth being exact about, because an earlier version of this page conflated the two. What it actually
+drops is `venue-db.ts` and `venue-db.test.ts`, the seam and its contract test, which take the seam
+without being anyone's conversion; `lifecycle.ts` and `lifecycle.test.ts` never appear in this
+command's output at all, and are in the expression only because one shared expression covering the
+four files that may name EITHER helper is simpler than two. Permission is wider than those four: the
+guard exempts `packages/db` whole, and six files in it name the old helper today. The one that
+matters is `packages/db/src/testing/lifecycle.test.ts:26`, which is `describe("usePgliteDb")` —
+converting it would delete the coverage for the function being wrapped. The command lists FILES, not
+packages and not call sites, and not every file it lists is a suite: some are shared fixtures under a
+package's `test/` directory.
 
 **`useVenueDb` is not the only door to a PGlite database, and the guard sees only this one.** Some
 suites call `createPgliteDb` themselves; `describeEachTarget`'s PGlite half is a third. Neither is a
