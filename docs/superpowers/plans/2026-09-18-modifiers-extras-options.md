@@ -65,8 +65,12 @@ Every task's requirements implicitly include this section.
 - **New tables** are classified in `CATALOGUE_CLASSIFICATION`
   (`packages/catalogue/src/classification.ts`) and, if append-only, carry `ENABLE ALWAYS`
   `reject_mutation()` triggers. None of branch 1's tables are append-only (they are `state`).
-- **Money is whole cents after the flip**; today it is `numeric(12,2)`. Use `money()`, never a raw
-  numeric, so P5 of the SQLite plan converts the new price columns for free.
+- **Money is whole cents, as of 2026-09-20** — the SQLite plan's task P5 landed, so a money column
+  is a `bigint` counting cents and 12.34 is stored as `1234`. Declare a price with `money()`, never
+  a raw numeric, and convert at the row: `decimalToCents` on the way in, `centsToDecimal` on the
+  way out, both from `@waitron/shared`. Everything above the row still works in the exact decimal
+  type, so a wire field, a receipt literal and a fiscal amount are all unchanged. (This line said
+  the conversion was still to come, which was true when it was written.)
 
 ## File Structure
 

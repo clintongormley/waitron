@@ -308,6 +308,82 @@ ways it is weaker than "no write path touches a forbidden table", and the two pa
 comment reader and its detector state what each of those gives up in turn. What it does not cover at
 all is what the grants refuse one operation at a time (`docs/backlog.md` → B9).
 
+## A money column holds a count of whole cents, and the conversion happens at the row
+
+Landed 2026-09-20 as task P5 of the SQLite storage swap
+(`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Twenty-five columns declared
+through `money()` stopped being `numeric(12, 2)` and became integers counting cents: the storage
+engine the vocabulary exists to switch to has no exact decimal type, and a float cannot hold a
+cent exactly.
+
+**Where the boundary is, and why it is there.** The database is the edge and only the database.
+A read turns the stored count into the exact `Decimal` that `packages/shared/src/money.ts`
+already works in; a write turns it back; both happen at the row. Above that line nothing moved —
+the arithmetic, the HTTP contract both single-page apps consume, the receipt strings and the
+literals a fiscal record hashes. The alternative, cents as the in-memory type through core,
+catalogue, payments, reporting and `apps/server`, reaches the same storage with a far larger
+change and a live risk of rounding drift in the arithmetic the hash chain depends on.
+
+The two converters live alone in `packages/shared/src/cents.ts` rather than beside the arithmetic.
+`money.ts` is read as TEXT by `packages/shared/src/conventions.test.ts` and fails on any
+float-shaped operation in it, including the number constructor; keeping that check that strict is
+worth more than one module. `cents.ts` has its own version of the check, which allows the number
+conversion it exists for and forbids the rest.
+
+**The width is eight bytes, and that is a measurement, not a preference.** On the development
+PostgreSQL, with a control in both directions: `2147483647::integer` succeeds and
+`2147483648::integer` gives `integer out of range`. As cents that is a ceiling of 21,474,836.47,
+while the bound the rest of the system states is twelve integer digits
+(`MAX_MONEY_INTEGER_DIGITS`, enforced by `assertMoney` and by `packages/catalogue`'s price
+validators) — 99999999999999 cents. A four-byte column leaves a band of amounts the converters
+accept and the column refuses with a bare `22003`, which is what turned
+`packages/catalogue/src/modifier-projection.test.ts` red. 99999999999999 is well inside the
+9007199254740991 a JavaScript number counts exactly, so nothing in range loses a cent to the
+number type. Under SQLite an INTEGER is 64-bit, so the flip is unaffected.
+
+**A `bigint` reads differently on the two test targets.** Measured 2026-09-20 against a real
+`postgres:18-alpine` through the `pg` client, and the same query under PGlite 0.5.8:
+
+| expression | real PostgreSQL via `pg` | PGlite |
+| --- | --- | --- |
+| `select amount` on a `bigint` column | `"1234"`, a string | `1234`, a number |
+| `sum(amount)::bigint` | `"1234"`, a string | `1234`, a number |
+| `select n` on an `integer` column | `1234`, a number | `1234`, a number |
+| `sum(amount)::int` | `1234`, a number | `1234`, a number |
+
+Nothing in this repository sets an int8 type parser (`grep -rn "setTypeParser"` returns nothing),
+so this is the driver default. Drizzle's typed `.select()` is safe — the column maps the value,
+pinned by the read-mode assertion in `packages/db/src/schema/columns.test.ts`, which is there
+because `money` and `bigCount` emit the SAME SQL type and only the mode test can tell them apart.
+Raw SQL is not safe: a money sum casts `::int`, whose ceiling is 2147483647 cents per aggregate
+and which raises `22003` loudly rather than returning a wrong number, and a raw money READ on
+PGlite is a false pass for what real PostgreSQL will hand back.
+
+**What the compiler could not see.** Three classes, each found by hand and each worth re-checking
+whenever a money column is added:
+
+- A cast of a money sum to `::numeric(12, 2)::text` still succeeds on an integer column and
+  returns a plausible decimal string one hundred times too small. `packages/core`,
+  `packages/reporting` and `apps/server` each carried some. In `core` and `reporting` each was
+  checked by restoring the old cast and watching tests go red — nineteen of twenty-seven in
+  reporting, five in core.
+- Raw-SQL inserts. A quoted decimal now fails loudly with `22P02`, but **a bare whole number
+  succeeds and means cents** — `offline_amount_cap` seeded as `50` used to be fifty euros and is
+  now fifty cents, with nothing red. That is the shape to look for.
+- Money held as strings inside a `jsonb` document — `sales.vat_breakdown` and the hashed
+  `daily_closes.snapshot`. Both are above the line and stay decimal strings.
+
+**Every document written before 2026-09-20 that states a money column as `numeric(12, 2)`
+describes the old storage.** There are dozens, nearly all dated plans and specs recording what was
+true when written; they were not rewritten. The two that instructed a reader rather than recording
+history were corrected in place: the modifiers plan's conventions block, and this file plus
+`CLAUDE.md` §3, which carry the rule.
+
+**The migration rounds, and that is deliberate.** `ALTER COLUMN ... SET DATA TYPE bigint` casts an
+existing decimal by rounding, so a development database that held rows ends up holding whole
+euros. No data-migration code is allowed before production, so the generated migration was left
+unedited; a box needs `wa-wt reset demo <name>`.
+
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`
 
 A replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what

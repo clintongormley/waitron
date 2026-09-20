@@ -3056,7 +3056,19 @@ Leave the pull request open for the owner.
 **Interfaces:**
 
 - Consumes: `money(name)` from P1.
-- Produces: money values are `number` in cents everywhere. A value that was `"12.34"` is now `1234`.
+- Produces: a money COLUMN holds a `number` counting whole cents. A value stored as `"12.34"` is
+  now `1234`.
+
+**Corrected in place on 2026-09-20, while doing it.** This line originally read "money values are
+`number` in cents everywhere", which does not fit this task's own Files list (it names the schema,
+the read and write paths and the migrations, and does not name the two single-page apps, the wire
+clients, or the receipt and fiscal formatting) or step 4 below ("convert at the edges"). What
+landed: **the database is the edge.** Every read turns the stored count into the exact `Decimal`
+the rest of the system already works in and every write turns it back, both at the row; above that
+line the arithmetic in `packages/shared/src/money.ts`, the HTTP contract, the receipts and the
+fiscal literals are unchanged, so no second form of an amount circulates. The two converters are
+`decimalToCents` and `centsToDecimal` in `packages/shared/src/cents.ts` — a file of their own
+because `money.ts` is text-checked for the absence of every float-shaped operation.
 
 - [ ] **Step 1: Write the failing test — the one that catches a rounding drift**
 
@@ -3105,8 +3117,26 @@ In `packages/db/src/schema/columns.ts`:
  * Integer cents rather than a decimal type: SQLite has no exact decimal, and a float cannot
  * represent a cent exactly. The name says cents so a caller cannot read it as units.
  */
-export const money = (name: string) => integer(name);
+export const money = (name: string) => bigint(name, { mode: "number" });
 ```
+
+**Corrected in place on 2026-09-20:** this sketch said `integer(name)`, and four bytes is not
+enough. Measured on the development PostgreSQL, with a control in both directions:
+`2147483647::integer` succeeds and `2147483648::integer` gives `integer out of range`. As cents
+that is a ceiling of 21,474,836.47, while the money bound the rest of the system states is twelve
+integer digits (`MAX_MONEY_INTEGER_DIGITS`, enforced by `assertMoney` and by
+`packages/catalogue`'s price validators) — 99999999999999 cents. A four-byte column therefore
+refuses a band of amounts the converters accept, with a bare `22003`, and
+`packages/catalogue`'s `modifier-projection` test went red on exactly that. `bigint` holds the
+whole declared range and 99999999999999 is well inside the 9007199254740991 a JavaScript number
+counts exactly. Under SQLite an INTEGER is 64-bit, so the flip is unaffected.
+
+**And one trap that goes with it:** on real PostgreSQL through `pg`, a `bigint` column read by RAW
+SQL comes back as a STRING, and so does a `::bigint` cast, while PGlite returns a number for both
+(measured 2026-09-20 against `postgres:18-alpine`; nothing in this repository sets an int8 type
+parser). Drizzle's typed `.select()` is safe because the column maps the value. A raw-SQL sum of
+money must therefore cast `::int`, whose ceiling is 2147483647 cents per aggregate and which
+raises `22003` loudly rather than returning a wrong number.
 
 - [ ] **Step 4: Find every place that reads or writes a money value**
 
@@ -4050,7 +4080,9 @@ import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const id = (name: string) => text(name);
 export const ts = (name: string) => text(name);            // ISO-8601
 export const json = <T>(name: string) => text(name, { mode: "json" }).$type<T>();
-export const money = (name: string) => integer(name);       // whole cents (P5)
+export const money = (name: string) => integer(name);       // whole cents (P5); SQLite's INTEGER is
+                                                            // 64-bit, so this matches the `bigint`
+                                                            // P5 actually landed on PostgreSQL
 export const quantity = (name: string) => integer(name);    // whole thousandths (P6)
 export const rate = (name: string) => integer(name);        // whole basis points (P6)
 export const enumText = <T extends string>(name: string, _values: readonly T[]) => text(name).$type<T>();

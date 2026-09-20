@@ -254,9 +254,15 @@ PostgreSQL types; the flip changes its bodies.
 | `jsonb` | text holding JSON |
 | enum type | text with a check constraint |
 | array | text holding JSON |
-| `numeric(12,2)` money | whole cents, as an integer |
+| `numeric(12,2)` money | whole cents, as an integer (an eight-byte one — see the note below the table) |
 | `numeric(12,3)` quantity | whole thousandths, as an integer |
 | `numeric(5,2)` rate | whole basis points, as an integer |
+
+**Width, added 2026-09-20 when P5 landed.** "An integer" is eight bytes, not four. PostgreSQL's
+`integer` stops at 2147483647, which as cents is 21,474,836.47, while the money bound the rest of
+the system states is twelve integer digits — so a four-byte column would refuse a band of amounts
+the code accepts. On PostgreSQL the money columns are `bigint`; on SQLite an INTEGER is 64-bit, so
+nothing about the flip changes. The receipt is in the plan's task P5, step 3.
 
 The money and quantity rule is **not** a blanket one, and the columns were counted rather than
 assumed. Across the 72 table-defining files on 2026-09-16 there are 30 `numeric` columns: **23 money
