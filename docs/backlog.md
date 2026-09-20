@@ -4040,8 +4040,9 @@ owed, in their own pull request — see the paragraph below that keeps them open
 
 **Three things #470, the last conversion, left behind.**
 
-1. **Twelve documents hold a designating `usePgliteDb` sketch for a file that conversion converted,
-   and got no pointer.** A designating sketch is one whose step tells an implementer to write or
+1. **TAKEN by the final pull request on 2026-09-20, together with four more this scan could not
+   see — see the entry below. Twelve documents hold a designating `usePgliteDb` sketch for a file
+   that conversion converted, and got no pointer.** A designating sketch is one whose step tells an implementer to write or
    rework that exact file, which is the class earlier conversions gave a dated pointer to in the same
    pull request. #470 corrected only the two `docs/backlog.md` had already named by name, and the
    sentence recording them (further down this section) now carries the scan, the scope and the whole
@@ -4101,16 +4102,45 @@ the wrong place to change what a fixture guarantees, so it is recorded here rath
 anyone takes it, the question to answer first is whether any such fixture relies on the truncate
 running BEFORE the first test, where the helper's reset has not yet run at all.
 
-Two more things left deliberately open, and the FIRST of them is now the whole of what task P2 still
-owes. The house rule naming `useVenueDb`, and the guard that would enforce it, are NOT added yet — a
-rule with standing violations needs a guard, and there were violations standing until the last
-conversion, so both land together in their own pull request afterwards, which is the shape the
-vocabulary rollout ended in (#414 last conversion, #416 the guard and the rule). That conversion has
-now happened (#470), so nothing blocks this pull request any more; it also owns the rollout's final
-documentation sweep, described three paragraphs down. And a converted suite that reads its accessor too early still gets the error
+**TASK P2 IS COMPLETE.** The house rule naming `useVenueDb` and the guard that enforces it landed on
+2026-09-20, in their own pull request after the last conversion — the shape the vocabulary rollout
+ended in (#414 last conversion, #416 the guard and the rule), and for the same reason: a rule with
+standing violations needs a guard, and the guard could not pass while one suite still called the old
+helper. The rule is `CLAUDE.md` §4 and the guard is `scripts/venue-db-helper.test.ts`, whose own
+header carries its five hedges. What that pull request found, and it is the part worth
+carrying, is in the entry directly below. One thing it did NOT take: a converted suite that reads its
+accessor too early still gets the error
 `usePgliteDb: database not started`, naming a function its own file does not call; the cheapest fix
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
+
+**The rule, the guard and the final sweep, LANDED 2026-09-20 — and the finding is about SCOPE, which
+is what every earlier round of this rollout also got wrong.** The rule is one line in `CLAUDE.md` §4;
+the guard is `scripts/venue-db-helper.test.ts`, a root-project check that reports any `.ts` file
+under `packages/` or `apps/`, outside `packages/db/`, which NAMES `usePgliteDb`. **It forbids the
+NAME, not the call, and that decision is the whole of why it was worth writing.** `useVenueDb`'s body
+is `return usePgliteDb(options)`, so a comment written before a conversion stays TRUE while pointing
+a reader at a function its own file can no longer call — and a call-shaped grep cannot see one. Run
+for the first time against the converted tree, the guard reported SEVEN such lines: one in
+`packages/bookings/src/migrations.ts`, one in `packages/fiscal-verifactu/src/registro-sif.test.ts`,
+and five in a `vitest.config.ts` (`credentials`, `printing`, `provisioning`, `recipes`,
+`workforce-es`), each explaining which timeout bounds the PGlite boot. Five of the seven were in a
+file no sweep over SUITES would ever have opened. That is the receipt for the comment decision this
+section asked whoever wrote the guard to make deliberately.
+
+**The documentation sweep found FOUR documents the twelve-document list above does not contain, and
+each one is the scope gap this section had already named.** The list of twelve came from one scan:
+`usePgliteDb` mentions under `docs/` with one of `apps/server`'s 56 converted paths in the preceding
+forty lines. Re-run with the SAME window over all 211 converted paths it returns 36 documents and
+adds `2026-08-04-locations-provisioning.md`, whose step 1 sketches
+`packages/provisioning/src/venue-apply.test.ts`; re-run over the converted files' BASENAMES — the
+third grep this section says is wanted if anyone wants one — it adds `2026-08-02-f3-canje.md`,
+`2026-08-02-rectificativas.md` and `2026-09-07-module-bookings-sp1.md`. All four were pointed, along
+with the twelve; after the sweep both legs return NOTHING without a `useVenueDb` pointer. **The three
+the basename leg found are a different shape from the twelve and the more dangerous one**: they are
+generic INSTRUCTIONS — "any new suite uses `usePgliteDb`/`useRealPostgres`" — rather than a sketch of
+one file, so a reader following them would have written a fresh violation rather than a stale
+reference. `2026-08-04-locations-provisioning.md` carries one of each.
 
 **Two things the pre-landing documentation sweep still cannot do, both measured on
 `packages/catalogue` (#454, 2026-09-19).** The sweep is two greps over the whole tree — the converted
@@ -4153,9 +4183,10 @@ such suites in `packages/media`, one is accent collation and one is full-text st
 Both of the plan's lists now name it (#429 corrected them in place). Nothing to do; it is here so
 the next converter meeting a real-PostgreSQL suite does not have to work it out again.
 
-**A third thing for that last pull request, found while converting `packages/bookings` (#428).**
-Converting a package does not remove the old helper's name from its PROSE, and the grep pair cannot
-see what is left: the still-to-convert command matches `usePgliteDb[(]`, with a parenthesis, so a
+**A third thing for that last pull request, found while converting `packages/bookings` (#428) —
+TAKEN on 2026-09-20; the guard now refuses the bare name outside `packages/db`, so this class cannot
+come back.** Converting a package does not remove the old helper's name from its PROSE, and the grep
+pair cannot see what is left: the still-to-convert command matches `usePgliteDb[(]`, with a parenthesis, so a
 comment that writes the bare name is invisible to it. `packages/bookings` is converted and
 `grep -rlE "usePgliteDb[(]" --include="*.ts" packages/bookings` exits 1, yet
 `packages/bookings/src/migrations.ts:5` still tells a reader that a test's `usePgliteDb` applies the
@@ -4168,7 +4199,9 @@ a pointer to a caller the package no longer has. Comment mentions of the helper 
 conversion turns that package's share into dead pointers, so the sweep belongs with the house rule
 and its guard rather than with any one conversion. Whoever writes the guard should decide
 deliberately whether it reads comments at all; if it does not, say so in its header, because a guard
-narrower than its name is the thing this repository's §7 asks to be stated.
+narrower than its name is the thing this repository's §7 asks to be stated. **It does: the guard
+matches the bare NAME, so a comment is reported exactly like a call, and its header states the five
+things it still cannot see.**
 
 **One exception to "defer the sweep", set by `packages/provisioning` (#431, 2026-09-19).** That
 conversion renamed a comment mention rather than leaving it, and the line it drew is worth keeping:

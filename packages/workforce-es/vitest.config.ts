@@ -12,7 +12,8 @@ export default defineConfig({
     // `testTimeout` covers work inside an individual test. `hookTimeout` bounds a hook that passes
     // no timeout of its OWN; a hook given one overrides this config (the receipt is at
     // `packages/db/src/testing/lifecycle.ts:178`). So it does NOT bound the PGlite boot and
-    // migrations, which run under `usePgliteDb`'s own 60s default; what it bounds here is the bare
+    // migrations, which run under the 60s default `useVenueDb` forwards to
+    // (`packages/db/src/testing/lifecycle.ts:22`, applied at `:146`); what it bounds here is the bare
     // afterEach reset and afterAll close the helper registers per suite, plus any hook a test file
     // writes for itself. The container boot/image pull runs in globalSetup, outside both.
     testTimeout: 120_000,

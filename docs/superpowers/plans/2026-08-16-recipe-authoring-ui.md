@@ -218,6 +218,17 @@ git commit -s -m "fix(dashboard): seed product allergen picker from manual_aller
 
 - [ ] **Step 1: Write the failing test** — `apps/server/src/recipe-api.test.ts`, modelled on `catalogue-api.test.ts` (reuse its `send`/`mountApp` helpers, `usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS], setup })`, and `setup` seeding a `manager` + `staff` session with cookies). Cover:
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/recipe-api.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:5`, the call at `:38` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The file this step tells you
+> to model it on, `apps/server/src/catalogue-api.test.ts`, was converted too — its import is at `:5`
+> and its call at `:38`. Asking through it is now a house rule (`CLAUDE.md` §4), enforced by
+> `scripts/venue-db-helper.test.ts`. **Only the helper name was re-checked; nothing else in this
+> sketch was.**
+
 ```ts
 // happy path: create + list an ingredient, then set + get a product's recipe
 it("creates and lists an ingredient under a manager session", async () => {

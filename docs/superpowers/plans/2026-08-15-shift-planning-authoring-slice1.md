@@ -816,6 +816,17 @@ Run `pnpm install` (updates the lockfile). Verify: `pnpm --filter @waitron/serve
 
 - [ ] **Step 2: Write the failing test** — `apps/server/src/workforce-api.test.ts` (mirror `catalogue-api.test.ts`'s in-process PGlite setup: `usePgliteDb` with `CORE_MIGRATIONS + IDENTITY_MIGRATIONS + WORKFORCE_MIGRATIONS + WORKFORCE_ES_MIGRATIONS`, seed a tenant/location/manager/staff, mint sessions with `startManagementSession`):
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> creates, so the name matters.** `apps/server/src/workforce-api.test.ts` asks for its database
+> through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:5`, the call at
+> `:21` — not `usePgliteDb`. It is the same PGlite database with the same options and the same
+> per-test reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The file this step tells you
+> to mirror, `apps/server/src/catalogue-api.test.ts`, was converted too — its import is at `:5` and
+> its call at `:38`. Asking through it is now a house rule (`CLAUDE.md` §4), enforced by
+> `scripts/venue-db-helper.test.ts`. **Only the helper name was re-checked; nothing else in this
+> sketch was.**
+
 ```ts
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";

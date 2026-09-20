@@ -23,7 +23,7 @@ beforeEach(async () => {
   // A fresh database per test. The counter under test is monotonic and never resets, so a shared
   // database would make every assertion about "strictly greater" depend on test execution order —
   // and the first reordering would produce a failure that looks like a real defect. That
-  // requirement is why this suite cannot use `usePgliteDb`, which owns ONE database for the suite.
+  // requirement is why this suite cannot use `useVenueDb`, which owns ONE database for the suite.
   db = await createPgliteDb();
   for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
   await seedTenants(db);

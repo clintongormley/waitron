@@ -85,7 +85,7 @@ function body rather than 211 files.
 > 2026-09-19: the number 211 is this document's original reading and was never reproduced. The plan
 > re-measured it with the commands beside it (task P2, "The count in this paragraph used to read
 > '211 files'"), and the current pair, with what it excludes and why, is in
-> `docs/developers/testing-guide.md` under "A PGlite suite is being moved behind one helper". The
+> `docs/developers/testing-guide.md` under "A PGlite suite asks for its database through one helper, and a guard enforces it". The
 > argument above does not turn on the number.
 
 Both are mechanical, reviewable, and independently valuable: they put the engine's vocabulary in one

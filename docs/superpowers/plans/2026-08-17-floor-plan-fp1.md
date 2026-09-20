@@ -239,6 +239,16 @@ git commit -s -m "feat(server): zone.not_found + zone.name_taken error codes"
 
 - [ ] **Step 1: Write the failing test** (PGlite via `usePgliteDb` + `runMigrations`):
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> extends, so the name matters.** `apps/server/src/tables.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:13`, the call at `:55` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). This step's own prose names no
+> file; the one it designates is the `Test:` line in the task's Files block above. Asking through it
+> is now a house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the
+> helper name was re-checked; nothing else in this sketch was.**
+
 ```ts
 it("creates, lists (ordered, active-only), renames, deactivates a zone", async () => {
   const tx = pgliteTx(); const cfg = testCfg();

@@ -54,48 +54,48 @@ legitimately builds its own resource, and then guarded (`if (db !== undefined) a
 enforced by `scripts/guarded-teardowns.test.ts`, whose header records why an ESLint rule was
 rejected. Suites sharing a database clean up in a `finally`, order-independent.
 
-## A PGlite suite is being moved behind one helper, and it is not the rule yet.
+## A PGlite suite asks for its database through one helper, and a guard enforces it.
 
 `useVenueDb` (`@waitron/db/testing/venue-db.js`) forwards to `usePgliteDb` unchanged — same options,
-same handle, same per-test reset — so that the planned SQLite switch replaces one function body
-instead of every call site (plan `2026-09-16-sqlite-slice1-storage-swap.md`, task P2).
+same handle, same per-test reset — so the planned SQLite switch replaces one function body instead
+of every call site (plan `2026-09-16-sqlite-slice1-storage-swap.md`, tasks P2 and F1). The rule is
+in `CLAUDE.md` §4 and the guard is `scripts/venue-db-helper.test.ts`: no `.ts` file under
+`packages/` or `apps/`, outside `packages/db/`, may NAME `usePgliteDb` — not call it, name it.
 
-State of the rollout, so nobody reads more into this than it says: **every suite that called
-`usePgliteDb` now calls `useVenueDb`**, so the first command below prints nothing and exits 1 — the
-only files its own grep still finds are three of the four the exclusion then drops. Which files are
-converted is the second command — not a list here, which would be stale by the next pull
-request. Run them from the workspace root; the paths they print are relative to it, and the second
-grep in each is anchored to that form:
+**Why the name and not the call, which is the part worth carrying.** `useVenueDb`'s whole body is
+`return usePgliteDb(options)`, so a comment written before the conversion stays TRUE while pointing
+a reader at a function its own file can no longer call. The guard's first run against the converted
+tree reported seven such lines. Five were in a `vitest.config.ts`, explaining which timeout bounds
+the PGlite boot — a file no call-shaped grep over suites would ever have opened. That is why the
+check reads text rather than calls, and its header says so rather than leaving a reader to find out.
+
+Which files take the seam is a grep rather than a list here, because a list is stale by the next
+pull request. Run it from the workspace root; the paths it prints are relative to it, and the second
+grep is anchored to that form:
 
 ```bash
-# still to convert
-grep -rlE "usePgliteDb[(]" --include="*.ts" packages apps \
-  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)([.]test)?[.]ts$"
-
-# already converted
 grep -rlE "useVenueDb[(]" --include="*.ts" packages apps \
   | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)([.]test)?[.]ts$"
 ```
 
-The second grep is the same in both, and it names the four files ALLOWED to name either helper:
-`lifecycle.ts` and `venue-db.ts`, which define them, and `lifecycle.test.ts` and `venue-db.test.ts`,
-which are their contract tests. Each command actually returns three of the four without it — the
-first returns everything but `venue-db.test.ts`, the second only the two `venue-db` files — and one
-shared expression covering all four is simpler than two. `lifecycle.test.ts` is the one that matters:
+The exclusion names the four files allowed to name either helper: `lifecycle.ts` and `venue-db.ts`,
+which define them, and `lifecycle.test.ts` and `venue-db.test.ts`, which are their contract tests.
+`lifecycle.test.ts` is the one that matters —
 `packages/db/src/testing/lifecycle.test.ts:26` is `describe("usePgliteDb")`, so converting it would
-delete the coverage for the function being wrapped.
+delete the coverage for the function being wrapped. That command lists FILES, not packages and not
+call sites, and not every file it lists is a suite: some are shared fixtures under a package's
+`test/` directory.
 
-Both commands list FILES, not packages and not call sites, and not every file they list is a suite:
-on the commit that converted `packages/fiscal-none` the first returned 206 files, three of them
-shared fixtures under a package's `test/` directory. Note also that `usePgliteDb` is not the only
-door: some suites call `createPgliteDb` themselves, and `describeEachTarget`'s PGlite half is a
-third. Those are not a mechanical rename and
-are decided with the storage flip, not here.
-The conversions are finished; the rule is not written yet, so until it is, this is guidance rather
-than something a reviewer enforces. A rule with standing violations needs a guard, and there were
-violations standing until the last conversion, which is why the house rule in `CLAUDE.md` and the
-guard that enforces it land TOGETHER, in their own pull request AFTER that conversion rather than
-before it. That is the shape the column-vocabulary rollout ended in: #414 was the last conversion,
+**`useVenueDb` is not the only door to a PGlite database, and the guard sees only this one.** Some
+suites call `createPgliteDb` themselves; `describeEachTarget`'s PGlite half is a third. Neither is a
+mechanical rename — `describeEachTarget` hands out a fresh cluster PER TEST where this helper hands
+out one database per SUITE with a truncate between tests, a different isolation contract argued for
+at length in `Target`'s own doc comment — so both are decided with the storage flip, in task F1,
+not here. The guard's header carries the commands that count them and the rest of its hedges.
+
+**The rule and the guard landed AFTER the last conversion, deliberately.** A rule with standing
+violations needs a guard, and the guard could not pass while a single suite still called the old
+helper. That is the shape the column-vocabulary rollout ended in too: #414 was the last conversion,
 and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together afterwards.
 
 **Containers and Docker**

@@ -395,6 +395,15 @@ export async function recordTillSale(
 
 - [ ] **Step 2: Write the failing test** (`apps/server/src/till-api.test.ts`, PGlite via `usePgliteDb` with `CORE_MIGRATIONS, IDENTITY_MIGRATIONS`, driven by `app.request(...)` like `webhook.test.ts`):
 
+> **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+> heads, so the name matters.** `apps/server/src/till-api.test.ts` asks for its database through
+> `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:7`, the call at `:93` —
+> not `usePgliteDb`. It is the same PGlite database with the same options and the same per-test
+> reset: the new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
+> house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+> was re-checked; nothing else in this sketch was.**
+
 ```ts
 it("POST /api/session opens a session and sets an httpOnly cookie; DELETE ends it", async () => {
   const res = await app.request("/api/session", {

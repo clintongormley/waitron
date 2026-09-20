@@ -95,6 +95,11 @@ pnpm workspace; TypeScript (ESM, `node24`); Drizzle ORM `0.45.2` + drizzle-kit; 
   (`@waitron/db/testing/lifecycle.js`), which own `beforeAll`/`afterAll` and hand back a throwing
   accessor. Where a suite must own a resource, guard the close: `if (db !== undefined) await db.close()`.
   A guard that reads the whole tree belongs in `scripts/`, not a package.
+  **2026-09-20: the PGlite half of that instruction is out of date, and it is an instruction rather
+  than a record, so it would otherwise still be followed.** A suite asks for its PGlite database
+  through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to `usePgliteDb`
+  unchanged; naming the old helper anywhere outside `packages/db` is refused by
+  `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4). `useRealPostgres` is unchanged.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** (`series.not_found`, not
   `db.series_not_found`). Codes are **never renamed once shipped**. Every file that throws a code
   imports its registry (`import "./errors.js"` / the owning package's barrel) directly.
@@ -963,6 +968,17 @@ login role can each INSERT a node under the tenant GUC.
   PGlite for the wiring/idempotency logic (a superuser connection — RLS is bypassed, which is fine
   here because the privilege behaviour is proven separately in Task C1's container test; state that
   in a comment). Own the db via `usePgliteDb` with the core + fiscal migration sets:
+
+  **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
+  creates, so the name matters.** `packages/provisioning/src/venue-apply.test.ts` asks for its
+  database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:7`, the
+  call at `:20` — not `usePgliteDb`, and this step's closing note names the old helper again for the
+  same reason. It is the same PGlite database with the same options and the same per-test reset: the
+  new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
+  `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a
+  house rule (`CLAUDE.md` §4), enforced by `scripts/venue-db-helper.test.ts`. **Only the helper name
+  was re-checked; nothing else in this sketch was.**
+
   ```ts
   import { sql } from "drizzle-orm";
   import { describe, expect, it } from "vitest";
