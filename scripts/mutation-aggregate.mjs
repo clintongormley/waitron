@@ -41,11 +41,17 @@ export function aggregate(reports) {
         // a detected and an undetected mutant together.
         const { start, end } = mutant.location;
         const key = `${mutant.mutatorName}@${start.line}:${start.column}-${end.line}:${end.column}=${mutant.replacement ?? ""}`;
-        // A mutant two reports BOTH carry keeps whichever status counts AGAINST the package, so a
-        // merge can never raise the score and the answer does not depend on the order the shard
-        // artifacts happen to be listed in. Undetected beats detected, and either beats a status
-        // outside the ratio — `ignoreStatic: true` makes Stryker report static mutants `Ignored`,
-        // and keeping an `Ignored` over a `Survived` would drop a survivor out of the denominator.
+        // A mutant two reports disagree about resolves the same way whichever order the shard
+        // artifacts are listed in: undetected beats detected, and either beats a status outside
+        // the ratio.
+        //
+        // The two steps are there for different reasons, and only the first is a safety property.
+        // Undetected over detected is what stops a merge RAISING the score. Detected over a
+        // status outside the ratio does the opposite — keeping a `Killed` over an `Ignored` adds
+        // 1/1 to the ratio — and it is there because a shard that actually ran the mutant knows
+        // more than one that skipped it. Neither can fire in this workflow anyway: the ten shards
+        // run one config, so a mutant is `Ignored` in all of them or none, and each file is in
+        // exactly one shard's mutate list. This is what to do if that ever stops being true.
         const seen = mutants.get(key);
         if (seen !== undefined && weight(seen) >= weight(mutant.status)) continue;
         mutants.set(key, mutant.status);
@@ -71,7 +77,7 @@ export function aggregate(reports) {
   return { score: ratio(killed, valid), killed, valid, files };
 }
 
-/** How much a status counts against the package, highest wins when two reports disagree. */
+/** Which status wins when two reports disagree about one mutant: undetected, then detected. */
 function weight(status) {
   if (UNDETECTED.has(status)) return 2;
   if (DETECTED.has(status)) return 1;

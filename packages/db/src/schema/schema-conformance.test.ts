@@ -350,11 +350,14 @@ async function declaredOnACopy(
         sql.raw(`alter table ${copy} add constraint "${check.name}" check (${expression})`),
       );
     }
-    // No declared index carries a `where` today, so the predicate half of this comparison is
-    // exercised only by putting one in by hand. What a real one would meet: drizzle renders a
-    // helper such as `eq(column, false)` as a bind placeholder, and `create index … where ($1)`
-    // is not a statement PostgreSQL will take — hence the refusal below rather than a confusing
-    // syntax error from the server.
+    // No declared index in this package carries a `where` today —
+    // `grep -rn "\.where(" packages/db/src/schema/` matches nothing, though four indexes in
+    // OTHER packages do — so the predicate half of
+    // this comparison is exercised only by putting one in by hand. What a real one would meet:
+    // drizzle renders a helper such as `eq(column, false)` as a bind placeholder, and
+    // `create index … where ($1)` is refused by PostgreSQL with 42P02, "there is no parameter
+    // $1". The refusal below fires first so the message points at the declaration rather than at
+    // the harness that rendered it.
     for (const index of config.indexes) {
       const { name, unique, columns: parts, where } = index.config;
       const columns = parts

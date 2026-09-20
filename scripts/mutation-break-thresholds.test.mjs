@@ -57,8 +57,9 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     { timeout: PNPM_LS_SPAWN_TIMEOUT_MS * 2 },
     () => {
       // One case over the whole list rather than `it.each`, which would have to build the list
-      // while the file is being COLLECTED: an unbounded `pnpm ls` there, and a throw that fails
-      // the file as a collection error rather than as an assertion.
+      // while the file is being COLLECTED — where no per-test bound applies (the spawn's own 30s
+      // kill still does) and where a throw fails the whole file as a collection error rather
+      // than as an assertion.
       const bars = mutationPackages()
         .filter(({ dir }) => dir !== "packages/db")
         .map(({ dir }) => ({

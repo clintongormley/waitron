@@ -14,9 +14,13 @@
 //     `ci.yml`, whose own comment carries both run ids (30651421691 passed on a warm cache,
 //     30652021468 failed cold) — so it fires only sometimes, which is worse.
 //
-// So a setup-node step is safe in exactly two shapes: the cache is turned off, or the job both
-// installs pnpm and runs `pnpm install`. Weaker than its name in two ways: it reads the workflows
-// as TEXT rather than parsing YAML, so a step reached through a composite action or a reusable
+// So a setup-node step is safe in exactly two shapes: the cache is turned off, or the job runs
+// `pnpm/action-setup` BEFORE that step and runs `pnpm install` somewhere in the job. The order
+// matters for the first failure and not the second: the restore happens while the step runs, so
+// pnpm has to be on PATH by then, while the save happens after every step, so the install may
+// come later.
+//
+// Weaker than its name in two ways: it reads the workflows as TEXT rather than parsing YAML, so a step reached through a composite action or a reusable
 // workflow is invisible to it; and it splits jobs and steps by INDENTATION, so a file written with
 // different indentation than this repository's would not be read correctly.
 import { readdirSync, readFileSync } from "node:fs";

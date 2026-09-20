@@ -2836,9 +2836,12 @@ deliberately did not settle.
   The "41 source files" figure and the `testing/global-setup` example went with the same change, the
   first dropped rather than refreshed, the second because that file is no longer mutated at all.
   The "~750 database-backed mutants" figure went too, in both places that carried it, and the
-  parenthetical above — that nothing showed it stale — no longer holds: run 35504169506 read 2165
-  valid mutants over the ten shards. The prose now says "thousands" and leaves the numbers in their
-  dated receipts, which is the repair this bullet asks for.)_
+  parenthetical above — that nothing showed it stale — no longer holds: the whole-package
+  `stryker run --dryRunOnly` count in the first bullet, 2649, is the like-for-like reading, and it
+  is more than three times 749. (Run 35504169506's 2165 is a different measurement again: valid
+  mutants after a full sharded run, so ignored and errored ones are out.) The prose now says
+  "thousands" and leaves the numbers in their dated receipts, which is the repair this bullet
+  asks for.)_
 
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
 latest minor or patch release; two loose ends came with it.

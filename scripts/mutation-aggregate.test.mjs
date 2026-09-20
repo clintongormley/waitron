@@ -125,7 +125,9 @@ describe("aggregate", () => {
   it("never lets a merge drop a survivor out of the ratio", () => {
     // `ignoreStatic: true` makes Stryker report a static mutant `Ignored`, which is outside the
     // ratio. Keeping an `Ignored` over a `Survived` would remove a survivor from the denominator
-    // and RAISE the score, so undetected wins over a status that does not count at all.
+    // and RAISE the score, so undetected wins over a status that does not count at all. (The
+    // other way round — `Killed` over `Ignored` — raises it too, and is kept deliberately: see
+    // the rule's own comment.)
     const survived = report("src/a.ts", { status: "Survived", line: 7 });
     const ignored = report("src/a.ts", { status: "Ignored", line: 7 });
 
