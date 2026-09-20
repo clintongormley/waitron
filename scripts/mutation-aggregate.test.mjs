@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -177,5 +177,26 @@ describe("the command", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("src/bad.ts");
     expect(result.stdout).not.toContain("src/good.ts");
+  });
+});
+
+// The shard COUNT is written twice in `.github/workflows/mutation.yml`: once as the matrix list the
+// ten shard jobs come from, and once as the `--shards` argument the aggregate job uses to refuse a
+// run with a report missing. The shard SCRIPT avoids that by reading `strategy.job-total`, which a
+// separate job cannot see. This reads the workflow as TEXT, so it checks those two numbers and
+// nothing else about the file — it cannot tell you the aggregate job runs, only that if it does it
+// expects as many reports as the matrix produces.
+describe("the shard count in the mutation workflow", () => {
+  const workflow = readFileSync(join(here, "..", ".github", "workflows", "mutation.yml"), "utf8");
+
+  it("matches between the shard matrix and the aggregate job's --shards", () => {
+    const matrix = workflow.match(/shard: \[([^\]]*)\]/);
+    expect(matrix, "no `shard: [...]` matrix in mutation.yml").not.toBeNull();
+    const shards = matrix[1].split(",").length;
+
+    const argument = workflow.match(/--shards (\d+)/);
+    expect(argument, "no `--shards <n>` argument in mutation.yml").not.toBeNull();
+
+    expect(Number(argument[1])).toBe(shards);
   });
 });
