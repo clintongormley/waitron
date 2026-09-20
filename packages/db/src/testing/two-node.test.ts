@@ -430,16 +430,21 @@ describe("startTwoNodeCluster without Docker", () => {
       ...(await vi.importActual<typeof import("./harness.js")>("./harness.js")),
       dockerAvailable: () => false,
     }));
+    let refusal: string | undefined;
     try {
       const { startTwoNodeCluster: start } = await import("./two-node.js");
+      // The refusal is the whole point, so a call that RETURNS leaves `refusal` unset and the
+      // caller says so — rather than the sentinel throw landing in this function's own catch and
+      // being compared with the message as if the fixture had refused.
       await start({ dockerRequired, migrate: async () => {} });
-      throw new Error("expected startTwoNodeCluster to refuse");
     } catch (error) {
-      return (error as Error).message;
+      refusal = (error as Error).message;
     } finally {
       vi.doUnmock("./harness.js");
       vi.resetModules();
     }
+    if (refusal === undefined) throw new Error("startTwoNodeCluster returned instead of refusing");
+    return refusal;
   }
 
   it("says what it needs and that it cannot do without it, when Docker is required", async () => {

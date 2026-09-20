@@ -28,7 +28,12 @@ import * as barrel from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-/** Every table a module exports, plus `deployment`, which is deliberately not in the barrel. */
+/**
+ * Every table a module exports, plus the three that are deliberately not in the schema barrel —
+ * `deployment`, `mirror_config` and `node_membership`. Each of those three says why at the top of
+ * its own file: all three come from the hand-written baseline migration, which drizzle-kit never
+ * diffed into a snapshot.
+ */
 function tablesIn(module: Record<string, unknown>, ...extra: PgTable[]): PgTable[] {
   return [
     ...Object.values<unknown>(module).filter((value): value is PgTable => is(value, PgTable)),
@@ -307,12 +312,41 @@ async function checkExpressionsIn(
  * MEAN — PostgreSQL rewrites `in (…)` into `= ANY (ARRAY[…])` and `between` into a pair of
  * comparisons — where comparing the text as typed would differ on wording alone.
  */
-async function declaredCheckExpressions(
+/** Every index predicate on one table, keyed by index name — the empty string where there is none. */
+async function indexPredicatesIn(
+  db: Database,
+  schema: string,
+  name: string,
+): Promise<Record<string, string>> {
+  const found = await rows<{ name: string; predicate: string | null }>(
+    db,
+    sql`
+      select i.relname as name, pg_get_expr(ix.indpred, ix.indrelid) as predicate
+      from pg_index ix
+      join pg_class i on i.oid = ix.indexrelid
+      where ix.indrelid = ${`${schema}."${name}"`}::regclass
+    `,
+  );
+  return Object.fromEntries(found.map((row) => [row.name, row.predicate ?? ""]));
+}
+
+/**
+ * What the declaration asks for, put through the SAME renderer the database side is read with: a
+ * bare copy of the table in a scratch schema, given the declared check constraints and indexes,
+ * read back out of the catalog. Comparing the two rendered forms compares what the declaration
+ * MEANS — PostgreSQL rewrites `in (…)` into `= ANY (ARRAY[…])` either way — where comparing the
+ * text as typed would differ on wording alone.
+ *
+ * The copy keeps the ORIGINAL table's name, in a schema nothing else uses, because a rendered
+ * check expression qualifies its columns with that name.
+ */
+async function declaredOnACopy(
   db: Database,
   table: PgTable,
-): Promise<Record<string, string>> {
+): Promise<{ checks: Record<string, string>; indexPredicates: Record<string, string> }> {
   const config = getTableConfig(table);
-  if (config.checks.length === 0) return {};
+  if (config.checks.length === 0 && config.indexes.length === 0)
+    return { checks: {}, indexPredicates: {} };
   await db.execute(sql.raw(`create schema ${SCRATCH_SCHEMA}`));
   try {
     const copy = `${SCRATCH_SCHEMA}."${config.name}"`;
@@ -323,7 +357,26 @@ async function declaredCheckExpressions(
         sql.raw(`alter table ${copy} add constraint "${check.name}" check (${expression})`),
       );
     }
-    return await checkExpressionsIn(db, SCRATCH_SCHEMA, config.name);
+    for (const index of config.indexes) {
+      const { name, unique, columns: parts, where } = index.config;
+      const columns = parts
+        .map((part) =>
+          is(part, SQL)
+            ? dialect.sqlToQuery(part).sql
+            : `"${String((part as { name?: unknown }).name ?? "")}"`,
+        )
+        .join(", ");
+      const predicate = where === undefined ? "" : ` where (${dialect.sqlToQuery(where).sql})`;
+      await db.execute(
+        sql.raw(
+          `create ${unique === true ? "unique " : ""}index "${name}" on ${copy} (${columns})${predicate}`,
+        ),
+      );
+    }
+    return {
+      checks: await checkExpressionsIn(db, SCRATCH_SCHEMA, config.name),
+      indexPredicates: await indexPredicatesIn(db, SCRATCH_SCHEMA, config.name),
+    };
   } finally {
     await db.execute(sql.raw(`drop schema ${SCRATCH_SCHEMA} cascade`));
   }
@@ -465,8 +518,21 @@ describe("the drizzle enum declarations match the database the core migrations b
 });
 
 describe("the drizzle schema matches the database the core migrations build", () => {
-  it("declares at least every core table", () => {
-    expect(declared.length).toBeGreaterThan(30);
+  it("declares every table the core migrations build", async () => {
+    // An inventory, not a count. A count only says how many declarations there are, so a table
+    // dropped from the schema barrel takes its own case away with it and the suite goes green with
+    // fewer cases than before — which is how a missing table would arrive.
+    const built = await rows<{ name: string }>(
+      suite.db,
+      sql`
+        select tablename as name
+        from pg_tables
+        where schemaname = 'public' and tablename not like '\_\_drizzle\_migrations%'
+      `,
+    );
+    expect(declared.map((table) => getTableConfig(table).name).sort()).toEqual(
+      built.map((row) => row.name).sort(),
+    );
   });
 
   it.each(declared.map((table, index) => [getTableConfig(table).name, index] as const))(
@@ -481,13 +547,22 @@ describe("the drizzle schema matches the database the core migrations build", ()
       expect(derived.map((column) => column.name)).toEqual([]);
       const shape = fromDeclaration(tables[index]);
       await expect(fromDatabase(suite.db, shape.name)).resolves.toEqual(shape);
-      // The shape above compares check constraints by NAME. This compares what each declared one
-      // SAYS with what the migration built, so a permitted value dropped from a list, a bound
-      // moved, or a comparison flipped is caught rather than passing on a matching name.
-      const expressions = await declaredCheckExpressions(suite.db, tables[index]);
-      const built = await checkExpressionsIn(suite.db, "public", shape.name);
-      expect(expressions).toEqual(
-        Object.fromEntries(Object.keys(expressions).map((name) => [name, built[name]])),
+      // The shape above compares check constraints by NAME and indexes by name and columns. This
+      // compares what each declared one SAYS: a permitted value dropped from a list, a bound
+      // moved, a comparison flipped, or an index given a filter that leaves out rows the migration
+      // indexes — none of which move a name.
+      const declaredHere = await declaredOnACopy(suite.db, tables[index]);
+      const builtChecks = await checkExpressionsIn(suite.db, "public", shape.name);
+      expect(declaredHere.checks).toEqual(
+        Object.fromEntries(
+          Object.keys(declaredHere.checks).map((name) => [name, builtChecks[name]]),
+        ),
+      );
+      const builtPredicates = await indexPredicatesIn(suite.db, "public", shape.name);
+      expect(declaredHere.indexPredicates).toEqual(
+        Object.fromEntries(
+          Object.keys(declaredHere.indexPredicates).map((name) => [name, builtPredicates[name]]),
+        ),
       );
     },
   );

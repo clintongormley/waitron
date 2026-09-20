@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -146,6 +146,22 @@ describe("the CLI over the real @waitron/db tree", () => {
 
   it("names only files that exist, so a rename cannot silently un-exclude one", () => {
     expect(NOT_MUTATED.filter((path) => !eligibleFiles().includes(path))).toEqual([]);
+  });
+
+  it("excludes exactly what packages/db's own stryker config excludes", () => {
+    // Two lists decide what gets mutated and only one of them is ever used at a time: CI passes
+    // `--mutate "$FILES"` built from NOT_MUTATED, which REPLACES the config's patterns, while a
+    // local `pnpm --filter @waitron/db mutation` uses the config. Left to drift, CI and a
+    // developer's own run measure different sets — and it is CI's set the 90 bar is computed over.
+    const config = JSON.parse(
+      readFileSync(join(here, "..", "packages", "db", "stryker.config.json"), "utf8"),
+    );
+    const excluded = config.mutate
+      .filter((pattern) => pattern.startsWith("!") && !pattern.includes("*"))
+      .map((pattern) => pattern.slice(1))
+      .sort();
+
+    expect(excluded).toEqual([...NOT_MUTATED].sort());
   });
 
   it("splits the heavy file across distinct shards (not clustered in one)", () => {

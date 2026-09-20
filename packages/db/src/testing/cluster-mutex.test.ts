@@ -312,6 +312,9 @@ describe("createFileClusterMutex", () => {
 });
 
 describe("DEFAULT_LOCK_DIR", () => {
+  // Compared as a value rather than by making two default mutexes contend: contending would take
+  // the REAL machine-wide lock, and every other case in this file deliberately works in a
+  // throwaway directory so that nothing here can collide with a two-node suite running beside it.
   it("is one named path in the OS temp dir, so every process on the box picks the same lock", () => {
     expect(DEFAULT_LOCK_DIR).toBe(join(tmpdir(), "waitron-two-node-cluster.lock"));
   });

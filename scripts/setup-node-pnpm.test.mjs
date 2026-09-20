@@ -1,18 +1,24 @@
-// A job that asks GitHub's setup-node action for a package-manager cache has to have pnpm on the
-// runner already.
+// A job that lets GitHub's setup-node action cache the package manager has to have pnpm on the
+// runner AND a populated pnpm store.
 //
 // `actions/setup-node@v5` caches the package manager by DEFAULT — `package-manager-cache` is true
 // unless a job says otherwise — and this repository declares `packageManager: pnpm` in its root
-// manifest, so the action shells out to pnpm to find the store. A job that has not run
-// `pnpm/action-setup` first fails there with `Unable to locate executable file: pnpm`, before any
-// of its own steps run. Cost: the `mutation-db-aggregate` job, which runs one plain `node` script
-// and installs nothing, failed that way on its first real run (2026-09-20).
+// manifest, so the action goes looking for pnpm. Two different jobs have been broken by it, at
+// opposite ends of the job:
 //
-// So each setup-node step must do ONE of two things: come after `pnpm/action-setup` in the same
-// job, or turn the cache off. Weaker than its name in two ways: it reads the workflows as TEXT
-// rather than parsing YAML, so a step reached through a composite action or a reusable workflow is
-// invisible to it; and it splits jobs and steps by INDENTATION, so a file written with different
-// indentation than this repository's would not be read correctly.
+//   - RESTORE, at the start: a job that never ran `pnpm/action-setup` dies with `Unable to locate
+//     executable file: pnpm` before any of its own steps run. That is what `mutation-db-aggregate`
+//     did on its first real run, 35504169506 (2026-09-20).
+//   - SAVE, in the post-job step: a job that HAS pnpm but never runs `pnpm install` has no store
+//     to save, and the post step fails with `Path Validation Error`. That is the `changes` job in
+//     `ci.yml`, whose own comment carries both run ids (30651421691 passed on a warm cache,
+//     30652021468 failed cold) — so it fires only sometimes, which is worse.
+//
+// So a setup-node step is safe in exactly two shapes: the cache is turned off, or the job both
+// installs pnpm and runs `pnpm install`. Weaker than its name in two ways: it reads the workflows
+// as TEXT rather than parsing YAML, so a step reached through a composite action or a reusable
+// workflow is invisible to it; and it splits jobs and steps by INDENTATION, so a file written with
+// different indentation than this repository's would not be read correctly.
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,34 +34,45 @@ function workflowFiles() {
     .sort();
 }
 
-/** One entry per `actions/setup-node` step: which job it is in, and whether it is safe. */
-function setupNodeSteps(text) {
-  const lines = text.split("\n");
-  const found = [];
-  let job = "(before any job)";
-  let pnpmSeenInJob = false;
-  for (let at = 0; at < lines.length; at += 1) {
-    const line = lines[at];
-    const jobHeader = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
-    if (jobHeader !== null) {
-      job = jobHeader[1];
-      pnpmSeenInJob = false;
+/** The lines of each job, keyed by the job's name, split on the two-space job headers. */
+function jobsIn(text) {
+  const jobs = new Map();
+  let current;
+  for (const line of text.split("\n")) {
+    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
+    if (header !== null) {
+      current = [];
+      jobs.set(header[1], current);
       continue;
     }
-    if (line.includes("pnpm/action-setup")) pnpmSeenInJob = true;
-    if (!line.includes("actions/setup-node")) continue;
-    // The step's own body: everything up to the next step at the same indentation, or the next job.
-    const body = [];
-    for (let then = at + 1; then < lines.length; then += 1) {
-      if (/^ {2,}- /.test(lines[then]) || /^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[then])) break;
-      body.push(lines[then]);
+    current?.push(line);
+  }
+  return jobs;
+}
+
+/** One entry per `actions/setup-node` step: which job it is in, and whether it is safe. */
+function setupNodeSteps(text) {
+  const found = [];
+  for (const [job, lines] of jobsIn(text)) {
+    const hasPnpm = lines.some((line) => /^\s*-?\s*uses:\s*pnpm\/action-setup/.test(line));
+    const hasInstall = lines.some((line) => /run: .*pnpm install/.test(line));
+    for (let at = 0; at < lines.length; at += 1) {
+      // A `uses:` line, never a comment that merely names the action — `ci.yml`'s `changes` job
+      // explains this very trap in prose above its own step.
+      if (!/^\s*-?\s*uses:\s*actions\/setup-node/.test(lines[at])) continue;
+      // The step's own body: everything up to the next step at the same indentation.
+      const body = [];
+      for (let then = at + 1; then < lines.length; then += 1) {
+        if (/^ {2,}- /.test(lines[then])) break;
+        body.push(lines[then]);
+      }
+      found.push({
+        job,
+        line: at + 1,
+        withStore: hasPnpm && hasInstall,
+        cacheOff: body.join("\n").includes("package-manager-cache: false"),
+      });
     }
-    found.push({
-      job,
-      line: at + 1,
-      afterPnpm: pnpmSeenInJob,
-      cacheOff: body.join("\n").includes("package-manager-cache: false"),
-    });
   }
   return found;
 }
@@ -74,8 +91,8 @@ describe("every setup-node step can reach the package manager it caches", () => 
   it.each(workflowFiles())("%s", (name) => {
     const steps = setupNodeSteps(readFileSync(join(workflowDir, name), "utf8"));
     const unsafe = steps
-      .filter((step) => !step.afterPnpm && !step.cacheOff)
-      .map((step) => `${name}:${step.line} in job ${step.job}`);
+      .filter((step) => !step.withStore && !step.cacheOff)
+      .map((step) => `${name}, job ${step.job}, line ${step.line} of that job`);
     expect(unsafe).toEqual([]);
   });
 });

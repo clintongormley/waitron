@@ -9,46 +9,57 @@
 //
 // Weaker than its name in one way worth stating: it reads the workflow as TEXT for db's bar, so a
 // step that reached the same command through a variable would be invisible to it.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const BAR = 90;
 
-/** Every workspace package whose `package.json` declares a `mutation` script, as directory names. */
+/**
+ * Every workspace member whose `package.json` declares a `mutation` script, as `{name, dir}`.
+ *
+ * Members come from `pnpm ls` through `workspaceMembers` (scripts/workspace-members.mjs) — the
+ * same source the pre-push hook and CI scope from — rather than from a directory listing of
+ * `packages/`, so a `mutation` script added under `apps/` or any other workspace root reaches this
+ * guard without an edit.
+ */
 function mutationPackages() {
-  return readdirSync(join(root, "packages"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .filter((entry) => {
-      const manifest = join(root, "packages", entry.name, "package.json");
+  return workspaceMembers()
+    .filter(({ dir }) => {
       try {
-        return readFileSync(manifest, "utf8").includes('"mutation"');
+        return (
+          JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8")).scripts?.mutation !==
+          undefined
+        );
       } catch {
         return false;
       }
     })
-    .map((entry) => entry.name)
-    .sort();
+    .sort((a, b) => a.dir.localeCompare(b.dir));
 }
 
 describe("every mutation-tested package declares the bar it fails at", () => {
-  it("finds the packages that run mutation testing", () => {
-    // The list is read, not written down, so a new one arrives here on its own. It is asserted
-    // non-empty because an empty list would make every case below vacuous.
-    expect(mutationPackages().length).toBeGreaterThan(0);
-  });
-
-  it.each(mutationPackages().filter((name) => name !== "db"))(
-    "packages/%s breaks at 90 in its own stryker config",
-    (name) => {
-      const config = JSON.parse(
-        readFileSync(join(root, "packages", name, "stryker.config.json"), "utf8"),
-      );
-      expect(config.thresholds?.break).toBeGreaterThanOrEqual(BAR);
+  it(
+    "finds the packages that run mutation testing",
+    { timeout: PNPM_LS_SPAWN_TIMEOUT_MS * 2 },
+    () => {
+      // The list is read, not written down, so a new one arrives here on its own. It is asserted
+      // non-empty because an empty list would make every case below vacuous.
+      expect(mutationPackages().length).toBeGreaterThan(0);
     },
   );
+
+  it.each(
+    mutationPackages()
+      .filter(({ dir }) => dir !== "packages/db")
+      .map(({ dir }) => dir),
+  )("%s breaks at 90 in its own stryker config", (dir) => {
+    const config = JSON.parse(readFileSync(join(root, dir, "stryker.config.json"), "utf8"));
+    expect(config.thresholds?.break).toBeGreaterThanOrEqual(BAR);
+  });
 
   it("packages/db breaks at 90 on the merged score of its shards", () => {
     // Its own config deliberately carries no `thresholds.break`: CI passes each shard its own
@@ -59,9 +70,15 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     );
     expect(config.thresholds).toBeUndefined();
 
+    // Matched as a whole `run:` line, not as a substring: `run: echo node scripts/…` contains the
+    // command and executes nothing, and passed this guard until 2026-09-20.
     const workflow = readFileSync(join(root, ".github", "workflows", "mutation.yml"), "utf8");
-    expect(workflow).toContain(
-      `node scripts/mutation-aggregate.mjs mutation-reports --shards 10 --break ${BAR}`,
+    const runs = workflow
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("run: "));
+    expect(runs).toContain(
+      `run: node scripts/mutation-aggregate.mjs mutation-reports --shards 10 --break ${BAR}`,
     );
   });
 });

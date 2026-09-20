@@ -1,18 +1,24 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import { aggregate, findReports } from "./mutation-aggregate.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+const temporaryRoots = [];
+afterAll(() => {
+  for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
 /** Writes one report per shard into a fresh directory, the shape the CI artifacts arrive in. */
 function shardDirectory(reports) {
   const root = mkdtempSync(join(tmpdir(), "mutation-aggregate-"));
+  temporaryRoots.push(root);
   reports.forEach((content, index) => {
     const shard = join(root, `mutation-report-db-shard-${index + 1}`);
     mkdirSync(shard);
@@ -40,7 +46,7 @@ function report(file, ...mutants) {
           status: mutant.status,
           location: {
             start: { line: mutant.line ?? index + 1, column: 1 },
-            end: { line: mutant.line ?? index + 1, column: 9 },
+            end: { line: mutant.line ?? index + 1, column: mutant.endColumn ?? 9 },
           },
         })),
       },
@@ -89,6 +95,33 @@ describe("aggregate", () => {
     expect(result.score).toBe(50);
   });
 
+  it("keeps two mutants that start at the same place and end at different ones", () => {
+    // `a && b` gives Stryker two ConditionalExpression mutants that both replace with `true` and
+    // both start at the left operand's column: the whole condition, and the operand. Only the END
+    // of the span tells them apart, and on run 35504169506's real reports 21 mutants were a pair
+    // of this shape.
+    const result = aggregate([
+      report(
+        "src/a.ts",
+        { status: "Killed", line: 4, endColumn: 40, mutator: "ConditionalExpression" },
+        { status: "Survived", line: 4, endColumn: 20, mutator: "ConditionalExpression" },
+      ),
+    ]);
+
+    expect(result.valid).toBe(2);
+    expect(result.score).toBe(50);
+  });
+
+  it("gives a mutant two shards disagree about its UNDETECTED status, whichever is read first", () => {
+    // Merging must never be able to RAISE the score, so a disagreement resolves downwards and the
+    // answer does not depend on the order the artifacts happen to be listed in.
+    const survived = report("src/a.ts", { status: "Survived", line: 7 });
+    const killed = report("src/a.ts", { status: "Killed", line: 7 });
+
+    expect(aggregate([survived, killed]).score).toBe(0);
+    expect(aggregate([killed, survived]).score).toBe(0);
+  });
+
   it("reports each file's own score, worst first", () => {
     const result = aggregate([
       report("src/good.ts", { status: "Killed" }, { status: "Killed" }),
@@ -126,6 +159,14 @@ describe("findReports", () => {
 
     expect(findReports(root)).toHaveLength(1);
   });
+
+  it("ignores a json that is not a mutation report", () => {
+    const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
+    writeFileSync(join(root, "extra.json"), "{}");
+    writeFileSync(join(root, "broken.json"), "not json at all");
+
+    expect(findReports(root)).toHaveLength(1);
+  });
 });
 
 describe("the command", () => {
@@ -140,6 +181,21 @@ describe("the command", () => {
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("75.00%");
+  });
+
+  it("refuses when a shard is missing, however many json files are lying around", () => {
+    // The hole this closes: nine real reports plus one unrelated json used to count as ten shards,
+    // and a shard whose job failed takes its own survivors with it, so the nine read too high.
+    const root = shardDirectory([
+      report("src/a.ts", { status: "Killed" }),
+      report("src/b.ts", { status: "Killed" }),
+    ]);
+    writeFileSync(join(root, "mutation-report-db-shard-1", "second.json"), JSON.stringify({}));
+
+    const result = run(root, "--shards", "3", "--break", "50");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("expected 3 shard reports");
   });
 
   it("fails when the package is below the bar", () => {
@@ -161,7 +217,7 @@ describe("the command", () => {
     const result = run(root, "--shards", "10", "--break", "90");
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("1 report");
+    expect(result.stderr).toContain("found 1 in 1 file(s)");
     expect(result.stdout).not.toContain("100.00%");
   });
 

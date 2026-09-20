@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * Merges the ten `mutation-db` shard reports into ONE score for `packages/db`.
@@ -17,7 +17,7 @@ const DETECTED = new Set(["Killed", "Timeout"]);
 const UNDETECTED = new Set(["Survived", "NoCoverage"]);
 
 /**
- * @param {{files: Record<string, {mutants: {id: string, mutatorName: string, status: string, replacement?: string, location: {start: {line: number, column: number}}}[]}>}[]} reports
+ * @param {{files: Record<string, {mutants: {id: string, mutatorName: string, status: string, replacement?: string, location: {start: {line: number, column: number}, end: {line: number, column: number}}}[]}>}[]} reports
  * @returns {{score: number, killed: number, valid: number, files: {path: string, score: number, killed: number, valid: number}[]}}
  */
 export function aggregate(reports) {
@@ -31,7 +31,20 @@ export function aggregate(reports) {
         // Keyed by what the mutant IS rather than by its id: ids are handed out per run, so the
         // same id in two shards can mean two different mutants, and the same mutant in two shards
         // (a file split into line ranges is mutated by several) can carry two different ids.
-        const key = `${mutant.mutatorName}@${mutant.location.start.line}:${mutant.location.start.column}=${mutant.replacement ?? ""}`;
+        //
+        // The END of the span is part of that identity, not decoration. `a && b` gives Stryker two
+        // ConditionalExpression mutants that both replace with `true` and both START at the same
+        // column — the whole condition, and its left operand. Keyed on the start alone the two
+        // merge into one, and `Map.set` keeps whichever report was read last, so the package's
+        // score moves with the order the shard artifacts happen to be listed in. Measured on run
+        // 35504169506's ten real reports: 21 mutants disappeared that way and 7 of the merges put
+        // a detected and an undetected mutant together.
+        const { start, end } = mutant.location;
+        const key = `${mutant.mutatorName}@${start.line}:${start.column}-${end.line}:${end.column}=${mutant.replacement ?? ""}`;
+        // A mutant two reports BOTH carry takes its undetected status, never its detected one: a
+        // merge must not be able to raise the score.
+        const seen = mutants.get(key);
+        if (seen !== undefined && !DETECTED.has(seen)) continue;
         mutants.set(key, mutant.status);
       }
     }
@@ -60,13 +73,30 @@ function ratio(killed, valid) {
   return valid === 0 ? 0 : (100 * killed) / valid;
 }
 
-/** Every `*.json` under `dir`, at any depth. */
+/**
+ * Every json under `dir` that IS a mutation report — it parses, and it carries a `files` object.
+ *
+ * Counting bare `*.json` files was enough to be fooled: one unrelated json beside nine real
+ * reports made the count ten, and a missing shard went unnoticed. So the shape is checked, and
+ * the CLI below counts DIRECTORIES rather than files, because each shard arrives as its own
+ * artifact directory and two reports in one directory are not two shards.
+ */
 export function findReports(dir) {
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...findReports(full));
-    else if (entry.name.endsWith(".json")) out.push(full);
+    if (entry.isDirectory()) {
+      out.push(...findReports(full));
+      continue;
+    }
+    if (!entry.name.endsWith(".json")) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(full, "utf8"));
+    } catch {
+      continue;
+    }
+    if (typeof parsed?.files === "object" && parsed.files !== null) out.push(full);
   }
   return out.sort();
 }
@@ -98,9 +128,14 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
 
   const paths = findReports(dir);
   // A shard whose job failed uploads nothing, and the slice it holds is usually the one nobody has
-  // written tests for, so scoring what did arrive reports a number that is too high.
-  if (paths.length !== shards)
-    die(`expected ${shards} shard reports under ${dir}, found ${paths.length} report(s)`);
+  // written tests for, so scoring what did arrive reports a number that is too high. Counted by
+  // the directory each report sits in — one artifact per shard — so a second json in one shard's
+  // directory cannot stand in for a shard that never arrived.
+  const directories = new Set(paths.map((path) => dirname(path)));
+  if (directories.size !== shards)
+    die(
+      `expected ${shards} shard reports under ${dir}, found ${directories.size} in ${paths.length} file(s)`,
+    );
 
   const result = aggregate(paths.map((path) => JSON.parse(readFileSync(path, "utf8"))));
   for (const file of result.files)
@@ -109,7 +144,7 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
         `${file.score.toFixed(2).padStart(7)}%  ${String(file.killed).padStart(5)}/${String(file.valid).padEnd(5)}  ${file.path}`,
       );
   console.log(
-    `\n@waitron/db mutation score ${result.score.toFixed(2)}% (${result.killed} of ${result.valid} mutants detected, ${paths.length} shards)`,
+    `\n@waitron/db mutation score ${result.score.toFixed(2)}% (${result.killed} of ${result.valid} mutants detected, ${directories.size} shards)`,
   );
   if (result.score < breakAt)
     die(`score ${result.score.toFixed(2)}% is below the break threshold of ${breakAt}`);
