@@ -7,7 +7,7 @@
 // money column declared as free text — is invisible until a query fails at runtime.
 import { is, sql } from "drizzle-orm";
 import { getTableConfig, isPgEnum, PgTable, type PgEnum } from "drizzle-orm/pg-core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -18,10 +18,35 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false })
 
 // `deployment` is deliberately not re-exported from the barrel (see its own file), so it is named
 // here rather than discovered.
-const declared: PgTable[] = [
-  ...Object.values<unknown>(barrel).filter((value): value is PgTable => is(value, PgTable)),
-  deployment,
-];
+function tablesIn(module: Record<string, unknown>, extra: PgTable): PgTable[] {
+  return [
+    ...Object.values<unknown>(module).filter((value): value is PgTable => is(value, PgTable)),
+    extra,
+  ];
+}
+
+function enumsIn(module: Record<string, unknown>): PgEnum<[string, ...string[]]>[] {
+  return Object.values<unknown>(module).filter((value): value is PgEnum<[string, ...string[]]> =>
+    isPgEnum(value),
+  );
+}
+
+// Reloads the declarations INSIDE the calling test, which is what makes this file able to catch a
+// mutated declaration at all. A drizzle declaration runs when its module loads, not while a test
+// runs, so Stryker's `perTest` coverage credits each of those mutants to whatever test happened to
+// be running when the module first loaded — in a whole-package run, some unrelated file's test,
+// which is then the only test the mutant is ever run against. Receipt: CI run 35498146363 on this
+// branch, shard 7, where the surviving mutant in `src/schema/printers.ts` is covered-by six cases
+// in `src/testing/harness.docker.test.ts` and by none of the cases here. Re-importing in the test
+// body puts the declaration's execution inside the test, so the coverage lands here.
+async function reload(): Promise<{ tables: PgTable[]; enums: PgEnum<[string, ...string[]]>[] }> {
+  vi.resetModules();
+  const fresh: Record<string, unknown> = await import("./index.js");
+  const { deployment: freshDeployment } = await import("./deployment.js");
+  return { tables: tablesIn(fresh, freshDeployment), enums: enumsIn(fresh) };
+}
+
+const declared: PgTable[] = tablesIn(barrel, deployment);
 
 // Foreign keys the migrations create that no declaration here carries. Each one is hand-written in
 // SQL for a stated reason at the column — most often that declaring it would make this file import
@@ -258,9 +283,7 @@ async function fromDatabase(db: Database, name: string): Promise<TableShape> {
   return { name, columns, primaryKey, foreignKeys, uniques, indexes, checks };
 }
 
-const declaredEnums: PgEnum<[string, ...string[]]>[] = Object.values<unknown>(barrel).filter(
-  (value): value is PgEnum<[string, ...string[]]> => isPgEnum(value),
-);
+const declaredEnums: PgEnum<[string, ...string[]]>[] = enumsIn(barrel);
 
 interface EnumRow {
   label: string;
@@ -271,9 +294,12 @@ describe("the drizzle enum declarations match the database the core migrations b
     expect(declaredEnums.length).toBeGreaterThan(0);
   });
 
-  it.each(declaredEnums.map((declared) => [declared.enumName, declared] as const))(
+  it.each(declaredEnums.map((declared, index) => [declared.enumName, index] as const))(
     "%s",
-    async (_name, declared) => {
+    async (_name, index) => {
+      const { enums } = await reload();
+      expect(enums).toHaveLength(declaredEnums.length);
+      const declared = enums[index];
       // Labels in declaration order, which is the order PostgreSQL stores and sorts them in. A
       // label that differs, is missing, or has moved is a value the application can write and the
       // database refuses, or the other way round.
@@ -297,10 +323,17 @@ describe("the drizzle schema matches the database the core migrations build", ()
     expect(declared.length).toBeGreaterThan(30);
   });
 
-  it.each(declared.map((table) => [getTableConfig(table).name, table] as const))(
+  it.each(declared.map((table, index) => [getTableConfig(table).name, index] as const))(
     "%s",
-    async (_name, table) => {
-      const shape = fromDeclaration(table);
+    async (_name, index) => {
+      const { tables } = await reload();
+      expect(tables).toHaveLength(declared.length);
+      // Every column spells its database name out. Left empty, drizzle derives the name from the
+      // property key instead, which reads as a declared name while declaring none — and a derived
+      // name would move if the `casing` option ever changed.
+      const derived = getTableConfig(tables[index]).columns.filter((column) => column.keyAsName);
+      expect(derived.map((column) => column.name)).toEqual([]);
+      const shape = fromDeclaration(tables[index]);
       await expect(fromDatabase(suite.db, shape.name)).resolves.toEqual(shape);
     },
   );
