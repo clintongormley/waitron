@@ -305,13 +305,6 @@ async function checkExpressionsIn(
   return Object.fromEntries(found.map((row) => [row.name, row.def]));
 }
 
-/**
- * The check expressions the declaration asks for, put through the SAME renderer the database side
- * is read with: a bare copy of the table in a scratch schema, given the declared constraints, read
- * back with `pg_get_constraintdef`. Comparing the two rendered forms compares what the expressions
- * MEAN — PostgreSQL rewrites `in (…)` into `= ANY (ARRAY[…])` and `between` into a pair of
- * comparisons — where comparing the text as typed would differ on wording alone.
- */
 /** Every index predicate on one table, keyed by index name — the empty string where there is none. */
 async function indexPredicatesIn(
   db: Database,
@@ -357,6 +350,11 @@ async function declaredOnACopy(
         sql.raw(`alter table ${copy} add constraint "${check.name}" check (${expression})`),
       );
     }
+    // No declared index carries a `where` today, so the predicate half of this comparison is
+    // exercised only by putting one in by hand. What a real one would meet: drizzle renders a
+    // helper such as `eq(column, false)` as a bind placeholder, and `create index … where ($1)`
+    // is not a statement PostgreSQL will take — hence the refusal below rather than a confusing
+    // syntax error from the server.
     for (const index of config.indexes) {
       const { name, unique, columns: parts, where } = index.config;
       const columns = parts
@@ -366,7 +364,16 @@ async function declaredOnACopy(
             : `"${String((part as { name?: unknown }).name ?? "")}"`,
         )
         .join(", ");
-      const predicate = where === undefined ? "" : ` where (${dialect.sqlToQuery(where).sql})`;
+      let predicate = "";
+      if (where !== undefined) {
+        const rendered = dialect.sqlToQuery(where);
+        if (rendered.params.length > 0)
+          throw new Error(
+            `index ${name} declares a where clause drizzle renders with bind parameters ` +
+              `(${rendered.sql}); write it as an inline sql\`…\` template so it can be compared`,
+          );
+        predicate = ` where (${rendered.sql})`;
+      }
       await db.execute(
         sql.raw(
           `create ${unique === true ? "unique " : ""}index "${name}" on ${copy} (${columns})${predicate}`,

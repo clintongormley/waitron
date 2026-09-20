@@ -76,8 +76,9 @@ jobs:
   # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of
   # database-backed mutants (every test here boots a Postgres and applies a schema), which on ONE
   # 2-vCPU runner is ~10h — past GitHub's 6h job limit, so the job never once completed. The count
-  # itself moves as files enter and leave the mutate set, so it is a dated receipt below rather
-  # than a figure to carry. Measured on run 32374126111:
+  # moves as files enter and leave the mutate set, so it lives in dated receipts rather than in
+  # this sentence: 749 when the ~10h was measured, 2165 valid on run 35504169506 (2026-09-20).
+  # Measured on run 32374126111:
   # `ignoreStatic` dropped 1545 → 749 mutants and the dry run finished in 6m48s (both stryker keys
   # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
   #

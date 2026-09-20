@@ -52,14 +52,25 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     },
   );
 
-  it.each(
-    mutationPackages()
-      .filter(({ dir }) => dir !== "packages/db")
-      .map(({ dir }) => dir),
-  )("%s breaks at 90 in its own stryker config", (dir) => {
-    const config = JSON.parse(readFileSync(join(root, dir, "stryker.config.json"), "utf8"));
-    expect(config.thresholds?.break).toBeGreaterThanOrEqual(BAR);
-  });
+  it(
+    "every package but db breaks at 90 in its own stryker config",
+    { timeout: PNPM_LS_SPAWN_TIMEOUT_MS * 2 },
+    () => {
+      // One case over the whole list rather than `it.each`, which would have to build the list
+      // while the file is being COLLECTED: an unbounded `pnpm ls` there, and a throw that fails
+      // the file as a collection error rather than as an assertion.
+      const bars = mutationPackages()
+        .filter(({ dir }) => dir !== "packages/db")
+        .map(({ dir }) => ({
+          dir,
+          bar: JSON.parse(readFileSync(join(root, dir, "stryker.config.json"), "utf8")).thresholds
+            ?.break,
+        }));
+
+      expect(bars.length).toBeGreaterThan(0);
+      expect(bars.filter(({ bar }) => !(bar >= BAR)).map(({ dir }) => dir)).toEqual([]);
+    },
+  );
 
   it("packages/db breaks at 90 on the merged score of its shards", () => {
     // Its own config deliberately carries no `thresholds.break`: CI passes each shard its own

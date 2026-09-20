@@ -41,10 +41,13 @@ export function aggregate(reports) {
         // a detected and an undetected mutant together.
         const { start, end } = mutant.location;
         const key = `${mutant.mutatorName}@${start.line}:${start.column}-${end.line}:${end.column}=${mutant.replacement ?? ""}`;
-        // A mutant two reports BOTH carry takes its undetected status, never its detected one: a
-        // merge must not be able to raise the score.
+        // A mutant two reports BOTH carry keeps whichever status counts AGAINST the package, so a
+        // merge can never raise the score and the answer does not depend on the order the shard
+        // artifacts happen to be listed in. Undetected beats detected, and either beats a status
+        // outside the ratio — `ignoreStatic: true` makes Stryker report static mutants `Ignored`,
+        // and keeping an `Ignored` over a `Survived` would drop a survivor out of the denominator.
         const seen = mutants.get(key);
-        if (seen !== undefined && !DETECTED.has(seen)) continue;
+        if (seen !== undefined && weight(seen) >= weight(mutant.status)) continue;
         mutants.set(key, mutant.status);
       }
     }
@@ -68,6 +71,13 @@ export function aggregate(reports) {
   return { score: ratio(killed, valid), killed, valid, files };
 }
 
+/** How much a status counts against the package, highest wins when two reports disagree. */
+function weight(status) {
+  if (UNDETECTED.has(status)) return 2;
+  if (DETECTED.has(status)) return 1;
+  return 0;
+}
+
 /** A run with nothing to measure scores zero — never NaN, which every comparison lets through. */
 function ratio(killed, valid) {
   return valid === 0 ? 0 : (100 * killed) / valid;
@@ -76,8 +86,9 @@ function ratio(killed, valid) {
 /**
  * Every json under `dir` that IS a mutation report — it parses, and it carries a `files` object.
  *
- * Counting bare `*.json` files was enough to be fooled: one unrelated json beside nine real
- * reports made the count ten, and a missing shard went unnoticed. So the shape is checked, and
+ * Counting bare `*.json` files was enough to be fooled — a reviewer showed it with a constructed
+ * case: nine real reports plus one unrelated json counted as ten, and the missing shard went
+ * unnoticed. So the shape is checked, and
  * the CLI below counts DIRECTORIES rather than files, because each shard arrives as its own
  * artifact directory and two reports in one directory are not two shards.
  */

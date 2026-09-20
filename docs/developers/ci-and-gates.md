@@ -109,8 +109,11 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
-Two hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor is
-not a package-wide one. And `scripts/mutation-break-thresholds.test.mjs`, which pins which package
+Three hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor
+is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: two files are out of
+its `mutate` set — `src/english-only.ts`, whose only suite lives in the root project, and
+`src/testing/global-setup.ts`, which vitest runs in the main process where Stryker records no
+coverage — each with its receipt at `scripts/mutation-shard.mjs`'s `NOT_MUTATED`. And `scripts/mutation-break-thresholds.test.mjs`, which pins which package
 holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's bar, so a step
 that reached the same command through a variable would be invisible to it.
 
@@ -129,8 +132,9 @@ mutant by its mutator, its replacement and BOTH ends of its span: `a && b` yield
 ConditionalExpression mutants that replace with `true` from the same start column, and keyed on
 the start alone they merged — 21 of them on run 35504169506, 7 of those pairing a detected mutant
 with an undetected one, so the score moved with the order the artifacts were listed in. And it
-counts shard DIRECTORIES holding a recognisable report, not `*.json` files, because one stray json
-beside nine real reports used to make the count ten and hide a shard whose job had failed.
+counts shard DIRECTORIES holding a recognisable report, not `*.json` files: a reviewer showed with
+a constructed case that one stray json beside nine real reports made the count ten and hid a shard
+whose job had failed.
 
 Receipt for the `ui` floor (2026-09-20): before the tests that branch added, the package read
 78.62% — 1658 of 2109 valid mutants — and the run exited 1 against the new threshold, which is the

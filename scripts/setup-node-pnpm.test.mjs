@@ -54,8 +54,8 @@ function jobsIn(text) {
 function setupNodeSteps(text) {
   const found = [];
   for (const [job, lines] of jobsIn(text)) {
-    const hasPnpm = lines.some((line) => /^\s*-?\s*uses:\s*pnpm\/action-setup/.test(line));
-    const hasInstall = lines.some((line) => /run: .*pnpm install/.test(line));
+    const pnpmAt = lines.findIndex((line) => /^\s*-?\s*uses:\s*pnpm\/action-setup/.test(line));
+    const hasInstall = lines.some((line) => /^\s*-?\s*run:\s.*pnpm install/.test(line));
     for (let at = 0; at < lines.length; at += 1) {
       // A `uses:` line, never a comment that merely names the action — `ci.yml`'s `changes` job
       // explains this very trap in prose above its own step.
@@ -69,7 +69,9 @@ function setupNodeSteps(text) {
       found.push({
         job,
         line: at + 1,
-        withStore: hasPnpm && hasInstall,
+        // pnpm must be installed BEFORE this step, because the cache restore runs inside it; the
+        // install may come after, because the cache save runs once the job's steps are done.
+        withStore: pnpmAt !== -1 && pnpmAt < at && hasInstall,
         cacheOff: body.join("\n").includes("package-manager-cache: false"),
       });
     }

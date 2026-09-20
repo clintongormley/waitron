@@ -122,6 +122,17 @@ describe("aggregate", () => {
     expect(aggregate([killed, survived]).score).toBe(0);
   });
 
+  it("never lets a merge drop a survivor out of the ratio", () => {
+    // `ignoreStatic: true` makes Stryker report a static mutant `Ignored`, which is outside the
+    // ratio. Keeping an `Ignored` over a `Survived` would remove a survivor from the denominator
+    // and RAISE the score, so undetected wins over a status that does not count at all.
+    const survived = report("src/a.ts", { status: "Survived", line: 7 });
+    const ignored = report("src/a.ts", { status: "Ignored", line: 7 });
+
+    expect(aggregate([survived, ignored])).toMatchObject({ valid: 1, killed: 0 });
+    expect(aggregate([ignored, survived])).toMatchObject({ valid: 1, killed: 0 });
+  });
+
   it("reports each file's own score, worst first", () => {
     const result = aggregate([
       report("src/good.ts", { status: "Killed" }, { status: "Killed" }),

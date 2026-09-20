@@ -1724,7 +1724,7 @@ standalone, real PostgreSQL in the cloud. **One dialect.** There is no SQLite pa
 | `pnpm test` | Vitest. Skips the real-Postgres target if Docker is absent, loudly. |
 | `pnpm test:coverage` | The same, under V8 coverage thresholds. What CI runs. |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm mutation` | Stryker. Weekly in CI, not a merge gate. |
+| `pnpm mutation` | Stryker. Weekly in CI, not a merge gate. _(Superseded 2026-09-20: the weekly run gates — `mutation-db-aggregate` merges the ten shard reports and fails below 90. A local `pnpm mutation` still gates nothing.)_ |
 | `pnpm db:generate` | Regenerates `drizzle/` from `src/schema/*.ts`. |
 | `pnpm db:generate:custom` | An empty numbered migration for hand-written SQL (triggers, RLS). |
 

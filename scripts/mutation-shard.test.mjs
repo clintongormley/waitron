@@ -153,6 +153,9 @@ describe("the CLI over the real @waitron/db tree", () => {
     // `--mutate "$FILES"` built from NOT_MUTATED, which REPLACES the config's patterns, while a
     // local `pnpm --filter @waitron/db mutation` uses the config. Left to drift, CI and a
     // developer's own run measure different sets — and it is CI's set the 90 bar is computed over.
+    //
+    // Narrower than it sounds: it reads only literal `!path` entries out of the config, so an
+    // exclusion written as a glob would be invisible to it and the two lists could still drift.
     const config = JSON.parse(
       readFileSync(join(here, "..", "packages", "db", "stryker.config.json"), "utf8"),
     );
