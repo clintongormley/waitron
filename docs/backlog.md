@@ -2754,6 +2754,29 @@ turns out to need a design moves to its track.
   `scripts/workspace-cycles.test.ts` looks only for loops, and `eslint.config.js`'s
   `no-restricted-paths` zones name `packages/*` as targets, never `apps/*`.
 
+**Left behind by gating `packages/db`'s mutation score (#472, 2026-09-20).** Two things the branch
+measured and did not settle.
+
+- **The gate never runs on a pull request, so thinning a `packages/db` test merges green.**
+  `.github/workflows/mutation.yml` fires on a weekly schedule and on `workflow_dispatch`, and on
+  nothing else; `mutation-db-aggregate` lives in it. A change that removes an assertion the score
+  depended on therefore passes every required check and reddens the following Monday, days from the
+  change that caused it. This is the shape `packages/ui` already had — #472 puts a second package in
+  it rather than creating it. What would settle it is a decision about cost: the ten db shards took
+  about 50 minutes of wall clock on run 35528428168, which is why nobody has put them on the merge
+  path. Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
+  per-pull-request signal.
+- **Three `packages/db` files contribute nothing to the gated score, and the table prints that as
+  `0.00%`.** Run 35528428168's aggregate lists `src/change-feed.ts`, `src/classification.ts` and
+  `src/testing/venue-db.ts` as `0.00%  0/0`. Nothing was killed because nothing was counted: the
+  score's denominator takes only `Killed`, `Timeout`, `Survived` and `NoCoverage`
+  (`scripts/mutation-aggregate.mjs:16-17`), so every mutant in those three files ended in some other
+  status — `Ignored`, a compile error or a run error. Which of the three it is has not been checked,
+  and it matters, because a compile error is a broken measurement while `Ignored` is a deliberate
+  one. Meanwhile `ratio()` returns 0 when the denominator is 0 (`scripts/mutation-aggregate.mjs:89`),
+  so a file nobody measured is displayed exactly like a file whose every mutant survived — the worst
+  reading in the table given to the case that carries no reading at all.
+
 **Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).** Three edges the
 branch found, checked, and consciously did not take.
 
@@ -2786,11 +2809,12 @@ deliberately did not settle.
   ones by running both installed instrumenters over the package's mutate set: every one is the new
   deletion mutant, nothing was removed, and no pre-existing mutant changed. What nobody has measured
   is what they do to the score.
-  _(Answered 2026-09-20 on `chore/db-mutation-gate`: the package now has a whole-package score and
-  a gate. `scripts/mutation-aggregate.mjs` merges the ten shard reports into one number and the
-  `mutation-db-aggregate` job fails below 90. Run 35504169506, ten shards, read 93.30% of 2165
-  valid mutants. The bar stays out of `packages/db/stryker.config.json` on purpose — CI passes each
-  shard its own `--mutate` list, so a `thresholds.break` there would gate a slice — and
+  _(Answered by #472, merged 2026-09-20: the package now has a whole-package score and a gate.
+  `scripts/mutation-aggregate.mjs` merges the ten shard reports into one number and the
+  `mutation-db-aggregate` job fails below 90. The first reading CI took of the merged code is
+  **94.20%, 2048 of 2174 valid mutants** — run 35528428168, ten shards, exit 0 against the bar of
+  90. The bar stays out of `packages/db/stryker.config.json` on purpose — CI passes each shard its
+  own `--mutate` list, so a `thresholds.break` there would gate a slice — and
   `scripts/mutation-break-thresholds.test.mjs` pins that arrangement.)_
   `packages/ui` used to sit in this bullet. It came out on 2026-09-20: a whole-package Stryker 10
   run turned out to take 10 to 16 minutes locally at `--concurrency 8`, not hours, which is what
@@ -2830,7 +2854,7 @@ deliberately did not settle.
   non-goal for now (see docs/backlog.md)", and no backlog entry answered that pointer — this is the
   entry it points at. Whether to keep it a non-goal or build the cross-shard aggregate, and gate on
   it, is still open, and it is also the only route to the db number the first bullet wants.
-  _(Answered 2026-09-20 on `chore/db-mutation-gate`: the aggregate is built —
+  _(Answered by #472, merged 2026-09-20: the aggregate is built —
   `scripts/mutation-aggregate.mjs` merges the ten shard reports and the `mutation-db-aggregate` job
   fails below 90 — so a merged db score is no longer a non-goal, and the workflow's header says so.
   The "41 source files" figure and the `testing/global-setup` example went with the same change, the
