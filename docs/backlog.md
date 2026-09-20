@@ -4102,8 +4102,9 @@ its own bar.
 fourteenth package of the rollout, ten test files and ten calls, plus the `vitest.config.ts` comment
 the list above had been holding open for this conversion. Six packages left after it:
 `identity` (13), `reporting` (13), `payments` (14), `db` (20), `fiscal-verifactu` (25),
-`apps/server` (56) — re-measure with the plan's step-5 command rather than trusting those. Four
-things to carry.
+`apps/server` (56) — re-measure with the plan's step-5 command rather than trusting those. (2026-09-20:
+`identity` came off that list with #461, below. The count is dated to #459 and is not maintained
+here; run the command.) Four things to carry.
 
 **First, the sweep must be reported PER SWEEP, and reporting the INTERSECTION is #440's mistake in a
 new dress.** This branch ran the two prescribed sweeps and reported the one document in BOTH, which
@@ -4209,6 +4210,54 @@ file, one of the three still standing on purpose (recorded above).
 
 Which package is NEXT is the plan's step-5 command run on the tree you are converting, never a name
 written here.
+
+**`packages/identity` converted, LANDED as #461 on 2026-09-20** (main `a771d130`) — thirteen test
+files, thirteen calls, plus one comment in `src/passkey.test.ts` that named the old helper. The
+package's other fifteen test files are accounted for too: four take a real PostgreSQL database
+through `useTemplateDb` and are left alone, and eleven open no database at all. Coverage identical
+before and after: 28 files, 237 tests, statements 93.1% against 90, branches 85.04% against 85,
+functions 99.17% against 85, lines 95.2% against 90 — branches clear their bar by 0.04 of a point
+on both sides. Remaining after it, measured on the merged main with the plan's step-5 command:
+`reporting` 13 files, `payments` 14, `db` 20, `fiscal-verifactu` 25, `apps/server` 56. Four things
+to carry.
+
+**First, a package holding both kinds of suite gets the `hookTimeout` control for free, and this is
+the conversion that spent it** — the free-control note #457 left open. One run of
+`--hookTimeout=50` over `src/person-locale.test.ts` (a `useVenueDb` suite) and `src/staff.pg.test.ts`
+(a `useTemplateDb` one) carries both directions: the template file failed naming
+`packages/db/src/testing/lifecycle.ts:422`, its clone of the migrated template, while the PGlite
+file passed both its tests. Report WHICH HOOK the timeout names, not the pass count — at 50ms the
+count is not stable and the named hook is. With `--testTimeout=1` (suite boots, only bodies fail)
+and `timeoutMs: 50` at the call site (`beforeAll` dies at `lifecycle.ts:139`), that is the whole
+picture for a package in three runs, and it is cheaper than the delay-injection recipe #459 needed.
+
+**Second, `packages/identity/vitest.config.ts` carries TWO findings and neither was fixed here.**
+Its timeout comment states two true sentences and names no helper, so no conversion falsifies it;
+what is wrong is only that its position implies those budgets guard the PGlite boot, which the runs
+above show they do not — though `hookTimeout` is not idle in this package, since it bounds the
+real-PostgreSQL clone those four `useTemplateDb` suites take. Separately, and older: the same
+file's single-fork comment carries a 2026-08-20 receipt saying this package's `test:coverage`
+"prints 100/100/100/100", which the two coverage runs above contradict, and the conclusion resting
+on it ("single-fork is not demonstrably load-bearing for identity's threshold") no longer follows —
+branches now clear by 0.04 of a point, which is the margin a cross-fork under-merge would eat.
+Somebody has to take both deliberately.
+
+**Third, the Codex run-it seat wedged twice on this branch and produced no report.** Both
+invocations ran for hours against a twelve-command brief, the second while the first was still
+alive, and they wrote to the same report paths so neither output was trustworthy. They were killed
+and the seat was re-run as an Opus subagent with the same brief, which returned in eight minutes
+and reproduced every measurement. If a seat has produced no report file after roughly twenty
+minutes, check whether it is still running before dispatching a second one — a second dispatch does
+not replace the first, it races it.
+
+**Fourth, the third claim-check round is still earning its place, and it found the corrections'
+own defects.** Two review seats found five prose defects in this branch — a false sweep-intersection
+count, a false claim that five test-file basenames exist elsewhere in the tree, two pointers
+asserting their sketches still matched their files, and a `hookTimeout` conclusion wider than its
+runs. The round-three read over those corrections then found four more inside them, including a
+sentence that generalised two verified sketches to a third which does not have the feature
+described. The code was thirteen import lines and thirteen calls and was right the first time; every
+defect on this branch, in both waves, was in prose.
 
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
