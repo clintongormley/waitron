@@ -374,6 +374,15 @@ declare module "@waitron/shared" {
      * six `working_order.*` codes below; the sole thrower is `priceOrderLines` (`working-order.ts`).
      * A CLIENT request-shape fault → mapped to 400 (the STATUS map's default, as the `options.*`
      * codes are). Never renamed once shipped.
+     *
+     * (The former `working_order.invalid_doneness` sat beside this one and was removed with the
+     * built-in doneness field — pre-production and no bwc, the grounds `till.not_found` above also
+     * gives. It differs from that one in having NO successor: `till.not_found`'s thrower moved and
+     * kept throwing, while this code refused a value outside an enum that no longer exists, so
+     * nothing throws in its place. The nearest analogous refusal belongs to a different concept and
+     * a different package — an options list left unanswered is `options.label_required`
+     * (`packages/catalogue/src/errors.ts`), not any of the three `options.*`/`option.*` entries in
+     * THIS file, every one of which is itself retired.)
      */
     "working_order.note_too_long": { length: number; limit: number };
     /**

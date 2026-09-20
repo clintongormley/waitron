@@ -532,7 +532,7 @@ still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy 
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
 for a child line by a NULL product, no longer recognise one. Task 12 wires the till. Task 10 has
-since taken doneness out end to end and seeded a "Cooked" options list in its place; the next task
+since taken doneness out end to end and seeded a cooking options list in its place; the next task
 is Task 11, the dashboard's Extras and Options tabs.
 
 Task 8 has landed too, as #465. This is what it changed. It took the preserve path's comparison out of
@@ -2024,7 +2024,7 @@ ongoing overhaul listed at the top of Track A.
   decision 2026-09-14). DONE as Task 10 of the modifiers track. The `doneness` enum and its two
   columns, the `working_order.invalid_doneness` code and its validation, the prominent kitchen-ticket
   line, and the till's meat-gated picker, label file and store field are all deleted; core migration
-  0042 drops both columns and the type. The line note stays. The demo seed grows a "Cooked" options
+  0042 drops both columns and the type. The line note stays. The demo seed grows a cooking options
   list on the steak (`apps/server/scripts/demo-seed/seed-option-lists.ts`).
   **The prominence question this entry asked to check first, answered by measurement:** an options
   answer already prints on a kitchen ticket, as an indented `+ <list kitchen name>: <label kitchen
@@ -2039,6 +2039,40 @@ ongoing overhaul listed at the top of Track A.
   **Still owed:** the till does not OFFER the seeded list yet — `listAvailableProducts` resolves the
   legacy attachments (`packages/catalogue/src/operations.ts:1477`) while only `listProducts` (`:1054`)
   reads `product_modifiers`. Task 12 of the modifiers plan wires it.
+  **A window nobody had written down, found by the review wave:** the demo steak now carries the
+  cooking question TWICE — the legacy "Cooking" option group and the new list, side by side. That is
+  invisible today because the till reads only the legacy attachments. But Task 12 (wire the till)
+  lands BEFORE Task 13 (delete the legacy tables), so between those two tasks a demo steak will ask
+  the diner how it should be cooked twice over. Whoever takes Task 12 should either pull the legacy
+  group out of the seed in the same change or accept the duplicate knowingly.
+- **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and
+  it reproduces itself** (found by the review wave on the doneness removal, 2026-09-20). What
+  `backend.recordSale` is actually handed is twelve fields
+  (`packages/core/src/record-sale.ts:389-408`); the true claim is that NONE of them is a line, and
+  the three-field version was used to argue what cannot reach the huella — which is how a false
+  receipt about `DescripcionOperacion` survived three review layers. Corrected on that branch in
+  `packages/fiscal-verifactu/src/write-path.e2e.test.ts`, `docs/developers/modifiers.md`,
+  `packages/db/src/schema/sales.ts` and `sales.test.ts`. **Left standing, deliberately, with where
+  and why:** `docs/superpowers/plans/2026-08-30-ordering-modifiers.md:12`, `:155`, `:290` and
+  `docs/superpowers/specs/2026-08-31-modifier-allergen-association-design.md:181` are dated records
+  of what was believed when written, and the repo does not rewrite those — but `:155` is the plan
+  line that AUTHORED the `sales.ts` comment, so following that plan again would reproduce the
+  defect. Two compliance-track documents carry the same shape about tips specifically —
+  `docs/compliance/asesor-questions.md:465` and `docs/compliance/verifactu-findings.md:678` ("hands
+  the fiscal backend only `total`, never the tip"); their operative claim about tips is TRUE and the
+  legal track is kept separate, so they were not touched here. **Next action:** whoever next works
+  the compliance track widens those two sentences.
+- **Nine copies of the demo seed's venue-provisioning fixture** (found reviewing the doneness
+  removal, 2026-09-20, NOT fixed there — it is nine files of churn on a branch about something
+  else). Every test file under `apps/server/scripts/demo-seed/` declares its own `provisionVenue`
+  and `nextNif` — nine of them, which is the seven matching `seed-*.test.ts` plus `seed.test.ts` and
+  `seed.integration.test.ts`; the newest pair is byte-identical to `seed-options.test.ts`'s apart
+  from the NIF base.
+  The repo has already paid for this extraction once elsewhere and said so
+  (`apps/server/src/testing/venue-fixtures.ts`), and it is free here because
+  `apps/server/vitest.config.ts` excludes `scripts/**` from coverage. **Next action:** extract
+  `apps/server/scripts/demo-seed/testing/provision-venue.ts` taking the NIF base as an argument —
+  each file genuinely needs its own range — and convert the siblings as they are next touched.
 - **`wt-combobox`** (#351, 2026-09-13). It is a searchable dropdown in `packages/ui`: pick one option
   or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
   with nothing using it; #362 (2026-09-14) is the first adopter, for the

@@ -156,6 +156,21 @@ describe("seedDemoRestaurant", () => {
         join catalogues c on c.id = mi.menu_id
         where p.name = 'Negroni'
         order by mi.gross_price`);
+      const { rows: optionListRows } = await tx.execute<{
+        product_name: string;
+        list_name: string;
+        default_label: string | null;
+        labels: string[];
+      }>(sql`
+        select p.name as product_name, ol.name as list_name, dflt.name as default_label,
+               array_agg(lab.name order by lab.sort) as labels
+        from product_modifiers pm
+        join products p on p.id = pm.product_id
+        join option_lists ol on ol.id = pm.option_list_id
+        join option_labels lab on lab.list_id = ol.id
+        left join option_labels dflt on dflt.id = ol.default_label_id
+        group by p.name, ol.name, dflt.name
+        order by p.name, ol.name`);
       const { rows: cocktailRouteRows } = await tx.execute<{
         zone_name: string;
         station_name: string;
@@ -180,6 +195,7 @@ describe("seedDemoRestaurant", () => {
         stations: stationRows.map((row) => row.name),
         negroniOffers: negroniRows,
         cocktailRoutes: cocktailRouteRows,
+        optionLists: optionListRows,
       };
     });
 
@@ -267,6 +283,17 @@ describe("seedDemoRestaurant", () => {
     expect(read.cocktailRoutes).toEqual([
       { zone_name: "Downstairs bar", station_name: "Downstairs bar" },
       { zone_name: "Upstairs bar", station_name: "Upstairs bar" },
+    ]);
+
+    // seedOptionLists ran: the steak carries the cooking list through the NEW `product_modifiers`
+    // rows, which the `optionGroups` assertions above cannot see — they read the legacy attachments.
+    expect(read.optionLists).toEqual([
+      {
+        product_name: "Solomillo",
+        list_name: "Punto",
+        default_label: "Punto medio",
+        labels: ["Poco", "Punto medio", "Muy"],
+      },
     ]);
 
     // Floor: the ~16-table demo plan (seedFloor seeds 16).

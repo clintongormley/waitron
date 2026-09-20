@@ -768,8 +768,10 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
 
 /**
  * The sale_line → parent sale_line self-link (ordering modifiers, Task 2). `parent_line_id` is
- * presentation/reporting metadata ONLY — the fiscal record is built from `total` + `vat_breakdown`,
- * never from `sale_lines`, so this column never reaches the fiscal fingerprint (design §4). An extras
+ * presentation/reporting metadata ONLY — `backend.recordSale` is handed the sale's own header
+ * fields and never `sale_lines` at all (the twelve are named at
+ * `packages/core/src/record-sale.ts:389-408`), so this column never reaches the fiscal fingerprint
+ * (design §4). An extras
  * pick files as its own child line pointing at the dish line it belongs to; a top-level line leaves
  * it NULL.
  *

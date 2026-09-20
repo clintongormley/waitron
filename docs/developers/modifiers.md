@@ -255,9 +255,11 @@ architecture §6), so the two kinds of answer land differently:
   therefore groups on the frozen name, the way the top-sellers report groups products.
 
 **The frozen ANSWERS never reach the fiscal fingerprint. A line's AMOUNTS do.** Do not read the
-first half as the second. What `backend.recordSale` is handed is the sale's `total` and its VAT
-breakdown — a list of one entry per VAT rate — and never the lines themselves, so the words a diner
-chose have no channel at all into `computeHuella`'s input. The money is a different story, and the
+first half as the second. What `backend.recordSale` is handed is the sale as a whole — its till,
+node, sale and series ids, the series' own code, its invoice number, its issue time and offset, its
+description, its `total`, its VAT breakdown (a list of one entry per VAT rate) and its counterparty
+— and never the lines themselves, so the words a diner chose have no channel at all into
+`computeHuella`'s input. The money is a different story, and the
 channel is that breakdown, whichever of the two ways it was built. When the caller supplies none,
 `recordSale` derives it from the lines (`input.vatBreakdown ?? buildVatBreakdown(input.lines)`,
 `packages/core/src/record-sale.ts`), and `buildVatBreakdown` groups each line's `lineTotal` by its

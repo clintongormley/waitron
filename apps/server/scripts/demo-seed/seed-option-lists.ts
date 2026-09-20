@@ -1,13 +1,16 @@
 // Seeds the demo's reusable OPTIONS LISTS (`PRODUCT_OPTION_LISTS` in menu.ts) and attaches each to
 // its named product. This is the generic mechanism that replaced the built-in doneness field: the
-// steak carries a "Cooked" list where it used to carry a doneness enum.
+// steak carries a cooking options list, `Punto`, where it used to carry a doneness enum. The plan
+// that asked for it calls it the "Cooked" list; the seeded staff name is Spanish because every
+// other staff-facing name in `menu.ts` is, and a staff name is one plain string that is never
+// translated at read time, so an English one would show in English on the Spanish demo.
 //
 // What that does NOT yet mean, measured rather than assumed: the TILL does not offer the list to an
 // operator. `listAvailableProducts` — the read the till uses — still resolves the LEGACY attachments
 // through `readLegacyProductModifiers` (`packages/catalogue/src/operations.ts:1477`); only
 // `listProducts` (`:1054`) reads the new `product_modifiers` rows this file writes. Asked for the
 // steak straight after this seed, that read answers `optionGroups: ["Extras", "Cooking"]` and no
-// "Cooked". Wiring the till is Task 12 of
+// `Punto`. Wiring the till is Task 12 of
 // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
 //
 // A file of its own, not part of `seed-options.ts`, on purpose: that file seeds the LEGACY option
@@ -52,8 +55,11 @@ export async function seedOptionLists(
     const refs: ProductModifierRef[] = [];
     for (const list of lists) {
       // The label ids are minted HERE rather than left to `createOptionList`, because
-      // `defaultLabelId` has to name one of the labels in the same body — a default naming anything
-      // else is dropped to null (`parseOptionListInput`, option-contract.ts).
+      // `defaultLabelId` has to name one of the labels in the same body. The contract has two
+      // different answers for a default that does not, and neither is silent success: one naming no
+      // label of the body is REFUSED, `options.invalid` with `field: "defaultLabelId"`
+      // (`option-contract.ts:139`), and one naming a label that exists but is unavailable is dropped
+      // to null (`:145-147`). A misaligned default here would therefore fail the whole demo seed.
       const labels = list.labels.map((label) => ({ id: randomUUID(), ...label }));
       const created = await createOptionList(
         tx,

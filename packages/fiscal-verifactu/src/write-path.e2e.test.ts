@@ -281,8 +281,11 @@ describe("parent_line_id is not part of the huella", () => {
   // The parent_line_id counterpart of verify.test.ts's "entorno is not part of the huella" — the
   // §5 invariant "never put our own metadata into a hash", applied to Task 5's self-link. A filed
   // MODIFIER child line carries `sale_lines.parent_line_id`, presentation/reporting metadata that
-  // is NEVER hashed: `backend.recordSale` receives only `total` + `vatBreakdown`, never the
-  // individual `sale_lines`, so `parent_line_id` cannot reach `computeHuella`'s input at all.
+  // is NEVER hashed: `backend.recordSale` receives no per-line structure at all — the call at
+  // `record-sale.ts:389-408` passes the same twelve fields the note guard below names, `tillId`
+  // through `counterparty`, and never the individual `sale_lines` — so `parent_line_id` cannot reach
+  // `computeHuella`'s input. Unlike that guard, this one is READ and not measured: no probe has been
+  // run for this block.
   //
   // Two sales built from IDENTICAL input, differing ONLY in whether one child line names a parent,
   // must therefore produce the same huella. Getting two BYTE-IDENTICAL huellas is the hard part:
@@ -375,16 +378,30 @@ describe("a line's note is not part of the huella", () => {
   // into a hash", applied to the per-line kitchen customisation (spec §2). A line's `note` (free-text
   // kitchen instruction) is NON-FISCAL KDS metadata: it lives ONLY on `working_order_lines` and —
   // snapshotted at fire — `ticket_items`, and never on the fiscal projection. `RecordSaleLine`
-  // (packages/core/src/record-sale.ts) carries no such field, `sale_lines` has no such column, and
-  // `backend.recordSale` is handed only `total` + `vatBreakdown` + `descriptionOfOperation` — so a
-  // line's note has no channel into `computeHuella`'s input at all.
+  // (packages/core/src/record-sale.ts) carries no such field and `sale_lines` has no such column.
+  // The boundary itself is that `backend.recordSale` is handed NO PER-LINE STRUCTURE AT ALL: the call
+  // at `record-sale.ts:389-408` passes exactly twelve fields — `tillId`, `nodeId`, `saleId`,
+  // `seriesId`, `seriesCode`, `invoiceNumber`, `issuedAt`, `offsetMinutes`,
+  // `descriptionOfOperation`, `total`, `vatBreakdown`, `counterparty` — and not one of them is a
+  // line. So a line's note has no channel into `computeHuella`'s input. They are named rather than
+  // summarised because an earlier version of this sentence said "only `total` + `vatBreakdown` +
+  // `descriptionOfOperation`", and a summary is how that stayed wrong.
   //
   // This is a REGRESSION GUARD, not a red-first test: because there is no channel today, it passes the
   // day it is written (map §4 — no line data feeds computeHuella). It earns its place by failing the day
   // someone threads a line field into a HASHED field. Measured both ways rather than reasoned about:
   // adding each line's note length (in cents) to `total` in `record-sale.ts` — `ImporteTotal` is one of
-  // the eight fields `buildCadenaAlta` hashes — turned the two huellas apart
-  // (`2701C196…` against `9C2079C8…`), and reverting restored them. The CONTROL in the other direction
+  // the eight fields `buildCadenaAlta` hashes — turned this block's two huellas apart, one case red,
+  // and restoring `record-sale.ts` from a copy turned them equal again. The OBSERVABLE is the
+  // divergence, not a value: no literal is quoted because this block does not pin its NIF, and
+  // `IDEmisorFactura` — also one of the eight — is minted from a module-level counter, so a literal
+  // recorded here would move the moment a test is added above it. That is measured, not assumed:
+  // `test/fixtures.ts:249-256` records the same basket hashing differently filed 16th and filed
+  // standalone, and the one block in this file that DOES quote 64-character literals pins the NIF
+  // first.
+  // The clock is not the reason — `steadyClock` returns a module constant
+  // (`test/write-path-fixtures.ts:37-44`) and `recordSale` is handed its caller's `issuedAt`, so
+  // `FechaHoraHusoGenRegistro` repeats run to run. The CONTROL in the other direction
   // matters just as much and is why the receipt names a field: folding the same note into
   // `descriptionOfOperation` instead changes NOTHING, because `DescripcionOperacion` is not a huella
   // input at all (`registro-row.ts:390`) — so a probe aimed there measures nothing and would have
@@ -396,8 +413,10 @@ describe("a line's note is not part of the huella", () => {
   // abstract chain layer (`altaFor` has no per-line structure at all), so a note hash comparison cannot
   // even be expressed there; this file is the one place the REAL `recordSale` → `computeHuella` path
   // runs, exactly where a line field could wrongly leak — the same reasoning that put the
-  // parent_line_id guard here. `record-sale.ts:348` already points callers at "the huella-invariance
-  // test in packages/fiscal-verifactu's write-path e2e" for precisely this property.
+  // parent_line_id guard here. An earlier version of this sentence also cited a pointer back from
+  // `record-sale.ts:348`; there is none — `grep -n "write-path\|invariance"
+  // packages/core/src/record-sale.ts` comes back empty. It was removed by #341 and the sentence
+  // outlived it.
   //
   // Byte-identical huellas need the same NumSerieFactura against the same empty chain, so — exactly as
   // the parent_line_id block above — each sale is recorded, its huella read back INSIDE its transaction,

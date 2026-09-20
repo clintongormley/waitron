@@ -174,6 +174,12 @@ export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
         ],
       },
       {
+        // This dish has a TWIN cooking question: `PRODUCT_OPTION_LISTS` below attaches the new
+        // options list to the same steak. Both are seeded on purpose while the till still reads
+        // only these legacy attachments. The moment that stops being invisible is Task 12 of
+        // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, which wires the till and
+        // lands BEFORE Task 13 deletes these tables — whoever takes it removes this group or
+        // accepts a steak that asks twice.
         name: { en: "Cooking", es: "Punto de la carne" },
         minSelect: 1,
         maxSelect: 1,
@@ -233,23 +239,23 @@ export const PRODUCT_OPTION_LISTS: SeedProductOptionLists[] = [
     productImage: "solomillo.png",
     lists: [
       {
-        name: "Cooked",
+        name: "Punto",
         customerName: { en: "How would you like it cooked?", es: "¿Cómo la quiere hecha?" },
         kitchenName: "PUNTO CARNE",
         labels: [
           {
-            name: "Rare",
+            name: "Poco",
             customerName: { en: "Rare, red in the middle", es: "Poco hecho, rojo por dentro" },
             kitchenName: "POCO HECHO",
           },
           {
-            name: "Medium",
+            name: "Punto medio",
             customerName: { en: "Medium, pink in the middle", es: "Al punto, rosado por dentro" },
             kitchenName: "AL PUNTO",
             preselected: true,
           },
           {
-            name: "Well done",
+            name: "Muy",
             customerName: { en: "Well done, cooked through", es: "Muy hecho, sin nada de rosa" },
             kitchenName: "MUY HECHO",
           },

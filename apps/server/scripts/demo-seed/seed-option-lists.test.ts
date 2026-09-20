@@ -1,4 +1,4 @@
-// Real-Postgres proof of `seedOptionLists`: the demo seed creates the "Cooked" options list — the
+// Real-Postgres proof of `seedOptionLists`: the demo seed creates the cooking options list `Punto` — the
 // generic replacement for the deleted built-in `doneness` field — and attaches it to the steak, so
 // the demo data still carries the question "how do you want it cooked?".
 //
@@ -8,10 +8,16 @@
 // `product_modifiers` rows this seed writes, and that is the read asserted below. Wiring the till
 // to the new mechanism is a separate task.
 //
-// Real Postgres, not PGlite: this runs as `app_user` against the option-list, option-label and
-// attachment tables, the same posture `seedOptions` is proven under. PGlite's connection arrives as
-// a superuser and so cannot check the grants these writes need (CLAUDE.md §4). Cloned per file from
-// the shared `manifest` template via `useTemplateDb`.
+// Real Postgres, not PGlite, and NOT because of the grants. The reason first given here — that
+// PGlite cannot check them — is false, and CLAUDE.md §4 says so plainly: grants ARE enforced once
+// the session assumes the role, which is what `asAppUser` does. A review seat measured it rather
+// than reading it, driving PGlite through `SET ROLE app_user`: a granted insert succeeded and an
+// ungranted delete was refused `42501`.
+// The real reason is the seed path itself. Every `seed-*.test.ts` beside this one clones the shared
+// `manifest` template through `useTemplateDb`, so the seed runs against the same migrated schema a
+// provisioned venue gets, and — like all of them — this file calls `applyVenue`, so the seed runs
+// over real provisioning rather than a hand-built fixture. Matching the siblings is the point; a
+// lighter target here would prove the seed against a database no venue ever has.
 
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
@@ -80,7 +86,7 @@ async function provisionVenue(): Promise<{ locationId: string }> {
 }
 
 describe("seedOptionLists", () => {
-  it("creates the Cooked list with three different names at both levels and attaches it to the steak", async () => {
+  it("creates the Punto list with three different names at both levels and attaches it to the steak", async () => {
     const { locationId } = await provisionVenue();
 
     const { lists, steakId, coffeeId, attachments, available } = await withTransaction(
@@ -108,19 +114,25 @@ describe("seedOptionLists", () => {
     );
 
     // ONE options list in the demo catalogue, and it is the cooking question.
-    expect(lists.map((list) => list.name)).toEqual(["Cooked"]);
+    expect(lists.map((list) => list.name)).toEqual(["Punto"]);
     const cooked = lists[0]!;
     expect(cooked).toMatchObject({
-      name: "Cooked",
+      name: "Punto",
       customerName: { en: "How would you like it cooked?", es: "¿Cómo la quiere hecha?" },
       kitchenName: "PUNTO CARNE",
       active: true,
     });
 
-    // The three labels in the order they are offered, each carrying three DIFFERENT texts — so a
-    // surface reading the staff name where it should read the kitchen name (or the diner's wording)
-    // fails here rather than passing on identical words (CLAUDE.md §3).
-    expect(cooked.labels.map((label) => label.name)).toEqual(["Rare", "Medium", "Well done"]);
+    // The three labels in the order they are offered, each carrying three DIFFERENT texts.
+    // What that buys, stated narrowly because the wider version was measured and disproved: this
+    // file checks the names as STORED, so it fails if the seed puts the wrong text in a column. It
+    // does NOT catch a surface that reads the wrong one of the three — a review seat made the
+    // kitchen renderer use staff names and this suite stayed green, while
+    // `apps/server/src/kitchen-print.test.ts` went red. That is where the wrong-surface property is
+    // tested, and it does not read this seed at all: it hand-writes its own six-name fixture. So
+    // the three texts here differ for a narrower reason — a seed that wrote one of them into the
+    // wrong column fails the assertions below (CLAUDE.md §3).
+    expect(cooked.labels.map((label) => label.name)).toEqual(["Poco", "Punto medio", "Muy"]);
     expect(cooked.labels.map((label) => label.customerName)).toEqual([
       { en: "Rare, red in the middle", es: "Poco hecho, rojo por dentro" },
       { en: "Medium, pink in the middle", es: "Al punto, rosado por dentro" },
@@ -134,10 +146,11 @@ describe("seedOptionLists", () => {
     expect(cooked.labels.every((label) => label.available)).toBe(true);
 
     // The house default is medium, and it is stored as that label's id — not its position and not
-    // its name. `parseOptionListInput` drops a default naming no available label of the list
-    // (option-contract.ts), so a list seeded with a default that did not line up would read back
-    // `null` here.
-    const medium = cooked.labels.find((label) => label.name === "Medium")!;
+    // its name. A default that did not line up would not read back `null` here: `parseOptionListInput`
+    // REFUSES one naming no label of the same body, `options.invalid` with `field: "defaultLabelId"`
+    // (`option-contract.ts:139`), and only drops to null a default naming a label that exists but is
+    // unavailable (`:145-147`). So a misaligned seed default fails the whole seed, loudly.
+    const medium = cooked.labels.find((label) => label.name === "Punto medio")!;
     expect(cooked.defaultLabelId).toBe(medium.id);
 
     // Attached to the steak through the new `product_modifiers` rows, and to nothing else.
