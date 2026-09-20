@@ -4384,7 +4384,7 @@ sentence that generalised two verified sketches to a third which does not have t
 described. The code was thirteen import lines and thirteen calls and was right the first time; every
 defect on this branch, in both waves, was in prose.
 
-**`packages/reporting` converted, on the branch `feat/sqlite-slice1-venue-db-reporting`** — thirteen
+**`packages/reporting` converted, LANDED as #463 on 2026-09-20** (main `933c29a1`) — thirteen
 test files and fourteen calls (`src/business-day.test.ts` has two, one per database-backed
 `describe`), plus the package's `vitest.config.ts` comment, which this section had been holding open
 for exactly this conversion. No comment in the package named the old helper, so
