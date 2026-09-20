@@ -8,17 +8,48 @@ export default defineConfig({
     // source. Without this exclude Vitest discovers them as real test files, so
     // one interrupted mutation run makes every later test run fail confusingly.
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // Vitest's 5s default is a live risk in this package and nowhere else in
-    // the repo: every test here boots a WASM PostgreSQL. The figure comes from
-    // docs/research/2026-07-20-pglite-throughput.md — cold boot plus schema
-    // plus seed, with an order of magnitude of headroom, because a timeout
-    // that fires under CI load produces a flaky suite that people learn to
-    // rerun, and a suite people rerun is a suite that no longer gates.
+    // Vitest's 5s default is too short for this package's database-backed tests: each `it` runs
+    // real SQL, against PGlite in-process or a clone of the shared container. Not every test here
+    // is one: 15 of the package's 70 test files call none of the five helpers
+    // (`grep -rLE "useVenueDb|useTemplateDb|useRealPostgres|describeEachTarget|createPgliteDb"
+    // --include="*.test.ts" src`). That grep measures which DOOR a suite uses, not whether it
+    // touches a database: SEVEN of those fifteen reach a real PostgreSQL anyway, by starting or
+    // connecting to a container themselves — `migrate-upgrade.pg`, `change-feed-replication.pg`,
+    // `testing/networked-postgres`, `testing/shared-container`, `testing/postgres`,
+    // `testing/two-node` and `testing/two-node-wireguard`. Eight files open no database at all.
+    //
+    // What this setting does NOT bound is the PGlite boot and migrations. `usePgliteDb` hands its
+    // own `beforeAll` a 60s default (`src/testing/lifecycle.ts:22` and `:146`), and a timeout
+    // passed to a hook overrides the config's. This comment used to say the 30s figure came from
+    // docs/research/2026-07-20-pglite-throughput.md as "cold boot plus schema plus seed", and that
+    // it was a risk "in this package and nowhere else in the repo": the first named a budget this
+    // setting does not hold, and the second is not so —
+    // `grep -ln testTimeout packages/*/vitest.config.ts apps/*/vitest.config.ts | wc -l` is 25,
+    // 24 of them other packages — and that glob is two levels deep, so it misses three more
+    // (`apps/server/vitest.preprod.config.ts` and the two `vitest.sandbox.config.ts` files).
+    // Keep the headroom anyway: a bound that fires under CI load produces a flaky suite people
+    // learn to rerun, and a suite people rerun is a suite that no longer gates.
     testTimeout: 30_000,
-    // Separately and much larger: beforeAll starts a Testcontainers Postgres,
-    // and on a cold runner that includes pulling the image. That is a network
-    // download, not a boot, and it is the only thing in this package measured
-    // in minutes.
+    // What `hookTimeout` reaches here was measured, by setting it to 1 and running two suites:
+    //   - every `afterEach` and `afterAll` in the package, PGlite suites included — the per-test
+    //     reset and the close (`src/testing/lifecycle.ts:148` and `:153`). That is where
+    //     `src/testing/reset-append-only.test.ts` died.
+    //   - the `beforeAll` of a `useTemplateDb` or `useRealPostgres` suite that passes no
+    //     `timeoutMs` of its own, because `lifecycle.ts` passes that option straight through
+    //     (`:422` and `:431`). That is where `src/testing/reset-append-only.pg.test.ts` died, on
+    //     the template clone.
+    //   - ONE hand-written `beforeAll` that declares no timeout:
+    //     `src/testing/networked-postgres.test.ts:12`, which starts a Docker network and a real
+    //     Testcontainers PostgreSQL. On a cold runner that includes the image pull, so the old
+    //     reason given here — "beforeAll starts a Testcontainers Postgres … a network download,
+    //     not a boot" — is TRUE of that one suite and false of the rest. Every other
+    //     container-booting hook in this package declares its own budget
+    //     (`shared-container.test.ts:133`, `lifecycle.test.ts:215` and `:319`,
+    //     `postgres.test.ts:128`, `two-node.test.ts:331` and `:407`,
+    //     `two-node-wireguard.test.ts:292`).
+    // It does NOT reach a PGlite `beforeAll`, which survived the same 1ms run, and it does not
+    // reach the shared container's boot — that is `globalSetup` below, which Vitest budgets
+    // separately.
     hookTimeout: 120_000,
     // Boots ONE shared container and migrates a `core` template through this package's own
     // `runMigrationSets` path; `describeEachTarget` and the converted `useRealPostgres` suites clone

@@ -3,13 +3,13 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {

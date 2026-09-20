@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 
 // The core migration chain (0011_device_profile_inactivity_timeout_sql) adds a nullable
 // `inactivity_timeout_seconds` integer to `device_profiles`. PGlite is sufficient here: this is about
@@ -10,7 +10,7 @@ import { usePgliteDb } from "../testing/lifecycle.js";
 // covered by the app-role suites in packages/layouts.
 
 describe("device_profiles.inactivity_timeout_seconds", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
   beforeAll(async () => {

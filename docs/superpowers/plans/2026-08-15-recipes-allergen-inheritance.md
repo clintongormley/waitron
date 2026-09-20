@@ -620,6 +620,14 @@ Copy `packages/catalogue/tsconfig.json` and `packages/catalogue/vitest.config.ts
 > tenant-column drop), and no TypeScript source names it now. Nothing else in this document was
 > re-checked.
 
+> **2026-09-20 — the clause above that was STILL TRUE is now stale too.** The rollout reached
+> `packages/db` on this date, so Task 2 step 6's sketch, headed
+> `packages/db/src/schema/recipes.test.ts`, no longer matches that file: it calls `useVenueDb`
+> from `../testing/venue-db.js` today (`:4` and `:6`). All four of this document's writings of
+> the old helper have now gone stale — at THREE moments, not four: the pointer above has the
+> `packages/recipes/src/recipes.test.ts` sketch and Task 4's Consumes line both dying at #434.
+> Nothing else was re-checked.
+
 - [ ] **Step 2: Write the test harness**
 
 `packages/recipes/src/testing/postgres.ts` — copy `packages/catalogue/src/testing/postgres.ts` verbatim (it runs `[CORE_MIGRATIONS]`, which now contains the recipe tables), adjusting the doc comment to say "recipes".

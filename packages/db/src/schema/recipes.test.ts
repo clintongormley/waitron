@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 
-const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 describe("recipes schema", () => {
   it("creates the ingredients and recipe_lines tables and the products overlay columns", async () => {

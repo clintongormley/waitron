@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "11111111-0000-4000-8000-0000000000a1";
@@ -18,7 +18,7 @@ const TOKEN_HASH = "scrypt$00$00";
 // ONLY constraint each case leaves violated is the FK under test. `devices` is the only table that
 // carries a device binding FK, so it is the only one with cases here.
 describe("devices FKs (till / receipt_printer / device_profile)", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
   beforeAll(async () => {

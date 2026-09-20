@@ -4,10 +4,10 @@ import type { Database } from "./client.js";
 import { locations, tenants } from "./schema/tenants.js";
 import { withTransaction } from "./tenancy.js";
 import { pgErrorMessage } from "./testing/errors.js";
-import { usePgliteDb } from "./testing/lifecycle.js";
+import { useVenueDb } from "./testing/venue-db.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {

@@ -6,7 +6,7 @@ import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { readMembershipTrustSet, setNodePublicKey } from "./node-identity.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
-import { usePgliteDb } from "./testing/lifecycle.js";
+import { useVenueDb } from "./testing/venue-db.js";
 
 // PGlite, not real Postgres: this proves the query + null-filter logic (the read skips a keyless row,
 // the write stamps the column). PGlite connects as superuser, so it cannot show the GRANT enforcement
@@ -23,7 +23,7 @@ async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocati
 }
 
 describe("membership trust-set accessors", () => {
-  const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   let nodeId: NodeId;
 
