@@ -85,3 +85,36 @@ test("focusing the host delegates focus to the header button", async () => {
   el.focus();
   expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("button.header"));
 });
+
+test("a disclosure given no heading and no summary writes neither into the header", async () => {
+  const el = await mount("<wt-disclosure><p>body</p></wt-disclosure>");
+  expect(el.shadowRoot!.querySelector(".heading")!.textContent).toBe("");
+  expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
+});
+
+test("the header points at a body id that names this component, and two disclosures never share one", async () => {
+  const first = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
+  const second = await mount('<wt-disclosure heading="Descriptors"><p>body</p></wt-disclosure>');
+  const idOf = (el: HTMLElement) => el.shadowRoot!.querySelector<HTMLElement>(".body")!.id;
+  for (const el of [first, second]) {
+    expect(idOf(el)).toMatch(/^wt-disclosure-body-\d+$/);
+    expect(el.shadowRoot!.querySelector("button")!.getAttribute("aria-controls")).toBe(idOf(el));
+    // A body id has to survive being used as a selector, which not every legal HTML id does.
+    expect(el.shadowRoot!.querySelector(`#${idOf(el)}`)).toBe(
+      el.shadowRoot!.querySelector(".body"),
+    );
+  }
+  expect(idOf(first)).not.toBe(idOf(second));
+});
+
+test("the header click stays inside the disclosure, so a listener above it sees only wt-toggle", async () => {
+  const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
+  let clicks = 0;
+  let toggles = 0;
+  host.addEventListener("click", () => clicks++);
+  host.addEventListener("wt-toggle", () => toggles++);
+  el.shadowRoot!.querySelector("button")!.click();
+  await (el as import("./wt-disclosure.js").WtDisclosure).updateComplete;
+  expect(toggles).toBe(1);
+  expect(clicks).toBe(0);
+});

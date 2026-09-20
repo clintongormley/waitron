@@ -173,3 +173,31 @@ test("a disabled field dims via the disabled-opacity token", async () => {
   expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).opacity).toBe("0.3");
   expect(getComputedStyle(el.shadowRoot!.querySelector("button.unit")!).opacity).toBe("0.3");
 });
+
+test("a price field created with nothing set is empty, unlabelled, unmarked and optional", async () => {
+  const el = await mount("<wt-price-input></wt-price-input>");
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.value).toBe("");
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(el.shadowRoot!.querySelector("button.unit")!.textContent!.trim()).toBe("");
+  expect(input.required).toBe(false);
+  expect(el.hasAttribute("required")).toBe(false);
+});
+
+test("a named field submits under its own name, and an unnamed one carries no name at all", async () => {
+  const named = await mount('<wt-price-input name="price"></wt-price-input>');
+  expect(named.shadowRoot!.querySelector("input")!.getAttribute("name")).toBe("price");
+  const unnamed = await mount("<wt-price-input></wt-price-input>");
+  expect(unnamed.shadowRoot!.querySelector("input")!.hasAttribute("name")).toBe(false);
+});
+
+test("each error message gets its own id shaped wt-price-input-error-N, and the field points at it", async () => {
+  const a = await mount('<wt-price-input error="Enter a price"></wt-price-input>');
+  const b = await mount('<wt-price-input error="Enter a price"></wt-price-input>');
+  const idA = a.shadowRoot!.querySelector("[data-error]")!.id;
+  const idB = b.shadowRoot!.querySelector("[data-error]")!.id;
+  expect(idA).toMatch(/^wt-price-input-error-\d+$/);
+  expect(idB).toMatch(/^wt-price-input-error-\d+$/);
+  expect(idA).not.toBe(idB);
+  expect(a.shadowRoot!.querySelector("input")!.getAttribute("aria-describedby")).toBe(idA);
+});

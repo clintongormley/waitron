@@ -65,6 +65,28 @@ it.each(["textarea", "select", "button", "div"])(
 );
 
 it.each([
+  "text",
+  "search",
+  "email",
+  "password",
+  "tel",
+  "url",
+  "number",
+  "date",
+  "datetime-local",
+  "month",
+  "time",
+  "week",
+])("submits from single-line input type %s", async (type) => {
+  const { input, clicked } = await fixture();
+  input.type = type;
+  input.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+  );
+  expect(clicked).toHaveBeenCalledOnce();
+});
+
+it.each([
   "checkbox",
   "radio",
   "file",

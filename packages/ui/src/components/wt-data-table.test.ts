@@ -1,7 +1,7 @@
 import { html } from "lit";
 import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanup, host, mount } from "../test-helpers.js";
+import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 
@@ -85,6 +85,113 @@ test("sorts numbers numerically", async () => {
   expect(rowText(el)).toEqual(["Bea2Edit", "Ada10Edit"]);
 });
 
+test("sorts ascending when the consumer names a sort key but no direction", async () => {
+  const el = await table({ sortKey: "name" });
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
+  expect(
+    el.shadowRoot!.querySelector('[data-sort="name"]')!.closest("th")!.getAttribute("aria-sort"),
+  ).toBe("ascending");
+});
+
+test("a third header click returns the table to ascending", async () => {
+  const el = await table();
+  const name = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="name"]')!;
+  name.click();
+  await el.updateComplete;
+  name.click();
+  await el.updateComplete;
+  name.click();
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
+  expect(name.closest("th")!.getAttribute("aria-sort")).toBe("ascending");
+});
+
+test("wt-sort-change bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
+  const el = (await mountInShadowRoot(
+    '<wt-data-table aria-label="Users"></wt-data-table>',
+  )) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns, rowKey: (row: Row) => row.id });
+  await el.updateComplete;
+  let received: { sortKey: string | null; sortDirection: string } | undefined;
+  document.addEventListener(
+    "wt-sort-change",
+    (event) => {
+      received = (event as CustomEvent<{ sortKey: string | null; sortDirection: string }>).detail;
+    },
+    { once: true },
+  );
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="name"]')!.click();
+  expect(received).toEqual({ sortKey: "name", sortDirection: "ascending" });
+});
+
+// The ordering tests below share one shape: a single sortable column whose values are the whole
+// point of the case, and a row key per row so the rendered order can be read back.
+type SortRow = { id: string; value: string | number | null };
+
+async function sortTable(sortRows: SortRow[]): Promise<WtDataTable<SortRow>> {
+  const el = (await mount(
+    '<wt-data-table aria-label="Values"></wt-data-table>',
+  )) as WtDataTable<SortRow>;
+  Object.assign(el, {
+    rows: sortRows,
+    rowKey: (row: SortRow) => row.id,
+    sortKey: "value",
+    columns: [
+      {
+        key: "value",
+        label: "Value",
+        cell: (row: SortRow) => String(row.value ?? ""),
+        sortValue: (row: SortRow) => row.value,
+      },
+    ],
+  });
+  await el.updateComplete;
+  return el;
+}
+
+function sortedKeys(el: WtDataTable<SortRow>): (string | null)[] {
+  return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+    row.getAttribute("data-row-key"),
+  );
+}
+
+test("rows with no value sort last in both directions and keep their own order", async () => {
+  const el = await sortTable([
+    { id: "zoe", value: "Zoe" },
+    { id: "first-blank", value: null },
+    { id: "wim", value: "Wim" },
+    { id: "second-blank", value: null },
+  ]);
+  expect(sortedKeys(el)).toEqual(["wim", "zoe", "first-blank", "second-blank"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="value"]')!.click();
+  await el.updateComplete;
+  expect(sortedKeys(el)).toEqual(["zoe", "wim", "first-blank", "second-blank"]);
+});
+
+test("a column of decimals sorts by size, not as text", async () => {
+  const el = await sortTable([
+    { id: "larger", value: 1.5 },
+    { id: "smaller", value: 1.25 },
+  ]);
+  expect(sortedKeys(el)).toEqual(["smaller", "larger"]);
+});
+
+test("a column that mixes numbers and text still orders its rows", async () => {
+  const el = await sortTable([
+    { id: "text", value: "n/a" },
+    { id: "number", value: 10 },
+  ]);
+  expect(sortedKeys(el)).toEqual(["number", "text"]);
+});
+
+test("text ending in a number sorts 9 before 10", async () => {
+  const el = await sortTable([
+    { id: "ten", value: "Table 10" },
+    { id: "nine", value: "Table 9" },
+  ]);
+  expect(sortedKeys(el)).toEqual(["nine", "ten"]);
+});
+
 test("applies the sortKey and sortDirection defaults on first render", async () => {
   const el = await table({ sortKey: "name", sortDirection: "ascending" });
   expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]); // Ada before Bea
@@ -121,6 +228,50 @@ test("descending default sorts the other way", async () => {
   expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]); // 10 before 2
 });
 
+const alignedColumns: DataTableColumn<Row>[] = [
+  { key: "name", label: "Name", cell: (row) => row.name },
+  { key: "count", label: "Count", cell: (row) => row.count, align: "end" },
+];
+
+test("a column asking for end alignment aligns its header and its cells to the end", async () => {
+  const el = await table({ columns: alignedColumns });
+  const [nameHead, countHead] = [...el.shadowRoot!.querySelectorAll<HTMLElement>("th")];
+  const [nameCell, countCell] = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr:first-child td"),
+  ];
+  expect(nameHead!.getAttribute("data-align")).toBe("start");
+  expect(countHead!.getAttribute("data-align")).toBe("end");
+  expect(nameCell!.getAttribute("data-align")).toBe("start");
+  expect(countCell!.getAttribute("data-align")).toBe("end");
+  expect(getComputedStyle(nameHead!).textAlign).toBe("start");
+  expect(getComputedStyle(countHead!).textAlign).toBe("end");
+  expect(getComputedStyle(nameCell!).textAlign).toBe("start");
+  expect(getComputedStyle(countCell!).textAlign).toBe("end");
+});
+
+test("only a sortable column offers a sort button, and one not sorted by reports no order", async () => {
+  const el = await table({ sortKey: "name" });
+  const [name, count, actions] = [...el.shadowRoot!.querySelectorAll("th")];
+  expect(name!.getAttribute("aria-sort")).toBe("ascending");
+  expect(count!.getAttribute("aria-sort")).toBe("none");
+  expect(actions!.hasAttribute("aria-sort")).toBe(false);
+  expect(name!.querySelector("button.sort")).not.toBeNull();
+  expect(actions!.querySelector("button")).toBeNull();
+  expect(actions!.textContent!.trim()).toBe("Actions");
+});
+
+test("the column being sorted shows an arrow for its direction and the others show none", async () => {
+  const el = await table({ sortKey: "name" });
+  const indicator = (key: string) =>
+    el.shadowRoot!.querySelector(`[data-sort="${key}"] .indicator`)!.textContent!.trim();
+  expect(indicator("name")).toBe("▲");
+  expect(indicator("count")).toBe("");
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(indicator("name")).toBe("▼");
+  expect(indicator("count")).toBe("");
+});
+
 test("renders loading, error and empty states supplied by the consumer", async () => {
   const loading = await table({ loading: true, loadingMessage: "Loading users" });
   expect(loading.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain(
@@ -137,6 +288,35 @@ test("renders loading, error and empty states supplied by the consumer", async (
   const empty = await table({ rows: [], emptyMessage: "No users" });
   expect(empty.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain("No users");
   expect(empty.shadowRoot!.querySelector("table")).toBeNull();
+});
+
+test("shows 'Loading' while loading when the consumer supplies no message", async () => {
+  const el = await table({ loading: true });
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain("Loading");
+});
+
+test("a table given no rows at all shows the default empty message", async () => {
+  const el = (await mount("<wt-data-table></wt-data-table>")) as WtDataTable<Row>;
+  el.columns = columns;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain("No results");
+  expect(el.shadowRoot!.querySelector("table")).toBeNull();
+});
+
+test("keys each row by its position when the consumer supplies no row key", async () => {
+  const el = (await mount("<wt-data-table></wt-data-table>")) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns });
+  await el.updateComplete;
+  expect(
+    [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) => row.getAttribute("data-row-key")),
+  ).toEqual(["0", "1"]);
+});
+
+test("leaves the scrollable region unnamed when the host carries no label", async () => {
+  const el = (await mount("<wt-data-table></wt-data-table>")) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns, rowKey: (row: Row) => row.id });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[role=region]")!.hasAttribute("aria-label")).toBe(false);
 });
 
 test("keeps the table in a horizontally scrollable region", async () => {
@@ -206,6 +386,77 @@ test("select-all is indeterminate when only some rows are selected", async () =>
   expect(all.checked).toBe(false);
 });
 
+test("labels the checkboxes generically when the consumer names none", async () => {
+  const el = await table({ selectable: true });
+  expect(el.shadowRoot!.querySelector("[data-test=select-all]")!.getAttribute("aria-label")).toBe(
+    "Select all",
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=select-b]")!.getAttribute("aria-label")).toBe(
+    "Select row",
+  );
+});
+
+test("starts with an empty selection, so the first box ticked reports only that row", async () => {
+  const el = await table({ selectable: true });
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent<{ selected: string[] }>).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-b]")!.click();
+  expect(seen.at(-1)).toEqual(["b"]);
+});
+
+test("select-all adds the rows not selected yet and keeps the ones already selected", async () => {
+  const el = await table({ selectable: true, selected: ["a"] });
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent<{ selected: string[] }>).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect(seen.at(-1)).toEqual(["a", "b"]);
+});
+
+test("wt-selection-change bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
+  const el = (await mountInShadowRoot(
+    '<wt-data-table aria-label="Users"></wt-data-table>',
+  )) as WtDataTable<Row>;
+  Object.assign(el, { rows, columns, rowKey: (row: Row) => row.id, selectable: true });
+  await el.updateComplete;
+  let received: string[] | undefined;
+  document.addEventListener(
+    "wt-selection-change",
+    (event) => {
+      received = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+    },
+    { once: true },
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-b]")!.click();
+  expect(received).toEqual(["b"]);
+});
+
+test("the select-all box is ticked only when every visible row is selected", async () => {
+  const el = await table({ selectable: true, selected: [] });
+  const all = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+  expect(all.checked).toBe(false);
+  expect(all.indeterminate).toBe(false);
+  el.selected = ["a", "b"];
+  await el.updateComplete;
+  expect(all.checked).toBe(true);
+  expect(all.indeterminate).toBe(false);
+});
+
+test("ticking a box reports the selection and stops the raw change event at the table", async () => {
+  const el = await table({ selectable: true });
+  const changes = vi.fn();
+  const selections = vi.fn();
+  el.shadowRoot!.addEventListener("change", changes);
+  el.addEventListener("wt-selection-change", selections);
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-b]")!.click();
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect(selections).toHaveBeenCalledTimes(2);
+  expect(changes).not.toHaveBeenCalled();
+});
+
 type TreeRow = { id: string; parent: string | null; name: string };
 const treeRows: TreeRow[] = [
   { id: "food", parent: null, name: "Food" },
@@ -216,6 +467,12 @@ const treeRows: TreeRow[] = [
 const treeColumns: DataTableColumn<TreeRow>[] = [
   { key: "name", label: "Name", cell: (r) => r.name, sortValue: (r) => r.name },
 ];
+function treeKeys(el: WtDataTable<TreeRow>): (string | null)[] {
+  return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+    row.getAttribute("data-row-key"),
+  );
+}
+
 async function treeTable(props: Partial<WtDataTable<TreeRow>> = {}): Promise<WtDataTable<TreeRow>> {
   const el = (await mount(
     '<wt-data-table aria-label="Categories"></wt-data-table>',
@@ -350,6 +607,53 @@ test("tree mode and selection work together, and collapsing takes rows out of se
   expect([...seen.at(-1)!].sort()).toEqual(["drinks", "food"]);
 });
 
+test("labels the tree toggle Collapse when the branch is open and Expand when it is closed", async () => {
+  const el = await treeTable();
+  const toggle = () =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'tbody tr[data-row-key="food"] button.tree-toggle',
+    )!;
+  expect(toggle().getAttribute("aria-label")).toBe("Collapse");
+  toggle().click();
+  await el.updateComplete;
+  expect(toggle().getAttribute("aria-label")).toBe("Expand");
+});
+
+test("seeds branches collapsed when the rows arrive after the flag", async () => {
+  const el = await treeTable({ rows: [], initiallyCollapsed: true });
+  el.rows = treeRows;
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("seeds branches collapsed when the parent lookup arrives after the rows", async () => {
+  const el = await treeTable({ initiallyCollapsed: true, rowParent: undefined });
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  el.rowParent = (row: TreeRow) => row.parent;
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("seeds branches collapsed when the flag is turned on after the rows", async () => {
+  const el = await treeTable();
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs", "drinks"]);
+  el.initiallyCollapsed = true;
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+});
+
+test("a branch the person expanded stays open when the rows are refreshed", async () => {
+  const el = await treeTable({ initiallyCollapsed: true });
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tbody tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+  el.rows = [...treeRows];
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
+});
+
 test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only", async () => {
   const treeRows: TreeRow[] = [
     { id: "food", parent: null, name: "Food" },
@@ -392,6 +696,128 @@ test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only"
   // not offer a collapse button whose clicks cannot hide the required matching descendant.
   expect(el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')).toBeNull();
   expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
+});
+
+test("a search in a tree keeps a match's ancestors and drops everything else", async () => {
+  const el = await treeTable({
+    rows: [...treeRows, { id: "cola", parent: "drinks", name: "Cola" }],
+    searchable: true,
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "eggs";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
+});
+
+// Each of these two rows names the other as its parent, so walking up the chain from either one
+// never reaches a top-level row.
+const loopingRows: TreeRow[] = [
+  { id: "x", parent: "y", name: "Ex" },
+  { id: "y", parent: "x", name: "Why" },
+];
+
+test("rows whose parents point at each other leave the table empty instead of circling", async () => {
+  const el = await treeTable({ rows: loopingRows });
+  expect(el.shadowRoot!.querySelector("table")).not.toBeNull();
+  expect(treeKeys(el)).toEqual([]);
+});
+
+test("the select-all box is not ticked when nothing is on screen to select", async () => {
+  const el = await treeTable({ rows: loopingRows, selectable: true });
+  const all = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+  expect(all.checked).toBe(false);
+  expect(all.indeterminate).toBe(false);
+});
+
+test("a tree keys its rows by position when the consumer supplies no row key", async () => {
+  const el = (await mount(
+    '<wt-data-table aria-label="Categories"></wt-data-table>',
+  )) as WtDataTable<TreeRow>;
+  Object.assign(el, {
+    rows: [
+      { id: "ignored-top", parent: null, name: "Food" },
+      { id: "ignored-child", parent: "0", name: "Breakfast" },
+    ],
+    columns: treeColumns,
+    rowParent: (row: TreeRow) => row.parent,
+  });
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual(["0", "1"]);
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="1"]')!.getAttribute("aria-level")).toBe(
+    "2",
+  );
+});
+
+const twoColumnTree: DataTableColumn<TreeRow>[] = [
+  { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+  { key: "code", label: "Code", cell: (row) => row.id, align: "end" },
+];
+
+test("only a tree row's first cell carries the indentation and the toggle", async () => {
+  const el = await treeTable({ columns: twoColumnTree });
+  const [first, second] = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="food"] td'),
+  ];
+  expect(first!.querySelector(".tree-cell")).not.toBeNull();
+  expect(first!.querySelector("button.tree-toggle")).not.toBeNull();
+  expect(second!.querySelector(".tree-cell")).toBeNull();
+  expect(second!.textContent!.trim()).toBe("food");
+});
+
+test("a tree aligns an end-aligned column to the end and the rest to the start", async () => {
+  const el = await treeTable({ columns: twoColumnTree });
+  const [first, second] = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="food"] td'),
+  ];
+  expect(first!.getAttribute("data-align")).toBe("start");
+  expect(second!.getAttribute("data-align")).toBe("end");
+  expect(getComputedStyle(first!).textAlign).toBe("start");
+  expect(getComputedStyle(second!).textAlign).toBe("end");
+});
+
+test("each level of a tree is indented one step further than the level above it", async () => {
+  const el = await treeTable();
+  host.style.setProperty("--wt-space-4", "16px");
+  const indent = (key: string) =>
+    getComputedStyle(
+      el.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
+    ).paddingInlineStart;
+  expect(indent("food")).toBe("0px");
+  expect(indent("break")).toBe("16px");
+  expect(indent("eggs")).toBe("32px");
+});
+
+test("the tree toggle points down while a branch is open and right once it is closed", async () => {
+  const el = await treeTable();
+  const toggle = () =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="food"] button.tree-toggle')!;
+  expect(toggle().textContent!.trim()).toBe("▾");
+  toggle().click();
+  await el.updateComplete;
+  expect(toggle().textContent!.trim()).toBe("▸");
+});
+
+test("a row with no children keeps a spacer as wide as a toggle, so the labels line up", async () => {
+  const el = await treeTable();
+  host.style.setProperty("--wt-tap-min", "44px");
+  const spacer = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="eggs"] .tree-spacer');
+  expect(spacer).not.toBeNull();
+  expect(spacer!.getBoundingClientRect().width).toBe(44);
+});
+
+test("a tree names its scrollable region from the host label", async () => {
+  const el = await treeTable();
+  expect(el.shadowRoot!.querySelector("[role=region]")!.getAttribute("aria-label")).toBe(
+    "Categories",
+  );
+});
+
+test("the selection cell is a grid cell in a tree and carries no role in a plain table", async () => {
+  const flat = await table({ selectable: true });
+  expect(flat.shadowRoot!.querySelector("td.select")!.hasAttribute("role")).toBe(false);
+  const tree = await treeTable({ selectable: true });
+  expect(tree.shadowRoot!.querySelector("td.select")!.getAttribute("role")).toBe("gridcell");
 });
 
 test("searchable renders a search box that narrows rows", async () => {
@@ -462,6 +888,86 @@ test("search matches a column that exposes only a sortValue", async () => {
   });
   const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
   input.value = "10";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["Ada10"]);
+});
+
+test("labels the search box 'Search' when the consumer names none", async () => {
+  const el = await table({ searchable: true });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  expect(input.getAttribute("aria-label")).toBe("Search");
+  expect(input.placeholder).toBe("Search");
+});
+
+test("says 'No matches' when a search clears the table and the consumer named no message", async () => {
+  const el = await table({
+    searchable: true,
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
+    ],
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "zzz";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".message")!.textContent).toContain("No matches");
+});
+
+test("a search term matches with its surrounding spaces trimmed and its case ignored", async () => {
+  const el = await table({
+    searchable: true,
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
+    ],
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "  ADA  ";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["Ada"]);
+});
+
+// A row's search text is its columns' text joined by single spaces. A column that supplies none
+// contributes an empty slot, so its neighbours' text ends up two spaces apart — which is what the
+// term below matches, and what an invented placeholder in that slot would break.
+test("a column with no text of its own adds nothing to a row's search text", async () => {
+  const el = await table({
+    searchable: true,
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
+      { key: "note", label: "Note", cell: () => "" },
+      {
+        key: "count",
+        label: "Count",
+        cell: (r: Row) => r.count,
+        searchValue: (r: Row) => String(r.count),
+      },
+    ],
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "ada  10";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["Ada10"]);
+});
+
+test("a column whose sortable value is missing adds nothing to a row's search text", async () => {
+  const el = await table({
+    searchable: true,
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
+      { key: "note", label: "Note", cell: () => "", sortValue: () => null },
+      {
+        key: "count",
+        label: "Count",
+        cell: (r: Row) => r.count,
+        searchValue: (r: Row) => String(r.count),
+      },
+    ],
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "ada  10";
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
   expect(rowText(el)).toEqual(["Ada10"]);
@@ -785,6 +1291,66 @@ test("a chosen filter waits, unapplied, while its column offers no options at al
   expect(statusSelect(el).value).toBe("off");
 });
 
+const twoFilterRows: RowS[] = [
+  { id: "1", name: "Ada", status: "active" },
+  { id: "2", name: "Bea", status: "active" },
+  { id: "3", name: "Ada", status: "off" },
+];
+const twoFilterColumns: DataTableColumn<RowS>[] = [
+  {
+    key: "name",
+    label: "Name",
+    cell: (row) => row.name,
+    filter: {
+      label: "Filter by name",
+      allLabel: "Anyone",
+      value: (row) => row.name,
+      options: [
+        { value: "Ada", label: "Ada" },
+        { value: "Bea", label: "Bea" },
+      ],
+    },
+  },
+  withStatus[1]!,
+];
+
+test("choosing a filter in one column keeps the choice already made in another", async () => {
+  const el = await tableS({ rows: twoFilterRows, columns: twoFilterColumns });
+  const nameFilter = () =>
+    el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="name"]')!;
+  nameFilter().value = "Ada";
+  nameFilter().dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "3"]);
+  statusSelect(el).value = "active";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(nameFilter().value).toBe("Ada");
+});
+
+test("choosing the all option again removes the stored filter choice", async () => {
+  const el = await tableS({ viewKey: "test.cleared", columns: withStatus });
+  statusSelect(el).value = "active";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(storedFilters("test.cleared")).toEqual({ status: "active" });
+  statusSelect(el).value = "";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(storedFilters("test.cleared")).toEqual({});
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+});
+
+// The stored choice here is the FIRST of the two options: a dropdown that marked every option as
+// chosen would still show the last one, and pass a test written around the last option.
+test("a restored filter's dropdown shows the choice even when it is not the last option", async () => {
+  sessionStorage.setItem("test.first", JSON.stringify({ filters: { status: "active" } }));
+  const el = await tableS({ viewKey: "test.first", columns: withStatus });
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(statusSelect(el).value).toBe("active");
+});
+
 test("writes sort changes back to session storage", async () => {
   const el = await table({ viewKey: "test.table2", searchable: true });
   el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
@@ -836,6 +1402,104 @@ test("a throwing setItem does not break the table", async () => {
   expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
 });
 
+test("clearing select-all leaves selected rows that a filter has hidden", async () => {
+  const el = await tableS({ selectable: true, selected: ["1", "2"], columns: withStatus });
+  statusSelect(el).value = "off";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent<{ selected: string[] }>).detail.selected),
+  );
+  const all = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+  expect(all.checked).toBe(true);
+  all.click();
+  expect(seen.at(-1)).toEqual(["1"]);
+});
+
+test("restores the view stored under a new viewKey when the key changes", async () => {
+  sessionStorage.setItem("test.first", JSON.stringify({ filters: { status: "off" } }));
+  sessionStorage.setItem("test.second", JSON.stringify({ filters: { status: "active" } }));
+  const el = await tableS({ viewKey: "test.first", searchable: true, columns: withStatus });
+  expect(rowKeysS(el)).toEqual(["2"]);
+  el.viewKey = "test.second";
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+});
+
+test("reads the stored view once, so a later write does not pull back the person's choice", async () => {
+  const stored = JSON.stringify({ filters: { status: "off" } });
+  sessionStorage.setItem("test.once", stored);
+  const el = await tableS({ viewKey: "test.once", searchable: true, columns: withStatus });
+  expect(rowKeysS(el)).toEqual(["2"]);
+  statusSelect(el).value = "active";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  sessionStorage.setItem("test.once", stored);
+  el.columns = [...withStatus];
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(statusSelect(el).value).toBe("active");
+});
+
+test("ignores a stored sort key naming a column the table cannot sort by", async () => {
+  sessionStorage.setItem(
+    "test.unsortable",
+    JSON.stringify({ sortKey: "action", sortDirection: "descending" }),
+  );
+  const el = await table({ viewKey: "test.unsortable" });
+  expect(el.sortKey).toBeNull();
+  expect(el.sortDirection).toBe("ascending");
+});
+
+test("ignores a stored sort direction that is neither ascending nor descending", async () => {
+  for (const sortDirection of ["sideways", ""]) {
+    sessionStorage.setItem("test.direction", JSON.stringify({ sortKey: "name", sortDirection }));
+    const el = await table({ viewKey: "test.direction" });
+    expect(el.sortDirection).toBe("ascending");
+    expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
+    cleanup();
+  }
+});
+
+test("ignores a stored filters value that is not an object", async () => {
+  sessionStorage.setItem("test.notobject", JSON.stringify({ filters: "off" }));
+  const el = await tableS({
+    viewKey: "test.notobject",
+    searchable: true,
+    columns: [sortableName, withStatus[1]!],
+  });
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(storedFilters("test.notobject")).toEqual({});
+});
+
+test("drops stored filter values that are not text, even with no column to judge them", async () => {
+  sessionStorage.setItem(
+    "test.types",
+    JSON.stringify({ filters: { ghost: 1, phantom: "", status: "off" } }),
+  );
+  const el = await tableS({
+    viewKey: "test.types",
+    searchable: true,
+    columns: [sortableName, withStatus[1]!],
+  });
+  expect(rowKeysS(el)).toEqual(["2"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(storedFilters("test.types")).toEqual({ status: "off" });
+});
+
+test("writes nothing to session storage when no viewKey is set", async () => {
+  const el = await table();
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(sessionStorage.length).toBe(0);
+});
+
 test("no clickable rows and no stretched activator unless rowClick is set", async () => {
   const el = await table();
   expect(el.shadowRoot!.querySelector(".row-activate")).toBeNull();
@@ -854,6 +1518,13 @@ test("activates a row on click when rowClick is set", async () => {
   expect(activate.closest("tr")!.classList.contains("clickable")).toBe(true);
   activate.click();
   expect(clicked).toEqual(["b"]);
+});
+
+test("labels a row's activator 'Open row' when the consumer names none", async () => {
+  const el = await table({ rowClick: (row: Row) => row.id });
+  expect(el.shadowRoot!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
+    "Open row",
+  );
 });
 
 test("an in-cell control's click is not also wired to the row activator", async () => {
@@ -892,4 +1563,29 @@ test("a real pointer click on an in-cell control does not fall through to the ro
   const edit = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!;
   await userEvent.click(edit);
   expect(clicked).toEqual([]); // the click reached Edit, not the activator beneath it
+});
+
+test("a clickable row gets exactly one activator, and it sits in the row's first cell", async () => {
+  const el = await table({ rowClick: (row: Row) => row.id });
+  const firstRow = el.shadowRoot!.querySelector("tbody tr")!;
+  expect(firstRow.querySelectorAll(".row-activate").length).toBe(1);
+  expect(firstRow.querySelector("td")!.querySelector(".row-activate")).not.toBeNull();
+});
+
+test("a plain table tells every cell its row is a match, not an ancestor standing in for one", async () => {
+  const seen: { key: string; context: { ancestorOnly: boolean } }[] = [];
+  const recording = (key: string): DataTableColumn<Row> => ({
+    key,
+    label: key,
+    cell: (row, context) => {
+      seen.push({ key, context });
+      return row.name;
+    },
+  });
+  await table({
+    rowClick: (row: Row) => row.id,
+    columns: [recording("first"), recording("second")],
+  });
+  expect([...new Set(seen.map((entry) => entry.key))].sort()).toEqual(["first", "second"]);
+  for (const entry of seen) expect(entry.context).toEqual({ ancestorOnly: false });
 });

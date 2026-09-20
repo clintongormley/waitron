@@ -1,4 +1,4 @@
-import { expect, test, afterEach } from "vitest";
+import { expect, test, afterEach, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-dialog.js";
 
@@ -191,4 +191,110 @@ test("refuses Escape when dismissible is off", async () => {
   dialog.dispatchEvent(cancel);
   expect(cancel.defaultPrevented).toBe(true);
   expect(el.open).toBe(true);
+});
+
+test("draws a divider above the footer only when there is footer content", async () => {
+  const bare = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
+  bare.open = true;
+  await bare.updateComplete;
+  expect(getComputedStyle(bare.shadowRoot!.querySelector(".footer")!).borderTopWidth).toBe("0px");
+
+  const withFooter = (await mount(
+    '<wt-dialog><button slot="footer">OK</button></wt-dialog>',
+  )) as Openable;
+  withFooter.open = true;
+  await withFooter.updateComplete;
+  expect(getComputedStyle(withFooter.shadowRoot!.querySelector(".footer")!).borderTopWidth).toBe(
+    "1px",
+  );
+});
+
+test("starts drawing the divider when footer content arrives after the dialog is open", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const footer = el.shadowRoot!.querySelector(".footer")!;
+  expect(getComputedStyle(footer).borderTopWidth).toBe("0px");
+
+  const button = document.createElement("button");
+  button.slot = "footer";
+  button.textContent = "OK";
+  el.appendChild(button);
+
+  await vi.waitFor(() => expect(getComputedStyle(footer).borderTopWidth).toBe("1px"));
+});
+
+test("ignores a forwarded footer slot that has nothing in it", async () => {
+  // A wrapping component can hand its own <slot name="footer"> through to wt-dialog. What counts
+  // is the content that reaches the footer, not the slot element carrying it: an empty forwarded
+  // slot must leave the dialog with no bar across its bottom.
+  const wrapper = await mount("<div></div>");
+  const shadow = wrapper.attachShadow({ mode: "open" });
+  shadow.innerHTML = '<wt-dialog><slot name="footer" slot="footer"></slot>body</wt-dialog>';
+  const el = shadow.firstElementChild as Openable;
+  await el.updateComplete;
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".footer")!).borderTopWidth).toBe("0px");
+
+  const filled = await mount("<div></div>");
+  filled.innerHTML = '<button slot="footer">OK</button>';
+  const filledShadow = filled.attachShadow({ mode: "open" });
+  filledShadow.innerHTML = '<wt-dialog><slot name="footer" slot="footer"></slot>body</wt-dialog>';
+  const filledDialog = filledShadow.firstElementChild as Openable;
+  await filledDialog.updateComplete;
+  expect(getComputedStyle(filledDialog.shadowRoot!.querySelector(".footer")!).borderTopWidth).toBe(
+    "1px",
+  );
+});
+
+test("adds an aria-label only when there is a label to add and no heading", async () => {
+  const plain = await mount("<wt-dialog>body</wt-dialog>");
+  expect(plain.shadowRoot!.querySelector("dialog")!.hasAttribute("aria-label")).toBe(false);
+
+  const headed = await mount('<wt-dialog heading="Void sale">body</wt-dialog>');
+  expect(headed.shadowRoot!.querySelector("dialog")!.hasAttribute("aria-label")).toBe(false);
+
+  const both = await mount('<wt-dialog heading="Void sale" aria-label="Log out">body</wt-dialog>');
+  const dialog = both.shadowRoot!.querySelector("dialog")!;
+  expect(dialog.hasAttribute("aria-label")).toBe(false);
+  expect(dialog.getAttribute("aria-labelledby")).toBe(both.shadowRoot!.querySelector("h2")!.id);
+});
+
+test("emits wt-close once when the dialog is closed, not twice", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+
+  const firstClose = new Promise<void>((resolve) => {
+    el.addEventListener("wt-close", () => resolve(), { once: true });
+  });
+  el.shadowRoot!.querySelector("dialog")!.close();
+  await firstClose;
+  await el.updateComplete;
+  // A dialog closed a second time reports it in a later task, so give the queue two turns before
+  // counting.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(closes).toHaveBeenCalledTimes(1);
+  expect(el.open).toBe(false);
+});
+
+test("stays shut when another property changes just after the dialog was closed", async () => {
+  const el = (await mount('<wt-dialog heading="Void sale">body</wt-dialog>')) as Openable & {
+    heading: string;
+  };
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
+
+  // The native close event arrives in a later task, so for a moment the element still believes it
+  // is open. A heading change in that window must not put the dialog back on screen.
+  dialog.close();
+  el.heading = "Void sale (2 items)";
+  await el.updateComplete;
+
+  expect(dialog.open).toBe(false);
+  expect(dialog.matches(":modal")).toBe(false);
 });

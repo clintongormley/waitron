@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { WtModal } from "./wt-modal.js";
@@ -104,4 +104,30 @@ test("Escape closes the modal, emits wt-close and returns focus to its trigger",
   await closed;
   expect(modal.open).toBe(false);
   expect(document.activeElement).toBe(trigger);
+});
+
+test("keeps the body in the tab order, whether or not there is anything to scroll", async () => {
+  // Whether the body overflows depends on the content and on the viewport, so its tab stop must
+  // not: a reader who cannot put focus in the body cannot scroll it from the keyboard. Chromium
+  // makes a text-only scrolling box focusable by itself, so the short modal below is the case that
+  // shows the component doing it.
+  //
+  // `tabIndex` is asserted rather than where focus lands, because neither focus route can tell 0
+  // from -1: `.focus()` works on both, and so does showModal()'s own initial focus, since -1 is
+  // still focusable and the body is the dialog's first focusable descendant. Measured by setting
+  // the component to -1 — all seven tests in this file stayed green until this assertion existed.
+  const short = await openModal();
+  const shortBody = short.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(shortBody.tabIndex).toBe(0);
+  expect(short.shadowRoot!.activeElement).toBe(shortBody);
+  short.open = false;
+  await short.updateComplete;
+
+  const long = await openModal('<div style="height: 1800px">Long notice</div>');
+  const longBody = long.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(longBody.tabIndex).toBe(0);
+  expect(long.shadowRoot!.activeElement).toBe(longBody);
+  await userEvent.keyboard("{PageDown}");
+  // The browser lands the scroll several frames after the key press, not on the next one.
+  await vi.waitFor(() => expect(longBody.scrollTop).toBeGreaterThan(0));
 });

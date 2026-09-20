@@ -70,3 +70,32 @@ test("isHexColor accepts #rrggbb lower case only", () => {
   expect(isHexColor("#fff")).toBe(false);
   expect(isHexColor("")).toBe(false);
 });
+
+test("a nearly black colour gets white text", () => {
+  // Channels this dark take the straight-line arm of the sRGB curve; getting that arm wrong puts
+  // black text on a near-black chip, which is unreadable rather than merely suboptimal.
+  for (const hex of ["#000000", "#050505", "#00040a", "#0a0a0a"]) {
+    expect(readableTextColor(hex)).toBe("#ffffff");
+    expect(contrast(hex, "#ffffff")).toBeGreaterThan(contrast(hex, "#000000"));
+  }
+});
+
+test("picks the better of black and white even where the two contrast almost equally", () => {
+  for (const hex of ["#006dfb", "#007eac"]) {
+    const chosen = readableTextColor(hex);
+    const rejected = chosen === "#000000" ? "#ffffff" : "#000000";
+    expect(contrast(hex, chosen)).toBeGreaterThan(contrast(hex, rejected));
+  }
+});
+
+test("isHexColor rejects a hex colour with anything before or after it", () => {
+  // wt-lozenge interpolates an accepted value straight into an inline style
+  // (src/components/wt-lozenge.ts, the `colored` branch), so a match inside a longer string would
+  // carry whatever else the string holds into that attribute.
+  expect(isHexColor("#dd9e5f;color:red")).toBe(false);
+  expect(isHexColor("#dd9e5fff")).toBe(false);
+  expect(isHexColor("#dd9e5f ")).toBe(false);
+  expect(isHexColor("x#dd9e5f")).toBe(false);
+  expect(isHexColor(" #dd9e5f")).toBe(false);
+  expect(isHexColor("background:#dd9e5f")).toBe(false);
+});

@@ -109,3 +109,106 @@ test("uses theme tokens, touch targets and scrolls within a narrow container", a
   expect(bar.scrollWidth).toBeGreaterThan(bar.clientWidth);
   expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(220);
 });
+
+test("renders nothing until it is given tabs", async () => {
+  const el = (await mountThemed('<wt-tabs label="Venue operations"></wt-tabs>')) as WtTabs;
+  expect(el.shadowRoot!.querySelector('[role="tablist"]')).toBeNull();
+  expect(buttons(el)).toEqual([]);
+  expect(el.shadowRoot!.querySelectorAll('[role="tabpanel"]')).toHaveLength(0);
+});
+
+test("reports no selection of its own until a tab is chosen", async () => {
+  const el = await setup();
+  expect(el.value).toBe("");
+  buttons(el)[1]!.click();
+  await el.updateComplete;
+  expect(el.value).toBe("menus");
+});
+
+test("labels the tab bar with the label it was given, and leaves it unlabelled otherwise", async () => {
+  const labelled = await setup();
+  expect(labelled.shadowRoot!.querySelector('[role="tablist"]')!.getAttribute("aria-label")).toBe(
+    "Venue operations",
+  );
+
+  const unlabelled = (await mountThemed("<wt-tabs></wt-tabs>")) as WtTabs;
+  unlabelled.items = items;
+  await unlabelled.updateComplete;
+  expect(unlabelled.shadowRoot!.querySelector('[role="tablist"]')!.getAttribute("aria-label")).toBe(
+    "",
+  );
+});
+
+test("names each tab and panel id after the component and its position", async () => {
+  const el = await setup();
+  const tabs = buttons(el);
+  // The "-N" instance counter is what keeps two wt-tabs on one page apart, so the prefix before
+  // it has to be there too: an id of "-1-tab-0" would still pair up with its own panel.
+  expect(tabs[0]!.id).toMatch(/^wt-tabs-\d+-tab-0$/);
+  expect(tabs[2]!.id).toMatch(/^wt-tabs-\d+-tab-2$/);
+  const panel = el.shadowRoot!.getElementById(tabs[2]!.getAttribute("aria-controls")!)!;
+  expect(panel.id).toMatch(/^wt-tabs-\d+-panel-2$/);
+});
+
+test("keyboard navigation scrolls the tab bar sideways and leaves the page where it was", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  const above = document.createElement("div");
+  above.style.height = "200px";
+  host.prepend(above);
+  const below = document.createElement("div");
+  below.style.height = "2000px";
+  host.append(below);
+  window.scrollTo(0, 0);
+  try {
+    const bar = el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+    expect(bar.scrollLeft).toBe(0);
+    // Focus the first tab itself: with the bar narrow enough to scroll, el.focus() lands on the
+    // scrolling tablist rather than delegating into a tab.
+    buttons(el)[0]!.focus();
+    const event = new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true });
+    buttons(el)[0]!.dispatchEvent(event);
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(buttons(el)[2]);
+    expect(bar.scrollLeft).toBeGreaterThan(0);
+    expect(window.scrollY).toBe(0);
+  } finally {
+    window.scrollTo(0, 0);
+  }
+});
+
+test("carries each tab's own elements along when the tabs are reordered", async () => {
+  // The elements follow the tab key rather than the position, so whatever a browser attaches to a
+  // node — focus, a scroll offset, a running transition — stays with the tab the reader chose.
+  const el = await setup();
+  const [status, , routes] = buttons(el);
+  const statusPanel = el.shadowRoot!.getElementById(status!.getAttribute("aria-controls")!)!;
+
+  el.items = [items[2]!, items[0]!, items[1]!];
+  await el.updateComplete;
+
+  const reordered = buttons(el);
+  expect(reordered.map((tab) => tab.dataset.key)).toEqual(["routes", "status", "menus"]);
+  expect(reordered[0]).toBe(routes);
+  expect(reordered[1]).toBe(status);
+  expect(el.shadowRoot!.getElementById(reordered[1]!.getAttribute("aria-controls")!)).toBe(
+    statusPanel,
+  );
+});
+
+test("a click from a tab that has since been removed still reports that tab", async () => {
+  // Nothing is selected once the items are gone, so the chosen key is a change like any other —
+  // asking an empty list for its current tab must not be an error.
+  const el = await setup();
+  const menus = buttons(el)[1]!;
+  const listener = vi.fn();
+  el.addEventListener("wt-change", listener);
+
+  el.items = [];
+  await el.updateComplete;
+  menus.click();
+
+  expect(listener).toHaveBeenCalledTimes(1);
+  expect(listener.mock.calls[0]![0].detail).toEqual({ value: "menus" });
+  expect(el.value).toBe("menus");
+});

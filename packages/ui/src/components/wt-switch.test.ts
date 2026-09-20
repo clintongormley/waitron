@@ -149,3 +149,21 @@ test("the input's hit target does not extend beyond the host's bounds", async ()
   expect(inputRect.left).toBeGreaterThanOrEqual(hostRect.left);
   expect(inputRect.right).toBeLessThanOrEqual(hostRect.right);
 });
+
+test("a switch with no label renders no label text and no aria-label attribute", async () => {
+  const el = await mount("<wt-switch></wt-switch>");
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(input.hasAttribute("aria-label")).toBe(false);
+});
+
+test("names the switch for assistive technology with its own label text", async () => {
+  const el = await mount('<wt-switch label="Modo formación"></wt-switch>');
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.getAttribute("aria-label")).toBe("Modo formación");
+});
+
+test("a switch given no name leaves its native input unnamed", async () => {
+  const el = await mount("<wt-switch></wt-switch>");
+  expect(el.shadowRoot!.querySelector("input")!.hasAttribute("name")).toBe(false);
+});

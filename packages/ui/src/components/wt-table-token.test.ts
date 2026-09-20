@@ -75,6 +75,15 @@ test("a delivery-pending table shows no tab total", async () => {
   expect(el.shadowRoot!.querySelector(".total")).toBeNull();
 });
 
+test("shows no running total for a table that is not on an open tab, whatever total it carries", async () => {
+  // A settled table can still arrive carrying its last total; the running total belongs to the open
+  // tab alone, so showing it would tell staff the table still owes money.
+  const free = await mountToken(table({ state: "free", tabTotal: "47.50" }));
+  const delivery = await mountToken(table({ state: "delivery-pending", tabTotal: "47.50" }));
+  expect(free.shadowRoot!.querySelector(".total")).toBeNull();
+  expect(delivery.shadowRoot!.querySelector(".total")).toBeNull();
+});
+
 test("shows the to-serve badge with its count only when something is pending", async () => {
   const pending = await mountToken(table({ pendingToServe: 3 }), { toServe: "por servir" });
   const badge = pending.shadowRoot!.querySelector(".badge.to-serve");
@@ -151,6 +160,20 @@ test("an unplaced (shapeless) token falls back to the rounded-rect shape", async
   expect(bare.shadowRoot!.querySelector(".card")!.classList.contains("shape-rect")).toBe(true);
 });
 
+/** Answers the reduced-motion query with `matches`, delegating every other query (theming, layout)
+ *  to the real `matchMedia`. Returns the undo. */
+function stubReducedMotion(matches: boolean): () => void {
+  const QUERY = "(prefers-reduced-motion: reduce)";
+  const original = window.matchMedia.bind(window);
+  window.matchMedia = ((query: string) =>
+    query === QUERY
+      ? ({ matches, media: QUERY } as MediaQueryList)
+      : original(query)) as typeof window.matchMedia;
+  return () => {
+    window.matchMedia = original;
+  };
+}
+
 // ── KDS order-timing alerts (design §7.3, fix round 1): the flash-red requirement on the MAP/canvas
 // token, mirroring till-floor-screen's LIST card treatment so the escalation reads as one visual
 // language on whichever floor view a manager happens to be looking at. ──────────────────────────────
@@ -225,5 +248,27 @@ describe("order-timing accent (timingBand)", () => {
     expect(marker.getAttribute("role")).toBe("img");
     expect(marker.getAttribute("aria-label")).toBe("Olvidada");
     expect(marker.hasAttribute("aria-hidden")).toBe(false);
+  });
+
+  test("a fresh table carries no timing accent and no marker", async () => {
+    const el = await mountToken(table({ timingBand: "fresh" }));
+    const card = el.shadowRoot!.querySelector(".card")!;
+    expect([...card.classList].some((c) => c.startsWith("age-"))).toBe(false);
+    expect(card.classList.contains("flash")).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
+  });
+
+  test("with nothing injected, the flash follows the browser's own reduced-motion setting", async () => {
+    const flashesWhenMotionReduced = async (reduced: boolean) => {
+      const restore = stubReducedMotion(reduced);
+      try {
+        const el = await mountToken(table({ timingBand: "forgotten" }));
+        return el.shadowRoot!.querySelector(".card")!.classList.contains("flash");
+      } finally {
+        restore();
+      }
+    };
+    expect(await flashesWhenMotionReduced(true)).toBe(false);
+    expect(await flashesWhenMotionReduced(false)).toBe(true);
   });
 });

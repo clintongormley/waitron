@@ -50,3 +50,11 @@ test.each([
   expect(style.backgroundColor).toBe("rgb(1, 2, 3)");
   expect(style.color).toBe("rgb(4, 5, 6)");
 });
+
+test("a badge nobody gave a tone to is the neutral one, and says so on the element", async () => {
+  // The tone reflects to an attribute, which is what both the component's own :host([tone=...])
+  // rules and a screen's selectors match on.
+  const el = (await mount('<wt-count-badge count="2"></wt-count-badge>')) as WtCountBadge;
+  expect(el.tone).toBe("neutral");
+  expect(el.getAttribute("tone")).toBe("neutral");
+});

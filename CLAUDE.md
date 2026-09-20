@@ -108,6 +108,16 @@ Unknown ranges keep the full local gate, including workspace typechecking. See
 browser packages included. Which package holds which bar is pinned by
 `scripts/coverage-thresholds.test.ts`.
 
+**A mutation floor of 90 breaks the run in `ui`, `verifactu`, `shared` and `fiscal`; `db` alone has
+none** (`verifactu` and `shared` since July 2026, `fiscal` and `ui` under the owner's 90-everywhere
+decision of 2026-09-19). WHERE it bites differs, and nothing pins which package holds which:
+`verifactu` and `shared` fail a pull request whose resolved scope contains them (on `main` the scope
+is `global`, so both always run); `ui` fails only the weekly `.github/workflows/mutation.yml` run, so
+thinning a UI test goes green and reddens on Monday; and `fiscal` has no CI job at all, so only a
+local `pnpm --filter @waitron/fiscal mutation` sees it — and its `mutate` list covers two named
+files, not the package. More:
+[ci-and-gates.md](docs/developers/ci-and-gates.md).
+
 Traps, each of which cost a round trip. The mechanism behind every one is in
 [ci-and-gates.md](docs/developers/ci-and-gates.md) — read it before changing anything about CI, the
 hook, or how tests are scheduled:

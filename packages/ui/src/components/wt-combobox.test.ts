@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanup, host, mount } from "../test-helpers.js";
+import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-combobox.js";
 import type { WtCombobox } from "./wt-combobox.js";
 
@@ -372,7 +372,6 @@ test("multi-select shows the single label for one selection and countLabel for m
 });
 
 test("wt-change bubbles and crosses shadow boundaries", async () => {
-  const { mountInShadowRoot } = await import("../test-helpers.js");
   const el = (await mountInShadowRoot(
     '<wt-combobox label="Dietary tags"></wt-combobox>',
   )) as WtCombobox;
@@ -614,4 +613,429 @@ test("reopening after a filtered search fits the full list, not the filtered one
   await userEvent.click(trigger);
   await new Promise(requestAnimationFrame);
   expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+});
+
+test("names each part it points ARIA at with its own generated id", async () => {
+  const { el } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" error="Choose at least one tag"></wt-combobox>',
+  );
+  expect(el.shadowRoot!.querySelector("label")!.id).toMatch(/^wt-combobox-label-\d+$/);
+  expect(el.shadowRoot!.querySelector('[role="listbox"]')!.id).toMatch(/^wt-combobox-listbox-\d+$/);
+  expect(el.shadowRoot!.querySelector("[data-error]")!.id).toMatch(/^wt-combobox-error-\d+$/);
+});
+
+test("labels the search box and the empty list with its default wording", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  expect(search.placeholder).toBe("Search");
+  await userEvent.type(search, "zzz");
+  expect(el.shadowRoot!.querySelector(".empty")!.textContent!.trim()).toBe("No results");
+});
+
+test("counts a multiple selection with its default wording", async () => {
+  const { el } = await mountCombobox('<wt-combobox label="Dietary tags" multiple></wt-combobox>');
+  el.options = TAGS;
+  el.values = ["gluten-free", "vegan"];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("2 selected");
+});
+
+test("shows nothing in the trigger when nothing is selected and no placeholder was given", async () => {
+  const { el } = await mountWithOptions();
+  expect(el.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("");
+});
+
+test("a combobox that has never been opened lists everything and has no active row", async () => {
+  const { el } = await mountWithOptions();
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  expect(search.value).toBe("");
+  expect(search.hasAttribute("aria-activedescendant")).toBe(false);
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(3);
+  expect(el.shadowRoot!.querySelector(".option.active")).toBeNull();
+});
+
+test("ignores the spaces around the typed text when filtering and when offering to add it", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  let added: string | undefined;
+  el.addEventListener("wt-combobox-add", (e) => {
+    added = (e as CustomEvent<{ text: string }>).detail.text;
+  });
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "  veg  ");
+  expect(
+    [...el.shadowRoot!.querySelectorAll('[role="option"]')].map((r) => r.textContent!.trim()),
+  ).toEqual(["Vegan", "Vegetarian", "Add 'veg'"]);
+  await userEvent.click(el.shadowRoot!.querySelector(".add")!);
+  expect(added).toBe("veg");
+});
+
+test("an exact match surrounded by spaces still offers no add row", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "  Vegan  ");
+  expect(el.shadowRoot!.querySelector(".add")).toBeNull();
+});
+
+test("single-select marks only the chosen row as selected", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.value = "vegan";
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  expect([...rows].map((row) => row.getAttribute("aria-selected"))).toEqual([
+    "false",
+    "true",
+    "false",
+  ]);
+});
+
+test("multi-select with nothing chosen shows the placeholder, not a count of zero", async () => {
+  const { el } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple placeholder="Choose tags"></wt-combobox>',
+  );
+  el.options = TAGS;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("Choose tags");
+});
+
+test("a single-select value no longer among the options shows the placeholder", async () => {
+  const { el } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" placeholder="Choose a tag" value="halal"></wt-combobox>',
+  );
+  el.options = TAGS;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("Choose a tag");
+});
+
+test("a multi-select value no longer among the options shows the placeholder", async () => {
+  const { el } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple placeholder="Choose tags"></wt-combobox>',
+  );
+  el.options = TAGS;
+  el.values = ["halal"];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("Choose tags");
+});
+
+test("a combobox with no error text has no error paragraph and describes its trigger with nothing", async () => {
+  const { el, trigger } = await mountCombobox();
+  expect(el.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(trigger.hasAttribute("aria-describedby")).toBe(false);
+});
+
+test("the panel does not say there are no results while it is listing options", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  expect(el.shadowRoot!.querySelector(".empty")).toBeNull();
+});
+
+test("only the row the keyboard is on carries the active outline", async () => {
+  const { el, trigger } = await mountWithOptions();
+  // The class alone is not the promise in this test's name: with the `.active` outline rule
+  // deleted the class assertion below still passes, so the painted outline is asserted too.
+  host.style.setProperty("--wt-focus-ring", "3px solid rgb(1, 2, 3)");
+  await userEvent.click(trigger);
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+  const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(rows.map((row) => row.classList.contains("active"))).toEqual([false, true, false]);
+  expect(rows.map((row) => getComputedStyle(row).outlineStyle)).toEqual(["none", "solid", "none"]);
+  expect(getComputedStyle(rows[1]!).outlineColor).toBe("rgb(1, 2, 3)");
+});
+
+test("the add row takes the active outline only when the keyboard is on it", async () => {
+  const { el, trigger } = await mountWithOptions();
+  host.style.setProperty("--wt-focus-ring", "3px solid rgb(1, 2, 3)");
+  el.allowAdd = true;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "veg");
+  expect(el.shadowRoot!.querySelector(".add")!.classList.contains("active")).toBe(false);
+  await userEvent.keyboard("{End}");
+  const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(rows.map((row) => row.classList.contains("active"))).toEqual([false, false, true]);
+  expect(el.shadowRoot!.querySelector(".add.active")).not.toBeNull();
+  expect(rows.map((row) => getComputedStyle(row).outlineStyle)).toEqual(["none", "none", "solid"]);
+});
+
+/** A throw inside one of the component's async keydown handlers escapes as a promise rejection
+    nothing awaits, so this is the only place a test can see it. */
+function collectEscapedErrors(): { reasons: unknown[]; stop: () => void } {
+  const reasons: unknown[] = [];
+  const onRejection = (event: PromiseRejectionEvent) => {
+    reasons.push(event.reason);
+    event.preventDefault();
+  };
+  window.addEventListener("unhandledrejection", onRejection);
+  return { reasons, stop: () => window.removeEventListener("unhandledrejection", onRejection) };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("the panel keeps its navigation keys and leaves ordinary typing alone", async () => {
+  const { el, trigger } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
+  );
+  el.options = TAGS;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  const seen: [string, boolean][] = [];
+  const record = (event: Event) => {
+    const key = event as KeyboardEvent;
+    seen.push([key.key, key.defaultPrevented]);
+  };
+  // Listening on the search box itself, not on an ancestor: selecting with Enter stops the
+  // keydown propagating, which would hide that key from any listener further up.
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.addEventListener("keydown", record);
+  await userEvent.keyboard("{ArrowDown}{ArrowUp}{Home}{End}{Enter}a");
+  expect(seen).toEqual([
+    ["ArrowDown", true],
+    ["ArrowUp", true],
+    ["Home", true],
+    ["End", true],
+    ["Enter", true],
+    ["a", false],
+  ]);
+});
+
+test("ArrowUp steps back one row rather than jumping to the first", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  await userEvent.keyboard("{End}{ArrowUp}");
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  expect([...rows].map((row) => row.classList.contains("active"))).toEqual([false, true, false]);
+});
+
+test("Enter with no row chosen selects nothing, adds nothing and raises nothing", async () => {
+  const { el, trigger, popup } = await mountWithOptions();
+  const changed = vi.fn();
+  const added = vi.fn();
+  el.addEventListener("wt-change", changed);
+  el.addEventListener("wt-combobox-add", added);
+  const escaped = collectEscapedErrors();
+  try {
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{Enter}");
+    await settle();
+  } finally {
+    escaped.stop();
+  }
+  expect(escaped.reasons).toEqual([]);
+  expect(changed).not.toHaveBeenCalled();
+  expect(added).not.toHaveBeenCalled();
+  expect(el.value).toBe("");
+  expect(popup.matches(":popover-open")).toBe(true);
+});
+
+test("switching adding off stops Enter announcing what was the add row", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  const added = vi.fn();
+  el.addEventListener("wt-combobox-add", added);
+  await userEvent.click(trigger);
+  await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "kosher");
+  el.allowAdd = false;
+  await el.updateComplete;
+  await userEvent.keyboard("{Enter}");
+  await settle();
+  expect(added).not.toHaveBeenCalled();
+});
+
+test("arrowing up after the option list is replaced with a shorter one raises nothing", async () => {
+  const { el, trigger, popup } = await mountWithManyOptions();
+  const escaped = collectEscapedErrors();
+  try {
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{End}");
+    el.options = TAGS;
+    await el.updateComplete;
+    await userEvent.keyboard("{ArrowUp}");
+    await settle();
+  } finally {
+    escaped.stop();
+  }
+  expect(escaped.reasons).toEqual([]);
+  expect(popup.matches(":popover-open")).toBe(true);
+});
+
+test("the click that activates the add row is not left to the page behind the panel", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.allowAdd = true;
+  await el.updateComplete;
+  let added: string | undefined;
+  el.addEventListener("wt-combobox-add", (e) => {
+    added = (e as CustomEvent<{ text: string }>).detail.text;
+  });
+  const pageClicks = vi.fn();
+  document.addEventListener("click", pageClicks);
+  try {
+    await userEvent.click(trigger);
+    await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "kosher");
+    pageClicks.mockClear();
+    await userEvent.click(el.shadowRoot!.querySelector(".add")!);
+  } finally {
+    document.removeEventListener("click", pageClicks);
+  }
+  expect(added).toBe("kosher");
+  expect(pageClicks).not.toHaveBeenCalled();
+});
+
+test("wt-combobox-add bubbles and crosses shadow boundaries", async () => {
+  const el = (await mountInShadowRoot(
+    '<wt-combobox label="Dietary tags" allow-add></wt-combobox>',
+  )) as WtCombobox;
+  el.options = TAGS;
+  await el.updateComplete;
+  let received: CustomEvent<{ text: string }> | undefined;
+  document.addEventListener(
+    "wt-combobox-add",
+    (e) => {
+      received = e as CustomEvent<{ text: string }>;
+    },
+    { once: true },
+  );
+  // Driven programmatically for the same reason as the wt-change test above: this nested shadow
+  // root is outside applyTokens' reach, so the trigger has no box for a real pointer to land on.
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+  await el.updateComplete;
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.value = "kosher";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>(".add")!.click();
+  expect(received?.detail.text).toBe("kosher");
+});
+
+test("choosing an option returns focus to the trigger", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  await userEvent.click(el.shadowRoot!.querySelectorAll('[role="option"]')[1]);
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("a selection made after the panel has closed still hands focus back to the trigger", async () => {
+  const { el, trigger, popup } = await mountWithOptions();
+  await userEvent.click(trigger);
+  await userEvent.keyboard("{ArrowDown}");
+  el.disabled = true;
+  await el.updateComplete;
+  el.disabled = false;
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  expect(el.shadowRoot!.activeElement).toBe(search);
+  // Dispatched at the search box because that is where the closed panel left the shadow root's
+  // focus, asserted directly above.
+  search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await el.updateComplete;
+  expect(el.value).toBe("gluten-free");
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("a panel stays open when the field is disabled and re-enabled before the next render", async () => {
+  const { el, trigger, popup } = await mountWithOptions();
+  await userEvent.click(trigger);
+  el.disabled = true;
+  el.disabled = false;
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(true);
+});
+
+test("a click delivered to a disabled trigger does not open the panel", async () => {
+  const { trigger, popup } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" disabled></wt-combobox>',
+  );
+  // Dispatched, because a browser never delivers a click to a disabled button: what is under test
+  // is the component's own refusal, not the button's disabled attribute.
+  trigger.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("the Escape that closes the panel is consumed and never reaches the page behind it", async () => {
+  const { trigger, popup } = await mountWithOptions();
+  const pageKeys = vi.fn();
+  let panelKey: KeyboardEvent | undefined;
+  popup.addEventListener("keydown", (event) => {
+    panelKey = event as KeyboardEvent;
+  });
+  document.addEventListener("keydown", pageKeys);
+  try {
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{Escape}");
+  } finally {
+    document.removeEventListener("keydown", pageKeys);
+  }
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+  expect(panelKey?.defaultPrevented).toBe(true);
+  expect(pageKeys).not.toHaveBeenCalled();
+});
+
+test("Home scrolls the first option back into view", async () => {
+  const { el, trigger } = await mountWithManyOptions();
+  await userEvent.click(trigger);
+  const list = el.shadowRoot!.querySelector<HTMLElement>(".list")!;
+  await userEvent.keyboard("{End}");
+  await vi.waitFor(() => expect(list.scrollTop).toBeGreaterThan(0));
+  await userEvent.keyboard("{Home}");
+  await vi.waitFor(() => expect(list.scrollTop).toBe(0));
+});
+
+test("moving to an option that is already in view does not jog the list", async () => {
+  const { el, trigger } = await mountWithManyOptions();
+  await userEvent.click(trigger);
+  const list = el.shadowRoot!.querySelector<HTMLElement>(".list")!;
+  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+  await userEvent.keyboard("{Home}{ArrowDown}");
+  await settle();
+  expect(list.scrollTop).toBe(0);
+});
+
+test("the open panel is as wide as its trigger and sits under it when there is room", async () => {
+  const { el, trigger, popup } = await mountCombobox();
+  el.options = [{ value: "a", label: "A" }];
+  el.style.cssText = "position: fixed; left: 120px; top: 40px; width: 240px";
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const box = popup.getBoundingClientRect();
+  expect(box.width).toBeCloseTo(240, 0);
+  expect(box.left).toBeCloseTo(120, 0);
+  expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+});
+
+test("a panel whose trigger overhangs the right edge stops at the viewport's 8px gutter", async () => {
+  const { el, trigger, popup } = await mountCombobox();
+  el.options = [{ value: "a", label: "A" }];
+  // Far enough over the edge to need the clamp, with the trigger's midpoint still on screen
+  // for the click to land on.
+  el.style.cssText = `position: fixed; left: ${innerWidth - 160}px; top: 40px; width: 240px`;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const box = popup.getBoundingClientRect();
+  // The exact margin, plus the width: a panel that merely wrapped narrower at the edge would
+  // satisfy "inside the viewport" without having been moved at all.
+  expect(box.width).toBeCloseTo(240, 0);
+  expect(box.right).toBeCloseTo(innerWidth - 8, 0);
+});
+
+test("a panel whose trigger overhangs the left edge starts at the viewport edge", async () => {
+  const { el, trigger, popup } = await mountCombobox();
+  el.options = [{ value: "a", label: "A" }];
+  el.style.cssText = "position: fixed; left: -60px; top: 40px; width: 240px";
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await new Promise(requestAnimationFrame);
+  const box = popup.getBoundingClientRect();
+  expect(box.width).toBeCloseTo(240, 0);
+  expect(box.left).toBeCloseTo(0, 0);
 });

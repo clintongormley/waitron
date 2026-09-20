@@ -181,3 +181,37 @@ test("focusing the host delegates focus to the inner input", async () => {
   el.focus();
   expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("input"));
 });
+
+test("an input with no attributes set is a plain text field with no label or placeholder", async () => {
+  const el = await mount("<wt-input></wt-input>");
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".label-row")).toBeNull();
+  // The rendered attribute, not input.type: the browser reports "text" for an empty type
+  // attribute as well, so only the attribute tells a default-typed field from an untyped one.
+  expect(input.getAttribute("type")).toBe("text");
+  expect(input.getAttribute("placeholder")).toBe("");
+});
+
+test("an input with no end action hides the end slot and keeps the field ready to hold one", async () => {
+  const el = await mount("<wt-input></wt-input>");
+  const input = el.shadowRoot!.querySelector("input")!;
+  const end = el.shadowRoot!.querySelector<HTMLElement>('slot[name="end"]')!;
+  expect(getComputedStyle(end).display).toBe("none");
+  // The end action is positioned against this wrapper, so it has to stay a positioned ancestor
+  // even while empty.
+  expect(getComputedStyle(input.parentElement!).position).toBe("relative");
+});
+
+test("gives each instance's error text an id of its own, distinct from every other instance's", async () => {
+  const a = await mount('<wt-input error="Enter a valid email address"></wt-input>');
+  const b = await mount('<wt-input error="Enter a valid email address"></wt-input>');
+  const errorA = a.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  const errorB = b.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(errorA.id).not.toBe(errorB.id);
+  // Pins the "wt-input-error-N" shape, not just that the two differ: emptying the prefix still
+  // produces two distinct ids, so only the shape catches it. A bare "-3" is still addressable —
+  // `CSS.escape` and an attribute selector both reach it — what it stops being is readable.
+  expect(errorA.id).toMatch(/^wt-input-error-\d+$/);
+  expect(errorB.id).toMatch(/^wt-input-error-\d+$/);
+});

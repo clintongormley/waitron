@@ -2430,19 +2430,22 @@ turns out to need a design moves to its track.
 **Left behind by the Stryker upgrade (#447, 2026-09-19).** Four things the bump surfaced and
 deliberately did not settle.
 
-- **`packages/ui` and `packages/db` are on Stryker 10 with no whole-package score.** Both runs take
-  hours (db is sharded ten ways in CI for that reason), so the bump measured them two cheaper ways
-  instead: a two-file slice on both versions, and a whole-package mutant count from
-  `stryker run --dryRunOnly`. Those counts went up — ui 1998 → 2112, db 2627 → 2649 — and the review
-  then classified the new ones by running both installed instrumenters over each package's mutate
-  set: every one of them is the new deletion mutant, nothing was removed, and no pre-existing mutant
-  changed. What nobody has measured is what they do to the two scores. Neither package sets a
-  `thresholds.break`, so nothing gates on this today. `.github/workflows/mutation.yml` carries
-  `workflow_dispatch` and can be run against a branch on demand, which gets **ui** measured whole at
-  no local cost. Two caveats: the workflow takes no inputs, so a dispatch also fires the ten
-  `mutation-db` shards; and it yields a Stryker 10 number only, so the 9.6.1 side of the comparison
-  still has to come from an earlier weekly run's artifact. It does not get a db package total at
-  all — that job publishes ten per-shard slice scores and no aggregate, which is the last bullet.
+- **`packages/db` is on Stryker 10 with no whole-package score, and nothing gates on it.** The db
+  run is sharded ten ways in CI because it takes hours, so the Stryker bump measured it two cheaper
+  ways instead: a two-file slice on both versions, and a whole-package mutant count from
+  `stryker run --dryRunOnly`. That count went up, 2627 → 2649, and the review classified the new
+  ones by running both installed instrumenters over the package's mutate set: every one is the new
+  deletion mutant, nothing was removed, and no pre-existing mutant changed. What nobody has measured
+  is what they do to the score, and `packages/db/stryker.config.json` sets no `thresholds.break`.
+  The db job publishes ten per-shard slice scores and no aggregate, so a dispatch does not yield a
+  package total at all — which is the last bullet.
+  `packages/ui` used to sit in this bullet. It came out on 2026-09-20: a whole-package Stryker 10
+  run turned out to take 10 to 16 minutes locally at `--concurrency 8`, not hours, which is what
+  made measuring it cheap. It read 78.62% (1658 of 2109 valid) and was raised to between 96.73% and
+  96.83% — four runs, the spread being mutants that time out — and now
+  carries `"thresholds": { "high": 95, "low": 90, "break": 90 }`. The 9.6.1 side of the ui
+  comparison the bump wanted is still unmeasured and would have to come from an earlier weekly run's
+  artifact.
 - **`packages/verifactu` and `packages/db` mutate their `src/testing/` tree, against the practice the
   sales-spine plan set.** `docs/superpowers/plans/2026-07-20-sales-spine-data-model.md` records the
   reason under `packages/fiscal`: a surviving mutant in a fake proves only that the fake has
@@ -2463,10 +2466,11 @@ deliberately did not settle.
   untouched rather than resolved. The dated note at the top of
   `docs/superpowers/plans/2026-09-18-vitest-5-upgrade.md` says the same thing beside the plan it
   qualifies; this is the backlog's pointer to it.
-- **`.github/workflows/mutation.yml`'s header comments quote counts that have drifted.** It says ui is
-  "cheap today at ~10 source files" and db "bin-packs the 41 source files"; both are far off what
-  `stryker run --dryRunOnly` reports in either package today, and they drifted from the packages
-  growing rather than from the Stryker bump. (Its "~750 database-backed mutants" is a different
+- **`.github/workflows/mutation.yml`'s header comments quote counts that have drifted.** The ui
+  half's file count was dropped on 2026-09-20 and replaced by a dated, sourced timing figure; what is
+  left is db "bin-packs the 41 source files", which is far off what `stryker run --dryRunOnly`
+  reports for `packages/db` today, and it drifted from the package growing rather than from the
+  Stryker bump. (Its "~750 database-backed mutants" is a different
   measurement — taken with `ignoreStatic` applied — so nothing here shows that one is stale.) The
   repo's own rule is to describe the property rather than the number, so the repair is to drop the
   figures, not refresh them. Separately, the same file says a single merged db score is "a deliberate

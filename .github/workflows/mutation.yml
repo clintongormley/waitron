@@ -2,8 +2,11 @@ name: Mutation testing
 
 # Mutation testing runs the full real-Chromium suite once per surviving mutant
 # (tens to low hundreds of extra Vitest invocations even with perTest coverage
-# analysis narrowing which tests run per mutant). That's cheap today at ~10
-# source files, but it does not belong gating merges the way ci.yml's
+# analysis narrowing which tests run per mutant). The last figure for the ui job
+# is 12m32s, on the 2026-09-14 weekly (`gh run view 34808295788`: 05:04:35 →
+# 05:17:07) — which predates both Stryker 10 and the 2026-09-20 tests, so it is
+# indicative rather than current, and the direction either change moved it has not
+# been measured. Either way it does not belong gating merges the way ci.yml's
 # `test:coverage` shards do: it doesn't tell you "did I break something,"
 # it tells you "how good are my tests," which is a slower-moving signal worth
 # reviewing periodically rather than blocking merges on. Scheduled weekly, plus
@@ -57,10 +60,9 @@ jobs:
       # runner-image or Playwright bump ever drops one.
       - run: pnpm --filter @waitron/ui exec playwright install chromium
 
-      # No thresholds.break is configured in stryker.config.json, so this does
-      # not fail the job on a low score — there's no agreed-on floor yet (see
-      # the coverage-mutation report). It publishes the score and the HTML
-      # report for a human to look at.
+      # stryker.config.json sets thresholds.break to 90, so this step FAILS the
+      # job if the score drops below it. The report is still published below
+      # either way, which is what a human reads to find the new survivors.
       - run: pnpm --filter @waitron/ui mutation
 
       - name: Upload mutation report

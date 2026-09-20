@@ -965,7 +965,7 @@ export default defineConfig({
 }
 ```
 
-Two deliberate differences from `packages/verifactu`. `timeoutMS` is raised from Stryker's 5000ms default because every test in this package boots PGlite before it asserts anything, and Stryker would otherwise score a slow boot as a killed mutant — a false positive that inflates the score while proving nothing. And there is **no `thresholds.break`**: this package follows `packages/ui`'s weekly, publish-a-score model, for the reason Step 11 sets out.
+Two deliberate differences from `packages/verifactu`. `timeoutMS` is raised from Stryker's 5000ms default because every test in this package boots PGlite before it asserts anything, and Stryker would otherwise score a slow boot as a killed mutant — a false positive that inflates the score while proving nothing. And there is **no `thresholds.break`**: this package follows `packages/ui`'s weekly, publish-a-score model, for the reason Step 11 sets out. _(Superseded 2026-09-20 for the model it names, not for this package: `packages/ui` now carries `"thresholds": { "high": 95, "low": 90, "break": 90 }` and its weekly job fails below 90. `packages/db` still has no break threshold.)_
 
 - [ ] **Step 3: Create the Drizzle config**
 
@@ -1629,7 +1629,7 @@ The plan-1 handoff records the rule as "pure-Node packages can afford the per-PR
 
 The handoff's rule is a proxy for the real variable, which is not "browser or not" but per-test setup cost. `packages/verifactu` is 305 tests over pure functions with no setup at all, and a full Stryker run takes about 2m45s in CI. Every test in `packages/db` boots a WASM PostgreSQL and applies a schema first — the fresh-database figure from `docs/research/2026-07-20-pglite-throughput.md`. Multiply that figure by the number of test executions a Stryker run performs (mutants × covering tests, even with `coverageAnalysis: "perTest"` narrowing it) and the boot cost alone dominates the run. `packages/db`'s cost profile is `packages/ui`'s, arrived at by a different route: `packages/ui` pays a real Chromium per test, this package pays a real PostgreSQL.
 
-So `packages/db` follows the `packages/ui` model — **weekly, publishes a score, no break threshold** — and `stryker.config.json` in Step 2 accordingly omits `thresholds`. Add to `.github/workflows/mutation.yml`, alongside the existing `mutation` job:
+So `packages/db` follows the `packages/ui` model — **weekly, publishes a score, no break threshold** — and `stryker.config.json` in Step 2 accordingly omits `thresholds`. Add to `.github/workflows/mutation.yml`, alongside the existing `mutation` job: _(Superseded 2026-09-20: `packages/ui` gained `break: 90`; `packages/db` has not, so what db follows is now its own arrangement rather than ui's.)_
 
 ```yaml
   # packages/db. Weekly rather than per-PR for the same reason packages/ui is
