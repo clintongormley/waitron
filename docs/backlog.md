@@ -2447,6 +2447,28 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
+- **A sixth, seen once (2026-09-20) on #469, a branch that touches no browser package at all.**
+  `test-dashboard` failed `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and
+  cancels on Escape from a focused field", at `expect(cancel).toHaveBeenCalledTimes(1)` — the Enter
+  half of the same test passed, so the form was mounted, focused and listening; only the Escape
+  produced nothing (job 106056111513, 1 failed / 2150 passed, failure screenshot retained by the
+  runner). **Established, by running:** the branch cannot be the cause — its only file that
+  `apps/dashboard` can even see is `packages/shared/src/modifier-snapshots.ts`, and that change is a
+  doc comment; `main`'s four most recent runs are green; and the case passed here three times on its
+  own and twice more in two full 142-file `test:coverage` runs of the package, so it did not
+  reproduce locally at all. **NOT established:** the cause. Two hypotheses were traced through the
+  code and NEITHER was run, so neither is a receipt. (1) The test fires `{Enter}` and `{Escape}` back
+  to back with nothing awaited between them, so a re-render provoked by the submit can land in the
+  gap and take focus off the field; `userEvent.keyboard` delivers to whatever is focused, so the key
+  would miss the dialog and no `wt-cancel` would follow. (2) `variant-form.ts` swallows Escape while
+  `busy` (`if (this.busy && event.key === "Escape") event.preventDefault()`, pinned by the sibling
+  test "holds Escape while the save it started is in flight") — but `busy` is a property the PARENT
+  sets and this test never sets it, so this one looks unlikely and is recorded only to save the next
+  reader the trace. **Next action:** on the next sighting keep the job log and the screenshot, and
+  fix it at the root — the first hypothesis is cheap to close by awaiting the component's
+  `updateComplete` between the two key presses and checking focus is still in the field. Not done
+  here: it was not reproducible, so a change would have been an unproven claim of repair, which is
+  the one thing a re-run can never establish.
 - **A fifth, with a real hypothesis this time: `test-dashboard`'s browser a11y suite fails on a stray
   `:hover` state left over from a prior test in the same shared browser page.** Seen three times the
   same day (2026-09-13), on two unrelated PRs, in code neither branch touched: `products-editor`'s CI
