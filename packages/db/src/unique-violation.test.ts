@@ -5,6 +5,16 @@ import {
   uniqueViolationConstraint,
 } from "./unique-violation.js";
 
+/**
+ * `wrappers` Error links wrapping `tail`, so `tail` sits at index `wrappers` of the cause chain —
+ * the shape Drizzle and the driver build between them, made as deep as a test needs.
+ */
+function wrapped(wrappers: number, tail: unknown): unknown {
+  let current = tail;
+  for (let i = 0; i < wrappers; i++) current = new Error(`wrapper ${i}`, { cause: current });
+  return current;
+}
+
 // Mirrors packages/fiscal-verifactu/src/chain.test.ts's identical suite for its own,
 // independently-written copy of this exact check — see ./unique-violation.ts's own doc comment
 // for why the two are not (yet) consolidated into one.
@@ -32,6 +42,24 @@ describe("isUniqueViolation", () => {
     const looped: Error & { cause?: unknown } = new Error("loop");
     looped.cause = looped;
     expect(isUniqueViolation(looped)).toBe(false);
+  });
+
+  it("reads five links of the chain and stops", () => {
+    // The walk is bounded so a cause chain that loops cannot spin forever, and five is the bound.
+    // Both directions matter: a bound that stopped one link early would miss a real violation, and
+    // one that never stopped would not be a bound at all.
+    const violation = { code: "23505" };
+    expect(isUniqueViolation(wrapped(4, violation))).toBe(true);
+    expect(isUniqueViolation(wrapped(5, violation))).toBe(false);
+  });
+
+  it("does not read a link that is not an object as an error layer", () => {
+    // The walk asks `typeof current === "object"` before touching the link, and a function is the
+    // only non-object that can carry a `code` property at all — so it is the one value that shows
+    // that question doing something. Drop the question and this chain reports a violation that no
+    // driver ever raised.
+    const notAnError = Object.assign(() => {}, { code: "23505" });
+    expect(isUniqueViolation(new Error("outer", { cause: notAnError }))).toBe(false);
   });
 
   it("returns false for a non-object value", () => {
@@ -77,6 +105,28 @@ describe("pgErrorConstraint", () => {
         "23503",
       ),
     ).toBe(undefined);
+  });
+
+  it("reads five links of the chain and stops", () => {
+    // The same bound as isPgError's, asserted here too because the two walks are written out
+    // separately and nothing but a test keeps their bounds equal.
+    const violation = { code: "23503", constraint: "deep_fk" };
+    expect(pgErrorConstraint(wrapped(4, violation), "23503")).toBe("deep_fk");
+    expect(pgErrorConstraint(wrapped(5, violation), "23503")).toBe(undefined);
+  });
+
+  it("refuses a constraint name the driver did not report as text", () => {
+    // The driver reports a string or nothing, and the undefined case is above. This is the other
+    // half: whatever else arrives on `.constraint`, a caller is told "unknown" rather than handed a
+    // value that is not a name while the return type says it is one.
+    const odd = Object.assign(new Error("fk"), { code: "23503", constraint: 42 });
+    expect(pgErrorConstraint(odd, "23503")).toBe(undefined);
+  });
+
+  it("does not read a link that is not an object as an error layer", () => {
+    // The same question as isPgError's, on the other walk, with the same representative.
+    const notAnError = Object.assign(() => {}, { code: "23503", constraint: "invented_fk" });
+    expect(pgErrorConstraint(new Error("outer", { cause: notAnError }), "23503")).toBe(undefined);
   });
 
   it("returns undefined for a non-object value and terminates on a self-referential chain", () => {
