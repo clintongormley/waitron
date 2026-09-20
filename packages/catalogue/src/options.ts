@@ -34,13 +34,12 @@ const labelColumns = {
   available: optionLabels.available,
 };
 
-export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
-  const lists = await tx
-    .select(listColumns)
-    .from(optionLists)
-    .orderBy(optionLists.sort, optionLists.id);
+/** One query for every list's labels, never one per list, whatever the number of lists. */
+async function withLabels(
+  tx: Transaction,
+  lists: Omit<OptionList, "labels">[],
+): Promise<OptionList[]> {
   if (lists.length === 0) return [];
-  // One query for every list's labels, never one per list.
   const rows = await tx
     .select({ listId: optionLabels.listId, ...labelColumns })
     .from(optionLabels)
@@ -59,6 +58,38 @@ export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
     grouped.set(listId, held);
   }
   return lists.map((list) => ({ ...list, labels: grouped.get(list.id) ?? [] }));
+}
+
+export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
+  const lists = await tx
+    .select(listColumns)
+    .from(optionLists)
+    .orderBy(optionLists.sort, optionLists.id);
+  return withLabels(tx, lists);
+}
+
+/**
+ * The named lists, in the order {@link listOptionLists} returns them, each with its labels. Two
+ * queries whatever the number of ids, and none at all for an empty one. An id naming no list is
+ * simply absent from the answer.
+ *
+ * The order path wants exactly the lists one dish attaches rather than the whole catalogue's: it has
+ * to freeze a chosen label's three names onto the order line, and what it holds is the option-list
+ * ids from `readProductModifiers` (product-modifiers.ts). Reading every list instead would be a
+ * third query whose cost grows with the catalogue rather than with the dish. This is the options
+ * twin of `readExtraListsByIds` (extras.ts).
+ */
+export async function readOptionListsByIds(
+  tx: Transaction,
+  optionListIds: string[],
+): Promise<OptionList[]> {
+  if (optionListIds.length === 0) return [];
+  const lists = await tx
+    .select(listColumns)
+    .from(optionLists)
+    .where(inArray(optionLists.id, optionListIds))
+    .orderBy(optionLists.sort, optionLists.id);
+  return withLabels(tx, lists);
 }
 
 export async function getOptionList(tx: Transaction, optionListId: string): Promise<OptionList> {
