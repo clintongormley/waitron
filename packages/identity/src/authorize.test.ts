@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { authorize } from "./authorize.js";
@@ -13,7 +13,7 @@ import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
 // Nothing here depends on the privilege set (a PGlite connection is superuser holding every grant,
 // so a grant assertion would be a false pass, CLAUDE.md §4).
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });

@@ -528,6 +528,29 @@ git commit -s -m "feat(identity): FORCE RLS + tenant isolation for management_se
 
 - [ ] **Step 2: Write the failing test** — `packages/identity/src/management-session.test.ts` (PGlite; PGlite is superuser so RLS is a no-op here — this suite tests *logic*, RLS is proven in Task 6):
 
+> **2026-09-20 — the two sketches in this document name a helper the package does not call now,
+> and this pointer covers both of them.** The one below, for
+> `packages/identity/src/management-session.test.ts`, and the one under Task 8's Step 1, for
+> `packages/identity/src/manager-login.test.ts`, each print
+> `import { usePgliteDb } from "@waitron/db/testing/lifecycle.js"` and a `const suite = usePgliteDb({`
+> call. Both files now import `useVenueDb` from `@waitron/db/testing/venue-db.js` and call that
+> instead; no identity suite calls the old helper any more
+> (`grep -rnE "usePgliteDb[(]" --include="*.ts" packages/identity` exits 1 on the change that added
+> this pointer). The target is the same PGlite database with the same migration list, and the new
+> helper takes the same options, because its whole body forwards to `usePgliteDb`
+> (`packages/db/src/testing/venue-db.ts`; plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The "PGlite is superuser so
+> RLS is a no-op here" reasoning is untouched too.
+>
+> **What this pointer does NOT say is that the rest of either sketch matches its file.** Both had
+> already drifted before this branch, which changed only the helper's name: each sketch passes
+> `setup: async (db) => { tenantId = await seedTenant(db); }` and no `resetPerTest`, where both real
+> files pass `resetPerTest: false` and no `setup` at all, and each sketch's `run` helper is
+> `withTenant(suite.db, tenantId, fn)` where both files use `withTransaction(suite.db, fn)` — the
+> tenant column having been dropped on 2026-09-14. Those differences were noticed while writing
+> this pointer; the sketches were not audited for any others, and nothing else in this document
+> was re-checked.
+
 ```ts
 import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -691,6 +714,10 @@ git commit -s -m "feat(identity): management session lifecycle (idle timeout + s
   - `loginManager(tx, input: { tenantId: string; personId: string; password: string; totp?: string }): Promise<ManagementSession>` — the verifier seam: password required; TOTP required **iff** enrolled; passkey plugs in here later. Throws `person.not_found`, `person.suspended`, `password.invalid`, `totp.invalid`.
 
 - [ ] **Step 1: Write the failing test** — `packages/identity/src/manager-login.test.ts`:
+
+> **2026-09-20 — this sketch is one of the two the pointer under Task 7's Step 2 covers.** It
+> names `usePgliteDb`; the file calls `useVenueDb`. Read that pointer for what changed and for what
+> it deliberately does not claim about the rest of the sketch.
 
 ```ts
 import { CORE_MIGRATIONS, withTenant } from "@waitron/db";

@@ -1,6 +1,6 @@
 import { captureError, CORE_MIGRATIONS, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -81,7 +81,7 @@ function authVerified(
   };
 }
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
@@ -126,7 +126,7 @@ beforeEach(() => {
   mockVerifyAuth.mockReset();
 });
 
-// One PGlite database is shared across the suite (usePgliteDb registers beforeAll, not beforeEach),
+// One PGlite database is shared across the suite (useVenueDb registers beforeAll, not beforeEach),
 // so clear the passkey rows between tests to keep them order-independent (CLAUDE.md §4). The credential
 // id the mock returns is fixed, and `credential_id` is unique — without this a second test
 // registering the same id would hit the unique constraint rather than exercise its own path.
