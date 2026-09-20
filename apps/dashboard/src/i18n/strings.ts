@@ -148,6 +148,14 @@ export const en = {
   // Option lists (reusable label lists), the Options tab and its form. The three names are
   // deliberately different things: `name` is what staff see, `customer_name` is what the diner is
   // shown, `kitchen_name` is what the ticket prints (CLAUDE.md §3).
+  "options.title": "Options",
+  "options.add": "Add options list",
+  "options.search": "Search options lists",
+  "options.no_matches": "No options lists match your search.",
+  "options.empty": "No options lists to show.",
+  "options.status": "Status",
+  "options.not_in_use": "Not in use",
+  "options.filter_status_all": "Any status",
   "options.create": "Create options list",
   "options.edit": "Edit options list",
   "options.name": "Name",
@@ -170,6 +178,14 @@ export const en = {
   // The three names mean the same three things as in the options block above. A blank price is not
   // a price of zero: it means the item charges the product's own, which the form shows as the
   // field's hint (2026-09-18-one-product-model-design.md §9.1).
+  "extras.title": "Extras",
+  "extras.add": "Add extras list",
+  "extras.search": "Search extras lists",
+  "extras.no_matches": "No extras lists match your search.",
+  "extras.empty": "No extras lists to show.",
+  "extras.status": "Status",
+  "extras.not_in_use": "Not in use",
+  "extras.filter_status_all": "Any status",
   "extras.create": "Create extras list",
   "extras.edit": "Edit extras list",
   "extras.name": "Name",
@@ -1497,6 +1513,14 @@ export const es: Record<StringKey, string> = {
   "modifiers.affected_products": "Productos afectados",
   "modifiers.affected_menus": "Elementos de menú afectados",
   // Ver el bloque en `en` para qué significa cada uno de los tres nombres.
+  "options.title": "Opciones",
+  "options.add": "Añadir lista de opciones",
+  "options.search": "Buscar listas de opciones",
+  "options.no_matches": "Ninguna lista de opciones coincide con tu búsqueda.",
+  "options.empty": "No hay listas de opciones que mostrar.",
+  "options.status": "Estado",
+  "options.not_in_use": "Sin uso",
+  "options.filter_status_all": "Cualquier estado",
   "options.create": "Crear lista de opciones",
   "options.edit": "Editar lista de opciones",
   "options.name": "Nombre",
@@ -1516,6 +1540,14 @@ export const es: Record<StringKey, string> = {
   "options.labels_required": "Añade o habilita una etiqueta, o retira esta lista del uso.",
 
   // Ver el bloque en `en` para qué significa cada uno de los tres nombres y el precio en blanco.
+  "extras.title": "Extras",
+  "extras.add": "Añadir lista de extras",
+  "extras.search": "Buscar listas de extras",
+  "extras.no_matches": "Ninguna lista de extras coincide con tu búsqueda.",
+  "extras.empty": "No hay listas de extras que mostrar.",
+  "extras.status": "Estado",
+  "extras.not_in_use": "Sin uso",
+  "extras.filter_status_all": "Cualquier estado",
   "extras.create": "Crear lista de extras",
   "extras.edit": "Editar lista de extras",
   "extras.name": "Nombre",
