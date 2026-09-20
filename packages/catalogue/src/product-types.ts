@@ -76,10 +76,9 @@ export interface Product {
   /** The ordered extras and options lists attached to this product. */
   modifiers: ProductModifierRef[];
   /** The OLD flat attachment list, read from `product_option_groups`. Nothing writes it any more —
-   * the product body carries `modifiers` — and now nothing READS it either: `grep -rn --include='*.ts'
-   * '\.modifierIds' apps packages` matches nothing, tests included, and the only remaining mentions
-   * are `operations.ts` filling it in and string literals naming the rejected legacy BODY key. It is
-   * still populated, and goes with the old tables in Task 13 of
+   * the product body carries the ordered `modifiers` list — and no consumer reads the property off
+   * a `Product`: `operations.ts` fills it in on the way out and it is dropped on the floor. It goes
+   * with the old tables in Task 13 of
    * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. */
   modifierIds: string[];
   catalogueId: string;

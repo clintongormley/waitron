@@ -2,9 +2,10 @@
  * The extras-list and options-list wire shapes — the JSON the two
  * `/management-api/modifiers/{options,extras}` surfaces hand across the HTTP boundary, so the
  * dashboard (and any browser client) can import ONE authoritative copy instead of re-declaring them
- * by hand. This is a LEAF: type definitions only, no running code, and it imports nothing at all —
- * every shape below is built from primitives. The guard is
- * `scripts/dashboard-browser-purity.test.ts`, which reads the file as TEXT.
+ * by hand. This is a LEAF: type definitions only, no running code. The guard is
+ * `scripts/dashboard-browser-purity.test.ts`, which reads the file as TEXT and enforces TYPE-ONLY —
+ * an `import type` line would pass it. That the file imports nothing AT ALL is a separate and
+ * unguarded fact, true today because every shape below is built from primitives.
  *
  * The file exists because the operational homes are not browser-safe: `option-contract.ts` and
  * `extra-contract.ts` import `AppError` and `decimal` from `@waitron/shared` and the `errors.ts`

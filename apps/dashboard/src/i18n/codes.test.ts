@@ -206,7 +206,7 @@ it("has a sentence for each options/extras list code the dashboard can be answer
   // `options.translation_required` / `extras.translation_required`, and the two not-founds. The
   // order-time codes on the same STATUS map — `options.label_required` and `extras.limit_exceeded` —
   // are NOT here: their only throwers are `validateOptionSelections` / `validateExtraSelections`
-  // (packages/catalogue/src/option-contract.ts:190, extra-contract.ts:309 and :315), reached from the
+  // (packages/catalogue/src/option-contract.ts:172, extra-contract.ts:285 and :291), reached from the
   // till's order path, never from a management route. Each language is compared against ITS OWN
   // generic. Proven by deletion: drop any of these from CODE_MESSAGES and both calls return that
   // language's generic → red.

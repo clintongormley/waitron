@@ -1,7 +1,9 @@
 import { expect, test, afterEach } from "vitest";
 import { commands } from "vitest/browser";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
-import { applyTokens } from "../index.js";
+// The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same
+// way, and its header asks these suites to stay free of anything beyond raw DOM and `applyTokens`.
+import { applyTokens } from "./index.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {

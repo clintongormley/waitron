@@ -44,6 +44,16 @@ Light and dark ship by default. Selection order:
 1. `prefers-color-scheme` — the default, read from the OS/browser.
 2. `data-theme="light" | "dark"` on the theme root — always wins, in both directions.
 
+**The token layer sets more than `--wt-*` custom properties: each of its three blocks also sets the
+CSS `color-scheme` property**, to `light` or `dark` to match. That is what makes controls the app
+does not paint itself — native radios, checkboxes and scrollbars — drawn in the right theme, because
+the browser draws those from `color-scheme` and never from `data-theme`. Without it the dark theme
+got the light drawing, and an unchecked radio came out as a solid white dot heavier than the checked
+one's ring. `color-scheme` is an inherited property, so the base block's `color-scheme: light` also
+stops a theme root nested inside a dark one from being drawn dark while its colour tokens resolve
+light. Both are pinned in `packages/ui/src/tokens/colors.test.ts`; nothing nests a theme root today,
+so the second is a constructed case rather than an observed one.
+
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
 `prefers-color-scheme` in both directions, but purely by **source order** (the `data-theme` rules
@@ -128,12 +138,28 @@ buttons" under "Page composition" below for the pattern this exists for.
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
 through a token.
 
-`--wt-cell-name-max-width` caps the NAME cell of a table a form owns — the modifier form's choices
-and the product editor's variants. The name is the one cell whose text can be long, so capping it
-makes the text wrap and keeps the controls after it (a switch, a row menu) on screen at phone width
-instead of pushing the row into a sideways scroll. Both of those tables spelled the same literal
-`140px` out for themselves until this token existed; the no-hardcoded-chrome guard would not have
-caught either, because it scans `packages/ui` and neither table lives there.
+`--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
+is used in **three different directions**, which its name does not say. Grep for the token before
+quoting a list of its consumers — the list here has gone stale once already.
+
+As a **cap** (`max-width`) it is in the modifier form's choices table, the variants table, and the
+product editor's attached-lists table. The name is the one cell whose text can be long, so capping
+it makes the text wrap and keeps the controls after it (a switch, a row menu) on screen at phone
+width instead of pushing the row into a sideways scroll. The first two of those tables spelled the
+same literal `140px` out for themselves until this token existed; the no-hardcoded-chrome guard
+would not have caught either, because it scans `packages/ui` and neither table lives there.
+
+As a **flex basis** it sizes the extras list form's product picker, which is a combobox rather
+than a table cell and sizes its open panel to its trigger.
+
+As a **floor** (`min-width`) it is in the options list form's two single-input cells and in the
+extras list form's price cell. An input
+alone in a cell has no width of its own, so the automatic table layout shrinks it to `wt-input`'s
+tap-target minimum and cuts the value off mid-word; the same value gives it room. That table then
+does scroll sideways, which is exactly what the cap exists to avoid — it carries its own focusable
+horizontal scroller so the dialog does not scroll instead. **So the two uses disagree about the
+sideways scroll.** Whether the floor deserves a token of its own is an open design question, not a
+settled convention; it is recorded in `docs/backlog.md` under what Task 11 left open.
 
 ### `--wt-tap-min`
 
@@ -495,7 +521,8 @@ A form that shows everything an entity can carry becomes one long stack of cards
 somebody actually changes most days get lost in it. Fold the optional detail away instead: keep the
 frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is the pattern's first home —
-Name, Categories, Available and Price stay on screen; Kitchen, Descriptors and Nutritional info fold.
+Name, Categories, Available, Price and Modifiers stay on screen; Kitchen, Descriptors and
+Nutritional info fold.
 
 Three rules make the fold safe rather than merely tidy.
 
@@ -1074,7 +1101,9 @@ needs the icon that means "more options here," not "open navigation" (see "Icons
 label that identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table
 heading, and Edit, Delete or domain-specific actions in each row's menu. A screen may instead
 offer Create as a round icon-only `wt-button` (`shape="round"` with the `plus` icon and an
-`aria-label`) beside the heading; the Modifiers screen does, by design choice. The menu uses a native
+`aria-label`) beside the heading — but **no screen does today**, so read this as a permission rather
+than a pattern with a home. The dashboard's one `shape="round"` button is not a screen's Create at
+all: it is the product editor's category picker. The menu uses a native
 popover: clicking outside or pressing Escape closes it. Its action buttons follow normal Tab
 navigation. Give every `wt-button` slotted into a `wt-row-actions` popover `align="start"` — a
 centred label reads oddly once the button has been stretched to the popover's full width, the way a

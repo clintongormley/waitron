@@ -16,6 +16,16 @@ Use the reusable definition for configuration and explicit selections for each o
 
 ## Authoring
 
+> **2026-09-20:** this section is about the OLD option-group surface only, and it is no longer the
+> one the dashboard authors against. The dashboard's Modifiers page now writes two other surfaces,
+> `/management-api/modifiers/options` and `/management-api/modifiers/extras`, six routes each
+> (collection GET and POST, item GET, PATCH and DELETE, and `GET …/:id/dependants`), mounted by the
+> shared `mountListSurface` in `apps/server/src/catalogue-api.ts`. Their wire shapes —
+> `OptionList`, `OptionListInput`, `ExtraList`, `ExtraListInput` — are declared in
+> `packages/catalogue/src/modifier-list-types.ts`. Documenting them properly, and deleting what is
+> below, is Task 13 of
+> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+
 `GET /management-api/modifiers` returns `{ modifiers: Modifier[] }`.
 `POST /management-api/modifiers`, `GET /management-api/modifiers/:id` and
 `PATCH /management-api/modifiers/:id` return `{ modifier: Modifier }`. POST returns 201; PATCH takes
@@ -74,15 +84,21 @@ The old group cap maps into `maxTotalQuantity`.
 
 `dashboard-modifier-form` in `apps/dashboard/src/widgets/modifier-form.ts` accepts `open`, `busy`,
 `locales: string[]`, `value: Modifier | null` and `fieldErrors: Record<string, string>`. It emits
-`wt-submit` with `{ value: ModifierInput }` and `wt-cancel` with `{}`. The screen owns the API call
-and closes the editor after a successful write. A choice-level validation error — the form's own
+`wt-submit` with `{ value: ModifierInput }` and `wt-cancel` with `{}`. Since 2026-09-20 the ONE
+screen that composes it is the Products screen (`apps/dashboard/src/screens/catalogue-screen.ts`),
+which renders it as a nested create-or-edit form and owns the API call
+(`#submitModifier`); nothing on the interface opens it any more, and Task 13 of
+`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes it. The Modifiers screen
+composes `dashboard-option-list-form` and `dashboard-extra-list-form` instead. The composing screen
+closes the editor after a successful write. A choice-level validation error — the form's own
 check, or a `choices.<index>.<field>` rejection from the server — is shown as one message under the
 choices table naming the choice by its current label, so a rejection never lands on a field the
 manager cannot see. Every error is also listed in the form's `wt-form-error-summary`, including a
 server refusal that names no field (such as `modifier.in_use`) or a field the form does not draw
 an input for (such as `defaultChoiceId`, or a name in a language the form does not show), which
-appears only there. The
-screen's reads use the existing option-group, item and content-language live sources.
+appears only there. The Products screen feeds it from two of its own live watches, `listModifiers`
+(whose dependencies are `option_groups` and `option_group_items`) and `getContentLanguages`
+(`apps/dashboard/src/api/live-queries.ts`).
 
 One choice is edited in `dashboard-choice-form` (`apps/dashboard/src/widgets/choice-form.ts`), a
 modal inside the modifier form. It accepts `open`, `busy`, `locales`, `kind: "extras" | "options"`,

@@ -512,9 +512,8 @@ replaced by that ordered `modifiers` list, with a body still sending either old 
 name; six management routes for extras lists under `/management-api/modifiers/extras`, mounted by
 the same `mountListSurface` helper the options block now uses; `readProductExtras`, which reads
 what a product itself carries with no menu offer in the question; and `setMenuItemExtraLists`
-refusing to publish a list the dish's product does not carry. What is still missing is the SCREEN:
-the product editor's attachment section was removed rather than rebuilt, and no dashboard screen
-shows either kind of list — that is the plan's Task 11.
+refusing to publish a list the dish's product does not carry. The screens it left missing are the
+plan's Task 11, which has since landed (below).
 
 The plan's Task 7 has landed too (#462), so the ORDER path is now the new one. An extras pick
 becomes its own child order line carrying the PICKED product on `working_order_lines.product_id`,
@@ -532,8 +531,8 @@ still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy 
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
 for a child line by a NULL product, no longer recognise one. Task 12 wires the till. Task 10 has
-since taken doneness out end to end and seeded a cooking options list in its place; the next task
-is Task 11, the dashboard's Extras and Options tabs.
+since taken doneness out end to end and seeded a cooking options list in its place, and Task 11 has
+built the dashboard's Extras and Options tabs (below), so the next task is Task 12.
 
 Task 10 has landed as **#471** (main `bc958bd3b`). It deleted the built-in `doneness` field end to
 end — the enum, its column on the open order line and on the fired ticket item, the
@@ -710,6 +709,70 @@ What that task carries with it:
   real filed line is keyed, and the negative control was run when the fix landed (`d527cd819`):
   with that fixture and the old exact-key code, the English-receipt case fails with the Spanish
   answer on the paper.
+
+Task 11 has landed, which is the dashboard side. `/manage/modifiers` is now one screen with two
+tabs, **Extras** and **Options**, each the Categories-pattern table for its kind: a header Add
+button, a searchable and filterable table whose sort is remembered under its own session-storage
+key, a read-only detail modal with Edit and Close showing the products and menu offers carrying the
+list, and a delete flow that previews what the cascade would take. Two new widgets author the
+lists, `dashboard-extra-list-form` and `dashboard-option-list-form`. **Neither delete is blocked
+and neither previews an order count**: `extraListDependants` and `optionListDependants` return
+products and menus and nothing else, and `options.in_use` / `extras.in_use` are still declared and
+mapped to 409 with no thrower anywhere. The product editor gained an always-visible **Modifiers**
+section over one ordered list mixing both kinds, added to from a single combobox that also offers
+**New extras list…** and **New options list…**; the products list gained a sold-alone column and
+filter and reads the new ordered `modifiers` attachment instead of the flat `modifierIds`. The wire
+shapes moved into a browser-safe leaf, `packages/catalogue/src/modifier-list-types.ts`, so the
+dashboard imports one authoritative copy. The token layer also learnt to set `color-scheme`
+(`packages/ui/src/tokens/colors.css`): native radios, checkboxes and scrollbars are drawn by the
+browser, which reads that property and never `data-theme`, so the dark theme had been getting the
+light drawing.
+
+What Task 11 left open:
+
+- **`--wt-cell-name-max-width` is now used in three different directions, and the token is named
+  for only one of them.** Some consumers CAP a name cell with it; others use it as a `min-width`
+  FLOOR so a cell holding one input does not shrink to the tap-target minimum and cut its value off
+  mid-word; and one uses it as a FLEX BASIS on a combobox, which is not a table cell at all. The
+  floor's tables then carry their own horizontal scroller, which is the thing the cap exists to
+  avoid. Both descriptions say so (`packages/ui/src/tokens/structure.css`,
+  `docs/developers/design-system.md`); neither lists the consumers, because that list went stale
+  twice inside Task 11's own review — grep for the token instead. **Next action (design decision):**
+  decide whether a second token for the floor is right, or whether one shared sizing value used
+  three ways is the honest design.
+
+- **A refused nested create is silent on three of the catalogue screen's five child forms.** Task 11
+  wired `fieldErrors` from the create controller into the two list forms, after a review seat
+  reproduced a refused nested create sitting in an open modal that said nothing. The same gap is
+  still open on the other three: `unit-form.ts`, `category-form.ts` and `modifier-form.ts` each
+  declare a `fieldErrors` property and `apps/dashboard/src/screens/catalogue-screen.ts` passes it to
+  none of them. Verified pre-existing rather than assumed —
+  `git diff 2b354d5638ebb81f87e8421a25db83f14556440e -- apps/dashboard/src/screens/catalogue-screen.ts`
+  has no added or removed line mentioning any of the three. **Next action:** wire the same
+  `#childFieldErrors()` into all three, one line each, and check each form's own field mapping
+  rather than assuming the paths match.
+- **Dismissing a nested form fires TWO cancels, and only two of five forms guard it.** The form
+  emits its own `wt-cancel`, then the native `<dialog>`'s `close` arrives a task later,
+  `wt-dialog.ts` turns it into `wt-close` and the form cancels again. If a second form has opened in
+  between, the late cancel closes THAT one — measured on Task 11's branch as a test that failed
+  about two runs in eight, traced rather than re-run to green. Task 11 guarded the extras and
+  options forms with a kind check; the unit, category and modifier handlers still call
+  `#child.cancel()` unguarded. **Next action:** the same guard on the other three.
+- **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
+  screens now carry the same `event.target !== event.currentTarget` guard against it**
+  (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and
+  the Modifiers screen Task 11 rebuilt). CLAUDE.md §3 says a custom event stops the triggering event
+  before re-emitting; `wt-tabs` does not. **Next action:** give the strip its own event name, or
+  have it stop the inner event, and retire the guard in all five. Raised when the copy count reached
+  five, which is what makes it worth the root fix.
+- **The two list forms still share about a hundred lines of chrome.** Task 11 lifted what moved
+  cleanly — `translations()`, the placeholder-carrying translated-name fields, the visually-hidden
+  rule and the table chrome all live in `form-fields.ts` and `reorder-table.ts` now. What is still
+  written twice is the per-form plumbing: `#primaryLanguage`, `#mapFieldErrors`, `#edit`, `#emit`,
+  `#cancel`, the `willUpdate` reseed guard, the Escape-while-busy handler, the error summary and the
+  footer, each identical modulo the `t()` key prefix. **Next action:** decide whether a shared base
+  or a controller is the right vehicle before a third list form is written; the row editors
+  genuinely differ and should NOT be merged.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -930,15 +993,17 @@ What the order path (the plan's Task 7) left behind:
   consumer cannot reach into `apps/server`, so the rule is in line to be written a third time.
   MOVE the pair into `packages/catalogue` when Task 12 needs them rather than copying them; Task 9
   left them where they are because the server's two printers were the only callers.
-- **A dead dashboard surface is left behind by `modifierDependants(...).orders` always being 0.**
-  Three consumers survive in `apps/dashboard/src/screens/modifiers-screen.ts`: the orders-block
-  alert (line 403), the delete button disabled on `dependants.orders > 0` (line 545) and the
-  `dependency === "order"` refusal mapping (line 187). With them go two translations that can no
-  longer appear (`modifiers.delete_orders_block`, English and Spanish, in
-  `apps/dashboard/src/i18n/strings.ts`) and a test asserting a refusal the server can no longer
-  send (`apps/dashboard/src/screens/modifiers-screen.test.ts`, `params: { dependency: "order" }`).
-  **Next action:** Task 13 removes this surface; widening this branch into the dashboard is what
-  this entry avoids.
+- **A dead dashboard surface was left behind by `modifierDependants(...).orders` always being 0 —
+  MOSTLY CLEARED by Task 11.** Rewriting the Modifiers screen took all three consumers with it: the
+  orders-block element, the delete button disabled on `dependants.orders > 0` and the
+  `dependency === "order"` refusal mapping are all gone from
+  `apps/dashboard/src/screens/modifiers-screen.ts`, and so is the test that sent
+  `params: { dependency: "order" }`. Neither `extraListDependants` nor `optionListDependants`
+  returns an order count at all. **Nothing is left.** The last of it — the
+  `modifiers.delete_orders_block` pair in English and Spanish, whose only reader was a NEGATIVE
+  assertion in `apps/dashboard/src/screens/modifiers-screen.test.ts` — went in the same pull
+  request. The structural check that the delete dialog carries no `[data-test="orders-block"]`
+  stays, so the behaviour is still pinned without the wording. **No next action.**
 - **A dead projection on the sale path.** `priceOrderLines` (`apps/server/src/working-order.ts`)
   still maps every offer's `optionGroups` into its `available` projection and carries
   `offer.modifiers` alongside, and nothing reads either: the projection feeds
@@ -985,12 +1050,17 @@ What the product attachment (#456, the plan's Task 6) left behind:
   while the whole file measures 1.4s alone. Fixed in #456: one read per file, and a declared bound
   on each scanning case. **Next action:** none — noted because the same shape is latent in any root
   guard that walks the whole tree without declaring a bound.
-- **The product editor has no Modifiers section until Task 11.** #456 removed the old option-group
-  attachment section rather than leave one whose edits the save would discard, and the catalogue
-  screen's nested modifier form is now unreachable from the interface but left in place, because
-  removing it reaches through `ProductChildKind` into that screen's own create-and-edit plumbing.
-  **Next action:** Task 11 rebuilds the section over extras and options lists, and decides whether
-  the nested form is rewired or removed.
+- **The product editor had no Modifiers section — Task 11 has rebuilt it.** #456 removed the old
+  option-group attachment section rather than leave one whose edits the save would discard. The
+  editor now carries an always-visible Modifiers section holding one ordered list that mixes both
+  kinds, added to from a single combobox that also offers **New extras list…** and **New options
+  list…**. The question that entry left open is ANSWERED, and the answer was "neither yet": the
+  catalogue screen's nested `dashboard-modifier-form` was left in place and not rewired, so nothing
+  on the interface opens it — the product editor's rows carry `kind` `extras` or `options`, and its
+  `selectRelated` has no `modifier` branch. The `"modifier"` member of `ProductChildKind`
+  (`apps/dashboard/src/state/product-child-create.ts`) stays only to keep that plumbing compiling.
+  **Next action:** remove the form, that kind and the plumbing together in Task 13, with the rest of
+  the old model.
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 
@@ -1017,11 +1087,18 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
   A review asked for the join. Not taken: `assertProductsOffered` reads `extra_list_items` for only
   the lists the body actually overrides, and a join hung off the publication rows would read the
   items of every list the offer publishes — the larger set.
-- **The two new tables are not dashboard live-query dependencies, and should not be yet.**
-  `QUERY_DEPENDENCIES` in `packages/venue-service/src/dashboard/live-queries.ts` names
-  `menu_item_option_groups` and `menu_item_options` and has no extras equivalent. Nothing in the
-  dashboard reads `menu_item_extra_lists` or `menu_item_extra_items` at all — no screen does — so the
-  dependency belongs with the plan's Task 11, which builds those screens.
+- **The two publication tables are still not dashboard live-query dependencies, and Task 11
+  SETTLED that they should not be.** Task 11 built the screens and added four new entries to
+  `QUERY_DEPENDENCIES` in `apps/dashboard/src/api/live-queries.ts` — `listOptionLists` and
+  `getOptionList` on `option_lists` + `option_labels`, `listExtraLists` and `getExtraList` on
+  `extra_lists` + `extra_list_items` — and deliberately named nothing else. The reason is recorded
+  at that entry: each of the four reads is two SELECTs and nothing more, the list table and then its
+  children, and none of them joins `products`, `product_modifiers` or either `menu_item_extra_*`
+  table. So `menu_item_extra_lists` and `menu_item_extra_items` stay unnamed in both dependency maps
+  — the dashboard's and `packages/venue-service/src/dashboard/live-queries.ts`'s `operations` entry,
+  which still names the two option-group equivalents and no extras twin. **Next action:** revisit
+  when a screen that actually publishes an extras list on a menu offer is built; nothing in the
+  dashboard reads either table today.
 - **Nobody has decided whether the application role should hold `UPDATE` on the two publication
   tables.** `packages/catalogue/drizzle/0009_menu_extra_publication_grants.sql` grants it, and no
   production path uses it: `setMenuItemExtraLists` replaces rows rather than editing them. So the
@@ -1341,6 +1418,12 @@ choice. It also replaced the negative "no longer suitable for" dietary control w
 "suitable for" list over vegan/vegetarian/halal/kosher, and stopped the till and kitchen screens
 combining a dish with its extras. See
 [the redesign](superpowers/specs/2026-09-15-modifier-nutrition-redesign-design.md).
+_Superseded 2026-09-20 (Task 11):_ the page described above is gone. `/manage/modifiers` is now two
+tabs, Extras and Options, over the two new list kinds; there is no modifier **Type**, no Text
+surface and no whole-modifier record to open. The delete flow still previews the products and menu
+offers it affects, but it no longer refuses while an open order uses the thing being deleted —
+neither list kind is reachable from an open order, so nothing blocks the delete. See
+[the one-product model](superpowers/specs/2026-09-18-one-product-model-design.md).
 
 What it left open:
 
