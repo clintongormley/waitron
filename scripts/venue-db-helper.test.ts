@@ -17,10 +17,13 @@ import { describe, expect, it } from "vitest";
  * Measured on this tree, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` lists six
  * packages and `@waitron/db` is not among them — so the scoped run for a pull request adding a suite
  * in `packages/bookings` would not have reached a check that lived there. Two paths do still reach
- * it, and neither is the case this guard is for: a push whose scope the classifier calls `global`
- * runs the whole workspace unfiltered (`.husky/pre-push`, `scope_label="whole workspace"`), and a
- * pull request that changes `packages/db` itself. The root project needs none of that — ci.yml's
- * `lint` job and `.husky/pre-push` both run it on every non-documentation push.
+ * it, and neither is the case this guard is for: a push whose scope the classifier does NOT call
+ * `packages`, which makes CI emit every gate true (`.github/workflows/ci.yml:273`) and so run the
+ * `test-heavy` shard (`:580`, `pnpm --filter "@waitron/db" test:shard`), and a pull request that
+ * changes `packages/db` itself. The PRE-PUSH HOOK is not one of those paths, and it is the natural
+ * thing to assume: it runs no package tests at all (CLAUDE.md §2), so its unfiltered run reaches a
+ * TYPECHECK of `packages/db`, never a suite living there. The root project needs none of this —
+ * ci.yml's `lint` job and `.husky/pre-push` both run it on every non-documentation push.
  *
  * **It forbids the NAME, not just the call, and that is the deliberate part.** `useVenueDb`'s whole
  * body is `return usePgliteDb(options)`, so a comment elsewhere in the tree pointing a reader at

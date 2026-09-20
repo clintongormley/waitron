@@ -124,11 +124,12 @@ hook, or how tests are scheduled:
 
 - **`prettier --check` on an IGNORED path prints the same line as a clean one.** `docs/` is ignored
   whole (`.prettierignore`), so a format check over it reports
-  `All matched files use Prettier code style!` and exits 0 having opened nothing — CLAUDE.md §1's
-  "both answers look alike" with a command attached. `pnpm exec prettier --file-info <file>` is the
+  `All matched files use Prettier code style!` and exits 0 having checked nothing — CLAUDE.md §1's
+  "both answers look alike" with a command attached, and the same two lines a genuinely clean path
+  prints. `pnpm exec prettier --file-info <file>` is the
   one that discriminates; it prints `"ignored": true`. Cost: a dated pointer scripted into a plan
-  matched a line-wrapped `**Run`, split the bold span and left the paragraph rendering wrong; three
-  format checks over that directory reported clean, and a review seat found it by reading.
+  matched a line-wrapped `**Run`, split the bold span and left the paragraph rendering wrong; a
+  format check over that directory reported clean, and a review seat found it by reading.
 - **Check every command's exit status.** A shell sequence separated by newlines reports only its
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
   Cost: a review-fix command ran a successful build after a failed server typecheck and reported

@@ -92,8 +92,10 @@ function body rather than 211 files.
 > through `usePgliteDb` now chooses through `useVenueDb`, and asking that way is a house rule
 > (`CLAUDE.md` §4) enforced by `scripts/venue-db-helper.test.ts`. `useRealPostgres` and
 > `describeEachTarget` are untouched. The paragraph above puts all three in the prepare phase;
-> what actually happened is that only the first was collapsed there, and the plan (task P2, and
-> task F1 step 24) is where the other two were reassigned to the flip.
+> what actually happened is that only the first was collapsed there. The plan's task P2 says
+> "Leave `useRealPostgres`, `useTemplateDb` and `describeEachTarget` alone" (`:2582`), which is a
+> statement about P2's scope; only `describeEachTarget` is actually routed onward, to task F1
+> step 24 (`:2586`). Where `useRealPostgres` ends up is not settled by either.
 
 Both are mechanical, reviewable, and independently valuable: they put the engine's vocabulary in one
 place, which is where it should have been anyway.

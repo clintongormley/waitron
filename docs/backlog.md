@@ -4088,9 +4088,13 @@ pull request and a command does not: on `e596fea4f` they return 10 suites taking
 and nothing else (`packages/db/src/index.test.ts` does it inside the `it`) and 7 taking
 `describeEachTarget`'s PGlite half. The figure that used to stand here said 11 and 18, and stated its
 scope perfectly clearly — "counted over `*.test.ts` under `packages/` and `apps/` on 2026-09-18".
-It was simply wrong: running the header's predicate against the last commit of 2026-09-18 returns
-10, with the same file list as today. So this is not the usual stale-count story, and that is the
-point — a count can carry its scope and still be a number nobody can reproduce. Replacing `usePgliteDb(` with
+It was simply wrong: running that sentence's own predicate — suites calling `createPgliteDb` with no
+helper at all — against `5d626dc68`, the last commit of 2026-09-18, returns 10, and the file list is
+today's. So this is not the usual stale-count story, and that is the point: a count can carry its
+scope and still be a number nobody can reproduce. (The guard header's command is NOT that predicate
+and must not be substituted for it — it subtracts only `useVenueDb` and `describeEachTarget`, and on
+that commit returns 16, because six of those suites still called the old helper then. The two agree
+today only because nothing calls it.) Replacing `usePgliteDb(` with
 `useVenueDb(` reaches neither door, and `describeEachTarget`'s half in particular cannot simply
 move: `pgliteTarget.create()` hands out a fresh cluster PER TEST where the helper hands out one
 database per SUITE with a truncate between tests, which is a different isolation contract and one
@@ -4122,8 +4126,9 @@ accessor too early still gets the error
 is a message that names no function, and it is recorded in the plan's task F1 step 24 because that
 step replaces the body anyway.
 
-**The rule, the guard and the final sweep, LANDED 2026-09-20 — and the finding is about SCOPE, which
-is what every earlier round of this rollout also got wrong.** The rule is one line in `CLAUDE.md` §4;
+**The rule, the guard and the final sweep — the pull request this entry arrives in, opened
+2026-09-20. Its finding is about SCOPE, which is what every earlier round of this rollout also got
+wrong.** The rule is one line in `CLAUDE.md` §4;
 the guard is `scripts/venue-db-helper.test.ts`, a root-project check that reports any `.ts` file
 under `packages/` or `apps/`, outside `packages/db/`, which NAMES `usePgliteDb`. **It forbids the
 NAME, not the call, and that decision is the whole of why it was worth writing.** `useVenueDb`'s body
@@ -4792,6 +4797,12 @@ and then restored: 20 files, 204 tests, statements 100% against a bar of 90, lin
 functions 100% against 85, branches 100% against 85. Remaining after it, same command:
 `payments` 14 files, `db` 20, `fiscal-verifactu` 25, `apps/server` 56. Seven things to carry.
 
+> 2026-09-20: every `venue-db.ts:26` below is the line as it READ when the output quoted here was
+> produced. The pull request that added `scripts/venue-db-helper.test.ts` rewrote that file's doc
+> comment and moved the forwarding call to `:31`. The quotes are left alone because rewriting output
+> nobody re-ran would falsify the record; `git grep -nE "usePgliteDb[(]" -- packages/db` is the
+> command that answers where it is today.
+
 **First, the two standard controls both ran, and only the THROW one covers every converted file.**
 Making the seam's body `throw` fails exactly the thirteen converted files at collection — 0 tests
 each, 13 failed / 7 passed, and every one of the thirteen stacks names
@@ -5003,8 +5014,8 @@ twenty-one calls (`src/node-membership.test.ts` has two), plus the package's `vi
 comments and a paragraph of `packages/db/README.md`. This is the package that OWNS both helpers, so
 the four files the rollout's grep exclusion lists stay untouched: `src/testing/lifecycle.ts` and
 `src/testing/venue-db.ts`, which define them, and both their contract tests. (Permission is wider
-than that four, and the guard that landed afterwards is what settled it: `packages/db` is exempt
-whole.) After it,
+than that four, and the guard in the pull request that adds this parenthesis is what settles it:
+`packages/db` is exempt whole.) After it,
 `git grep -nE "usePgliteDb[(]" -- packages/db` returns four lines and all four are allowed: the
 definition (`lifecycle.ts:129`), the wrapper's forwarding call (`venue-db.ts:26`) and the old
 helper's two contract-test calls (`lifecycle.test.ts:27` and `:68`).
