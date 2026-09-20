@@ -2826,6 +2826,11 @@ deliberately did not settle.
   non-goal for now (see docs/backlog.md)", and no backlog entry answered that pointer — this is the
   entry it points at. Whether to keep it a non-goal or build the cross-shard aggregate, and gate on
   it, is still open, and it is also the only route to the db number the first bullet wants.
+  _(Answered 2026-09-20 on `chore/db-mutation-gate`: the aggregate is built —
+  `scripts/mutation-aggregate.mjs` merges the ten shard reports and the `mutation-db-aggregate` job
+  fails below 90 — so a merged db score is no longer a non-goal, and the workflow's header says so.
+  The "41 source files" figure and the `testing/global-setup` example went with the same change, the
+  first dropped rather than refreshed, the second because that file is no longer mutated at all.)_
 
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
 latest minor or patch release; two loose ends came with it.

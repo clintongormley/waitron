@@ -80,14 +80,14 @@ jobs:
   # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
   #
   # The fix is parallelism, not a faster suite: mutation cost is mutants ÷ concurrency, and a matrix
-  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs bin-packs the 41 source files
-  # by size into one `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
+  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs bin-packs the package's source
+  # files by size into one `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
   # so N is defined once — here in the matrix list — and the two cannot drift.
   #
   # TEN shards, not fewer, because the per-mutant cost is WILDLY uneven and clusters. Measured on run
   # 32380395996 (an N=6 attempt): shards ran 53min → 4h50. A surviving mutant in a widely-covered
-  # file — the core-table schema (orders/tenants/sales/daily-closes/incidents) and
-  # testing/global-setup, exercised by nearly every test — reruns a huge covering set, while a
+  # file — the core-table schema (orders/tenants/sales/daily-closes/incidents), exercised by nearly
+  # every test — reruns a huge covering set, while a
   # leaf-file mutant is cheap. Byte size is a rough proxy that at N=6 unluckily put orders+tenants in
   # one shard (the 4h50 one). At N=10 the bin-packing isolates each expensive file in its OWN shard
   # (verified: sales/orders/tenants/daily-closes/incidents/global-setup each land alone), so the
