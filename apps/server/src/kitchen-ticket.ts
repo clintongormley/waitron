@@ -33,11 +33,6 @@ export interface KitchenTicketItem {
   qty: number | string;
   unit?: string;
   name: string;
-  /** The meat-doneness (order-line customisation, spec §3) as its raw enum value (e.g. `medium_rare`),
-   *  snapshotted at fire by the caller. Printed PROMINENTLY on its own indented sub-line directly beneath
-   *  the dish — upper-cased with underscores spaced (`MEDIUM RARE`) — so the cook reads how a steak is
-   *  wanted first. Absent on a non-meat / no-preference line, which then prints exactly as before. */
-  doneness?: string;
   /** The free-text kitchen note (order-line customisation, spec §2), snapshotted at fire. Printed as its
    *  own indented `* <note>` sub-line beneath the dish (distinct from a `+ <modifier>`). Absent/empty on a
    *  line that carried none, so a note-free caller is byte-for-byte unchanged. */
@@ -90,13 +85,11 @@ function sanitizeNote(note: string): string {
   return note.replace(/[\x00-\x1f\x7f]+/g, " ").trim();
 }
 
-/** Emit one item — its `qty x name` line, then (order-line customisation, spec §2/§3) the DONENESS as a
- *  prominent indented sub-line, each selected modifier as an indented `+ <name>` line, and the free-text
- *  NOTE as an indented `* <note>` line, in that order. Doneness prints FIRST and PROMINENT — upper-cased
- *  with underscores spaced, wrapped in `**` markers — because there is no ESC/POS bold (ruling R-G) and
- *  the cook must not miss how a steak is wanted; the ASCII markers keep it legible on any single-byte code
- *  page, like the modifier `+`. A plain dish (no doneness/note/modifiers) emits exactly the one line it
- *  always did. */
+/** Emit one item — its `qty x name` line, then (order-line customisation, spec §2/§3) each selected
+ *  modifier as an indented `+ <name>` line, and the free-text NOTE as an indented `* <note>` line, in
+ *  that order. The ASCII markers keep a sub-line legible on any single-byte code page, there being no
+ *  ESC/POS bold (ruling R-G). A plain dish (no note, no modifiers) emits exactly the one line it always
+ *  did. */
 function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem, layout: KitchenLayout): void {
   // Each line wraps to the paper; a continuation starts under the text after its marker.
   const text = (s: string, indent: number): void => {
@@ -105,9 +98,6 @@ function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem, layout: Ki
   };
   const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
   text(itemLine(item), prepareText(prefix, layout.charset).length);
-  if (item.doneness !== undefined && item.doneness !== "") {
-    text(`  ** ${item.doneness.replace(/_/g, " ").toUpperCase()} **`, 5);
-  }
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   if (item.note !== undefined && item.note !== "") {
     // Sanitise the operator-typed note (strip CR/LF and other control bytes) so it prints as one

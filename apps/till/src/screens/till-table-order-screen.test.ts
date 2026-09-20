@@ -460,10 +460,10 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  // Per-line note + meat-gated doneness (order-line customisation, Task 4b): the round bar reuses
-  // `till-basket`, so its per-line Note affordance is available on the table-order screen too (parity
-  // with the counter). A note set on a round line via that affordance reaches the round store and is
-  // forwarded by `send-round` (via `toWireLineExtras`), the same wire path as the counter's sale lines.
+  // Per-line note (order-line customisation, Task 4b): the round bar reuses `till-basket`, so its
+  // per-line Note affordance is available on the table-order screen too (parity with the counter). A
+  // note set on a round line via that affordance reaches the round store and is forwarded by
+  // `send-round` (via `toWireLineExtras`), the same wire path as the counter's sale lines.
   it("forwards a per-line note set through the round basket's Note affordance on send-round (parity)", async () => {
     const { el } = await mount();
     // Ring a café into the current round through the grid (a plain fast-add, no picker).

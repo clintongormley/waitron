@@ -61,24 +61,13 @@ describe("WorkingOrderStore", () => {
     expect(s.total).toBe("1.50");
   });
 
-  it("attaches a per-line note and doneness passed as extras", () => {
+  it("attaches a per-line note passed as extras", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", undefined, { note: "no mayo", doneness: "medium" });
-    expect(s.lines[0]).toEqual({
-      product: cafe,
-      quantity: "1",
-      note: "no mayo",
-      doneness: "medium",
-    });
+    s.addProduct(cafe, "1", undefined, { note: "no mayo" });
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "no mayo" });
   });
 
-  it("attaches only the extra that is provided (each key omitted when absent)", () => {
-    const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", undefined, { doneness: "rare" });
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", doneness: "rare" });
-  });
-
-  it("omits both note and doneness keys when extras are absent or empty", () => {
+  it("omits the note key when extras are absent or empty", () => {
     const s = new WorkingOrderStore();
     s.addProduct(cafe, "1");
     s.addProduct(cafe, "1", undefined, {});
@@ -174,47 +163,37 @@ describe("WorkingOrderStore", () => {
     expect(n).toBe(notificationsAfterAdds);
   });
 
-  // Per-line note + meat-gated doneness (order-line customisation, Task 4b): the basket-line editor
-  // sets a rung line's note/doneness AFTER it was fast-added, via `setLineExtras`. It marks the basket
-  // dirty (the extra rides the wire, so a retrieved order must re-sync) and notifies, exactly like the
-  // other line edits, and applies the SAME omission discipline as the picker — a whitespace-only note
-  // and a blank doneness clear the key rather than storing "".
-  it("setLineExtras attaches a note and doneness to a fast-added line, marks dirty and notifies", () => {
+  // Per-line note (order-line customisation, Task 4b): the basket-line editor sets a rung line's note
+  // AFTER it was fast-added, via `setLineExtras`. It marks the basket dirty (the note rides the wire, so
+  // a retrieved order must re-sync) and notifies, exactly like the other line edits, and applies the
+  // SAME omission discipline as the picker — a whitespace-only note clears the key rather than
+  // storing "".
+  it("setLineExtras attaches a note to a fast-added line, marks dirty and notifies", () => {
     const s = new WorkingOrderStore();
     s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
     expect(s.dirty).toBe(false);
     let n = 0;
     s.subscribe(() => n++);
-    s.setLineExtras(0, { note: "no onion", doneness: "medium_rare" });
-    expect(s.lines[0]).toEqual({
-      product: cafe,
-      quantity: "1",
-      note: "no onion",
-      doneness: "medium_rare",
-    });
+    s.setLineExtras(0, { note: "no onion" });
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "no onion" });
     expect(s.dirty).toBe(true);
     expect(n).toBe(1);
   });
 
-  it("setLineExtras updates only the key it is given, leaving the other extra untouched", () => {
+  it("setLineExtras touches only the keys the caller names, leaving an unnamed note alone", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", undefined, { note: "keep me", doneness: "rare" });
-    // A doneness-only change must not wipe the existing note (partial update).
-    s.setLineExtras(0, { doneness: "well_done" });
-    expect(s.lines[0]).toEqual({
-      product: cafe,
-      quantity: "1",
-      note: "keep me",
-      doneness: "well_done",
-    });
+    s.addProduct(cafe, "1", undefined, { note: "keep me" });
+    // An extras object that does not name `note` must not wipe the stored one: the update is keyed on
+    // the PRESENCE of the key, not on its value, so an absent key is "unchanged", never "clear it".
+    s.setLineExtras(0, {});
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "keep me" });
   });
 
-  it("setLineExtras trims a whitespace-only note and clears a blank doneness (omission discipline)", () => {
+  it("setLineExtras trims a whitespace-only note away (omission discipline)", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", undefined, { note: "old note", doneness: "medium" });
+    s.addProduct(cafe, "1", undefined, { note: "old note" });
     s.setLineExtras(0, { note: "   " });
-    s.setLineExtras(0, { doneness: "" });
-    // Both keys are gone — a plain line, byte-identical to a note-free add.
+    // The key is gone — a plain line, byte-identical to a note-free add.
     expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
   });
 

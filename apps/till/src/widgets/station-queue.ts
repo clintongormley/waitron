@@ -6,7 +6,6 @@ import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
-import { donenessLabel } from "../i18n/doneness-label.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
 import type {
@@ -248,20 +247,13 @@ export class TillStationQueue extends LitElement {
       }
 
       /* The per-line kitchen customisation (order-line customisation, Task 5), indented beneath the dish
-         like the modifiers list. Doneness is PROMINENT — a cook must read how a steak is wanted first —
-         via text WEIGHT (the non-colour tell, house a11y rule), not colour alone; the free-text note is
-         muted sub-text like the modifiers. */
+         like the modifiers list: the free-text note as muted sub-text. */
       .line-customisation {
         display: flex;
         flex-direction: column;
         gap: 0;
         padding-left: var(--wt-space-3);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .line-doneness {
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text);
       }
 
       .line-note {
@@ -820,29 +812,14 @@ export class TillStationQueue extends LitElement {
     </button>`;
   }
 
-  /** The line's per-line kitchen customisation (order-line customisation, Task 5) as indented sub-text
-   *  beneath the dish: the DONENESS rendered PROMINENTLY (localised `doneness.*` label, bold — a cook must
-   *  read how a steak is wanted first; the weight is the non-colour tell) and the free-text NOTE as muted
-   *  sub-text. Reads the SNAPSHOTTED fields the server froze at fire. `nothing` when the line carried
-   *  neither (a null/absent doneness and an empty/absent note), so a plain dish renders exactly as before
-   *  this task. */
+  /** The line's per-line kitchen customisation (order-line customisation, Task 5) as indented muted
+   *  sub-text beneath the dish: the free-text NOTE the server SNAPSHOTTED at fire. `nothing` when the
+   *  line carried none (an empty/absent note), so a plain dish renders exactly as before this task. */
   #customisation(item: StationQueueItem): TemplateResult | typeof nothing {
-    const doneness = item.doneness ?? null;
     const note = item.note ?? null;
-    if (doneness === null && (note === null || note === "")) return nothing;
+    if (note === null || note === "") return nothing;
     return html`<span class="line-customisation" data-item-customisation=${item.id}>
-      ${
-        doneness !== null
-          ? html`<span class="line-doneness" data-doneness=${doneness}
-              >${t("doneness.label")}: ${donenessLabel(doneness)}</span
-            >`
-          : nothing
-      }
-      ${
-        note !== null && note !== ""
-          ? html`<span class="line-note" data-note>${note}</span>`
-          : nothing
-      }
+      <span class="line-note" data-note>${note}</span>
     </span>`;
   }
 

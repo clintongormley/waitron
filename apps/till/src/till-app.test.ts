@@ -2060,7 +2060,6 @@ describe("till-app", () => {
             product: cafe,
             options: [option],
             note: "Sin espuma",
-            doneness: "medium",
           },
         ],
       }),
@@ -2077,7 +2076,6 @@ describe("till-app", () => {
         quantity: "2",
         options: [option],
         note: "Sin espuma",
-        doneness: "medium",
       },
     ]);
   });

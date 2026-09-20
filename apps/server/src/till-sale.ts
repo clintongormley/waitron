@@ -484,7 +484,6 @@ export async function payWorkingOrder(
             courseId: line.courseId ?? null,
             parentLineId: line.parentLineId ?? null,
             note: line.note ?? null,
-            doneness: line.doneness ?? null,
           })),
         );
       }
@@ -1312,7 +1311,6 @@ async function firePrepayOrder(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
-      doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))

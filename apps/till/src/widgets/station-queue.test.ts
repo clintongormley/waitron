@@ -319,9 +319,9 @@ describe("till-station-queue", () => {
     });
   });
 
-  describe("per-line customisation (Task 5): snapshotted doneness + note as sub-text under the dish", () => {
-    // A fired meat dish carrying the snapshotted note + doneness the server surfaces (order-line
-    // customisation) — the KDS renders the doneness prominently and the note as sub-text.
+  describe("per-line customisation (Task 5): the snapshotted note as sub-text under the dish", () => {
+    // A fired dish carrying the snapshotted note the server surfaces (order-line customisation) — the
+    // KDS renders it as sub-text.
     const withCustomisation: StationQueueGroup = {
       orderId: "wo-c",
       orderNumber: 12,
@@ -339,12 +339,11 @@ describe("till-station-queue", () => {
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
           note: "sin sal",
-          doneness: "medium_rare",
         },
       ],
     };
 
-    it("rail: renders the doneness (localised label) and the note as sub-text beneath the dish", async () => {
+    it("rail: renders the note as sub-text beneath the dish", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withCustomisation],
         view: "rail",
@@ -352,75 +351,50 @@ describe("till-station-queue", () => {
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
       expect(item.textContent).toContain("1× Chuletón");
-      const doneness = item.querySelector('[data-doneness="medium_rare"]')!;
-      expect(doneness).not.toBeNull();
-      expect(doneness.textContent).toContain(t("doneness.medium_rare"));
       expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
-      // Doneness precedes the note in DOM order (prominent first).
-      const html = item.innerHTML;
-      expect(html.indexOf("data-doneness")).toBeLessThan(html.indexOf("data-note"));
     });
 
-    it("kanban: renders the same doneness + note beneath the cell's dish", async () => {
+    it("kanban: renders the same note beneath the cell's dish", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withCustomisation],
         stationId: "st-c",
       });
       const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-c"]')!;
-      expect(cell.querySelector('[data-doneness="medium_rare"]')).not.toBeNull();
       expect(cell.querySelector("[data-note]")!.textContent).toContain("sin sal");
     });
 
-    it("localises the doneness label for the operator locale (es-ES)", async () => {
-      const previous = currentLocale();
-      setLocale("es-ES");
-      try {
-        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-          groups: [withCustomisation],
-          view: "rail",
-          stationId: "st-c",
-        });
-        expect(
-          el.shadowRoot!.querySelector('[data-item="ti-c"] [data-doneness]')!.textContent,
-        ).toContain(t("doneness.medium_rare", "es-ES"));
-      } finally {
-        setLocale(previous);
-      }
-    });
-
-    it("a note-only line (no doneness) renders the note and no doneness label", async () => {
-      const noteOnly: StationQueueGroup = {
+    it("an EMPTY note renders no customisation row (an empty string is not a note)", async () => {
+      const emptyNote: StationQueueGroup = {
         ...withCustomisation,
-        items: [{ ...withCustomisation.items[0]!, doneness: null }],
+        items: [{ ...withCustomisation.items[0]!, note: "" }],
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [noteOnly],
+        groups: [emptyNote],
         view: "rail",
         stationId: "st-c",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
-      expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
-      expect(item.querySelector("[data-doneness]")).toBeNull();
+      expect(item.querySelector("[data-note]")).toBeNull();
+      expect(item.querySelector(".line-customisation")).toBeNull();
     });
 
-    it("a doneness-only line (no note) renders the doneness and no note", async () => {
-      const donenessOnly: StationQueueGroup = {
+    it("a null note renders no customisation row", async () => {
+      const noNote: StationQueueGroup = {
         ...withCustomisation,
         items: [{ ...withCustomisation.items[0]!, note: null }],
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups: [donenessOnly],
+        groups: [noNote],
         view: "rail",
         stationId: "st-c",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-c"]')!;
-      expect(item.querySelector('[data-doneness="medium_rare"]')).not.toBeNull();
-      expect(item.querySelector("[data-note]")).toBeNull();
+      expect(item.querySelector(".line-customisation")).toBeNull();
     });
 
-    it("a plain item (no note, no doneness) renders no customisation row at all (regression-safe)", async () => {
+    it("a plain item (no note) renders no customisation row at all (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups, // the top-level fixture — no item carries note/doneness
+        groups, // the top-level fixture — no item carries a note
         view: "rail",
         stationId: "st-1",
       });

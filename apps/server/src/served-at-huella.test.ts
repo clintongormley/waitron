@@ -515,7 +515,6 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
         note: workingOrderLines.note,
-        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))

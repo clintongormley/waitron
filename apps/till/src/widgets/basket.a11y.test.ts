@@ -44,19 +44,18 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
-  it("a line with the note editor OPEN and a doneness picker has no violations (order-line customisation)", async () => {
+  it("a line with the note editor OPEN has no violations (order-line customisation)", async () => {
     const steak: TillProduct = {
       ...cafe,
       id: "steak",
       name: "Filete",
       customerName: { es: "Filete para el cliente" },
       unitPrice: "18.00",
-      diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
     };
     const store = new WorkingOrderStore();
-    store.addProduct(steak, "1", undefined, { note: "no butter", doneness: "medium" });
+    store.addProduct(steak, "1", undefined, { note: "no butter" });
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
-    // Open the inline editor so the textarea + doneness select are in the tree when scanned.
+    // Open the inline editor so the note textarea and its sub-row are in the tree when scanned.
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-0"]')!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);

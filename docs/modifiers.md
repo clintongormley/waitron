@@ -16,7 +16,7 @@ a default or leave the decision to the operator. For a simple on/off question, s
 include cutlery, make an Options or Extras modifier with a single choice.
 
 Use **Text** for an optional message of up to 500 characters. Text is displayed literally and has
-no price. It remains separate from the dish's kitchen note and doneness setting.
+no price. It remains separate from the dish's kitchen note.
 
 ## Set defaults and availability
 

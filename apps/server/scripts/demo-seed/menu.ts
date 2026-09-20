@@ -174,6 +174,12 @@ export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
         ],
       },
       {
+        // This dish has a TWIN cooking question: `PRODUCT_OPTION_LISTS` below attaches the new
+        // options list to the same steak. Both are seeded on purpose while the till still reads
+        // only these legacy attachments. The moment that stops being invisible is Task 12 of
+        // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, which wires the till and
+        // lands BEFORE Task 13 deletes these tables — whoever takes it removes this group or
+        // accepts a steak that asks twice.
         name: { en: "Cooking", es: "Punto de la carne" },
         minSelect: 1,
         maxSelect: 1,
@@ -182,6 +188,77 @@ export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
           { name: { en: "Rare", es: "Poco hecho" }, priceDelta: "0.00", vatClass: null },
           { name: { en: "Medium", es: "Al punto" }, priceDelta: "0.00", vatClass: null },
           { name: { en: "Well done", es: "Muy hecho" }, priceDelta: "0.00", vatClass: null },
+        ],
+      },
+    ],
+  },
+];
+
+// ── Options lists — the generic mechanism, seeded beside the legacy groups above ─────────────────
+// A reusable list of labels the diner picks exactly one of. It is what a venue uses to ask "how do
+// you want it cooked?" now that the product model carries no built-in doneness field. Unlike an
+// option group, a list owns no price, VAT or allergens (`OptionList`, option-contract.ts), so there
+// is no `priceDelta` or `vatClass` here.
+//
+// Seeded by `seed-option-lists.ts`, deliberately NOT by `seed-options.ts`: that file seeds the
+// LEGACY option groups, whose tables Task 13 of
+// `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes.
+//
+// Staff `name`, `customerName` and `kitchenName` are DIFFERENT text on the list and on every label,
+// so a surface reading the wrong one of the three shows the wrong words rather than the right ones
+// by coincidence (CLAUDE.md §3).
+
+/** One label of a demo options list. */
+export interface SeedOptionLabel {
+  /** The staff name: the button a waiter presses. Plain text and the only required name. */
+  name: string;
+  customerName: Record<SeedLocale, string>;
+  /** Upper-case shorthand, like `SeedProduct.kitchenName` — this is what prints on the ticket. */
+  kitchenName: string;
+  /** Preselected when the list is asked; at most one label of a list carries it. */
+  preselected?: boolean;
+}
+
+/** A demo options list: the three names and its labels, in the order they are offered. */
+export interface SeedOptionList {
+  name: string;
+  customerName: Record<SeedLocale, string>;
+  kitchenName: string;
+  labels: SeedOptionLabel[];
+}
+
+/** One product's attached options lists, keyed by the SAME unique `image` basename
+ * `PRODUCT_OPTION_GROUPS` joins on. */
+export interface SeedProductOptionLists {
+  productImage: string;
+  lists: SeedOptionList[];
+}
+
+export const PRODUCT_OPTION_LISTS: SeedProductOptionLists[] = [
+  {
+    productImage: "solomillo.png",
+    lists: [
+      {
+        name: "Punto",
+        customerName: { en: "How would you like it cooked?", es: "¿Cómo la quiere hecha?" },
+        kitchenName: "PUNTO CARNE",
+        labels: [
+          {
+            name: "Poco",
+            customerName: { en: "Rare, red in the middle", es: "Poco hecho, rojo por dentro" },
+            kitchenName: "POCO HECHO",
+          },
+          {
+            name: "Punto medio",
+            customerName: { en: "Medium, pink in the middle", es: "Al punto, rosado por dentro" },
+            kitchenName: "AL PUNTO",
+            preselected: true,
+          },
+          {
+            name: "Muy",
+            customerName: { en: "Well done, cooked through", es: "Muy hecho, sin nada de rosa" },
+            kitchenName: "MUY HECHO",
+          },
         ],
       },
     ],

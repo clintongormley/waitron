@@ -8,7 +8,7 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
-import type { Doneness, SaleLine } from "../api/client.js";
+import type { SaleLine } from "../api/client.js";
 import type { OrderLine, SelectedLineOption } from "./working-order.js";
 import { unitName } from "../widgets/product-name.js";
 
@@ -108,27 +108,21 @@ export function toWireOption(option: SelectedLineOption): {
 }
 
 /**
- * Maps a line's per-line customisation (order-line customisation) to the `note`/`doneness` fields every
- * send builder spreads onto its wire line (`SaleLine`, `RoundLine`). Each key is present ONLY when the
- * line carries it — the same omission pattern as {@link toWireOption} — so a plain line's wire is
- * byte-identical to before (an empty object spreads nothing). The ONE mapping shared by `till-app`'s
- * `#currentSaleLines`, `till-table-order-screen`'s round builder, and the modifier picker's confirm
- * (`product-grid`). The server trims/validates both; they never reach a sale or a huella.
+ * Maps a line's per-line customisation (order-line customisation) to the `note` field every send builder
+ * spreads onto its wire line (`SaleLine`, `RoundLine`). The key is present ONLY when the line carries it
+ * — the same omission pattern as {@link toWireOption} — so a plain line's wire is byte-identical to
+ * before (an empty object spreads nothing). The ONE mapping shared by `till-app`'s `#currentSaleLines`,
+ * `till-table-order-screen`'s round builder, and the modifier picker's confirm (`product-grid`). The
+ * server trims/validates it; it never reaches a sale or a huella.
  *
- * The parameter is the MINIMAL `{ note?; doneness? }` shape, not the full `OrderLine` — both `OrderLine`
- * and the picker's `ModifierConfirmDetail` satisfy it structurally, so every caller passes its own line
- * object directly without hand-copying the two fields first.
+ * The parameter is the MINIMAL `{ note? }` shape, not the full `OrderLine` — both `OrderLine` and the
+ * picker's `ModifierConfirmDetail` satisfy it structurally, so every caller passes its own line object
+ * directly without hand-copying the field first.
  */
-export function toWireLineExtras(line: { note?: string; doneness?: Doneness }): {
-  note?: string;
-  doneness?: Doneness;
-} {
-  const extras: { note?: string; doneness?: Doneness } = {};
+export function toWireLineExtras(line: { note?: string }): { note?: string } {
+  const extras: { note?: string } = {};
   if (line.note !== undefined) {
     extras.note = line.note;
-  }
-  if (line.doneness !== undefined) {
-    extras.doneness = line.doneness;
   }
   return extras;
 }

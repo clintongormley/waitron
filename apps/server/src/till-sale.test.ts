@@ -1228,7 +1228,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // The structural half of the same rule (spec decision 11, and `sale_lines`'s own "snapshotted
     // values, never catalogue references" header): there is no column for the picked product at all,
     // so no future write can put one there without this failing first. Same instrument as
-    // `packages/fiscal-verifactu/src/write-path.e2e.test.ts`'s note/doneness guard.
+    // `packages/fiscal-verifactu/src/write-path.e2e.test.ts`'s note guard.
     const columns = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { rows } = await tx.execute<{ column_name: string }>(

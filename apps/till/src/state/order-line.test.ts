@@ -143,19 +143,12 @@ describe("order-line pricing", () => {
   });
 
   describe("toWireLineExtras", () => {
-    it("forwards note and doneness when both are present", () => {
-      const line: OrderLine = { product: cafe, quantity: "1", note: "no mayo", doneness: "medium" };
-      expect(toWireLineExtras(line)).toEqual({ note: "no mayo", doneness: "medium" });
+    it("forwards the note when the line carries one", () => {
+      const line: OrderLine = { product: cafe, quantity: "1", note: "no mayo" };
+      expect(toWireLineExtras(line)).toEqual({ note: "no mayo" });
     });
 
-    it("forwards only the field that is present", () => {
-      const donenessOnly: OrderLine = { product: cafe, quantity: "1", doneness: "well_done" };
-      expect(toWireLineExtras(donenessOnly)).toEqual({ doneness: "well_done" });
-      const noteOnly: OrderLine = { product: cafe, quantity: "1", note: "extra crispy" };
-      expect(toWireLineExtras(noteOnly)).toEqual({ note: "extra crispy" });
-    });
-
-    it("returns an empty object when neither is present", () => {
+    it("returns an empty object when the line carries no note", () => {
       const plain: OrderLine = { product: cafe, quantity: "1" };
       expect(toWireLineExtras(plain)).toEqual({});
     });

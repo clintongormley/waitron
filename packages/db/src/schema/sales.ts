@@ -231,8 +231,9 @@ export const saleLines = table(
     category: label("category"),
     // The dish line this line belongs to — a filed EXTRAS pick is a line of its own and points at
     // the dish it was picked for; a top-level line leaves it NULL. Presentation/reporting metadata
-    // ONLY — the fiscal record is built from `total` + `vat_breakdown`, never from `sale_lines`, so
-    // this never reaches the fiscal fingerprint (design §4). Bare NULLABLE uuid: the
+    // ONLY — `backend.recordSale` is handed the sale's own header fields and never `sale_lines` at
+    // all (the twelve are named at `packages/core/src/record-sale.ts:389-408`), so this never
+    // reaches the fiscal fingerprint (design §4). Bare NULLABLE uuid: the
     // self-FK (parent_line_id) → sale_lines(id) is
     // hand-written in the --custom migration (the same split sales_corrects_fk uses). MATCH SIMPLE
     // means a NULL parent satisfies it. Nothing here points at the extras or options list the pick

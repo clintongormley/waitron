@@ -180,11 +180,10 @@ async function buildTicketItems(
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
-      // Per-line customisation (order-line customisation, spec §2/§3): the note/doneness printed as a
-      // prominent doneness line + a note sub-line (`emitItem`). Read here so BOTH the fire path and the
-      // recall/void correction slip carry them — a correction slip shows the same detail the cook has.
+      // Per-line customisation (order-line customisation, spec §2/§3): the note printed as a sub-line
+      // (`emitItem`). Read here so BOTH the fire path and the recall/void correction slip carry it —
+      // a correction slip shows the same detail the cook has.
       note: workingOrderLines.note,
-      doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.id, lineIds));
@@ -226,9 +225,8 @@ async function buildTicketItems(
         qty: row.quantity,
         unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
         name: kitchenPresentationName(row),
-        // Nullable columns → `?? undefined` so a plain line carries neither key and prints exactly as
-        // before; `emitItem` prints doneness prominently and the note as a sub-line.
-        doneness: row.doneness ?? undefined,
+        // A nullable column → `?? undefined` so a plain line carries no key and prints exactly as
+        // before; `emitItem` prints the note as a sub-line.
         note: row.note ?? undefined,
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),

@@ -98,10 +98,10 @@ export class TillProductGrid extends LitElement {
   }
 
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
-    // Forward the picker's per-line note/doneness (order-line customisation) through the ONE
-    // `toWireLineExtras` mapping (`detail` satisfies its minimal `{ note?; doneness? }` shape), each key
-    // present only when the picker set it. The result may be an empty `{}`, which `addProduct` treats
-    // exactly like `undefined`, so a note-free, doneness-free confirm leaves the line byte-identical.
+    // Forward the picker's per-line note (order-line customisation) through the ONE `toWireLineExtras`
+    // mapping (`detail` satisfies its minimal `{ note? }` shape), the key present only when the picker
+    // set it. The result may be an empty `{}`, which `addProduct` treats exactly like `undefined`, so a
+    // note-free confirm leaves the line byte-identical.
     this.store.addProduct(
       detail.product,
       "1",

@@ -32,7 +32,6 @@ import {
   asAppUser,
   categories,
   diningTables,
-  DONENESS,
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
@@ -46,7 +45,7 @@ import {
   workingOrders,
   workingOrderStatus,
 } from "@waitron/db";
-import type { Database, Doneness, Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import {
   expandDietaryDeclarations,
   listProductVariantsForProducts,
@@ -123,12 +122,12 @@ type PricedBasket = PricedLines;
 
 /**
  * Per-line customisation carried on the wire and threaded through every order path (spec §2/§3): a
- * free-text kitchen `note` and, for a meat product, a `doneness`. BOTH ARE NON-FISCAL — validated and
- * persisted server-side on the parent dish line (and snapshotted onto its ticket item at fire), and
- * NEVER threaded into any sale/fiscal projection or huella. Intersected into each request/parameter
- * line shape so the field pair (and this rationale) is declared ONCE rather than re-copied per site.
+ * free-text kitchen `note`. NON-FISCAL — validated and persisted server-side on the parent dish line
+ * (and snapshotted onto its ticket item at fire), and NEVER threaded into any sale/fiscal projection
+ * or huella. Intersected into each request/parameter line shape so the field (and this rationale) is
+ * declared ONCE rather than re-copied per site.
  */
-export type LineExtras = { note?: string; doneness?: Doneness; variantId?: string };
+export type LineExtras = { note?: string; variantId?: string };
 
 /**
  * Every extras and options definition the dishes in one basket offer, read ONCE before the line
@@ -270,11 +269,10 @@ async function priceOrderLines(
   // whole basket above. Absent/empty = a plain single line, except that an ACTIVE options list must
   // still be answered.
   //
-  // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note` and a
-  // `doneness`. Both are NON-FISCAL. The note is trimmed and length-capped (`working_order.note_too_long`);
-  // the doneness is validated against the enum (`working_order.invalid_doneness`). Both attach to the PARENT dish
-  // line only — a child modifier row carries neither. Absent = NULL (not chosen); a whitespace-only
-  // note folds to NULL.
+  // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note`, which is
+  // NON-FISCAL. It is trimmed and length-capped (`working_order.note_too_long`), and attaches to the
+  // PARENT dish line only — a child modifier row carries none. Absent = NULL (not chosen); a
+  // whitespace-only note folds to NULL.
   requestedLines: ({
     productId?: string;
     menuItemId?: string;
@@ -398,7 +396,6 @@ async function priceOrderLines(
         menuItemId: string | null;
         courseId: string | null;
         note: string | null;
-        doneness: Doneness | null;
       }
     | { kind: "child"; productId: string; menuItemId: string | null };
   const items: BasketItemWithOptions[] = [];
@@ -454,9 +451,8 @@ async function priceOrderLines(
     // (a clean 400) rather than reaching `.trim()` as a `123.trim is not a function` TypeError → an
     // opaque 500 — an absent (`undefined`) note stays "not chosen", the same as before. It is then
     // trimmed (trailing whitespace never trips the cap) and capped at 200 chars; a note empty after
-    // trimming folds to NULL. The doneness is screened against the enum — the same runtime check keeps a
-    // crafted value out of the `working_order_lines` insert. Both belong to the PARENT dish line and are
-    // carried on its `lineMeta` entry below.
+    // trimming folds to NULL. It belongs to the PARENT dish line and is carried on its `lineMeta`
+    // entry below.
     const NOTE_LIMIT = 200;
     const screenedNote = line.note === undefined ? null : requireNullableString(line.note, "note");
     const trimmedNote = screenedNote?.trim() ?? "";
@@ -467,10 +463,6 @@ async function priceOrderLines(
       });
     }
     const note = trimmedNote.length === 0 ? null : trimmedNote;
-    if (line.doneness !== undefined && !DONENESS.includes(line.doneness)) {
-      throw new AppError("working_order.invalid_doneness", { value: String(line.doneness) });
-    }
-    const doneness = line.doneness ?? null;
 
     // Validate and freeze this dish's answers against the definitions resolved for the whole basket:
     // the options answers become the dish row's `option_snapshots`, and each extras pick becomes a
@@ -533,7 +525,6 @@ async function priceOrderLines(
       menuItemId: line.menuItemId ?? null,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
-      doneness,
     });
     for (const child of extraChildren) {
       lineMeta.push({
@@ -650,11 +641,10 @@ async function priceOrderLines(
       // `lineMeta` when the basket was built (data already in hand — the input line's override and the
       // resolved `product.courseId`); a CHILD row inherits no course.
       courseId: meta.kind === "parent" ? meta.courseId : null,
-      // Per-line customisation (spec §2/§3), NON-FISCAL: the validated + normalised note/doneness, on the
-      // PARENT dish line only — a child modifier row carries neither (NULL). Snapshotted onto the
+      // Per-line customisation (spec §2/§3), NON-FISCAL: the validated + normalised note, on the
+      // PARENT dish line only — a child modifier row carries none (NULL). Snapshotted onto the
       // ticket item at fire (`fireLines`), never onto the sale.
       note: meta.kind === "parent" ? meta.note : null,
-      doneness: meta.kind === "parent" ? meta.doneness : null,
       // The whole name block comes from the priced row, never from the request: a PARENT carries its
       // product's and its variant's names through `priceBasketWithOptions` and a CHILD's variant fields
       // stay null, and the invoice re-key above rewrote the two customer maps on that row in place —
@@ -1151,7 +1141,7 @@ export async function fireLines(
   // line" — covering every caller by construction rather than being repeated at each. `productId` stays
   // nullable in the row shape only so a caller can hand the whole line set through; after the filter it
   // is non-null on every surviving parent.
-  // Per-line customisation (spec §2/§3): each parent line's `note`/`doneness` (NON-FISCAL) rides in on
+  // Per-line customisation (spec §2/§3): each parent line's `note` (NON-FISCAL) rides in on
   // the same `lines` param — read back from `working_order_lines` by each caller's line-select, exactly
   // as `courseId` is — and is SNAPSHOTTED onto the `ticket_items` row below (like `station_id`/
   // `course_id`), so a later edit to the draft line never moves an already-fired ticket.
@@ -1166,7 +1156,6 @@ export async function fireLines(
     courseId: string | null;
     parentLineId: string | null;
     note: string | null;
-    doneness: Doneness | null;
     hold?: boolean;
   }[],
 ): Promise<void> {
@@ -1310,11 +1299,10 @@ export async function fireLines(
         workingOrderLineId: line.id,
         stationId,
         courseId,
-        // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note/doneness onto
-        // the ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
+        // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note onto the
+        // ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
         // afterwards never moves this fired ticket.
         note: line.note,
-        doneness: line.doneness,
         firedAt: fired ? sql`now()` : null,
         state: "queued" as const,
       };
@@ -1592,7 +1580,7 @@ export async function addTabRound(
   // KDS-2: each round line MAY carry an optional `courseId` override, threaded into `priceOrderLines`
   // where the line's course resolves to `override ?? product.course_id` (§2b). Ordering modifiers
   // (Task 6): a line MAY also carry `options`, expanded there into parent + child rows. Per-line
-  // customisation (`LineExtras`): a line MAY carry a `note`/`doneness` (NON-FISCAL), persisted on the
+  // customisation (`LineExtras`): a line MAY carry a `note` (NON-FISCAL), persisted on the
   // parent dish line and snapshotted onto its ticket item at fire. Coursing editing (A3): a line MAY carry
   // `hold: true` — insert it HELD (no fire, no print) regardless of course; the marker is correlated onto
   // the priced PARENT row below and read by `fireLines`. All optional, so existing callers (and the till's
@@ -1635,7 +1623,6 @@ export async function addTabRound(
     courseId: workingOrderLines.courseId,
     parentLineId: workingOrderLines.parentLineId,
     note: workingOrderLines.note,
-    doneness: workingOrderLines.doneness,
     lineNo: workingOrderLines.lineNo,
   });
   await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts);
@@ -2812,7 +2799,6 @@ export interface HeldOrder {
       quantity: number;
     }[];
     note?: string;
-    doneness?: Doneness;
     product?: {
       id: string;
       productId: string;
@@ -2925,7 +2911,6 @@ export async function getHeldOrder(
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
         note: workingOrderLines.note,
-        doneness: workingOrderLines.doneness,
         variantId: workingOrderLines.variantId,
         variantName: workingOrderLines.variantName,
         variantKitchenName: workingOrderLines.variantKitchenName,
@@ -2980,7 +2965,6 @@ export async function getHeldOrder(
           quantity: line.quantity,
           ...(extras.length === 0 ? {} : { extras }),
           ...(line.note === null ? {} : { note: line.note }),
-          ...(line.doneness === null ? {} : { doneness: line.doneness }),
           ...(line.variantId === null ? {} : { variantId: line.variantId }),
           product: {
             id: line.productId,
@@ -3086,7 +3070,6 @@ export async function updateHeldOrder(
         unitPriceGross: workingOrderLines.unitPriceGross,
         quantity: workingOrderLines.quantity,
         note: workingOrderLines.note,
-        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
@@ -3109,9 +3092,9 @@ export async function updateHeldOrder(
 
     /**
      * The stored parent a requested line would keep, or `null` when it is not the same line at
-     * all. Every check here is free — the line's position, the id the client named, its note, its
-     * doneness, and which dish it names — so an edit that changes any of them reaches the
-     * replacement path below without paying for the catalogue reads the ANSWERS comparison needs.
+     * all. Every check here is free — the line's position, the id the client named, its note, and
+     * which dish it names — so an edit that changes any of them reaches the replacement path below
+     * without paying for the catalogue reads the ANSWERS comparison needs.
      */
     const sameLines = req.lines.map((line, index) => {
       const stored = storedParents[index];
@@ -3121,8 +3104,7 @@ export async function updateHeldOrder(
         productId === null ||
         productId === undefined ||
         line.workingOrderLineId !== stored.id ||
-        (line.note?.trim() ?? null) !== stored.note ||
-        (line.doneness ?? null) !== stored.doneness
+        (line.note?.trim() ?? null) !== stored.note
       ) {
         return null;
       }
@@ -3434,7 +3416,6 @@ export async function placeOrder(
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
         note: workingOrderLines.note,
-        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
@@ -3528,7 +3509,6 @@ export async function sendToPrep(
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
         note: workingOrderLines.note,
-        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
@@ -3761,12 +3741,10 @@ export interface StationQueueItem {
    *  course, or released via `fireCourse`). */
   firedAt: string | null;
   /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
-   *  SNAPSHOTTED `ticket_items.note`/`doneness` (frozen at fire) rather than the live line, so a later
-   *  draft edit never changes what the kitchen already sees. `note` is a free-text instruction, `doneness`
-   *  the meat-doneness enum; both `null` when the line carried neither. The KDS renders the doneness
-   *  prominently and the note as sub-text beside the modifiers. */
+   *  SNAPSHOTTED `ticket_items.note` (frozen at fire) rather than the live line, so a later draft edit
+   *  never changes what the kitchen already sees. A free-text instruction; `null` when the line carried
+   *  none. The KDS renders it as sub-text beside the modifiers. */
   note: string | null;
-  doneness: Doneness | null;
   /** `ticket_items.queued_at` — the moment this line reached its station (KDS order-timing alerts, design
    *  §3), so the client's `TickingClock` can re-derive {@link band} between refreshes from this plus the
    *  group's {@link StationQueueGroup.thresholds}. */
@@ -3939,7 +3917,6 @@ export async function listStationQueue(
       // SNAPSHOTTED `ticket_items` columns (frozen at fire), NOT the live `working_order_lines`, so a
       // later draft edit never moves what the kitchen already sees.
       note: ticketItems.note,
-      doneness: ticketItems.doneness,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
@@ -4051,7 +4028,6 @@ export async function listStationQueue(
       firedAt: row.firedAt,
       // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
       note: row.note,
-      doneness: row.doneness,
       queuedAt: row.queuedAt,
       // Reconstruct a `queuedAtMs` offset from `Date.now()` using the DB-computed age, rather than
       // `Date.parse(row.queuedAt)` directly — the DB's `now()` and this process's clock can skew, and
@@ -4084,11 +4060,10 @@ export interface ExpoItem {
   firedAt: string | null;
   awayAt: string | null;
   /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
-   *  SNAPSHOTTED `ticket_items.note`/`doneness` (frozen at fire) — the same snapshot
-   *  {@link StationQueueItem.note}/`doneness` carries, never the live line. Both `null` when the line
-   *  carried neither. The pass renders the doneness prominently and the note as sub-text. */
+   *  SNAPSHOTTED `ticket_items.note` (frozen at fire) — the same snapshot
+   *  {@link StationQueueItem.note} carries, never the live line. `null` when the line carried none.
+   *  The pass renders it as sub-text. */
   note: string | null;
-  doneness: Doneness | null;
   /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the pass renders
    *  them as sub-text under this item. Each is the child modifier line's snapshotted `descriptions` map
    *  (localised client-side, as `name` is). Empty for a plain dish. */
@@ -4198,7 +4173,6 @@ export async function listExpoQueue(
       // `ticket_items` columns (frozen at fire), the same snapshot `listStationQueue` reads, so a later
       // draft edit never moves what the pass sees.
       note: ticketItems.note,
-      doneness: ticketItems.doneness,
       // The DISPLAY snapshot the pass renders — the line's four frozen staff/kitchen names + quantity,
       // carried from working_order_lines (never a live catalogue lookup), exactly as
       // `listStationQueue` serialises.
@@ -4360,7 +4334,6 @@ export async function listExpoQueue(
       awayAt: row.awayAt,
       // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
       note: row.note,
-      doneness: row.doneness,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
       // The dish's OWN allergen profile the station read attaches, safe-defaulted identically.
       asServed: asServedByParent.get(row.lineId)?.asServed ?? {

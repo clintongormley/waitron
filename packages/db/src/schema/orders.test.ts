@@ -425,7 +425,7 @@ describe("working_order_lines", () => {
     expect(references).toEqual(["product_id", "variant_id"]);
   });
 
-  it("carries nullable note + doneness columns (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
+  it("carries a nullable note column (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
     const meta = await rows<{
       column_name: string;
       is_nullable: string;
@@ -435,16 +435,9 @@ describe("working_order_lines", () => {
       db,
       sql`select column_name, is_nullable, data_type, udt_name
             from information_schema.columns
-           where table_name = 'working_order_lines' and column_name in ('note', 'doneness')
-           order by column_name`,
+           where table_name = 'working_order_lines' and column_name = 'note'`,
     );
     expect(meta).toEqual([
-      {
-        column_name: "doneness",
-        is_nullable: "YES",
-        data_type: "USER-DEFINED",
-        udt_name: "doneness",
-      },
       { column_name: "note", is_nullable: "YES", data_type: "text", udt_name: "text" },
     ]);
   });

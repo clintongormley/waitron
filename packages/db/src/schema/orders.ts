@@ -23,29 +23,6 @@ export const workingOrderStatus = pgEnum("working_order_status", [
 ]);
 
 /**
- * How a meat dish is cooked (KDS-only, spec §3). A pgEnum rather than a text CHECK, deliberately —
- * the same rationale as `working_order_status` above: these five values are settled by the spec, and
- * one declaration yields both the TypeScript union and the database constraint. Optional even on a
- * meat line: a stewed/minced dish leaves it NULL.
- */
-export const doneness = pgEnum("doneness", [
-  "rare",
-  "medium_rare",
-  "medium",
-  "medium_well",
-  "well_done",
-]);
-
-/**
- * The `doneness` enum's values as a runtime tuple, plus its narrowed type — for server-side validation
- * of a per-line `doneness` (spec §3). NON-FISCAL, like the column itself. `DONENESS.includes(value)` is
- * the membership check the ring-time line parser (`priceOrderLines`) runs before persisting; `Doneness`
- * types every param that carries one.
- */
-export const DONENESS = doneness.enumValues;
-export type Doneness = (typeof DONENESS)[number];
-
-/**
  * A working order is MUTABLE — the deliberate opposite of `sales`. Lines are
  * added, amended and removed all evening, and the order may end in nothing at
  * all. Two tables, one transition between them (architecture §6): conflating
@@ -198,7 +175,6 @@ export const workingOrderLines = table(
     courseId: id("course_id"),
     parentLineId: id("parent_line_id"),
     note: label("note"),
-    doneness: doneness("doneness"),
   },
   (t) => [
     foreignKey({
