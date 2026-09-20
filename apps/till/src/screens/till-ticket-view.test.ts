@@ -535,19 +535,22 @@ it("shows saved nonprice modifier answers literally without inventing charge row
     lines: [
       {
         ...result.lines[0]!,
-        modifierSnapshots: [
+        optionSnapshots: [
           {
-            modifierId: "note",
-            type: "text",
-            name: { "es-ES": "Dedicatoria" },
-            text: "<b>Happy day</b>",
+            listName: { es: "Dedicatoria" },
+            listCustomerName: null,
+            listKitchenName: null,
+            labelName: { es: "<b>Happy day</b>" },
+            labelCustomerName: null,
+            labelKitchenName: null,
           },
           {
-            modifierId: "side",
-            type: "options",
-            name: { "es-ES": "Guarnición" },
-            choiceId: "salad",
-            choiceName: { "es-ES": "Ensalada" },
+            listName: { es: "Guarnición" },
+            listCustomerName: null,
+            listKitchenName: null,
+            labelName: { es: "Ensalada" },
+            labelCustomerName: null,
+            labelKitchenName: null,
           },
         ],
       },
@@ -561,4 +564,50 @@ it("shows saved nonprice modifier answers literally without inventing charge row
   expect(
     el.shadowRoot!.querySelectorAll(".modifier-answer b, .modifier-answer .line-gross"),
   ).toHaveLength(0);
+});
+
+it("resolves a filed line's unit abbreviation from a BARE content-language key", async () => {
+  // Only `descriptions` is re-keyed onto the venue's invoice locales
+  // (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`); a line's
+  // `unit_name` keeps the bare content-language keys it was stored under, so an exact-key lookup
+  // against "es-ES" misses every one of them and shows whichever language happens to come first.
+  const { el } = await mount({
+    lines: [
+      {
+        descriptions: { "es-ES": "Jamón" },
+        unitName: { ca: "u", en: "ea", es: "ud" },
+        unitPrecision: 3,
+        quantity: "0.32",
+        gross: "6.40",
+      },
+    ],
+  });
+  expect(norm(el.shadowRoot!.querySelector(".line-qty")!.textContent ?? "").trim()).toBe("0.32 ud");
+});
+
+it("shows a dish's frozen options answers in the DINER's wording", async () => {
+  // Three different texts per name, so the assertion fails if the receipt reads the staff or the
+  // kitchen side by mistake (CLAUDE.md §4).
+  const { el } = await mount({
+    lines: [
+      {
+        ...result.lines[0]!,
+        optionSnapshots: [
+          {
+            listName: { es: "Punto personal" },
+            listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+            listKitchenName: "PTO",
+            labelName: { es: "Poco personal" },
+            labelCustomerName: { "es-ES": "Poco hecho" },
+            labelKitchenName: "PH",
+          },
+        ],
+      },
+    ],
+  });
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) =>
+      answer.textContent?.trim(),
+    ),
+  ).toEqual(["¿Cómo lo quiere?: Poco hecho"]);
 });

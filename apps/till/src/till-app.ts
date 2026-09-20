@@ -1707,9 +1707,7 @@ export class TillApp extends LitElement {
           ...(line.modifierSelections === undefined
             ? {}
             : { modifierSelections: line.modifierSelections }),
-          ...(line.modifierSnapshots === undefined
-            ? {}
-            : { modifierSnapshots: line.modifierSnapshots }),
+          ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
           ...(line.note === undefined ? {} : { note: line.note }),
         });
       }

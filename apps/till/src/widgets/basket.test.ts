@@ -1029,3 +1029,30 @@ it("reopens a draft modifier editor with its explicit answer and changes only th
     },
   ]);
 });
+
+it("shows a retrieved line's frozen options answers in the STAFF wording", async () => {
+  // Three different texts per name, so the assertion fails if the basket reads the kitchen or the
+  // customer side by mistake (CLAUDE.md §4).
+  const store = new WorkingOrderStore();
+  store.loadFrom("wo-1", [
+    {
+      product: cafe,
+      quantity: "1",
+      workingOrderLineId: "wol-1",
+      optionSnapshots: [
+        {
+          listName: { es: "Punto personal" },
+          listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+          listKitchenName: "PTO",
+          labelName: { es: "Poco personal" },
+          labelCustomerName: { "es-ES": "Poco hecho" },
+          labelKitchenName: "PH",
+        },
+      ],
+    },
+  ]);
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
+  ).toEqual(["Punto personal: Poco personal"]);
+});

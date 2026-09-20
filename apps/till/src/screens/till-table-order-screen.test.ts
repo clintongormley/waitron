@@ -1316,13 +1316,14 @@ it("shows a retained table line's recorded name and modifier answer after live n
       {
         ...pendingLine,
         name: "Nombre guardado",
-        modifierSnapshots: [
+        optionSnapshots: [
           {
-            modifierId: "cut",
-            name: { "es-ES": "Cortar" },
-            type: "options",
-            choiceId: "fino",
-            choiceName: { "es-ES": "Fino" },
+            listName: { es: "Cortar" },
+            listCustomerName: null,
+            listKitchenName: null,
+            labelName: { es: "Fino" },
+            labelCustomerName: null,
+            labelKitchenName: null,
           },
         ],
       },
@@ -1334,4 +1335,31 @@ it("shows a retained table line's recorded name and modifier answer after live n
   // The saved snapshot resolves the modifier name and the chosen label, not the live catalogue name.
   expect(row.textContent).toContain("Cortar");
   expect(row.textContent).not.toContain("Nuevo nombre");
+});
+
+it("shows a tab line's frozen options answers in the STAFF wording", async () => {
+  // Three different texts per name, so the assertion fails if the tab reads the kitchen or the
+  // customer side by mistake (CLAUDE.md §4).
+  const { el } = await mount({
+    lines: [
+      {
+        ...pendingLine,
+        name: "Nombre guardado",
+        optionSnapshots: [
+          {
+            listName: { es: "Punto personal" },
+            listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+            listKitchenName: "PTO",
+            labelName: { es: "Poco personal" },
+            labelCustomerName: { "es-ES": "Poco hecho" },
+            labelKitchenName: "PH",
+          },
+        ],
+      },
+    ],
+  });
+  await openDrawer(el);
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
+  ).toEqual(["Punto personal: Poco personal"]);
 });

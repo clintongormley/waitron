@@ -1,4 +1,4 @@
-import { modifierSnapshotLabels } from "../widgets/modifier-snapshot.js";
+import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -543,9 +543,8 @@ export class TillTableOrderScreen extends LitElement {
   /** A line's display name: the STAFF label the server froze onto it and resolved, falling back to the
    * live catalogue when a payload carries none. That catalogue fallback in turn falls back to the raw
    * id for a product deactivated since the line was added (mirroring the retrieve path's
-   * productId-only philosophy). `null` — a child modifier line, which has no product — resolves to
-   * `""`; the screen never renders a name for such a row (the per-line action + course picker are
-   * guarded off it), so this is only a total-safety fallback. */
+   * productId-only philosophy). A null `productId` resolves to `""` — a total-safety fallback; see
+   * the gap on {@link #isSendable} for why that is not the child test it reads as. */
   #nameForLine(line: TabLine): string {
     return line.name ?? this.#nameFor(line.productId);
   }
@@ -690,10 +689,19 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Whether `line` has a LIVE, unfired ticket item worth SENDING — the shared predicate the Send button
    * ({@link #lineAction}) and the Send-all gate ({@link #anyHeld}) both key on, so the two stay in
-   * lockstep. Three exclusions: a CHILD MODIFIER line (`productId === null`) never fires a ticket item of
-   * its own; a ticket-item-less PARENT (`state === null` — a moved/merged line or an openTab-initial line)
-   * has nothing to send (`sendLines` would match no ticket item and no-op); and an already-FIRED line
-   * (`firedAt !== null`) is past sending. */
+   * lockstep. A ticket-item-less PARENT (`state === null` — a moved/merged line or an openTab-initial
+   * line) has nothing to send (`sendLines` would match no ticket item and no-op), and an already-FIRED
+   * line (`firedAt !== null`) is past sending.
+   *
+   * GAP, stated so nobody reads the `productId` test as a child test — this screen and
+   * {@link #lineAction} and {@link #lineCourse} all use it as one, and it no longer is. A child extras
+   * line carries the picked product (spec §3.4), and nothing else on the tab wire marks it: the
+   * server's `readTabLines` selects no `parent_line_id` and `TabLine` declares no `parentLineNo`, the
+   * way `TillSaleLine` does (`apps/server/src/working-order.ts`). So a child line on a tab would be
+   * named, offered a Send action and a course picker, and swept into the split and pay filters.
+   * TRACED, not run: no such line can exist yet, because the till's `SaleLine` sends no `extras`
+   * field and `buildLineExtras` (`apps/server/src/modifier-selection.ts`) builds a child only from
+   * `requested.extras`. Fixing it needs the marker on the wire first. */
   #isSendable(line: TabLine): boolean {
     return line.productId !== null && line.firedAt === null && line.state !== null;
   }
@@ -705,10 +713,9 @@ export class TillTableOrderScreen extends LitElement {
    *  - FIRED + started (`state === "preparing"` / `"ready"`) → **Cancel**, behind the consequence-naming
    *    confirm (a started dish is binned, so {@link #requestCancel} opens the dialog rather than voiding).
    *
-   * A CHILD MODIFIER line (`productId === null`) is skipped FIRST: it has no product and never fires a
-   * ticket item of its own (`firedAt`/`state` always null), so it must show no action — without this
-   * guard its null `firedAt` would fall into the HELD branch and paint a meaningless Send on every
-   * option row. The HELD branch also requires a LIVE ticket item (`state !== null`): a parent line can
+   * A line with no product is skipped FIRST, so its null `firedAt` cannot fall into the HELD branch
+   * and paint a meaningless Send — but this is no longer the child test it reads as; see the gap on
+   * {@link #isSendable}. The HELD branch also requires a LIVE ticket item (`state !== null`): a parent line can
    * carry `firedAt === null && state === null` when it has no ticket item to send — a line opened with a
    * tab's initial round or one moved/merged between tabs (re-inserted under a new id without re-firing).
    * `sendLines` would match no ticket item for such a line and no-op, so Send would be dead; that shape
@@ -882,9 +889,9 @@ export class TillTableOrderScreen extends LitElement {
    * bound to its current course (`null` shows the "No course" placeholder); its change re-files the line via
    * {@link #setLineCourse}. A FIRED line shows its course READ-ONLY — a fired line's course is corrected via
    * recall (C5), not moved here. Renders nothing when the venue has no courses to pick between, exactly as
-   * the round-builder strip hides itself then — and nothing for a CHILD MODIFIER line (`productId === null`),
-   * which has no course of its own and whose null `firedAt` would otherwise paint an editable picker on
-   * every option row. */
+   * the round-builder strip hides itself then — and nothing for a line with no product, whose null
+   * `firedAt` would otherwise paint an editable picker on a row that has no course of its own. Not the
+   * child test it reads as; see the gap on {@link #isSendable}. */
   #lineCourse(line: TabLine): TemplateResult | typeof nothing {
     if (this.courses.length === 0 || line.productId === null) return nothing;
     if (line.firedAt !== null) {
@@ -1142,7 +1149,7 @@ export class TillTableOrderScreen extends LitElement {
     const name = this.#nameForLine(line);
     return html`<li class="line pending-line">
       <span class="name"
-        >${name}${modifierSnapshotLabels(line.modifierSnapshots).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
+        >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       <span class="line-total">${formatMoney(this.#lineGross(line))}</span>
@@ -1172,7 +1179,7 @@ export class TillTableOrderScreen extends LitElement {
                 (line) =>
                   html`<li class="line served-line">
                     <span class="name"
-                      >${this.#nameForLine(line)}${modifierSnapshotLabels(line.modifierSnapshots).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
+                      >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
                     <span class="line-total">${formatMoney(this.#lineGross(line))}</span>

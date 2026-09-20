@@ -7,11 +7,13 @@ import { currentLocale } from "../i18n/t.js";
  * duplicating. Text is DATA keyed by locale (spec §9) and a quantity is `numeric(_,3)` carried as
  * text, so neither is UI chrome.
  *
- * A line's DISH NAME is no longer one of them: the kitchen queue and the expo screen render the
+ * A line's DISH NAME is not one of them: the kitchen queue and the expo screen render the
  * server-resolved `item.name` as sent, and the table order screen reads the line's frozen `name`,
- * importing only {@link trimQuantity} from here. What the locale-map resolvers still serve is unit
- * labels, modifier snapshot text, and the live catalogue text the basket, the modifier picker and
- * `product-name.ts` show.
+ * importing only {@link trimQuantity} from here. What the locale-map resolvers serve is unit
+ * labels, an extras child line's name, and the live catalogue text the basket, the modifier picker
+ * and `product-name.ts` show. A dish's frozen OPTIONS answers do not come through here: their three
+ * wordings are built by `packages/catalogue/src/option-snapshot-labels.ts`, reached from
+ * `widgets/option-snapshot.ts`.
  */
 
 /**

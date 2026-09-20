@@ -33,6 +33,7 @@ import { sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import type { TillProduct, ModifierSelection, ModifierSnapshot } from "../api/client.js";
+import type { OptionSnapshot } from "@waitron/shared";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
@@ -81,6 +82,13 @@ export interface OrderLine {
   options?: SelectedLineOption[];
   modifierSelections?: ModifierSelection[];
   modifierSnapshots?: ModifierSnapshot[];
+  /**
+   * The answers the SERVER froze onto this line, carried back when a held order is retrieved
+   * (`HeldOrder.lines`, `../api/client.ts`). READ-ONLY here: nothing on the send path writes or
+   * returns it, so it never travels back up the wire — the basket renders it, and the picker's own
+   * draft ({@link modifierSnapshots}) takes precedence on a line the operator has answered.
+   */
+  optionSnapshots?: OptionSnapshot[];
   /**
    * A free-text kitchen instruction the operator typed on the line (order-line customisation), or
    * ABSENT when none — the common case, kept absent (never `""`) so a plain add stays byte-identical to

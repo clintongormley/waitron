@@ -38,7 +38,7 @@ import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
 // (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
 // primitives.
-import type { StationThresholds, TimingBand } from "@waitron/shared";
+import type { OptionSnapshot, StationThresholds, TimingBand } from "@waitron/shared";
 // The offer/menu shapes, type-only from catalogue's browser-safe leaf — see the file header for why
 // this pulls no runtime. `MenuOffer` is the body `GET /api/service-zones/:zoneId/offers` returns.
 import type { AccessibleCatalogue, MenuOffer } from "@waitron/catalogue/src/menu-types.js";
@@ -632,7 +632,9 @@ export type Tender = CashTender | CardTender;
  * the mutable client basket, so the printed line list can never diverge from the invoice.
  */
 export interface TillSaleLine {
-  modifierSnapshots?: ModifierSnapshot[];
+  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
+   *  every child line. The six names per answer are the server's, copied by value. */
+  optionSnapshots?: OptionSnapshot[];
   descriptions: Record<string, string>;
   /** Unit values frozen with the filed line; null for a modifier child. */
   unitName?: Record<string, string> | null;
@@ -718,7 +720,9 @@ export interface HeldOrder {
       quantity?: number;
     }[];
     product?: TillProduct;
-    modifierSnapshots?: ModifierSnapshot[];
+    /** The dish's frozen answers to its options lists; absent on a line that answered none and on
+     *  every child line. The six names per answer are the server's, copied by value. */
+    optionSnapshots?: OptionSnapshot[];
   })[];
 }
 
@@ -818,7 +822,9 @@ export interface AsServedAllergens {
  * imported — same bundle-decoupling rationale as every other type in this file.
  */
 export interface StationQueueItem {
-  modifierSnapshots?: ModifierSnapshot[];
+  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
+   *  every child line. The six names per answer are the server's, copied by value. */
+  optionSnapshots?: OptionSnapshot[];
   id: string;
   workingOrderLineId: string;
   state: TicketState;
@@ -1003,7 +1009,9 @@ export interface DevDeviceList {
  * server-resolved kitchen label, like {@link StationQueueItem.name}.
  */
 export interface ExpoItem {
-  modifierSnapshots?: ModifierSnapshot[];
+  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
+   *  every child line. The six names per answer are the server's, copied by value. */
+  optionSnapshots?: OptionSnapshot[];
   id: string;
   name: string;
   qty: string;
@@ -1320,14 +1328,18 @@ export interface TabLine {
    * buttons and the basket carry, never the customer-facing text a receipt prints. Absent only on a
    * fixture that omits it, which falls back to the live catalogue name. */
   name?: string;
-  modifierSnapshots?: ModifierSnapshot[];
+  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
+   *  every child line. The six names per answer are the server's, copied by value. */
+  optionSnapshots?: OptionSnapshot[];
   lineNo: number;
-  /** The line's product, or `null` for a CHILD MODIFIER line (ordering modifiers, Task 2) — a child has
-   * no product of its own (it rides under its parent dish). Mirrors the server's nullable
-   * `TabLine.productId` (`apps/server/src/working-order.ts`). The tab screen keys off this to tell a
-   * top-level dish from a modifier row: a child (`productId === null`) carries no per-line kitchen action
-   * and no course picker (coursing corrections C5 / C4), since it never fires a ticket item of its own
-   * (`firedAt`/`state` are always null for it). Non-null for every top-level dish line. */
+  /** The line's product. `string | null` because the COLUMN is nullable
+   * (`working_order_lines.product_id`), NOT because a child line lacks a product: an extras child
+   * carries the PICKED product, which is what the kitchen cooks and the diner is charged for
+   * (spec §3.4, and the server's own note on `TabLine.productId`,
+   * `apps/server/src/working-order.ts`).
+   *
+   * So `productId === null` is NOT a child test, and the tab screen still uses it as one — see the
+   * gap recorded on `#isSendable` (`../screens/till-table-order-screen.ts`). */
   productId: string | null;
   quantity: string;
   unitPriceGross: string;

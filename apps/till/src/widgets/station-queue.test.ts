@@ -1060,12 +1060,14 @@ it("shows saved nonprice modifier answers in the kitchen without HTML interpreta
         items: [
           {
             ...groupA.items[0]!,
-            modifierSnapshots: [
+            optionSnapshots: [
               {
-                modifierId: "note",
-                name: { "es-ES": "Dedicatoria" },
-                type: "text",
-                text: "<b>Happy day</b>",
+                listName: { es: "Dedicatoria" },
+                listCustomerName: null,
+                listKitchenName: null,
+                labelName: { es: "<b>Happy day</b>" },
+                labelCustomerName: null,
+                labelKitchenName: null,
               },
             ],
           },
@@ -1078,4 +1080,33 @@ it("shows saved nonprice modifier answers in the kitchen without HTML interpreta
     "Dedicatoria: <b>Happy day</b>",
   );
   expect(el.shadowRoot!.querySelector(".modifier-answer b")).toBeNull();
+});
+
+it("shows a dish's frozen options answers in the KITCHEN's wording", async () => {
+  // Three different texts per name, so the assertion fails if the rail reads the staff or the
+  // customer side by mistake (CLAUDE.md §4).
+  const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+    groups: [
+      {
+        ...groupA,
+        items: [
+          {
+            ...groupA.items[0]!,
+            optionSnapshots: [
+              {
+                listName: { es: "Punto personal" },
+                listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+                listKitchenName: "PTO",
+                labelName: { es: "Poco personal" },
+                labelCustomerName: { "es-ES": "Poco hecho" },
+                labelKitchenName: "PH",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    stationId: "st-1",
+  });
+  expect(el.shadowRoot!.querySelector(".modifier-answer")!.textContent).toBe("PTO: PH");
 });

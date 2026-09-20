@@ -1,5 +1,6 @@
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
+import type { ModifierSnapshot } from "../api/client.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -8,7 +9,7 @@ import { formatMoney } from "../i18n/format.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { descriptionFor, snapshotDescriptionFor } from "./dish-format.js";
-import { modifierSnapshotLabels } from "./modifier-snapshot.js";
+import { optionAnswers } from "./option-snapshot.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
@@ -31,6 +32,25 @@ const QTY_BADGE = "×";
  */
 function optionQuantityBadge(quantity: number | undefined): string {
   return quantity !== undefined && quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
+}
+
+/**
+ * The answers the PICKER has just produced on a line, which still arrive in the shape it emits
+ * (`ModifierSnapshot`, `../api/client.ts`) rather than as the server's `OptionSnapshot`. An extras
+ * pick is skipped: it is a priced row of its own, rendered beside the dish. `resolve` is the caller's
+ * language fold, because a picker answer carries a locale map and no venue default to resolve against.
+ *
+ * Deleted along with the picker's own move to the `options` wire shape (spec §11).
+ */
+function draftAnswers(
+  snapshots: readonly ModifierSnapshot[],
+  resolve: (text: Record<string, string>, fallback: string) => string,
+): string[] {
+  return snapshots.flatMap((snapshot) => {
+    if (snapshot.type === "extras") return [];
+    const value = snapshot.type === "text" ? snapshot.text : resolve(snapshot.choiceName, "");
+    return [`${resolve(snapshot.name, "")}: ${value}`];
+  });
 }
 
 /**
@@ -288,6 +308,23 @@ export class TillBasket extends LitElement {
   }
 
   /**
+   * A line's frozen options answers, in the STAFF wording a server at the till reads (spec §10) —
+   * never the kitchen shorthand or the diner's text.
+   *
+   * Two sources, because the picker has not moved to the `options` wire shape yet: a line the
+   * operator has just answered here carries the picker's DRAFT (`modifierSnapshots`, written by
+   * `setLineModifiers`), and a line rebuilt from a held order carries the server's frozen
+   * `optionSnapshots`. The draft wins wherever it is present — on a retrieved line it is the operator's
+   * newer answer, and it is set on every picker confirm — so the two can never both render.
+   */
+  #answers(line: OrderLine): string[] {
+    const draft = line.modifierSnapshots;
+    if (draft !== undefined)
+      return draftAnswers(draft, (labels, fallback) => this.#lineText(line, labels, fallback));
+    return optionAnswers(line.optionSnapshots, { reads: "staff" });
+  }
+
+  /**
    * A selected option's OWN allergens and dietary suitability, resolved from the line's product option
    * definition by its `optionGroupItemId` — the source of truth for an extra's own list, so both a
    * freshly-picked line and a retrieved one (each carrying the resolved product) render identically.
@@ -396,7 +433,7 @@ export class TillBasket extends LitElement {
               `;
             },
           )}
-          ${modifierSnapshotLabels(line.modifierSnapshots ?? [], (labels, fallback) => this.#lineText(line, labels, fallback)).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
+          ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
         `,
       )}
