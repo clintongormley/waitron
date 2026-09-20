@@ -1,6 +1,6 @@
 // Real PostgreSQL: tests real database lifecycle helpers and authentication as a probe role.
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import {
   assertSafeIdentifier,
@@ -112,6 +112,21 @@ describe("probeRoleStatement", () => {
     ["inRole", { name: "probe", password: "pw", inRole: ["app_user", 'report_reader"'] }],
   ])("refuses an unsafe %s", (field, probe) => {
     expect(() => probeRoleStatement(probe)).toThrowError(new RegExp(`unsafe ${field}`));
+  });
+
+  // Every case above puts its bad character in the MIDDLE of the value, which leaves both ends of
+  // the rule — that a token starts where it starts and ends where it ends — unchecked. These two
+  // put it at each end instead. They reload the module inside the case on purpose: the rule is a
+  // module-level constant, so it is built when the module loads rather than while a test runs, and
+  // a mutation test only runs a case it saw the code execute in.
+  it.each([
+    ["starting with a digit", "1probe"],
+    ["ending in a semicolon", "probe;"],
+  ])("refuses a name %s", async (_shape, name) => {
+    vi.resetModules();
+    const { probeRoleStatement: fresh } = await import("./identifiers.js");
+    expect(() => fresh({ name, password: "pw" })).toThrowError("unsafe name");
+    vi.resetModules();
   });
 });
 
