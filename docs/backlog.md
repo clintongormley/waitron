@@ -535,6 +535,55 @@ for a child line by a NULL product, no longer recognise one. Task 12 wires the t
 since taken doneness out end to end and seeded a cooking options list in its place; the next task
 is Task 11, the dashboard's Extras and Options tabs.
 
+Task 10 has landed as **#471** (main `bc958bd3b`). It deleted the built-in `doneness` field end to
+end — the enum, its column on the open order line and on the fired ticket item, the
+`working_order.invalid_doneness` code and its check, the prominent upper-cased kitchen-ticket line,
+and the till's meat-gated dropdown with its label module, its seven pairs of translated strings and
+its store field. Core migration 0042 drops both columns and then the type; drizzle emitted the
+`DROP TYPE` itself. The per-line free-text note stays, and every test that covered "the note and
+the doneness" now covers the note.
+
+The demo seed grows a cooking options list on the steak, in `seed-option-lists.ts` — a file of its
+own so Task 13 can delete the legacy option-group seed without taking it too. **Its staff name is
+`Punto`, not the `Cooked` the plan named**: a staff name is one plain string that is never
+translated at read time, and every other staff name in the demo menu is Spanish, so an English one
+would have shown English buttons on the Spanish demo. That was a review finding, not a choice made
+up front.
+
+WHAT THE REVIEW FOUND BY RUNNING, and what it says about this class of change. **A false receipt
+inside a fiscal guard**, which had already survived Task 3's review, Task 9's full wave and its
+four correction rounds: the guard proving a line's kitchen note never reaches the invoice hash
+claimed it had been proven by folding a note into `DescripcionOperacion`. Running that probe leaves
+all sixteen cases GREEN, because that field is not hashed at all — `registro-row.ts` says so three
+files away. What proves the guard, measured in both directions and reproduced independently by the
+Codex seat: letting a note reach `ImporteTotal`, which IS one of the eight fields `buildCadenaAlta`
+hashes. **And the reason it survived so long was an enumeration.** The comment saying what
+`backend.recordSale` is handed named three fields where the call site passes twelve, and that
+too-narrow list was the ARGUMENT for what cannot reach the hash. The same wrong enumeration was
+standing in four other places, two of them living source (`packages/db/src/schema/sales.ts` and its
+test), all now corrected — the rest are dated records, listed in the entry below.
+
+**The #421 shape, measured rather than estimated for once:** round one of corrections introduced
+SEVEN fresh false claims and round two introduced TWO. Three reading rounds, eleven claim fixes.
+
+TWO REAL DEFECTS beyond the claims: the English staff names above, and an orchestrator suite whose
+own header promised it asserted every sub-seed ran while deleting the new sub-seed's call left it
+green — gap and guard each proven by deletion.
+
+A CI TRAP RE-MEASURED: a root-guard run taken while three implementation agents were running their
+suites failed ten tests across five files, every one a five-second timeout on a tree-scanning
+guard, and the failing SET changed between two consecutive runs of the same code. On a quiet
+machine the same tree is 46/46. Load, not the branch — and the control is the quiet run, not a
+re-run past to green.
+
+STILL OPEN after this task, precisely. The till does not yet OFFER the seeded list:
+`listAvailableProducts` resolves the legacy attachments while only `listProducts` reads
+`product_modifiers`. Task 12 wires it — and because Task 12 lands BEFORE Task 13 deletes the legacy
+tables, there is a window in which the demo steak asks how it should be cooked twice; whoever takes
+Task 12 removes the legacy group in the same change or accepts the duplicate knowingly. Whether a
+`+ <list>: <label>` sub-line is prominent enough on a kitchen ticket to replace the old
+`** MEDIUM RARE **` framing is an open question nobody has put to a real cook.
+
 Task 8 has landed too, as #465. This is what it changed. It took the preserve path's comparison out of
 `updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
 (`apps/server/src/modifier-selection.ts`) — and made both sides order-independent. The defect that
