@@ -187,17 +187,20 @@ export function sameOptionSelections(
  * ONE pick MOVED from one list to the other predates the branch — measured in a checkout of `main`
  * at `68e36c6aa` with the same fixture, it bills the old list's 1.00 there too. Both now take the
  * replacement path, which re-prices from today's offers; the cost is that the whole order is
- * rewritten, every line losing its id and its locked price, whenever a PICKED product is offered by
+ * rewritten, every line losing its id and its price lock, whenever a PICKED product is offered by
  * more than one ACTIVE list. Pinned by "replaces the line when a pick moves to another list
  * offering the same product" and "replaces the line when two lists offering the same product have
  * their picks swapped" (working-order.test.ts).
  *
  * THIS IS NOT A COMPLETE GUARD, and the gap is in the word "offers": the count is taken over the
  * offers as they are NOW, while the ambiguity is a property of the offers the stored child was
- * written against. A second list deactivated, or the product taken out of it, between the park and
- * the edit brings the count back to one and the moved pick is preserved at the old row's price
- * again. Closing that would mean the child line carrying the list it came from, which spec §3.4
- * rules out; it is recorded in `docs/backlog.md` instead.
+ * written against. The escape is one edit — the list the STORED CHILD came off deactivated, or the
+ * product taken out of it, between the park and the edit — which brings the count back to one and
+ * preserves the moved pick at the old row's price. The opposite edit is closed elsewhere:
+ * `validateExtraSelections` refuses a pick naming a list that no longer offers the product. Closing
+ * the escape WITHOUT giving up the price lock would mean the child carrying the list it came off,
+ * which spec §3.5 rules out; the alternative, and the owner decision it needs, are in
+ * `docs/backlog.md`.
  *
  * Two picks naming the same product are the same rule, not a second one: `extra_list_items` holds
  * each product at most once per list (`extra_list_items_list_product_uq`, which

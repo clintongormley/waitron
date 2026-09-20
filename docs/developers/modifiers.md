@@ -197,7 +197,8 @@ each position and replaced the line. ONE pick MOVED from one list to the other p
 the same fixture run against `main` at `68e36c6aa` bills it at the old list's 1.00 there too. Both
 now take the replacement path and are re-priced from today's offers. The cost is not confined to the
 line that was refused: the replacement path rewrites the WHOLE order, so every line loses its id and
-its locked price whenever a picked product is doubly offered.
+its price lock whenever a picked product is doubly offered — re-priced from today's offers, which
+changes the number only where an offer has moved.
 
 Pinned in `apps/server/src/working-order.test.ts` by two cases that assert the BILL rather than the
 line ids, because the ids were right while the money was wrong: "replaces the line when a pick moves
@@ -207,10 +208,15 @@ product have their picks swapped", where two picks exchanged between a 1.00 list
 
 **The refusal is not a complete guard, and the gap is in the word "offers".** It counts the offers as
 they are NOW, while the ambiguity is a property of the offers the stored child was written against.
-Deactivate the second list, or take the product out of it, between the park and the edit, and the
-count comes back to one: the moved pick is preserved at the old row's price again. Closing that would
-mean the child line carrying the list it came from, which §3.4 rules out. Recorded in
-`docs/backlog.md` rather than guessed at.
+The escape is one specific edit: the list the STORED CHILD came off is deactivated, or loses the
+product, between the park and the edit — the count comes back to one, the re-sent pick names the
+surviving list, and the line is preserved at the old row's price. Traced through the code, not run.
+The opposite edit is closed by something else: a pick naming a list that no longer offers the product
+is refused outright by `validateExtraSelections`, and the line is replaced. Two ways to close the
+escape, neither free — pair on the child's frozen price as well as its product and quantity, which
+gives up the price lock a quantity-only edit exists to keep; or let the child carry the list it came
+off, which is what §3.5 rules out when it says an open order's child points at the product and not
+the list. Recorded in `docs/backlog.md` as an owner decision rather than guessed at here.
 
 An OPTIONS list RENAMED between the two sends does make the two sides differ, and the line is
 replaced and re-priced. That is a decision, not an omission: an options answer freezes six names and

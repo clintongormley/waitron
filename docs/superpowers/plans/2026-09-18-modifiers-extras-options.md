@@ -657,8 +657,8 @@ it("an extra child line carries product_id and the product's own VAT", async () 
   `OptionSnapshot[]`. The extras one is named `matchExtraChildren(offered, picks, children, dishQuantity)` and
   answers the PAIRING of picks to stored child lines rather than a boolean, because the caller moves
   each child's quantity from its own pick and a boolean would have to be paired up a second time
-  under a rule that could disagree with it. It takes a fourth thing the plan did not foresee — the
-  dish's offered extras lists — because it refuses the pairing outright when a picked product is
+  under a rule that could disagree with it. It takes something the plan did not foresee, first in its
+  signature — the dish's offered extras lists — because it refuses the pairing outright when a picked product is
   offered by more than one ACTIVE list. `docs/developers/modifiers.md` carries the reason, the two
   cases that pin it, and what the refusal does NOT cover.
 

@@ -551,27 +551,35 @@ Three things the review found, each measured rather than read:
   bills 1.00 there too — pre-existing, and the index-wise comparison never caught it either.
   `matchExtraChildren` now refuses the pairing whenever a PICKED product is offered by more than one
   of the dish's ACTIVE lists. The cost is not confined to the refused line: the replacement path
-  rewrites the whole order, so every line loses its id and its locked price.
+  rewrites the whole order, so every line loses its id and its price lock — re-priced from today's
+  offers, which changes the number only where an offer has moved.
 - **That refusal is not a complete guard, and the residue is worth knowing before anyone relies on
   it.** It counts the offers as they are NOW, while the ambiguity is a property of the offers the
-  stored child was written against. Deactivate the second list, or take the product out of it
-  (`PATCH /management-api/modifiers/extras/:id`), between the park and the edit, and the count comes
-  back to one: the moved pick is preserved at the old row's price again. Traced, not run. Closing it
-  means the child line carrying the list it came from, which spec §3.4 rules out — so it is a
-  DESIGN decision, not a fix. **Also not examined:** the refusal sits on the held-order edit path,
-  which is where the wrong price was measured being written; whether any other path can pair a
-  stored child with the wrong list's price was not looked at. **Next action:** an owner decision on
-  whether an extras child may carry its list id, taken with Task 9, which is the next task to touch
-  what a line records.
+  stored child was written against. The escape is one specific edit: the list the STORED CHILD came
+  off is deactivated, or loses the product (`PATCH /management-api/modifiers/extras/:id`), between
+  the park and the edit, so the count comes back to one, the re-sent pick names the surviving list,
+  and the line is preserved at the old row's price. Traced through the code, not run. The other
+  direction is closed by something else: a pick naming a list that no longer offers the product is
+  refused outright by `validateExtraSelections`, and the line takes the replacement path. There are
+  two ways to close the escape and neither is free — pair on the child's frozen price as well as its
+  product and quantity, which gives up the deliberate price lock that "keeps extras rows and
+  customisation on a quantity-only edit" pins; or let the child line carry the list it came off,
+  which is what spec §3.5 rules out when it says an open order's child points at the product and not
+  the list. Keeping the price lock AND closing the escape needs the second. **Also not examined:**
+  the refusal sits on the held-order edit path, which is where the wrong price was measured being
+  written; whether any other path can pair a stored child with the wrong list's price was not looked
+  at. **Next action:** an owner decision on whether an OPEN-ORDER extras child may carry its list
+  id. It is not Task 9's — that one writes the FILED sale line, where decision 11 already bans a
+  catalogue reference.
 - **The mechanism the branch first wrote down was a third of the story, and the correction of it
   was two thirds.** THREE columns hold parts of the offered order, each re-numbered from a save's
   body: `product_modifiers.sort`, `extra_list_items.sort` (the items within one extras list, which
   is the order that list's picks come back in) and `menu_item_extra_lists.display_order`. The first
   round of prose named only the first; the correction named the first and third and asserted the
-  third was unreachable, which is true of it and not of the second — `PUT
-  /management-api/modifiers/extras/:id` reaches `writeItems`. The full table is in
-  `docs/developers/modifiers.md`, and it is the only place the columns are enumerated — everywhere
-  else states the rule and points there.
+  third was unreachable, which is true of it and not of the second — `PATCH
+  /management-api/modifiers/extras/:id` reaches `writeItems`, as does the `POST` that creates a
+  list. What is single-homed, in `docs/developers/modifiers.md`, is the TABLE — each column beside
+  what writes it and which routes reach it. Everywhere else states the rule and points there.
 - **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
   the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 
