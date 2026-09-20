@@ -285,8 +285,9 @@ export interface DietProfile {
 /**
  * One selectable choice inside a {@link TillOptionGroup} (ordering modifiers, Task 3). A LOCAL mirror
  * of catalogue's `ResolvedOptionItem`, deliberately NOT imported from `@waitron/catalogue` — same
- * bundle-decoupling rationale as every other type in this file. `priceDelta` is the GROSS
- * (VAT-inclusive) numeric column carried as a string, like {@link TillProduct.unitPrice}; the modifier
+ * bundle-decoupling rationale as every other type in this file. `priceDelta` is a GROSS
+ * (VAT-inclusive) two-place decimal string, like {@link TillProduct.unitPrice} — the column stores
+ * the amount as a count of whole cents and the read converts it; the modifier
  * picker adds the selected deltas to its display-only running price. `vatClass` is null when the item
  * INHERITS the parent dish's rate (a non-null value overrides it) — carried for shape-fidelity; the
  * client never prices from it (the server re-prices authoritatively from the id).
