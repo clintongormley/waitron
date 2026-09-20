@@ -2489,6 +2489,28 @@ turns out to need a design moves to its track.
   `scripts/workspace-cycles.test.ts` looks only for loops, and `eslint.config.js`'s
   `no-restricted-paths` zones name `packages/*` as targets, never `apps/*`.
 
+**Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).** Three edges the
+branch found, checked, and consciously did not take.
+
+- **A vacuous test in `packages/ui/src/components/wt-combobox.test.ts`.** "disabling an open panel
+  closes it, so nothing further can be selected" passes whatever the component does: once the panel
+  is hidden its keystrokes never reach the component at all, so the assertions that follow are about
+  a combobox nothing typed into. Measured while writing the neighbouring tests, not inferred. The
+  repair is to drive the refusal the test names through a path that actually reaches the component,
+  or to delete the test and say what replaced it.
+- **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests.** Four mutants, none
+  covered. It is test-only plumbing the Vitest config loads — the same class as `src/test-helpers.ts`,
+  `src/a11y-helpers.ts` and `src/tokens/token-test-helpers.ts`, which `packages/ui/stryker.config.json`
+  already lists under `mutate` as exclusions. Adding a fourth exclusion is the consistent move and
+  also shrinks the denominator the new `break: 90` is measured against, which is why #466 left it in
+  and said so rather than quietly dropping it. Owner's call.
+- **`packages/media` and `packages/venue-service` register `parkPointerCommands` and never call
+  `commands.parkPointer()`.** So the pointer reset that `apps/dashboard`, `apps/till` and
+  `packages/ui`'s a11y suites use is available in both and wired to nothing — the latent
+  hover-leaks-into-the-next-test failure `docs/developers/testing-guide.md` documents applies to them
+  untouched. Either add the `beforeEach` to each package's shared test helper or drop the
+  registration.
+
 **Left behind by the Stryker upgrade (#447, 2026-09-19).** Four things the bump surfaced and
 deliberately did not settle.
 
