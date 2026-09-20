@@ -254,17 +254,37 @@ PostgreSQL types; the flip changes its bodies.
 | `jsonb` | text holding JSON |
 | enum type | text with a check constraint |
 | array | text holding JSON |
-| `numeric(12,2)` money | whole cents, as an integer |
+| `numeric(12,2)` money | whole cents, as an integer (an eight-byte one — see the note below the table) |
 | `numeric(12,3)` quantity | whole thousandths, as an integer |
 | `numeric(5,2)` rate | whole basis points, as an integer |
 
+**Width, added 2026-09-20 when P5 landed.** "An integer" is eight bytes, not four. PostgreSQL's
+`integer` stops at 2147483647, which as cents is 21,474,836.47, while the money bound the rest of
+the system states is twelve integer digits — so a four-byte column would refuse a band of amounts
+the code accepts. On PostgreSQL the money columns are `bigint`; on SQLite an INTEGER is 64-bit, so
+nothing about the flip changes. The receipt is in the plan's task P5, step 3.
+
 The money and quantity rule is **not** a blanket one, and the columns were counted rather than
-assumed. Across the 72 table-defining files on 2026-09-16 there are 30 `numeric` columns: **23 money
-columns** at precision 12 scale 2 (`amount` ×3, `unit_price` ×5, `line_total` ×2, `total` ×2,
+assumed. Across the 72 table-defining files on 2026-09-16 there were 30 `numeric` columns: **23 at
+precision 12 scale 2, the money ones** (`amount` ×3, `unit_price` ×5, `line_total` ×2, `total` ×2,
 `price_delta` ×2, `base`, `tax`, `gross_price`, `unit_price_gross`, `cash_tendered`, `tip_amount`,
 `offline_amount_cap`, `pay_rate`, `split_shift_premium`), **2 quantity columns** at 12/3, and **5 rate
 columns** at 5/2 (`vat_rate` ×2, `deductible_proportion`, `night_premium_pct`, `rate`). This matches
 what the topology design's §8.3 predicted from the Fable review; it is now measured.
+
+**That money figure is a snapshot of 2026-09-16, and the rule it justifies is a property. Added
+2026-09-20.** What a future session should carry away is not "23" but "every column declared through
+`money()` stores a count of whole cents"; the set grows without this document noticing. It already
+has — `packages/catalogue/src/schema/extras.ts` landed on 2026-09-19 in #449 carrying two `price`
+columns, so the same count taken on 2026-09-20 is 25. The command that answers the question at any
+moment is
+`grep -rn '\bmoney(' packages apps --include='*.ts' | grep -v '\.test\.ts'`; read its lines rather
+than counting them, and check each is a declaration. The pattern matches any line naming the
+helper, so a COMMENT mentioning `money()` is a hit like a column, and the next comment to mention
+it will be another one — the prose hits as this is written are
+`packages/db/src/schema/daily-closes.ts` and `packages/fiscal/src/testing/fake-backend.ts`, which
+is why the 27 lines it prints today are 25 columns. The sentence the count was written to support — that the
+mapping is not blanket, and that rate and quantity columns are mapped differently — is unaffected.
 
 **The one the vocabulary may not fully hide is the enum.** On PostgreSQL an enum is declared at the
 top of a file and produces a column builder; on SQLite it is a text column with a check. That is a

@@ -169,7 +169,7 @@ export const optionGroupItems = table(
     id: id("id").primaryKey().defaultRandom(),
     groupId: id("group_id").notNull(),
     name: json<Record<string, string>>("name").notNull(),
-    priceDelta: money("price_delta").notNull().default("0"),
+    priceDelta: money("price_delta").notNull().default(0),
     vatClass: label("vat_class"),
     // The AUTHORED cap on how many of THIS option a diner may take on one dish (per-option quantity).
     // `1` (the default) means "no per-option quantity" — the option behaves exactly as before this

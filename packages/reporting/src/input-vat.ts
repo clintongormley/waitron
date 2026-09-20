@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal, rawCentsToDecimal } from "@waitron/shared";
 import { periodDateFilter, validatePeriod, type LiquidationPeriod } from "./period.js";
 import type { InputVatRateLine, InputVatReturn, PurchaseVatKind } from "./types.js";
 
@@ -45,11 +45,21 @@ export async function computeInputVat(
 
   const dateFilter = periodDateFilter(sql`p.received_on`, input.year, input.period);
 
-  // The deductible cuota is rounded (half away from zero, Postgres `round(numeric, 2)`) PER invoice
-  // line before summing — matching `@waitron/shared`'s `percentOf` rounding and the per-invoice
-  // exactness rule. The rate is grouped as `numeric(5,2)::text` so two spellings of one rate cannot
-  // split into two lines (defensive; production rates are already 2-dp literals), exactly as
-  // `aggregateVatByRate` does on the output side.
+  // `purchase_invoice_vat.base` and `.tax` count whole cents; `deductible_proportion` is a
+  // `numeric(5, 2)` percentage and did NOT move, so the product below is a numeric count of cents
+  // with a fraction, and the rounding that used to go to 2 decimal places of EUROS now goes to 0
+  // decimal places of CENTS — the same granularity (one cent) and the same rule (Postgres
+  // `round(numeric, …)` is half away from zero, matching `@waitron/shared`'s `percentOf`), so every
+  // amount this reports is the amount it reported before. It is still rounded PER invoice line and
+  // only then summed, which is the per-invoice exactness rule the output side follows.
+  //
+  // Each sum is a count of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment. `round(numeric, 0)` renders no decimal point, so
+  // the tax sum's text is a plain integer like the base's (measured on both engines, 2026-09-20).
+  //
+  // The rate is grouped as `numeric(5,2)::text` so two spellings of one rate cannot split into two
+  // lines (defensive; production rates are already 2-dp literals), exactly as `aggregateVatByRate`
+  // does on the output side.
   const { rows } = await tx.execute<{
     rate: string;
     kind: PurchaseVatKind;
@@ -59,8 +69,8 @@ export async function computeInputVat(
     select
       (v.rate)::numeric(5, 2)::text as rate,
       v.kind as kind,
-      sum(v.base)::numeric(12, 2)::text as base,
-      sum(round(v.tax * p.deductible_proportion / 100, 2))::numeric(12, 2)::text as tax
+      sum(v.base)::text as base,
+      sum(round(v.tax * p.deductible_proportion / 100, 0))::text as tax
     from purchase_invoice_vat v
     join purchase_invoices p on p.id = v.purchase_invoice_id
     where p.regime = 'general'
@@ -71,8 +81,8 @@ export async function computeInputVat(
   const lines: InputVatRateLine[] = rows
     .map((r) => ({
       rate: decimal(r.rate),
-      base: decimal(r.base),
-      tax: decimal(r.tax),
+      base: rawCentsToDecimal(r.base),
+      tax: rawCentsToDecimal(r.tax),
       kind: r.kind,
     }))
     .sort((a, b) => {

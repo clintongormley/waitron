@@ -80,7 +80,7 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
   await db.execute(sql`
     insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${TENANT_A.saleId}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.seriesId}, 1,
       '2026-07-20T19:20:30+01:00', 60,
-      '0.00', '[]'::jsonb,
+      0, '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     )
   `);
@@ -165,7 +165,7 @@ export async function seedSoldRegistro(
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
-      '0.00', '[]'::jsonb,
+      0, '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     )
     returning id

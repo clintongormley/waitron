@@ -3,7 +3,15 @@ import "./errors.js";
 import { eq, sql } from "drizzle-orm";
 import { isUniqueViolation, saleSettlements, saleVoids, sales, tenders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  decimalToCents,
+  rawCentsToDecimal,
+  sumDecimals,
+} from "@waitron/shared";
 import type { SaleId } from "@waitron/shared";
 import type { RecordSaleTender } from "./record-sale.js";
 
@@ -24,11 +32,15 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // as listOutstandingSales does for correctionTotal.
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
+  //
+  // The subquery is a count of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment. `sales.total` beside it is a typed drizzle column,
+  // so the column's own mapping converts that one and it needs no cast.
   const [sale] = await tx
     .select({
       tillId: sales.tillId,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::numeric(12, 2)::text`,
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::text`,
     })
     .from(sales)
     .where(eq(sales.id, input.saleId));
@@ -73,8 +85,8 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // subquery above), plus tips — summed in the decimal domain, exactly as listOutstandingSales reads
   // its amountDue.
   const due = sumDecimals([
-    decimal(sale.total),
-    decimal(sale.corrections),
+    centsToDecimal(sale.total),
+    rawCentsToDecimal(sale.corrections),
     ...input.tenders.map((t) => decimal(t.tipAmount)),
   ]);
   const charged = sumDecimals(input.tenders.map((t) => decimal(t.amount)));
@@ -107,13 +119,20 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // `insert().values([])` outright — the empty case is written by its `sale_settlements` row alone.
   if (input.tenders.length > 0) {
     try {
+      // `amount`, `cash_tendered` and `tip_amount` are money columns, so the caller's decimal
+      // amounts become counts of whole cents here, at the row. `cashTendered` keeps its own
+      // absent-versus-null distinction: undefined lets the column take its default, null stores
+      // null, and only a supplied amount is converted.
       await tx.insert(tenders).values(
         input.tenders.map((tender) => ({
           saleId: input.saleId,
           method: tender.method as (typeof tenders.$inferInsert)["method"],
-          amount: tender.amount,
-          cashTendered: tender.cashTendered,
-          tipAmount: tender.tipAmount,
+          amount: decimalToCents(decimal(tender.amount)),
+          cashTendered:
+            tender.cashTendered == null
+              ? tender.cashTendered
+              : decimalToCents(decimal(tender.cashTendered)),
+          tipAmount: decimalToCents(decimal(tender.tipAmount)),
           settledAt: tender.settledAt!.toISOString(),
         })),
       );

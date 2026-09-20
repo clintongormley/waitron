@@ -380,10 +380,10 @@ describe("venue service routing", () => {
         name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
         quantity: "0.250",
-        unitPrice: "22.64",
-        unitPriceGross: "24.90",
+        unitPrice: 2264,
+        unitPriceGross: 2490,
         vatRate: "10.00",
-        lineTotal: "6.23",
+        lineTotal: 623,
         category: "Cold cuts",
       });
       await recordWorkingLineContexts(tx, { locationId }, "00000000-0000-4000-8000-000000000001", [
@@ -480,10 +480,10 @@ describe("venue service routing", () => {
         name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
         quantity: "0.100",
-        unitPrice: "22.64",
-        unitPriceGross: "24.90",
+        unitPrice: 2264,
+        unitPriceGross: 2490,
         vatRate: "10.00",
-        lineTotal: "2.49",
+        lineTotal: 249,
         category: "Cold cuts",
       });
       await copyOrderServiceContext(
@@ -579,10 +579,10 @@ describe("venue service routing", () => {
         name: "Loose sweets",
         descriptions: { "en-GB": "Loose sweets" },
         quantity: "1.000",
-        unitPrice: "1.09",
-        unitPriceGross: "1.20",
+        unitPrice: 109,
+        unitPriceGross: 120,
         vatRate: "10.00",
-        lineTotal: "1.20",
+        lineTotal: 120,
         category: "Uncategorised",
       });
 

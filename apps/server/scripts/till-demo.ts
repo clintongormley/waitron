@@ -30,6 +30,7 @@ import {
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  rawCentsToDecimal,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -306,8 +307,10 @@ async function main(): Promise<void> {
     const cardTicket = (await cardSaleRes.json()) as TillSaleResult;
 
     // Read the filed tender and its payment through the owner connection.
+    // `tenders.amount` counts whole cents, read raw and printed through `rawCentsToDecimal` below
+    // — see its doc comment.
     const { rows: cardTenders } = await db.execute<{ method: string; amount: string }>(sql`
-      select t.method, t.amount
+      select t.method, t.amount::text as amount
       from tenders t
       join sales s on s.id = t.sale_id
       where s.working_order_id = ${cardWorkingOrderId}`);
@@ -327,7 +330,7 @@ async function main(): Promise<void> {
       amount: string;
       linked: boolean;
     }>(sql`
-      select p.provider, p.state, p.amount, (p.sale_id is not null and p.sale_id = s.id) as linked
+      select p.provider, p.state, p.amount::text as amount, (p.sale_id is not null and p.sale_id = s.id) as linked
       from payments p
       join sales s on s.working_order_id = p.working_order_id
       where p.working_order_id = ${cardWorkingOrderId}`);
@@ -358,9 +361,11 @@ async function main(): Promise<void> {
       console.log(`    rate ${line.rate}%  base ${line.base}  tax ${line.tax}`);
     }
     console.log(`  qr:            ${cardTicket.qr}`);
-    console.log(`  tenders row:   method=${tender.method} amount=${tender.amount}`);
     console.log(
-      `  payments row:  provider=${payment.provider} state=${payment.state} amount=${payment.amount} linkedToSale=${payment.linked}`,
+      `  tenders row:   method=${tender.method} amount=${rawCentsToDecimal(tender.amount)}`,
+    );
+    console.log(
+      `  payments row:  provider=${payment.provider} state=${payment.state} amount=${rawCentsToDecimal(payment.amount)} linkedToSale=${payment.linked}`,
     );
   } finally {
     await db.close();

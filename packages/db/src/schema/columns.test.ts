@@ -73,7 +73,11 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
     expect(c.at.getSQLType()).toBe("timestamp with time zone");
     expect(c.at_string.getSQLType()).toBe("timestamp with time zone");
     expect(c.doc.getSQLType()).toBe("jsonb");
-    expect(c.amount.getSQLType()).toBe("numeric(12, 2)");
+    // Money is a count of whole cents. A decimal column would have no equivalent on the engine
+    // this vocabulary exists to switch to, and a float cannot hold a cent exactly; eight bytes
+    // rather than four because the money bound stated elsewhere is twelve integer digits, which
+    // a four-byte column cannot hold (see the helper's own comment for the measurement).
+    expect(c.amount.getSQLType()).toBe("bigint");
     expect(c.qty.getSQLType()).toBe("numeric(12, 3)");
     expect(c.vat.getSQLType()).toBe("numeric(5, 2)");
     expect(c.kind.getSQLType()).toBe("text");
@@ -432,6 +436,14 @@ describe("the newest helpers differ in ways their SQL type cannot show", () => {
     // but the two SQL-type cases go red with it — so treat this as documentation of the returned
     // type, not as the assertion that would catch such a swap.
     expect(c.opens_at.mapFromDriverValue("06:00:00")).toBe("06:00:00");
+  });
+
+  it("gives money the number reading, so a count of cents arrives as a number", () => {
+    // `money` and `bigCount` emit the same SQL type, so the type assertion above cannot tell a
+    // mode swap from a correct column. A caller that received a JavaScript `bigint` here would
+    // break every arithmetic and every conversion in `@waitron/shared`'s cents module.
+    expect(c.amount.columnType).toBe("PgBigInt53");
+    expect(c.amount.mapFromDriverValue("1234")).toBe(1234);
   });
 
   it("gives bigCount the number reading, not the bigint one", () => {

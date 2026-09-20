@@ -394,6 +394,19 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the bytes the
   huella hashed. Guard: `scripts/column-vocabulary.test.ts`, weaker than its name — it reads the
   IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it.
+- **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
+  (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
+  for a raw-SQL read of an AMOUNT, which casts the expression `::text`, never `::int` — a test
+  asserting the stored COUNT is not reading an amount and several cast `::int`). Above the row every
+  amount stays the exact `Decimal`. Money held as decimal strings inside `jsonb` is not a cents
+  column and is still summed as `numeric` (`packages/reporting/src/vat-summary.ts`). **Nothing
+  guards the boundary itself** — a bare whole number written into a money column by raw SQL now
+  silently means CENTS (a quoted decimal still fails loudly, `22P02`). Guards, both narrower than their names:
+  `packages/db/src/schema/columns.test.ts` (`money` and `bigCount` emit the SAME SQL type, so only
+  its read-mode case separates them) and `packages/shared/src/conventions.test.ts` (reads
+  `cents.ts` as TEXT, and nothing outside `packages/shared/src`, so a second file crossing into the
+  number type is seen by nobody). Receipts:
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — a replication
   apply worker skips ordinary triggers. No PRODUCT code replicates today (2026-09-19) — some test

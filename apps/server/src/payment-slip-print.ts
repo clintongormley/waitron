@@ -2,7 +2,7 @@ import "./errors.js";
 import { and, eq, ne } from "drizzle-orm";
 import { asAppUser, readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
-import { AppError, decimal, subtractDecimal } from "@waitron/shared";
+import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -61,13 +61,17 @@ export async function printSalePaymentSlip(
           };
     // An associated capture carries its settlement instant; do not invent a payment date if absent.
     if (payment.paidAt === null) return;
+    // `payments.amount` and `tenders.tip_amount` each store a count of whole cents; the slip is
+    // printed from amounts, so both become decimals here, at the row that read them.
+    const charged = centsToDecimal(payment.charged);
+    const tip = centsToDecimal(payment.tip);
     const payload = formatPaymentSlip({
       issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
       ...(await readReceiptOrder(tx, cfg, workingOrderId)),
       paidAt: payment.paidAt,
-      amount: subtractDecimal(decimal(payment.charged), decimal(payment.tip)),
-      charged: payment.charged,
-      tip: payment.tip,
+      amount: subtractDecimal(charged, tip),
+      charged,
+      tip,
       card,
       invoiceLocale: cfg.locale,
       printer: {

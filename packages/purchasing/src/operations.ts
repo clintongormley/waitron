@@ -2,7 +2,7 @@ import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { isUniqueViolation, purchaseInvoiceVat, purchaseInvoices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, compareDecimal, decimal } from "@waitron/shared";
+import { AppError, centsToDecimal, compareDecimal, decimal, decimalToCents } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import "./errors.js";
 import type {
@@ -50,6 +50,9 @@ const LINE_SELECT = {
 // `selectLines`' `orderBy(asc(rate), asc(id))` tie-break in JS without a re-read.
 const LINE_RETURNING = { ...LINE_SELECT, id: purchaseInvoiceVat.id };
 
+// The row shapes as the DATABASE hands them over: `total`, `base` and `tax` are money columns, so
+// they arrive as a count of whole cents, while `rate` and `deductible_proportion` are rates and
+// stay decimal literals. `mapHeader`/`mapLine` are the only crossing back to `Decimal`.
 interface HeaderRow {
   id: string;
   supplierTaxId: string;
@@ -57,7 +60,7 @@ interface HeaderRow {
   supplierInvoiceNumber: string;
   issuedOn: string;
   receivedOn: string;
-  total: string;
+  total: number;
   regime: PurchaseRegime;
   deductibleProportion: string;
   note: string | null;
@@ -66,8 +69,8 @@ interface HeaderRow {
 interface LineRow {
   purchaseInvoiceId: string;
   rate: string;
-  base: string;
-  tax: string;
+  base: number;
+  tax: number;
   kind: PurchaseVatKind;
 }
 
@@ -83,7 +86,7 @@ function mapHeader(row: HeaderRow): Omit<PurchaseInvoice, "lines"> {
     supplierInvoiceNumber: row.supplierInvoiceNumber,
     issuedOn: row.issuedOn,
     receivedOn: row.receivedOn,
-    total: row.total as Decimal,
+    total: centsToDecimal(row.total),
     regime: row.regime,
     deductibleProportion: row.deductibleProportion as Decimal,
     note: row.note,
@@ -93,8 +96,8 @@ function mapHeader(row: HeaderRow): Omit<PurchaseInvoice, "lines"> {
 function mapLine(row: LineRow): PurchaseInvoiceLine {
   return {
     rate: row.rate as Decimal,
-    base: row.base as Decimal,
-    tax: row.tax as Decimal,
+    base: centsToDecimal(row.base),
+    tax: centsToDecimal(row.tax),
     kind: row.kind,
   };
 }
@@ -139,8 +142,8 @@ async function insertLines(
       lines.map((line) => ({
         purchaseInvoiceId: invoiceId,
         rate: line.rate,
-        base: line.base,
-        tax: line.tax,
+        base: decimalToCents(line.base),
+        tax: decimalToCents(line.tax),
         kind: line.kind,
       })),
     )
@@ -201,7 +204,7 @@ export async function createPurchaseInvoice(
         supplierInvoiceNumber: input.header.supplierInvoiceNumber,
         issuedOn: input.header.issuedOn,
         receivedOn: input.header.receivedOn,
-        total: input.header.total,
+        total: decimalToCents(input.header.total),
         regime: input.header.regime,
         deductibleProportion: input.header.deductibleProportion,
         note: input.header.note ?? null,
@@ -288,9 +291,16 @@ export async function updatePurchaseInvoice(
   }
   if (patch.lines !== undefined) validateLines(patch.lines);
 
+  // `total` is the one money field in the patch, so it crosses to cents here; every other header
+  // field passes through as it stands.
+  const { total, ...header } = patch.header ?? {};
   const updated = await tx
     .update(purchaseInvoices)
-    .set({ ...patch.header, updatedAt: sql`now()` })
+    .set({
+      ...header,
+      ...(total === undefined ? {} : { total: decimalToCents(total) }),
+      updatedAt: sql`now()`,
+    })
     .where(eq(purchaseInvoices.id, id))
     .returning({ id: purchaseInvoices.id });
   if (updated.length === 0) throw new AppError("purchase.not_found", { id });

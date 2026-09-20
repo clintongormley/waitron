@@ -400,7 +400,8 @@ export type ModifierInput = ModifierCommon &
 export type Modifier = ModifierInput & { id: string };
 
 /** One `option_group_items` row for the authoring editor — mirrors catalogue's `OptionGroupItem`.
- * `priceDelta` is the GROSS numeric column carried as a string (like `unitPrice`); `vatClass` is null
+ * `priceDelta` is a GROSS two-place decimal string (like `unitPrice`) — the column stores the
+ * amount as a count of whole cents and the read converts it; `vatClass` is null
  * when the item INHERITS the parent dish's rate. */
 export interface OptionGroupItem {
   id: string;

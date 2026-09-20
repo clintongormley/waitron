@@ -26,6 +26,7 @@ import {
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  rawCentsToDecimal,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -339,21 +340,29 @@ async function stationQueueOrderIds(stationId: string): Promise<string[]> {
 async function tendersFor(
   workingOrderId: string,
 ): Promise<{ method: string; amount: string; tipAmount: string }[]> {
+  // Both count whole cents, read raw and converted by `rawCentsToDecimal`; the helper hands its
+  // callers the AMOUNTS, so their assertions read the same decimal literals they always did.
   const { rows } = await suite.admin.execute<{ method: string; amount: string; tip: string }>(sql`
-    select t.method, t.amount, t.tip_amount as tip
+    select t.method, t.amount::text as amount, t.tip_amount::text as tip
     from tenders t join sales s on s.id = t.sale_id
     where s.working_order_id = ${workingOrderId}
     order by t.method
   `);
-  return rows.map((r) => ({ method: r.method, amount: r.amount, tipAmount: r.tip }));
+  return rows.map((r) => ({
+    method: r.method,
+    amount: rawCentsToDecimal(r.amount),
+    tipAmount: rawCentsToDecimal(r.tip),
+  }));
 }
 
 /** The filed `sales.total` (ex-tip) for this order's sale. */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
+  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
+  // returns the amount its callers assert on.
   const { rows } = await suite.admin.execute<{ total: string }>(
-    sql`select total from sales where working_order_id = ${workingOrderId}`,
+    sql`select total::text as total from sales where working_order_id = ${workingOrderId}`,
   );
-  return rows[0]!.total;
+  return rawCentsToDecimal(rows[0]!.total);
 }
 
 /** The `payments` rows for this order — provider/state/external_ref, plus whether `sale_id` points at

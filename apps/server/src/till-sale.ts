@@ -9,8 +9,10 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   addDecimal,
   AppError,
+  centsToDecimal,
   compareDecimal,
   decimal,
+  rawCentsToDecimal,
   saleId as brandSaleId,
   subtractDecimal,
   workingOrderId as brandWorkingOrderId,
@@ -204,7 +206,7 @@ export async function readTenderBlock(
   workingOrderId: string,
 ): Promise<TenderBlock> {
   void cfg;
-  const [tender] = await tx
+  const [row] = await tx
     .select({
       method: tenders.method,
       amount: tenders.amount,
@@ -214,14 +216,20 @@ export async function readTenderBlock(
     .from(tenders)
     .where(eq(tenders.saleId, saleId));
   // Invoice-first issuance legitimately precedes the tender.
-  if (tender === undefined) return { method: "unpaid" };
+  if (row === undefined) return { method: "unpaid" };
+  // `amount`, `tip_amount` and `cash_tendered` each store a count of whole cents; they become the
+  // amounts this block carries here, at the row. Everything below — the change subtraction and the
+  // returned block the receipt and the wire read — is in the decimal domain.
+  const tender = {
+    ...row,
+    amount: centsToDecimal(row.amount),
+    tip: centsToDecimal(row.tip),
+    cashTendered: row.cashTendered === null ? null : centsToDecimal(row.cashTendered),
+  };
   if (tender.method === "cash") {
     return {
       method: "cash",
-      change: subtractDecimal(
-        decimal(tender.cashTendered ?? tender.amount),
-        decimal(tender.amount),
-      ),
+      change: subtractDecimal(tender.cashTendered ?? tender.amount, tender.amount),
     };
   }
   const [payment] = await tx
@@ -581,7 +589,8 @@ async function readSettledTicket(
     // Normalise the stored `timestamptz` text back to a canonical ISO-8601 instant, so the replayed
     // ticket's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
-    total: issued.total,
+    // `sales.total` stores a count of whole cents; the replayed ticket carries the amount.
+    total: centsToDecimal(issued.total),
     vatBreakdown: toVatBreakdown(filed.vatBreakdown),
     lines: ticketLines,
     tender,
@@ -772,7 +781,10 @@ async function readOutstandingSaleForOrder(
     .select({
       id: sales.id,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::numeric(12, 2)::text`,
+      // The subquery is a count of whole cents read raw, cast `::text` and converted by
+      // `rawCentsToDecimal` — see its doc comment. `sales.total` above is a typed drizzle column
+      // and needs no cast.
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::text`,
     })
     .from(sales)
     .where(eq(sales.workingOrderId, workingOrderId));
@@ -781,7 +793,7 @@ async function readOutstandingSaleForOrder(
   }
   return {
     saleId: brandSaleId(row.id),
-    amountDue: addDecimal(decimal(row.total), decimal(row.corrections)),
+    amountDue: addDecimal(centsToDecimal(row.total), rawCentsToDecimal(row.corrections)),
   };
 }
 
@@ -1641,7 +1653,9 @@ export async function collectOrder(
       }
       /* v8 ignore stop */
 
-      const { settledAmount } = settlementFor(req.tender, sale.total);
+      // `sales.total` stores a count of whole cents; `settlementFor` and `settleSale` both work in
+      // amounts, so the conversion happens here, at the row that read it.
+      const { settledAmount } = settlementFor(req.tender, centsToDecimal(sale.total));
       const settledAt = deps.clock.now().instant;
 
       await settleSale(tx, {
@@ -1669,7 +1683,7 @@ export async function collectOrder(
       if (req.tender.method === "card") {
         const { provider, paymentRef } = await recordManualCardPayment(tx, {
           workingOrderId: req.id,
-          amount: decimal(sale.total),
+          amount: centsToDecimal(sale.total),
           settledAt,
           externalRef: req.tender.externalRef,
         });

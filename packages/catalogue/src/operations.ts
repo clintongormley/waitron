@@ -4,7 +4,14 @@ import type { Modifier } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
 import { isModifierPrice } from "./modifier-limits.js";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { AppError, resolveContentText, FALLBACK_LOCALE } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  resolveContentText,
+  FALLBACK_LOCALE,
+} from "@waitron/shared";
 import {
   catalogues,
   categories,
@@ -212,7 +219,8 @@ interface RawProduct {
   kitchenName: string | null;
   dietaryDeclarations: string[];
   pricingUnit: string;
-  unitPrice: string;
+  /** Cents, as the column stores it; `toProduct` is where it becomes the amount callers see. */
+  unitPrice: number;
   vatClass: string;
   active: boolean;
   allergens: ProductAllergens | null;
@@ -244,6 +252,7 @@ function toProduct(
   const unit = sellableUnit(row.unitId, unitName, unitPrecision, hardwareUnit, unitAbbreviation);
   return {
     ...product,
+    unitPrice: centsToDecimal(row.unitPrice),
     categoryIds,
     primaryCategoryId: row.categoryId,
     modifiers: [],
@@ -374,14 +383,15 @@ export async function createMenuItem(
     .select({ id: menuItems.id })
     .from(menuItems)
     .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
-  const [row] = await tx
+  const grossPrice = decimalToCents(decimal(input.grossPrice));
+  const [written] = await tx
     .insert(menuItems)
-    .values(input)
+    .values({ ...input, grossPrice })
     .onConflictDoUpdate({
       target: [menuItems.menuId, menuItems.productId],
       set: {
         sectionId: input.sectionId,
-        grossPrice: input.grossPrice,
+        grossPrice,
         displayOrder: input.displayOrder ?? 0,
         active: true,
       },
@@ -395,6 +405,7 @@ export async function createMenuItem(
       displayOrder: menuItems.displayOrder,
       active: menuItems.active,
     });
+  const row = { ...written!, grossPrice: centsToDecimal(written!.grossPrice) };
   if (existing === undefined) {
     const defaults = await tx
       .select({
@@ -423,14 +434,19 @@ export async function createMenuItem(
     for (const option of defaults) {
       const group = byGroup.get(option.groupId) ?? { groupId: option.groupId, options: [] };
       if (option.optionId !== null)
-        group.options.push({ optionId: option.optionId, priceDelta: option.priceDelta! });
+        group.options.push({
+          optionId: option.optionId,
+          // `setMenuItemOptionGroups` takes the decimal strings a request body carries, and
+          // validates them, so the stored count is converted back before it is handed over.
+          priceDelta: centsToDecimal(option.priceDelta!),
+        });
       byGroup.set(option.groupId, group);
     }
     if (byGroup.size > 0) {
-      await setMenuItemOptionGroups(tx, row!.id, [...byGroup.values()]);
+      await setMenuItemOptionGroups(tx, row.id, [...byGroup.values()]);
     }
   }
-  return row!;
+  return row;
 }
 
 export async function updateMenuItem(
@@ -439,9 +455,13 @@ export async function updateMenuItem(
   menuItemId: string,
   patch: { sectionId?: string; grossPrice?: string; displayOrder?: number },
 ): Promise<void> {
+  const { grossPrice, ...rest } = patch;
   const [row] = await tx
     .update(menuItems)
-    .set(patch)
+    .set({
+      ...rest,
+      ...(grossPrice === undefined ? {} : { grossPrice: decimalToCents(decimal(grossPrice)) }),
+    })
     .where(
       and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
     )
@@ -573,7 +593,7 @@ export async function setMenuItemOptionGroups(
       menuItemId,
       groupId: group.groupId,
       optionId: option.optionId,
-      priceDelta: option.priceDelta,
+      priceDelta: decimalToCents(decimal(option.priceDelta)),
     })),
   );
   if (options.length > 0) await tx.insert(menuItemOptions).values(options);
@@ -698,7 +718,7 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
     group.options.push({
       id: option.optionId,
       name: option.optionName,
-      priceDelta: option.priceDelta,
+      priceDelta: centsToDecimal(option.priceDelta),
       maxQuantity: option.maxQuantity,
       vatClass: option.vatClass as VatClass | null,
       addAllergens: option.addAllergens as ProductAllergens | null,
@@ -742,7 +762,7 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
     menuId: row.menuId,
     productId: row.productId,
     sectionId: row.sectionId,
-    grossPrice: row.grossPrice,
+    grossPrice: centsToDecimal(row.grossPrice),
     displayOrder: row.displayOrder,
     active: row.active,
     menuName: row.menuName,
@@ -779,7 +799,7 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
         customerName: variant.customerName,
         kitchenName: variant.kitchenName,
         image: variant.image,
-        unitPrice: variant.unitPrice,
+        unitPrice: centsToDecimal(variant.unitPrice),
         available: variant.productAvailable && variant.menuAvailable,
       })),
   }));
@@ -977,7 +997,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       kitchenName: input.kitchenName?.trim() || null,
       dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
       pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
-      unitPrice: input.unitPrice,
+      unitPrice: decimalToCents(decimal(input.unitPrice)),
       vatClass: input.vatClass,
       active: input.active ?? true,
       soldAlone: input.soldAlone ?? true,
@@ -1058,11 +1078,12 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
   // Both of these are grouped by product ONCE, the way `readProductModifiers` groups its own
   // rows. A `.filter()` inside the `map` below would rescan every variant row and every attachment
   // row for each product, which is the whole list read twice per product.
-  const variantsByProduct = new Map<string, typeof variantRows>();
+  const variantsByProduct = new Map<string, ProductVariant[]>();
   for (const variant of variantRows) {
     const held = variantsByProduct.get(variant.productId) ?? [];
-    held.push(variant);
-    variantsByProduct.set(variant.productId, held);
+    const { productId, unitPrice, ...rest } = variant;
+    held.push({ ...rest, unitPrice: centsToDecimal(unitPrice) });
+    variantsByProduct.set(productId, held);
   }
   const groupIdsByProduct = new Map<string, string[]>();
   for (const attachment of attachments) {
@@ -1088,8 +1109,16 @@ export async function updateProduct(
   // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
   // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
-  const { allergens, dietOverride, dietaryDeclarations, categoryId, unitId, pricingUnit, ...rest } =
-    patch;
+  const {
+    allergens,
+    dietOverride,
+    dietaryDeclarations,
+    categoryId,
+    unitId,
+    pricingUnit,
+    unitPrice,
+    ...rest
+  } = patch;
   if (categoryId !== undefined) {
     // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
     //
@@ -1146,6 +1175,7 @@ export async function updateProduct(
     .update(products)
     .set({
       ...rest,
+      ...(unitPrice === undefined ? {} : { unitPrice: decimalToCents(decimal(unitPrice)) }),
       ...(unitAction.kind === "keep"
         ? {}
         : {
@@ -1461,7 +1491,7 @@ export async function listAvailableProducts(
         group.items.push({
           id: r.itemId,
           name: r.itemName!,
-          priceDelta: r.priceDelta!,
+          priceDelta: centsToDecimal(r.priceDelta!),
           vatClass: r.vatClass as VatClass | null,
           maxQuantity: r.maxQuantity!,
           addAllergens: r.addAllergens as ProductAllergens | null,
@@ -1489,7 +1519,7 @@ export async function listAvailableProducts(
       row.unitAbbreviation,
     ),
     pricingUnit: row.pricingUnit as PricingUnit,
-    unitPrice: row.unitPrice,
+    unitPrice: centsToDecimal(row.unitPrice),
     vatClass: row.vatClass as VatClass,
     category:
       row.category === null
@@ -1525,9 +1555,9 @@ export interface OptionGroup {
   active: boolean;
 }
 
-/** One `option_group_items` row for the authoring editor. `priceDelta` is the GROSS numeric column
- * carried as a string (like `unitPrice`); `vatClass` is null when the item INHERITS the parent dish's
- * rate. Unlike the sale-time {@link ResolvedOptionItem}, this carries `sort`/`active` for editing. */
+/** One `option_group_items` row for the authoring editor. `priceDelta` is a GROSS decimal string
+ * (like `unitPrice`); `vatClass` is null when the item INHERITS the parent dish's rate. Unlike the
+ * sale-time {@link ResolvedOptionItem}, this carries `sort`/`active` for editing. */
 export interface OptionGroupItem {
   id: string;
   groupId: string;
@@ -1739,7 +1769,9 @@ export async function createOptionGroupItem(
       groupId,
       name: input.name,
       maxQuantity,
-      ...(input.priceDelta === undefined ? {} : { priceDelta: input.priceDelta }),
+      ...(input.priceDelta === undefined
+        ? {}
+        : { priceDelta: decimalToCents(decimal(input.priceDelta)) }),
       ...(input.vatClass === undefined ? {} : { vatClass: input.vatClass }),
       ...(input.sort === undefined ? {} : { sort: input.sort }),
       ...(input.active === undefined ? {} : { active: input.active }),
@@ -1749,6 +1781,7 @@ export async function createOptionGroupItem(
     .returning(OPTION_GROUP_ITEM_COLUMNS);
   return {
     ...row!,
+    priceDelta: centsToDecimal(row!.priceDelta),
     vatClass: row!.vatClass as VatClass | null,
     addAllergens: row!.addAllergens as ProductAllergens | null,
   };
@@ -1766,6 +1799,7 @@ export async function listOptionGroupItems(
     .orderBy(asc(optionGroupItems.sort), asc(optionGroupItems.id));
   return rows.map((r) => ({
     ...r,
+    priceDelta: centsToDecimal(r.priceDelta),
     vatClass: r.vatClass as VatClass | null,
     addAllergens: r.addAllergens as ProductAllergens | null,
   }));
@@ -1784,7 +1818,12 @@ export async function updateOptionGroupItem(
   // The allergen column is single-field: `normalizeOverlay` validates a present `addAllergens` and
   // collapses an empty map to NULL; Drizzle `.set()` writes only the keys present, so an omitted
   // `addAllergens` leaves the stored value untouched. Validated regardless of caller (CLAUDE.md §3).
-  const write: Record<string, unknown> = { ...patch, ...(normalizeOverlay(patch) ?? {}) };
+  const { priceDelta, ...rest } = patch;
+  const write = {
+    ...rest,
+    ...(priceDelta === undefined ? {} : { priceDelta: decimalToCents(decimal(priceDelta)) }),
+    ...(normalizeOverlay(patch) ?? {}),
+  };
   await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
 

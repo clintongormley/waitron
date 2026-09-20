@@ -19,6 +19,7 @@ import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  rawCentsToDecimal,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -227,10 +228,12 @@ async function registroCount(workingOrderId: string): Promise<number> {
  * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
+  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
+  // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
   const { rows } = await suite.admin.execute<{ total: string }>(sql`
-    select total from sales where working_order_id = ${workingOrderId}
+    select total::text as total from sales where working_order_id = ${workingOrderId}
   `);
-  return rows[0]!.total;
+  return rawCentsToDecimal(rows[0]!.total);
 }
 
 beforeAll(() => {

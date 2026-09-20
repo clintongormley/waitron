@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { addDecimal, decimal, tillId as brandTillId } from "@waitron/shared";
+import { addDecimal, decimal, rawCentsToDecimal, tillId as brandTillId } from "@waitron/shared";
 import { businessDayClause, nodeScopeClause } from "./business-day.js";
 import type {
   CashUp,
@@ -19,6 +19,8 @@ import type {
  * scope (tenders are always positive).
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
+  // Both sums are counts of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment.
   const { rows } = await tx.execute<{
     till_id: string;
     method: TenderMethod;
@@ -28,8 +30,8 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
     select
       s.till_id::text as till_id,
       t.method as method,
-      sum(t.amount)::numeric(12, 2)::text as amount,
-      sum(t.tip_amount)::numeric(12, 2)::text as tip
+      sum(t.amount)::text as amount,
+      sum(t.tip_amount)::text as tip
     from tenders t
     join sales s on s.id = t.sale_id
     where ${businessDayClause(sql`t.settled_at`, input)}
@@ -46,8 +48,8 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
   for (const r of rows) {
     const line: TenderMethodLine = {
       method: r.method,
-      amount: decimal(r.amount),
-      tip: decimal(r.tip),
+      amount: rawCentsToDecimal(r.amount),
+      tip: rawCentsToDecimal(r.tip),
     };
     const existing = tills.get(r.till_id);
     if (existing === undefined) tills.set(r.till_id, [line]);

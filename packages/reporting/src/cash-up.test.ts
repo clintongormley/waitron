@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -99,6 +100,27 @@ describe("computeCashUp", () => {
 
   it("returns zeros for an empty day", async () => {
     expect(await run()).toEqual({ byTill: [], tenderTotal: "0.00", tipTotal: "0.00" });
+  });
+
+  it("reads the money columns as counts of whole cents, summed then converted once", async () => {
+    // Written straight to the table as INTEGERS, past `seedTender`'s own decimalToCents, so this
+    // pins what the column holds rather than what the fixture does with it. 12345 + 5 = 12350 cents
+    // is 123.50, and 250 + 0 = 250 cents is 2.50. A query that read the column as euros — which a
+    // `::numeric(12, 2)::text` cast does without error — would report "12350.00" and "250.00".
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: settledNoon,
+      total: "123.50",
+      lines: [{ vatRate: "21.00", lineTotal: "102.07" }],
+    });
+    await suite.db.execute(sql`
+      insert into tenders (sale_id, method, amount, tip_amount, settled_at) values
+        (${saleId}, 'cash', 12345, 250, ${settledNoon}),
+        (${saleId}, 'cash', 5, 0, ${settledNoon})`);
+    const cash = await run();
+    expect(cash.byTill[0]!.byMethod).toEqual([{ method: "cash", amount: "123.50", tip: "2.50" }]);
+    expect(cash.byTill[0]!.cashTakings).toBe("123.50");
+    expect(cash).toMatchObject({ tenderTotal: "123.50", tipTotal: "2.50" });
   });
 
   it("excludes another node's tenders", async () => {

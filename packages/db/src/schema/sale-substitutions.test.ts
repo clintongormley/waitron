@@ -88,7 +88,7 @@ async function insertSale(
   const [row] = await rows<{ id: string }>(
     db,
     sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
-           '1.00', '[]'::jsonb, ${locales[0]}, ${localesArray}, 'verifactu', 'recorded',
+           100, '[]'::jsonb, ${locales[0]}, ${localesArray}, 'verifactu', 'recorded',
            ${cp?.taxId ?? null}, ${cp?.legalName ?? null}, ${cp?.countryCode ?? null}
          ) returning id`,
   );

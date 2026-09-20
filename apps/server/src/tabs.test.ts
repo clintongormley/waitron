@@ -310,7 +310,7 @@ describe("addTabRound (append-only, no re-price)", () => {
     await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }]));
     // Change the catalogue price AFTER two rounds are locked.
     await asApp(cfg, (tx) =>
-      tx.execute(sql`update products set unit_price = '9.99' where id = ${cafeId}`),
+      tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
     );
     // Round 3 prices at the NEW 9.99 — but rounds 1 & 2 are UNTOUCHED (the load-bearing behaviour; a
     // full-basket replace like updateHeldOrder would re-price ALL to 9.99).
@@ -321,10 +321,12 @@ describe("addTabRound (append-only, no re-price)", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
+    // Read straight off the column, which counts whole cents: 150 is the locked 1.50 and 999 the
+    // new 9.99.
     expect(lines).toEqual([
-      { lineNo: 1, gross: "1.50" },
-      { lineNo: 2, gross: "1.50" },
-      { lineNo: 3, gross: "9.99" },
+      { lineNo: 1, gross: 150 },
+      { lineNo: 2, gross: 150 },
+      { lineNo: 3, gross: 999 },
     ]);
   });
 
@@ -715,7 +717,7 @@ describe("readTabLines", () => {
     // addTabRound/openTab stamp unit_price_gross at add-time). A read that recomputed from the
     // catalogue would report 9.99 and misreport the locked tab; readTabLines must return the LOCK.
     await asApp(cfg, (tx) =>
-      tx.execute(sql`update products set unit_price = '9.99' where id = ${cafeId}`),
+      tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
     );
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     expect(lines[0]!.unitPriceGross).toBe("1.50");

@@ -63,7 +63,7 @@ describe("resolveWorkTimeRuleset", () => {
         min_break_minutes, weekly_rest_minutes, annual_overtime_cap_hours, night_window_start_minute,
         night_window_end_minute, night_premium_pct, split_shift_premium, breaks_count_as_worked
       ) values (${locationId}, 6, 'period_net', 120, 60, 470, 2100, 780, 500, 300, 20, 2400, 90,
-        1380, 300, 25.00, 12.50, true)`);
+        1380, 300, 25.00, 1250, true)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
     expect(ruleset).toEqual({
       workingDaysPerWeek: 6,

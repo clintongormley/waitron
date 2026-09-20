@@ -1880,7 +1880,7 @@ describe("mountCatalogueApi — option group items", () => {
     expect(item).toMatchObject({
       groupId: g.id,
       name: { es: "Alioli" },
-      priceDelta: "0.00", // numeric(12,2) default renders with scale
+      priceDelta: "0.00", // column default is the integer 0; centsToDecimal always renders 2 places
       vatClass: null,
       sort: 0,
       active: true,

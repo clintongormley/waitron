@@ -55,7 +55,9 @@ export interface ExtraListItem {
   /** Per-dish cap for this product; at least 1, where 1 means "one or none". */
   maxQuantity: number;
   preselected: boolean;
-  /** null means "charge the product's own `unitPrice`" — see `resolveExtraPrice` in extras.ts. */
+  /** A GROSS (VAT-inclusive) two-place decimal string — the column stores the amount as a count of
+   * whole cents and the read converts it. null means "charge the product's own `unitPrice`" — see
+   * `resolveExtraPrice` in extras.ts. */
   price: string | null;
 }
 

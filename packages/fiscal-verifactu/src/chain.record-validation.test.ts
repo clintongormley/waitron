@@ -202,7 +202,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
         invoiceNumber,
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
-        total: "0.00",
+        total: 0,
         vatBreakdown: [],
         locale: "es-ES",
         invoiceLocales: ["es-ES"],

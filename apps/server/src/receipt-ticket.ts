@@ -286,7 +286,9 @@ export function formatReceipt({
   } else if (t.method === "card") {
     b.line("Tarjeta");
     if (t.reference !== null) text(`Ref. ${t.reference}`);
-    // String compare: `tenders.tip_amount` is `numeric(12,2)`, always canonical "0.00"/"0.50".
+    // String compare: `tenders.tip_amount` stores a count of whole cents, and `readTenderBlock`
+    // (`till-sale.ts`) converts it at the row with `centsToDecimal`, which always renders two
+    // places — so the tip reaching here is canonical "0.00"/"0.50" and never an unpadded "0".
     if (t.tip !== "0.00") {
       row(LABEL.tip, formatMoney(t.tip, locale));
       row(LABEL.charged, formatMoney(t.charged, locale));

@@ -5,6 +5,7 @@ import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { decimal, decimalToCents } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -45,25 +46,32 @@ const SEED = {
  * the venue-clock business day the route computes from `now()` always contains them — the insert and
  * the read share the DB clock). Superuser insert (fixture setup). */
 async function seedTodaySale(db: Database): Promise<void> {
+  // The SEED constants above are the AMOUNTS the route's response carries, and the assertions read
+  // them unchanged. `sales.total`, `tenders.amount`, `tenders.tip_amount`, `sale_lines.unit_price`
+  // and `sale_lines.line_total` all store a count of whole cents, so each is converted here, on the
+  // way into the row. `vat_breakdown` is jsonb, not a money column, and keeps its decimal literals;
+  // so do `quantity` and `vat_rate`.
+  const cents = (value: string): number => decimalToCents(decimal(value));
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
       till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
       total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
       ${tillId}, ${nodeId}, ${seriesId}, 1, now(), 0,
-      '121.00', ${JSON.stringify([{ rate: "21.00", base: SEED.base, tax: SEED.tax }])}::jsonb,
+      ${cents(SEED.grossTotal)},
+      ${JSON.stringify([{ rate: "21.00", base: SEED.base, tax: SEED.tax }])}::jsonb,
       'es-ES', array['es-ES'], 'fake', 'recorded'
     ) returning id`);
   const saleId = sale.rows[0]!.id;
   await db.execute(sql`
     insert into tenders (sale_id, method, amount, tip_amount, settled_at)
-    values (${saleId}, 'cash', ${SEED.tenderAmount}, ${SEED.tipAmount}, now())`);
+    values (${saleId}, 'cash', ${cents(SEED.tenderAmount)}, ${cents(SEED.tipAmount)}, now())`);
   await db.execute(sql`
     insert into sale_lines
       (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
     values (${saleId}, 1, ${SEED.name},
             ${JSON.stringify(SEED.descriptions)}::jsonb,
-            ${SEED.lineQuantity}, '3.50', '21.00', ${SEED.lineTotal})`);
+            ${SEED.lineQuantity}, ${cents("3.50")}, '21.00', ${cents(SEED.lineTotal)})`);
 }
 
 /** Seed dining tables at the node's location: one ACTIVE + OPEN (tab_id → a working order), one ACTIVE

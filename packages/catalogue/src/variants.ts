@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
-import { AppError, decimal, toScale } from "@waitron/shared";
+import { AppError, centsToDecimal, decimal, decimalToCents, toScale } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
 import { menuItems, menuSections } from "./schema/menu.js";
 import { menuItemVariants, productVariants } from "./schema/variants.js";
@@ -30,7 +31,7 @@ const publicationColumns = {
   available: menuItemVariants.available,
 };
 
-function validatePrice(price: string): string {
+function validatePrice(price: string): Decimal {
   if (typeof price !== "string" || !isProductPrice(price)) {
     throw new AppError("product.variant_invalid", { field: "unitPrice" });
   }
@@ -76,8 +77,8 @@ export async function listProductVariantsForProducts(
     );
   for (const row of rows) {
     const variants = grouped.get(row.productId) ?? [];
-    const { productId, ...variant } = row;
-    variants.push(variant);
+    const { productId, unitPrice, ...variant } = row;
+    variants.push({ ...variant, unitPrice: centsToDecimal(unitPrice) });
     grouped.set(productId, variants);
   }
   return grouped;
@@ -91,7 +92,9 @@ export async function setProductVariants(
   fallbackLanguage: string,
 ): Promise<ProductVariant[]> {
   const seen = new Set<string>();
-  const normalized: ProductVariantInput[] = [];
+  // `unitPrice` is re-declared as the branded `Decimal` `validatePrice` returns, so the write below
+  // converts it to cents without validating the same string a second time.
+  const normalized: (ProductVariantInput & { unitPrice: Decimal })[] = [];
   for (const input of inputs) {
     if (input.id !== undefined) {
       if (seen.has(input.id)) throw new AppError("product.variant_invalid", { field: "id" });
@@ -134,7 +137,7 @@ export async function setProductVariants(
       customerName: input.customerName,
       kitchenName: input.kitchenName,
       image: input.image,
-      unitPrice: input.unitPrice,
+      unitPrice: decimalToCents(input.unitPrice),
       available: input.available,
       displayOrder,
     };
@@ -162,11 +165,12 @@ export async function listMenuVariants(
       .where(and(eq(menuItems.id, menuItemId), eq(menuItems.menuId, menuId)));
     if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   }
-  return tx
+  const rows = await tx
     .select(publicationColumns)
     .from(menuItemVariants)
     .where(eq(menuItemVariants.menuItemId, menuItemId))
     .orderBy(asc(menuItemVariants.displayOrder), asc(menuItemVariants.variantId));
+  return rows.map((row) => ({ ...row, unitPrice: centsToDecimal(row.unitPrice) }));
 }
 
 export async function setMenuVariants(
@@ -199,7 +203,7 @@ export async function setMenuVariants(
     validateAvailability(input.available);
     return {
       ...input,
-      unitPrice: validatePrice(input.unitPrice),
+      unitPrice: decimalToCents(validatePrice(input.unitPrice)),
       menuItemId,
       productId: offer.productId,
       displayOrder,
@@ -324,7 +328,7 @@ export async function resolveMenuVariant(
       variantName: null,
       variantCustomerName: null,
       variantKitchenName: null,
-      unitPrice: offer.unitPrice,
+      unitPrice: centsToDecimal(offer.unitPrice),
     };
   const variant = variants.find((v) => v.id === variantId);
   const published = (await listMenuVariants(tx, menuItemId)).find((v) => v.variantId === variantId);

@@ -72,6 +72,7 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
+  decimalToCents,
   subtractDecimal,
   sumDecimals,
   nodeId as brandNodeId,
@@ -376,17 +377,21 @@ function printPeriodSummary(label: string, summary: VatSummary): void {
  * seeds the tenant — a received invoice is a plain accounting record, no fiscal write path.
  */
 async function seedPurchaseInvoices(db: Database): Promise<void> {
+  // These go straight into `purchase_invoices` and `purchase_invoice_vat`, whose `total`, `base`
+  // and `tax` columns store a count of whole cents — so the constants above, which are the amounts
+  // this script's own expectations are summed from, are converted at the row. `rate` is not a money
+  // column and stays a decimal string.
   for (const p of PURCHASE_INVOICES) {
     const total = addDecimal(decimal(p.base), decimal(p.tax));
     const inv = await db.execute<{ id: string }>(sql`
       insert into purchase_invoices
         (supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total, regime)
-      values (${p.supplierTaxId}, ${p.supplierName}, ${p.number}, ${p.issuedOn}, ${p.receivedOn}, ${total}, ${p.regime})
+      values (${p.supplierTaxId}, ${p.supplierName}, ${p.number}, ${p.issuedOn}, ${p.receivedOn}, ${decimalToCents(total)}, ${p.regime})
       returning id`);
     const id = inv.rows[0]!.id;
     await db.execute(sql`
       insert into purchase_invoice_vat (purchase_invoice_id, rate, base, tax, kind)
-      values (${id}, ${p.rate}, ${p.base}, ${p.tax}, ${p.kind})`);
+      values (${id}, ${p.rate}, ${decimalToCents(decimal(p.base))}, ${decimalToCents(decimal(p.tax))}, ${p.kind})`);
   }
 }
 

@@ -31,7 +31,7 @@ function insertSaleSql(opts: {
   // Raw insert (not the drizzle `sales` object) so the RED phase fails on "column working_order_id
   // does not exist" — the real cause — rather than on a TypeScript shape mismatch.
   return sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${TILL_A1}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
-      '1.00', '[]'::jsonb, 'es', array['es','ca']::text[], 'verifactu', 'recorded', ${opts.workingOrderId}
+      100, '[]'::jsonb, 'es', array['es','ca']::text[], 'verifactu', 'recorded', ${opts.workingOrderId}
     )`;
 }
 
@@ -75,7 +75,7 @@ describe("park & retrieve schema", () => {
         catalogueId: catalogue.id,
         name: "Café solo",
         pricingUnit: "each",
-        unitPrice: "1.00",
+        unitPrice: 100,
         vatClass: "general",
       })
       .returning({ id: products.id });
@@ -107,7 +107,7 @@ describe("park & retrieve schema", () => {
     // is the FK biting, not the line being malformed for some other reason.
     await suite.db.execute(
       sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
-         '1.000', '1.00', '1.10', '10.00', '1.00')`,
+         '1.000', 100, 110, '10.00', 100)`,
     );
     // Negative: a product_id with no products row is refused 23503. The BEFORE triggers
     // (require_open_parent, check_locales) pass first — open parent, matching locales — so the row
@@ -115,7 +115,7 @@ describe("park & retrieve schema", () => {
     const error = await captureError(() =>
       suite.db.execute(
         sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
-           '1.000', '1.00', '1.10', '10.00', '1.00')`,
+           '1.000', 100, 110, '10.00', 100)`,
       ),
     );
     expect(pgErrorCode(error)).toBe("23503");

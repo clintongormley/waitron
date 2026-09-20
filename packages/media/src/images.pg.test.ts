@@ -37,7 +37,9 @@ async function fixture() {
   const product = await suite.admin.execute<{
     id: string;
   }>(
-    sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
+    // `unit_price` counts whole cents, so 200 is the 2.00 this fixture means. A quoted decimal
+    // here fails loudly with `22P02`, which is how this one was found.
+    sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', 'each', 200, 'general') returning id`,
   );
   return { image, productId: product.rows[0]!.id };
 }

@@ -364,8 +364,9 @@ describe("recordSubstitution — the F3 sale", () => {
 
     const { saleId: f3Id } = await substitute(backend, [ticket]);
 
+    // Read straight off `sales`, so the total is a count of whole cents: 1441 is 14.41.
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
-    expect(row?.total).toBe("14.41");
+    expect(row?.total).toBe(1441);
     expect(row?.correctsSaleId).toBe(null); // an F3 is NOT a corrective invoice — it corrects nothing
     expect(row?.fiscalState).toBe("recorded");
     expect(row?.counterpartyTaxId).toBe("B12345678");
@@ -410,7 +411,8 @@ describe("recordSubstitution — the F3 sale", () => {
 
     const lines = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, f3Id));
     expect(lines).toHaveLength(2);
-    expect(lines.map((l) => l.lineTotal).sort()).toEqual(["10.00", "2.10"]);
+    // Whole cents off the table, and a numeric sort: the default one orders numbers as text.
+    expect(lines.map((l) => l.lineTotal).sort((x, y) => x - y)).toEqual([210, 1000]);
   });
 
   it("links every substituted ticket via sale_substitutions (the N:1 fan-out)", async () => {
@@ -523,7 +525,7 @@ describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => 
     expect(rows[0]?.code).toBe("clock.degraded");
     expect(rows[0]?.severity).toBe("warning");
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
-    expect(row?.total).toBe("14.41"); // the F3 itself still landed
+    expect(row?.total).toBe(1441); // the F3 itself still landed, 1441 cents being 14.41
   });
 
   it("records nothing to incidents when verification and the clock are both clean", async () => {

@@ -910,6 +910,23 @@ hold 52 columns between them — 6 in `categories.ts`, 22 in `menu.ts`, 9 in `un
 date, time, smallint, bigint or binary column — which is why the `ts`/`tsString` trap has no surface
 here, read off the diff rather than assumed.
 
+**Corrected in place on 2026-09-20, and read the paragraph above as true of THIS task and no
+later one.** Task P5 gave this package bigint columns — as at 2026-09-20, six, every one declared
+through `money()`, which is `bigint(name, { mode: "number" })`:
+`packages/catalogue/src/schema/menu.ts` (`gross_price`, `price_delta`),
+`packages/catalogue/src/schema/extras.ts` (`price` twice) and
+`packages/catalogue/src/schema/variants.ts` (`unit_price` twice). Two of them are not P5's doing at
+all — `extras.ts` landed on 2026-09-19 in #449 — so the file list above is a snapshot as well.
+
+Be exact about which trap that reopens. The `ts`/`tsString` pair itself still has no surface here:
+`grep -rn "timestamp" packages/catalogue/src/schema` returns nothing on 2026-09-20. What DOES now
+have a surface is the SHAPE that pair stands for — a builder whose `mode` changes the JavaScript
+value a caller receives while leaving the emitted SQL type identical. `money()`'s
+`{ mode: "number" }` and the `{ mode: "bigint" }` it could have been are exactly that, which is why
+`packages/db/src/schema/columns.test.ts` carries a read-mode case beside its type case ("gives
+money the number reading, so a count of cents arrives as a number") and says in its own comment
+that the type assertion alone cannot tell a mode swap from a correct column.
+
 Two things the conversion did NOT absorb, and the second one is the more useful.
 
 The first is the check-constraint carve-out: `units.hardware_unit` became a plain `label()` beside
@@ -1569,8 +1586,15 @@ folder reads 100% on every measure after the conversion, and the package as a wh
 `convenio_config`, the Spain-specific configuration surface that supplies the overtime rule and the
 working-time guardrails as data. The builders it used were `uuid`, `integer`, `numeric` in two
 shapes (`numeric(5, 2)` and `numeric(12, 2)` — the same scale, different precisions), `boolean` and
-`timestamp` in string mode, every one of which has a vocabulary equivalent. _Two superlatives were cut from this
-paragraph in review._ It is not "the smallest conversion in the rollout", and it is false in both
+`timestamp` in string mode, every one of which has a vocabulary equivalent. _Corrected in place on
+2026-09-20: the `numeric(12, 2)` half of that is now historical. Task P5 turned the single money
+column, `split_shift_premium` (`packages/workforce-es/src/schema/convenio-config.ts:77`), into a
+`bigint` counting whole cents, and left the single `numeric(5, 2)` rate column,
+`night_premium_pct`, alone — checked against
+`packages/workforce-es/drizzle/0002_money_in_cents.sql`, whose one statement names
+`split_shift_premium` and nothing else. So the table no longer holds `numeric` in two shapes:
+`night_premium_pct` is the only `numeric` column left in it._
+_Two superlatives were cut from this paragraph in review._ It is not "the smallest conversion in the rollout", and it is false in both
 directions: four packages still unconverted are smaller, `packages/credentials` being one table of
 six columns, and behind it P1b's third pull request (#396) converted a single column. And it is not
 "the first in a country module" either: `packages/fiscal-verifactu` was converted first, in the
@@ -3056,9 +3080,21 @@ Leave the pull request open for the owner.
 **Interfaces:**
 
 - Consumes: `money(name)` from P1.
-- Produces: money values are `number` in cents everywhere. A value that was `"12.34"` is now `1234`.
+- Produces: a money COLUMN holds a `number` counting whole cents. A value stored as `"12.34"` is
+  now `1234`.
 
-- [ ] **Step 1: Write the failing test — the one that catches a rounding drift**
+**Corrected in place on 2026-09-20, while doing it.** This line originally read "money values are
+`number` in cents everywhere", which does not fit this task's own Files list (it names the schema,
+the read and write paths and the migrations, and does not name the two single-page apps, the wire
+clients, or the receipt and fiscal formatting) or step 4 below ("convert at the edges"). What
+landed: **the database is the edge.** Every read turns the stored count into the exact `Decimal`
+the rest of the system already works in and every write turns it back, both at the row; above that
+line the arithmetic in `packages/shared/src/money.ts`, the HTTP contract, the receipts and the
+fiscal literals are unchanged, so no second form of an amount circulates. The two converters are
+`decimalToCents` and `centsToDecimal` in `packages/shared/src/cents.ts` — a file of their own
+because `money.ts` is text-checked for the absence of every float-shaped operation.
+
+- [x] **Step 1: Write the failing test — the one that catches a rounding drift** — done 2026-09-20 as `packages/fiscal-verifactu/src/money-conversion.huella.test.ts`, in its own commit before the conversion. It grew a SECOND case the sketch does not have: the shared fixture rounds nothing, so it would pass even if the rounding rule changed. The added case puts the tax on exactly half a cent in both directions (1.50 at 21% is 0.315, 0.05 at 10% is 0.005), where truncation or half-to-even returns a different byte.
 
 Create `packages/fiscal-verifactu/src/money-conversion.huella.test.ts`. It records what the current code produces, then asserts the converted code produces exactly the same bytes. Capture the expected values by running the current code once and pasting them in — a test that computes the expected value the same way as the code under test proves nothing.
 
@@ -3086,7 +3122,7 @@ describe("the money conversion does not move a single byte of a fiscal record", 
 });
 ```
 
-- [ ] **Step 2: Fill in the expected values from the current code**
+- [x] **Step 2: Fill in the expected values from the current code** — done 2026-09-20, and the file has not been touched since, which is the property that makes the literals a genuine before-reading.
 
 ```bash
 pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
@@ -3094,7 +3130,7 @@ pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
 
 It fails and prints what the current code actually produced. Paste those three values in. **Run it again and watch it pass on the unconverted code** — that is what makes it a real before-reading rather than a guess.
 
-- [ ] **Step 3: Change the helper**
+- [x] **Step 3: Change the helper** — done 2026-09-20, as `bigint` rather than the sketch's `integer`; the measurement that decided the width is written under this step.
 
 In `packages/db/src/schema/columns.ts`:
 
@@ -3105,10 +3141,38 @@ In `packages/db/src/schema/columns.ts`:
  * Integer cents rather than a decimal type: SQLite has no exact decimal, and a float cannot
  * represent a cent exactly. The name says cents so a caller cannot read it as units.
  */
-export const money = (name: string) => integer(name);
+export const money = (name: string) => bigint(name, { mode: "number" });
 ```
 
-- [ ] **Step 4: Find every place that reads or writes a money value**
+**Corrected in place on 2026-09-20:** this sketch said `integer(name)`, and four bytes is not
+enough. Measured on the development PostgreSQL, with a control in both directions:
+`2147483647::integer` succeeds and `2147483648::integer` gives `integer out of range`. As cents
+that is a ceiling of 21,474,836.47, while the money bound the rest of the system states is twelve
+integer digits (`MAX_MONEY_INTEGER_DIGITS`, enforced by `assertMoney` and by
+`packages/catalogue`'s price validators) — 99999999999999 cents. A four-byte column therefore
+refuses a band of amounts the converters accept, with a bare `22003`, and
+`packages/catalogue`'s `modifier-projection` test went red on exactly that. `bigint` holds the
+whole declared range and 99999999999999 is well inside the 9007199254740991 a JavaScript number
+counts exactly. Under SQLite an INTEGER is 64-bit, so the flip is unaffected.
+
+**And one trap that goes with it:** on real PostgreSQL through `pg`, an UNCAST `bigint` column
+read by RAW SQL comes back as a STRING, while PGlite returns a number (re-measured 2026-09-20 with
+a node script printing `typeof`, through `pg` 8.23 against `waitron-db-1` at server version 18.6
+and through the PGlite 0.5.8 API; nothing in this repository sets an int8 type parser). Drizzle's
+typed `.select()` is safe because the column maps the value.
+
+**This paragraph first said the raw-SQL cast was `::int`. Corrected 2026-09-20 in the same pass:
+the cast is `::text`, and the value goes to `rawCentsToDecimal` (`packages/shared/src/cents.ts`).**
+`::int` agrees on the TYPE and nothing else: four bytes stop at 2147483647 cents, €21,474,836.47,
+which sits INSIDE the twelve integer digits `assertMoney` admits, so it refuses on the way out —
+with a bare `22003` — a value the column accepted on the way in. That is the band the column is
+eight bytes to carry, reopened one query at a time. A note on the instrument, because it is easy
+to get wrong: `psql` renders every value as text and so cannot tell a driver returning a string
+from one returning a number, which is why the string-versus-number half of the paragraph above
+was re-measured through a JavaScript client. The rule and its measurements now live in
+`docs/developers/conventions-data.md` → _A money column holds a count of whole cents_.
+
+- [x] **Step 4: Find every place that reads or writes a money value** — done 2026-09-20, package by package, `apps/server` last. One site survived every compiler and every PGlite suite: `packages/core/src/list-outstanding-sales.ts` read `sales.total` in raw SQL with no cast, which node-postgres hands back as a string. It cost five red tests in `apps/server`'s container suites and is now covered by a container test of its own.
 
 ```bash
 grep -rn "\bmoney(" packages apps --include='*.ts' | grep -v node_modules | grep -v '.test.ts'
@@ -3116,7 +3180,7 @@ grep -rn "\bmoney(" packages apps --include='*.ts' | grep -v node_modules | grep
 
 For each column the helper declares, follow its reads and writes. A value that arrived as a string like `"12.34"` now arrives as `1234`. Convert at the edges — the wire types and the formatting that produces a receipt or a fiscal amount — never in the middle, or two representations will circulate.
 
-- [ ] **Step 5: Run the byte-identical test and watch it pass**
+- [x] **Step 5: Run the byte-identical test and watch it pass** — done 2026-09-20: both cases pass against the literals captured before the conversion, no literal edited.
 
 ```bash
 pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
@@ -3124,7 +3188,7 @@ pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
 
 Expected: PASS, against the literals captured before the conversion. **A failure here is a real rounding difference; do not update the literals.**
 
-- [ ] **Step 6: Re-run the shared fixture against the real fiscal check**
+- [x] **Step 6: Re-run the shared fixture against the real fiscal check** — done 2026-09-20: `@waitron/fiscal-verifactu` 406 tests green at 98.99/96.01/99.35/99.68.
 
 `CLAUDE.md` §4: a fixture no check reads is unverified data.
 
@@ -3133,7 +3197,7 @@ pnpm --filter @waitron/fiscal-verifactu test:coverage
 pnpm --filter @waitron/verifactu test:coverage
 ```
 
-- [ ] **Step 7: Generate the migrations**
+- [x] **Step 7: Generate the migrations** — done 2026-09-20: `packages/db` 0043 and 0044, `packages/catalogue` 0012, plus the module sets that carry a money column.
 
 ```bash
 pnpm --filter <package> exec drizzle-kit generate --name money_in_cents
@@ -3141,7 +3205,7 @@ pnpm --filter <package> exec drizzle-kit generate --name money_in_cents
 
 One per affected package. Pre-production, so the migration drops and recreates the column type; no data migration.
 
-- [ ] **Step 8: Run the packages that do money arithmetic**
+- [x] **Step 8: Run the packages that do money arithmetic** — done 2026-09-20, each on its own pull request branch as it converted, and `core`, `fiscal-verifactu` and `server` re-run whole at the end.
 
 ```bash
 pnpm --filter @waitron/core test:coverage && \
@@ -4050,7 +4114,9 @@ import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const id = (name: string) => text(name);
 export const ts = (name: string) => text(name);            // ISO-8601
 export const json = <T>(name: string) => text(name, { mode: "json" }).$type<T>();
-export const money = (name: string) => integer(name);       // whole cents (P5)
+export const money = (name: string) => integer(name);       // whole cents (P5); SQLite's INTEGER is
+                                                            // 64-bit, so this matches the `bigint`
+                                                            // P5 actually landed on PostgreSQL
 export const quantity = (name: string) => integer(name);    // whole thousandths (P6)
 export const rate = (name: string) => integer(name);        // whole basis points (P6)
 export const enumText = <T extends string>(name: string, _values: readonly T[]) => text(name).$type<T>();

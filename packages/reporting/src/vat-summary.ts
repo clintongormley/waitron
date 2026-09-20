@@ -31,6 +31,10 @@ export async function aggregateVatByRate(
   scope: { nodeId?: NodeId; dateFilter: SQL },
 ): Promise<VatSummary> {
   const nodeClause = nodeScopeClause(scope.nodeId);
+  // No cents here, unlike every other money read in this package: `sales.vat_breakdown` is a jsonb
+  // document whose `base` and `tax` are the DECIMAL LITERALS filed with the invoice, not the integer
+  // cents a money COLUMN holds, so they are cast from text to `numeric` and summed as amounts.
+  //
   // The rate is grouped as `numeric(5,2)::text`, not the raw jsonb string, so two spellings of the
   // same rate ("21" vs "21.00") can never split into two byRate lines. Every production rate is
   // already a fixed 2-dp literal (`buildVatBreakdown`/`priceRows`), so this is defensive normalisation.

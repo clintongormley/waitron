@@ -924,7 +924,7 @@ describe("catalogue operations", () => {
         {
           groupId: extras!.id,
           name: { en: "Bacon" },
-          priceDelta: "0.50",
+          priceDelta: 50,
           vatClass: "reduced",
           sort: 1,
           active: true,
@@ -932,7 +932,7 @@ describe("catalogue operations", () => {
         {
           groupId: extras!.id,
           name: { en: "Lettuce" },
-          priceDelta: "0",
+          priceDelta: 0,
           vatClass: null,
           sort: 0,
           active: true,
@@ -940,7 +940,7 @@ describe("catalogue operations", () => {
         {
           groupId: extras!.id,
           name: { en: "Gold leaf" },
-          priceDelta: "5.00",
+          priceDelta: 500,
           vatClass: null,
           sort: 2,
           active: false,
@@ -959,7 +959,7 @@ describe("catalogue operations", () => {
       await tx.insert(optionGroupItems).values({
         groupId: retired!.id,
         name: { en: "Old" },
-        priceDelta: "1.00",
+        priceDelta: 100,
         vatClass: null,
         sort: 0,
         active: true,
@@ -980,7 +980,7 @@ describe("catalogue operations", () => {
       await tx.insert(optionGroupItems).values({
         groupId: sauces!.id,
         name: { en: "Discontinued ketchup" },
-        priceDelta: "0",
+        priceDelta: 0,
         vatClass: null,
         sort: 0,
         active: false,

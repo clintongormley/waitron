@@ -130,8 +130,8 @@ async function seed(db: Database): Promise<void> {
  */
 async function recordSale(
   db: Database,
-  total: string,
-  tenderRows: { method: "cash" | "card"; amount: string; tipAmount?: string }[],
+  total: number,
+  tenderRows: { method: "cash" | "card"; amount: number; tipAmount?: number }[],
 ): Promise<string> {
   return db.transaction(async (tx) => {
     const [sale] = await tx
@@ -168,7 +168,7 @@ async function recordSale(
         saleId: sale.id,
         method: t.method,
         amount: t.amount,
-        tipAmount: t.tipAmount ?? "0.00",
+        tipAmount: t.tipAmount ?? 0,
         settledAt: AT,
       })),
     );
@@ -193,15 +193,13 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
     // The negative control for the coverage guard — with or without the trigger,
     // this must succeed, so a deletion that made the mis-summed case pass could
     // not accidentally make THIS one start failing.
-    const saleId = await recordSale(db, "70.00", [
-      { method: "card", amount: "75.00", tipAmount: "5.00" },
-    ]);
+    const saleId = await recordSale(db, 7000, [{ method: "card", amount: 7500, tipAmount: 500 }]);
     const [row] = await db.insert(saleSettlements).values({ saleId, settledAt: AT }).returning();
     expect(row.saleId).toBe(saleId);
   });
 
   it("refuses a settlement whose tenders do not sum to total plus tips", async () => {
-    const saleId = await recordSale(db, "70.00", [{ method: "cash", amount: "50.00" }]);
+    const saleId = await recordSale(db, 7000, [{ method: "cash", amount: 5000 }]);
     const error = await captureError(() =>
       db.insert(saleSettlements).values({ saleId, settledAt: AT }),
     );
@@ -222,7 +220,7 @@ describeEachTarget("sale settlements — append-only", (target) => {
     db = await target.create();
     await seed(db);
     // A covered sale, so the settlement INSERT passes coverage and lands.
-    const saleId = await recordSale(db, "10.00", [{ method: "card", amount: "10.00" }]);
+    const saleId = await recordSale(db, 1000, [{ method: "card", amount: 1000 }]);
     const [row] = await db
       .insert(saleSettlements)
       .values({ saleId, settledAt: AT })
@@ -280,7 +278,7 @@ describeEachTarget("sale settlements — no tender after settlement", (target) =
   beforeEach(async () => {
     db = await target.create();
     await seed(db);
-    saleId = await recordSale(db, "10.00", [{ method: "card", amount: "10.00" }]);
+    saleId = await recordSale(db, 1000, [{ method: "card", amount: 1000 }]);
     await db.insert(saleSettlements).values({ saleId, settledAt: AT });
   });
 
@@ -292,7 +290,7 @@ describeEachTarget("sale settlements — no tender after settlement", (target) =
     const error = await captureError(() =>
       withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        return tx.insert(tenders).values({ saleId, method: "cash", amount: "5.00", settledAt: AT });
+        return tx.insert(tenders).values({ saleId, method: "cash", amount: 500, settledAt: AT });
       }),
     );
     expect(pgErrorCode(error)).toBe("WT002");

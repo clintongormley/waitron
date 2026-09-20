@@ -76,7 +76,7 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
       ${ids.saleId}, ${ids.tillId}, ${ids.nodeId}, ${ids.seriesId}, 1,
-      '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb,
+      '2026-07-20T19:20:30+01:00', 60, 0, '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     )`);
 }

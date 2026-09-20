@@ -20,11 +20,15 @@ import { asAppUser, verifyAmendmentChain, withTransaction } from "@waitron/db";
 import type { Transaction, VerifiableAmendment } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import {
+  addDecimal,
+  decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  rawCentsToDecimal,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readOrderFlow } from "./till-config.js";
@@ -245,10 +249,12 @@ async function saleCount(workingOrderId: string): Promise<number> {
  * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
+  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
+  // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
   const { rows } = await suite.admin.execute<{ total: string }>(sql`
-    select total from sales where working_order_id = ${workingOrderId}
+    select total::text as total from sales where working_order_id = ${workingOrderId}
   `);
-  return rows[0]!.total;
+  return rawCentsToDecimal(rows[0]!.total);
 }
 
 /**
@@ -288,14 +294,16 @@ async function registroCount(workingOrderId: string): Promise<number> {
  * Ordered by method so a multi-tender assertion is stable.
  */
 async function tendersFor(workingOrderId: string): Promise<{ method: string; amount: string }[]> {
+  // `tenders.amount` counts whole cents, read raw and converted by `rawCentsToDecimal`; the
+  // helper hands back the amount its callers assert on.
   const { rows } = await suite.admin.execute<{ method: string; amount: string }>(sql`
-    select t.method, t.amount
+    select t.method, t.amount::text as amount
     from tenders t
     join sales s on s.id = t.sale_id
     where s.working_order_id = ${workingOrderId}
     order by t.method
   `);
-  return rows.map((r) => ({ method: r.method, amount: r.amount }));
+  return rows.map((r) => ({ method: r.method, amount: rawCentsToDecimal(r.amount) }));
 }
 
 /**
@@ -313,7 +321,9 @@ async function paymentsFor(
     amount: string;
     linked: boolean;
   }>(sql`
-    select p.provider, p.state, p.amount,
+    -- payments.amount counts whole cents, read raw and converted by rawCentsToDecimal in the
+    -- mapping below, which returns the amount the callers assert on.
+    select p.provider, p.state, p.amount::text as amount,
            (p.sale_id is not null and p.sale_id = s.id) as linked
     from payments p
     join sales s on s.working_order_id = p.working_order_id
@@ -323,7 +333,7 @@ async function paymentsFor(
   return rows.map((r) => ({
     provider: r.provider,
     state: r.state,
-    amount: r.amount,
+    amount: rawCentsToDecimal(r.amount),
     linkedToSale: r.linked,
   }));
 }
@@ -488,14 +498,19 @@ async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
 /**
  * A parked order's line count and summed `line_total` (the GROSS draft total the held list shows) —
  * read as the owner and summed in JS, NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total`
- * aggregate is validated rather than restated (CLAUDE.md §1). Cent-magnitude 2dp values sum exactly
- * in float here.
+ * aggregate is validated rather than restated (CLAUDE.md §1). `line_total` counts whole cents, read
+ * raw and converted per row by `rawCentsToDecimal`, then added exactly — giving the amount the
+ * caller compares with the list's. The empty case is "0.00", the same literal `listHeldOrders`
+ * renders for an order with no lines.
  */
 async function draftAggregate(id: string): Promise<{ itemCount: number; total: string }> {
   const { rows } = await suite.admin.execute<{ line_total: string }>(sql`
-    select line_total from working_order_lines where working_order_id = ${id}
+    select line_total::text as line_total from working_order_lines where working_order_id = ${id}
   `);
-  const total = rows.reduce((sum, r) => sum + Number(r.line_total), 0).toFixed(2);
+  const total = rows.reduce<Decimal>(
+    (sum, r) => addDecimal(sum, rawCentsToDecimal(r.line_total)),
+    decimal("0.00"),
+  );
   return { itemCount: rows.length, total };
 }
 
@@ -683,7 +698,7 @@ describe("payWorkingOrder", () => {
     // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(sql`update products set unit_price = '9.99' where id = ${cafe.id}`);
+      await tx.execute(sql`update products set unit_price = 999 where id = ${cafe.id}`);
     });
 
     // Pay — files at the LOCKED 1.50, never the new 9.99.

@@ -3,8 +3,8 @@
  * code carries. `ErrorCode` is derived from the keys, so adding a code and forgetting its params
  * is a type error rather than a runtime surprise.
  *
- * This interface holds ONLY the codes native to `@waitron/shared` itself: `ids.ts`, `money.ts`
- * and `locales.ts` are the only things in this package that throw. Every other package — `packages/db`
+ * This interface holds ONLY the codes native to `@waitron/shared` itself: `ids.ts`, `money.ts`,
+ * `cents.ts` and `locales.ts` are the only things in this package that throw. Every other package — `packages/db`
  * today, `packages/core` and `packages/fiscal` once they exist, `packages/fiscal-verifactu` once
  * IT exists — contributes its own codes from its own source, by declaration merging:
  *
@@ -86,6 +86,7 @@ export interface ErrorParams {
   "shared.invalid_id": { kind: string; value: string };
   "shared.invalid_decimal": { value: string };
   "shared.decimal_overflow": { value: string; maxIntegerDigits: number };
+  "shared.invalid_cents": { value: string };
   "locale.unsupported": { locale: string };
 }
 

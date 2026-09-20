@@ -280,7 +280,7 @@ export const tenders = table(
     amount: money("amount").notNull(),
     /** Cash handed over before change; amount remains the settled charge, including any tip. */
     cashTendered: money("cash_tendered"),
-    tipAmount: money("tip_amount").notNull().default("0.00"),
+    tipAmount: money("tip_amount").notNull().default(0),
     settledAt: tsString("settled_at").notNull(),
   },
   (t) => [

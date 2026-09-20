@@ -11,7 +11,13 @@ import type { VenueResult } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { computeDailyClose } from "@waitron/reporting";
-import { addDecimal, compareDecimal, decimal, nodeId as brandNodeId } from "@waitron/shared";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  nodeId as brandNodeId,
+  rawCentsToDecimal,
+} from "@waitron/shared";
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
@@ -135,6 +141,9 @@ describe("seedSales", () => {
         .select({ entorno: registrosFacturacion.entorno })
         .from(registrosFacturacion);
       const sampled = saleRows[0]!;
+      // Three money columns, all counts of whole cents read raw and converted by
+      // `rawCentsToDecimal` at the assertion — see its doc comment. The identity below is checked
+      // in the decimal domain, never in cents.
       const { rows: coverage } = await tx.execute<{
         total: string;
         tendered: string;
@@ -177,8 +186,11 @@ describe("seedSales", () => {
     }
 
     // (d) Coverage identity for the sampled sale: Σ tender amount = total + Σ tip.
-    const expected = addDecimal(decimal(read.coverage.total), decimal(read.coverage.tips));
-    expect(compareDecimal(decimal(read.coverage.tendered), expected)).toBe(0);
+    const expected = addDecimal(
+      rawCentsToDecimal(read.coverage.total),
+      rawCentsToDecimal(read.coverage.tips),
+    );
+    expect(compareDecimal(rawCentsToDecimal(read.coverage.tendered), expected)).toBe(0);
 
     // (e) The reports are non-blank for a seeded business day: a per-rate VAT summary and a cash-up
     // with real tenders. This is the whole point of the task.

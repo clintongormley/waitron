@@ -22,7 +22,7 @@ describe("decimal", () => {
   it("preserves the scale it was given", () => {
     // "1.50" and "1.5" are the same quantity but not the same literal, and the literal is what
     // gets stored and later hashed. Normalising the scale here would silently reformat a value
-    // on its way into a numeric(12,2) column.
+    // on its way to storage.
     expect(decimal("1.50")).toBe("1.50");
     expect(decimal("1.5")).toBe("1.5");
   });
@@ -309,7 +309,7 @@ describe("toScale", () => {
 });
 
 describe("assertMoney", () => {
-  it("accepts a value that fits numeric(12, 2)", () => {
+  it("accepts the widest amount the money bound admits", () => {
     expect(assertMoney(decimal("999999999999.99"))).toBe("999999999999.99");
   });
 

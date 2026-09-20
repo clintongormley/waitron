@@ -108,8 +108,13 @@ describe("seedCatalogues", () => {
         select p.description, p.kitchen_name, p.dietary_declarations,
           count(distinct pc.category_id)::int as category_count,
           c.name->>'en' as primary_category,
-          array_agg(distinct pv.unit_price::text order by pv.unit_price::text) as variant_prices,
-          array_agg(distinct mv.unit_price::text order by mv.unit_price::text) as menu_variant_prices
+          -- unit_price counts whole cents, so these are counts, not amounts. The whole ARRAY is
+          -- cast to text rather than each element: that keeps the ordering numeric (element-wise
+          -- text ordering would put 1400 before 210) and hands back a text array on any driver,
+          -- where an uncast bigint array arrives as strings from node-postgres and as numbers from
+          -- PGlite.
+          (array_agg(distinct pv.unit_price order by pv.unit_price))::text[] as variant_prices,
+          (array_agg(distinct mv.unit_price order by mv.unit_price))::text[] as menu_variant_prices
         from products p
         join categories c on c.id = p.category_id
         join product_categories pc on pc.product_id = p.id
@@ -210,8 +215,8 @@ describe("seedCatalogues", () => {
         dietary_declarations: ["vegetarian", "halal"],
         category_count: 2,
         primary_category: "Drinks",
-        variant_prices: ["1.40", "2.10"],
-        menu_variant_prices: ["1.75", "2.60"],
+        variant_prices: ["140", "210"],
+        menu_variant_prices: ["175", "260"],
       },
     ]);
     expect(res.customUnit).toEqual([

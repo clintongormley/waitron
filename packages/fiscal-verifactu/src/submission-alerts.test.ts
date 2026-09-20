@@ -46,7 +46,7 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
   `);
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${id.tillId}, ${id.nodeId}, ${series.rows[0]!.id}, ${s},
-      '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb,
+      '2026-07-20T19:20:30+01:00', 60, 0, '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     ) returning id
   `);

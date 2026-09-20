@@ -51,7 +51,7 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
         catalogueId: cat!.id,
         name: "Café solo",
         pricingUnit: "each",
-        unitPrice: "1.00",
+        unitPrice: 100,
         vatClass: "general",
       })
       .returning({ id: products.id });

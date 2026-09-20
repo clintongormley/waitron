@@ -34,6 +34,7 @@ import * as catalogue from "@waitron/catalogue";
 import type { DietaryLabel } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import {
+  centsToDecimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -590,8 +591,12 @@ describe("parkOrder", () => {
       lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
     });
 
-    const line = await db.execute<{ unit_price_gross: string }>(sql`
-      select unit_price_gross from working_order_lines where working_order_id = ${id}`);
+    // Read straight from the column, which counts whole cents: 325 is the locked 3.25. Nothing
+    // converts here, so this asserts the stored COUNT; the ::int cast only normalises it to a
+    // number for the assertion, and would raise 22003 rather than answer wrong on a big one.
+    const line = await db.execute<{ unit_price_gross: number }>(sql`
+      select unit_price_gross::int as unit_price_gross
+      from working_order_lines where working_order_id = ${id}`);
     const context = await db.execute<{ zone_id: string; service_mode: string }>(sql`
       select zone_id, service_mode from order_service_contexts where working_order_id = ${id}`);
     const attribution = await db.execute<{
@@ -603,7 +608,7 @@ describe("parkOrder", () => {
       from working_line_contexts
       where working_order_line_id = (
         select id from working_order_lines where working_order_id = ${id})`);
-    expect(line.rows).toEqual([{ unit_price_gross: "3.25" }]);
+    expect(line.rows).toEqual([{ unit_price_gross: 325 }]);
     expect(context.rows).toEqual([{ zone_id: zoneId, service_mode: "prepay" }]);
     expect(attribution.rows).toEqual([
       {
@@ -664,15 +669,17 @@ describe("parkOrder", () => {
     // The line carries its product FK + quantity AND the full display snapshot priceBasket produced:
     // 1.50 gross each × 2 = 3.00 gross. `line_total` on this DRAFT is the GROSS 3.00 (the
     // customer-facing total the held list shows), NOT the net base 2.48 the FILED sale line carries;
-    // `unit_price` stays the net unit 1.24 and `vat_rate` 21%. numeric(12,3) reads "2" back as "2.000".
+    // `unit_price` stays the net unit 1.24 and `vat_rate` 21%. numeric(12,3) reads "2" back as
+    // "2.000". The two money columns are read straight off the row, so they are counts of whole
+    // cents: 300 is that gross 3.00 and 124 the net unit 1.24.
     expect(lines[0]).toMatchObject({
       productId: cafeId,
       lineNo: 1,
       quantity: "2.000",
       descriptions: { [LOCALE]: "Café" },
-      unitPrice: "1.24",
+      unitPrice: 124,
       vatRate: "21.00",
-      lineTotal: "3.00",
+      lineTotal: 300,
       category: "Bebidas",
     });
   });
@@ -849,11 +856,12 @@ describe("openTab service context", () => {
         lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
       });
 
-      const priced = await tx.execute<{ unit_price_gross: string }>(sql`
-        select unit_price_gross from working_order_lines where working_order_id = ${tabId}`);
+      const priced = await tx.execute<{ unit_price_gross: number }>(sql`
+        select unit_price_gross::int as unit_price_gross
+        from working_order_lines where working_order_id = ${tabId}`);
       const context = await tx.execute<{ zone_id: string; service_mode: string }>(sql`
         select zone_id, service_mode from order_service_contexts where working_order_id = ${tabId}`);
-      expect(priced.rows).toEqual([{ unit_price_gross: "3.25" }]);
+      expect(priced.rows).toEqual([{ unit_price_gross: 325 }]);
       expect(context.rows).toEqual([{ zone_id: zoneId, service_mode: "table_tab" }]);
     });
   });
@@ -878,12 +886,12 @@ describe("openTab service context", () => {
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
 
-      const line = await tx.execute<{ unit_price_gross: string; menu_item_id: string }>(sql`
-        select l.unit_price_gross, c.menu_item_id
+      const line = await tx.execute<{ unit_price_gross: number; menu_item_id: string }>(sql`
+        select l.unit_price_gross::int as unit_price_gross, c.menu_item_id
         from working_order_lines l
         join working_line_contexts c on c.working_order_line_id = l.id
         where l.working_order_id = ${tabId}`);
-      expect(line.rows).toEqual([{ unit_price_gross: "3.25", menu_item_id: premiumCafeOfferId }]);
+      expect(line.rows).toEqual([{ unit_price_gross: 325, menu_item_id: premiumCafeOfferId }]);
     });
   });
 
@@ -1006,7 +1014,9 @@ async function readOrder(id: string): Promise<{
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
     .orderBy(workingOrderLines.lineNo);
-  return { openedAt: wo!.openedAt, lineTotals: lines.map((l) => l.lineTotal) };
+  // `line_total` stores a count of whole cents; the helper hands back the amounts, which is what
+  // the caller compares against a held-orders total.
+  return { openedAt: wo!.openedAt, lineTotals: lines.map((l) => centsToDecimal(l.lineTotal)) };
 }
 
 /**
@@ -1199,17 +1209,17 @@ describe("getHeldOrder", () => {
     const order = await getHeldOrder({ db }, cfg, id);
     const stored = await db.execute<{
       quantity: string;
-      line_total: string;
+      line_total: number;
       unit_name: Record<string, string>;
       unit_precision: number;
     }>(sql`
-      select quantity, line_total, unit_name, unit_precision
+      select quantity, line_total::int as line_total, unit_name, unit_precision
       from working_order_lines
       where working_order_id = ${id}`);
     expect(stored.rows).toEqual([
       {
         quantity: "0.375",
-        line_total: "4.50",
+        line_total: 450,
         unit_name: { [LOCALE]: "kg" },
         unit_precision: 3,
       },
@@ -1428,15 +1438,16 @@ describe("updateHeldOrder", () => {
     const before = await db.execute<{
       id: string;
       parent_line_id: string | null;
-      unit_price_gross: string;
+      unit_price_gross: number;
     }>(sql`
-      select id, parent_line_id, unit_price_gross from working_order_lines
+      select id, parent_line_id, unit_price_gross::int as unit_price_gross
+      from working_order_lines
       where working_order_id = ${id} order by line_no`);
 
     await db.execute(sql`
-      update menu_items set gross_price = 9.00 where id = ${premiumCafeOfferId}`);
+      update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
     await db.execute(sql`
-      update menu_item_extra_items set price = 4.00 where menu_item_id = ${premiumCafeOfferId}`);
+      update menu_item_extra_items set price = 400 where menu_item_id = ${premiumCafeOfferId}`);
     await updateHeldOrder({ db }, cfg, id, {
       lines: [
         {
@@ -1453,10 +1464,11 @@ describe("updateHeldOrder", () => {
       id: string;
       parent_line_id: string | null;
       quantity: string;
-      unit_price_gross: string;
-      line_total: string;
+      unit_price_gross: number;
+      line_total: number;
     }>(sql`
-      select id, parent_line_id, quantity, unit_price_gross, line_total
+      select id, parent_line_id, quantity, unit_price_gross::int as unit_price_gross,
+             line_total::int as line_total
       from working_order_lines
       where working_order_id = ${id} order by line_no`);
     expect(after.rows).toEqual([
@@ -1464,15 +1476,15 @@ describe("updateHeldOrder", () => {
         id: before.rows[0]!.id,
         parent_line_id: null,
         quantity: "3.000",
-        unit_price_gross: "3.25",
-        line_total: "9.75",
+        unit_price_gross: 325,
+        line_total: 975,
       },
       {
         id: before.rows[1]!.id,
         parent_line_id: before.rows[0]!.id,
         quantity: "6.000",
-        unit_price_gross: "0.75",
-        line_total: "4.50",
+        unit_price_gross: 75,
+        line_total: 450,
       },
     ]);
   });
@@ -1491,7 +1503,7 @@ describe("updateHeldOrder", () => {
     const lineId = before.rows[0]!.id;
 
     await db.execute(sql`
-      update menu_items set gross_price = 9.00 where id = ${premiumCafeOfferId}`);
+      update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
     await updateHeldOrder({ db }, cfg, id, {
       lines: [
         {
@@ -1505,18 +1517,19 @@ describe("updateHeldOrder", () => {
     const after = await db.execute<{
       id: string;
       quantity: string;
-      unit_price_gross: string;
-      line_total: string;
+      unit_price_gross: number;
+      line_total: number;
     }>(sql`
-      select id, quantity, unit_price_gross, line_total
+      select id, quantity, unit_price_gross::int as unit_price_gross,
+             line_total::int as line_total
       from working_order_lines
       where working_order_id = ${id}`);
     expect(after.rows).toEqual([
       {
         id: lineId,
         quantity: "2.000",
-        unit_price_gross: "3.25",
-        line_total: "6.50",
+        unit_price_gross: 325,
+        line_total: 650,
       },
     ]);
   });
@@ -1536,15 +1549,15 @@ describe("updateHeldOrder", () => {
 
     const line = await db.execute<{
       quantity: string;
-      unit_price_gross: string;
+      unit_price_gross: number;
       menu_item_id: string;
     }>(sql`
-      select l.quantity, l.unit_price_gross, c.menu_item_id
+      select l.quantity, l.unit_price_gross::int as unit_price_gross, c.menu_item_id
       from working_order_lines l
       join working_line_contexts c on c.working_order_line_id = l.id
       where l.working_order_id = ${id}`);
     expect(line.rows).toEqual([
-      { quantity: "2.000", unit_price_gross: "3.25", menu_item_id: premiumCafeOfferId },
+      { quantity: "2.000", unit_price_gross: 325, menu_item_id: premiumCafeOfferId },
     ]);
   });
 
@@ -4552,13 +4565,14 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
-      // ONE parent + ONE child at quantity 2 (dish ×1 × pick ×2), 0.50 × 2 = 1.00 gross.
+      // ONE parent + ONE child at quantity 2 (dish ×1 × pick ×2), 0.50 × 2 = 1.00 gross — read
+      // straight off the column, so 100 is that gross as a count of whole cents.
       expect(lines).toHaveLength(2);
       expect(lines[0]!.parentLineId).toBeNull();
       expect(lines.filter((l) => l.parentLineId !== null)).toHaveLength(1);
       expect(lines[1]!.productId).toBe(bacon.productId);
       expect(lines[1]!.quantity).toBe("2.000");
-      expect(lines[1]!.lineTotal).toBe("1.00");
+      expect(lines[1]!.lineTotal).toBe(100);
     });
   });
 });
@@ -4665,12 +4679,13 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         parentLineId: null,
         quantity: "3.000",
       });
-      // Child row: combined 3 × 2 = 6, per-unit gross the offer's 0.50, total 0.50 × 6 = 3.00.
+      // Child row: combined 3 × 2 = 6, per-unit gross the offer's 0.50, total 0.50 × 6 = 3.00 —
+      // read straight off the columns, so 50 and 300 are those amounts as counts of whole cents.
       expect(lines[1]!.parentLineId).toBe(lines[0]!.id);
       expect(lines[1]!.productId).toBe(shot.productId);
       expect(lines[1]!.quantity).toBe("6.000");
-      expect(lines[1]!.unitPriceGross).toBe("0.50");
-      expect(lines[1]!.lineTotal).toBe("3.00");
+      expect(lines[1]!.unitPriceGross).toBe(50);
+      expect(lines[1]!.lineTotal).toBe(300);
     });
   });
 
@@ -4875,10 +4890,10 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
       expect(lines).toHaveLength(2);
-      // Child combined = dish ×2 × pick ×1 = 2; 0.50 × 2 = 1.00.
+      // Child combined = dish ×2 × pick ×1 = 2; 0.50 × 2 = 1.00, stored as 100 whole cents.
       expect(lines[1]!.productId).toBe(shot.productId);
       expect(lines[1]!.quantity).toBe("2.000");
-      expect(lines[1]!.lineTotal).toBe("1.00");
+      expect(lines[1]!.lineTotal).toBe(100);
     });
   });
 });
@@ -5073,8 +5088,8 @@ describe("frozen answers through a fractional quantity edit", () => {
       const lockedGross = stored[0]!.unitPriceGross;
 
       // The catalogue moves under the parked order; the locked line must not follow it.
-      await db.execute(sql`update products set unit_price = 99.00 where id = ${cafeId}`);
-      await db.execute(sql`update menu_items set gross_price = 99.00 where id = ${cafeOfferId}`);
+      await db.execute(sql`update products set unit_price = 9900 where id = ${cafeId}`);
+      await db.execute(sql`update menu_items set gross_price = 9900 where id = ${cafeOfferId}`);
 
       await updateHeldOrder({ db }, cfg, result.id, {
         lines: [
@@ -5353,10 +5368,11 @@ describe("order path — extras and options", () => {
     expect(child!.kitchenName).toBe("Vino kitchen");
     // The extra PRODUCT's own VAT, never the 10% dish's (spec §3.3, decision 9).
     expect(child!.vatRate).toBe("21.00");
-    // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2.
-    expect(child!.unitPriceGross).toBe("4.50");
+    // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2. Both money columns
+    // are read straight off the row: 450 is that 4.50 and 900 the 9.00 total, in whole cents.
+    expect(child!.unitPriceGross).toBe(450);
     expect(child!.quantity).toBe("2.000");
-    expect(child!.lineTotal).toBe("9.00");
+    expect(child!.lineTotal).toBe(900);
   });
 
   it("refuses a dish whose options list is left unanswered", async () => {
@@ -5444,7 +5460,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       ]);
     });
     await db.execute(sql`
-      update menu_items set gross_price = 99.00 where id = ${premiumCafeOfferId}`);
+      update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
 
     await updateHeldOrder({ db }, cfg, id, {
       lines: [
@@ -5466,9 +5482,10 @@ describe("what a held-order edit preserves and what it replaces", () => {
     expect(after[0]).toMatchObject({
       id: before[0]!.id,
       quantity: "2.000",
-      // The offer's 3.25 at park time, not the 99.00 it now costs, and twice it for the total.
-      unitPriceGross: "3.25",
-      lineTotal: "6.50",
+      // The offer's 3.25 at park time, not the 99.00 it now costs, and twice it for the total —
+      // both read straight off the row, so 325 and 650 are those amounts in whole cents.
+      unitPriceGross: 325,
+      lineTotal: 650,
     });
     expect(after[0]!.optionSnapshots).toEqual(before[0]!.optionSnapshots);
   });
@@ -5510,7 +5527,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
         { kind: "extras", id: seeded.bacon.listId },
       ]);
     });
-    await db.execute(sql`update products set unit_price = 99.00 where id = ${cafeId}`);
+    await db.execute(sql`update products set unit_price = 9900 where id = ${cafeId}`);
 
     await updateHeldOrder({ db }, cfg, id, {
       lines: [{ workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "2", extras }],
@@ -5527,10 +5544,10 @@ describe("what a held-order edit preserves and what it replaces", () => {
       after.map((line) => [line.id, line.quantity, line.unitPriceGross, line.lineTotal]),
     ).toEqual([
       // The dish at its own 1.50, twice; bacon at 1.00 for two dishes of one pick; milk at 0.30 for
-      // two dishes of three picks.
-      [before[0]!.id, "2.000", "1.50", "3.00"],
-      [before[1]!.id, "2.000", "1.00", "2.00"],
-      [before[2]!.id, "6.000", "0.30", "1.80"],
+      // two dishes of three picks — the money columns read straight off the row, in whole cents.
+      [before[0]!.id, "2.000", 150, 300],
+      [before[1]!.id, "2.000", 100, 200],
+      [before[2]!.id, "6.000", 30, 180],
     ]);
   });
 
@@ -5579,10 +5596,10 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    // One off the 1.00 list and two off the 3.00 one.
+    // One off the 1.00 list and two off the 3.00 one, in whole cents off the column.
     expect(
       before.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
-    ).toEqual(["1.00", "6.00"]);
+    ).toEqual([100, 600]);
 
     // The two picks change places: two of the cheap one and one of the dear one, same dish count.
     await updateHeldOrder({ db }, cfg, id, {
@@ -5603,7 +5620,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(
       after.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
-    ).toEqual(["2.00", "3.00"]);
+    ).toEqual([200, 300]);
   });
 
   it("replaces the line when a pick moves to another list offering the same product", async () => {
@@ -5649,7 +5666,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(
       before.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
-    ).toEqual(["1.00"]);
+    ).toEqual([100]);
 
     // ONE pick, moved off the 1.00 list onto the 3.00 one. The product and the count are the same,
     // and neither is what changed.
@@ -5673,7 +5690,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(
       after.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
-    ).toEqual(["3.00"]);
+    ).toEqual([300]);
   });
 
   it("replaces the line when the answer itself changed, re-pricing it from today's offer", async () => {
@@ -5700,7 +5717,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     await db.execute(sql`
-      update menu_items set gross_price = 99.00 where id = ${premiumCafeOfferId}`);
+      update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
 
     // Same dish, same quantity, a DIFFERENT label off the same list.
     await updateHeldOrder({ db }, cfg, id, {
@@ -5720,7 +5737,8 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(after[0]!.id).not.toEqual(before[0]!.id);
-    expect(after[0]!.unitPriceGross).toEqual("99.00");
+    // Re-priced from today's offer: 9900 whole cents is that 99.00, off the column.
+    expect(after[0]!.unitPriceGross).toEqual(9900);
     expect(after[0]!.optionSnapshots[0]).toMatchObject({
       labelName: { [CONTENT_LANGUAGE]: "Cortado staff" },
     });
@@ -5805,7 +5823,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       sql`update option_lists set name = 'Renamed staff' where id = ${punto.listId}`,
     );
     await db.execute(sql`
-      update menu_items set gross_price = 99.00 where id = ${premiumCafeOfferId}`);
+      update menu_items set gross_price = 9900 where id = ${premiumCafeOfferId}`);
 
     await updateHeldOrder({ db }, cfg, id, {
       lines: [
@@ -5825,7 +5843,8 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(after).toHaveLength(1);
     expect(after[0]!.id).not.toEqual(before[0]!.id);
-    expect(after[0]!.unitPriceGross).toEqual("99.00");
+    // Re-priced from today's offer: 9900 whole cents is that 99.00, off the column.
+    expect(after[0]!.unitPriceGross).toEqual(9900);
     expect(after[0]!.optionSnapshots[0]).toMatchObject({
       listName: { [CONTENT_LANGUAGE]: "Renamed staff" },
     });

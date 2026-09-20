@@ -49,8 +49,10 @@ export interface SelectedLineOption {
   optionGroupItemId: string;
   /** locale -> text, snapshotted at pick time; the child modifier row the basket renders (Task 8). */
   name: Record<string, string>;
-  /** GROSS (VAT-inclusive) price change this option adds, a `numeric(12,2)` literal ("0.50", "0.00" for
-   * a free option). DISPLAY-ONLY: {@link lineGross} adds `priceDelta × quantity`; the server re-prices. */
+  /** GROSS (VAT-inclusive) price change this option adds, a two-place decimal string ("0.50", "0.00"
+   * for a free option) — the `option_group_items.price_delta` column stores the amount as a count of
+   * whole cents and the read converts it. DISPLAY-ONLY: {@link lineGross} adds
+   * `priceDelta × quantity`; the server re-prices. */
   priceDelta: string;
   /**
    * How many times THIS option is taken per dish (per-option quantity), or ABSENT for the common case

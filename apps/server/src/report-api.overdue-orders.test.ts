@@ -33,7 +33,7 @@ async function seedFiredOrder(
   );
   const product = await db.execute<{ id: string }>(sql`
     insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-    values (${catalogue.rows[0]!.id}, 'Item', 'each', '1.00', 'general')
+    values (${catalogue.rows[0]!.id}, 'Item', 'each', 100, 'general')
     returning id`);
   const order = await db.execute<{ id: string }>(sql`
     insert into working_orders (till_id, node_id, order_number, status)
@@ -45,7 +45,7 @@ async function seedFiredOrder(
       unit_price, unit_price_gross, vat_rate, line_total
     ) values (
       ${orderId}, 1, ${product.rows[0]!.id}, 'Item', '{"es-ES":"Item"}'::jsonb, '1.000',
-      '1.00', '1.00', '10.00', '1.00'
+      100, 100, '10.00', 100
     ) returning id`);
   await db.execute(sql`
     insert into ticket_items (node_id, working_order_id, working_order_line_id, station_id, queued_at, fired_at)

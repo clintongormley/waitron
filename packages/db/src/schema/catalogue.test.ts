@@ -42,7 +42,7 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
     const pricingError = await captureError(() =>
       db.execute(
-        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'bogus', '1.00', 'general')`,
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'bogus', 100, 'general')`,
       ),
     );
     expect(pgErrorCode(pricingError)).toBe("23514");
@@ -51,7 +51,7 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     // Bad vat_class, VALID pricing_unit → only products_vat_class_ck can fire.
     const vatError = await captureError(() =>
       db.execute(
-        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'each', '1.00', 'bogus')`,
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'each', 100, 'bogus')`,
       ),
     );
     expect(pgErrorCode(vatError)).toBe("23514");
@@ -131,7 +131,7 @@ describe("catalogue — menu, taxonomy and priced items", () => {
       .returning({ id: optionGroups.id });
     const [row] = await rows<{ max_quantity: number }>(
       db,
-      sql`insert into option_group_items (group_id, name, price_delta) values (${group.id}, '{"en":"Cheese"}'::jsonb, '0.50')
+      sql`insert into option_group_items (group_id, name, price_delta) values (${group.id}, '{"en":"Cheese"}'::jsonb, 50)
           returning max_quantity`,
     );
     expect(row?.max_quantity).toBe(1);
@@ -147,7 +147,7 @@ describe("catalogue — menu, taxonomy and priced items", () => {
       .returning({ id: optionGroups.id });
     const error = await captureError(() =>
       db.execute(
-        sql`insert into option_group_items (group_id, name, price_delta, max_quantity) values (${group.id}, '{"en":"Bacon"}'::jsonb, '1.00', 0)`,
+        sql`insert into option_group_items (group_id, name, price_delta, max_quantity) values (${group.id}, '{"en":"Bacon"}'::jsonb, 100, 0)`,
       ),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation

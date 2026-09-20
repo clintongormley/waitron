@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { decimal, decimalToCents } from "@waitron/shared";
 import type { RecordSaleLine } from "./record-sale.js";
 
-/** Every issuance path preserves the same saved facts and resolves child links within its new sale. */
+/**
+ * Every issuance path preserves the same saved facts and resolves child links within its new sale.
+ *
+ * This builds the `sale_lines` insert, so it is where a line's decimal amounts become the count of
+ * whole cents the money columns store. `quantity` and `vatRate` are not money columns — they keep
+ * their own scales and stay decimal strings.
+ */
 export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
   const ids = lines.map(() => randomUUID());
   const byLineNo = new Map(lines.map((line, index) => [line.lineNo, ids[index]!]));
@@ -16,9 +23,9 @@ export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
     quantity: line.quantity,
-    unitPrice: line.unitPrice,
+    unitPrice: decimalToCents(decimal(line.unitPrice)),
     vatRate: line.vatRate,
-    lineTotal: line.lineTotal,
+    lineTotal: decimalToCents(decimal(line.lineTotal)),
     category: line.category ?? null,
     variantId: line.variantId ?? null,
     variantName: line.variantName ?? null,

@@ -16,6 +16,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
+  centsToDecimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -215,7 +216,9 @@ async function linesOf(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  return rows;
+  // `unit_price_gross` stores a count of whole cents; the helper hands back the locked AMOUNT, so
+  // its callers' assertions read the same decimal literals they always did.
+  return rows.map((row) => ({ ...row, gross: centsToDecimal(row.gross) }));
 }
 
 describe("moveTabLines", () => {

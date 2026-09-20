@@ -52,9 +52,11 @@ describe("saleLineRows", () => {
       unitName: { "en-GB": "cup" },
       unitPrecision: 0,
       quantity: "1",
-      unitPrice: "3.00",
+      // The money columns hold whole cents, so the row this builds carries 300 for "3.00";
+      // `quantity` and `vatRate` are not money columns and keep their decimal literals.
+      unitPrice: 300,
       vatRate: "10.00",
-      lineTotal: "3.00",
+      lineTotal: 300,
       category: "Drinks",
     });
   });
@@ -88,9 +90,9 @@ describe("saleLineRows", () => {
       unitName: null,
       unitPrecision: null,
       quantity: "1",
-      unitPrice: "1.00",
+      unitPrice: 100,
       vatRate: "10.00",
-      lineTotal: "1.00",
+      lineTotal: 100,
       category: null,
     });
   });

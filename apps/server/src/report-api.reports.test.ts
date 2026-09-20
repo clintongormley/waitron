@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { decimal, decimalToCents } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
@@ -85,25 +86,30 @@ interface DaySeed {
 /** Seed one sale + its tender + one sale_line on a FIXED business day (issued/settled at a literal
  * midday-UTC instant). Superuser insert (fixture setup, the demo idiom). */
 async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise<void> {
+  // The DaySeed figures are the AMOUNTS the route's response carries, and the assertions read them
+  // unchanged. `sales.total`, `tenders.amount`, `tenders.tip_amount`, `sale_lines.unit_price` and
+  // `sale_lines.line_total` all store a count of whole cents, so each is converted on the way into
+  // the row; `vat_breakdown` is jsonb, and `quantity`/`vat_rate` are not money columns.
+  const cents = (value: string): number => decimalToCents(decimal(value));
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
       till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
       total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
       ${tillId}, ${nodeId}, ${seriesId}, ${invoiceNumber}, ${d.issuedAt}, 0,
-      ${d.total}, ${JSON.stringify([{ rate: d.rate, base: d.base, tax: d.tax }])}::jsonb,
+      ${cents(d.total)}, ${JSON.stringify([{ rate: d.rate, base: d.base, tax: d.tax }])}::jsonb,
       'es-ES', array['es-ES'], 'fake', 'recorded'
     ) returning id`);
   const saleId = sale.rows[0]!.id;
   await db.execute(sql`
     insert into tenders (sale_id, method, amount, tip_amount, settled_at)
-    values (${saleId}, 'cash', ${d.tenderAmount}, ${d.tipAmount}, ${d.issuedAt})`);
+    values (${saleId}, 'cash', ${cents(d.tenderAmount)}, ${cents(d.tipAmount)}, ${d.issuedAt})`);
   await db.execute(sql`
     insert into sale_lines
       (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
     values (${saleId}, 1, ${d.line.name},
             ${JSON.stringify(d.line.descriptions)}::jsonb,
-            ${d.line.quantity}, '3.50', ${d.rate}, ${d.line.total})`);
+            ${d.line.quantity}, ${cents("3.50")}, ${d.rate}, ${cents(d.line.total)})`);
 }
 
 const suite = useVenueDb({

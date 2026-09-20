@@ -76,6 +76,11 @@ export class FakeFiscalBackend implements FiscalBackend {
         sequence integer not null,
         kind text not null,
         invoice_number integer not null,
+        -- A two-place decimal on purpose, which reads like a miss now that every money column in
+        -- the database counts whole cents. It is not one of those columns: this fake's own
+        -- bookkeeping table stores exactly what the backend interface hands it, and that is already
+        -- a decimal amount (total: Decimal, packages/fiscal/src/backend.ts:72), above the storage
+        -- boundary rather than under it.
         total numeric(12, 2) not null,
         state text not null,
         -- The filed VAT breakdown, stored so filedReceiptFor can hand back the EXACT figures the

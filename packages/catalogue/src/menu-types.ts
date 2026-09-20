@@ -69,7 +69,8 @@ export interface MenuOfferOption {
 
 /**
  * One selectable choice within a {@link ResolvedOptionGroup} (an active `option_group_items` row).
- * `priceDelta` is the GROSS (VAT-inclusive) numeric column carried as a string, like `unitPrice`.
+ * `priceDelta` is a GROSS (VAT-inclusive) decimal string, like `unitPrice` — the column stores the
+ * amount as a count of whole cents and the read converts it.
  * `vatClass` is `null` when the item INHERITS the parent dish's rate (`option_group_items.vat_class`
  * NULL); a non-null value overrides it. Later tasks price a selection against these.
  */

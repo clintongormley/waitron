@@ -54,7 +54,7 @@ function saleValues(overrides: Record<string, unknown> = {}) {
     invoiceNumber: 1,
     issuedAt: AT,
     issuedOffsetMinutes: 120,
-    total: "1.00",
+    total: 100,
     // The filed per-rate breakdown. `[]` here because these fixtures do not exercise
     // the breakdown — the column is just NOT NULL and must carry a valid jsonb array; the tests that
     // DO care about its content are record-sale.test.ts (the equality-to-filed proof) and the
@@ -78,13 +78,13 @@ function saleValues(overrides: Record<string, unknown> = {}) {
  * a valid steady state under invoice-first (design §3). The default tender is
  * coherent anyway (amount = total, no tip) so callers can settle it if they
  * need to; each tender carries its own `tip_amount` (design §9.2), defaulted to
- * "0.00".
+ * zero.
  */
 async function recordCompleteSale(
   db: Database,
   overrides: Record<string, unknown> = {},
-  tenderRows: { method: "cash" | "card"; amount: string; tipAmount?: string }[] = [
-    { method: "card", amount: "1.00" },
+  tenderRows: { method: "cash" | "card"; amount: number; tipAmount?: number }[] = [
+    { method: "card", amount: 100 },
   ],
 ): Promise<string> {
   return db.transaction(async (tx) => {
@@ -95,16 +95,16 @@ async function recordCompleteSale(
       name: "Café solo",
       descriptions: { es: "Café solo", ca: "Cafè sol" },
       quantity: "1.000",
-      unitPrice: "1.00",
+      unitPrice: 100,
       vatRate: "10.00",
-      lineTotal: "1.00",
+      lineTotal: 100,
     });
     await tx.insert(tenders).values(
       tenderRows.map((t) => ({
         saleId: sale.id,
         method: t.method,
         amount: t.amount,
-        tipAmount: t.tipAmount ?? "0.00",
+        tipAmount: t.tipAmount ?? 0,
         settledAt: AT,
       })),
     );
@@ -140,14 +140,12 @@ describeEachTarget("sales — the commercial record", (target) => {
     // amount_charged is derived, never stored (design §3). Here a €1.00 sale is
     // paid with a €1.50 tender carrying a €0.50 tip — three still-distinct
     // figures, but only `total` lives on the sale.
-    const id = await recordCompleteSale(db, {}, [
-      { method: "card", amount: "1.50", tipAmount: "0.50" },
-    ]);
+    const id = await recordCompleteSale(db, {}, [{ method: "card", amount: 150, tipAmount: 50 }]);
     const [row] = await db.select().from(sales).where(eq(sales.id, id));
-    expect(row.total).toBe("1.00");
+    expect(row.total).toBe(100);
     const [tender] = await db.select().from(tenders).where(eq(tenders.saleId, id));
-    expect(tender.amount).toBe("1.50");
-    expect(tender.tipAmount).toBe("0.50");
+    expect(tender.amount).toBe(150);
+    expect(tender.tipAmount).toBe(50);
   });
 
   it("rejects a duplicate invoice number within a series", async () => {
@@ -168,7 +166,7 @@ describeEachTarget("sales — the commercial record", (target) => {
     expect(second).toBeTruthy();
   });
 
-  it("stores every monetary column as numeric(12, 2)", async () => {
+  it("stores every monetary column as integer, a whole count of cents", async () => {
     const cols = await rows<{
       table_name: string;
       column_name: string;
@@ -185,9 +183,13 @@ describeEachTarget("sales — the commercial record", (target) => {
     );
     expect(cols).toHaveLength(5);
     for (const col of cols) {
-      expect(col.data_type).toBe("numeric");
-      expect(col.numeric_precision).toBe(12);
-      expect(col.numeric_scale).toBe(2);
+      // A money column counts whole cents (`money()` in packages/db/src/schema/columns.ts):
+      // PostgreSQL reports `bigint` as precision 64, scale 0, so a column that slipped back to
+      // numeric(12, 2) fails all three, and one narrowed to a four-byte integer fails the
+      // precision.
+      expect(col.data_type).toBe("bigint");
+      expect(col.numeric_precision).toBe(64);
+      expect(col.numeric_scale).toBe(0);
     }
   });
 
@@ -205,24 +207,19 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("sums line totals exactly, with no float drift", async () => {
-    // 0.10, 0.20 and 0.70 are not exactly representable in binary64. This
-    // test's actual bite, though, is not the drift value itself: verified
-    // live, the failure under a double-precision mutation of these columns
-    // is `expected '1' to be '1.00'`, not '0.9999999999999999', and a
-    // "vacuous" fixture (e.g. 0.25/0.25/0.50, chosen to sum exactly under
-    // either type) fails identically. The mechanism is that
-    // `sum(...)::text` on numeric(12, 2) always renders at scale 2 ("1.00"),
-    // while float8's `::text` output never pads to a fixed scale regardless
-    // of whether the underlying arithmetic drifted — so this assertion is an
-    // exact-format string match, fixture-independent, and it is that format
-    // difference doing the work here, not binary64 summation error.
+    // Three lines of 10, 20 and 70 cents summing to 100. What this asserted before the money
+    // columns became integers was a FORMAT difference: `sum(...)::text` on numeric(12, 2) always
+    // rendered at scale 2 ("1.00") where float8 never pads, so a double-precision mutation of
+    // these columns failed with `expected '1' to be '1.00'`. On an integer column that bite is
+    // GONE — 10 + 20 + 70 sums to 100 and renders "100" under a float8 mutation too — so this
+    // now asserts only that the database sums cents, and would not catch that mutation.
     const id = await db.transaction(async (tx) => {
       const [sale] = await tx
         .insert(sales)
-        .values(saleValues({ total: "1.00" }))
+        .values(saleValues({ total: 100 }))
         .returning({ id: sales.id });
       await tx.insert(saleLines).values(
-        ["0.10", "0.20", "0.70"].map((amount, i) => ({
+        [10, 20, 70].map((amount, i) => ({
           saleId: sale.id,
           lineNo: i + 1,
           name: "Café solo",
@@ -240,7 +237,7 @@ describeEachTarget("sales — the commercial record", (target) => {
       await tx.insert(tenders).values({
         saleId: sale.id,
         method: "cash",
-        amount: "1.00",
+        amount: 100,
         settledAt: AT,
       });
       return sale.id;
@@ -250,24 +247,28 @@ describeEachTarget("sales — the commercial record", (target) => {
       db,
       sql`select sum(line_total)::text as total from sale_lines where sale_id = ${id}::uuid`,
     );
-    expect(summed.total).toBe("1.00");
+    expect(summed.total).toBe("100");
   });
 
-  it("returns monetary values as strings, not JS numbers", async () => {
-    // node-postgres renders numeric as a string precisely so no value passes
-    // through binary64. A registered type parser that "helpfully" converts to
-    // Number would reintroduce the drift with nothing else changing.
-    const id = await recordCompleteSale(db, {}, [
-      { method: "card", amount: "1.50", tipAmount: "0.50" },
-    ]);
+  it("returns money as JS numbers and the numeric columns beside it as strings", async () => {
+    // Two halves of one contract. Money is an integer count of cents, so it arrives as a JS
+    // number and no value passes through binary64 at all. `quantity` and `vat_rate` on the same
+    // row are still numeric, which node-postgres renders as a STRING precisely so they do not:
+    // a registered type parser that "helpfully" converts those to Number would reintroduce the
+    // drift with nothing else changing. Before the money columns became integers, the money
+    // columns were what carried that second half.
+    const id = await recordCompleteSale(db, {}, [{ method: "card", amount: 150, tipAmount: 50 }]);
     const [row] = await db.select().from(sales).where(eq(sales.id, id));
-    expect(typeof row.total).toBe("string");
-    // The tender's amount and tip_amount are numeric(12, 2) too — the same
-    // parser path, checked here so a registered Number-coercing parser on any
-    // of the three surfaces is caught.
+    expect(typeof row.total).toBe("number");
+    // The tender's amount and tip_amount are money too — the same driver path, checked here so a
+    // mapping that reverts any of the three surfaces to a decimal string is caught.
     const [tender] = await db.select().from(tenders).where(eq(tenders.saleId, id));
-    expect(typeof tender.amount).toBe("string");
-    expect(typeof tender.tipAmount).toBe("string");
+    expect(typeof tender.amount).toBe("number");
+    expect(typeof tender.tipAmount).toBe("number");
+    // The numeric columns on the sale line, which is where the no-binary64 rule now lives.
+    const [line] = await db.select().from(saleLines).where(eq(saleLines.saleId, id));
+    expect(typeof line.quantity).toBe("string");
+    expect(typeof line.vatRate).toBe("string");
   });
 
   it("stores issued_at with its offset alongside", async () => {
@@ -299,7 +300,7 @@ describeEachTarget("sales — the commercial record", (target) => {
     const error = await captureError(() =>
       db.execute(
         sql`insert into sales (till_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
-               '1.00', '[]'::jsonb, 'es', array['es', 'ca']::text[], 'verifactu', 'recorded'
+               100, '[]'::jsonb, 'es', array['es', 'ca']::text[], 'verifactu', 'recorded'
              )`,
       ),
     );
@@ -391,8 +392,8 @@ describeEachTarget("sales — tender coverage", (target) => {
     // this only asserts both rows land. Whether they SUM correctly is the
     // sale_settlements coverage trigger's job, proved in sale-settlements.test.ts.
     const id = await recordCompleteSale(db, {}, [
-      { method: "cash", amount: "1.00" },
-      { method: "card", amount: "0.50" },
+      { method: "cash", amount: 100 },
+      { method: "card", amount: 50 },
     ]);
     const found = await db.select().from(tenders).where(eq(tenders.saleId, id));
     expect(found).toHaveLength(2);
@@ -410,7 +411,7 @@ describeEachTarget("sales — tender coverage", (target) => {
     // tenders_amount_ck is the only constraint that can fire here — deleting it
     // is what lets a zero tender through (proved by deletion locally).
     const error = await captureError(() =>
-      db.insert(tenders).values({ saleId: id, method: "cash", amount: "0.00", settledAt: AT }),
+      db.insert(tenders).values({ saleId: id, method: "cash", amount: 0, settledAt: AT }),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/tenders_amount_ck/);
@@ -428,7 +429,7 @@ describeEachTarget("sales — tender coverage", (target) => {
       db.insert(tenders).values({
         saleId: id,
         method: "cash",
-        amount: "-10.00",
+        amount: -1000,
         settledAt: AT,
       }),
     );
@@ -439,9 +440,9 @@ describeEachTarget("sales — tender coverage", (target) => {
     const id = await recordCompleteSale(db);
     const [inserted] = await db
       .insert(tenders)
-      .values({ saleId: id, method: "cash", amount: "10.00", settledAt: AT })
+      .values({ saleId: id, method: "cash", amount: 1000, settledAt: AT })
       .returning();
-    expect(inserted.amount).toBe("10.00");
+    expect(inserted.amount).toBe(1000);
   });
 
   // tenders_tip_amount_ck (design §7 deletion matrix): the tip is PART of the
@@ -455,8 +456,8 @@ describeEachTarget("sales — tender coverage", (target) => {
       db.insert(tenders).values({
         saleId: id,
         method: "card",
-        amount: "10.00",
-        tipAmount: "15.00",
+        amount: 1000,
+        tipAmount: 1500,
         settledAt: AT,
       }),
     );
@@ -471,12 +472,12 @@ describeEachTarget("sales — tender coverage", (target) => {
       .values({
         saleId: id,
         method: "card",
-        amount: "10.00",
-        tipAmount: "10.00",
+        amount: 1000,
+        tipAmount: 1000,
         settledAt: AT,
       })
       .returning();
-    expect(inserted.tipAmount).toBe("10.00");
+    expect(inserted.tipAmount).toBe(1000);
   });
 
   it("rejects a negative tip", async () => {
@@ -485,8 +486,8 @@ describeEachTarget("sales — tender coverage", (target) => {
       db.insert(tenders).values({
         saleId: id,
         method: "card",
-        amount: "10.00",
-        tipAmount: "-1.00",
+        amount: 1000,
+        tipAmount: -100,
         settledAt: AT,
       }),
     );
@@ -518,7 +519,7 @@ describeEachTarget("sales — immutability as the app role", (target) => {
     // message comes from the shared reject_mutation() and improving its
     // wording must not turn this red. Task 5 makes the same argument.
     const update = await captureError(() =>
-      db.update(sales).set({ total: "999.00" }).where(eq(sales.id, saleId)),
+      db.update(sales).set({ total: 99900 }).where(eq(sales.id, saleId)),
     );
     expect(pgErrorCode(update)).toBe("WT001");
     expect(pgErrorMessage(update)).toMatch(/sales is append-only: UPDATE is not permitted/);
@@ -664,7 +665,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
   // `sales` object, so the RED phase fails on the real cause ("column corrects_sale_id does
   // not exist", i.e. the migration is absent) rather than on a TypeScript compile error.
   async function insertSale(opts: {
-    total: string;
+    total: number;
     correctsSaleId: string | null;
     invoiceNumber: number;
     tillId?: string;
@@ -700,13 +701,13 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     // is rejected with 23514/sales_total_ck. The `OR corrects_sale_id IS NOT NULL` clause is
     // what admits it — the guard is doing the work, not the FK or the column add.
     const inserted = await insertSale({
-      total: "-1.00",
+      total: -100,
       correctsSaleId: originalSaleId,
       invoiceNumber: 2,
     });
     expect(inserted).toHaveLength(1);
     const [row] = await db.select().from(sales).where(eq(sales.id, inserted[0].id));
-    expect(row.total).toBe("-1.00");
+    expect(row.total).toBe(-100);
     expect(row.correctsSaleId).toBe(originalSaleId);
   });
 
@@ -714,7 +715,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     // Negative control: with no corrective link, the relaxed check still rejects a negative
     // total exactly as the original `total >= 0` did. An ordinary sale is never negative.
     const error = await captureError(() =>
-      insertSale({ total: "-1.00", correctsSaleId: null, invoiceNumber: 2 }),
+      insertSale({ total: -100, correctsSaleId: null, invoiceNumber: 2 }),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/sales_total_ck/);
@@ -723,7 +724,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
   it("still accepts a corrective sale with a positive total", async () => {
     // The link relaxes the sign; it does not force it. A corrective may be positive.
     const inserted = await insertSale({
-      total: "1.00",
+      total: 100,
       correctsSaleId: originalSaleId,
       invoiceNumber: 2,
     });
@@ -739,9 +740,9 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
   it("allows a sale to be corrected more than once", async () => {
     // NOT unique, unlike sale_voids_sale_id_key: successive corrective invoices against one sale are
     // legitimate (plan §2.1). Two correctives pointing at the same original both land.
-    await insertSale({ total: "-1.00", correctsSaleId: originalSaleId, invoiceNumber: 2 });
+    await insertSale({ total: -100, correctsSaleId: originalSaleId, invoiceNumber: 2 });
     const second = await insertSale({
-      total: "-0.50",
+      total: -50,
       correctsSaleId: originalSaleId,
       invoiceNumber: 3,
     });
@@ -756,7 +757,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
   it("rejects a corrective link to a sale that does not exist", async () => {
     const error = await captureError(() =>
       insertSale({
-        total: "-1.00",
+        total: -100,
         correctsSaleId: "99999999-9999-4999-8999-999999999999",
         invoiceNumber: 2,
       }),
@@ -810,8 +811,8 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into sale_lines (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total, parent_line_id) values (${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', '1.00',
-             '10.00', '1.00', ${opts.parentLineId}
+      sql`insert into sale_lines (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total, parent_line_id) values (${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', 100,
+             '10.00', 100, ${opts.parentLineId}
            ) returning id`,
     );
   }

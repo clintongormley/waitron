@@ -100,24 +100,41 @@ describe("payments migrations", () => {
     expect(rows.rows[0].indexdef).toContain("(provider, settled_at)");
   });
 
-  it("creates the payment_policy table with a numeric(12,2) offline_amount_cap", async () => {
+  it("creates payment_policy and leaves every money column a count of whole cents", async () => {
     const db = suite.db;
     const table = await db.execute<{ to_regclass: string | null }>(
       sql`select to_regclass('public.payment_policy')::text as to_regclass`,
     );
     expect(table.rows[0].to_regclass).toBe("payment_policy");
-    const col = await db.execute<{
+    // Every money column this set owns counts whole cents, so none has a fractional part to
+    // store. Read after the whole set has been applied, so a later `alter column` is included.
+    const cols = await db.execute<{
+      table_name: string;
+      column_name: string;
       data_type: string;
-      numeric_precision: number;
-      numeric_scale: number;
+      numeric_scale: number | null;
     }>(sql`
-        select data_type, numeric_precision, numeric_scale
+        select table_name, column_name, data_type, numeric_scale
         from information_schema.columns
-        where table_name = 'payment_policy' and column_name = 'offline_amount_cap'
+        where (table_name = 'payment_policy' and column_name = 'offline_amount_cap')
+           or (table_name in ('payments', 'payment_refunds') and column_name = 'amount')
+        order by table_name
       `);
-    expect(col.rows[0].data_type).toBe("numeric");
-    expect(col.rows[0].numeric_precision).toBe(12);
-    expect(col.rows[0].numeric_scale).toBe(2);
+    expect(cols.rows).toEqual([
+      {
+        table_name: "payment_policy",
+        column_name: "offline_amount_cap",
+        data_type: "bigint",
+        numeric_scale: 0,
+      },
+      {
+        table_name: "payment_refunds",
+        column_name: "amount",
+        data_type: "bigint",
+        numeric_scale: 0,
+      },
+      { table_name: "payments", column_name: "amount", data_type: "bigint", numeric_scale: 0 },
+    ]);
   });
 
   it("carries no tenant_id column on any table in the set", async () => {
@@ -132,21 +149,21 @@ describe("payments migrations", () => {
 
   it("keeps payment_policy to one row: id defaults to 1 and no other id is accepted", async () => {
     await suite.db.execute(sql`
-        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', '0.00')`);
+        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 0)`);
     const stored = await suite.db.execute<{ id: number }>(sql`select id from payment_policy`);
     expect(stored.rows).toEqual([{ id: 1 }]);
 
     const second = await captureError(() =>
       suite.db.execute(sql`
           insert into payment_policy (id, offline_mode, offline_amount_cap)
-          values (2, 'cash_only', '0.00')`),
+          values (2, 'cash_only', 0)`),
     );
     expect(pgErrorCode(second)).toBe("23514"); // check_violation
     expect(pgErrorMessage(second)).toMatch(/payment_policy_singleton_ck/);
 
     const duplicate = await captureError(() =>
       suite.db.execute(sql`
-          insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', '0.00')`),
+          insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 0)`),
     );
     expect(pgErrorCode(duplicate)).toBe("23505"); // unique_violation on the primary key
   });

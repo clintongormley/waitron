@@ -285,8 +285,9 @@ export interface DietProfile {
 /**
  * One selectable choice inside a {@link TillOptionGroup} (ordering modifiers, Task 3). A LOCAL mirror
  * of catalogue's `ResolvedOptionItem`, deliberately NOT imported from `@waitron/catalogue` — same
- * bundle-decoupling rationale as every other type in this file. `priceDelta` is the GROSS
- * (VAT-inclusive) numeric column carried as a string, like {@link TillProduct.unitPrice}; the modifier
+ * bundle-decoupling rationale as every other type in this file. `priceDelta` is a GROSS
+ * (VAT-inclusive) two-place decimal string, like {@link TillProduct.unitPrice} — the column stores
+ * the amount as a count of whole cents and the read converts it; the modifier
  * picker adds the selected deltas to its display-only running price. `vatClass` is null when the item
  * INHERITS the parent dish's rate (a non-null value overrides it) — carried for shape-fidelity; the
  * client never prices from it (the server re-prices authoritatively from the id).
@@ -1187,7 +1188,9 @@ export interface FloorZone {
  * (`hasOpenTab`, `pendingDeliveries`, `pendingToServe`, `readyToServe`) sit alongside the rolled-up
  * `state` so the floor plan can render a richer badge. `zoneId` is the `floor_zones` row this table sits
  * in, or null. The `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open (`hasOpenTab`);
- * `tabTotal` is the open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL
+ * `tabTotal` is the open tab's gross draft total as a two-place decimal string ("12.34") — the
+ * `working_order_lines.line_total` column stores whole cents and the server converts the summed count
+ * once, so the wire value is unchanged. `status` is the table's MANUAL
  * service status (a colour badge), independent of occupancy, or null. `pendingToServe` counts the open
  * tab's lines still to deliver (`served_at IS NULL`); `readyToServe` counts those the kitchen has bumped
  * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); `enRoute` counts those

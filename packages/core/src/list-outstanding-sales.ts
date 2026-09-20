@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { addDecimal, decimal, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
+import {
+  addDecimal,
+  rawCentsToDecimal,
+  saleId as brandSaleId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import type { Decimal, SaleId, TillId } from "@waitron/shared";
 
 /**
@@ -27,6 +32,8 @@ export interface OutstandingSale {
  * voided. This is a plain read over the database's one taxpayer.
  */
 export async function listOutstandingSales(tx: Transaction): Promise<OutstandingSale[]> {
+  // Both money expressions are counts of whole cents read raw, cast `::text` and converted by
+  // `rawCentsToDecimal` — see its doc comment for why the cast is there and why it is not `::int`.
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;
@@ -41,7 +48,7 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
       s.issued_at::text as issued_at,
       s.till_id        as till_id,
       s.total::text    as total,
-      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::numeric(12, 2)::text
+      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::text
         as correction_total
     from sales s
     where s.corrects_sale_id is null
@@ -52,8 +59,8 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
   `);
 
   return result.rows.map((r) => {
-    const total = decimal(r.total);
-    const correctionTotal = decimal(r.correction_total);
+    const total = rawCentsToDecimal(r.total);
+    const correctionTotal = rawCentsToDecimal(r.correction_total);
     return {
       saleId: brandSaleId(r.sale_id),
       invoiceNumber: r.invoice_number,

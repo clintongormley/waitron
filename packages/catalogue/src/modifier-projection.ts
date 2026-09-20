@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { productOptionGroups, type Transaction } from "@waitron/db";
-import { type Modifier } from "@waitron/shared";
+import { centsToDecimal, type Modifier } from "@waitron/shared";
 import { listModifiers } from "./modifiers.js";
 import { menuItemOptionGroups, menuItemOptions } from "./schema/menu.js";
 
@@ -86,7 +86,7 @@ export async function readMenuModifiers(
             option.menuItemId === publication.menuItemId &&
             option.groupId === publication.modifierId,
         )
-        .map((option) => [option.optionId, option.priceDelta]),
+        .map((option) => [option.optionId, centsToDecimal(option.priceDelta)]),
     );
     const modifiers = result.get(publication.menuItemId) ?? [];
     modifiers.push(projectModifier(definition, prices));
