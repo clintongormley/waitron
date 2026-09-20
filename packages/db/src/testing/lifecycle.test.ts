@@ -99,6 +99,50 @@ describe("usePgliteDb assigns its handle before setup can throw", () => {
 });
 
 // Role-statement generation is pure: both membership shapes can be checked without a container.
+/**
+ * The two container helpers refuse a handle read before their `beforeAll` has run, the same way
+ * `usePgliteDb` does — and neither refusal needs a container, because the state under test is the
+ * one where nothing has started. Each helper is called inside a suite that never runs, so its
+ * hooks are registered and never fire; the READ is then done inside a test, where a broken guard
+ * fails the case rather than the collection.
+ */
+let unstartedReal!: ReturnType<typeof useRealPostgres>;
+describe.skip("useRealPostgres, registered but never started", () => {
+  unstartedReal = useRealPostgres({
+    start: () => {
+      throw new Error("this suite never runs, so start() is never called");
+    },
+  });
+  it("never runs", () => {
+    expect.unreachable();
+  });
+});
+
+let unstartedTemplate!: ReturnType<typeof useTemplateDb>;
+describe.skip("useTemplateDb, registered but never started", () => {
+  unstartedTemplate = useTemplateDb({
+    template: "core",
+    getHandle: () => {
+      throw new Error("this suite never runs, so getHandle() is never called");
+    },
+  });
+  it("never runs", () => {
+    expect.unreachable();
+  });
+});
+
+describe("a handle read before the helper has started", () => {
+  it("useRealPostgres names itself in both refusals", () => {
+    expect(() => unstartedReal.pg).toThrow("useRealPostgres: container not started");
+    expect(() => unstartedReal.admin).toThrow("useRealPostgres: container not started");
+  });
+
+  it("useTemplateDb names itself in both refusals", () => {
+    expect(() => unstartedTemplate.pg).toThrow("useTemplateDb: clone not started");
+    expect(() => unstartedTemplate.admin).toThrow("useTemplateDb: clone not started");
+  });
+});
+
 describe("probeRoleStatement", () => {
   it("grants membership when inRole is given", () => {
     expect(probeRoleStatement({ name: "probe", password: "pw", inRole: "app_user" })).toBe(
