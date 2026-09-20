@@ -163,9 +163,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # No pnpm on this runner and none needed: the scorer is one plain `node` script over the
+      # downloaded reports, and it installs nothing. setup-node caches the package manager by
+      # default, which shells out to pnpm and fails the job before it starts.
       - uses: actions/setup-node@v5
         with:
           node-version-file: ".nvmrc"
+          package-manager-cache: false
 
       - name: Download every shard report
         uses: actions/download-artifact@v4
