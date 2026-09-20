@@ -1955,6 +1955,176 @@ describe("createOpenOrder empty-basket skips the full catalogue read (perf)", ()
   });
 });
 
+describe("basket-wide modifier resolution (perf)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // CLAUDE.md §3: shared catalogue data is resolved ONCE before the line loop, never per line.
+  // Each basket below is three lines — the same dish twice, then a second dish — so a resolver that
+  // moved inside the loop would call each reader three times instead of once. Behaviour alone
+  // cannot tell the two apart (the same order comes out either way), so the readers are spied on.
+  // Proven by mutation: moving the `resolveBasketModifiers` call in `priceOrderLines` inside the
+  // line loop takes both cases from 1 to 3.
+
+  it("reads each PRODUCT-side definition once for a walk-up basket", async () => {
+    const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      await addExtraList(tx, catalogueId, cafeId, "Bacon");
+      const cafe = await addOptionList(tx, cafeId, "Punto");
+      await addExtraList(tx, catalogueId, aguaId, "Hielo");
+      const agua = await addOptionList(tx, aguaId, "Tamano");
+      return { cafe, agua };
+    });
+    const menuExtras = vi.spyOn(catalogue, "readMenuExtras");
+    const productExtras = vi.spyOn(catalogue, "readProductExtras");
+    const attachments = vi.spyOn(catalogue, "readProductModifiers");
+    const optionLists = vi.spyOn(catalogue, "readOptionListsByIds");
+
+    await parkOrder({ db }, cfg, {
+      id: randomUUID(),
+      lines: [
+        {
+          productId: cafeId,
+          quantity: "1",
+          options: [{ listId: seeded.cafe.listId, labelId: seeded.cafe.labelIds[0]! }],
+        },
+        {
+          productId: cafeId,
+          quantity: "2",
+          options: [{ listId: seeded.cafe.listId, labelId: seeded.cafe.labelIds[0]! }],
+        },
+        {
+          productId: aguaId,
+          quantity: "1",
+          options: [{ listId: seeded.agua.listId, labelId: seeded.agua.labelIds[0]! }],
+        },
+      ],
+    });
+
+    expect(productExtras).toHaveBeenCalledTimes(1);
+    expect(optionLists).toHaveBeenCalledTimes(1);
+    expect(attachments).toHaveBeenCalledTimes(1);
+    // No line names a menu offer, so the menu-side read is never reached.
+    expect(menuExtras).not.toHaveBeenCalled();
+
+    // `readProductExtras` reads the same `product_modifiers` rows as its own first statement, so
+    // the basket hands it the map it just read. The spies above cannot see that second read: they
+    // replace the bindings on the `@waitron/catalogue` INDEX namespace, and `extra-projection.ts`
+    // calls `readProductModifiers` through its own `./product-modifiers.js` import, which is a
+    // different namespace object — with the resolve deliberately left duplicated, `attachments`
+    // still reported 1. What is checkable from here is the WIRING, by identity; that supplying
+    // the map skips the query is
+    // "takes attachments the caller already read rather than reading them again"
+    // (packages/catalogue/src/extra-projection.test.ts).
+    expect(productExtras.mock.calls[0]![2]).toBe(await attachments.mock.results[0]!.value);
+  });
+
+  it("does not resolve the catalogue twice for an edit that cannot be preserved", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      await addExtraList(tx, catalogueId, cafeId, "Bacon");
+      return addOptionList(tx, cafeId, "Punto");
+    });
+    const answer = { listId: seeded.listId, labelId: seeded.labelIds[0]! };
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1", options: [answer], note: "sin sal" }],
+    });
+    const held = await getHeldOrder({ db }, cfg, id);
+
+    const contentLanguages = vi.spyOn(catalogue, "readContentLanguages");
+    const productExtras = vi.spyOn(catalogue, "readProductExtras");
+    const attachments = vi.spyOn(catalogue, "readProductModifiers");
+
+    // A changed note is not a quantity-only edit, so this takes the replacement path and is
+    // re-priced from the current offer. The preserve check that runs first decides that from the
+    // stored `note` alone, which costs nothing — so the catalogue is resolved once, by
+    // `priceOrderLines`, and not a second time by a preserve check that was never going to hold.
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: held.lines[0]!.workingOrderLineId,
+          productId: cafeId,
+          quantity: "1",
+          options: [answer],
+          note: "con sal",
+        },
+      ],
+    });
+
+    expect(contentLanguages).toHaveBeenCalledTimes(1);
+    expect(productExtras).toHaveBeenCalledTimes(1);
+    expect(attachments).toHaveBeenCalledTimes(1);
+
+    const stored = await db
+      .select({ note: workingOrderLines.note })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)));
+    expect(stored).toEqual([{ note: "con sal" }]);
+  });
+
+  it("reads each MENU-side definition once for an offer basket", async () => {
+    const { cfg, cafeId, aguaId, catalogueId, zoneId, cafeOfferId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      const section = await createMenuSection(tx, {
+        menuId: catalogueId,
+        name: { [LOCALE]: "Aguas" },
+      });
+      const aguaOffer = await createMenuItem(tx, {
+        menuId: catalogueId,
+        productId: aguaId,
+        sectionId: section.id,
+        grossPrice: "2.20",
+      });
+      const bacon = await addExtraList(tx, catalogueId, cafeId, "Bacon");
+      await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
+        {
+          listId: bacon.listId,
+          items: [{ productId: bacon.productId, price: "1.00", available: true }],
+        },
+      ]);
+      const cafe = await addOptionList(tx, cafeId, "Punto");
+      const agua = await addOptionList(tx, aguaId, "Tamano");
+      return { aguaOfferId: aguaOffer.id, cafe, agua };
+    });
+    const menuExtras = vi.spyOn(catalogue, "readMenuExtras");
+    const productExtras = vi.spyOn(catalogue, "readProductExtras");
+    const attachments = vi.spyOn(catalogue, "readProductModifiers");
+    const optionLists = vi.spyOn(catalogue, "readOptionListsByIds");
+
+    await parkOrder({ db }, cfg, {
+      id: randomUUID(),
+      zoneId,
+      lines: [
+        {
+          menuItemId: cafeOfferId,
+          quantity: "1",
+          options: [{ listId: seeded.cafe.listId, labelId: seeded.cafe.labelIds[0]! }],
+        },
+        {
+          menuItemId: cafeOfferId,
+          quantity: "2",
+          options: [{ listId: seeded.cafe.listId, labelId: seeded.cafe.labelIds[0]! }],
+        },
+        {
+          menuItemId: seeded.aguaOfferId,
+          quantity: "1",
+          options: [{ listId: seeded.agua.listId, labelId: seeded.agua.labelIds[0]! }],
+        },
+      ],
+    });
+
+    expect(menuExtras).toHaveBeenCalledTimes(1);
+    expect(attachments).toHaveBeenCalledTimes(1);
+    expect(optionLists).toHaveBeenCalledTimes(1);
+    // Every line names an offer, so the product-side extras read is never reached.
+    expect(productExtras).not.toHaveBeenCalled();
+  });
+});
+
 describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("routes product > category > default and snapshots the station at fire time", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -4979,7 +5149,7 @@ describe("frozen answers through a fractional quantity edit", () => {
         ],
       }),
     ).rejects.toMatchObject({
-      code: "options.unsupported_product",
+      code: "extras.unsupported_product",
       params: { productId: cafeId, pricingUnit: "weight" },
     });
   });

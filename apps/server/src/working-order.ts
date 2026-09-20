@@ -1,6 +1,6 @@
 import { lockModifierDefinitions } from "@waitron/catalogue";
 import { buildLineExtras } from "./modifier-selection.js";
-import type { ExtraProductFacts } from "./modifier-selection.js";
+import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
@@ -133,8 +133,8 @@ export type LineExtras = { note?: string; doneness?: Doneness; variantId?: strin
 
 /**
  * Every extras and options definition the dishes in one basket offer, read ONCE before the line
- * loop. Reading them per line is the shape CLAUDE.md §3 forbids, guarded by
- * `apps/server/src/working-order.test.ts`.
+ * loop. Reading them per line is the shape CLAUDE.md §3 forbids. Guard: "basket-wide modifier
+ * resolution (perf)" in `apps/server/src/working-order.test.ts`.
  */
 interface BasketModifiers {
   /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
@@ -167,6 +167,12 @@ async function resolveBasketModifiers(
   const productOnlyIds = [
     ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [dish.productId] : []))),
   ];
+  // Every dish's attachments, read ONCE: the options side below needs them for the whole basket,
+  // and `readProductExtras` would otherwise ask the same table for the same ids on the same
+  // transaction as its own first statement. Awaited in turn with the reads below, never in
+  // parallel (CLAUDE.md §3).
+  const attachments = await readProductModifiers(tx, productIds);
+
   // Each dish is read on the side its own identity puts it on, so a basket mixing offer lines with
   // plain product lines resolves both. The two key spaces are distinct ids, so nothing collides.
   const extrasByHolder = new Map<string, ResolvedExtraList[]>();
@@ -176,12 +182,10 @@ async function resolveBasketModifiers(
     }
   }
   if (productOnlyIds.length > 0) {
-    for (const [holder, lists] of await readProductExtras(tx, productOnlyIds)) {
+    for (const [holder, lists] of await readProductExtras(tx, productOnlyIds, attachments)) {
       extrasByHolder.set(holder, lists);
     }
   }
-
-  const attachments = await readProductModifiers(tx, productIds);
   const optionLists = new Map(
     (
       await readOptionListsByIds(tx, [
@@ -486,12 +490,12 @@ async function priceOrderLines(
 
     // A child is priced at `dishQuantity × pickQuantity` (`priceBasketWithOptions`), so a dish sold by
     // WEIGHT would charge a fraction of each extra — 0.333 kg of fish carrying "one lemon" would bill
-    // 0.333 lemons. The legacy option payload refused the same shape with this same code. Only a pick
-    // makes a child, so an options answer on a weighed dish stays allowed. NOTE the signal is the
-    // product's own `pricing_unit`, which `assignProductUnit` does not move — a product left on
-    // `each` while carrying a kg unit reaches the arithmetic above (docs/backlog.md).
+    // 0.333 lemons. Only a pick makes a child, so an options answer on a weighed dish stays
+    // allowed. NOTE the signal is the product's own `pricing_unit`, which `assignProductUnit` does
+    // not move — a product left on `each` while carrying a kg unit reaches the arithmetic above
+    // (docs/backlog.md).
     if (extraChildren.length > 0 && product.pricingUnit !== "each") {
-      throw new AppError("options.unsupported_product", {
+      throw new AppError("extras.unsupported_product", {
         productId: underlyingProductId,
         pricingUnit: product.pricingUnit,
       });
@@ -1991,8 +1995,11 @@ export interface TabLine {
   /** The dish's frozen options answers; empty on a line that answered none and on every child. */
   optionSnapshots?: OptionSnapshot[];
   lineNo: number;
-  // Nullable since ordering modifiers (Task 2): a child modifier line has no product. Child-line
-  // rendering on the tab lands in Task 6; today every tab line still carries a product.
+  // `string | null` because the COLUMN is (`working_order_lines.product_id`,
+  // packages/db/src/schema/orders.ts), not because a tab line can lack a product: a PARENT row
+  // carries its dish and a CHILD row the picked extra product, which is what the kitchen cooks
+  // and the diner is charged for (spec §3.4). Every `insert(workingOrderLines)` in this file sets
+  // it.
   productId: string | null;
   quantity: string;
   unitPriceGross: string;
@@ -3073,6 +3080,7 @@ export async function updateHeldOrder(
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
+    type StoredLine = (typeof storedRows)[number];
     const storedParents = storedRows.filter((line) => line.parentLineId === null);
     const childrenByParent = new Map<string, typeof storedRows>();
     for (const row of storedRows) {
@@ -3088,38 +3096,22 @@ export async function updateHeldOrder(
       ]),
     );
 
-    // The definitions the STORED dishes offer, read once for the whole basket. A preserved line is
-    // by definition one whose dish has not changed, so the stored line's own product and offer are
-    // the right holders to resolve against — no zone read, and none of this inside the loop.
-    const contentConfig = await readContentLanguages(tx, cfg.locale);
-    const modifiers = await resolveBasketModifiers(
-      tx,
-      storedParents.flatMap((stored) =>
-        stored.productId === null
-          ? []
-          : [
-              {
-                productId: stored.productId,
-                menuItemId: contextByLine.get(stored.id)?.menuItemId ?? null,
-              },
-            ],
-      ),
-      contentConfig.defaultLanguage,
-    );
-
     /**
-     * What a requested line would freeze if it were re-priced now, or `null` when it is not the same
-     * line at all. An invalid selection answers `null` too: the replacement path below re-validates
-     * it and raises the authoritative refusal, so nothing is swallowed.
+     * The stored parent a requested line would keep, or `null` when it is not the same line at
+     * all. Every check here is free — the line's position, the id the client named, its note, its
+     * doneness, and which dish it names — so an edit that changes any of them reaches the
+     * replacement path below without paying for the catalogue reads the ANSWERS comparison needs.
      */
-    const rebuilt = req.lines.map((line, index) => {
+    const sameLines = req.lines.map((line, index) => {
       const stored = storedParents[index];
+      const productId = stored?.productId;
       if (
         stored === undefined ||
+        productId === null ||
+        productId === undefined ||
         line.workingOrderLineId !== stored.id ||
         (line.note?.trim() ?? null) !== stored.note ||
-        (line.doneness ?? null) !== stored.doneness ||
-        stored.productId === null
+        (line.doneness ?? null) !== stored.doneness
       ) {
         return null;
       }
@@ -3127,41 +3119,74 @@ export async function updateHeldOrder(
       const sameIdentity =
         line.menuItemId !== undefined
           ? context?.menuItemId === line.menuItemId && line.productId === undefined
-          : line.productId === stored.productId && line.menuItemId === undefined;
-      if (!sameIdentity) return null;
-      let frozen;
-      try {
-        frozen = buildLineExtras(
-          {
-            extras: modifiers.extrasByHolder.get(context?.menuItemId ?? stored.productId) ?? [],
-            options: modifiers.optionsByProduct.get(stored.productId) ?? [],
-          },
-          modifiers.extraProducts,
-          { extras: line.extras, options: line.options },
-          contentConfig.defaultLanguage,
-        );
-      } catch {
-        return null;
-      }
-      // Compared by VALUES, and index-wise because both sides are built in the OFFERED order — the
-      // validators answer in their lists' own order, never the wire's.
-      if (!isDeepStrictEqual(frozen.optionSnapshots, stored.optionSnapshots)) return null;
-      const children = childrenByParent.get(stored.id) ?? [];
-      if (children.length !== frozen.extraChildren.length) return null;
-      const same = children.every((child, childIndex) => {
-        const pick = frozen.extraChildren[childIndex]!;
-        return (
-          child.productId === pick.productId &&
-          compareDecimal(
-            multiplyDecimal(decimal(stored.quantity), decimal(String(pick.quantity))),
-            decimal(child.quantity),
-          ) === 0
-        );
-      });
-      return same ? { stored, children, picks: frozen.extraChildren } : null;
+          : line.productId === productId && line.menuItemId === undefined;
+      return sameIdentity ? { stored, productId, menuItemId: context?.menuItemId ?? null } : null;
     });
-    const preservesEveryLine =
-      req.lines.length === storedParents.length && rebuilt.every((entry) => entry !== null);
+    const sameBasket =
+      req.lines.length === storedParents.length && sameLines.every((entry) => entry !== null);
+
+    /**
+     * What a requested line would freeze if it were re-priced now, or `null` when its frozen
+     * answers differ from the stored ones. An invalid selection answers `null` too: the
+     * replacement path below re-validates it and raises the authoritative refusal, so nothing is
+     * swallowed.
+     *
+     * Left EMPTY when the free checks above already ruled the edit out, which `sameBasket` below
+     * distinguishes from "every line was rebuilt and matched". The two reads it needs are the same
+     * two `priceOrderLines` makes on the replacement path, on the same transaction — over the
+     * STORED basket here and the REQUESTED one there — so an edit heading there would otherwise
+     * pay for them twice. Both are read once for the WHOLE basket,
+     * never per line. A preserved line is by definition one whose dish has not changed, so the
+     * stored line's own product and offer are the right holders to resolve against — no zone read.
+     */
+    let rebuilt: ({ stored: StoredLine; children: StoredLine[]; picks: ExtraChild[] } | null)[] =
+      [];
+    if (sameBasket) {
+      const contentConfig = await readContentLanguages(tx, cfg.locale);
+      const modifiers = await resolveBasketModifiers(
+        tx,
+        sameLines.flatMap((entry) =>
+          entry === null ? [] : [{ productId: entry.productId, menuItemId: entry.menuItemId }],
+        ),
+        contentConfig.defaultLanguage,
+      );
+      rebuilt = req.lines.map((line, index) => {
+        const entry = sameLines[index];
+        if (entry === null || entry === undefined) return null;
+        const { stored, productId, menuItemId } = entry;
+        let frozen;
+        try {
+          frozen = buildLineExtras(
+            {
+              extras: modifiers.extrasByHolder.get(menuItemId ?? productId) ?? [],
+              options: modifiers.optionsByProduct.get(productId) ?? [],
+            },
+            modifiers.extraProducts,
+            { extras: line.extras, options: line.options },
+            contentConfig.defaultLanguage,
+          );
+        } catch {
+          return null;
+        }
+        // Compared by VALUES, and index-wise because both sides are built in the OFFERED order —
+        // the validators answer in their lists' own order, never the wire's.
+        if (!isDeepStrictEqual(frozen.optionSnapshots, stored.optionSnapshots)) return null;
+        const children = childrenByParent.get(stored.id) ?? [];
+        if (children.length !== frozen.extraChildren.length) return null;
+        const same = children.every((child, childIndex) => {
+          const pick = frozen.extraChildren[childIndex]!;
+          return (
+            child.productId === pick.productId &&
+            compareDecimal(
+              multiplyDecimal(decimal(stored.quantity), decimal(String(pick.quantity))),
+              decimal(child.quantity),
+            ) === 0
+          );
+        });
+        return same ? { stored, children, picks: frozen.extraChildren } : null;
+      });
+    }
+    const preservesEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
     if (preservesEveryLine) {
       for (let index = 0; index < req.lines.length; index++) {
         const requested = req.lines[index]!;

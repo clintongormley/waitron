@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -16,6 +16,7 @@ import {
 } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
+import * as productModifiers from "./product-modifiers.js";
 import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 
 // Publishing an extras list on a menu offer is authoring configuration, and PGlite is the lighter
@@ -402,6 +403,31 @@ describe("what a product's own extras lists offer", () => {
       [ids.olives, "0.75"],
       [ids.ham, "5.00"],
     ]);
+  });
+
+  it("takes attachments the caller already read rather than reading them again", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    await run((tx) => carries(tx, "burger", list.id));
+    const control = await run((tx) => readProductExtras(tx, [ids.burger]));
+    const attachments = await run((tx) => readProductModifiers(tx, [ids.burger]));
+
+    const spy = vi.spyOn(productModifiers, "readProductModifiers");
+    try {
+      const supplied = await run((tx) => readProductExtras(tx, [ids.burger], attachments));
+      // The caller's map is the answer to the question this read's first statement would have
+      // asked, so it does not ask it: the order path reads `product_modifiers` once per basket
+      // (`resolveBasketModifiers`, apps/server/src/working-order.ts).
+      expect(spy).not.toHaveBeenCalled();
+      expect(supplied).toEqual(control);
+
+      // The control in the other direction: with no map supplied the read does ask, and answers
+      // the same — so the assertion above is about the query, not about the result being empty.
+      const reread = await run((tx) => readProductExtras(tx, [ids.burger]));
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(reread).toEqual(control);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("returns an inactive list rather than dropping it", async () => {
