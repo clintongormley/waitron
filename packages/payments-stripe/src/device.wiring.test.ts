@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -19,7 +19,7 @@ import { StripeOnDeviceProvider } from "./device-provider.js";
 import { freshNif, seedForSale, seedPaymentPolicy } from "@waitron/payments/test/seed.js";
 import type { SeededForSale } from "@waitron/payments/test/seed.js";
 
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });

@@ -33,10 +33,18 @@ export default defineConfig({
             // The dashboard panel is browser-mode; it runs in the project below, never boots Docker.
             "src/dashboard/**",
           ],
-          // The hermetic suites boot PGlite (a WASM PostgreSQL) and apply migrations, and the real-PG
-          // suites clone the shared container's migrated template (globalSetup); Vitest's 5s default
-          // testTimeout is a live risk for both. The container boot/pull is NOT in a beforeAll: it moved
-          // to globalSetup, which vitest does not bound by hookTimeout.
+          // `testTimeout` bounds a test BODY, and neither database start-up is one: the PGlite boot
+          // with its migrations and the real-PG suites' clone of the migrated template both run in a
+          // beforeAll. `hookTimeout` bounds a hook that passes no timeout of its own, which is why it
+          // does not reach the PGlite boot either — that beforeAll is handed one
+          // (`packages/db/src/testing/lifecycle.ts:139`, 60s unless a suite passes `timeoutMs`).
+          // What `hookTimeout` does bound here is three things: `useTemplateDb`'s hooks — its clone
+          // at `lifecycle.ts:422` passes the caller's `timeoutMs` (`:431`) and this package's three
+          // callers pass none, and its reset (`:433`) and teardown (`:440`) are untimed outright —
+          // the bare afterEach reset and afterAll close every PGlite suite gets (`lifecycle.ts:148`,
+          // `:153`), and any hook a test file writes for itself, which in this project is the
+          // truncate in `src/reconciler.test.ts` and the one in `src/hosted-provider.test.ts`. The
+          // container boot and image pull run in globalSetup, outside both budgets.
           testTimeout: 120_000,
           hookTimeout: 180_000,
           // Keep one worker (#22): only ONE test file runs at a time, so the shared cluster's single

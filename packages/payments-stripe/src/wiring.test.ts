@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -38,7 +38,7 @@ import type {
 
 // The setup step creates the fake backend's own `fake_node_registrations`/`fake_fiscal_records`
 // tables, exactly as `record-sale.test.ts` and the neutral wiring test do.
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });

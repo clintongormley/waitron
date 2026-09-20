@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
@@ -20,7 +20,7 @@ const d = KEY ? describe : describe.skip;
 d("Stripe test-mode sandbox: hosted Checkout Session", () => {
   // `timeoutMs` carries over this suite's own 120s hook timeout rather than taking the helper's 60s
   // default — the nightly config's long timeouts are for the real Stripe round trip this suite makes.
-  const pg = usePgliteDb({
+  const pg = useVenueDb({
     migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
     timeoutMs: 120_000,
   });
