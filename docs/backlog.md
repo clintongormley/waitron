@@ -4063,6 +4063,45 @@ positionally, as a first draft of this branch's message did, and a PASSING run r
 failure — 87.02% branches against what looks like a 90 bar and is really 85. Write each number beside
 its own bar.
 
+**`packages/payments-stripe` converted, LANDED as #459 on 2026-09-20** (main `6a445202`) — the
+fourteenth package of the rollout, ten test files and ten calls, plus the `vitest.config.ts` comment
+the list above had been holding open for this conversion. Six packages left after it:
+`identity` (13), `reporting` (13), `payments` (14), `db` (20), `fiscal-verifactu` (25),
+`apps/server` (56) — re-measure with the plan's step-5 command rather than trusting those. Four
+things to carry.
+
+**First, the sweep must be reported PER SWEEP, and reporting the INTERSECTION is #440's mistake in a
+new dress.** This branch ran the two prescribed sweeps and reported the one document in BOTH, which
+is exactly one file — and that framing hid `docs/backlog.md`, which the first sweep returned on its
+own and which owed two corrections. The convention reviewer found it. Sweep 1 returns ten files here
+and sweep 2 returns ten; report each list and what each owed, never the overlap.
+
+**Second, BSD `sed` does not understand `\b`, and a half-done conversion passes every grep you would
+think to run.** The first pass substituted `\busePgliteDb(` and matched NOTHING, so the ten import
+lines were rewritten and the ten call sites were not. `git diff --stat` showed one changed line per
+file rather than two, which is what caught it. A conversion's own check is the pair of counts, not
+the absence of the old name: the old name was still there, on every call site.
+
+**Third, the `--hookTimeout=50` ceiling probe is INERT against this package** (its node project
+states its own `hookTimeout`), and the hooks that ceiling cannot reach need a delay INJECTED into
+them. Measured here in both directions: a 3s delay in a hook under an 800ms project ceiling, against
+a control at the same ceiling with no delay that passed all 8 tests. `useTemplateDb`'s reset
+(`packages/db/src/testing/lifecycle.ts:433`) and teardown (`:440`), the reset and close every PGlite
+suite gets (`:148`, `:153`), and a truncate a test file writes for itself all timed out. That is the
+experiment #440 asked for and several conversions have restated from reading instead — it is cheap,
+and it is what lets the comment name three kinds of hook rather than two.
+
+**Fourth, and it is about METHOD: a prose fix wave needed a THIRD round again, and that round found
+NINE defects, one of which was a correction inventing a false claim.** The wave's new backlog pointer
+said `packages/db/vitest.config.ts` lines 18-22 carried the #435 `globalSetup` shape. It does not —
+`packages/db/src/client.test.ts:101`, `migrate.test.ts:109` and `testing/networked-postgres.test.ts:12`
+each start a Testcontainers PostgreSQL in an untimed `beforeAll`, so that config's `hookTimeout`
+sentence is TRUE. The same round caught the self-referential trap once more (the pointer writes
+"live risk", so it is its own grep hit), a "byte-identical" sibling that differs in two hunks, a
+"three settings" that is two, a "nothing else in the package moves" contradicted four paragraphs
+later, and a "neither touched here" about two files the commit converts. Run the third round on every
+remaining conversion; the corrections are where the false claims are born.
+
 **`packages/workforce` converted, LANDED as #457 on 2026-09-20** (main `a4567862`) — nine test files, nine calls, plus the
 `vitest.config.ts` comment the list above named as carrying this rollout's false `hookTimeout`
 claim until this change took it out of that list. Four things to carry.
