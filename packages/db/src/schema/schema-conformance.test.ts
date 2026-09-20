@@ -19,7 +19,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false })
 // `deployment` is deliberately not re-exported from the barrel (see its own file), so it is named
 // here rather than discovered.
 const declared: PgTable[] = [
-  ...Object.values(barrel).filter((value): value is PgTable => is(value, PgTable)),
+  ...Object.values<unknown>(barrel).filter((value): value is PgTable => is(value, PgTable)),
   deployment,
 ];
 
