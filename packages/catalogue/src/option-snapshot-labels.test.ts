@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { customerOptionSnapshotLabels, optionSnapshotLabels } from "./option-snapshot-labels.js";
+import {
+  customerOptionSnapshotLabels,
+  optionSnapshotLabels,
+  staffOptionSnapshotLabels,
+} from "./option-snapshot-labels.js";
 
 const snapshot = (over: Partial<Parameters<typeof optionSnapshotLabels>[0][number]> = {}) => ({
   listName: { es: "Punto staff" },
@@ -115,5 +119,25 @@ describe("customerOptionSnapshotLabels", () => {
         "en-GB",
       ),
     ).toEqual(["Punto staff: Poco hecho staff"]);
+  });
+});
+
+describe("staffOptionSnapshotLabels", () => {
+  it("prints the STAFF name of the list and of the chosen label", () => {
+    // The fixture gives each side three different texts, so reading the kitchen name or the
+    // customer text instead of the staff name fails here rather than passing on identical strings.
+    expect(staffOptionSnapshotLabels([snapshot()])).toEqual(["Punto staff: Poco hecho staff"]);
+  });
+
+  it("prints a staff map's one entry whatever language it is keyed by", () => {
+    // `buildLineExtras` (`apps/server/src/modifier-selection.ts`) writes
+    // `listName: { [defaultLanguage]: list.name }`, so the key is the venue's default content
+    // language and the map holds one entry. A builder that looked up a fixed key would print
+    // nothing for a venue whose default is not that key.
+    expect(
+      staffOptionSnapshotLabels([
+        snapshot({ listName: { gl: "Punto galego" }, labelName: { gl: "Pouco feito galego" } }),
+      ]),
+    ).toEqual(["Punto galego: Pouco feito galego"]);
   });
 });

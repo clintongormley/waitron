@@ -1,4 +1,3 @@
-import { customerOptionSnapshotLabels } from "./option-snapshot-labels.js";
 /**
  * Formats a filed sale into the customer's ESC/POS receipt (design §3b) — the pure byte-producing
  * half of the counter-printing slice. Like {@link formatKitchenTicket} it owns no state and touches no
@@ -62,6 +61,7 @@ import {
   type PaperWidth,
   type Resolution,
 } from "@waitron/printing";
+import { customerOptionSnapshotLabels } from "@waitron/catalogue";
 import { addDecimal, decimal, perDishOptionQuantity, resolveSnapshotText } from "@waitron/shared";
 
 import { qrModules } from "./qr-matrix.js";

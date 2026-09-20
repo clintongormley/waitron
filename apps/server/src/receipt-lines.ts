@@ -28,7 +28,7 @@ export function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
     descriptions: joinCustomerPresentationText(line.descriptions, line.variantDescriptions ?? null),
     // The dish's frozen options answers, straight off the filed line: the receipt prints these
     // stored names and never re-reads the catalogue for them. The displayed TEXT is still chosen at
-    // print time — `customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`)
+    // print time — `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`)
     // picks the customer or staff name and resolves it against the invoice locale.
     optionSnapshots: line.optionSnapshots,
     quantity: trimQuantityForDisplay(line.quantity),

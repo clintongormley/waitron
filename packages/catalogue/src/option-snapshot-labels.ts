@@ -1,13 +1,14 @@
-import { kitchenPresentationName, nonBlankTranslations } from "@waitron/catalogue";
+import { kitchenPresentationName, nonBlankTranslations } from "./product-presentation.js";
 import { resolveSnapshotText } from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /**
- * One `<list>: <label>` line per options answer a dish froze. Two surfaces read these answers and
- * they name the same thing differently: {@link optionSnapshotLabels} is what a COOK reads and
- * {@link customerOptionSnapshotLabels} is what a DINER reads.
+ * One `<list>: <label>` line per options answer a dish froze. Three surfaces read these answers and
+ * they name the same thing differently: {@link optionSnapshotLabels} is what a COOK reads,
+ * {@link customerOptionSnapshotLabels} is what a DINER reads, and {@link staffOptionSnapshotLabels}
+ * is what a SERVER reads on the till.
  *
- * Common to both: the staff names arrive as locale → text maps because the snapshot widened them on
+ * Common to all three: the staff names arrive as locale → text maps because the snapshot widened them on
  * the way in (`OptionSnapshot`, `packages/shared/src/option-selection.ts`); the widening puts the one
  * plain name under the venue's default content language, so a staff map holds exactly one entry.
  * A list and a label carry no variant, which is why the presentation helpers below collapse to a
@@ -98,4 +99,21 @@ export function customerOptionSnapshotLabels(
       `${side(snapshot.listCustomerName, snapshot.listName)}: ` +
       `${side(snapshot.labelCustomerName, snapshot.labelName)}`,
   );
+}
+
+/**
+ * The STAFF wording — each side's plain staff name, the one the venue types in and the one a server
+ * recognises at the till. No kitchen shorthand and no customer text: those are the other two
+ * builders above.
+ *
+ * Like {@link optionSnapshotLabels} it takes no locale and calls no resolver, and for the same
+ * reason: a staff map holds one entry, so any value in it is the name. `buildLineExtras`
+ * (`apps/server/src/modifier-selection.ts`) is the only place an `OptionSnapshot` is built, and it
+ * writes `listName: { [defaultLanguage]: list.name }` from a plain `string` — checked by grepping
+ * every non-test `listName:` under `apps/` and `packages/`, which finds that one line and the type
+ * declaration in `packages/shared/src/option-selection.ts`.
+ */
+export function staffOptionSnapshotLabels(snapshots: readonly OptionSnapshot[]): string[] {
+  const side = (staffNames: Record<string, string>) => Object.values(staffNames)[0] ?? "";
+  return snapshots.map((snapshot) => `${side(snapshot.listName)}: ${side(snapshot.labelName)}`);
 }

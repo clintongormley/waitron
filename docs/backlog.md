@@ -647,7 +647,7 @@ Task 9 — a dish's frozen answers on the FILED sale line — has landed too, as
 and both filing routes now put a dish's frozen answers there: a walk-up off the basket the sale was
 priced from, a retrieved order off `working_order_lines.option_snapshots` through `readLockedLines`.
 The customer's paper receipt prints one `<list>: <label>` line indented under each dish, built by
-`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`) beside the
+`customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`) beside the
 kitchen-facing twin the kitchen ticket already used. `apps/server/src/modifier-snapshot-labels.ts`
 goes with the field it read.
 
@@ -925,7 +925,7 @@ What the order path (the plan's Task 7) left behind:
   and D). A walk-up files them off the priced basket and a retrieved order off
   `working_order_lines.option_snapshots` via `readLockedLines`; the customer receipt prints one
   `<list>: <label>` line under each dish, each side taking its customer text and falling back to the
-  staff name (`customerOptionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts`, beside the
+  staff name (`customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`, beside the
   kitchen-facing twin). `apps/server/src/modifier-snapshot-labels.ts` is deleted. Still not reachable
   from the till, which sends no answers until Task 12.
 - **`modifierDependants(...).orders` is always 0, and `deleteModifier` no longer refuses.** An open
@@ -981,7 +981,7 @@ What the order path (the plan's Task 7) left behind:
   problem, and so the child-line detection is rewritten rather than trusted.
   **A second next action on the same task, raised by the Task 9 review and deliberately NOT taken
   there:** the two label builders the till will need live in `apps/server` and the till cannot
-  import them. `apps/server/src/option-snapshot-labels.ts` turns a frozen answer into the
+  import them. `packages/catalogue/src/option-snapshot-labels.ts` turns a frozen answer into the
   `<list>: <label>` string each audience reads, and its diner-facing half restates a rule that has
   a home elsewhere — "take the customer map when it holds text in any language, else the staff
   name" is `nonBlankTranslations(customerNames) ?? staffNames` there and
@@ -993,6 +993,10 @@ What the order path (the plan's Task 7) left behind:
   consumer cannot reach into `apps/server`, so the rule is in line to be written a third time.
   MOVE the pair into `packages/catalogue` when Task 12 needs them rather than copying them; Task 9
   left them where they are because the server's two printers were the only callers.
+  **DONE:** the pair moved to `packages/catalogue/src/option-snapshot-labels.ts`, the two printers
+  now import them from `@waitron/catalogue`, and a third builder for the till's own staff wording
+  (`staffOptionSnapshotLabels`) sits beside them. The till screens that will call it are still Task
+  12's to write.
 - **A dead dashboard surface was left behind by `modifierDependants(...).orders` always being 0 —
   MOSTLY CLEARED by Task 11.** Rewriting the Modifiers screen took all three consumers with it: the
   orders-block element, the delete button disabled on `dependants.orders > 0` and the
@@ -2162,7 +2166,7 @@ ongoing overhaul listed at the top of Track A.
   list on the steak (`apps/server/scripts/demo-seed/seed-option-lists.ts`).
   **The prominence question this entry asked to check first, answered by measurement:** an options
   answer already prints on a kitchen ticket, as an indented `+ <list kitchen name>: <label kitchen
-  name>` line (`optionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts`, fed in at
+  name>` line (`optionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`, fed in at
   `apps/server/src/kitchen-print.ts`; the landed test is "prints a line's stored options answers,
   each side taking its KITCHEN name" in `kitchen-print.test.ts`). What it does NOT carry is the
   `** MEDIUM RARE **` framing the built-in line had: emphasis is now whatever upper-case shorthand

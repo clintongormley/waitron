@@ -1,4 +1,3 @@
-import { optionSnapshotLabels } from "./option-snapshot-labels.js";
 // KDS-4 print-on-fire (design §3c) — the DB-facing half that turns a freshly-fired set of ticket items
 // into kitchen print jobs. It lives OUTSIDE working-order.ts so that (already large) module gains only a
 // call, not the whole routing/formatting body. Called from inside `fireLines`/`fireCourse` on the
@@ -40,7 +39,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { perDishOptionQuantity } from "@waitron/shared";
-import { kitchenPresentationName } from "@waitron/catalogue";
+import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";

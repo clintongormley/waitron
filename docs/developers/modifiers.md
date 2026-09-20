@@ -311,7 +311,7 @@ pinned against is the CALLER's declared total, not the basket.
 
 The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
 CUSTOMER text at the invoice locale and falls back to the staff name, never to the kitchen name —
-`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`), beside the
+`customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside the
 kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage and integration order
