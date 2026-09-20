@@ -506,6 +506,24 @@ refusing to publish a list the dish's product does not carry. What is still miss
 the product editor's attachment section was removed rather than rebuilt, and no dashboard screen
 shows either kind of list — that is the plan's Task 11.
 
+The plan's Task 7 has landed too (#462), so the ORDER path is now the new one. An extras pick
+becomes its own child order line carrying the PICKED product on `working_order_lines.product_id`,
+at the price the offer set for it and at that product's OWN vat class; an options answer is frozen
+as names and no ids in a new `working_order_lines.option_snapshots` column; and
+`modifier_snapshots` and `option_group_item_id` are gone from that table (core migration 0040).
+Five routes take the new `extras` and `options` fields on a line — the walk-up sale, the park, the
+held-order edit, the tab round, and the integrated card pay on its walk-up branch — and every
+consumer is converted with them: the kitchen ticket, the station and expo screens, the tab line
+list, the held-order read, transfers and splits. The legacy ordering path had to go in this task
+rather than in Task 13, because the spec gives the wire field name `options` to the new shape and
+that field carried the old payload; one field cannot carry both and this repository keeps no
+compatibility code. TWO CONSEQUENCES WORTH KNOWING BEFORE ANYONE OPENS A DEV TILL: `apps/till`
+still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy modifier now
+answers 400 rather than being ignored (reaching it takes a product with a legacy option group
+attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
+for a child line by a NULL product, no longer recognise one. Task 12 wires the till. The next task
+is Task 8, held-order updates.
+
 What option lists left open, none of it taken in #436 or #445:
 
 - **`dependants` now fills both of its sides, and both of them through `product_modifiers`.** An
