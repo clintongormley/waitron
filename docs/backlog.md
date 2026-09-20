@@ -524,6 +524,17 @@ attached, and the dashboard can no longer attach one); and the till's read surfa
 for a child line by a NULL product, no longer recognise one. Task 12 wires the till. The next task
 is Task 8, held-order updates.
 
+Task 8 is that task, and this is what it changed. It took the preserve path's comparison out of
+`updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
+(`apps/server/src/modifier-selection.ts`) — and made both sides order-independent. The defect that
+paid for it, measured on both halves: a manager who REORDERS a dish's attachment lists leaves every
+parked line holding the old order, the comparison read that as a changed answer, and a quantity-only
+edit then deleted every line, re-issued it under a new id and re-priced the dish at today's menu
+price. The extras comparator answers the pairing of picks to stored child lines rather than a
+boolean, because the update moves each child's quantity and the two sides are no longer in step —
+the plan called it `sameExtraSelections` and had it answer a boolean, which the caller would have had
+to pair up a second time under a rule that could then disagree with it.
+
 What option lists left open, none of it taken in #436 or #445:
 
 - **`dependants` now fills both of its sides, and both of them through `product_modifiers`.** An
@@ -638,10 +649,14 @@ What the order path (the plan's Task 7) left behind:
   `quantity 2.000, price 19.00, listName "Renamed"` after it, under a new id. So a rename between
   two sends can change what a saved order says the diner chose, what it costs, and which rows it is
   made of. The old model compared by id and survived a rename. Whether today's till can reach it is
-  UNVERIFIED — it sends no `extras`/`options` until Task 12. **Next action:** Task 8
-  owns held-order comparison (`sameExtraSelections` / `sameOptionSelections`) and has to settle it —
-  either by carrying ids the comparison can use, or by deciding a rename SHOULD drop the line onto
-  the replacement path.
+  UNVERIFIED — it sends no `extras`/`options` until Task 12. **SETTLED by Task 8:** a rename drops
+  the line onto the replacement path, and that is now pinned by a test rather than left as a
+  consequence ("re-prices a held line when the options list it answered was renamed between the two
+  sends", `apps/server/src/working-order.test.ts`). The other option on the table — carrying ids the
+  comparison could use — would mean putting a list or label id on the line, which is exactly what
+  spec §2.3 rules out and what makes editing or deleting a list unable to change a saved order. With
+  no id on either side there is nothing but the wording to compare, so a rename is indistinguishable
+  from a different answer.
 - **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
   order path refuses an extras pick on a dish that is not priced `each`
   (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in

@@ -5409,13 +5409,15 @@ describe("order path — extras and options", () => {
 });
 
 /**
- * A dish's attachment list has an ORDER, and a product save re-numbers it from the body
- * (`writeProductModifiers`, packages/catalogue/src/product-modifiers.ts). Both halves of the
- * preserve check are built in that order, but a line stored before the reorder keeps the OLD one —
- * so a comparison that pairs the two sides up index by index reads a reorder as a changed answer and
- * re-prices a quantity-only edit.
+ * Which edits `updateHeldOrder` preserves the stored lines for, and which it replaces them for.
+ *
+ * The first two cases are the ones that paid for the comparison being order-independent: a dish's
+ * attachment list has an ORDER, a product save re-numbers it from the body (`writeProductModifiers`,
+ * packages/catalogue/src/product-modifiers.ts), and both halves of the preserve check are built in
+ * that order while a line stored before the reorder keeps the OLD one. A comparison pairing the two
+ * sides up index by index reads that as a changed answer and re-prices a quantity-only edit.
  */
-describe("a held-order edit after the dish's lists are reordered", () => {
+describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line's id and locked price when two options lists change places", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
@@ -5527,6 +5529,107 @@ describe("a held-order edit after the dish's lists are reordered", () => {
       [before[1]!.id, "2.000", before[1]!.unitPriceGross],
       [before[2]!.id, "2.000", before[2]!.unitPriceGross],
     ]);
+  });
+
+  it("replaces the line when the answer itself changed, re-pricing it from today's offer", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const punto = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      return addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          options: [{ listId: punto.listId, labelId: punto.labelIds[0]! }],
+        },
+      ],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    await db.execute(sql`
+      update menu_items set gross_price = 99.00 where id = ${premiumCafeOfferId}`);
+
+    // Same dish, same quantity, a DIFFERENT label off the same list.
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before[0]!.id,
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          options: [{ listId: punto.listId, labelId: punto.labelIds[1]! }],
+        },
+      ],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after[0]!.id).not.toEqual(before[0]!.id);
+    expect(after[0]!.unitPriceGross).toEqual("99.00");
+    expect(after[0]!.optionSnapshots[0]).toMatchObject({
+      labelName: { [CONTENT_LANGUAGE]: "Cortado staff" },
+    });
+  });
+
+  it("refuses an edit whose new answer breaks the list's own rules", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    const bacon = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      return addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
+        },
+      ],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+
+    // Two of an item capped at one. The preserve check cannot hold, and what the caller is told
+    // comes from the replacement path re-validating the answer — not from the preserve check, which
+    // only ever answers "not this edit".
+    await expect(
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            productId: cafeId,
+            quantity: "1",
+            extras: [
+              { listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 2 }] },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "extras.limit_exceeded",
+      params: { extraListId: bacon.listId },
+    });
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after.map((line) => line.id)).toEqual(before.map((line) => line.id));
   });
 
   /**

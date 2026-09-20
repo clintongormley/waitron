@@ -166,9 +166,21 @@ the child line holds no list id to name.
 A quantity-only edit of a held order sends the same answers with a new quantity. `updateHeldOrder`
 rebuilds what those answers would freeze NOW and compares the result with what the stored line
 holds, by value; equal, the line and its locked price are kept, otherwise the line is replaced and
-re-priced. Because an options answer freezes names and no ids, a list RENAMED between the two sends
-makes the two sides differ — the consequences are recorded in `docs/backlog.md` under what the
-order path left behind.
+re-priced.
+
+Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
+`apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
+lists, and that order moves: saving a product re-numbers its attachment positions from the body, so
+a line parked before a reorder holds the old one. The extras comparator answers the PAIRING of picks
+to stored child lines rather than a yes or no, because the update moves each child's quantity and
+the two sides are no longer in step.
+
+A list RENAMED between the two sends does make the two sides differ, and the line is replaced and
+re-priced. That is a decision, not an omission: an options answer freezes six names and no ids, so
+the wording is the only evidence the line carries about what was chosen, and a rename cannot be told
+from a different answer. Giving the comparison an id to use would mean putting one on the line,
+which §2.3 of the design rules out. Pinned by "re-prices a held line when the options list it
+answered was renamed between the two sends" (`apps/server/src/working-order.test.ts`).
 
 The till has not moved onto this wire yet: `apps/till` still builds and reads the old
 `modifierSelections`/`modifierSnapshots` shapes, which is a task of its own. The gap, and which
