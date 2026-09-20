@@ -2,10 +2,10 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
-import { usePgliteDb } from "./testing/lifecycle.js";
+import { useVenueDb } from "./testing/venue-db.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.execute(sql`drop table if exists immutability_probe`);

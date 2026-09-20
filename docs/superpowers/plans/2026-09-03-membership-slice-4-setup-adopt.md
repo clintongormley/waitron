@@ -14,6 +14,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md` — **§4 ("Trust: node identity keys chained from setup")**, the setup half only. This plan implements trust-anchor establishment at setup + adopt and the live boot read; the **endorsement chain** (`endorseKey`, a distinct second-serving-box identity, primary-vouches-for-a-new-key) is **deferred** — it has no consumer until promotion (Slice 5) or an add-second-box slice, and the cloud mirror runs *as* the primary's nodeId and never signs. Slice 3 (distribution): `docs/superpowers/plans/2026-09-03-membership-slice-3-distribution.md`.
 
+> **2026-09-20 — Step 3's test sketch is stale in its helper, not its shape.** Both files it
+> names, `packages/db/src/node-identity.test.ts` and the `node-membership.test.ts` it sends you
+> to open, ask for their PGlite database through `useVenueDb` (`./testing/venue-db.js`) today,
+> not `usePgliteDb`. `useVenueDb` forwards to `usePgliteDb` unchanged, so only the name to copy
+> changed. Task P2 step 5 of
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` is why.
+
 ## Global Constraints
 
 - **Owner decisions (2026-09-03, this brainstorm):**

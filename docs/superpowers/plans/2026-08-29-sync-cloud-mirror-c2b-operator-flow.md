@@ -10,6 +10,22 @@
 
 **Spec:** [docs/superpowers/specs/2026-08-29-sync-cloud-mirror-c2b-operator-flow-design.md](../specs/2026-08-29-sync-cloud-mirror-c2b-operator-flow-design.md) — read it alongside this plan; every task argues from it.
 
+> **2026-09-20 — Step 5's test sketch is stale in its helper, not its shape.** The file it is
+> headed with, `packages/db/src/mirror-config.test.ts`, asks for its database through
+> `useVenueDb` (`./testing/venue-db.js`) today, not `usePgliteDb`. So does every sibling in
+> `packages/db` that takes its database through that helper. TWO files in the package still call
+> `usePgliteDb` on purpose: `src/testing/venue-db.ts`, which IS the wrapper, and
+> `src/testing/lifecycle.test.ts`, the old helper's own contract test. Some siblings reach PGlite
+> by another door (`createPgliteDb` or `describeEachTarget`) and were not part of this; if you copy
+> one of those, copy what it actually does. `useVenueDb` forwards to `usePgliteDb` unchanged, so
+> nothing about the sketch's behaviour changed — only the name to copy. Task P2 step 5 of
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` is why.
+>
+> Only step 5's sketch was re-checked. This document has a second `usePgliteDb` sketch further
+> down, pointing at `packages/provisioning/src/venue-apply.test.ts`; that package was converted
+> earlier in the same rollout, so that clause is stale too — by somebody else's change, not this
+> one.
+
 ## Global Constraints
 
 - **No `registerSif` on the mirror, ever.** It mints a fresh `numero_instalacion` and nulls `cadenas.ultima_huella` → a second unrecoverable hash chain (spec §5, CLAUDE.md §5). `adoptVenue` inserts identity rows only; `registro_sif`/`cadenas` arrive via sync.

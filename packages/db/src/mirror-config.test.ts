@@ -4,7 +4,7 @@ import { createPgliteDb } from "./client.js";
 import { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
-import { usePgliteDb } from "./testing/lifecycle.js";
+import { useVenueDb } from "./testing/venue-db.js";
 
 // PGlite, not real Postgres: the accessor round-trip is pure SQL logic (upsert/read of a
 // singleton), with no privilege behaviour to observe — every PGlite connection is a superuser, so it
@@ -22,7 +22,7 @@ const SAMPLE: Parameters<typeof writeMirrorConfig>[1] = {
 };
 
 describe("mirror_config accessors", () => {
-  const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before any write (a primary/unstamped database)", async () => {
     expect(await readMirrorConfig(pg.db)).toBeNull();

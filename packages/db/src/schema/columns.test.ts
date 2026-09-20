@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, expectTypeOf, it } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
 import { PgDialect, check, getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import {
   table,
   id,
@@ -308,7 +308,7 @@ describe("the generated migration and the converted table agree", () => {
  * concurrency, which are the three things PGlite cannot show (CLAUDE.md §4). No rows are written,
  * so the per-test reset has nothing to do.
  */
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+const pg = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
 /** What the server says it created: one table's `data_type` per column name. */
 const reportedTypes = async (tableName: string) => {

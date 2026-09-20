@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
-import { usePgliteDb } from "./lifecycle.js";
+import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { freshNif, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {

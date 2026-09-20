@@ -5,14 +5,14 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Append-only links and sales retain their FK parents; each case uses a fresh fixture identity.
 beforeEach(() => {

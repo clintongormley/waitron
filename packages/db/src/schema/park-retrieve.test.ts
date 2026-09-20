@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
@@ -43,7 +43,7 @@ async function openOrder(admin: Database, orderNumber: number): Promise<string> 
 }
 
 describe("park & retrieve schema", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
     const admin = suite.db;

@@ -11,6 +11,14 @@
 > verification recomputes `canonicalize(body)` from the parsed object (no byte-preservation need).
 > The code/SQL blocks below have been updated to `jsonb`; follow them, not any lingering `text`.
 
+> **2026-09-20 — the PGlite half of this plan's test sketches is stale in its helper.** Step 1
+> creates `packages/db/src/node-membership.test.ts` with a `usePgliteDb` import and call, and
+> tells you to mirror `mirror-config.test.ts`; both files ask through `useVenueDb`
+> (`./testing/venue-db.js`) today. `useVenueDb` forwards to `usePgliteDb` unchanged, so only the
+> name changed. The real-Postgres half is untouched — `useTemplateDb` is not part of that
+> rollout and still hands back a container-backed database. Task P2 step 5 of
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` is why.
+
 **Architecture:** A new singleton table `node_membership` (`id = 1`; `term bigint`, `document jsonb`, `updated_at`) — **no `tenant_id`, no RLS**, like `mirror_config`/`deployment`/`sync_cursor` (whole-DB state, out of the fiscal FORCE-RLS scan by construction). Created by a hand-written custom migration that also `GRANT SELECT ... TO app_user` (a node reads the held document on the app pool at boot; writes are owner-role only). The table is deliberately **kept out of `schema/index.ts`** for the same reason `mirror-config.ts`/`deployment.ts` are (a `--custom` migration drizzle-kit never diffed into a snapshot). Two accessors on `@waitron/db`: `readNodeMembership` (`to_regclass` probe → `SignedMembershipDocument | null`) and `writeNodeMembership` (plain owner-role upsert of the `id = 1` row). `@waitron/db` takes a **type-only** dependency on the leaf `@waitron/membership` for the `SignedMembershipDocument` type — no runtime import, so no cycle and no membership error-registry load in `db`.
 
 **Tech stack:** TypeScript (ESM), Drizzle (`pgTable`, hand-written custom SQL migration), Vitest (PGlite for the accessor round-trip; real Postgres via `useTemplateDb` for the grant read-back), `@waitron/membership` (types only).

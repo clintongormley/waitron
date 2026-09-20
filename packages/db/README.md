@@ -35,9 +35,16 @@ moved behind one helper"; it needs the exclusion that pair carries, or the four 
 name either helper — the two that define them and their two contract tests — come back as work still
 to do.
 
-Keep `testTimeout: 30_000` in `vitest.config.ts` for the PGlite-backed tests; do not replace it
-with the usual 5 s default. Setup hooks have a separate `hookTimeout: 120_000` budget for booting
-and migrating PostgreSQL. Shared-fixture suites migrate once.
+Keep `testTimeout: 30_000` in `vitest.config.ts` for the database-backed tests; do not replace it
+with the usual 5 s default. **Neither that budget nor the `hookTimeout: 120_000` beside it bounds
+the PGlite boot and migrations**, which is what this paragraph used to say: `usePgliteDb` hands its
+own `beforeAll` a 60-second default (`src/testing/lifecycle.ts:22` and `:146`), and a timeout passed
+to a hook overrides the config's. What `hookTimeout` does reach — measured, by setting it to 1 — is
+every `afterEach`/`afterAll` in the package; the `beforeAll` of a `useTemplateDb` or
+`useRealPostgres` suite that passes no `timeoutMs` of its own; and one hand-written `beforeAll` that
+declares no budget, `src/testing/networked-postgres.test.ts:12`, which starts a real Testcontainers
+PostgreSQL — the one suite the old sentence was true about. The comments in `vitest.config.ts` name
+the suites and where each died. Shared-fixture suites migrate once.
 
 ## What CI runs
 

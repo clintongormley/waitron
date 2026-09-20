@@ -12,7 +12,8 @@ import {
 } from "./node-membership.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
-import { usePgliteDb, useTemplateDb } from "./testing/lifecycle.js";
+import { useTemplateDb } from "./testing/lifecycle.js";
+import { useVenueDb } from "./testing/venue-db.js";
 
 // PGlite for the accessor round-trip: it is pure SQL logic (upsert/read of a singleton), with no
 // privilege behaviour to observe. The one thing PGlite cannot answer is how the REAL `pg` driver
@@ -33,7 +34,7 @@ function doc(term: number): SignedMembershipDocument {
 }
 
 describe("node_membership accessors", () => {
-  const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before any write (a node that has never adopted a document)", async () => {
     expect(await readNodeMembership(pg.db)).toBeNull();
@@ -102,7 +103,7 @@ describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)
   // A separate PGlite instance (not the suite above's) so this describe's beforeEach reset is
   // independent of the other describe's ordering — moved from apps/server/src/membership-adopt.test.ts,
   // where it exercised the same accessor before it lived here.
-  const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   // Order-independent (CLAUDE.md §4): clear the singleton before each case rather than relying on
   // execution order.

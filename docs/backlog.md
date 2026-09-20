@@ -3922,9 +3922,14 @@ document, not from the places an earlier round happened to name. Three review ro
 "three places" count between them for
 `docs/superpowers/plans/2026-08-15-recipes-allergen-inheritance.md` while correcting each other about
 which commit each of the three died at; a fifth round ran `grep -n usePgliteDb` over the file and
-found four, and the fourth is STILL TRUE — a sketch headed `packages/db/src/schema/recipes.test.ts`,
-a package this rollout has not reached. A document's stale claims and its still-true ones look
-identical to every grep; only reading each one against the tree separates them.
+found four, and the fourth was STILL TRUE at that point — a sketch headed
+`packages/db/src/schema/recipes.test.ts`, a package the rollout had not reached. **It went stale
+on 2026-09-20**, when `packages/db` was converted; that document now carries a second dated
+pointer saying so, and all four of its writings of the old helper have now died — at THREE
+moments, two of them at #434. The lesson outlives the example: a document's stale claims and its still-true
+ones look identical to every grep, so only reading each one against the tree separates them —
+and a clause that reads true today is a clause to re-check, which is why that first pointer was
+written to be found again.
 
 **A fourth helper the rollout's own plan did not name, found while converting `packages/media`
 (#429).** Task P2 listed the doors to a test database as `usePgliteDb`, `useRealPostgres` and
@@ -4025,19 +4030,30 @@ three have since been corrected by the conversion of their own package — #438 
 returns `packages/purchasing` alone. That one has no conversion left to catch it: `packages/purchasing`
 was converted early in the rollout, by #427, whose whole diff is two lines in
 `packages/purchasing/test/fixtures.ts` and does not touch the config. Somebody has to take it
-deliberately.** Another instance sits in the package that owns the helper,
-`packages/db/README.md:39-40`:
-"Setup hooks have a separate `hookTimeout: 120_000` budget for booting and migrating PostgreSQL."
-That one is false for that package's `usePgliteDb` suites and true for a container suite whose hook
-passes no timeout (`packages/db/src/testing/networked-postgres.test.ts`), so correcting it means
-deciding what the sentence should say about both halves — which is why it is here rather than fixed.
+deliberately.** Another instance sat in the package that owns the helper,
+`packages/db/README.md`: "Setup hooks have a separate `hookTimeout: 120_000` budget for booting and
+migrating PostgreSQL." It was left open because correcting it meant deciding what the sentence
+should say about BOTH halves — false for that package's `usePgliteDb` suites, true for a hook that
+passes no timeout. **The `packages/db` conversion took it on 2026-09-20**, by measuring both halves
+rather than arguing them: with `hookTimeout: 1`, `src/testing/reset-append-only.test.ts` (PGlite)
+dies in `afterEach` and `afterAll` and never in `beforeAll`, while
+`src/testing/reset-append-only.pg.test.ts` (`useTemplateDb`, passing no `timeoutMs`) dies in
+`beforeAll` on the template clone. So `hookTimeout` reaches every teardown hook in the package, plus
+a real-Postgres `beforeAll` that names no timeout of its own, and reaches neither the PGlite
+`beforeAll` nor the shared container's boot, which is `globalSetup`'s. **The old sentence's true
+half survives and is still named**: `packages/db/src/testing/networked-postgres.test.ts:12` is a
+hand-written `beforeAll` that starts a Docker network and a real container and declares no budget,
+so `hookTimeout` is the only thing bounding it — which is exactly what that sentence described, for
+one suite out of seventy. Dropping the name while correcting the sentence was the first draft's
+mistake, caught by the branch's own re-read. `packages/db/vitest.config.ts` now carries all three
+cases with the suite that died in each; the README states them and points at the config.
 
 **THAT PHRASE-GREP IS NOT THE SIZE OF THE PROBLEM, and #438's review rounds are what showed it.** It
 finds ONE wording. Six more `vitest.config.ts` files stated the same claim in other words when this
 was written — `packages/credentials` corrected by #440, `packages/scheduler`, `packages/workforce`
 and `packages/reporting` each by their own conversion, `packages/payments` by its own on 2026-09-20,
 and **`packages/fiscal-verifactu`, the one OF THE SIX still standing**, in the third bullet below.
-"Of the six" is not a hedge to drop: four more instances of the same false claim are still standing
+"Of the six" is not a hedge to drop: three more instances of the same false claim are still standing
 elsewhere in this section — `packages/purchasing`, `packages/fiscal-none`, `packages/fiscal` and
 `packages/db/README.md` — each named in the paragraphs around this one. The running
 tally that used to sit here ("three do now") was left un-decremented by two successive conversions

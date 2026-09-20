@@ -18,7 +18,7 @@ import {
 import { invoiceSeries } from "./schema/series.js";
 import { captureError } from "./testing/errors.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
-import { usePgliteDb } from "./testing/lifecycle.js";
+import { useVenueDb } from "./testing/venue-db.js";
 
 // PGlite, not real Postgres: this proves the query/insert logic (a dormant node lands with its public
 // key + endorsement, the reserved series default to next_number 1, the endorsement round-trips and null
@@ -44,7 +44,7 @@ async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocati
 }
 
 describe("reserved-identity accessors", () => {
-  const suite = usePgliteDb({
+  const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS],
     timeoutMs: 60_000,
     resetPerTest: false,

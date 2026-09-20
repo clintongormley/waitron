@@ -10,6 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-03-reserved-standby-identity-and-promotion-design.md` — this plan implements **§6 R2** only (Reserve the cloud's dormant identity at adopt). R1 (document lifecycle, LANDED #205) is a prerequisite; R3 (cloud promotion) and H2 (fiscal-record sync) are later plans off the same spec.
 
+> **2026-09-20 — the sketch headed `packages/db/src/reserved-identity.test.ts` is stale in its
+> helper.** That file asks for its PGlite database through `useVenueDb`
+> (`./testing/venue-db.js`) today, not `usePgliteDb`; the wrapper forwards unchanged, so nothing
+> else in the sketch moved. This document's other test sketch is headed
+> `apps/server/src/reserved-identity.test.ts`, a package the rollout has not reached, and its
+> `usePgliteDb` is still what that file calls (`:7` and `:29`) — that ONE clause was re-checked,
+> not the whole sketch. Task P2 step 5 of
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` is why.
+
 ## Decisions taken in this plan (flag for owner review at PR — fiscal-adjacent)
 
 The spec fixes the model; these two sub-decisions are the plan's, taken from the code + constraints. Both are pre-production-reversible and owner-reviewed at land per the fiscal posture (spec "Supersedes a scheduling posture, not a fiscal one").

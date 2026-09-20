@@ -3,12 +3,12 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 
 const CANVAS_A = "11111111-0000-4000-8000-0000000000a2";
 
 describe("device_profiles canvas FK (canvas_id) → canvases", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
   beforeAll(async () => {
