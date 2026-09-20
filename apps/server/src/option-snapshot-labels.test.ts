@@ -41,11 +41,50 @@ describe("customerOptionSnapshotLabels", () => {
     ).toEqual(["Punto staff: Poco hecho staff"]);
   });
 
-  it("takes any stored text when the requested locale is not a key of the map", () => {
-    // A receipt asks for a full tag ("es-ES") while a frozen staff map is keyed by the venue's
-    // default content language ("es"), so the exact-key lookup misses on every real filed line.
-    expect(customerOptionSnapshotLabels([snapshot({ listCustomerName: null })], "es-ES")).toEqual([
-      "Punto staff: Poco hecho customer",
-    ]);
+  it("answers a full tag with the bare language the stored answers are keyed by", () => {
+    // A frozen answer is keyed by CONTENT LANGUAGE codes ("es", "en"): `buildLineExtras`
+    // (`apps/server/src/modifier-selection.ts`) copies the catalogue row's customer map through
+    // whole and widens each plain staff name under the venue's default content language. The
+    // receipt asks with the invoice locale, which can be a full tag. Matching keys exactly would
+    // miss and print whichever language the stored map happens to list first.
+    expect(
+      customerOptionSnapshotLabels(
+        [
+          snapshot({
+            listCustomerName: { es: "Punto customer", en: "Doneness customer" },
+            labelCustomerName: { es: "Poco hecho customer", en: "Rare customer" },
+          }),
+        ],
+        "en-GB",
+      ),
+    ).toEqual(["Doneness customer: Rare customer"]);
+  });
+
+  it("skips an entry that is blank in the requested language and prints text that is stored", () => {
+    // `nonBlankTranslations` keeps a map that holds text in ANY language, so the map it chose can
+    // still be blank in the language the receipt asked for. Printing that blank would drop the
+    // goods identification off a legal receipt while every other assertion still passed.
+    expect(
+      customerOptionSnapshotLabels(
+        [
+          snapshot({
+            listCustomerName: { en: "", es: "Punto customer" },
+            labelCustomerName: { en: "  ", es: "Poco hecho customer" },
+          }),
+        ],
+        "es-ES",
+      ),
+    ).toEqual(["Punto customer: Poco hecho customer"]);
+  });
+
+  it("prints a staff map's one entry whatever language the receipt asks for", () => {
+    // The staff fallback holds a single entry under the venue's default content language, which is
+    // not necessarily the language of the receipt; that entry is the only text the answer has.
+    expect(
+      customerOptionSnapshotLabels(
+        [snapshot({ listCustomerName: null, labelCustomerName: null })],
+        "en-GB",
+      ),
+    ).toEqual(["Punto staff: Poco hecho staff"]);
   });
 });

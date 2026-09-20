@@ -662,6 +662,13 @@ it("prints an unpaid invoice without claiming a cash or card payment", () => {
 // Two answers on one dish: the first stores customer text, the second stores none. Every one of the
 // twelve names differs, and each side's kitchen name differs again, so an assertion here cannot pass
 // while the receipt reads the staff name where a customer name exists, or the kitchen name at all.
+// Keyed by bare CONTENT LANGUAGE codes, which is what `buildLineExtras`
+// (`apps/server/src/modifier-selection.ts`) writes onto a real line: the catalogue's customer map
+// copied through whole, and each staff name widened under the venue's default content language.
+// The invoice tags the tests below ask with ("es-ES", "en-GB") are therefore NOT keys of these
+// maps, so the assertions can tell a locale resolve from an exact-key lookup. A line's own
+// `descriptions` above stay full tags — those ARE re-keyed onto the invoice locales before filing
+// (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`).
 const ANSWERED_DISH: TillSaleResult = {
   ...FILED_SALE,
   lines: [
@@ -669,18 +676,18 @@ const ANSWERED_DISH: TillSaleResult = {
       ...FILED_SALE.lines[0]!,
       optionSnapshots: [
         {
-          listName: { "es-ES": "Tamano personal" },
-          listCustomerName: { "es-ES": "Tamano cliente", "en-GB": "Size guest" },
+          listName: { es: "Tamano personal" },
+          listCustomerName: { es: "Tamano cliente", en: "Size guest" },
           listKitchenName: "Tamano cocina",
-          labelName: { "es-ES": "Grande personal" },
-          labelCustomerName: { "es-ES": "Grande cliente", "en-GB": "Large guest" },
+          labelName: { es: "Grande personal" },
+          labelCustomerName: { es: "Grande cliente", en: "Large guest" },
           labelKitchenName: "Grande cocina",
         },
         {
-          listName: { "es-ES": "Coccion personal" },
+          listName: { es: "Coccion personal" },
           listCustomerName: null,
           listKitchenName: "Coccion cocina",
-          labelName: { "es-ES": "Poco hecha personal" },
+          labelName: { es: "Poco hecha personal" },
           labelCustomerName: null,
           labelKitchenName: "Poco hecha cocina",
         },
