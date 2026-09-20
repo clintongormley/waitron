@@ -228,8 +228,35 @@ list is different: its children are compared by the picked product's id, so rena
 the product — disturbs nothing and the line is preserved.
 
 The till has not moved onto this wire yet: `apps/till` still builds and reads the old
-`modifierSelections`/`modifierSnapshots` shapes, which is a task of its own. The gap, and which
-till files it touches, is in `docs/backlog.md`.
+`modifierSelections`/`modifierSnapshots` shapes, which is a task of its own — its mirror of the
+settled ticket included. The gap, and which till files it touches, is in `docs/backlog.md`.
+
+## On the filed sale
+
+A filed sale is a snapshot and never a catalogue reference (`packages/db/src/schema/sales.ts`,
+architecture §6), so the two kinds of answer land differently:
+
+- An options answer is copied onto the DISH's own `sale_lines.option_snapshots` — the same six names
+  the open order froze, and no ids. Both filing routes supply it: a walk-up from the basket it was
+  priced from, a retrieved order from `working_order_lines.option_snapshots`, read by
+  `readLockedLines` (`apps/server/src/working-order.ts`).
+- An extras pick is already its own CHILD line, and that line IS the record: the picked product's
+  frozen name, its quantity, the price it sold at and its own VAT rate. Unlike the open order's child
+  line it carries NO `product_id` — `sale_lines` has no such column. "How much bacon did we sell"
+  therefore groups on the frozen name, the way the top-sellers report groups products.
+
+None of this reaches the fiscal fingerprint. `backend.recordSale` is handed `total` and
+`vatBreakdown`, never the individual lines, so a line's frozen answers have no channel into
+`computeHuella`'s input. That is asserted rather than assumed: the same basket filed before and
+after this rework produces a byte-identical huella, `ImporteTotal` and `CuotaTotal`, against values
+recorded from `main` before the change — "the extras/options rework leaves the fiscal fingerprint
+byte-identical" in `packages/fiscal-verifactu/src/write-path.e2e.test.ts`, which also records what a
+wrong answer prints.
+
+The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
+CUSTOMER text at the invoice locale and falls back to the staff name, never to the kitchen name —
+`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`), beside the
+kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage and integration order
 
