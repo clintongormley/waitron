@@ -618,16 +618,22 @@ What that task carries with it:
   the column ever held were written by `@waitron/core`'s own tests, each passing a list through
   `sale-line-rows.ts` and reading it straight back: `record-sale.test.ts`,
   `record-correction.test.ts` and `record-substitution.test.ts` all do this.
-- **The fiscal gate passed unedited.** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` gained
+- **The fiscal gate's three literals passed unedited.** (The FILE was edited on 2026-09-20, by the
+  test-database conversion this branch was later rebased onto — the entry below records that
+  separately. What was never edited is the three recorded values.)
+  `packages/fiscal-verifactu/src/write-path.e2e.test.ts` gained
   "the extras/options rework leaves the fiscal fingerprint byte-identical": one basket — a dish
   carrying an options answer plus a priced extra as its own child line — files the same huella,
   `ImporteTotal` and `CuotaTotal` as the same basket filed on `main`, where the block records the
   three literals as taken at `2ae3baa98`, before any of this branch's code existed. Each literal was
   written into the file once and never touched again on the branch
-  (`git log -p a7dd1993a..HEAD` over that file shows one `+` line per value and no `-`), and the
-  suite passes on the branch as it stands:
-  `pnpm --filter @waitron/fiscal-verifactu test write-path -- -t "byte-identical"`, 1 passed. The
-  block also records its own control, run here: moving the child line's VAT rate from 10% to 21% and
+  (`git log -p origin/main..HEAD` over that file shows one `+` line per value and no `-`; the older
+  citation `a7dd1993a..HEAD` stopped isolating the branch at the rebase, because that range now also
+  carries the conversion's own two-line import change), and the suite passes on the branch as it
+  stands — re-run after the rebase, on the converted helper:
+  `pnpm --filter @waitron/fiscal-verifactu test write-path`, 16 passed. The
+  block also records its own control, re-run here after the rebase and giving the same three values
+  as before it: moving the child line's VAT rate from 10% to 21% and
   touching nothing else moved both `CuotaTotal` and the huella, while `ImporteTotal` stayed put —
   it is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
   `packages/fiscal-verifactu/src/backend.ts`), the caller's declared figure rather than anything the
