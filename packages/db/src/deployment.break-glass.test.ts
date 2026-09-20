@@ -22,6 +22,14 @@ describeEachTarget("the deployment break-glass verifier", (target) => {
     expect(await readBreakGlassVerifier(db)).toBeNull();
   });
 
+  it("reads null on a migrated database nothing has stamped", async () => {
+    // No stampDeployment here, so the singleton row does not exist at all. This reader takes a
+    // plain select rather than the to_regclass probe its neighbours use, and its doc comment says
+    // the missing row is what answers null; without this case the reader could stop tolerating a
+    // missing row and every test would still pass, because every other one stamps first.
+    expect(await readBreakGlassVerifier(db)).toBeNull();
+  });
+
   it("round-trips the break-glass verifier written on a caller transaction", async () => {
     await stampDeployment(db, "preproduction");
     expect(await readBreakGlassVerifier(db)).toBeNull();
