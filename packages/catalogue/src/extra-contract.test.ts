@@ -301,6 +301,30 @@ describe("extra selections at order time", () => {
     ]);
   });
 
+  // A `uuid` column hands its value back lower-cased, so the stored ids are lower case while a body
+  // may send the same uuid in either case — `isUuid` accepts both. The ids here carry LETTERS
+  // deliberately: the digit-only fixtures above are unchanged by `toUpperCase`, so a probe built on
+  // them would pass whether this held or not (CLAUDE.md §1).
+  it("accepts picks whose ids are upper case, and answers with the stored lower-case ids", () => {
+    const letteredListId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    const letteredProductId = "ffffffff-eeee-4ddd-8ccc-bbbbbbbbbbbb";
+    const lettered = breads({
+      id: letteredListId,
+      items: [{ ...rye, productId: letteredProductId, maxQuantity: 1 }],
+    });
+    expect(
+      validateExtraSelections(
+        [lettered],
+        [
+          {
+            listId: letteredListId.toUpperCase(),
+            picks: [{ productId: letteredProductId.toUpperCase(), quantity: 1 }],
+          },
+        ],
+      ),
+    ).toEqual([{ listId: letteredListId, picks: [{ productId: letteredProductId, quantity: 1 }] }]);
+  });
+
   it("asks nothing of a list that is not active", () => {
     expect(validateExtraSelections([breads({ active: false })], [])).toEqual([]);
   });
