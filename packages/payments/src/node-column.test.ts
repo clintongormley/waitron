@@ -1,5 +1,5 @@
 import { CORE_MIGRATIONS, captureError, pgErrorCode } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -11,12 +11,12 @@ import { freshNif, seedWorkingOrder } from "../test/seed.js";
  * node_id scaffolding (Task 3 of the node rekey): `payments` gains a NULLABLE `node_id` with a
  * plain FK to core's `nodes`, and stays nullable in this slice — no writer yet (design §5).
  *
- * PGlite (via usePgliteDb): a column-existence, nullability and FK-round-trip test, none of which
+ * PGlite (via useVenueDb): a column-existence, nullability and FK-round-trip test, none of which
  * needs the non-superuser deployment role or lock contention that would require real Postgres
  * (CLAUDE.md §4). Each test seeds its own tenant (via `freshNif`), so payments accumulate in the
  * shared database without colliding on `payments_provider_ref_key`.
  */
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 

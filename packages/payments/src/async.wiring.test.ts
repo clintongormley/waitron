@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   decimal,
   nodeId as brandNodeId,
@@ -31,7 +31,7 @@ import type { SeededForSale } from "../test/seed.js";
 // wiring.test.ts. `recordSale` runs INSIDE the same transaction as settle + associate, so the sale
 // chains atomically with the tender settlement.
 
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });

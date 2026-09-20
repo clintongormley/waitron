@@ -3946,8 +3946,23 @@ deciding what the sentence should say about both halves — which is why it is h
 
 **THAT PHRASE-GREP IS NOT THE SIZE OF THE PROBLEM, and #438's review rounds are what showed it.** It
 finds ONE wording. Six more `vitest.config.ts` files stated the same claim in other words when this
-was written; three do now — `packages/credentials` was corrected by #440, `packages/scheduler` and
-`packages/workforce` each by their own conversion. The count is not the point — the METHOD is, because two
+was written — `packages/credentials` corrected by #440, `packages/scheduler`, `packages/workforce`
+and `packages/reporting` each by their own conversion, `packages/payments` by its own on 2026-09-20,
+and **`packages/fiscal-verifactu`, the one OF THE SIX still standing**, in the third bullet below.
+"Of the six" is not a hedge to drop: four more instances of the same false claim are still standing
+elsewhere in this section — `packages/purchasing`, `packages/fiscal-none`, `packages/fiscal` and
+`packages/db/README.md` — each named in the paragraphs around this one. The running
+tally that used to sit here ("three do now") was left un-decremented by two successive conversions
+before anyone noticed, which is the §7 rule about counts happening to this very sentence; naming the
+one outstanding package instead is what a later conversion can actually keep true.
+**A SECOND identifying phrase-grep, free, found while correcting `packages/payments`:**
+`git grep -n "hookTimeout stays generous for the PGlite boot" -- '*/vitest.config.ts'` now matches
+`packages/fiscal-verifactu/vitest.config.ts:17` and nothing else — the payments and
+fiscal-verifactu configs carried that sentence verbatim, and the grep at the top of this section
+matches neither. **The path scope on that command is doing real work**: unscoped it also matches the
+sentence you are reading, which is the same self-answering shape this file already records at the
+`createPgliteDb` note further down. A receipt-grep written INTO the file it searches has to exclude
+itself, or it reports its own text as a finding. The count is not the point — the METHOD is, because two
 successive corrections inside #438 got this wrong in opposite directions. Read each config against its own package and ask where the boot
 actually sits:
 
@@ -3968,10 +3983,20 @@ actually sits:
   boot in each is inside an `it` body (`packages/payments/src/migrations.test.ts:27`,
   `packages/scheduler/src/run.test.ts:205`), and `testTimeout` bounds a test body, not `hookTimeout`.
   **The grep tells you a boot exists; only reading tells you whether it is in a hook.**
-  `packages/payments` is the one of the two still standing. A caution for whoever fixes it: scheduler's
-  replacement comment deliberately does NOT write the word `createPgliteDb`, because that grep is how
-  this class is identified and a config that names the driver answers it about itself — the same shape
-  as the bare-name trap below.
+  **`packages/payments` was the one of the two still standing, and its own conversion corrected it on
+  2026-09-20, so this entry is now a record rather than work outstanding.** The caution was followed:
+  the replacement comment does NOT write the word `createPgliteDb`, because that grep is how this
+  class is identified and a config that names the driver answers it about itself — the same shape as
+  the bare-name trap below. It points at the `it` body instead
+  (`packages/payments/src/migrations.test.ts:27`). Two things that correction had to get right which
+  the scheduler one did not face. First, the route to "60 seconds, not this setting" differs by
+  package: `packages/reporting`'s fourteen call sites each pass `timeoutMs: 60_000` explicitly, while
+  none of this package's fourteen passes one at all, so it is the helper's own
+  `DEFAULT_SETUP_TIMEOUT_MS` fallback (`packages/db/src/testing/lifecycle.ts:22` and `:146`) that
+  supplies the same number — the same conclusion reached down a different path, and writing
+  reporting's sentence here would have been a false claim about this package. Second, `hookTimeout`
+  is not idle here either: nine real-PostgreSQL suites call `useTemplateDb({ template: "core_payments" })`
+  with no `timeoutMs`, so the clone at `lifecycle.ts:422` IS bounded by it.
 - False for a DIFFERENT reason: `packages/fiscal-verifactu/vitest.config.ts:14-16`. Three of its
   suites do boot PGlite in an untimed `beforeEach` that `hookTimeout` really does bound
   (`provisioning.test.ts:26`, `registro-sif.test.ts:27`, `restore.test.ts:64`) — but the sentence
@@ -4406,9 +4431,12 @@ each, 13 failed / 7 passed, and every one of the thirteen stacks names
 its tests under the same mutation. Forwarding `{ ...options, migrations: [] }` instead fails only
 twelve of the thirteen, 105 of the 204 tests. The thirteenth is `src/business-day.test.ts`, whose
 two converted suites evaluate SQL date expressions and never read a migrated table, so an unmigrated
-database answers them correctly. **That is the general shape, not a quirk of this package:** the
-migrations control reaches only suites that read a migrated table, so run the throw as well, and
-expect it to be the one that accounts for every file.
+database answers them correctly. **The MECHANISM is general, not a quirk of this package:** the
+migrations control reaches only suites that read a migrated table, so run the throw as well.
+**The EXPECTATION that followed it here — "expect the throw to be the one that accounts for every
+file" — is not general, and the `packages/payments` entry below is the counterexample**, added on
+the conversion that found it: every CONVERTED payments suite reads a migrated table, so both controls caught
+all fourteen. Run both; which one is wider is a property of the package.
 
 **Second, a `--hookTimeout=50` receipt on the PGlite half is TIMING-DEPENDENT, and an independent
 seat falsified one.** This branch first recorded that a 50ms ceiling over `src/counts.test.ts` and
@@ -4489,6 +4517,117 @@ which looks exactly like running from the wrong directory. Nothing was modified,
 the following `grep` correctly reported the work still to do. Pipe the file list into `xargs`
 instead. This is the same class as the repository's `pnpm --filter ""` and unquoted-`$PACKAGES`
 traps in `CLAUDE.md` §2, in a different shell.
+
+**`packages/payments` converted, on the branch `feat/sqlite-slice1-venue-db-payments`** — fourteen
+test files and fourteen calls, one per file, plus one
+doc comment that named the old helper in prose (`src/node-column.test.ts:14`) and the package's
+`vitest.config.ts` comment, which the `hookTimeout` section above had been holding open for this
+conversion BY NAME. After it, `git grep -n usePgliteDb -- packages/payments` exits 1, comments
+included. **Use the `git grep` form and not `grep -rn`**, which the rollout's earlier entries wrote:
+a checkout whose `test:coverage` run of that package was INTERRUPTED before it reported keeps
+gitignored V8 JSON under `packages/<pkg>/coverage/.tmp/` whose `functionName` fields name
+`usePgliteDb` — `venue-db.ts` imports `lifecycle.ts`
+(`packages/db/src/testing/venue-db.ts:26` → `packages/db/src/testing/lifecycle.ts:129`), and V8
+records every function in a loaded script. **This sentence took three tries, and both wrong versions
+are worth the line.** It first said the artefacts hold PRE-branch source text: false, they are a
+POST-conversion run's, and the same four files carry `useVenueDb` and `venue-db.ts` too. Correcting
+that, it then said a fresh run can never clear them — also false, and false in the direction a later
+converter would act on. A run that REACHES its reporting step deletes the directory
+(`cleanAfterRun`, `promises.rm(this.coverageFilesDirectory, …)`, called from `reportCoverage` in
+`vitest/dist/chunks/coverage.*.js` on a non-watch run). The observable — taken in the branch's own
+working tree, a transient state no commit records, so reproduce it by interrupting a coverage run
+rather than by looking for it: four converted
+packages whose runs completed — `workforce`, `catalogue`, `core`, `identity` — have an HTML report,
+no `.tmp`, and `grep -rn usePgliteDb packages/<pkg>` returns NOTHING; `payments` and
+`fiscal-verifactu`, whose runs were interrupted, have `.tmp`, no report, and return 4 and 76 hits.
+So the reason to prefer `git grep` is not that the hits are durable — it is that `git grep` never
+reads a gitignored file at all, so the receipt does not depend on how the last run ended.
+All thirty-two of the package's test files are accounted for: fourteen converted, nine taking a real
+PostgreSQL database through `useTemplateDb({ template: "core_payments" })` and left alone, nine
+opening no database at all (`grep -rLE "useVenueDb|useTemplateDb" --include="*.test.ts" src test`
+returns exactly those nine). Coverage identical on both sides, measured on the base `68e36c6a` by
+putting the fifteen changed files back, running, and restoring from saved copies: 32 files, 414
+tests, statements 99.42% against a bar of 98, lines 99.68% against 98, functions 100% against 98,
+branches 97.59% against 95. The branch run prints the same four figures and the same file and test
+counts. Remaining after it, on the plan's step-5 command: `db` 20 files, `fiscal-verifactu` 25,
+`apps/server` 56. Three things this one adds to what the rollout already carries.
+
+**First, `packages/payments` is the first package in this rollout where the two standard controls
+agree exactly, which narrows what the reporting entry above led a reader to expect.** Making the
+seam's body `throw` fails exactly the fourteen converted files and no other file in the
+package; forwarding `{ ...options, migrations: [] }` fails **the same fourteen**. Reporting's
+migrations control was blind to one file (`src/business-day.test.ts` only evaluates SQL date
+expressions and never reads a migrated table), and that entry generalised from it to "expect the
+throw to be the one that accounts for every file". The MECHANISM behind reporting's result still
+holds and is not contradicted — the migrations control reaches only suites that read a migrated
+table — but every one of the fourteen CONVERTED suites here reads one, so nothing is blind to it.
+Which control is wider
+is a property of what a package's suites read. Run both; the agreement is the finding, not the
+method. (Reporting's paragraph above is edited to say so, rather than left to mislead the next
+converter.)
+
+**Second, this package has ONE door into PGlite that step 5 does not convert, and it is in a file
+step 5 DOES convert.** `src/migrations.test.ts` takes its suite database through the seam like the
+other thirteen, and separately opens a second, unmigrated database inside an `it` body (`:27`) to
+exercise what happens when the payments migrations run before core's. That second one is F1's, with
+the rest of the 66-test disposition, and leaving it is what keeps the case honest — a migrated
+database cannot show a missing FK target. So
+`git grep -nE "createPgliteDb|describeEachTarget|useRealPostgres" -- packages/payments` does NOT
+exit 1 here, unlike in reporting, and a converter who expects it to will think the job is
+unfinished. It is not: the check that matters is the narrower one the plan states — no test SUITE
+asks for its database through the old helper. **That grep returns three lines in TWO files, not
+one**, and the second is not a door at all: `src/testing/global-setup.ts:21` mentions
+`useRealPostgres` in prose, describing a per-file `probeRole` argument from before the shared
+container existed. No payments suite calls that helper — all nine real-PostgreSQL suites take
+`useTemplateDb({ template: "core_payments" })`. It is a comment carrying history rather than an
+invariant (`CLAUDE.md` §1), so it will go when somebody is editing that file for its own reasons;
+it is named here so the next reader of the grep is not surprised by it.
+
+**Third, the `--hookTimeout=1` control discriminates here in one run over two files**, because this
+package holds both kinds of suite. `vitest run src/policy.test.ts src/store.pg.test.ts --hookTimeout=1`:
+all eight of the PGlite file's tests RUN (6 pass, 2 fail), failing only in hooks that fire after a
+successful boot — its own `beforeEach` (`:37`) and the helper's reset and close (`lifecycle.ts:148`
+and `:153`), each stack naming `venue-db.ts:26`. In the same output the real-PostgreSQL file's
+`beforeAll` times out at `lifecycle.ts:422`, its template clone, and all seven of its tests are
+SKIPPED. Run-versus-skip is the discriminator; the collected count is not, because both files
+collect either way.
+
+**Fourth, the docs sweep, reported per sweep with its command — because a sweep stated as a NUMBER
+is the one thing in this section a reader cannot check.** The convention reviewer on this branch
+tried five readings of "17 files" and reproduced none of them, because the sweep's own expression
+was not written down; the run-it seat, given the expression, got 17 first time. State the command
+or state nothing.
+
+**Writing a sweep's expression into the file the sweep searches makes it match its own text**, which
+is the same self-answering shape as the `createPgliteDb` note above. Stated unscoped, the "returns
+nothing" below returned four lines of this entry, and sweep three's total went from 10 to 11 the
+moment the command was written down. So **sweep three carries an exclusion and its count is for that
+excluded scope**; sweeps one and two do NOT exclude this file, and their counts include it — each
+says so beside the command, because an exclusion there would hide a real hit rather than a
+self-match.
+
+```bash
+# one — markdown naming the old helper anywhere: 54 files (this file is one of them)
+git grep -l usePgliteDb -- '*.md'
+# two — markdown naming one of the fourteen converted files: 17 files (this file is one of them)
+git grep -lE "packages/payments/src/(async\.wiring|manual|manual\.wiring|migrations|node-column|offline\.wiring|policy|reconcile|reconcile\.wiring|simulator|store|wiring)\.test\.ts|packages/payments/src/testing/fake-(async-)?provider\.test\.ts" -- '*.md'
+# three — markdown ELSEWHERE naming the package's vitest config: 5 files, 9 lines,
+# plus this file's own bullet, corrected here, for 6 and 10
+git grep -n "packages/payments/vitest.config.ts" -- '*.md' ':(exclude)docs/backlog.md'
+```
+
+Sweep one's 54 hold no claim about a `packages/payments` suite:
+`git grep -n -C3 usePgliteDb -- '*.md' ':(exclude)docs/backlog.md'`
+filtered to lines naming `packages/payments` or `@waitron/payments`, excluding the sumup and stripe
+packages, returns nothing. Sweep two's 17 are `docs/backlog.md` (this entry), `scripts/schema-equivalence.md`
+(which says `src/migrations.test.ts` asserts a lookup table is gone — still true, nothing to do with
+the helper), and 15 historical plans and specs describing how these files were CREATED, none of
+which states which helper any of them uses today. Sweep three's 9 lines, across 5 plans, are
+about coverage thresholds, the file's original creation, or a `git add` command — none about
+`hookTimeout`. **The scope is markdown, which is narrower than the sibling's** (reporting swept
+every non-TypeScript file), and the narrowing is safe only because it was checked:
+`git grep -l usePgliteDb -- . ':(exclude)*.ts' ':(exclude)*.md'` exits 1, so today markdown is the
+whole of it. State the path set — `CLAUDE.md` §1 — rather than letting a reader assume the wider one.
 
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
