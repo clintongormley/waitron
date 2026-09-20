@@ -1680,6 +1680,29 @@ targets for 30 seconds and each agent works out the remaining time against its o
 
 ### A4. Till, displays and devices
 
+- **Service dashboard workflow: design in progress (owner, 2026-09-20).** For table service, after
+  unlocking you land on the floor plan or a flat list of tables. Distinguish
+  unoccupied tables and show occupied tables' current state, particularly action needed soon,
+  such as taking an order, collecting food or drinks ready for delivery, late food, or a requested
+  bill. Tapping a table opens its tab details on Ordering, with a second Current orders view
+  showing submitted orders and their states. For deli/counter service, the owner proposes a flat
+  list of tabs rather than a table layout, including tabs not attached to a table. The exact landing
+  view selection, status derivation, timing and detailed interactions
+  remain to be designed. This is a future workflow brief, not a claim about current behaviour.
+  Implementation waits for the SQLite migration, dependency upgrades and variants/extras-as-products
+  changes to land, alongside the
+  [menu design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md).
+- **Later: staff-to-table assignments (owner, 2026-09-20).** Design assigning responsibility for
+  tables to staff, including handover and how assignments appear on the floor dashboard. The
+  current workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
+- **Later: change the working floor layout during service (owner, 2026-09-20).** From the floor
+  plan, join or split tables, increase or decrease chair counts, move a whole tab or selected items
+  to another table, and add or remove tables. Each service day starts from a saved default layout;
+  changes during service affect that day's working layout. Define the service-day boundary and
+  handling of still-open tabs before implementing the reset. These are future requirements: audit
+  the existing floor editor and transfer operations before deciding what needs changing, and retain
+  order and kitchen progress when moving items (see A9's KDS correction). This operational floor
+  editor is distinct from the general screen-layout canvas editor under reconsideration.
 - **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
   appear live on it. A till-app fix.
 - **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.
