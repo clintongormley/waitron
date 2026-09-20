@@ -2285,7 +2285,8 @@ turns out to need a design moves to its track.
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
   Packages run `tsc` at 7.0.2; the repository root resolves the name `typescript` to
   `npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads, because
-  version 7 ships no JavaScript API at all. typescript-eslint tracks the work in its issue 10940,
+  version 7 does not ship the old JavaScript API, and typescript-eslint refuses the version outright
+  in any case. typescript-eslint tracks the work in its issue 10940,
   and the message it prints today names version **7.1** as the target. When a typescript-eslint
   release supports it, the root entry goes back to a plain `^7` range and the alias disappears. The
   whole arrangement, with the receipts, is in

@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./src/bin.ts",
   "exports": {
     "./tcp-probe.js": "./src/tcp-probe.ts"
   },

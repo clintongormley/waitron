@@ -3,11 +3,13 @@
   "compilerOptions": {
     "outDir": "dist",
     // Explicit, though `moduleResolution: "bundler"` in tsconfig.base.json already implies it:
-    // `src/manifest.ts` imports `../migrations.manifest.json`, and this is the only package in the
-    // repo that imports JSON at all. Verified both directions on TypeScript 5.9.3 and re-run
-    // unchanged on 7.0.2 — setting this to false fails with `TS2732 Cannot find module
-    // '../migrations.manifest.json'`, and switching moduleResolution to nodenext still passes, so
-    // the default is doing the work today. Stated
+    // `src/manifest.ts` imports `../migrations.manifest.json`. (`apps/till`'s
+    // `server-router.contract.test.ts` imports JSON too, and leans on that same implied default
+    // with no setting of its own.) The experiment that measures the implication is DELETING this
+    // line, which passes on 7.0.2 — so the default really is carrying it. Two more, run on
+    // TypeScript 5.9.3 and again on 7.0.2: setting it to false fails with `TS2732 Cannot find
+    // module '../migrations.manifest.json'`, and switching moduleResolution to nodenext still
+    // passes. Stated
     // anyway so a future base-config change, or a cleanup pass like the one that removed this flag
     // from apps/server in the same branch (where nothing imports JSON), cannot silently break it.
     "resolveJsonModule": true,
