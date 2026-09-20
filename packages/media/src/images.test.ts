@@ -134,7 +134,7 @@ describe("metadata, labels and references", () => {
       const inserted = await tx.execute<{
         id: string;
       }>(
-        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image, active) values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general', ${image.filename}, false) returning id`,
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image, active) values (${menu.rows[0]!.id}, 'Bread', 'each', 200, 'general', ${image.filename}, false) returning id`,
       );
       const uses = [
         {
@@ -168,11 +168,11 @@ describe("metadata, labels and references", () => {
       // misses — the variant photo would be deletable while the variant still points at it.
       const product = await tx.execute<{ id: string }>(
         sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
+          values (${menu.rows[0]!.id}, 'Bread', 'each', 200, 'general') returning id`,
       );
       const variant = await tx.execute<{ id: string }>(
         sql`insert into product_variants (product_id, name, unit_price, image)
-          values (${product.rows[0]!.id}, 'Large', '3.00', ${image.filename}) returning id`,
+          values (${product.rows[0]!.id}, 'Large', 300, ${image.filename}) returning id`,
       );
       const uses = [
         {
