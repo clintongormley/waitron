@@ -619,7 +619,7 @@ async function priceOrderLines(
       // Read back off the priced line rather than kept a second time here, so the row this writes and
       // the sale a walk-up files from the same `priced` result can never describe different answers.
       // `priceBasketWithOptions` sets no answers on a child row, so a child stores `[]`.
-      optionSnapshots: line.optionSnapshots ?? [],
+      optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
       quantity: line.quantity,
@@ -675,9 +675,10 @@ async function priceOrderLines(
 }
 
 /**
- * Read a persisted order's STORED lines in `line_no` order — the columns `priceLockedLines` needs
- * (gross unit, quantity, rate, the frozen product and variant names, the dish's frozen options
- * answers, category), each snapshotted at add-time, PLUS `id`,
+ * Read a persisted order's STORED lines in `line_no` order — the columns `priceLockedLines` prices
+ * from (gross unit, quantity, rate) and the ones it copies through untouched (the frozen product
+ * and variant names, the dish's frozen options answers, category), each snapshotted at add-time,
+ * PLUS `id`,
  * `line_no` and `parent_line_id`, from which the returned `parentLineNo` is reconstructed so the
  * parent→child modifier linkage survives the lock round-trip (see below). THE ONE
  * reader shared by `payWorkingOrder` (a retrieved order), `placeOrder` (Mode-I's deferred file at
@@ -750,8 +751,7 @@ export async function readLockedLines(
     name: line.name,
     descriptions: line.descriptions,
     // The dish's frozen answers to its options lists, carried from the stored row onto the filed
-    // sale line — `priceLockedLines` passes this through untouched (`packages/catalogue/src/pricing.ts`
-    // `priceRows`, which copies it and does no arithmetic on it). A child row stored `[]`.
+    // sale line. A child row stored `[]`.
     optionSnapshots: line.optionSnapshots,
     category: line.category,
     unitName: line.unitName,
