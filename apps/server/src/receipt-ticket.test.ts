@@ -283,7 +283,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           descriptions: { "es-ES": "Jamón" },
           quantity: "0.375",
           gross: "4.50",
-          unitName: { "es-ES": "kg" },
+          // Keyed by a BARE content-language code, which is the only shape a unit abbreviation is
+          // ever stored or filed under — see the multi-language case below.
+          unitName: { es: "kg" },
           unitPrecision: 3,
         },
       ],
@@ -299,6 +301,38 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
     expect(text).toMatch(/0\.375 kg\s+Jamón[^\n]*4,50/u);
+  });
+
+  it("prints the unit abbreviation of the invoice language, not whichever one is stored first", () => {
+    // A unit's abbreviation map is keyed by BARE content-language codes and nothing re-keys it onto
+    // the venue's invoice locales, the way `toInvoiceLineDescriptions` re-keys a line's
+    // `descriptions`. This fixture is the exact map a real filed sale carries (the seeded "each"
+    // unit, `packages/catalogue/src/units.ts`; asserted on a real sale in `till-api.pg.test.ts`), so
+    // the receipt has to match the invoice TAG "es-ES" against the bare key "es". Reading the map's
+    // first entry instead prints the Catalan abbreviation on a Spanish receipt.
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      lines: [
+        {
+          descriptions: { "es-ES": "Agua mineral" },
+          quantity: "2",
+          gross: "3.00",
+          unitName: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
+          unitPrecision: 0,
+        },
+      ],
+      total: "3.00",
+    };
+    const text = decodeTicket(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(text).toMatch(/2 ud\s+Agua mineral/u);
   });
 
   it("groups modifier lines under their dish — dish at its price, options indented at their delta, and the lines reconcile with the filed desglose", () => {
@@ -909,7 +943,7 @@ describe("formatReceipt — printer layout", () => {
           descriptions: { "es-ES": "Queso manchego curado en aceite" },
           quantity: "123456.789",
           gross: "9.99",
-          unitName: { "es-ES": "kilogramos-de-queso-manchego-curado" },
+          unitName: { es: "kilogramos-de-queso-manchego-curado" },
           unitPrecision: 3,
           parentLineNo: null,
         },

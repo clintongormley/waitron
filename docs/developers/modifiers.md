@@ -272,8 +272,10 @@ same test also reads the filed line back and asserts the answers ARE on it, so t
 cannot match merely because nothing was written. And the block carries the control that was run for
 it: with the child line's VAT rate moved from 10% to 21% and nothing else touched, `CuotaTotal` and
 the huella both came back different while `ImporteTotal` did not move. That control is what shows
-the fixture can see a moved amount at all — and it is also where `ImporteTotal`'s independence from
-the lines was measured rather than assumed.
+the fixture can see a moved VAT RATE at all. It says nothing about a moved line AMOUNT: the probe
+left both `lineTotal`s exactly where they were, so `ImporteTotal` being independent of the line
+amounts is read off `ImporteTotal: sale.total` in `packages/fiscal-verifactu/src/backend.ts` rather
+than run.
 
 The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
 CUSTOMER text at the invoice locale and falls back to the staff name, never to the kitchen name —

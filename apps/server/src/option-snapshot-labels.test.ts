@@ -60,16 +60,37 @@ describe("customerOptionSnapshotLabels", () => {
     ).toEqual(["Doneness customer: Rare customer"]);
   });
 
-  it("skips an entry that is blank in the requested language and prints text that is stored", () => {
-    // `nonBlankTranslations` keeps a map that holds text in ANY language, so the map it chose can
-    // still be blank in the language the receipt asked for. Printing that blank would drop the
-    // goods identification off a legal receipt while every other assertion still passed.
+  it("prints the asked-for language's text even when an earlier key in the map is blank", () => {
+    // The requested language here is NOT blank — "es" holds text and the resolver finds it on its
+    // first pass. What this pins is that a blank sitting EARLIER in the map cannot win: the code
+    // this replaced read `Object.values(names)[0]`, which would have printed the empty "en" entry
+    // and dropped the goods identification off a legal receipt.
     expect(
       customerOptionSnapshotLabels(
         [
           snapshot({
             listCustomerName: { en: "", es: "Punto customer" },
             labelCustomerName: { en: "  ", es: "Poco hecho customer" },
+          }),
+        ],
+        "es-ES",
+      ),
+    ).toEqual(["Punto customer: Poco hecho customer"]);
+  });
+
+  it("falls back to the first non-blank value over sorted keys when the asked-for language is blank", () => {
+    // The case the docstring's "first non-blank value over SORTED keys" sentence is actually about.
+    // `nonBlankTranslations` keeps a map that holds text in ANY language, so the map it chose can
+    // still be blank in the language the receipt asked for — and printing that blank would drop the
+    // goods identification off a legal receipt while every other assertion still passed. "es" is
+    // blank on both sides here, so each side falls through to "en", which sorts first among the
+    // remaining keys.
+    expect(
+      customerOptionSnapshotLabels(
+        [
+          snapshot({
+            listCustomerName: { es: "", en: "Punto customer" },
+            labelCustomerName: { es: "  ", en: "Poco hecho customer" },
           }),
         ],
         "es-ES",

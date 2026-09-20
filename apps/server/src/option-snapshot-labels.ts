@@ -60,14 +60,22 @@ export function optionSnapshotLabels(snapshots: readonly OptionSnapshot[]): stri
  * It matches a REQUESTED TAG against a map keyed by a bare language code. `locale` here is the
  * invoice locale, normally a full tag ("es-ES"); neither map was ever re-keyed to match it.
  * `buildLineExtras` (`apps/server/src/modifier-selection.ts`) widens each plain staff name under
- * the venue's default content language — bare, because the two paths that STORE it put it through
- * `contentLanguageCode` first (`writeContentLanguages`,
- * `packages/catalogue/src/content-languages.ts`, and `packages/catalogue/src/provisioning.ts`) —
- * and copies the catalogue row's customer map through whole, under whatever languages the list was
- * translated into. A line's `descriptions` are the contrast: `toInvoiceLineDescriptions`
- * (`packages/catalogue/src/invoice-descriptions.ts`) re-keys every priced line's onto the venue's
- * invoice locales (`priceOrderLines`, `apps/server/src/working-order.ts`), which is why the
- * receipt's own `lineName` can match a tag exactly. Nothing does that for an options answer.
+ * the venue's default content language, and copies the catalogue row's customer map through whole,
+ * under whatever languages the list was translated into. That default language is a bare code
+ * whichever way it was produced: `writeContentLanguages`
+ * (`packages/catalogue/src/content-languages.ts`) puts a dashboard edit through
+ * `contentLanguageCode`, the no-row fallback in `readContentLanguages` calls it too, and the one
+ * insert that seeds the row (`packages/catalogue/src/provisioning.ts`) writes hard-coded bare
+ * literals on its `country === "ES"` branch, the branch every Spanish venue takes, and a
+ * `contentLanguageCode` result on the other.
+ *
+ * A line's `descriptions` are the one map on this receipt that IS re-keyed:
+ * `toInvoiceLineDescriptions` (`packages/catalogue/src/invoice-descriptions.ts`) rewrites every
+ * priced line's onto the venue's invoice locales, a dish's and its child option lines' alike
+ * (`priceOrderLines`, `apps/server/src/working-order.ts`), which is why the receipt's own
+ * `lineName` can match a tag exactly on the two maps it is used for. Nothing re-keys an options
+ * answer, and nothing re-keys a dish's unit abbreviation either, which is why `formatReceipt`
+ * resolves that one through `resolveSnapshotText` as well (`apps/server/src/receipt-ticket.ts`).
  *
  * And when the requested language holds no text it takes the first non-blank value over SORTED
  * keys. `nonBlankTranslations` keeps a map that has text in ANY language, so the map it hands back

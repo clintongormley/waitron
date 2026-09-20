@@ -18,7 +18,7 @@ import type { Entorno } from "../src/registro-row.js";
  * identities, never distinct tenants.
  *
  * `tillId`/`tillId2` are branded via `tillId()` (Task 13's addition) rather than left as plain
- * string literals: `registerSif`/`currentSif`/`esPrimerRegistro` (./src/registro-sif.ts) take
+ * string literals: `registerSif`/`currentSif`/`esPrimerRegistro` (../src/registro-sif.ts) take
  * `TillId`, and a plain `string` — even a `const`-literal one — is not assignable to a branded type
  * (see packages/shared/src/ids.ts's own design note on why: a string-keyed brand is forgeable, so
  * the brand is a `unique symbol` no literal can produce). `locationId`/`seriesId`/`saleId`/`sifId`
@@ -200,7 +200,7 @@ export interface SeededTillWithSif {
 
 // Module-scope, not per-call: every test file that imports `seedTenantWithSif` shares this
 // counter across its whole run, which is what keeps each call's SIF identity collision-free in
-// `registro_sif_instalacion_uq` — the identical convention `./src/testing/seed.ts`'s own `freshNif`
+// `registro_sif_instalacion_uq` — the identical convention `../src/testing/seed.ts`'s own `freshNif`
 // and `packages/core/test/fixtures.ts`'s `freshNif` already use.
 let nifSequence = 0;
 
@@ -243,7 +243,7 @@ async function insertLocationTillSeries(
  *
  * Each call mints its OWN fresh NIF and its own node so the write-path suite's `beforeEach` can
  * reseed on every test without ever truncating `registros_facturacion`'s append-only,
- * TRUNCATE-blocking table — the identical reasoning `./src/testing/seed.ts`'s `seedTill` doc
+ * TRUNCATE-blocking table — the identical reasoning `../src/testing/seed.ts`'s `seedTill` doc
  * comment already gives for the same shape.
  *
  * `options.nif` overrides that minting. The minted NIF comes from a module-level counter
@@ -260,8 +260,8 @@ async function insertLocationTillSeries(
  * `tenants` row keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella
  * because the hashed `IDEmisorFactura` is read from the SIF registration, not from `tenants`:
  * `VerifactuBackend.recordSale` sets it from `currentSif(tx, nodeId).nif`
- * (`./src/backend.ts`, `./src/registro-sif.ts`). The only tenant value that reaches a record at all
- * is the legal name — `taxpayer` in `./src/backend.ts` hands its callers nothing else — and the
+ * (`../src/backend.ts`, `../src/registro-sif.ts`). The only tenant value that reaches a record at all
+ * is the legal name — `taxpayer` in `../src/backend.ts` hands its callers nothing else — and the
  * legal name is not among the eight fields `buildCadenaAlta` hashes
  * (`packages/verifactu/src/huella.ts`). A test that needs `tenants.tax_id` itself to match must
  * seed before anything else does.

@@ -593,7 +593,8 @@ Three things the review found, each measured rather than read:
 - **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
   the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 
-Task 9 is that task, and this is what it changed. `sale_lines.modifier_snapshots` is replaced by
+Task 9 — a dish's frozen answers on the FILED sale line — is the plan's next one and has not
+landed yet. This is what it changed. `sale_lines.modifier_snapshots` is replaced by
 `sale_lines.option_snapshots` (core migration `packages/db/drizzle/0041_magenta_metal_master.sql`),
 and both filing routes now put a dish's frozen answers there: a walk-up off the basket the sale was
 priced from, a retrieved order off `working_order_lines.option_snapshots` through `readLockedLines`.
@@ -609,11 +610,13 @@ What that task carried with it:
   `sale_lines.modifier_snapshots` — `sale_lines` is only ever inserted into (the three writers in
   `packages/core`) and the one production query that reads the table is the top-sellers report,
   which asks for `name` and `variant_name`; the receipt's own answers came off the PRICED lines and
-  never off the row. Nor could the column hold anything: both places that could have filled it
-  defaulted to `[]` (`packages/catalogue/src/pricing.ts`), and nothing set either — `priceLockedLines`
-  stopped supplying one when Task 7 dropped the working-order column it copied from, and no
-  `apps/server` route ever built a basket item carrying one. The one thing that read the column back
-  was a `@waitron/core` test checking its own write.
+  never off the row. Nor could any PRODUCTION path put anything in it: both places that could have
+  filled it defaulted to `[]` (`packages/catalogue/src/pricing.ts`), and nothing set either —
+  `priceLockedLines` stopped supplying one when Task 7 dropped the working-order column it copied
+  from, and no `apps/server` route ever built a basket item carrying one. The only non-empty values
+  the column ever held were written by `@waitron/core`'s own tests, each passing a list through
+  `sale-line-rows.ts` and reading it straight back: `record-sale.test.ts`,
+  `record-correction.test.ts` and `record-substitution.test.ts` all do this.
 - **The fiscal gate passed unedited.** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` gained
   "the extras/options rework leaves the fiscal fingerprint byte-identical": one basket — a dish
   carrying an options answer plus a priced extra as its own child line — files the same huella,
@@ -627,8 +630,11 @@ What that task carried with it:
   touching nothing else moved both `CuotaTotal` and the huella, while `ImporteTotal` stayed put —
   it is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
   `packages/fiscal-verifactu/src/backend.ts`), the caller's declared figure rather than anything the
-  lines add up to. So the fixture can see a moved amount, and one of the three literals is pinned
-  against the caller's total instead of against the basket.
+  lines add up to. So the control shows the fixture can see a moved VAT RATE. It does NOT show what
+  a moved line AMOUNT would do — the probe left both `lineTotal`s exactly where they were — so
+  `ImporteTotal` being independent of the line amounts is read off that one line of `backend.ts`,
+  not run. Either way, one of the three literals is pinned against the caller's declared total
+  instead of against the basket.
 - **A bilingual venue could have had the wrong language printed on a receipt, and the test that
   should have caught it passed either way.** `customerOptionSnapshotLabels` looked its name maps up
   by exact key. A frozen answer is keyed by bare content language ("es", "en") — the catalogue's
