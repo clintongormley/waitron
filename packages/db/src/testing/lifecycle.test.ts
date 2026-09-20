@@ -52,6 +52,21 @@ describe("usePgliteDb", () => {
   it("yields the same handle throughout the suite", () => {
     expect(pg.db).toBe(pg.db);
   });
+
+  // The per-test reset, which is on unless a suite opts out, and which nothing asserted. These two
+  // cases are a pair and run in this order: the first leaves a row behind, the second is the one
+  // that would see it. Without the reset the second fails - which is the whole reason a suite can
+  // write a row without cleaning up after itself.
+  it("lets a test write a row", async () => {
+    await pg.db.execute(sql`insert into catalogues (name) values ('reset probe')`);
+    const result = await pg.db.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 1 });
+  });
+
+  it("does not hand the next test the row the last one left", async () => {
+    const result = await pg.db.execute(sql`select count(*)::int as n from catalogues`);
+    expect(result.rows[0]).toEqual({ n: 0 });
+  });
 });
 
 /**
