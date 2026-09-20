@@ -174,11 +174,13 @@ export async function startTwoNodeCluster(options: TwoNodeClusterOptions): Promi
   const startNode =
     options.startNode ?? ((network, alias) => startRealNode(network, alias, command));
 
-  /* v8 ignore start -- Docker-absent branch: unreachable in any Docker-present run, which is every
-     CI runner and dev machine this package requires (harness.ts `dockerAvailable` documents the same
-     reasoning). It is gated to the REAL primitives — a test injecting the seams drives cleanup
-     without a daemon — and callers gate the suite on `dockerAvailable()`, so this is purely
-     defensive; the whole `if` is ignored, since none of it runs when Docker is present. */
+  /* v8 ignore start -- Docker-absent branch: nothing in a Docker-present run reaches it, which is
+     every CI runner and dev machine this package requires (harness.ts `dockerAvailable` documents
+     the same reasoning). It is gated to the REAL primitives — a test injecting the seams drives
+     cleanup without a daemon — and callers gate the suite on `dockerAvailable()`. The two refusals
+     ARE read, by the "startTwoNodeCluster without Docker" cases in the suite beside this file,
+     which replace `dockerAvailable` with a module mock; the lines stay ignored here because no run
+     of the fixture itself executes them. */
   if (options.startNetwork === undefined && options.startNode === undefined && !dockerAvailable()) {
     throw new Error(
       options.dockerRequired

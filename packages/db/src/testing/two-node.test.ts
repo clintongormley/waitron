@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   startTwoNodeCluster,
   type ReplNode,
@@ -416,5 +416,42 @@ describe.runIf(dockerAvailable())("two-node fixture — custom postgres command"
       );
       expect(row!.max_slot_wal_keep_size).toBe("8MB");
     }
+  });
+});
+
+// The Docker-absent refusal. It cannot be reached on a machine that has Docker — which is every CI
+// runner and every dev machine this package requires — unless `dockerAvailable` is replaced, so the
+// two refusals it can raise went unread. They are what a person sees when the fixture cannot start,
+// and the two say different things: one is a demand, the other a plain statement of fact.
+describe("startTwoNodeCluster without Docker", () => {
+  async function refusalWithoutDocker(dockerRequired: boolean): Promise<string> {
+    vi.resetModules();
+    vi.doMock("./harness.js", async () => ({
+      ...(await vi.importActual<typeof import("./harness.js")>("./harness.js")),
+      dockerAvailable: () => false,
+    }));
+    try {
+      const { startTwoNodeCluster: start } = await import("./two-node.js");
+      await start({ dockerRequired, migrate: async () => {} });
+      throw new Error("expected startTwoNodeCluster to refuse");
+    } catch (error) {
+      return (error as Error).message;
+    } finally {
+      vi.doUnmock("./harness.js");
+      vi.resetModules();
+    }
+  }
+
+  it("says what it needs and that it cannot do without it, when Docker is required", async () => {
+    await expect(refusalWithoutDocker(true)).resolves.toBe(
+      "The two-node logical-replication fixture requires a running Docker daemon to start two " +
+        "PostgreSQL containers on a shared network; it cannot degrade to a hermetic run.",
+    );
+  });
+
+  it("states the fact plainly when Docker is not required", async () => {
+    await expect(refusalWithoutDocker(false)).resolves.toBe(
+      "Docker is not available; the two-node cluster cannot start.",
+    );
   });
 });
