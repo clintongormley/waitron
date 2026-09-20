@@ -3070,7 +3070,7 @@ fiscal literals are unchanged, so no second form of an amount circulates. The tw
 `decimalToCents` and `centsToDecimal` in `packages/shared/src/cents.ts` — a file of their own
 because `money.ts` is text-checked for the absence of every float-shaped operation.
 
-- [ ] **Step 1: Write the failing test — the one that catches a rounding drift**
+- [x] **Step 1: Write the failing test — the one that catches a rounding drift** — done 2026-09-20 as `packages/fiscal-verifactu/src/money-conversion.huella.test.ts`, in its own commit before the conversion. It grew a SECOND case the sketch does not have: the shared fixture rounds nothing, so it would pass even if the rounding rule changed. The added case puts the tax on exactly half a cent in both directions (1.50 at 21% is 0.315, 0.05 at 10% is 0.005), where truncation or half-to-even returns a different byte.
 
 Create `packages/fiscal-verifactu/src/money-conversion.huella.test.ts`. It records what the current code produces, then asserts the converted code produces exactly the same bytes. Capture the expected values by running the current code once and pasting them in — a test that computes the expected value the same way as the code under test proves nothing.
 
@@ -3098,7 +3098,7 @@ describe("the money conversion does not move a single byte of a fiscal record", 
 });
 ```
 
-- [ ] **Step 2: Fill in the expected values from the current code**
+- [x] **Step 2: Fill in the expected values from the current code** — done 2026-09-20, and the file has not been touched since, which is the property that makes the literals a genuine before-reading.
 
 ```bash
 pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
@@ -3106,7 +3106,7 @@ pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
 
 It fails and prints what the current code actually produced. Paste those three values in. **Run it again and watch it pass on the unconverted code** — that is what makes it a real before-reading rather than a guess.
 
-- [ ] **Step 3: Change the helper**
+- [x] **Step 3: Change the helper** — done 2026-09-20, as `bigint` rather than the sketch's `integer`; the measurement that decided the width is written under this step.
 
 In `packages/db/src/schema/columns.ts`:
 
@@ -3138,7 +3138,7 @@ parser). Drizzle's typed `.select()` is safe because the column maps the value. 
 money must therefore cast `::int`, whose ceiling is 2147483647 cents per aggregate and which
 raises `22003` loudly rather than returning a wrong number.
 
-- [ ] **Step 4: Find every place that reads or writes a money value**
+- [x] **Step 4: Find every place that reads or writes a money value** — done 2026-09-20, package by package, `apps/server` last. One site survived every compiler and every PGlite suite: `packages/core/src/list-outstanding-sales.ts` read `sales.total` in raw SQL with no cast, which node-postgres hands back as a string. It cost five red tests in `apps/server`'s container suites and is now covered by a container test of its own.
 
 ```bash
 grep -rn "\bmoney(" packages apps --include='*.ts' | grep -v node_modules | grep -v '.test.ts'
@@ -3146,7 +3146,7 @@ grep -rn "\bmoney(" packages apps --include='*.ts' | grep -v node_modules | grep
 
 For each column the helper declares, follow its reads and writes. A value that arrived as a string like `"12.34"` now arrives as `1234`. Convert at the edges — the wire types and the formatting that produces a receipt or a fiscal amount — never in the middle, or two representations will circulate.
 
-- [ ] **Step 5: Run the byte-identical test and watch it pass**
+- [x] **Step 5: Run the byte-identical test and watch it pass** — done 2026-09-20: both cases pass against the literals captured before the conversion, no literal edited.
 
 ```bash
 pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
@@ -3154,7 +3154,7 @@ pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
 
 Expected: PASS, against the literals captured before the conversion. **A failure here is a real rounding difference; do not update the literals.**
 
-- [ ] **Step 6: Re-run the shared fixture against the real fiscal check**
+- [x] **Step 6: Re-run the shared fixture against the real fiscal check** — done 2026-09-20: `@waitron/fiscal-verifactu` 406 tests green at 98.99/96.01/99.35/99.68.
 
 `CLAUDE.md` §4: a fixture no check reads is unverified data.
 
@@ -3163,7 +3163,7 @@ pnpm --filter @waitron/fiscal-verifactu test:coverage
 pnpm --filter @waitron/verifactu test:coverage
 ```
 
-- [ ] **Step 7: Generate the migrations**
+- [x] **Step 7: Generate the migrations** — done 2026-09-20: `packages/db` 0043 and 0044, `packages/catalogue` 0012, plus the module sets that carry a money column.
 
 ```bash
 pnpm --filter <package> exec drizzle-kit generate --name money_in_cents
@@ -3171,7 +3171,7 @@ pnpm --filter <package> exec drizzle-kit generate --name money_in_cents
 
 One per affected package. Pre-production, so the migration drops and recreates the column type; no data migration.
 
-- [ ] **Step 8: Run the packages that do money arithmetic**
+- [x] **Step 8: Run the packages that do money arithmetic** — done 2026-09-20, each on its own pull request branch as it converted, and `core`, `fiscal-verifactu` and `server` re-run whole at the end.
 
 ```bash
 pnpm --filter @waitron/core test:coverage && \
