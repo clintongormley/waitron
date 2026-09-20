@@ -522,7 +522,8 @@ still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy 
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
 for a child line by a NULL product, no longer recognise one. Task 12 wires the till. The next task
-is Task 8, held-order updates.
+is Task 8, held-order updates, and after it Task 9, the fiscal fingerprint gate and the filed sale
+line.
 
 Task 8 is that task, and this is what it changed. It took the preserve path's comparison out of
 `updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
@@ -534,6 +535,27 @@ price. The extras comparator answers the pairing of picks to stored child lines 
 boolean, because the update moves each child's quantity and the two sides are no longer in step —
 the plan called it `sameExtraSelections` and had it answer a boolean, which the caller would have had
 to pair up a second time under a rule that could then disagree with it.
+
+Three things the review found, each measured rather than read:
+
+- **Order-independence bought a way to charge the wrong bill, and the fix is a refusal.** The
+  run-it seat built one product offered by TWO of a dish's lists at two prices, parked one off the
+  1.00 list and two off the 3.00 one, then swapped the two picks over. Nothing on a stored child
+  says which list offered it, so a pairing that knows only the product and the quantity matched each
+  pick to the OTHER list's row: the edit was preserved and the diner kept paying 7.00 where the new
+  answer costs 5.00. The seat ran the same case against `main` and got 5.00, so this was the
+  branch's own regression and not a pre-existing one. `matchExtraChildren` now refuses the pairing
+  whenever two picks name the same product, whichever lists offered them; the edit takes the
+  replacement path and is re-priced correctly, losing only the line's price lock.
+- **The mechanism the branch first wrote down was half the story.** Two columns hold the offered
+  order, not one: `product_modifiers.sort` orders a dish's options lists and a plain product line's
+  extras lists, while `menu_item_extra_lists.display_order` orders a MENU OFFER line's extras lists
+  and is written by `setMenuItemExtraLists`, which `readProductModifiers` never consults. Both
+  reading seats found it independently. Corrected wherever it was stated. Worth knowing:
+  `setMenuItemExtraLists` has no caller outside `packages/catalogue` and its tests, so the second
+  column cannot be moved from any shipping route today.
+- **"A rename replaces the line" is only true of an OPTIONS list.** An extras child is compared by
+  the picked product's id, so renaming an extras list or the product itself disturbs nothing.
 
 What option lists left open, none of it taken in #436 or #445:
 

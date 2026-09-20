@@ -288,9 +288,11 @@ describe("buildLineExtras", () => {
   });
 });
 
-// The two comparators below decide whether a held-order edit is quantity-only. Both sides of each
-// comparison are built by `buildLineExtras` here rather than written out by hand, so a fixture
-// cannot drift from the shape the order path actually freezes.
+// The two comparators below decide whether a held-order edit is quantity-only. The REBUILT side of
+// each comparison comes out of `buildLineExtras` rather than being written by hand, so it cannot
+// drift from the shape the order path actually freezes. The STORED side is hand-written wherever it
+// stands for a `working_order_lines` row, which `matchExtraChildren` takes and this file cannot
+// produce.
 const freeze = (
   offered: { extras?: ResolvedExtraList[]; options?: OptionList[] },
   requested: { extras?: unknown; options?: unknown },
@@ -325,6 +327,9 @@ describe("sameOptionSelections", () => {
       },
     ).optionSnapshots;
 
+    // Without this line the case would pass on a comparison that reads position, because nothing
+    // else here shows the two arrays actually came back transposed.
+    expect(frozen).not.toEqual(stored);
     expect(sameOptionSelections(frozen, stored)).toBe(true);
   });
 
@@ -441,6 +446,37 @@ describe("matchExtraChildren", () => {
       matchExtraChildren(
         extraChildren,
         [{ productId: "product-sourdough", quantity: "1.000" }],
+        "1",
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses a pairing when two picks name the same product, whichever list offered it", () => {
+    // The same wine on two lists at two prices. Nothing on a stored child says which list it came
+    // from, so a pairing that knows only the product and the quantity can hand the row sold at 9.00
+    // the pick that was made off the 4.50 one — which is a different bill, not a reordering.
+    const premiumDrinks: ResolvedExtraList = {
+      ...drinks,
+      id: "list-drinks-premium",
+      items: [{ ...drinks.items[0]!, id: "item-wine-premium", price: "9.00" }],
+    };
+    const { extraChildren } = freeze(
+      { extras: [drinks, premiumDrinks] },
+      {
+        extras: [
+          { listId: drinks.id, picks: [{ productId: "product-wine", quantity: 2 }] },
+          { listId: premiumDrinks.id, picks: [{ productId: "product-wine", quantity: 1 }] },
+        ],
+      },
+    );
+
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [
+          { productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" },
+          { productId: "product-wine", quantity: "2.000", unitPriceGross: "9.00" },
+        ],
         "1",
       ),
     ).toBeNull();

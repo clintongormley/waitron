@@ -5444,7 +5444,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
     expect(before).toHaveLength(1);
 
     // The manager swaps the two lists over, and the menu price moves, so a line that took the
-    // replacement path would be visibly re-priced rather than merely re-issued.
+    // replacement path would be visibly re-priced rather than merely re-issued. Replacing the whole
+    // set is the point here, so this goes straight to `writeProductModifiers` rather than through
+    // `attachModifierList`, which exists to ADD one without disturbing the rest.
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await catalogue.writeProductModifiers(tx, cafeId, [
@@ -5475,7 +5477,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
     expect(after[0]).toMatchObject({
       id: before[0]!.id,
       quantity: "2.000",
-      unitPriceGross: before[0]!.unitPriceGross,
+      // The offer's 3.25 at park time, not the 99.00 it now costs, and twice it for the total.
+      unitPriceGross: "3.25",
+      lineTotal: "6.50",
     });
     expect(after[0]!.optionSnapshots).toEqual(before[0]!.optionSnapshots);
   });
@@ -5485,12 +5489,17 @@ describe("what a held-order edit preserves and what it replaces", () => {
     const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const bacon = await addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
-      const leche = await addExtraList(tx, catalogueId, cafeId, "Leche", { price: "0.30" });
+      const leche = await addExtraList(tx, catalogueId, cafeId, "Leche", {
+        price: "0.30",
+        maxQuantity: 3,
+      });
       return { bacon, leche };
     });
+    // The two picks differ, so a child that took the OTHER pick's count lands on a different
+    // quantity — which is what makes the dish x picks arithmetic visible here rather than assumed.
     const extras = [
       { listId: seeded.bacon.listId, picks: [{ productId: seeded.bacon.productId, quantity: 1 }] },
-      { listId: seeded.leche.listId, picks: [{ productId: seeded.leche.productId, quantity: 1 }] },
+      { listId: seeded.leche.listId, picks: [{ productId: seeded.leche.productId, quantity: 3 }] },
     ];
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
@@ -5504,6 +5513,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(before).toHaveLength(3);
 
+    // Replacing the whole set, as above.
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await catalogue.writeProductModifiers(tx, cafeId, [
@@ -5523,12 +5533,88 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     // Every row keeps its id and the price it was sold at; only the quantities move, each child
-    // following its own dish at dish × picks.
-    expect(after.map((line) => [line.id, line.quantity, line.unitPriceGross])).toEqual([
-      [before[0]!.id, "2.000", before[0]!.unitPriceGross],
-      [before[1]!.id, "2.000", before[1]!.unitPriceGross],
-      [before[2]!.id, "2.000", before[2]!.unitPriceGross],
+    // following its own dish at dish × picks — so the three-pick child doubles to six.
+    expect(
+      after.map((line) => [line.id, line.quantity, line.unitPriceGross, line.lineTotal]),
+    ).toEqual([
+      // The dish at its own 1.50, twice; bacon at 1.00 for two dishes of one pick; milk at 0.30 for
+      // two dishes of three picks.
+      [before[0]!.id, "2.000", "1.50", "3.00"],
+      [before[1]!.id, "2.000", "1.00", "2.00"],
+      [before[2]!.id, "6.000", "0.30", "1.80"],
     ]);
+  });
+
+  it("replaces the line when two lists offering the same product have their picks swapped", async () => {
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    // One wine, offered by two of the dish's lists at two prices. A child line records the product
+    // it is, its quantity and the price it was sold at — never the list that offered it.
+    const seeded = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      const cheap = await addExtraList(tx, catalogueId, cafeId, "Vino", {
+        price: "1.00",
+        maxQuantity: 3,
+      });
+      const dear = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Vino premium list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Vino premium list customer" },
+          kitchenName: "Vino premium list kitchen",
+          minPicks: 0,
+          maxPicks: null,
+          active: true,
+          items: [
+            { productId: cheap.productId, maxQuantity: 3, preselected: false, price: "3.00" },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: dear.id });
+      return { wineId: cheap.productId, cheapListId: cheap.listId, dearListId: dear.id };
+    });
+    const picks = (cheapQuantity: number, dearQuantity: number) => [
+      {
+        listId: seeded.cheapListId,
+        picks: [{ productId: seeded.wineId, quantity: cheapQuantity }],
+      },
+      { listId: seeded.dearListId, picks: [{ productId: seeded.wineId, quantity: dearQuantity }] },
+    ];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1", extras: picks(1, 2) }],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    // One off the 1.00 list and two off the 3.00 one.
+    expect(
+      before.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
+    ).toEqual(["1.00", "6.00"]);
+
+    // The two picks change places: two of the cheap one and one of the dear one, same dish count.
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before[0]!.id,
+          productId: cafeId,
+          quantity: "1",
+          extras: picks(2, 1),
+        },
+      ],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(
+      after.filter((line) => line.parentLineId !== null).map((line) => line.lineTotal),
+    ).toEqual(["2.00", "3.00"]);
   });
 
   it("replaces the line when the answer itself changed, re-pricing it from today's offer", async () => {

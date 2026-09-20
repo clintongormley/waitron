@@ -170,17 +170,34 @@ re-priced.
 
 Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
 `apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
-lists, and that order moves: saving a product re-numbers its attachment positions from the body, so
-a line parked before a reorder holds the old one. The extras comparator answers the PAIRING of picks
-to stored child lines rather than a yes or no, because the update moves each child's quantity and
-the two sides are no longer in step.
+lists, and that order is a stored position somebody can move. TWO columns hold it:
+`product_modifiers.sort`, which `writeProductModifiers` re-numbers from the body of a product save,
+orders a dish's options lists and — on a line naming a plain product — its extras lists;
+`menu_item_extra_lists.display_order`, which `setMenuItemExtraLists` re-numbers from the body it is
+given, orders the extras lists of a line naming a MENU OFFER. Only the first is reachable from a
+shipping route today: no file outside `packages/catalogue` and its tests calls
+`setMenuItemExtraLists`. The extras comparator answers the PAIRING of picks to stored child lines
+rather than a yes or no, because the update moves each child's quantity and the two sides are no
+longer in step.
 
-A list RENAMED between the two sends does make the two sides differ, and the line is replaced and
-re-priced. That is a decision, not an omission: an options answer freezes six names and no ids, so
-the wording is the only evidence the line carries about what was chosen, and a rename cannot be told
-from a different answer. Giving the comparison an id to use would mean putting one on the line,
-which §2.3 of the design rules out. Pinned by "re-prices a held line when the options list it
-answered was renamed between the two sends" (`apps/server/src/working-order.test.ts`).
+**Two picks of the same product refuse the pairing**, whichever lists offered them. A child line
+records the product it is, its quantity and the price it was sold at, never the list that offered it
+(§3.4 of the design), so when one product is offered by two of a dish's lists at two prices nothing
+on the stored side says which row belongs to which list — and a pairing built on the product and the
+quantity can hand a row the pick made off the other list. Such an edit takes the replacement path
+and is re-priced from today's offers, which is correct but loses the line's price lock. Pinned by
+"replaces the line when two lists offering the same product have their picks swapped"
+(`apps/server/src/working-order.test.ts`), which asserts the BILL: the same two picks exchanged
+between a 1.00 list and a 3.00 one cost 5.00, where a crossed pairing charges 7.00.
+
+An OPTIONS list RENAMED between the two sends does make the two sides differ, and the line is
+replaced and re-priced. That is a decision, not an omission: an options answer freezes six names and
+no ids, so the wording is the only evidence the line carries about what was chosen, and a rename
+cannot be told from a different answer. Giving the comparison an id to use would mean putting one on
+the line, which §2.3 of the design rules out. Pinned by "re-prices a held line when the options list
+it answered was renamed between the two sends" (`apps/server/src/working-order.test.ts`). An EXTRAS
+list is different: its children are compared by the picked product's id, so renaming the list — or
+the product — disturbs nothing and the line is preserved.
 
 The till has not moved onto this wire yet: `apps/till` still builds and reads the old
 `modifierSelections`/`modifierSnapshots` shapes, which is a task of its own. The gap, and which

@@ -114,45 +114,43 @@ export function buildLineExtras(
 
 /**
  * Take one entry at a time and give it the first candidate that matches, consuming that candidate.
- * Answers the pairing, or `null` as soon as an entry finds nothing left to pair with.
+ * Answers the matched candidates IN ENTRY ORDER, or `null` — either because the two sides are
+ * different lengths, or because an entry found nothing left to pair with.
  *
- * Greedy is EXACT here because every caller's `matches` is an equality test: two entries that could
- * both take the same candidate are interchangeable in it, so no early choice can strand a later
- * entry. A predicate that merely OVERLAPS — "close enough", a range — would need a real bipartite
- * matching, and this helper would be wrong for it.
+ * Greedy is EXACT for both callers here because each one's `matches` is equality of a KEY derived
+ * from the two sides: two entries that could take the same candidate match exactly the same set of
+ * candidates, so no early choice can strand a later entry. A predicate that merely OVERLAPS —
+ * "close enough", a range — would need a real bipartite matching, and this helper would be wrong
+ * for it. Key equality is also not enough on its own: see {@link matchExtraChildren}, which has to
+ * rule out two entries sharing a key before it can trust the pairing it gets back.
  */
 function pairOff<Entry, Candidate>(
   entries: readonly Entry[],
   candidates: readonly Candidate[],
   matches: (entry: Entry, candidate: Candidate) => boolean,
-): { entry: Entry; candidate: Candidate }[] | null {
+): Candidate[] | null {
   if (entries.length !== candidates.length) return null;
   const remaining = [...candidates];
-  const paired: { entry: Entry; candidate: Candidate }[] = [];
+  const matched: Candidate[] = [];
   for (const entry of entries) {
     const index = remaining.findIndex((candidate) => matches(entry, candidate));
     if (index < 0) return null;
-    paired.push({ entry, candidate: remaining[index]! });
+    matched.push(remaining[index]!);
     remaining.splice(index, 1);
   }
-  return paired;
+  return matched;
 }
 
 /**
  * Whether a line's freshly rebuilt options answers say the same thing as the ones it froze — the
  * question `updateHeldOrder` asks to decide that an edit is quantity-only.
  *
- * Compared BY VALUE and without regard to either side's order. Order matters because the offered
- * order is not fixed: `readProductModifiers` (`packages/catalogue/src/product-modifiers.ts`) answers
- * in the attachment rows' `sort` order and a product save re-numbers those positions from the body,
- * so a manager reordering a dish's lists changes the order both `buildLineExtras` and every later
- * read produce, while the stored line keeps the order it was written in.
+ * Compared BY VALUE and without regard to either side's order, because the order both sides are
+ * built in is a stored position somebody can move: see {@link matchExtraChildren} for where each
+ * one comes from.
  *
- * A RENAME still differs, and that is the settled behaviour, not an oversight: an options answer
- * freezes the six names and NO ids (spec §2.3), so the wording is the only evidence the line carries
- * about what was chosen, and a renamed list is indistinguishable from a different answer. Such an
- * edit takes the replacement path and is re-priced — pinned by "re-prices a held line when the
- * options list it answered was renamed between the two sends" in working-order.test.ts.
+ * A RENAMED list still differs, and that is a settled decision rather than an oversight — the
+ * reason, and the test that pins it, are in `docs/developers/modifiers.md`.
  */
 export function sameOptionSelections(
   frozen: readonly OptionSnapshot[],
@@ -169,30 +167,44 @@ export function sameOptionSelections(
  * (`priceBasketWithOptions`, `packages/catalogue/src/pricing.ts`), so `dishQuantity` here is the
  * STORED dish count — the one the child was written against, not the one being asked for.
  *
- * Order-independent for the same reason {@link sameOptionSelections} is. Unlike the options answer,
- * a child DOES carry an id — the picked product — so a product rename does not disturb it.
+ * Neither side's ORDER is part of the pairing. The order both sides come back in is a stored
+ * position, and two different columns hold it: `product_modifiers.sort`, which
+ * `writeProductModifiers` re-numbers from the body of a product save, orders a dish's options lists
+ * and — on a line naming a plain product — its extras lists; `menu_item_extra_lists.display_order`,
+ * which `setMenuItemExtraLists` re-numbers from the body it is given, orders the extras lists of a
+ * line naming a MENU OFFER. Only the first is reachable from a shipping route today: no file
+ * outside `packages/catalogue` and its tests calls `setMenuItemExtraLists`.
+ *
+ * TWO PICKS OF THE SAME PRODUCT REFUSE THE PAIRING, whichever lists offered them. A child line
+ * records the product it is, its quantity and the price it was sold at, and never the list that
+ * offered it (spec §3.4) — so when one product is offered by two of a dish's lists at two prices,
+ * nothing on the stored side says which row belongs to which list, and a pairing built on the
+ * product and the quantity can hand a row the pick made off the OTHER list. Such an edit takes the
+ * replacement path and is re-priced from today's offers, which is correct but loses the line's
+ * price lock. Pinned by "replaces the line when two lists offering the same product have their
+ * picks swapped" (working-order.test.ts).
  *
  * The pairing is what the caller needs, not just its truth value: it updates each child's quantity
- * from its own pick, and the two sides are no longer index-aligned. (The plan named this
- * `sameExtraSelections` and had it answer a boolean; a boolean would have to be paired up a second
- * time by the caller, and the two rules could then disagree.)
+ * from its own pick, and the two sides are no longer index-aligned.
  */
 export function matchExtraChildren<Child extends { productId: string | null; quantity: string }>(
   picks: readonly ExtraChild[],
   children: readonly Child[],
   dishQuantity: string,
 ): { pick: ExtraChild; child: Child }[] | null {
-  const paired = pairOff(
-    picks,
+  if (new Set(picks.map((pick) => pick.productId)).size !== picks.length) return null;
+  // Each pick's expected stored quantity, computed once rather than once per probe.
+  const dish = decimal(dishQuantity);
+  const wanted = picks.map((pick) => ({
+    productId: pick.productId,
+    quantity: multiplyDecimal(dish, decimal(String(pick.quantity))),
+  }));
+  const matched = pairOff(
+    wanted,
     children,
-    (pick, child) =>
-      child.productId === pick.productId &&
-      compareDecimal(
-        multiplyDecimal(decimal(dishQuantity), decimal(String(pick.quantity))),
-        decimal(child.quantity),
-      ) === 0,
+    (want, child) =>
+      child.productId === want.productId &&
+      compareDecimal(want.quantity, decimal(child.quantity)) === 0,
   );
-  return paired === null
-    ? null
-    : paired.map(({ entry, candidate }) => ({ pick: entry, child: candidate }));
+  return matched === null ? null : picks.map((pick, index) => ({ pick, child: matched[index]! }));
 }

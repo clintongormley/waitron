@@ -64,13 +64,37 @@ reading how the request was written instead of what it said.
 Since the extras-and-options order path (2026-09-20) that comparison lives in `updateHeldOrder`
 (`apps/server/src/working-order.ts`). It rebuilds what the request's answers would freeze NOW
 (`buildLineExtras`, `apps/server/src/modifier-selection.ts`) and compares that with what the stored
-line holds, by value and index-wise — both sides are built in the OFFERED order rather than the
-order they were sent, so neither key order nor entry order can reach the result. The helper this
-replaces, `sameModifierSelections`, no longer exists.
+line holds, by value. The helper this replaces, `sameModifierSelections`, no longer exists.
 
-What covers it: `apps/server/src/working-order.test.ts`, "keeps extras rows and customisation on a
-quantity-only edit" — it raises the offer's price and the extra's price underneath the edit, then
-asserts the parent and its child line keep their original ids and their locked prices.
+**Neither side's ORDER is part of the comparison either, and the reason is worth carrying.** Both
+sides are built in the order the dish OFFERS its lists, which reads as a fixed thing and is not one:
+it is a stored position somebody can move, and two different columns hold it. `product_modifiers.sort`
+orders a dish's options lists, and its extras lists on a line naming a plain product;
+`writeProductModifiers` re-numbers it from the body of a product save.
+`menu_item_extra_lists.display_order` orders the extras lists of a line naming a MENU OFFER, and
+`setMenuItemExtraLists` re-numbers it from the body it is given. So a line parked before a reorder
+keeps the OLD order while the rebuilt side comes back in the new one — and a comparison pairing the
+two up position by position reads that as a changed answer and re-prices a quantity-only edit. That
+was measured on both halves on 2026-09-20 and is why the pairing is order-independent
+(`sameOptionSelections`, `matchExtraChildren`). Only the first of the two columns is reachable from
+a shipping route today: no file outside `packages/catalogue` and its tests calls
+`setMenuItemExtraLists`.
+
+**Order-independence has a price, and it is paid rather than hidden.** A child line records the
+product it is, its quantity and the price it was sold at, and never the list that offered it — so
+when one product is offered by two of a dish's lists at two prices, nothing on the stored side says
+which row belongs to which list. `matchExtraChildren` refuses the pairing whenever two picks name
+the same product; such an edit takes the replacement path and is re-priced from today's offers,
+correct but without the line's price lock.
+
+What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
+a quantity-only edit" raises the offer's price and the extra's price underneath the edit and asserts
+the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
+two options lists change places" and "keeps each extras child on its own row when two extras lists
+change places" do the same across a reorder; "replaces the line when two lists offering the same
+product have their picks swapped" pins the refusal above, by the BILL rather than by an id — the
+same two picks exchanged between a 1.00 list and a 3.00 one cost 5.00, not the 7.00 a crossed
+pairing charges.
 
 ## A replay reports the original transaction facts; side effects are gated separately
 

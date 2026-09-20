@@ -651,6 +651,14 @@ it("an extra child line carries product_id and the product's own VAT", async () 
 - Produces: `sameExtraSelections(value, childLines)` and `sameOptionSelections(value, snapshots)` —
   compare by values, order-independent (the heir of `sameModifierSelections`, guarding
   `apps/server/src/modifier-selection.test.ts`).
+- **2026-09-20, what was actually built.** The order-independence is as written; the two interfaces
+  are not. Task 7 had already moved the comparison inside `updateHeldOrder` and had it work on
+  REBUILT values rather than the raw wire, so `sameOptionSelections(frozen, stored)` takes two
+  `OptionSnapshot[]`. The extras one is named `matchExtraChildren(picks, children, dishQuantity)` and
+  answers the PAIRING of picks to stored child lines rather than a boolean, because the caller moves
+  each child's quantity from its own pick and a boolean would have to be paired up a second time
+  under a rule that could disagree with it. It also refuses outright when two picks name the same
+  product — see `docs/developers/modifiers.md`, which carries the reason.
 
 - [ ] **Step 1: Write the failing test** — a quantity-only update on a held line preserves the frozen
       extras child prices and option snapshots; a reordered-but-equal selection compares equal; a
