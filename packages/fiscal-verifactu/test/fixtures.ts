@@ -260,8 +260,9 @@ async function insertLocationTillSeries(
  * `tenants` row keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella
  * because the hashed `IDEmisorFactura` is read from the SIF registration, not from `tenants`:
  * `VerifactuBackend.recordSale` sets it from `currentSif(tx, nodeId).nif`
- * (`./src/backend.ts`, `./src/registro-sif.ts`), and the one field it does take off `tenants` —
- * `NombreRazonEmisor`, the legal name — is not one of the eight fields `buildCadenaAlta` hashes
+ * (`./src/backend.ts`, `./src/registro-sif.ts`). The only tenant value that reaches a record at all
+ * is the legal name — `taxpayer` in `./src/backend.ts` hands its callers nothing else — and the
+ * legal name is not among the eight fields `buildCadenaAlta` hashes
  * (`packages/verifactu/src/huella.ts`). A test that needs `tenants.tax_id` itself to match must
  * seed before anything else does.
  */

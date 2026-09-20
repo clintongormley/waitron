@@ -572,13 +572,16 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // ABOVE it — a gate that cries wolf. With it, the literal is a property of the basket: recorded
   // at `2ae3baa98` both standalone and appended to the end of this file, the two runs agreed.
   //
-  // WHAT A WRONG ANSWER PRINTS, so this is a measurement and not a formality: captured the same way
-  // at `2ae3baa98`, with only the child line's `vatRate` moved from "10.00" to "21.00" (its base
-  // unchanged, the settlement rebalanced to 16.51), the record came back as
-  // `3D5F2E3981F025153FFF81BF1A9B9E519F1E127472E83063BB39F2C91FFF38FA` / 14.61 / 2.54 — all three
-  // move. An extra's VAT rate is the picked product's own (spec
-  // `docs/superpowers/specs/2026-09-18-one-product-model-design.md` decision 9), which is the
-  // figure this rework could have moved, and this fixture is sensitive to it.
+  // WHAT A WRONG ANSWER PRINTS, so this is a measurement and not a formality. Ran here with the
+  // child line's `vatRate` moved from "10.00" to "21.00" and NOTHING else touched: `cuota_total`
+  // came back "2.54" and the huella
+  // `A445E2BA3E533EE363B05CA272293EC015AE419B4785C4946F0D3E8BD57C0AF3` — both different, so an
+  // extra's VAT rate, which is the picked product's own (spec
+  // `docs/superpowers/specs/2026-09-18-one-product-model-design.md` decision 9) and the figure this
+  // rework could have moved, is a figure this fixture can see. WHAT THAT PROBE DOES NOT COVER:
+  // `importe_total` stayed "14.41". It is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
+  // `./backend.ts`), an explicit field of `saleInput` rather than anything derived from the lines,
+  // so the third literal is pinned against the CALLER's total and not against the basket.
   const GOLDEN = {
     huella: "C43623FCC6F00D21DD31D4BABBDBA1A1FD05D466B84677C2F46594C31ED8536A",
     importe_total: "14.41",
