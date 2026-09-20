@@ -31,7 +31,8 @@ SQLite switch replaces that one body rather than every call site (plan
 `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P2). Asking for a PGlite
 database through it is now a written rule (`CLAUDE.md` §4), enforced by
 `scripts/venue-db-helper.test.ts`: outside this package, no `.ts` file under `packages/` or `apps/`
-may NAME `usePgliteDb`; inside this package the name is allowed, and six files use it. Which files
+may NAME `usePgliteDb`; inside this package the name is allowed, and six `.ts` files use it —
+seven files counting this one. Which files
 take the seam is the grep in `docs/developers/testing-guide.md` under "A PGlite suite asks for its
 database through one helper, and a guard enforces it". Its exclusion is about that command's output
 rather than about permission: without it the list also returns `src/testing/venue-db.ts` and its

@@ -4036,9 +4036,9 @@ command listing the files that take the seam. That command, not a number written
 anyone checks: a number here went stale in one pull request, which is the whole reason #423 took it
 out. It lists FILES, not packages and not call sites.
 
-**And the house rule and its guard, which step 5 does not include, LANDED on 2026-09-20 in their own
-pull request afterwards — so the whole of task P2 is done.** The entry further down carries what
-that pull request found.
+**And the house rule and its guard, which step 5 does not include, land with the pull request that
+adds this sentence — their own, after the last conversion, as planned.** When it merges the whole of
+task P2 is done. The entry further down carries what it found.
 
 **Three things #470, the last conversion, left behind.**
 
@@ -4086,9 +4086,11 @@ database. Two other doors open onto one, and the commands that count them are no
 `scripts/venue-db-helper.test.ts`'s header rather than here, because a number here goes stale in a
 pull request and a command does not: on `e596fea4f` they return 10 suites taking `createPgliteDb`
 and nothing else (`packages/db/src/index.test.ts` does it inside the `it`) and 7 taking
-`describeEachTarget`'s PGlite half. The figure that used to stand here, 11 and 18, was measured on
-2026-09-18 under a scope nobody wrote down, and the two disagree by one — which is this section's
-own lesson about counts, happening to this very sentence. Replacing `usePgliteDb(` with
+`describeEachTarget`'s PGlite half. The figure that used to stand here said 11 and 18, and stated its
+scope perfectly clearly — "counted over `*.test.ts` under `packages/` and `apps/` on 2026-09-18".
+It was simply wrong: running the header's predicate against the last commit of 2026-09-18 returns
+10, with the same file list as today. So this is not the usual stale-count story, and that is the
+point — a count can carry its scope and still be a number nobody can reproduce. Replacing `usePgliteDb(` with
 `useVenueDb(` reaches neither door, and `describeEachTarget`'s half in particular cannot simply
 move: `pgliteTarget.create()` hands out a fresh cluster PER TEST where the helper hands out one
 database per SUITE with a truncate between tests, which is a different isolation contract and one
@@ -4108,8 +4110,8 @@ the wrong place to change what a fixture guarantees, so it is recorded here rath
 anyone takes it, the question to answer first is whether any such fixture relies on the truncate
 running BEFORE the first test, where the helper's reset has not yet run at all.
 
-**TASK P2 IS COMPLETE.** The house rule naming `useVenueDb` and the guard that enforces it landed on
-2026-09-20, in their own pull request after the last conversion — the shape the vocabulary rollout
+**TASK P2 IS FINISHED WITH THIS PULL REQUEST.** The house rule naming `useVenueDb` and the guard
+that enforces it land here, after the last conversion — the shape the vocabulary rollout
 ended in (#414 last conversion, #416 the guard and the rule), and for the same reason: a rule with
 standing violations needs a guard, and the guard could not pass while one suite still called the old
 helper. The rule is `CLAUDE.md` §4 and the guard is `scripts/venue-db-helper.test.ts`, whose own
@@ -4197,10 +4199,11 @@ Both of the plan's lists now name it (#429 corrected them in place). Nothing to 
 the next converter meeting a real-PostgreSQL suite does not have to work it out again.
 
 **A third thing for that last pull request, found while converting `packages/bookings` (#428) —
-TAKEN on 2026-09-20; the guard now refuses the bare name outside `packages/db`, so this class cannot
-come back.** Converting a package does not remove the old helper's name from its PROSE, and the grep
-pair cannot see what is left: the still-to-convert command matches `usePgliteDb[(]`, with a parenthesis, so a
-comment that writes the bare name is invisible to it. `packages/bookings` is converted and
+TAKEN by this pull request; the guard now refuses the bare name in a `.ts` file under `packages/` or
+`apps/` outside `packages/db`, so this class cannot come back there.** Converting a package does not
+remove the old helper's name from its PROSE, and the grep pair that used to sit in the testing guide
+could not see what was left: its still-to-convert command matched `usePgliteDb[(]`, with a
+parenthesis, so a comment writing the bare name was invisible to it. `packages/bookings` is converted and
 `grep -rlE "usePgliteDb[(]" --include="*.ts" packages/bookings` exits 1, yet
 `packages/bookings/src/migrations.ts:5` still tells a reader that a test's `usePgliteDb` applies the
 migration descriptor — true, because `useVenueDb`'s whole body is `return usePgliteDb(options)`, but
@@ -4998,8 +5001,10 @@ whole of it. State the path set — `CLAUDE.md` §1 — rather than letting a re
 **`packages/db` converted, LANDED as #467 on 2026-09-20** (main `b2a7f3d5`) — twenty test files and
 twenty-one calls (`src/node-membership.test.ts` has two), plus the package's `vitest.config.ts`
 comments and a paragraph of `packages/db/README.md`. This is the package that OWNS both helpers, so
-the four files allowed to name the PGlite one stay untouched: `src/testing/lifecycle.ts` and
-`src/testing/venue-db.ts`, which define them, and both their contract tests. After it,
+the four files the rollout's grep exclusion lists stay untouched: `src/testing/lifecycle.ts` and
+`src/testing/venue-db.ts`, which define them, and both their contract tests. (Permission is wider
+than that four, and the guard that landed afterwards is what settled it: `packages/db` is exempt
+whole.) After it,
 `git grep -nE "usePgliteDb[(]" -- packages/db` returns four lines and all four are allowed: the
 definition (`lifecycle.ts:129`), the wrapper's forwarding call (`venue-db.ts:26`) and the old
 helper's two contract-test calls (`lifecycle.test.ts:27` and `:68`).

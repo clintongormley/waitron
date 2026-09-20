@@ -122,6 +122,13 @@ Traps, each of which cost a round trip. The mechanism behind every one is in
 [ci-and-gates.md](docs/developers/ci-and-gates.md) — read it before changing anything about CI, the
 hook, or how tests are scheduled:
 
+- **`prettier --check` on an IGNORED path prints the same line as a clean one.** `docs/` is ignored
+  whole (`.prettierignore`), so a format check over it reports
+  `All matched files use Prettier code style!` and exits 0 having opened nothing — CLAUDE.md §1's
+  "both answers look alike" with a command attached. `pnpm exec prettier --file-info <file>` is the
+  one that discriminates; it prints `"ignored": true`. Cost: a dated pointer scripted into a plan
+  matched a line-wrapped `**Run`, split the bold span and left the paragraph rendering wrong; three
+  format checks over that directory reported clean, and a review seat found it by reading.
 - **Check every command's exit status.** A shell sequence separated by newlines reports only its
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
   Cost: a review-fix command ran a successful build after a failed server typecheck and reported
@@ -451,12 +458,13 @@ container or browser test** — most of these rules exist because a test passed 
   justification does not apply, and say why in a comment.
 - **A grant assertion must call `asAppUser(tx)` before the query under test.** Without it the test
   runs as the owner and asserts nothing, however much it asserts.
-- **A suite that asks a shared helper for a PGlite database asks `useVenueDb`, and no `.ts` file
-  under `packages/` or `apps/` outside `packages/db` NAMES `usePgliteDb`.** That helper is the one
+- **A suite that would once have called `usePgliteDb` calls `useVenueDb`, and no `.ts` file under
+  `packages/` or `apps/` outside `packages/db` NAMES `usePgliteDb`.** That helper is the one
   body the SQLite switch replaces. Guard: `scripts/venue-db-helper.test.ts`, weaker than its name in
   ways its header lists — it sees ONE of the three doors to a PGlite database, so a suite reaching
   one through `createPgliteDb` or `describeEachTarget` is outside the rule as well as the guard
-  (both are task F1's), and markdown is outside its scope entirely. Cost: the rule had to wait for
+  (both are task F1's — `describeEachTarget` is a shared helper too, so "ask a helper" is NOT the
+  rule), and markdown is outside its scope entirely. Cost: the rule had to wait for
   the last conversion, because a rule with standing violations needs a guard and the guard could not
   pass; by then seven comments named a helper no suite in their own package called any more, five of
   them in a `vitest.config.ts`, where a call-shaped grep never looks. Receipt:

@@ -91,7 +91,9 @@ function body rather than 211 files.
 > 2026-09-20: that collapsing is DONE for the first of the three. Every suite that chose its database
 > through `usePgliteDb` now chooses through `useVenueDb`, and asking that way is a house rule
 > (`CLAUDE.md` §4) enforced by `scripts/venue-db-helper.test.ts`. `useRealPostgres` and
-> `describeEachTarget` are untouched and are still the flip's, as this paragraph says.
+> `describeEachTarget` are untouched. The paragraph above puts all three in the prepare phase;
+> what actually happened is that only the first was collapsed there, and the plan (task P2, and
+> task F1 step 24) is where the other two were reassigned to the flip.
 
 Both are mechanical, reviewable, and independently valuable: they put the engine's vocabulary in one
 place, which is where it should have been anyway.

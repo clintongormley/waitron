@@ -9,14 +9,18 @@ import { describe, expect, it } from "vitest";
  *
  * It lives in the ROOT Vitest project rather than beside the helper in `packages/db`, for the same
  * reason `scripts/column-vocabulary.test.ts` does, and the reason runs in the direction a reader
- * easily gets backwards: both gates expand a changed package to its DEPENDENTS (`--filter "...<pkg>"`
- * — `scripts/changed-packages.mjs` and `.husky/pre-push`), so a check inside `packages/db` runs only
- * when `@waitron/db` is a dependent of something the pull request changed, which is to say only when
- * `db` DEPENDS on it. It depends on three workspace packages, so it is almost never pulled in.
+ * easily gets backwards. Both gates build `--filter "...<pkg>"` from the shared classifier's output
+ * (`.husky/pre-push:112`, `.github/workflows/ci.yml:302`), and that expands a package to its
+ * DEPENDENTS — so a scoped run reaches a check inside `packages/db` only when `@waitron/db` is
+ * pulled in as a dependent, which is to say only when `db` DEPENDS on the changed package. It
+ * depends on three (`membership`, `shared`, `sync-enrolment`), so it is almost never pulled in.
  * Measured on this tree, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` lists six
- * packages and `@waitron/db` is not among them — so a pull request adding a suite in
- * `packages/bookings` would never have run a check that lived there. The root project is ungated —
- * ci.yml's `lint` job and `.husky/pre-push` both run it on every non-documentation push.
+ * packages and `@waitron/db` is not among them — so the scoped run for a pull request adding a suite
+ * in `packages/bookings` would not have reached a check that lived there. Two paths do still reach
+ * it, and neither is the case this guard is for: a push whose scope the classifier calls `global`
+ * runs the whole workspace unfiltered (`.husky/pre-push`, `scope_label="whole workspace"`), and a
+ * pull request that changes `packages/db` itself. The root project needs none of that — ci.yml's
+ * `lint` job and `.husky/pre-push` both run it on every non-documentation push.
  *
  * **It forbids the NAME, not just the call, and that is the deliberate part.** `useVenueDb`'s whole
  * body is `return usePgliteDb(options)`, so a comment elsewhere in the tree pointing a reader at
@@ -33,10 +37,10 @@ import { describe, expect, it } from "vitest";
  *    exactly like a call. That is the point rather than a flaw, but it means a file that needs to
  *    DISCUSS the old helper cannot, outside the package that owns it.
  * 2. **`packages/db/` is exempt WHOLE**, not file by file. It defines both helpers, tests them, and
- *    documents them in its own vitest config and README, and `git grep -l usePgliteDb --
- *    packages/db` returns SIX files on this tree — a per-file list would be six entries that go
- *    stale on the next refactor. The price: a suite inside that package could call `usePgliteDb`
- *    directly and this guard would not see it.
+ *    documents them in its own vitest config and README. `git grep -l usePgliteDb -- packages/db`
+ *    returns SEVEN files on this tree and six of them are `.ts`, which is what a per-file list here
+ *    would have to carry — six entries that go stale on the next refactor. The price: a suite inside
+ *    that package could call `usePgliteDb` directly and this guard would not see it.
  * 3. **It sees one of the three doors to a PGlite database.** `createPgliteDb` called directly and
  *    `describeEachTarget`'s PGlite half are the other two, and neither is reported. On `e596fea4f`,
  *    `comm -23 <(grep -rlE "createPgliteDb\(" --include="*.test.ts" packages apps | sort)
@@ -62,8 +66,9 @@ const OLD_HELPER = "usePgliteDb";
 const SEAM = "packages/db/src/testing/venue-db.ts";
 
 /**
- * Every `.ts` file under `dir`, discovered rather than listed. The same walk four other root guards
- * use, kept as a copy per house convention rather than shared.
+ * Every `.ts` file under `dir`, discovered rather than listed. The same walk three other root guards
+ * use (`grep -rln "function sourceFilesIn" scripts/` returns four files, this one among them), kept
+ * as a copy per house convention rather than shared.
  *
  * The shape to keep is that the DIRECTORY branch is taken first: a failing browser test writes its
  * screenshot into a directory named after the test file, and a walk that dispatched on the

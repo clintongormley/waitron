@@ -251,12 +251,13 @@ PGlite (the adoption logic is pure SQL + the pure `@waitron/membership` fence; n
 > **2026-09-20 — the helper in the sketch below is out of date.** A suite asks for its PGlite
 > database through `useVenueDb` (`@waitron/db/testing/venue-db.js`), whose body forwards to
 > `usePgliteDb` unchanged; naming the old helper in a `.ts` file under `packages/` or `apps/`,
-> outside `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4). Unlike
-> the other documents pointed in that sweep, the file this step designates —
-> `apps/server/src/membership-adopt.test.ts` — does NOT exist on this tree, and
+> outside `packages/db`, is refused by `scripts/venue-db-helper.test.ts` (`CLAUDE.md` §4). One
+> thing about this step is worth saying because the other pointers do not have to: the file it
+> designates — `apps/server/src/membership-adopt.test.ts` — does NOT exist on this tree, and
 > `grep -rn adoptMembership --include="*.test.ts" apps packages` returns nothing, so what became of
 > this step was not established here. **Only the helper name was re-checked; nothing else in this
 > sketch was.**
+
 ```ts
 import { describe, expect, it } from "vitest";
 import { generateNodeKeyPair } from "@waitron/membership";

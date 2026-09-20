@@ -974,7 +974,7 @@ login role can each INSERT a node under the tenant GUC.
   **2026-09-20 — the helper in the sketch below is out of date, and this step designates the file it
   creates, so the name matters.** `packages/provisioning/src/venue-apply.test.ts` asks for its
   database through `useVenueDb` (`@waitron/db/testing/venue-db.js`) today — the import at `:7`, the
-  call at `:20` — not `usePgliteDb`. Step 3's closing note, at `:1176`, names the old helper again
+  call at `:20` — not `usePgliteDb`. Step 3's closing note, at `:1178`, names the old helper again
   for the same reason. It is the same PGlite database with the same options and the same per-test reset: the
   new helper's body forwards to `usePgliteDb` unchanged (plan task P2,
   `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). Asking through it is now a

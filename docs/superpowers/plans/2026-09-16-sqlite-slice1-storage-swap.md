@@ -2548,7 +2548,7 @@ pnpm --filter @waitron/db test -- venue-db.test.ts
 
 Expected: PASS, all three.
 
-- [x] **Step 5: Convert package by package** — done 2026-09-20, one package per pull request, the last of them `apps/server`. Every suite that called `usePgliteDb` now calls `useVenueDb`; the guide's still-to-convert command exits 1. The house rule and its guard are NOT part of this step: they landed in their own pull request afterwards, on 2026-09-20 — `CLAUDE.md` §4 and `scripts/venue-db-helper.test.ts`, which reports any `.ts` file under `packages/` or `apps/` outside `packages/db/` that NAMES the old helper, comment mentions included. That pull request also swept the seven dead comment pointers the conversions left behind and the historical documents whose sketches designate a converted file.
+- [x] **Step 5: Convert package by package** — done 2026-09-20, one package per pull request, the last of them `apps/server`. Every suite that called `usePgliteDb` now calls `useVenueDb`; the guide's still-to-convert command exited 1, and the pull request below replaced it with a guard that runs on every push. The house rule and its guard are NOT part of this step: they landed in their own pull request afterwards, on 2026-09-20 — `CLAUDE.md` §4 and `scripts/venue-db-helper.test.ts`, which reports any `.ts` file under `packages/` or `apps/` outside `packages/db/` that NAMES the old helper, comment mentions included. That pull request also swept the seven dead comment pointers the conversions left behind and the historical documents whose sketches designate a converted file.
 
 Order: by how many of a package's FILES call it, fewest first, so each pull request is a clean
 checkpoint. That is not the same as a call-site count. Measured on the branch that converted

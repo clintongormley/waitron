@@ -13,9 +13,10 @@ export type VenueDb = PgliteSuite;
  * `scripts/venue-db-helper.test.ts`, which reports any `.ts` file under `packages/` or `apps/`
  * outside `packages/db/` that NAMES the old helper. Which files take the seam is a grep rather
  * than a list here, because a list would be stale by the next pull request; the command is in
- * `docs/developers/testing-guide.md`, under "A PGlite suite asks for its database through one helper, and a guard enforces it",
- * and it carries the exclusion that keeps the two files defining either helper, and their two
- * contract tests, out of the answer.
+ * `docs/developers/testing-guide.md`, under "A PGlite suite asks for its database through one
+ * helper, and a guard enforces it". Its exclusion is about that command's OUTPUT rather than about
+ * permission: without it the list also returns this file and its contract test, which take the seam
+ * without being anyone's conversion.
  *
  * Some suites reach PGlite without `usePgliteDb` at all, through `createPgliteDb` or
  * `describeEachTarget`; that conversion is not mechanical and is task F1's, not step 5's.

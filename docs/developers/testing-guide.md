@@ -85,7 +85,8 @@ drops is `venue-db.ts` and `venue-db.test.ts`, the seam and its contract test, w
 without being anyone's conversion; `lifecycle.ts` and `lifecycle.test.ts` never appear in this
 command's output at all, and are in the expression only because one shared expression covering the
 four files that may name EITHER helper is simpler than two. Permission is wider than those four: the
-guard exempts `packages/db` whole, and six files in it name the old helper today. The one that
+guard exempts `packages/db` whole, and six `.ts` files in it name the old helper today (seven files
+in all — its README is the seventh, and markdown is outside the guard's scope anyway). The one that
 matters is `packages/db/src/testing/lifecycle.test.ts:26`, which is `describe("usePgliteDb")` —
 converting it would delete the coverage for the function being wrapped. The command lists FILES, not
 packages and not call sites, and not every file it lists is a suite: some are shared fixtures under a
