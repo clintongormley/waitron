@@ -2,7 +2,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { appendToChain } from "./chain.js";
@@ -10,7 +10,7 @@ import { currentSif, esPrimerRegistro } from "./registro-sif.js";
 import { installationFloor, restoreFiscal } from "./restore.js";
 import { altaFor, seedSale, seedTill } from "./testing/seed.js";
 
-const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 
 describe("restoreFiscal", () => {

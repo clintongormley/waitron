@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, getCredential, loadKeyRing } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
@@ -44,7 +44,7 @@ describe("FISCAL_SLOT", () => {
 // the regime owns the transport it builds inside the pass. A pass with no due work builds no
 // transport at all (resolveClient is called lazily, only when there is work) and returns the empty result.
 describe("FISCAL_SLOT.drain", () => {
-  const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+  const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
   const ring = loadKeyRing({
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -67,7 +67,7 @@ describe("FISCAL_SLOT.drain", () => {
 // we pin the SEAT wiring — that FISCAL_SLOT actually exposes and forwards to them.)
 describe("FISCAL_SLOT.provisioningSecret", () => {
   const secret = FISCAL_SLOT.provisioningSecret!;
-  const pg = usePgliteDb({
+  const pg = useVenueDb({
     migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
     timeoutMs: 120_000,
   });

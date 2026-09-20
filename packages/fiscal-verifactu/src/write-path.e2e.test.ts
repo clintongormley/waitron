@@ -8,7 +8,7 @@ import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import { asAppUser, incidents, saleLines, sales, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
@@ -39,7 +39,7 @@ let seriesId: SeriesId;
  * hash, and a `pendiente` sidecar row exists. The fake writes to none of these tables at all, so
  * every one of these assertions would pass against a module that silently no-ops.
  */
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));

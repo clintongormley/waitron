@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import type { Cabecera, EnvioRegistro } from "@waitron/verifactu";
@@ -29,14 +29,14 @@ const KEY_ENV = {
 // about parsing — `createClient` parses, and its own suite covers that.
 const MINIMAL_SOAP_BODY = '<?xml version="1.0"?><Envelope><Body/></Envelope>';
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 120_000,
 });
 const ring = loadKeyRing(KEY_ENV);
 const material: MtlsMaterial = mintMtlsMaterial();
 
-// The local TLS listener is this suite's own; only the database is `usePgliteDb`'s. The teardown is
+// The local TLS listener is this suite's own; only the database is `useVenueDb`'s. The teardown is
 // guarded because a `startMtlsServer` that threw would otherwise be reported twice — once really,
 // once as a spurious `Cannot read properties of undefined (reading 'close')`. See
 // `scripts/guarded-teardowns.test.ts`'s header for the experiment that measured that.

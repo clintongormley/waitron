@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
 import { registerSif } from "./registro-sif.js";
@@ -41,7 +41,7 @@ describe("stripOwnSuffixes", () => {
 
 describe("liveSeriesBases", () => {
   // PGlite exercises the derivation over stored series; no privileges or contention are asserted.
-  const suite = usePgliteDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
+  const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
   it("keeps one base per (code, purpose) pair in first-seen order", async () => {
     await withTransaction(suite.db, async (tx) => {
@@ -72,7 +72,7 @@ describe("liveSeriesBases", () => {
 
 describe("liveSeriesBases across purposes", () => {
   // Each fixture owns its database so registration counters and live codes cannot depend on test order.
-  const suite = usePgliteDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
+  const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
   it("keeps FA standard and FA-1 rectificative distinct when installation 1 is registered", async () => {
     await withTransaction(suite.db, async (tx) => {

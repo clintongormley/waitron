@@ -5,7 +5,7 @@ import {
   pgErrorMessage,
   runMigrations,
 } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Database } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,7 +17,7 @@ import { FISCAL_MIGRATIONS } from "./migrations.js";
 // PGlite exercises migration composition and predicates without concurrent writers.
 let orderingError: unknown;
 let namesAfterOrderingFailure: string[];
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: [],
   setup: async (db) => {
     orderingError = await captureError(() => runMigrations(db, FISCAL_MIGRATIONS));

@@ -1,6 +1,6 @@
 import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
@@ -8,7 +8,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 
 // Apply the whole manifest so the guard sees every module's append-only triggers.
 // PGlite provides the trigger catalog and rejection paths without concurrent writers.
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
   resetPerTest: false,

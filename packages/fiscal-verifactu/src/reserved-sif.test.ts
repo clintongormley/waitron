@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   currentSif,
   esPrimerRegistro,
@@ -11,7 +11,7 @@ import {
 } from "./registro-sif.js";
 import { seedNodesForSifContention, type SifContentionFixture } from "./testing/seed.js";
 
-const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const SISTEMA = "W1";
 

@@ -415,6 +415,19 @@ reused for a minute."
 
 - [ ] **Step 2: Write the failing tests (PGlite, `asAppUser`).**
 
+> **2026-09-20 — `packages/fiscal-verifactu/src/submission-alerts.test.ts` exists and asks for its
+> database through `useVenueDb` (`@waitron/db/testing/venue-db.js`), not the `usePgliteDb` the
+> sketch below names.** Same PGlite database, same migration sets, same per-test reset — the new
+> helper forwards to the old one (plan task P2 step 5,
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). The sketch's own advice to
+> grep a sibling for the real helper name is still the right move, and now it answers `useVenueDb`.
+>
+> **Only the helper name was re-checked.** The sketch's other stale half is the one this plan's own
+> §"Tenant scoping" bullet told you to expect: it passes `tenantId` into every `read({ tx, tenantId,
+> now })` and adds an `it("scopes to the tenant")` case. The tenant column went on 2026-09-14, and
+> the shipped file passes no `tenantId` anywhere — `grep -c tenantId
+> packages/fiscal-verifactu/src/submission-alerts.test.ts` returns 0.
+
 ```ts
 // packages/fiscal-verifactu/src/submission-alerts.test.ts
 import { describe, expect, it } from "vitest";

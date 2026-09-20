@@ -42,6 +42,22 @@
 
 Create `packages/fiscal-verifactu/src/chain.record-validation.test.ts`. The harness below is the one `packages/fiscal-verifactu/src/write-path.e2e.test.ts` uses — open that file first and follow it rather than inventing a variation.
 
+> **2026-09-20 — both files now ask for their database through `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`), not the `usePgliteDb` import the sketch below shows.** It is
+> the same PGlite database with the same migration sets and the same per-test reset, because the new
+> helper's whole body forwards to the old one; only the name to write in a new suite changes (plan
+> task P2 step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+>
+> **Only the helper name was re-checked. The rest of the sketch below has drifted further, and one
+> way it has drifted would stop a copy of it compiling**: it imports `withTenant` from `@waitron/db`
+> and wraps every sale in `withTenant(pg.db, tenantId, …)`. `withTenant` no longer exists —
+> `grep -rn "withTenant" --include="*.ts" packages apps` returns nothing — because the tenant column
+> went on 2026-09-14 (`docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`). The real file
+> uses `withTransaction(pg.db, …)` and has no `tenantId` at all
+> (`packages/fiscal-verifactu/src/chain.record-validation.test.ts:5` and `:44`). So the instruction
+> above is what governs — open the sibling and copy what it actually does — and the sketch is a
+> record of how the file was designed, not of what it contains.
+
 ```ts
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";

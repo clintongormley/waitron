@@ -4052,8 +4052,10 @@ cases with the suite that died in each; the README states them and points at the
 finds ONE wording. Six more `vitest.config.ts` files stated the same claim in other words when this
 was written — `packages/credentials` corrected by #440, `packages/scheduler`, `packages/workforce`
 and `packages/reporting` each by their own conversion, `packages/payments` by its own on 2026-09-20,
-and **`packages/fiscal-verifactu`, the one OF THE SIX still standing**, in the third bullet below.
-"Of the six" is not a hedge to drop: three more instances of the same false claim are still standing
+and `packages/fiscal-verifactu`, **the last of the six, by its own conversion on 2026-09-20**, in
+the third bullet below. **None of the six is outstanding — and that is a statement about six CONFIG
+files, not about the class.**
+Three more instances of the same false claim are still standing
 elsewhere in this section — `packages/purchasing`, `packages/fiscal-none` and `packages/fiscal` —
 each named in the paragraphs around this one. It read four until #467 took
 `packages/db/README.md`, and that pull request's first round of corrections changed this number
@@ -4063,10 +4065,11 @@ tally that used to sit here ("three do now") was left un-decremented by two succ
 before anyone noticed, which is the §7 rule about counts happening to this very sentence; naming the
 one outstanding package instead is what a later conversion can actually keep true.
 **A SECOND identifying phrase-grep, free, found while correcting `packages/payments`:**
-`git grep -n "hookTimeout stays generous for the PGlite boot" -- '*/vitest.config.ts'` now matches
-`packages/fiscal-verifactu/vitest.config.ts:17` and nothing else — the payments and
-fiscal-verifactu configs carried that sentence verbatim, and the grep at the top of this section
-matches neither. **The path scope on that command is doing real work**: unscoped it also matches the
+`git grep -n "hookTimeout stays generous for the PGlite boot" -- '*/vitest.config.ts'` matched the
+payments and fiscal-verifactu configs, which carried that sentence verbatim, and the grep at the top
+of this section matched neither. **Both are corrected, so scoped to `*/vitest.config.ts` it now
+exits 1**; it is kept here because it is how this class was identified, not because anything is left
+for it to find. **The path scope on that command is doing real work**: unscoped it also matches the
 sentence you are reading, which is the same self-answering shape this file already records at the
 `createPgliteDb` note further down. A receipt-grep written INTO the file it searches has to exclude
 itself, or it reports its own text as a finding. The count is not the point — the METHOD is, because two
@@ -4104,12 +4107,14 @@ actually sits:
   reporting's sentence here would have been a false claim about this package. Second, `hookTimeout`
   is not idle here either: nine real-PostgreSQL suites call `useTemplateDb({ template: "core_payments" })`
   with no `timeoutMs`, so the clone at `lifecycle.ts:422` IS bounded by it.
-- False for a DIFFERENT reason: `packages/fiscal-verifactu/vitest.config.ts:14-16`. Three of its
-  suites do boot PGlite in an untimed `beforeEach` that `hookTimeout` really does bound
-  (`provisioning.test.ts:26`, `registro-sif.test.ts:27`, `restore.test.ts:64`) — but the sentence
-  says every per-suite cost "is paid in a beforeAll", and 25 files there call `usePgliteDb` and take
-  the helper's own 60-second `beforeAll`. So it needs rewording, not sparing; a second correction
-  inside #438 spared it and was itself wrong.
+- False for a DIFFERENT reason: `packages/fiscal-verifactu/vitest.config.ts`, **corrected by
+  that package's own conversion on 2026-09-20, so this entry is now a record rather than work
+  outstanding.** Three of its suites do boot PGlite in an untimed `beforeEach` that `hookTimeout`
+  really does bound (`provisioning.test.ts:25`, `registro-sif.test.ts:22`, `restore.test.ts:63`) —
+  but the sentence said every per-suite cost "is paid in a beforeAll", and the package's converted
+  files take a `beforeAll` budget of their own instead. So it needed rewording, not sparing; a second
+  correction inside #438 spared it and was itself wrong. The measurement, and what the rewrite had to
+  get right that none of the earlier ones faced, is in that conversion's own entry below.
 - Three more, each matched by the claim's own words (`git grep -n "5s default"`) and then read,
   found while converting `packages/core`. `packages/fiscal-none/vitest.config.ts:8-10` and
   `packages/fiscal/vitest.config.ts:8-10` each name a boot that goes through the helper —
@@ -4812,6 +4817,88 @@ Sweep two, `usePgliteDb` alone: 54 documents, adding NOTHING here — of the 40 
 does not, 13 put a `packages/db/src` path within six lines of the helper, and every one of those
 paths is a helper file, a helper's contract test, a schema source or `src/english-only.ts`, never a
 file this conversion touched.
+
+**`packages/fiscal-verifactu` converted** — twenty-five test files and twenty-seven calls
+(`src/reserved-series.test.ts` and `src/slot.test.ts` have two each), plus three comments inside
+those files and the package's `vitest.config.ts`. Every import was a lone
+`import { usePgliteDb } from "@waitron/db/testing/lifecycle.js"`, so no import had to be split, and
+after it `git grep -nE "usePgliteDb" -- packages/fiscal-verifactu` returns ONE line, in a file this
+step does not reach. **`apps/server` (56 files) is the last package**, then the house rule and its
+guard. Four things to carry.
+
+**First, the two standard controls DISAGREE here, and the disagreement has a reason.** The throw
+accounts for exactly the 25 converted files and nothing else — `Test Files 25 failed | 17 passed
+(42)`, the 17 being the seven `useTemplateDb` suites, the three that open a database in a hook of
+their own and seven that open none. `{ ...options, migrations: [] }` accounts for 24 of the same 25
+(`24 failed | 18 passed`, `Tests 186 failed | 183 passed | 34 skipped`, failing `42P01` —
+`relation "tenants" does not exist`). The one it misses is `src/migrations.test.ts`, which already
+passes `migrations: []` itself and applies the manifest inside its own `setup` (`:20-26`), so the
+mutation is a no-op there — it still went through the seam, which the throw proves. Four data points
+now across four packages, two agreeing and two not: **run both, and do not predict which is wider.**
+
+**Second, this package's `hookTimeout` entry is closed, and it is the last of the six.** The old
+comment said every per-suite cost "is paid in a beforeAll", which is the claim this section records
+as false. `npx vitest run src/acks.test.ts src/privileges.test.ts src/provisioning.test.ts
+--hookTimeout=1` discriminates all three shapes in one run. **FAILED-versus-SKIPPED is the
+discriminator** — a `beforeAll` that times out SKIPS its suite's tests, any later hook FAILS them —
+**and "failed" is NOT "ran"**, which is the correction the run-it seat forced and is worth carrying:
+it tried to establish body execution by instrumenting `acks.test.ts`'s `it` callbacks, got no markers
+in EITHER direction (the passing control included), and reported the claim UNVERIFIED rather than
+inferring one. `acks.test.ts` (a `useVenueDb` suite) has all ten of its tests FAILED, in the helper's
+`afterEach` and `afterAll` (`lifecycle.ts:148` and `:153`, each frame naming `venue-db.ts:26`) and in
+its own untimed `beforeEach` (`:40`) — so its boot survived, but that `beforeEach` means its bodies
+did not run. `privileges.test.ts` (`useTemplateDb`, no `timeoutMs`) times out in `beforeAll` at the
+template clone (`lifecycle.ts:422`) and all five of its tests are SKIPPED. A second run over
+`src/registro-sif.test.ts` and `src/restore.test.ts` times out in each suite's own `beforeEach`
+(`:22` and `:63`), which is the third shape. The one test that passes there is `restore.test.ts`'s
+`installationFloor` block, which opens no database. **The suite that does establish body execution is
+`src/provisioning-secret.test.ts`**, and the reason matters more than the result, because the first
+draft of this paragraph got it wrong and the fix-wave re-read caught it by running a probe. The
+reason is NOT that its teardown fired: an untimed `afterEach` runs even for a test whose `beforeEach`
+failed and whose body never ran — measured in a scratch suite where `AFTER_EACH_FIRED` printed and
+`BODY_RAN` did not, which is exactly `acks.test.ts`'s situation here. The reason is that **no hook
+precedes a body in that file at all**: it declares none of its own, and `usePgliteDb` registers only
+`beforeAll`, `afterEach` and `afterAll` (`lifecycle.ts:146-156`), so with its `beforeAll` surviving on
+its own 120s budget nothing could have stopped a body. Pick a suite of THAT shape as the
+representative next time — one with no hook ahead of the body — and note that "no hook of its own" is
+not enough on its own, because the helper registers hooks too.
+
+**This is the first package in the rollout where the route to "not this setting" differs INSIDE one
+package, and the first draft of both the comment and this entry missed it.** The entry above records
+reporting's fourteen call sites each passing `timeoutMs: 60_000` and payments' fourteen passing none;
+here THREE pass `timeoutMs: 120_000` (`src/aeat-transport.test.ts:34`,
+`src/provisioning-secret.test.ts:22`, `src/slot.test.ts:72`) and the other twenty-four take the
+helper's 60s default, so "the helper's own 60-second `beforeAll`" — which is what both first drafts
+said — is a false claim about three of this package's suites. All three reviewers found it, separately.
+**The representative was the reason it survived being measured**: the discriminating run above picked
+`src/acks.test.ts`, a default-route call site, so both routes printed the same thing and the run
+could not tell them apart (CLAUDE.md §1, a class's representative has to be a value the two sides
+could treat differently). The missing half, run afterwards: the same flag over
+`src/provisioning-secret.test.ts`, a 120s call site, fails all thirteen of its tests in the helper's
+reset and close alone — no `beforeEach` frame, which is what distinguishes it from `acks.test.ts`
+rather than what it has in common with it. The invariant survives at both routes; the number was
+never a property of the package.
+
+**Third, the CLI `--hookTimeout` is not inert here, and the entry above says why.** This config
+declares no `projects`, so the flag reaches it — which the runs above measure rather than assume.
+Where a config splits into projects and a project states a `hookTimeout` of its own, the same run
+proves nothing.
+
+**The documentation sweep, reported per sweep**, over non-TypeScript files, whole tree — and the
+path set is markdown alone: `git grep -l usePgliteDb -- . ':(exclude)*.ts' ':(exclude)*.md'` exits 1.
+Sweep one, the converted files' paths with no second condition: 29 documents, 12 of which also name
+`usePgliteDb`. **Three owed a dated pointer and got one** — the fiscal-record-validation plan (its
+step-1 sketch IS `chain.record-validation.test.ts`, and it designates `write-path.e2e.test.ts` as the
+harness to follow), the dashboard-alerts plan (its sketch is headed
+`// packages/fiscal-verifactu/src/submission-alerts.test.ts`), and the fiscal-none plan, whose
+step 6 sends a reader to `drain.test.ts` "for the real `db`/vault fixtures (`usePgliteDb` …)" — a
+designation, the same shape this section already records costing something in #438. The other nine
+owe nothing, and two of them are the near miss worth naming: the gated-provisioning and
+fiscal-restore-hook plans both sketch a `usePgliteDb` suite, and both sketches are `apps/server`
+files, which this rollout has not reached. Sweep two, `usePgliteDb` alone: 54 documents, adding
+NOTHING here — five of the 42 it holds that sweep one does not put `fiscal-verifactu` within six
+lines of the helper, and all five are either a generic "use the helper, never a raw teardown"
+instruction or a sketch for a file in `packages/db`, `packages/provisioning` or `apps/server`.
 
 **Task P7 — nothing joins the two database files any more, LANDED as #426 on 2026-09-19** (main `2741f60c`). The storage switch
 puts everything the venue owns in one file and this node's own identity in another, and the two can
