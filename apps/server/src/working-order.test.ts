@@ -5656,7 +5656,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
 
-    await db.execute(sql`update option_lists set name = 'Renamed staff' where id = ${punto.listId}`);
+    await db.execute(
+      sql`update option_lists set name = 'Renamed staff' where id = ${punto.listId}`,
+    );
     await db.execute(sql`
       update menu_items set gross_price = 99.00 where id = ${premiumCafeOfferId}`);
 

@@ -351,9 +351,9 @@ describe("sameOptionSelections", () => {
       { options: [{ listId: sauce.id, labelId: "label-pepper" }] },
     ).optionSnapshots;
 
-    expect(sameOptionSelections([cookedAnswer!, cookedAnswer!], [cookedAnswer!, sauceAnswer!])).toBe(
-      false,
-    );
+    expect(
+      sameOptionSelections([cookedAnswer!, cookedAnswer!], [cookedAnswer!, sauceAnswer!]),
+    ).toBe(false);
   });
 
   it("differs when the line froze an answer the edit no longer gives", () => {
@@ -415,8 +415,20 @@ describe("matchExtraChildren", () => {
       { extras: [{ listId: breads.id, picks: [{ productId: "product-sourdough", quantity: 2 }] }] },
     );
 
-    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "6.000" }], "3")).not.toBeNull();
-    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "4.000" }], "3")).toBeNull();
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [{ productId: "product-sourdough", quantity: "6.000" }],
+        "3",
+      ),
+    ).not.toBeNull();
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [{ productId: "product-sourdough", quantity: "4.000" }],
+        "3",
+      ),
+    ).toBeNull();
   });
 
   it("refuses a pairing when a pick names a product no stored child holds", () => {
@@ -425,7 +437,13 @@ describe("matchExtraChildren", () => {
       { extras: [{ listId: breads.id, picks: [{ productId: "product-rye", quantity: 1 }] }] },
     );
 
-    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "1.000" }], "1")).toBeNull();
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [{ productId: "product-sourdough", quantity: "1.000" }],
+        "1",
+      ),
+    ).toBeNull();
   });
 
   it("refuses a pairing when the stored line holds a child the edit no longer picks", () => {
@@ -464,6 +482,12 @@ describe("matchExtraChildren", () => {
       },
     );
 
-    expect(matchExtraChildren(extraChildren, [{ productId: "product-sourdough", quantity: "1.000" }], "1")).toBeNull();
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [{ productId: "product-sourdough", quantity: "1.000" }],
+        "1",
+      ),
+    ).toBeNull();
   });
 });
