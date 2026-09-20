@@ -10,11 +10,11 @@ import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { usePgliteDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { deployment } from "./deployment.js";
 import * as barrel from "./index.js";
 
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
 // `deployment` is deliberately not re-exported from the barrel (see its own file), so it is named
 // here rather than discovered.
