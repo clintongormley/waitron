@@ -108,14 +108,19 @@ Unknown ranges keep the full local gate, including workspace typechecking. See
 browser packages included. Which package holds which bar is pinned by
 `scripts/coverage-thresholds.test.ts`.
 
-**A mutation floor of 90 breaks the run in `ui`, `verifactu`, `shared` and `fiscal`; `db` alone has
-none** (`verifactu` and `shared` since July 2026, `fiscal` and `ui` under the owner's 90-everywhere
-decision of 2026-09-19). WHERE it bites differs, and nothing pins which package holds which:
+**A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `verifactu`,
+`shared`, `fiscal` and `db`** (`verifactu` and `shared` since July 2026; `fiscal`, `ui` and `db`
+under the owner's 90-everywhere decision of 2026-09-19). WHERE it bites differs:
 `verifactu` and `shared` fail a pull request whose resolved scope contains them (on `main` the scope
-is `global`, so both always run); `ui` fails only the weekly `.github/workflows/mutation.yml` run, so
-thinning a UI test goes green and reddens on Monday; and `fiscal` has no CI job at all, so only a
-local `pnpm --filter @waitron/fiscal mutation` sees it — and its `mutate` list covers two named
-files, not the package. More:
+is `global`, so both always run); `ui` and `db` fail only the weekly
+`.github/workflows/mutation.yml` run, so thinning one of their tests goes green and reddens on
+Monday; and `fiscal` has no CI job at all, so only a local `pnpm --filter @waitron/fiscal mutation`
+sees it — and its `mutate` list covers two named files, not the package. **`db`'s bar is not in its
+own stryker config**, because CI splits its run across ten shards and a `thresholds.break` there
+would gate a slice: the ten reports are merged and scored once by the `mutation-db-aggregate` job,
+so a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing. Which package
+holds which bar is pinned by `scripts/mutation-break-thresholds.test.mjs`, weaker than its name in
+one way — it reads the workflow as TEXT for db's bar. More:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in

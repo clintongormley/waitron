@@ -95,7 +95,10 @@ A mutation run makes one small change to a source file at a time and reruns the 
 nothing notices is behaviour no test is checking. `thresholds.break` turns that score into a gate.
 Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/verifactu` and `packages/shared` since July 2026, `packages/fiscal` and `packages/ui`
-under the owner's 2026-09-19 decision that the target is 90 everywhere. `packages/db` carries none.
+under the owner's 2026-09-19 decision that the target is 90 everywhere. `packages/db` carries none
+in its own config, deliberately: CI splits its run into ten shards, each passed its own `--mutate`
+list, so a `thresholds.break` there would gate one slice rather than the package. Its bar lives in
+the `mutation-db-aggregate` job instead, which merges the ten shard reports and scores them once.
 
 Where each failure arrives differs, which is the part a session gets wrong:
 
@@ -104,12 +107,30 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `verifactu`, `shared` | `mutation-verifactu` / `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
 | `ui` | the `mutation` job in `.github/workflows/mutation.yml` | the weekly Monday run only — a branch that thins a UI test goes green and reddens on Monday |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
-| `db` | the sharded `mutation-db` matrix in `.github/workflows/mutation.yml` | never — it publishes ten per-shard scores and no aggregate |
+| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
 Two hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor is
-not a package-wide one. And nothing pins which package holds which threshold, the way
-`scripts/coverage-thresholds.test.ts` pins the coverage bars — a config edit that drops a threshold
-fails no guard.
+not a package-wide one. And `scripts/mutation-break-thresholds.test.mjs`, which pins which package
+holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's bar, so a step
+that reached the same command through a variable would be invisible to it.
+
+### Reading `packages/db`'s score by hand
+
+The ten shard reports are artifacts of the run, so the number can be read without waiting for the
+job:
+
+```
+gh run download <run-id> -D /tmp/db-mut -p "mutation-report-db-shard-*"
+node scripts/mutation-aggregate.mjs /tmp/db-mut --shards 10 --break 90
+```
+
+Two things that script does deliberately, each because the obvious version was wrong. It keys a
+mutant by its mutator, its replacement and BOTH ends of its span: `a && b` yields two
+ConditionalExpression mutants that replace with `true` from the same start column, and keyed on
+the start alone they merged — 21 of them on run 35504169506, 7 of those pairing a detected mutant
+with an undetected one, so the score moved with the order the artifacts were listed in. And it
+counts shard DIRECTORIES holding a recognisable report, not `*.json` files, because one stray json
+beside nine real reports used to make the count ten and hide a shard whose job had failed.
 
 Receipt for the `ui` floor (2026-09-20): before the tests that branch added, the package read
 78.62% — 1658 of 2109 valid mutants — and the run exited 1 against the new threshold, which is the

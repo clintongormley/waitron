@@ -73,9 +73,11 @@ jobs:
           path: packages/ui/reports/mutation/
           retention-days: 30
 
-  # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates ~750 database-backed
-  # mutants (every test here boots a Postgres and applies a schema), which on ONE 2-vCPU runner is
-  # ~10h — past GitHub's 6h job limit, so the job never once completed. Measured on run 32374126111:
+  # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of
+  # database-backed mutants (every test here boots a Postgres and applies a schema), which on ONE
+  # 2-vCPU runner is ~10h — past GitHub's 6h job limit, so the job never once completed. The count
+  # itself moves as files enter and leave the mutate set, so it is a dated receipt below rather
+  # than a figure to carry. Measured on run 32374126111:
   # `ignoreStatic` dropped 1545 → 749 mutants and the dry run finished in 6m48s (both stryker keys
   # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
   #
@@ -90,7 +92,7 @@ jobs:
   # every test — reruns a huge covering set, while a
   # leaf-file mutant is cheap. Byte size is a rough proxy that at N=6 unluckily put orders+tenants in
   # one shard (the 4h50 one). At N=10 the bin-packing isolates each expensive file in its OWN shard
-  # (verified: sales/orders/tenants/daily-closes/incidents/global-setup each land alone), so the
+  # (verified: sales/orders/tenants/daily-closes/incidents each land alone), so the
   # slowest shard is bounded by the single priciest FILE. More shards past that don't lower the floor
   # (a file isn't split), which is why 10 is the knee rather than an arbitrary bump.
   #
@@ -101,8 +103,7 @@ jobs:
   # No thresholds.break is configured HERE, and that is on purpose: a break in
   # packages/db/stryker.config.json would gate each SHARD's own slice, so a shard holding the
   # well-tested files passes while the package as a whole sits far below the bar. The package is
-  # gated once, on the merged score, by the `mutation-db-aggregate` job below (2026-09-20 — before
-  # that date this comment said a merged score was a deliberate non-goal). Docker is present on
+  # gated once, on the merged score, by the `mutation-db-aggregate` job below. Docker is present on
   # ubuntu-latest, so the real-Postgres target runs here too.
   mutation-db:
     strategy:

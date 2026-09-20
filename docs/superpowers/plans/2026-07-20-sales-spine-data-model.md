@@ -965,7 +965,10 @@ export default defineConfig({
 }
 ```
 
-Two deliberate differences from `packages/verifactu`. `timeoutMS` is raised from Stryker's 5000ms default because every test in this package boots PGlite before it asserts anything, and Stryker would otherwise score a slow boot as a killed mutant — a false positive that inflates the score while proving nothing. And there is **no `thresholds.break`**: this package follows `packages/ui`'s weekly, publish-a-score model, for the reason Step 11 sets out. _(Superseded 2026-09-20: `packages/ui` now carries `"thresholds": { "high": 95, "low": 90, "break": 90 }` and its weekly job fails below 90, and `packages/db` is gated too — not here, because CI passes each of its ten shards its own `--mutate` list, so a threshold in this config would gate a slice rather than the package. Its bar is 90 on the merged score, in the `mutation-db-aggregate` job.)_
+Two deliberate differences from `packages/verifactu`. `timeoutMS` is raised from Stryker's 5000ms default because every test in this package boots PGlite before it asserts anything, and Stryker would otherwise score a slow boot as a killed mutant — a false positive that inflates the score while proving nothing. And there is **no `thresholds.break`**: this package follows `packages/ui`'s weekly, publish-a-score model, for the reason Step 11 sets out. _(Superseded 2026-09-20: `packages/ui` now carries `"thresholds": { "high": 95, "low": 90, "break": 90 }` and its weekly job fails below 90, and `packages/db` is gated too — not here, because CI passes each of its ten shards its own `--mutate` list, so a threshold in this config would gate a slice rather than the package. Its bar is 90 on the merged score, in the `mutation-db-aggregate` job. The `mutate` list and the
+reporters in the block above moved in the same change: `src/english-only.ts` and
+`src/testing/global-setup.ts` are excluded — nothing in this package can kill either file's
+mutants — and a `json` reporter was added, which is the file `mutation-db-aggregate` reads.)_
 
 - [ ] **Step 3: Create the Drizzle config**
 

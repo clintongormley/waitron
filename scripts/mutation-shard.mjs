@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 /**
  * Splits the mutation targets across N CI shards so each fits GitHub's 6h job limit.
  *
- * Stryker over @waitron/db is ~10h on one 2-vCPU runner because it mutates ~750 database-backed
- * mutants serially-ish; sharded across a matrix, each job mutates only its slice and runs in
- * parallel. `assignShards` decides the slices, `--mutate`d one list per shard.
+ * Stryker over @waitron/db is ~10h on one 2-vCPU runner because it mutates thousands of
+ * database-backed mutants serially-ish; sharded across a matrix, each job mutates only its slice
+ * and runs in parallel. `assignShards` decides the slices, `--mutate`d one list per shard. The
+ * count moves as files enter and leave the mutate set — `.github/workflows/mutation.yml` carries
+ * the dated measurement.
  *
  * The unit of a slice is usually a whole file, but a single file can dominate a shard when its
  * mutants are covered by ~the whole suite (measured: src/schema/sales.ts alone ran 186min while
