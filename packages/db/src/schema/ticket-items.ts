@@ -1,6 +1,5 @@
 import { index, pgEnum, unique } from "drizzle-orm/pg-core";
 import { id, label, table, tsString } from "./columns.js";
-import { doneness } from "./orders.js";
 
 /**
  * The per-line kitchen state (KDS-1, §2d). A NEW enum, NOT `order_prep`'s `prep_state`: ticket items
@@ -62,7 +61,6 @@ export const ticketItems = table(
     firedAt: tsString("fired_at"),
     awayAt: tsString("away_at"),
     note: label("note"),
-    doneness: doneness("doneness"),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide (23505)

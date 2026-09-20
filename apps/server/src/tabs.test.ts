@@ -203,7 +203,6 @@ async function seedFiredDelivery(
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
         note: workingOrderLines.note,
-        doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
@@ -413,64 +412,44 @@ describe("addTabRound (append-only, no re-price)", () => {
   });
 });
 
-describe("addTabRound per-line note + doneness (NON-FISCAL, spec §2/§3)", () => {
-  it("persists a TRIMMED note + doneness on the working_order_lines row AND snapshots them onto ticket_items at fire", async () => {
+describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
+  it("persists a TRIMMED note on the working_order_lines row AND snapshots it onto ticket_items at fire", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note: "  sin sal  " }]),
+    );
+
+    // Draft line carries the validated (trimmed) note.
+    const [line] = await db
+      .select({ id: workingOrderLines.id, note: workingOrderLines.note })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect(line!.note).toBe("sin sal");
+
+    // Fire SNAPSHOTTED it onto the ticket item (like station_id/course_id).
+    const [item] = await db
+      .select({ note: ticketItems.note })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, line!.id));
+    expect(item!.note).toBe("sin sal");
+  });
+
+  it("stores NULL for an absent note and for a whitespace-only note", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { productId: cafeId, quantity: "1", note: "  sin sal  ", doneness: "medium" },
+        { productId: cafeId, quantity: "1", note: "   " },
+        { productId: cafeId, quantity: "1" },
       ]),
     );
-
-    // Draft line carries the validated (trimmed) note + doneness.
-    const [line] = await db
-      .select({
-        id: workingOrderLines.id,
-        note: workingOrderLines.note,
-        doneness: workingOrderLines.doneness,
-      })
+    const lines = await db
+      .select({ note: workingOrderLines.note })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, tabId));
-    expect(line!.note).toBe("sin sal");
-    expect(line!.doneness).toBe("medium");
-
-    // Fire SNAPSHOTTED them onto the ticket item (like station_id/course_id).
-    const [item] = await db
-      .select({ note: ticketItems.note, doneness: ticketItems.doneness })
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderLineId, line!.id));
-    expect(item!.note).toBe("sin sal");
-    expect(item!.doneness).toBe("medium");
-  });
-
-  it("stores NULL for an absent note/doneness and for a whitespace-only note", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note: "   " }]),
-    );
-    const [line] = await db
-      .select({ note: workingOrderLines.note, doneness: workingOrderLines.doneness })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, tabId));
-    expect(line!.note).toBeNull();
-    expect(line!.doneness).toBeNull();
-  });
-
-  it("rejects a doneness not in the enum (working_order.invalid_doneness)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-    await expect(
-      asApp(cfg, (tx) =>
-        addTabRound(tx, cfg, tabId, [
-          { productId: cafeId, quantity: "1", doneness: "scorched" as never },
-        ]),
-      ),
-    ).rejects.toMatchObject({
-      code: "working_order.invalid_doneness",
-      params: { value: "scorched" },
-    });
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines.map((line) => line.note)).toEqual([null, null]);
   });
 
   it("rejects a note longer than 200 chars (working_order.note_too_long)", async () => {

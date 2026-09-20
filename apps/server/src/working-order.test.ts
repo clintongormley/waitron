@@ -12,7 +12,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { AllergenMap, Database, Doneness, Transaction } from "@waitron/db";
+import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -452,7 +452,6 @@ describe("a sold line's label carries its variant", () => {
           courseId: workingOrderLines.courseId,
           parentLineId: workingOrderLines.parentLineId,
           note: workingOrderLines.note,
-          doneness: workingOrderLines.doneness,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId));
@@ -1256,7 +1255,6 @@ describe("getHeldOrder", () => {
           quantity: "2",
           extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 2 }] }],
           note: "Sin espuma",
-          doneness: "medium",
         },
       ],
     });
@@ -1270,7 +1268,6 @@ describe("getHeldOrder", () => {
         productId: cafeId,
         quantity: "2.000",
         note: "Sin espuma",
-        doneness: "medium",
         extras: [
           {
             productId: extra.productId,
@@ -1425,7 +1422,6 @@ describe("updateHeldOrder", () => {
           quantity: "1",
           extras: [{ listId: extra.listId, picks }],
           note: "Sin espuma",
-          doneness: "medium",
         },
       ],
     });
@@ -1449,7 +1445,6 @@ describe("updateHeldOrder", () => {
           quantity: "3",
           extras: [{ listId: extra.listId, picks }],
           note: "Sin espuma",
-          doneness: "medium",
         },
       ],
     });
@@ -1833,15 +1828,14 @@ async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
 async function placeOrderWith(
   tx: Transaction,
   cfg: TillConfig,
-  // `note`/`doneness` are the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder`
-  // validates + persists them on the parent dish line, and `fireLines` snapshots them onto the ticket.
+  // `note` is the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder` validates
+  // and persists it on the parent dish line, and `fireLines` snapshots it onto the ticket.
   lines: {
     productId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
     note?: string;
-    doneness?: Doneness;
   }[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
@@ -1853,7 +1847,6 @@ async function placeOrderWith(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
-      doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -2190,47 +2183,47 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("snapshots the line note + doneness at fire, and a later draft edit never moves the fired ticket (NON-FISCAL, spec §2/§3)", async () => {
-    // The note/doneness counterpart of "Re-route the category AFTER firing" above: a fired ticket_items
+  it("snapshots the line note at fire, and a later draft edit never moves the fired ticket (NON-FISCAL, spec §2/§3)", async () => {
+    // The note counterpart of "Re-route the category AFTER firing" above: a fired ticket_items
     // row is a SNAPSHOT (like station_id/course_id), so editing the working_order_line afterwards must
     // NOT rewrite food already sent to the pass. Task 2's tabs.test.ts already pins that fire CAPTURES
-    // the values; this pins that they stay FROZEN against a later edit — the immutability half.
+    // the value; this pins that it stays FROZEN against a later edit — the immutability half.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const p = await makeProduct(tx, cfg, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [
-        { productId: p, quantity: "1", note: "sin cebolla", doneness: "medium_rare" },
+        { productId: p, quantity: "1", note: "sin cebolla" },
       ]);
 
-      // Fire snapshotted the parent line's note/doneness onto the ticket item.
+      // Fire snapshotted the parent line's note onto the ticket item.
       const [before] = await tx
-        .select({ note: ticketItems.note, doneness: ticketItems.doneness })
+        .select({ note: ticketItems.note })
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, orderId));
-      expect(before).toMatchObject({ note: "sin cebolla", doneness: "medium_rare" });
+      expect(before).toEqual({ note: "sin cebolla" });
 
       // Edit the DRAFT working_order_line AFTER firing.
       await tx
         .update(workingOrderLines)
-        .set({ note: "con cebolla", doneness: "well_done" })
+        .set({ note: "con cebolla" })
         .where(eq(workingOrderLines.workingOrderId, orderId));
 
       // Self-contained guard (mirrors verify.test.ts's entorno test): confirm the DRAFT actually
       // changed, so the ticket_items assertion below cannot pass merely because the update no-op'd.
       const [draft] = await tx
-        .select({ note: workingOrderLines.note, doneness: workingOrderLines.doneness })
+        .select({ note: workingOrderLines.note })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId));
-      expect(draft).toMatchObject({ note: "con cebolla", doneness: "well_done" });
+      expect(draft).toEqual({ note: "con cebolla" });
 
       // The already-fired ticket is UNCHANGED — the snapshot did not move.
       const [after] = await tx
-        .select({ note: ticketItems.note, doneness: ticketItems.doneness })
+        .select({ note: ticketItems.note })
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, orderId));
-      expect(after).toMatchObject({ note: "sin cebolla", doneness: "medium_rare" });
+      expect(after).toEqual({ note: "sin cebolla" });
     });
   });
 
@@ -2287,7 +2280,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
             courseId: workingOrderLines.courseId,
             parentLineId: workingOrderLines.parentLineId,
             note: workingOrderLines.note,
-            doneness: workingOrderLines.doneness,
           })
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, orderId));
@@ -2660,27 +2652,25 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   });
 
   // Order-line customisation (spec §2/§3, Task 5): the station/expo reads surface the SNAPSHOTTED
-  // per-line `note`/`doneness` so the cook sees them. Read off `ticket_items` (the snapshot frozen at
-  // fire), never the live line — a later draft edit must not change what the kitchen already sees.
-  it("surfaces a fired line's snapshotted note + doneness on listStationQueue and listExpoQueue", async () => {
+  // per-line `note` so the cook sees it. Read off `ticket_items` (the snapshot frozen at fire), never
+  // the live line — a later draft edit must not change what the kitchen already sees.
+  it("surfaces a fired line's snapshotted note on listStationQueue and listExpoQueue", async () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
-        { productId: cafeId, quantity: "1", note: "sin cebolla", doneness: "medium_rare" },
+        { productId: cafeId, quantity: "1", note: "sin cebolla" },
       ]);
 
       const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(1);
       expect(group!.items[0]!.note).toBe("sin cebolla");
-      expect(group!.items[0]!.doneness).toBe("medium_rare");
 
       const expo = await listExpoQueue(tx, cfg);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.note).toBe("sin cebolla");
-      expect(expoItem.doneness).toBe("medium_rare");
 
       // A later DRAFT edit of the parent line does NOT move the fired snapshot the kitchen reads.
       const [parent] = await tx
@@ -2694,17 +2684,16 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         );
       await tx
         .update(workingOrderLines)
-        .set({ note: "con cebolla", doneness: "well_done" })
+        .set({ note: "con cebolla" })
         .where(eq(workingOrderLines.id, parent!.id));
       const [afterEdit] = await listStationQueue(tx, cocina.id);
       expect(afterEdit!.items[0]!.note).toBe("sin cebolla");
-      expect(afterEdit!.items[0]!.doneness).toBe("medium_rare");
     });
   });
 
-  // A plain line (no note, no doneness) surfaces both as null — the belt-and-braces default so a cook
-  // never sees a phantom instruction, and a plain fixture reads exactly as before this task.
-  it("surfaces null note + doneness for a plain fired line", async () => {
+  // A plain line (no note) surfaces null — the belt-and-braces default so a cook never sees a phantom
+  // instruction, and a plain fixture reads exactly as before this task.
+  it("surfaces a null note for a plain fired line", async () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
@@ -2713,10 +2702,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 
       const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.items[0]!.note).toBeNull();
-      expect(group!.items[0]!.doneness).toBeNull();
       const expo = await listExpoQueue(tx, cfg);
       expect(expo[0]!.courses[0]!.items[0]!.note).toBeNull();
-      expect(expo[0]!.courses[0]!.items[0]!.doneness).toBeNull();
     });
   });
 

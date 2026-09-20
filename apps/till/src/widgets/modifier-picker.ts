@@ -4,14 +4,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
-import { selectStyles } from "../select-styles.js";
 import { lineGross } from "../state/order-line.js";
 import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { OrderLine, SelectedLineOption } from "../state/working-order.js";
 import type {
-  Doneness,
   TillOptionGroup,
   TillOptionItem,
   TillProduct,
@@ -26,7 +24,6 @@ export interface ModifierConfirmDetail {
   modifierSelections?: ModifierSelection[];
   modifierSnapshots?: ModifierSnapshot[];
   note?: string;
-  doneness?: Doneness;
 }
 
 @customElement("till-modifier-picker")
@@ -38,7 +35,6 @@ export class TillModifierPicker extends LitElement {
 
   static override styles = [
     baseStyles,
-    selectStyles,
     lineExtrasEditorStyles,
     css`
       textarea {
@@ -173,8 +169,6 @@ export class TillModifierPicker extends LitElement {
   @state() private quantities: Record<string, number> = {};
 
   @state() private note = "";
-
-  @state() private doneness: Doneness | "" = "";
 
   @state() private variantId = "";
 
@@ -346,9 +340,6 @@ export class TillModifierPicker extends LitElement {
     if (note !== "") {
       detail.note = note;
     }
-    if (this.doneness !== "") {
-      detail.doneness = this.doneness;
-    }
     this.dispatchEvent(
       new CustomEvent<ModifierConfirmDetail>("wt-modifier-confirm", {
         detail,
@@ -400,14 +391,9 @@ export class TillModifierPicker extends LitElement {
         this.initialSelections !== undefined
           ? nothing
           : renderLineExtrasEditor({
-              product: this.product,
               note: this.note,
-              doneness: this.doneness,
               onNoteChange: (note) => {
                 this.note = note;
-              },
-              onDonenessChange: (doneness) => {
-                this.doneness = doneness;
               },
             })
       }

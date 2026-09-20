@@ -148,9 +148,9 @@ const modifierGroups: StationQueueGroup[] = [
   },
 ];
 
-// A dish carrying the per-line customisation (order-line customisation, Task 5): a PROMINENT doneness
-// label (bold text — the non-colour tell) and a muted free-text note, both indented sub-text under the
-// same tappable line, so axe sweeps their contrast in both themes and confirms no new violation.
+// A dish carrying the per-line customisation (order-line customisation, Task 5): a muted free-text
+// note as indented sub-text under the tappable line, so axe sweeps its contrast in both themes and
+// confirms no new violation.
 const customisationGroups: StationQueueGroup[] = [
   {
     orderId: "wo-cust",
@@ -169,7 +169,6 @@ const customisationGroups: StationQueueGroup[] = [
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
         note: "sin sal",
-        doneness: "medium_rare",
       },
     ],
   },
@@ -316,7 +315,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("a dish with a per-line note + prominent doneness (indented sub-text) has no violations", async () => {
+  it("a dish with a per-line note (indented sub-text) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: customisationGroups, stationId: "st-1", view: "rail" },

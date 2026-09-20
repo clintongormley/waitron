@@ -371,24 +371,11 @@ declare module "@waitron/shared" {
      * `length` is the TRIMMED note's length and `limit` the cap (200), echoed so the message can say by
      * how much it overran; neither is a secret. `working_order.*` names the DOMAIN CONCEPT (a working
      * order's line), never the throwing package (`tenant.not_found`'s note gives the rule), beside the
-     * six `working_order.*` codes below and `working_order.invalid_doneness`; the sole thrower is
-     * `priceOrderLines` (`working-order.ts`). A CLIENT request-shape fault → mapped to 400 (the STATUS
-     * map's default, as the `options.*` codes are). Never renamed once shipped.
+     * six `working_order.*` codes below; the sole thrower is `priceOrderLines` (`working-order.ts`).
+     * A CLIENT request-shape fault → mapped to 400 (the STATUS map's default, as the `options.*`
+     * codes are). Never renamed once shipped.
      */
     "working_order.note_too_long": { length: number; limit: number };
-    /**
-     * A ring-time line carried a `doneness` value outside the `doneness` enum (`rare` … `well_done`,
-     * spec §3) — a crafted request, since the till only offers the five valid choices. Refused before
-     * the line is priced or persisted (`DONENESS.includes(value)` in `priceOrderLines`), so a bad value
-     * never reaches the `working_order_lines` insert (where it would `22P02` → an opaque 500). NON-FISCAL,
-     * like `working_order.note_too_long` beside it.
-     *
-     * `value` is the offending string (stringified — the wire type is a lie), echoed so the message can
-     * name what was rejected; not a secret. `working_order.*` names the DOMAIN CONCEPT, never the throwing
-     * package (`tenant.not_found`'s note); the sole thrower is `priceOrderLines`. A CLIENT request-shape
-     * fault → mapped to 400 (the STATUS map's default). Never renamed once shipped.
-     */
-    "working_order.invalid_doneness": { value: string };
     /**
      * An operation needed an open shift session and none was supplied — the till's session cookie was
      * absent or named no open session. A fact about the REQUEST, so the operator-scoped routes

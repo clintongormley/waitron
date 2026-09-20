@@ -80,7 +80,7 @@ describe("formatKitchenTicket", () => {
       expect(text).toContain("0.375 kg x Jamón");
     });
 
-    it("prints the doneness prominently and the note as indented sub-lines beneath the dish", () => {
+    it("prints the note as an indented sub-line beneath the dish", () => {
       const text = decodeTicket(
         formatKitchenTicket(
           {
@@ -93,7 +93,6 @@ describe("formatKitchenTicket", () => {
               {
                 qty: 1,
                 name: "Steak",
-                doneness: "medium_rare",
                 note: "sin sal",
                 modifiers: ["Grande"],
               },
@@ -105,13 +104,10 @@ describe("formatKitchenTicket", () => {
       const lines = text.split("\n");
       const dish = lines.findIndex((l) => l.includes("1 x Steak"));
       expect(dish).toBeGreaterThanOrEqual(0);
-      // Doneness is PROMINENT (upper-cased, underscores → spaces, marked) and sits directly beneath the
-      // dish — the cook must read it first — above the `+ modifier` and the note sub-lines.
-      expect(lines[dish + 1]).toContain("MEDIUM RARE");
-      expect(lines[dish + 1]).not.toContain("medium_rare");
-      expect(text).toContain("  + Grande");
-      // The free-text note prints as its own indented sub-line, distinct from a `+ modifier`.
-      expect(text).toMatch(/\n {2}\* sin sal/);
+      // The modifiers sit directly beneath the dish, and the free-text note prints as its own
+      // indented sub-line after them, distinct from a `+ modifier`.
+      expect(lines[dish + 1]).toBe("  + Grande");
+      expect(lines[dish + 2]).toBe("  * sin sal");
     });
 
     it("sanitizes a free-text note with a newline so it prints on ONE ticket line", () => {
@@ -137,7 +133,7 @@ describe("formatKitchenTicket", () => {
       expect(lines.filter((l) => l.includes("* "))).toHaveLength(1);
     });
 
-    it("prints a plain dish (no doneness, no note) byte-for-byte as before", () => {
+    it("prints a plain dish (no note) byte-for-byte as before", () => {
       const withExtras = formatKitchenTicket(
         {
           scope: "station",
@@ -145,7 +141,7 @@ describe("formatKitchenTicket", () => {
           tableLabel: "Mesa 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
-          items: [{ qty: 1, name: "Chips", doneness: undefined, note: undefined }],
+          items: [{ qty: 1, name: "Chips", note: undefined }],
         },
         KITCHEN_80,
       );
@@ -308,7 +304,6 @@ describe("kitchen paper layout", () => {
       {
         qty: 2,
         name: "Chuletón de buey madurado a la brasa",
-        doneness: "medium_rare",
         modifiers: ["Grande", "Salsa de setas silvestres con trufa negra"],
         note: "sin sal y con la guarnición aparte por favor",
       },
@@ -331,7 +326,6 @@ describe("kitchen paper layout", () => {
     expect(lines.slice(first)).toEqual([
       "2 x Chuletón de buey madurado",
       "    a la brasa",
-      "  ** MEDIUM RARE **",
       "  + Grande",
       "  + Salsa de setas silvestres",
       "    con trufa negra",

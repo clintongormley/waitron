@@ -31,14 +31,7 @@ export { readTenant } from "./read-tenant.js";
 export type { Tenant } from "./read-tenant.js";
 export { nodes } from "./schema/nodes.js";
 export { invoiceSeries } from "./schema/series.js";
-export {
-  DONENESS,
-  doneness,
-  workingOrderLines,
-  workingOrders,
-  workingOrderStatus,
-} from "./schema/orders.js";
-export type { Doneness } from "./schema/orders.js";
+export { workingOrderLines, workingOrders, workingOrderStatus } from "./schema/orders.js";
 export { orderAmendmentKind, orderAmendments } from "./schema/order-amendments.js";
 export { appendOrderAmendment } from "./append-order-amendment.js";
 export type { AppendAmendmentInput } from "./append-order-amendment.js";

@@ -3,7 +3,7 @@ import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { asAppUser, printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
-import type { Database, Doneness, Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -181,9 +181,8 @@ async function fireNewOrder(
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
-    // Order-line customisation (spec §2/§3): a parent line MAY carry a note/doneness, snapshotted at fire.
+    // Order-line customisation (spec §2/§3): a parent line MAY carry a note, snapshotted at fire.
     note?: string;
-    doneness?: Doneness;
   }[],
 ): Promise<string> {
   const id = randomUUID();
@@ -195,7 +194,6 @@ async function fireNewOrder(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
-      doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -691,7 +689,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Leche avena"));
   });
 
-  it("prints the line's doneness prominently and its note as sub-lines on the kitchen ticket (order-line customisation)", async () => {
+  it("prints the line's note as a sub-line on the kitchen ticket (order-line customisation)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -701,20 +699,15 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
         stationId: cocina.id,
       });
 
-      await fireNewOrder(tx, cfg, [
-        { productId: chuleton, quantity: "1", note: "sin sal", doneness: "medium_rare" },
-      ]);
+      await fireNewOrder(tx, cfg, [{ productId: chuleton, quantity: "1", note: "sin sal" }]);
       return { printerId, jobs: await printJobsFor(tx) };
     });
 
     const ticket = decodeTicket(jobs.filter((j) => j.printerId === printerId)[0]!.payload);
     expect(ticket).toContain("Chuleton");
-    // Doneness prominent (upper-cased, underscores spaced) BENEATH the dish, above the note.
-    expect(ticket).toContain("MEDIUM RARE");
-    expect(ticket).not.toContain("medium_rare");
+    // The note prints as its own marked sub-line BENEATH the dish.
     expect(ticket).toContain("* sin sal");
-    expect(ticket.indexOf("Chuleton")).toBeLessThan(ticket.indexOf("MEDIUM RARE"));
-    expect(ticket.indexOf("MEDIUM RARE")).toBeLessThan(ticket.indexOf("* sin sal"));
+    expect(ticket.indexOf("Chuleton")).toBeLessThan(ticket.indexOf("* sin sal"));
   });
 
   it("badges an extra's PER-DISH count when it exceeds one, leaving a single pick's line unchanged", async () => {

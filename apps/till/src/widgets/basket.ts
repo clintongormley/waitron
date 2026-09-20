@@ -7,8 +7,6 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
-import { donenessLabel } from "../i18n/doneness-label.js";
-import { selectStyles } from "../select-styles.js";
 import { descriptionFor, snapshotDescriptionFor } from "./dish-format.js";
 import { modifierSnapshotLabels } from "./modifier-snapshot.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
@@ -50,7 +48,6 @@ export class TillBasket extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
-    selectStyles,
     lineExtrasEditorStyles,
     css`
       :host {
@@ -73,15 +70,15 @@ export class TillBasket extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
 
-      /* The per-line note/doneness editor (order-line customisation) — an inline expander opened by the
-         line's Note button, indented under the dish like its option/allergen/diet sub-rows. */
+      /* The per-line note editor (order-line customisation) — an inline expander opened by the line's
+         Note button, indented under the dish like its option/allergen/diet sub-rows. */
       .line-extras-editor {
         padding: var(--wt-space-2) 0 var(--wt-space-3);
         padding-left: var(--wt-space-4);
       }
 
-      /* The at-a-glance read-out of a line's SET note/doneness (order-line customisation) — indented
-         under the dish like the allergen/diet rows, a label plus the value. */
+      /* The at-a-glance read-out of a line's SET note (order-line customisation) — indented under the
+         dish like the allergen/diet rows, a label plus the value. */
       .line-extras {
         display: flex;
         flex-wrap: wrap;
@@ -201,7 +198,7 @@ export class TillBasket extends LitElement {
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** The index of the line whose note/doneness editor (order-line customisation) is expanded, or `null`
+  /** The index of the line whose note editor (order-line customisation) is expanded, or `null`
    * when none is — only one line's editor is open at a time. Toggled by each line's Note button. It is a
    * POSITIONAL index into `store.lines`, so it must be kept in step with any structural change that
    * shifts positions: {@link #removeLine} adjusts it atomically with an in-basket removal, and a
@@ -240,7 +237,7 @@ export class TillBasket extends LitElement {
   }
 
   /**
-   * Handle a store `"changed"` notification. Besides re-rendering, it closes any open note/doneness
+   * Handle a store `"changed"` notification. Besides re-rendering, it closes any open note
    * editor when the basket was SWAPPED WHOLESALE — `clear` (fresh id) or `loadFrom` (a retrieved order's
    * id) — because the line the editor pointed at no longer exists and a positional index into the new
    * basket would open the editor on an unrelated line. An in-basket add / remove / edit keeps the id and
@@ -426,58 +423,42 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  /** Open the note/doneness editor for `index`, or close it if it is already the open one (the Note
+  /** Open the note editor for `index`, or close it if it is already the open one (the Note
    * button toggles). A store change never closes an open editor — only the button does. */
   #toggleEditor(index: number): void {
     this.editingIndex = this.editingIndex === index ? null : index;
   }
 
   /**
-   * The line's SET note/doneness as an at-a-glance indented sub-row (order-line customisation), or
-   * `nothing` when the line carries neither — so a plain line adds no chrome. Shows the kitchen note and,
-   * for a meat line with a chosen doneness, its localised label, mirroring the option/allergen/diet rows.
+   * The line's SET note as an at-a-glance indented sub-row (order-line customisation), or `nothing` when
+   * the line carries none — so a plain line adds no chrome. Mirrors the option/allergen/diet rows.
    */
   #extrasRow(line: OrderLine, index: number) {
-    if (line.note === undefined && line.doneness === undefined) return nothing;
+    if (line.note === undefined) return nothing;
     return html`
       <div class="line-extras" data-test=${`line-extras-${index}`}>
-        ${
-          line.note !== undefined
-            ? html`<span class="line-extras-note"
-                ><span class="line-extras-label">${t("line.note.label")}:</span> ${line.note}</span
-              >`
-            : nothing
-        }
-        ${
-          line.doneness !== undefined
-            ? html`<span class="line-extras-doneness"
-                ><span class="line-extras-label">${t("doneness.label")}:</span>
-                ${donenessLabel(line.doneness)}</span
-              >`
-            : nothing
-        }
+        <span class="line-extras-note"
+          ><span class="line-extras-label">${t("line.note.label")}:</span> ${line.note}</span
+        >
       </div>
     `;
   }
 
   /**
-   * The inline note/doneness EDITOR (order-line customisation) for the line at `index`, shown only while
-   * that line's Note button has it expanded — the SAME shared field group the modifier picker renders
-   * ({@link renderLineExtrasEditor}), so a meat line offers the doneness select and any line offers the
-   * note. Each change drives the store's {@link WorkingOrderStore.setLineExtras}, which trims/omits and
-   * notifies (re-rendering the sub-row above). This is the affordance that makes note/doneness reachable
-   * on a plain fast-added line that never opened the picker.
+   * The inline note EDITOR (order-line customisation) for the line at `index`, shown only while that
+   * line's Note button has it expanded — the SAME shared field group the modifier picker renders
+   * ({@link renderLineExtrasEditor}). Each change drives the store's
+   * {@link WorkingOrderStore.setLineExtras}, which trims/omits and notifies (re-rendering the sub-row
+   * above). This is the affordance that makes the note reachable on a plain fast-added line that never
+   * opened the picker.
    */
   #extrasEditor(line: OrderLine, index: number) {
     if (this.editingIndex !== index) return nothing;
     return html`
       <div class="line-extras-editor">
         ${renderLineExtrasEditor({
-          product: line.product,
           note: line.note ?? "",
-          doneness: line.doneness ?? "",
           onNoteChange: (note) => this.store.setLineExtras(index, { note }),
-          onDonenessChange: (doneness) => this.store.setLineExtras(index, { doneness }),
         })}
       </div>
     `;

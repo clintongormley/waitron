@@ -10,6 +10,7 @@ import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedMedia } from "./seed-media.js";
 import { seedOptions } from "./seed-options.js";
+import { seedOptionLists } from "./seed-option-lists.js";
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
 import type { SeedLocale } from "./menu.js";
@@ -43,7 +44,7 @@ export async function seedDemoRestaurant(
 ): Promise<void> {
   const { locationId } = venue;
 
-  // One app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
+  // One app_user tx for every in-transaction sub-seed. `listAvailableProducts` is read at
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
   const products = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
@@ -56,6 +57,7 @@ export async function seedDemoRestaurant(
       menuItemsByProduct,
       locale,
     });
+    await seedOptionLists(tx, { productsByImage, locale });
     await seedFloor(tx, { locationId, locale, menuIds });
     await seedStaff(tx);
     await seedMedia(tx, { productsByImage });

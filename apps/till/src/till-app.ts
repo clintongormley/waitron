@@ -1711,7 +1711,6 @@ export class TillApp extends LitElement {
             ? {}
             : { modifierSnapshots: line.modifierSnapshots }),
           ...(line.note === undefined ? {} : { note: line.note }),
-          ...(line.doneness === undefined ? {} : { doneness: line.doneness }),
         });
       }
       if (droppedAProduct) this.errorKey = "held.product_gone";

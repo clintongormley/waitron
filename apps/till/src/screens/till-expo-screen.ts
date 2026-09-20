@@ -7,7 +7,6 @@ import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/sh
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
-import { donenessLabel } from "../i18n/doneness-label.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "../widgets/diet-badges.js";
 import { snapshotDescriptionFor, trimQuantity } from "../widgets/dish-format.js";
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
@@ -288,18 +287,12 @@ export class TillExpoScreen extends LitElement {
       }
 
       /* The per-line kitchen customisation (order-line customisation, Task 5), indented beneath the dish
-         — the same shape the per-station display uses. Doneness is PROMINENT via text WEIGHT (the
-         non-colour tell, house a11y rule); the free-text note is muted sub-text like the modifiers. */
+         — the same shape the per-station display uses: the free-text note as muted sub-text. */
       .item-customisation {
         display: flex;
         flex-direction: column;
         padding-left: var(--wt-space-3);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .item-doneness {
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text);
       }
 
       .item-note {
@@ -637,28 +630,15 @@ export class TillExpoScreen extends LitElement {
     </span>`;
   }
 
-  /** The item's per-line kitchen customisation (order-line customisation, Task 5) as indented sub-text —
-   *  the DONENESS rendered PROMINENTLY (localised `doneness.*` label, bold — the expediter must read how a
-   *  steak is wanted; the weight is the non-colour tell) and the free-text NOTE as muted sub-text. Reads
-   *  the SNAPSHOTTED fields the server froze at fire, the same rendering the per-station display uses.
-   *  `nothing` when the line carried neither, so a plain dish renders identically to before this task. */
+  /** The item's per-line kitchen customisation (order-line customisation, Task 5) as indented muted
+   *  sub-text — the free-text NOTE the server SNAPSHOTTED at fire, the same rendering the per-station
+   *  display uses. `nothing` when the line carried none, so a plain dish renders identically to before
+   *  this task. */
   #customisation(item: ExpoItem): TemplateResult | typeof nothing {
-    const doneness = item.doneness ?? null;
     const note = item.note ?? null;
-    if (doneness === null && (note === null || note === "")) return nothing;
+    if (note === null || note === "") return nothing;
     return html`<span class="item-customisation" data-item-customisation=${item.id}>
-      ${
-        doneness !== null
-          ? html`<span class="item-doneness" data-doneness=${doneness}
-              >${t("doneness.label")}: ${donenessLabel(doneness)}</span
-            >`
-          : nothing
-      }
-      ${
-        note !== null && note !== ""
-          ? html`<span class="item-note" data-note>${note}</span>`
-          : nothing
-      }
+      <span class="item-note" data-note>${note}</span>
     </span>`;
   }
 

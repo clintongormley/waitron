@@ -391,8 +391,8 @@ describe("till-expo-screen", () => {
     });
   });
 
-  describe("per-line customisation (Task 5): snapshotted doneness + note as sub-text under the item", () => {
-    // The wire shape `listExpoQueue` surfaces — a fired meat dish carrying the snapshotted note + doneness.
+  describe("per-line customisation (Task 5): the snapshotted note as sub-text under the item", () => {
+    // The wire shape `listExpoQueue` surfaces — a fired dish carrying the snapshotted note.
     const orderWithCustomisation: ExpoOrder = {
       orderId: "wo-c",
       orderNumber: 12,
@@ -418,44 +418,37 @@ describe("till-expo-screen", () => {
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh",
               note: "sin sal",
-              doneness: "medium_rare",
             },
           ],
         },
       ],
     };
 
-    it("renders the doneness (localised label) prominently and the note as sub-text beneath the item", async () => {
+    it("renders the note as sub-text beneath the item", async () => {
       const el = await mount({ api: stubApi([orderWithCustomisation]) });
       const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-c"]')!;
       expect(item.textContent).toContain("1× Chuletón");
-      const doneness = item.querySelector('[data-doneness="medium_rare"]')!;
-      expect(doneness).not.toBeNull();
-      expect(doneness.textContent).toContain(t("doneness.medium_rare"));
       expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
-      // Doneness precedes the note in DOM order (prominent first).
-      const html = item.innerHTML;
-      expect(html.indexOf("data-doneness")).toBeLessThan(html.indexOf("data-note"));
     });
 
-    it("a note-only item (no doneness) renders the note and no doneness label", async () => {
-      const noteOnly: ExpoOrder = {
+    it("an EMPTY note renders no customisation row (an empty string is not a note)", async () => {
+      const emptyNote: ExpoOrder = {
         ...orderWithCustomisation,
         courses: [
           {
             ...orderWithCustomisation.courses[0]!,
-            items: [{ ...orderWithCustomisation.courses[0]!.items[0]!, doneness: null }],
+            items: [{ ...orderWithCustomisation.courses[0]!.items[0]!, note: "" }],
           },
         ],
       };
-      const el = await mount({ api: stubApi([noteOnly]) });
+      const el = await mount({ api: stubApi([emptyNote]) });
       const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-c"]')!;
-      expect(item.querySelector("[data-note]")!.textContent).toContain("sin sal");
-      expect(item.querySelector("[data-doneness]")).toBeNull();
+      expect(item.querySelector("[data-note]")).toBeNull();
+      expect(item.querySelector(".item-customisation")).toBeNull();
     });
 
-    it("a doneness-only item (no note) renders the doneness and no note", async () => {
-      const donenessOnly: ExpoOrder = {
+    it("a null note renders no customisation row", async () => {
+      const noNote: ExpoOrder = {
         ...orderWithCustomisation,
         courses: [
           {
@@ -464,14 +457,13 @@ describe("till-expo-screen", () => {
           },
         ],
       };
-      const el = await mount({ api: stubApi([donenessOnly]) });
+      const el = await mount({ api: stubApi([noNote]) });
       const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-c"]')!;
-      expect(item.querySelector('[data-doneness="medium_rare"]')).not.toBeNull();
-      expect(item.querySelector("[data-note]")).toBeNull();
+      expect(item.querySelector(".item-customisation")).toBeNull();
     });
 
-    it("an item with no note/doneness renders no customisation row at all (regression-safe)", async () => {
-      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries note/doneness
+    it("an item with no note renders no customisation row at all (regression-safe)", async () => {
+      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries a note
       expect(el.shadowRoot!.querySelectorAll(".item-customisation")).toHaveLength(0);
     });
   });

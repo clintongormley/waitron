@@ -531,9 +531,9 @@ compatibility code. TWO CONSEQUENCES WORTH KNOWING BEFORE ANYONE OPENS A DEV TIL
 still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy modifier now
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
-for a child line by a NULL product, no longer recognise one. Task 12 wires the till. The next task
-after Task 9 is Task 10, which takes doneness out end to end and seeds a "Cooked" options list in
-its place.
+for a child line by a NULL product, no longer recognise one. Task 12 wires the till. Task 10 has
+since taken doneness out end to end and seeded a "Cooked" options list in its place; the next task
+is Task 11, the dashboard's Extras and Options tabs.
 
 Task 8 has landed too, as #465. This is what it changed. It took the preserve path's comparison out of
 `updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
@@ -2006,8 +2006,7 @@ ongoing overhaul listed at the top of Track A.
   bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3). Found by a text scan, checked by
   hand: `apps/dashboard/src/screens/my-schedule-screen.ts:393`, `:407`, `:459`,
   `apps/dashboard/src/screens/units-screen.ts:456`, and
-  `apps/till/src/screens/till-schedule-screen.ts:390`, `:404`, `:457` (plus the doneness picker in
-  `apps/till/src/widgets/line-extras-editor.ts`, due for removal below). By reading, every one opens
+  `apps/till/src/screens/till-schedule-screen.ts:390`, `:404`, `:457`. By reading, every one opens
   on its first option — an empty placeholder or the first absence type — which is what that shape
   shows anyway, so the fault stays hidden until one opens with another value. **Next action:** when
   one of them is next touched, mark its options `.selected` the way
@@ -2021,22 +2020,25 @@ ongoing overhaul listed at the top of Track A.
   from the list makes the dropdown show the first zone (checked while reviewing #365). **Next
   action:** find whether a `table_tab` zone can be the counter default or a device default; if it
   can, decide whether that is refused where it is set or handled by the till.
-- **Remove the built-in doneness picker; doneness becomes a modifier the venue adds itself** (owner
-  decision 2026-09-14). The built-in picker is unreachable today: the till shows it only when
-  `products.diet.contains` includes `meat` (`isMeatProduct` in
-  `apps/till/src/widgets/line-extras-editor.ts`), and since #345 nothing in the dashboard writes that
-  field — the old product form that could is no longer mounted, and recipe editing left the
-  dashboard. On the dev database on 2026-09-14 all 45 products had an empty `contains` list. Venues
-  already have the tool: an options modifier (#341) whose choices are rare … well done, attached to
-  the products that need it. **Next action:** remove doneness end to end — the `doneness` enum and
-  its column on `working_order_lines` and `ticket_items` (`packages/db/src/schema/orders.ts`,
-  `ticket-items.ts`; schema change, no data migration), `working_order.invalid_doneness` and its
-  validation in `apps/server/src/working-order.ts`, the doneness line on kitchen tickets
-  (`kitchen-ticket.ts`, `kitchen-print.ts`), the till's picker, label and store field, and the
-  note/doneness test in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (which proves those
-  fields stay out of the invoice hash; keep the note half). The line note stays. Check first that an
-  options modifier prints prominently enough on a kitchen ticket to replace the upper-cased doneness
-  line.
+- **The built-in doneness picker is gone; doneness is a modifier the venue adds itself** (owner
+  decision 2026-09-14). DONE as Task 10 of the modifiers track. The `doneness` enum and its two
+  columns, the `working_order.invalid_doneness` code and its validation, the prominent kitchen-ticket
+  line, and the till's meat-gated picker, label file and store field are all deleted; core migration
+  0042 drops both columns and the type. The line note stays. The demo seed grows a "Cooked" options
+  list on the steak (`apps/server/scripts/demo-seed/seed-option-lists.ts`).
+  **The prominence question this entry asked to check first, answered by measurement:** an options
+  answer already prints on a kitchen ticket, as an indented `+ <list kitchen name>: <label kitchen
+  name>` line (`optionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts`, fed in at
+  `apps/server/src/kitchen-print.ts`; the landed test is "prints a line's stored options answers,
+  each side taking its KITCHEN name" in `kitchen-print.test.ts`). What it does NOT carry is the
+  `** MEDIUM RARE **` framing the built-in line had: emphasis is now whatever upper-case shorthand
+  the venue types into the kitchen name, which is why the seeded list uses `POCO HECHO` / `AL PUNTO`
+  / `MUY HECHO`. **Open, and worth a cook's eye before a real service:** whether a `+` sub-line is
+  enough for something a cook must not miss, or whether an options answer deserves its own
+  prominent form on the ticket. Nobody has watched a real kitchen read one.
+  **Still owed:** the till does not OFFER the seeded list yet — `listAvailableProducts` resolves the
+  legacy attachments (`packages/catalogue/src/operations.ts:1477`) while only `listProducts` (`:1054`)
+  reads `product_modifiers`. Task 12 of the modifiers plan wires it.
 - **`wt-combobox`** (#351, 2026-09-13). It is a searchable dropdown in `packages/ui`: pick one option
   or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
   with nothing using it; #362 (2026-09-14) is the first adopter, for the
