@@ -5,7 +5,7 @@ import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
@@ -22,7 +22,7 @@ const PERIOD = { year: "2026", month: "07" };
 
 // TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
 // `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 /**
  * Real per-test isolation, deliberately NOT drain.test.ts's shared-and-accumulating convention:

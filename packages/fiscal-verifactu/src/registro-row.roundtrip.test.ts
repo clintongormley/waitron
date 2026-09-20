@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
 import type { AltaInput, Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -9,7 +9,7 @@ import { fromRegistroRow, toRegistroRow, type RegistroRow } from "./registro-row
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
 
 // PGlite exercises record flattening, storage, rehydration and XML assembly without concurrency.
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 

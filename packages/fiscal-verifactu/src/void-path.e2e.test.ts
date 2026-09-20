@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
@@ -38,7 +38,7 @@ let voidSessionId: string;
  */
 // TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
 // `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));

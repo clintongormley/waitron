@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   CREDENTIALS_MIGRATIONS,
   getCredential,
@@ -17,7 +17,7 @@ import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-
 // `purpose` alone and references no other table, and `withTransaction` only opens a transaction —
 // it sets no session variable (`packages/db/src/tenancy.test.ts` asserts that).
 
-const suite = usePgliteDb({
+const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 120_000,
 });

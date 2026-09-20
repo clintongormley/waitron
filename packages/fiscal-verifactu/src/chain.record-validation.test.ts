@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
 import { asAppUser, sales, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, saleId as brandSaleId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
@@ -21,7 +21,7 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));

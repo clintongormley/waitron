@@ -1,6 +1,6 @@
 import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -10,11 +10,11 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  * The four AEAT rectificativa columns on `registros_facturacion` (the baseline) and their two
  * CHECK constraints. docs/superpowers/plans/2026-08-02-rectificativas.md §2.2.
  *
- * PGlite (via usePgliteDb), matching this package's own `inmutabilidad.test.ts`: these are CHECK,
+ * PGlite (via useVenueDb), matching this package's own `inmutabilidad.test.ts`: these are CHECK,
  * jsonb round-trip and trigger-backstop assertions, none of which needs the non-superuser
  * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
  */
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
   resetPerTest: false,

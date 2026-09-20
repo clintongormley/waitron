@@ -3,7 +3,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { AppError } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { createPgliteDb, runMigrations } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -35,7 +35,7 @@ function recordingResolver(): { resolveClient: () => Promise<VerifactuClient>; a
   return state;
 }
 
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 describe("drain resolves a client only when it has work", () => {
   it("never asks the resolver when nothing is due", async () => {

@@ -5,7 +5,7 @@ import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
 import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
@@ -22,7 +22,7 @@ import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtu
 
 // TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
 // `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 // The `DrainDeps` a `VerifactuBackend` used to assemble internally, built here directly now that the
 // submission pass lives on the standalone `drain` function. `pg.db` is this file's one connection;

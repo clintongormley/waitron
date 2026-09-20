@@ -247,6 +247,15 @@ Run `pnpm --filter @waitron/fiscal test contribution` — PASS. (`@waitron/fisca
 
 - [ ] **Step 6: Write the failing `FISCAL_SLOT.drain` test** in `packages/fiscal-verifactu/src/slot.test.ts`. Read `packages/fiscal-verifactu/src/drain.test.ts` for the real `db`/vault fixtures (`usePgliteDb` or the real-PG harness, `CORE_MIGRATIONS`+`FISCAL_MIGRATIONS`, and the existing ring/vault helper — do NOT invent `createPgliteDb`/`runMigrations`/`fakeKeyRing`; use the exact helpers `drain.test.ts` uses). Assert a pass with no due work returns zeros and builds no transport:
 
+> **2026-09-20 — the helper named above is out of date, and this step designates that file as the
+> one to copy from, so the name matters.** `packages/fiscal-verifactu/src/drain.test.ts` and
+> `slot.test.ts` both ask for their database through `useVenueDb`
+> (`@waitron/db/testing/venue-db.js`) now. It is the same PGlite database with the same migration
+> sets and the same per-test reset — the new helper's body forwards to `usePgliteDb` unchanged
+> (plan task P2 step 5, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+> **Only the helper name was re-checked; nothing else in this step or in either file was.** The
+> step's own instruction is what still governs: use the exact helpers `drain.test.ts` uses.
+
 ```ts
 it("FISCAL_SLOT.drain returns the empty result when nothing is due", async () => {
   // db migrated to the full manifest, empty envios/registros

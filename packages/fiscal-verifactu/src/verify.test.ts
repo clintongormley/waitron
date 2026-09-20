@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createPgliteDb, runMigrations } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { appendToChain } from "./chain.js";
 import type { Entorno } from "./registro-row.js";
 import { verifyChain } from "./verify.js";
@@ -15,7 +15,7 @@ import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./te
 //
 // Until 2026-07-31 this was a fresh PGlite per test closed by a single `afterAll` — one close for
 // however many instances the run opened, leaving every one but the last alive for the whole run.
-const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
+const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 

@@ -143,6 +143,21 @@ Expected: PASS. (`sourceFilesIn("payments")` returns `[]` until the package has 
 
 `packages/payments/vitest.config.ts` — **identical** to `packages/fiscal-verifactu/vitest.config.ts` (same thresholds 98/98/98/95, same `coverage.exclude` of `drizzle.config.ts`/`drizzle/**`/`src/testing/**`, same `testTimeout: 120_000` / `hookTimeout: 180_000`, same `.stryker-tmp` exclude). Copy it verbatim.
 
+> **2026-09-20 — every setting enumerated above is still true of both files, but the word
+> "identical" and the instruction "copy it verbatim" are not, and this sentence is the only place
+> that says either.** The enumeration was never the whole file: at `68e36c6aa`, the commit before
+> either package's test-database conversion touched either config, `packages/payments` already set
+> `maxWorkers: 1` against fiscal-verifactu's `maxWorkers: 4` — with its own reason stated beside it —
+> and carried three coverage excludes fiscal-verifactu does not. So the two were already different
+> before this rollout, and copying wholesale would have overwritten payments' worker cap.
+>
+> What 2026-09-20 changed is the `hookTimeout` comment in each, rewritten by that package's own
+> conversion (`packages/payments` in #464, `packages/fiscal-verifactu` in its own) to correct the
+> same false claim. Each states what is true of ITS OWN call sites — payments' pass no `timeoutMs`
+> at all, fiscal-verifactu's are mixed — so the comments are now deliberately not interchangeable
+> either. Take the enumerated settings as a checklist, check anything else against the file you are
+> writing, and write the comment for the package you are in.
+
 `packages/payments/drizzle.config.ts` — clone of `fiscal-verifactu`'s, with the journal table renamed:
 
 ```ts

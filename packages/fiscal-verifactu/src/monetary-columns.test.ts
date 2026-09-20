@@ -1,10 +1,10 @@
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
 });

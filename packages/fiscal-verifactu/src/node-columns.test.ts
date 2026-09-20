@@ -1,5 +1,5 @@
 import { captureError, pgErrorCode } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -15,11 +15,11 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  * `registros_facturacion`). These tests pin the finished contract: node_id is present, NOT NULL, and
  * FK-checked against core's `nodes` on all three tables.
  *
- * PGlite (via usePgliteDb), matching this package's other column tests (`canje-columns.test.ts`):
+ * PGlite (via useVenueDb), matching this package's other column tests (`canje-columns.test.ts`):
  * these are column-nullability and FK-round-trip assertions, none of which needs the non-superuser
  * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
  */
-const pg = usePgliteDb({
+const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
   resetPerTest: false,
