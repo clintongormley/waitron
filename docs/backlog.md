@@ -522,10 +522,9 @@ still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy 
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
 for a child line by a NULL product, no longer recognise one. Task 12 wires the till. The next task
-is Task 8, held-order updates, and after it Task 9, the fiscal fingerprint gate and the filed sale
-line.
+after Task 8 is Task 9, the fiscal fingerprint gate and the filed sale line.
 
-Task 8 is that task, and this is what it changed. It took the preserve path's comparison out of
+Task 8 has landed too, as #465. This is what it changed. It took the preserve path's comparison out of
 `updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
 (`apps/server/src/modifier-selection.ts`) — and made both sides order-independent. The defect that
 paid for it, measured on both halves: a manager who REORDERS a dish's attachment lists leaves every
