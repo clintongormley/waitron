@@ -66,8 +66,15 @@ export const timeOfDay = (name: string) => time(name);
 /** A structured document. */
 export const json = <T>(name: string) => jsonb(name).$type<T>();
 
-/** A monetary amount: two decimal places. */
-export const money = (name: string) => numeric(name, { precision: 12, scale: 2 });
+/**
+ * A monetary amount, counted in whole cents: 12.34 euros is the number 1234.
+ *
+ * An integer rather than a decimal because the engine this vocabulary exists to switch to has no
+ * exact decimal type, and a float cannot hold a cent exactly. The name says cents so a caller
+ * cannot read the number as units. Decimal arithmetic and the decimal literals a receipt or a
+ * fiscal record carries live at the edges, in `@waitron/shared`'s money module.
+ */
+export const money = (name: string) => integer(name);
 
 /** A quantity: three decimal places, so 0.005 kg is representable. */
 export const quantity = (name: string) => numeric(name, { precision: 12, scale: 3 });

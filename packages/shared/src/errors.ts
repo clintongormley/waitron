@@ -86,6 +86,7 @@ export interface ErrorParams {
   "shared.invalid_id": { kind: string; value: string };
   "shared.invalid_decimal": { value: string };
   "shared.decimal_overflow": { value: string; maxIntegerDigits: number };
+  "shared.invalid_cents": { value: string };
   "locale.unsupported": { locale: string };
 }
 

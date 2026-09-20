@@ -39,6 +39,7 @@ export {
   workingOrderId,
   workingOrderLineId,
 } from "./ids.js";
+export { centsToDecimal, decimalToCents } from "./cents.js";
 export type { Decimal } from "./money.js";
 export {
   addDecimal,

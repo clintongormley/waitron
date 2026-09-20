@@ -219,7 +219,10 @@ export function assertMoney(value: Decimal): Decimal {
   return value;
 }
 
-// There is deliberately no `toNumber`. The only honest reason to want one is formatting for
+// There is deliberately no `toNumber`, and this file names no float-shaped operation at all —
+// `conventions.test.ts` reads its text and fails on any of them. The one sanctioned crossing
+// into the number type, a count of whole cents, lives in `./cents.ts` and is built on the
+// exports above. The only honest reason to want a float conversion is formatting for
 // display, and a display formatter takes the string. Exporting a conversion would put the float
 // path one autocomplete away from every call site in the repo, and the resulting defect is
 // invisible: totals that are individually plausible, disagree by a cent, and are already signed

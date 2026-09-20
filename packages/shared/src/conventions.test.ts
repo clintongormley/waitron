@@ -77,6 +77,28 @@ describe("money.ts never touches a float", () => {
   });
 });
 
+describe("cents.ts crosses into the number type without rounding one", () => {
+  const source = sourceOf("cents.ts");
+
+  it.each([
+    ["parseFloat", "parseFloat"],
+    ["parseInt", "parseInt"],
+    ["toFixed", ".toFixed("],
+    ["Math.round", "Math.round"],
+    ["Math.floor", "Math.floor"],
+    ["Math.abs", "Math.abs"],
+  ])("contains no %s", (_label, token) => {
+    // This file is allowed the number constructor — converting a count of cents is what it is
+    // for — and nothing else from the float family. A rounding done here would be done on a
+    // float, whereas the rounding that belongs to money happens in `money.ts` in BigInt.
+    expect(source).not.toContain(token);
+  });
+
+  it("rounds only by calling money.ts", () => {
+    expect(source).toContain("toScale(");
+  });
+});
+
 describe("errors never carry prose", () => {
   it.each(Object.entries(sources))("%s throws only AppError", (_path, source) => {
     // `new Error("...")` anywhere in this package would produce a message no translation table

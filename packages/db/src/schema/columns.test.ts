@@ -73,7 +73,10 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
     expect(c.at.getSQLType()).toBe("timestamp with time zone");
     expect(c.at_string.getSQLType()).toBe("timestamp with time zone");
     expect(c.doc.getSQLType()).toBe("jsonb");
-    expect(c.amount.getSQLType()).toBe("numeric(12, 2)");
+    // Money is a count of whole cents, so its column is an ordinary integer. A decimal column
+    // would have no equivalent on the engine this vocabulary exists to switch to, and a float
+    // cannot hold a cent exactly.
+    expect(c.amount.getSQLType()).toBe("integer");
     expect(c.qty.getSQLType()).toBe("numeric(12, 3)");
     expect(c.vat.getSQLType()).toBe("numeric(5, 2)");
     expect(c.kind.getSQLType()).toBe("text");
