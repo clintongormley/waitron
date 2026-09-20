@@ -92,10 +92,11 @@
     "@types/qrcode": "^1.5.5",
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/print-agent": "workspace:*",
+    "@waitron/print-agent-app": "workspace:*",
     "esbuild": "^0.28.2",
     "otplib": "^13.5.0",
     "tsx": "^4.23.13",
-    "typescript": "^5.7.0",
+    "typescript": "^7.0.0",
     "vitest": "^4.1.11"
   }
 }

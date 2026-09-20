@@ -25,7 +25,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/payments": "workspace:*",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^5.7.0",
+    "typescript": "^7.0.0",
     "vitest": "^4.1.11"
   }
 }

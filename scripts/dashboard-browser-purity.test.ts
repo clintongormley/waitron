@@ -173,9 +173,11 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     // interface` (`export const`, `export {value}`, `export default`), and a bare top-level value
     // declaration (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch an exotic
     // top-level expression statement (`sideEffect();`) — which no type file writes; the transpile check
-    // (typescript is not a root dependency) is left to whatever next builds the dashboard bundle,
-    // which on a pull request that leaves `deploy/` alone is nothing (corrected 2026-09-19; this
-    // line used to name `bundle-smoke`, which builds no vite bundle). Prove-by-deletion:
+    // (the root has no `tsc`: its `typescript` is the TypeScript 6 API package typescript-eslint
+    // reads, and the only binary that comes with it is `tsc6`) is left to whatever next builds the
+    // dashboard bundle, which on a pull request that leaves `deploy/` alone is nothing (corrected
+    // 2026-09-19; this line used to name `bundle-smoke`, which builds no vite bundle).
+    // Prove-by-deletion:
     // add `import "@waitron/db";` or `export const x = 1;` to either leaf and it goes red.
     const LEAVES = [
       "packages/catalogue/src/product-types.ts",
