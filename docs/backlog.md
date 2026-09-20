@@ -2280,6 +2280,18 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
+**Left behind by the TypeScript 7 upgrade (2026-09-20).** One follow-up, waiting on somebody else.
+
+- **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
+  Packages run `tsc` at 7.0.2; the repository root resolves the name `typescript` to
+  `npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads, because
+  version 7 ships no JavaScript API at all. typescript-eslint tracks the work in its issue 10940,
+  and the message it prints today names version **7.1** as the target. When a typescript-eslint
+  release supports it, the root entry goes back to a plain `^7` range and the alias disappears. The
+  whole arrangement, with the receipts, is in
+  [ci-and-gates.md](developers/ci-and-gates.md) -> *Two TypeScript compilers are installed, and that
+  is deliberate*.
+
 **Left behind by the Stryker upgrade (#447, 2026-09-19).** Four things the bump surfaced and
 deliberately did not settle.
 
