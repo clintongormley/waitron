@@ -24,7 +24,9 @@ import type { CharacterSet } from "@waitron/printing/src/charset.js";
  * checked by the compiler instead of drifting apart by hand. `ProductEditorInput` is catalogue's
  * `ProductEditorBody` (the product fields plus the kitchen routing the editor sends) and
  * `ProductEditorVariant` is catalogue's `ProductVariantInput`; the names are kept so the views that
- * import them from here are unchanged.
+ * import them from here are unchanged. The extras-list and options-list shapes join the same
+ * exception, from `@waitron/catalogue/src/modifier-list-types.js` — a second leaf of the same kind,
+ * type definitions only.
  *
  * `TimingBand` below is the one exception, imported from `@waitron/shared` rather than re-declared —
  * that package is GENERIC (types + pure functions, no DB/Node builtins) and already a dashboard
@@ -44,6 +46,30 @@ import type {
   ProductEditorBody as ProductEditorInput,
 } from "@waitron/catalogue/src/product-types.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
+import type {
+  ExtraList,
+  ExtraListDependants,
+  ExtraListInput,
+  ExtraListItem,
+  ExtraListItemInput,
+  OptionLabel,
+  OptionLabelInput,
+  OptionList,
+  OptionListDependants,
+  OptionListInput,
+} from "@waitron/catalogue/src/modifier-list-types.js";
+export type {
+  ExtraList,
+  ExtraListDependants,
+  ExtraListInput,
+  ExtraListItem,
+  ExtraListItemInput,
+  OptionLabel,
+  OptionLabelInput,
+  OptionList,
+  OptionListDependants,
+  OptionListInput,
+};
 
 /** A person's role in the management model — the four levels the slice-1b staff API assigns. */
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
@@ -2005,6 +2031,101 @@ export class DashboardApi {
     return (
       await this.#request<{ dependants: ModifierDependants }>(
         `/management-api/modifiers/${id}/dependants`,
+        "GET",
+      )
+    ).dependants;
+  }
+
+  // ── Options lists and extras lists (`/management-api/modifiers/{options,extras}`) ───────────────
+  // The twelve routes `mountListSurface` mounts (apps/server/src/catalogue-api.ts), six per kind and
+  // identical apart from the path segment and the envelope key. Every answer arrives wrapped —
+  // `{ optionLists }` / `{ optionList }`, `{ extraLists }` / `{ extraList }`, `{ dependants }` — and
+  // each method below unwraps it, the shape the `listModifiers` block above already uses. DELETE
+  // answers `{ ok: true }` rather than an empty 204, so those two swallow the envelope and resolve
+  // to nothing.
+
+  async listOptionLists(): Promise<OptionList[]> {
+    return (
+      await this.#request<{ optionLists: OptionList[] }>("/management-api/modifiers/options", "GET")
+    ).optionLists;
+  }
+  async getOptionList(id: string): Promise<OptionList> {
+    return (
+      await this.#request<{ optionList: OptionList }>(
+        `/management-api/modifiers/options/${id}`,
+        "GET",
+      )
+    ).optionList;
+  }
+  async createOptionList(input: OptionListInput): Promise<OptionList> {
+    return (
+      await this.#request<{ optionList: OptionList }>(
+        "/management-api/modifiers/options",
+        "POST",
+        input,
+      )
+    ).optionList;
+  }
+  async updateOptionList(id: string, input: OptionListInput): Promise<OptionList> {
+    return (
+      await this.#request<{ optionList: OptionList }>(
+        `/management-api/modifiers/options/${id}`,
+        "PATCH",
+        input,
+      )
+    ).optionList;
+  }
+  async deleteOptionList(id: string): Promise<void> {
+    await this.#request<{ ok: true }>(`/management-api/modifiers/options/${id}`, "DELETE");
+  }
+  /** `GET /management-api/modifiers/options/:id/dependants` — the products carrying this list and the
+   * menu offers showing one, the preview a delete confirmation reads. */
+  async getOptionListDependants(id: string): Promise<OptionListDependants> {
+    return (
+      await this.#request<{ dependants: OptionListDependants }>(
+        `/management-api/modifiers/options/${id}/dependants`,
+        "GET",
+      )
+    ).dependants;
+  }
+
+  async listExtraLists(): Promise<ExtraList[]> {
+    return (
+      await this.#request<{ extraLists: ExtraList[] }>("/management-api/modifiers/extras", "GET")
+    ).extraLists;
+  }
+  async getExtraList(id: string): Promise<ExtraList> {
+    return (
+      await this.#request<{ extraList: ExtraList }>(`/management-api/modifiers/extras/${id}`, "GET")
+    ).extraList;
+  }
+  async createExtraList(input: ExtraListInput): Promise<ExtraList> {
+    return (
+      await this.#request<{ extraList: ExtraList }>(
+        "/management-api/modifiers/extras",
+        "POST",
+        input,
+      )
+    ).extraList;
+  }
+  async updateExtraList(id: string, input: ExtraListInput): Promise<ExtraList> {
+    return (
+      await this.#request<{ extraList: ExtraList }>(
+        `/management-api/modifiers/extras/${id}`,
+        "PATCH",
+        input,
+      )
+    ).extraList;
+  }
+  async deleteExtraList(id: string): Promise<void> {
+    await this.#request<{ ok: true }>(`/management-api/modifiers/extras/${id}`, "DELETE");
+  }
+  /** `GET /management-api/modifiers/extras/:id/dependants` — the products carrying this list and the
+   * menu offers publishing it, the preview a delete confirmation reads. */
+  async getExtraListDependants(id: string): Promise<ExtraListDependants> {
+    return (
+      await this.#request<{ dependants: ExtraListDependants }>(
+        `/management-api/modifiers/extras/${id}/dependants`,
         "GET",
       )
     ).dependants;

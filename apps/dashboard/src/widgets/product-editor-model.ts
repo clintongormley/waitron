@@ -1,8 +1,10 @@
 export type LocalizedText = Record<string, string>;
+import { t } from "../i18n/t.js";
 import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
 export type { DietaryLabel };
 import type {
   ProductEditorBody,
+  ProductModifierRef,
   ProductVariantInput,
 } from "@waitron/catalogue/src/product-types.js";
 
@@ -20,6 +22,53 @@ export type ProductEditorDraft = ProductEditorBody & {
   stationId: string | null;
   courseId: string | null;
 };
+/** A modifier list as the product editor's Modifiers section reads one: its id and its plain STAFF
+ * name. `ExtraList` and `OptionList` (packages/catalogue/src/modifier-list-types.ts) both satisfy
+ * this; their customer-facing and kitchen names are left out because this surface shows the staff
+ * name and nothing else (docs/developers/products.md). */
+export interface ModifierListChoice {
+  id: string;
+  name: string;
+}
+
+/** An attachment's identity, unique ACROSS the two kinds. The kinds are separate tables with their
+ * own ids, so one uuid can name an extras list AND an options list; keyed on the bare id, a lookup
+ * or a reorder would take whichever of the two came first. */
+export function modifierKey(ref: ProductModifierRef): string {
+  return `${ref.kind}:${ref.id}`;
+}
+
+/**
+ * Every loaded list's plain STAFF name, by {@link modifierKey}. Built once when the loaded sets
+ * change rather than searched per attachment, because both surfaces resolve a name per attachment
+ * per row and do it again on every keystroke near them: the editor's form re-renders on each one
+ * (`wt-input` reports on `input`), and the products table re-reads every row's search text.
+ */
+export function modifierListNames(
+  extraLists: readonly ModifierListChoice[],
+  optionLists: readonly ModifierListChoice[],
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const list of extraLists) names.set(modifierKey({ kind: "extras", id: list.id }), list.name);
+  for (const list of optionLists)
+    names.set(modifierKey({ kind: "options", id: list.id }), list.name);
+  return names;
+}
+
+/**
+ * The plain STAFF name of the list an attachment points at, read from {@link modifierListNames}.
+ * The ref's `kind` is part of the key — an `extras` ref never resolves to an options list — so that
+ * mapping lives here once, shared by the product editor's Modifiers section and the products list's
+ * Modifiers column. A list neither loaded set holds reads as the missing-choice placeholder, in the
+ * one wording both surfaces use: a blank cell there says the product carries nothing.
+ */
+export function modifierListName(
+  ref: ProductModifierRef,
+  names: ReadonlyMap<string, string>,
+): string {
+  return names.get(modifierKey(ref)) ?? t("editor.missing_choice");
+}
+
 export interface EditorChoice {
   id: string;
   name: LocalizedText;

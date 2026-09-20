@@ -53,3 +53,21 @@ it("refreshes the open alerts passively and when incidents change", async () => 
   await query.read();
   expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
 });
+
+it.each([
+  ["listOptionLists", [], ["option_lists", "option_labels"]],
+  ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
+  ["listExtraLists", [], ["extra_lists", "extra_list_items"]],
+  ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
+] as const)(
+  "subscribes %s to exactly the tables its read selects from",
+  async (name, args, types) => {
+    // The minimal set, read off the SELECTs rather than off the tables the feature touches:
+    // `listOptionLists`/`readOptionListsByIds` (packages/catalogue/src/options.ts) select from
+    // `option_lists` and then `option_labels`, and their extras twins (extras.ts) from `extra_lists`
+    // and `extra_list_items`. Neither read joins `products`, `product_modifiers` or the
+    // `menu_item_extra_*` tables, so a change there must NOT refresh these screens.
+    const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
+    expect(query.dependencies).toEqual(types.map((type) => ({ type })));
+  },
+);

@@ -29,10 +29,25 @@
 
   --wt-dialog-max-width: min(90vw, 48rem);
 
-  /* The widest a row's NAME cell grows in a table a form owns — the modifier form's choices and the
-     product editor's variants. The name is the one cell that can be long, so capping it makes it
-     wrap and keeps the controls after it (a switch, a row menu) on screen at phone width instead of
-     pushing the row into a sideways scroll. */
+  /* One sizing value for the NAME column of a table a form owns, used in BOTH directions. It is
+     larger than --wt-tap-min either way, which is what structure.test.ts pins.
+
+     As a CAP (`max-width`): the modifier form's choices, the variants table, and the product
+     editor's attached-lists table. The name is the one cell that can be long, so capping it makes
+     it wrap and keeps the controls after it (a switch, a row menu) on screen at phone width
+     instead of pushing the row into a sideways scroll.
+
+     As a FLOOR (`min-width`): the single-input cells of the options list form and of the extras
+     list form's price column, which have no width of their own and would otherwise shrink to the
+     tap-target minimum and cut the value off mid-word. Those tables accept a sideways scroll —
+     each has its own focusable horizontal scroller so the dialog does not scroll instead.
+
+     As a FLEX BASIS: the extras list form's product picker, which is a combobox rather than a
+     table cell and sizes its open panel to its trigger.
+
+     So the uses genuinely disagree about the scroll, and whether the floor should be a token of
+     its own is an open question (docs/backlog.md, under what Task 11 left open). Grep before
+     quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);

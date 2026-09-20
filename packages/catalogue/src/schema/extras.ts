@@ -13,8 +13,8 @@ import { optionLists } from "./options.js";
  * (PostgreSQL 18.3) — a table declared with `min integer not null default 0, max integer` took a
  * `check (min >= 0 and (max is null or max >= min))`, refused a bad row with `23514`, selected both
  * columns unqualified and aggregated them as `min(min)` / `max(max)`. The per-menu publication is
- * below in this file; the product attachment and the dashboard editor are Tasks 6 and 11 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. */
+ * below in this file; the product attachment is `product_modifiers` (`product-modifiers.ts`) and
+ * the dashboard editor is `apps/dashboard/src/widgets/extra-list-form.ts`. */
 export const extraLists = table(
   "extra_lists",
   {

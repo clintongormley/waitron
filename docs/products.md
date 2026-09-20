@@ -52,9 +52,9 @@ kitchen destinations. Use the product's station and course fields, under **Kitch
 existing preparation routing behavior. They save with the product now, so you can set them while
 creating it, and cancelling the editor leaves them as they were.
 
-You can create a unit, category or modifier without abandoning a product you are editing. Open the
-nested form, save the new item and select it when you return. The unsaved product fields remain in
-place if the nested save fails or you cancel it.
+You can create a unit, a category, an extras list or an options list without abandoning a product
+you are editing. Open the nested form, save the new item and select it when you return. The unsaved
+product fields remain in place if the nested save fails or you cancel it.
 
 ## Add variants when one product has several sellable forms
 
@@ -96,15 +96,22 @@ product allergens and dietary suitability in **Products**.
 
 ## Keep choices reusable
 
-Create reusable choices in **Modifiers**, then attach them to the product in the order you want the
-till to ask for them. See [Reuse choices across your products](modifiers.md) for text, extras,
-options, defaults, caps and menu-specific extra prices.
+Create reusable extras lists and options lists on the two tabs of **Modifiers**, then attach them in
+the product's own **Modifiers** section, in the order you want. See
+[Reuse choices across your products](modifiers.md) for what each kind holds, its defaults and
+limits, and menu-specific extra prices.
 
 When you park or complete an order, Waitron saves the chosen product and variant names, kitchen name,
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with two categories, a Reporting Category, a custom unit,
-two variants, a separate kitchen name, direct dietary declarations and three modifier types. Its
-menu variant and extra prices deliberately differ from the product definitions, so you can see which
-price wins at the till.
+two variants, a separate kitchen name and direct dietary declarations. Its menu variant and extra
+prices deliberately differ from the product definitions, so you can see which price wins at the
+till. The demo sirloin carries a seeded options list, **Punto**, asking how the steak should be
+cooked.
+
+The coffee also still carries three of the older modifiers — one of each of the retired text, extras
+and options types — because the demo seed has not been rewritten
+(`apps/server/scripts/demo-seed/seed-options.ts`). They are in the database, but no dashboard screen
+shows them any more, so they will not appear on the coffee's **Modifiers** section.

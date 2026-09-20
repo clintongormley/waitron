@@ -1,69 +1,79 @@
 # Reuse choices across your products
 
-When several dishes offer the same extras or preparation choices, create one modifier in
-**Modifiers** and attach it to each product. You edit its names, choices and limits in one place;
+When several dishes offer the same additions, or the same preparation choice, build the list once in
+**Modifiers** and attach it to each product. You edit its names, entries and limits in one place;
 each order keeps its own answers.
 
-## Choose the input you need
+## Two kinds of list, one per tab
 
-Use **Extras** for additions with a price. For example, add bacon at 1.00 with a maximum quantity
-of two and cheese at 1.00 with a maximum of one. Set the total maximum to two if you want two
-bacon portions or one of each. Leave the total maximum blank for no group limit. The individual
-maximum still applies. For two dishes, two bacon portions per dish add 4.00 to the bill.
+**Modifiers** has two tabs, **Extras** and **Options**, each with its own table and its own button
+for adding a list. There is no third kind and no **Type** to choose: the old Text modifier, and the
+type field that went with it, are not on this page any more.
 
-Use **Options** when you need exactly one unpriced choice, such as a cup or a glass. You can choose
-a default or leave the decision to the operator. For a simple on/off question, such as whether to
-include cutlery, make an Options or Extras modifier with a single choice.
+Use **Extras** for things a diner adds to a dish. Each entry on an extras list names a product you
+have already created, and takes that product's names, tax treatment, allergens, dietary labels and
+picture from it — you never retype them here. What you set on the entry is the terms of the offer:
+**Maximum quantity**, how many of it one dish may take (at least one, so 1 means "one or none");
+**Preselected**, whether it starts chosen; and **Price**, what the diner is charged for it. That
+price REPLACES the product's own rather than adding to it, so 1.50 against a 3.00 product bills
+1.50. Leave it blank and the product's own price is what gets charged — the field shows you that
+price, greyed, while it is blank. The list itself sets **Minimum choices** — 0 makes the list optional, 1 or
+more makes it required — and **Maximum choices**, left blank for no limit.
 
-Use **Text** for an optional message of up to 500 characters. Text is displayed literally and has
-no price. It remains separate from the dish's kitchen note.
+Use **Options** when the diner picks exactly one label, such as a cup or a glass. A label carries
+names and nothing else: no price, no tax treatment and no allergens. Each label has its own
+**Available** switch, and one of the available labels can be the **Default**.
 
-## Set defaults and availability
+## Name a list and decide whether it is in use
 
-Give the modifier and each choice a name in your default content language. You can add other
-translations now or later. See [content languages](content-and-images.md).
+Give the list a staff name in plain text — what you and your staff call it. A **Customer-facing
+name**, with one field per content language, and a **Kitchen name** are both optional and fall back
+to the staff name when you leave them blank. An options label carries the same three names. See
+[content languages](content-and-images.md).
 
-A default seeds a new selection once. Changing a default does not change an order you already
-started. An extra's choice is either preselected or not — there is no starting quantity to set — and
-you cannot preselect more choices than the total maximum allows. A required extras group may have no
-defaults, so the operator must make an active choice.
+Each list has an **In use** switch. A list that is in use needs something to answer it with, so the
+form refuses to save an extras list in use with no products on it, or an options list in use with no
+available label. It tells you to add or enable one, or to take the list out of use.
 
-Turn off **Available** on a choice to stop new selections of it and clear its default. If an
-available required Options or Extras modifier has no usable choices, add or enable a choice so the
-requirement can be met. If a published menu later reaches that state, the till explains why the
-product cannot be added. It does not silently waive the required choice.
+A **Default** seeds a new selection once. Changing it does not change an order you already started.
+Making the default label unavailable clears the default. An extras entry is either preselected or
+not — there is no starting quantity to set.
 
-A modifier has no modifier-level Available toggle — availability is set per choice — so you take a
-whole modifier out of use by detaching it from the product. An unavailable choice already present in
-an open picker must be corrected before you add the dish.
+## Attach a list to a product
 
-## Keep menu offers deliberate
+Open the product in **Products** and use its **Modifiers** section, which is always on screen rather
+than folded away. One control adds either kind, and the section holds both kinds in a single ordered
+list; each row shows the list's staff name and which kind it is. Drag a row by the handle at its
+start to move it, or focus the handle and use the up and down arrow keys. That same control offers
+**New extras list…** and **New options list…**, so you can build a list without abandoning the
+product you are editing.
 
-A product attachment and a menu publication are separate. New menu offers copy attached available
-modifiers and choices. Attaching another modifier to the product does not change an existing offer.
-Publish it on that menu when you want it to become selectable there.
+A product attachment and a menu publication are separate. Attaching a list to the product does not
+change an existing menu offer. A menu offer can carry its own price for one of an extras list's
+products, and that price wins over the price on the list entry, which in turn wins over the
+product's own price — though no dashboard screen sets a menu price for an extra yet.
 
-A menu can override an extra's price. That menu price controls the sale, even if you later change
-the definition's price. Options remain unpriced. An option default excluded from a
-menu's published choices does not reappear as another choice.
+## Deleting a list detaches it, and nothing refuses the delete
 
-## Keep recorded orders intact
+Deleting a list removes it from every product carrying it and from the menu offers of those dishes.
+The confirmation dialog shows both sets before you confirm, and deleting cannot be undone.
 
-When you park an order, its answers, labels and prices are saved. Retrieving it and changing only
-the quantity keeps those saved facts, even after you edit the definition. Printed paper shows the
-recorded answers: the kitchen ticket prints them in the kitchen's wording, and the customer receipt
-prints them under the dish in the diner's. The till's own screens do not show them yet — not the
-basket, the kitchen and pass displays, a table's line list, or a settled ticket you open again.
+**An open order does not block a delete, and you are not told to finish or void one.** It does not
+need to: an open order holds no reference back to the list. An extras pick becomes its own order
+line naming the product that was picked, and an options answer is stored as the wording that was
+chosen. So deleting a list reaches no order that is already open — but it does take the list off
+every product at once. To stop a list being asked without deleting it, turn its **In use** switch
+off, or remove it from that one product's Modifiers section.
 
-Deleting a modifier detaches it from every product and menu offer that uses it — those attachments
-are removed for you. Deletion is refused only while an open order still uses the modifier; the
-message says so, and you finish or void that order first. To stop new selections without deleting,
-detach the modifier from the product. Changing a modifier's type is still refused while it is
-attached to a product or menu.
+## Allergens and dietary information
 
-Each choice can carry its own nutrition. Under **Nutritional information** you list the allergens the
-choice contains. Under **Dietary preferences** you tick the diets the choice is suitable for — vegan,
-vegetarian, halal or kosher. Both apply to extras and to unpriced options. These describe the choice
-itself, not the whole dish: the till and kitchen screens show the dish's own allergens and diet and
-each extra's own, side by side, and never fold them into a single combined figure. Recorded answer
-labels stay fixed; the allergen and dietary information always reflects the current declarations.
+An extras entry declares its allergens and its dietary suitability through the product it names, so
+you maintain those on that product under **Products**, not here. An options label declares neither —
+it is wording, not something eaten.
+
+> **Not finished yet (2026-09-20).** The till does not offer these two kinds of list to an operator
+> yet. The read behind its menu still resolves only the older attachments
+> (`listAvailableProducts`), so a dish carrying an extras or options list is sold without the
+> question being asked. Wiring the till is Task 12 of
+> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. Until it lands, treat this page
+> as a guide to building lists in the dashboard rather than to selling with them.

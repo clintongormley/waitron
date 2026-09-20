@@ -8,9 +8,10 @@ import { count, flag, id, json, label, table } from "@waitron/db";
  * them takes a product name AND a variant name, and an options list has no variant
  * (`staffPresentationName`, `kitchenPresentationName`, `customerPresentationText`,
  * `joinCustomerPresentationText`). The one helper there that is not about variants,
- * `nonBlankTranslations`, IS reused — `packages/catalogue/src/option-contract.ts` imports it. Tasks
- * 11 and 12 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` build the dashboard
- * and till resolution. */
+ * `nonBlankTranslations`, IS reused — `packages/catalogue/src/option-contract.ts` imports it. The
+ * dashboard authors all three names in `apps/dashboard/src/widgets/option-list-form.ts`; resolving
+ * them on the till is Task 12 of
+ * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. */
 export const optionLists = table("option_lists", {
   id: id("id").primaryKey().defaultRandom(),
   // Staff-facing list name — plain text, like the product's own name.

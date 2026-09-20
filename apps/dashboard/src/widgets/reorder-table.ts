@@ -79,7 +79,10 @@ export class ReorderController implements ReactiveController {
     .handle:disabled {
       ${disabledStyles}
     }
-    .reorder-status {
+    /* Off screen but still announced: the live region below, and a header cell whose column holds
+       only controls and so has no visible label of its own. */
+    .reorder-status,
+    .visually-hidden {
       position: absolute;
       width: 1px;
       height: 1px;
@@ -89,6 +92,36 @@ export class ReorderController implements ReactiveController {
       clip: rect(0, 0, 0, 0);
       white-space: nowrap;
       border: 0;
+    }
+  `;
+
+  /** The chrome around a reorderable table: the scroller that lets it be wider than its dialog, and
+   * the table's own grid. A host adds this beside {@link ReorderController.styles} and wraps its
+   * `<table>` in `.table-wrap`. The wrapper is focusable so a keyboard can reach the scroll, which
+   * with no rows yet is the only way to reach it — the header overflows on its own and there is no
+   * row input to tab into. Same shape as packages/ui/src/components/wt-data-table.ts. */
+  static readonly tableStyles: CSSResult = css`
+    .table-wrap {
+      overflow-x: auto;
+    }
+    .table-wrap:focus-visible {
+      outline: var(--wt-focus-ring);
+      outline-offset: var(--wt-focus-offset);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th,
+    td {
+      padding: var(--wt-space-2) var(--wt-space-1);
+      text-align: start;
+      vertical-align: top;
+      border-bottom: 1px solid var(--wt-color-border);
+    }
+    /* The handle is a square button, so it centres rather than sitting at the top of a tall row. */
+    td.handle-cell {
+      vertical-align: middle;
     }
   `;
 

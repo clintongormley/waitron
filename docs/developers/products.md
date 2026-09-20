@@ -191,13 +191,13 @@ plain `text` column, declared in `packages/catalogue/drizzle/0000_catalogue_base
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
 collapsed. Top to bottom: Name, Categories, Available, ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info,
-Price (and the variants table, if there are variants), then Cancel and Save.
+Price (and the variants table, if there are variants), Modifiers, then Cancel and Save.
 
-There is no attachment section in the form today. The option-group one went with the flat
-`modifierIds`/`optionGroupIds` body fields it wrote; its replacement — one ordered list mixing
-extras lists and options lists — is Task 11 of
-`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. The write body already carries that
-ordered list (below), so the API is ahead of the screen.
+The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
+each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
+naming the list's plain STAFF name and which kind it is. It replaced the option-group
+section, which went with the flat `modifierIds`/`optionGroupIds` body fields it wrote; what it sends
+is the ordered `modifiers` list the write body carries (below).
 
 Sections always start collapsed; open and closed state is not remembered. A section holding a
 validation error opens itself and cannot be collapsed until the error is fixed — that is

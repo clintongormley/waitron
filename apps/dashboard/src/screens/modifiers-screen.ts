@@ -1,29 +1,75 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  UrlStateController,
   baseStyles,
   setContentLanguages,
-  currentContentLanguages,
   type DataTableColumn,
 } from "@waitron/ui";
-import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import "../widgets/modifier-form.js";
-import type { DashboardApi, Modifier, ModifierDependants, ModifierInput } from "../api/client.js";
+import "@waitron/ui/src/components/wt-tabs.js";
+import "../widgets/option-list-form.js";
+import "../widgets/extra-list-form.js";
+import type {
+  DashboardApi,
+  ExtraList,
+  ExtraListInput,
+  OptionList,
+  OptionListInput,
+  Product,
+} from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { dashboardPath } from "../navigation.js";
+import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
-/** A product or menu item that uses a modifier, as `modifierDependants` returns it. Both the
- * row-click usage modal and the delete confirmation list these. */
+/** The two tabs, and the two kinds of modifier list behind them. */
+type Kind = "extras" | "options";
+
+/** Which of the two dependants modals a piece of state belongs to: the read-only detail modal, or
+ * the delete confirmation's cascade preview. */
+type Modal = "view" | "delete";
+
+/** A list of either kind, reduced to what this screen's tables, modals and dialogs read. */
+type ModifierList = ExtraList | OptionList;
+
+/** A product or menu item that carries a list, as both dependants readers return it. */
 type Dependant = { id: string; name: string };
 type UsageDependant = Dependant & { type: "product" | "menu" };
 
+/**
+ * What deleting a list of either kind would touch. `extraListDependants` and `optionListDependants`
+ * (packages/catalogue/src/{extras,options}.ts) each return exactly these two arrays and no order
+ * count: options never touch an order, and an extras-list delete leaves an open order's child lines
+ * alone because they name the PRODUCT, not the list (spec
+ * 2026-09-18-one-product-model-design.md §3.5).
+ */
+type ListDependants = { products: Dependant[]; menus: Dependant[] };
+
+/** The list a modal is open on. The name is COPIED at open, so the heading does not depend on the
+ * row still being in the list a later refresh loads. */
+type Target = { kind: Kind; id: string; name: string };
+
+/**
+ * The Modifiers page: one screen, two tabs — Extras and Options — each the Categories-pattern table
+ * for its kind (spec 2026-09-18-one-product-model-design.md §9.2). A tab has a header Add button, a
+ * searchable and filterable table whose sort is remembered under its OWN session-storage key, a
+ * detail modal with Edit and Close, and a delete flow that previews what would be lost.
+ *
+ * Neither kind's delete previews an order count — see {@link ListDependants} — and neither is
+ * blocked before the write: `options.in_use` and `extras.in_use` are declared and status-mapped but
+ * thrown by nothing, which the `STATUS` map in `apps/server/src/catalogue-api.ts` states on those
+ * two entries itself. A refusal that arrives anyway is still shown in the dialog.
+ *
+ * The extras form edits rows picked from PRODUCTS, which it never loads: this screen reads them
+ * (every catalogue's products, as the catalogue screen does) and hands them over.
+ */
 @customElement("dashboard-modifiers-screen")
 export class ModifiersScreen extends LitElement {
   static override styles = [
@@ -33,14 +79,14 @@ export class ModifiersScreen extends LitElement {
         display: block;
       }
       h1 {
-        margin: 0;
+        margin: 0 0 var(--wt-space-4);
         font-size: var(--wt-font-size-xl);
       }
-      .heading {
+      /* The tab strip names the panel, so the Add button sits alone on its row rather than under a
+         second heading repeating the tab's own label. */
+      .tab-actions {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
+        justify-content: flex-end;
         margin-bottom: var(--wt-space-4);
       }
       .error {
@@ -49,25 +95,42 @@ export class ModifiersScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
-  @state() private modifiers: Modifier[] = [];
+  @state() private tab: Kind = "extras";
+  /** The chosen tab lives in the path, as it does on the alerts, printers and venue-operations
+   * screens — profile-screen.ts is the one tabbed screen that keeps its tab in component state — so
+   * a refresh, a back press and a shared link all reopen what the manager was looking at. An unknown
+   * tab falls back to Extras and REPLACES rather than pushes, so Back still leaves the screen. */
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "modifiers") return;
+      const view = this.#url.read("view");
+      this.tab = view === "options" ? "options" : "extras";
+      if (view !== this.tab) this.#url.write({ view: this.tab }, true);
+    },
+    dashboardPath,
+  );
+  @state() private extraLists: ExtraList[] = [];
+  @state() private optionLists: OptionList[] = [];
+  /** Every catalogue's products, deduplicated by id — the rows the extras form offers. */
+  @state() private products: Product[] = [];
   @state() private locales: ContentLanguages | null = null;
   @state() private loading = true;
   @state() private loadError = false;
   @state() private error: string | null = null;
-  @state() private open = false;
-  @state() private value: Modifier | null = null;
+  /** Which editor is open, and on which list; null when neither is. A null `value` is a create. */
+  @state() private editing: { kind: Kind; value: ModifierList | null } | null = null;
   @state() private busy = false;
   @state() private fieldErrors: Record<string, string> = {};
-  @state() private deleting: Modifier | null = null;
-  @state() private dependants: ModifierDependants | null = null;
+  @state() private deleting: Target | null = null;
+  @state() private dependants: ListDependants | null = null;
   /** The preview fetch failed. Distinct from `dependants === null` (still loading) and from a
-   * loaded object whose lists are empty and orders is 0 (genuinely nothing depends on this). */
+   * loaded object whose lists are both empty (genuinely nothing depends on this). */
   @state() private dependantsError = false;
-  // The modifier whose "products that use this" modal is open, or null when it is closed.
-  @state() private viewing: Modifier | null = null;
-  @state() private usage: ModifierDependants | null = null;
-  /** The usage fetch failed. Distinct from `usage === null` (still loading) and from a loaded
-   * object whose lists are empty (nothing uses this modifier yet). */
+  @state() private viewing: Target | null = null;
+  @state() private usage: ListDependants | null = null;
+  /** The detail read failed. Distinct from `usage === null` (still loading) and from a loaded
+   * object whose lists are both empty (nothing carries this list yet). */
   @state() private usageError = false;
   readonly #queries = new DashboardQueries(
     this,
@@ -80,193 +143,288 @@ export class ModifiersScreen extends LitElement {
     super.connectedCallback();
     void this.#load();
   }
+  protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has("products"))
+      this.#productById = new Map(this.products.map((product) => [product.id, product]));
+    if (changed.has("products") || changed.has("extraLists"))
+      this.#itemNamesByList = new Map(
+        this.extraLists.map((list) => [list.id, this.#joinItemNames(list)]),
+      );
+  }
   async #load(): Promise<void> {
     this.loadError = false;
     try {
       await Promise.all([
-        this.#queries.watch("listModifiers", [], (value) => {
-          this.modifiers = value;
+        this.#queries.watch("listExtraLists", [], (value) => {
+          this.extraLists = value;
+        }),
+        this.#queries.watch("listOptionLists", [], (value) => {
+          this.optionLists = value;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           this.locales = value;
           setContentLanguages(value);
         }),
+        this.#queries.watch("listCatalogues", [], (value) => {
+          this.#catalogueIds = value.map((catalogue) => catalogue.id);
+        }),
       ]);
-      // A `?modifier=<id>` deep link opens that modifier's editor. An unknown id is ignored.
-      // Clearing the param stops a refresh reopening the editor.
-      const linked = new URL(location.href).searchParams.get("modifier");
-      const target = linked ? this.modifiers.find((m) => m.id === linked) : undefined;
-      if (target) {
-        this.#edit(target);
-        const url = new URL(location.href);
-        url.searchParams.delete("modifier");
-        history.replaceState(null, "", url);
-      }
+      await this.#loadProducts();
     } catch {
       this.loadError = true;
     } finally {
       this.loading = false;
     }
   }
-  #edit(value: Modifier | null): void {
-    this.value = value;
+  /** The catalogue ids the product read is grouped over; set by `#load` before `#loadProducts`.
+   * Not reactive state: nothing renders it, and `#loadProducts` reads it in the same turn. */
+  #catalogueIds: string[] = [];
+  /** The extras form picks its rows from products, which live per catalogue. One watch per
+   * catalogue, merged by id, is the shape the catalogue screen uses for the same reason. */
+  async #loadProducts(): Promise<void> {
+    if (this.#catalogueIds.length === 0) {
+      this.products = [];
+      this.#queries.release("listProducts");
+      return;
+    }
+    await this.#queries.watchGroup(
+      "listProducts",
+      this.#catalogueIds.map((id) => [id] as [string]),
+      (lists) => {
+        this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
+      },
+    );
+  }
+  #lists(kind: Kind): ModifierList[] {
+    return kind === "extras" ? this.extraLists : this.optionLists;
+  }
+  #edit(kind: Kind, value: ModifierList | null): void {
     this.fieldErrors = {};
-    this.open = true;
+    this.editing = { kind, value };
   }
-  #viewGeneration = 0;
-  #openProducts(modifier: Modifier): void {
-    this.usage = null;
-    this.usageError = false;
-    this.viewing = modifier;
-    const generation = ++this.#viewGeneration;
-    void this.#loadUsage(modifier.id, generation);
+  #dependantsOf(kind: Kind, id: string): Promise<ListDependants> {
+    return kind === "extras"
+      ? this.api.getExtraListDependants(id)
+      : this.api.getOptionListDependants(id);
   }
-  #closeProducts(): void {
-    this.viewing = null;
-    this.usage = null;
-    this.usageError = false;
-    this.#viewGeneration++;
+  /** How far each modal has been reopened. Only a response minted under the CURRENT count is
+   * applied: comparing the open list's id alone cannot tell a superseded fetch from the current one
+   * when the SAME list is reopened. */
+  #generation: Record<Modal, number> = { view: 0, delete: 0 };
+  #setTarget(modal: Modal, target: Target | null): void {
+    if (modal === "view") this.viewing = target;
+    else this.deleting = target;
   }
-  /** Feeds the usage modal opened from a row click. `generation` guards a reopened modal against a
-   * stale response the same way `#loadDependants` does: only a response whose generation still
-   * matches the current open is applied. A failed fetch gets its own state rather than an empty
-   * stand-in, which would read as "nothing uses this". */
-  async #loadUsage(id: string, generation: number): Promise<void> {
+  #setDependants(modal: Modal, rows: ListDependants | null, failed: boolean): void {
+    if (modal === "view") {
+      this.usage = rows;
+      this.usageError = failed;
+    } else {
+      this.dependants = rows;
+      this.dependantsError = failed;
+    }
+  }
+  /** Opens one of the two modals on `list` and starts its read. Both show exactly the same two
+   * arrays and differ only in which fields hold them, so the open, the generation guard and the
+   * read are written once. */
+  #openModal(modal: Modal, kind: Kind, list: ModifierList): void {
+    if (modal === "delete") this.error = null;
+    this.#setDependants(modal, null, false);
+    this.#setTarget(modal, { kind, id: list.id, name: list.name });
+    void this.#loadDependants(modal, kind, list.id, ++this.#generation[modal]);
+  }
+  #closeModal(modal: Modal): void {
+    if (modal === "delete") this.error = null;
+    this.#setTarget(modal, null);
+    this.#setDependants(modal, null, false);
+    this.#generation[modal]++;
+  }
+  /** Feeds a modal's body. A failed fetch sets that modal's own error flag rather than an empty
+   * stand-in: for the detail modal an empty table would read as "nothing carries this list", and for
+   * the delete confirmation — where every consequence cascades and cannot be undone — as "nothing
+   * depends on this", which would have a manager confirm the cascade blind. */
+  async #loadDependants(modal: Modal, kind: Kind, id: string, generation: number): Promise<void> {
     try {
-      const usage = await this.api.getModifierDependants(id);
-      if (generation === this.#viewGeneration) this.usage = usage;
+      const rows = await this.#dependantsOf(kind, id);
+      if (generation === this.#generation[modal]) this.#setDependants(modal, rows, false);
     } catch {
-      if (generation === this.#viewGeneration) this.usageError = true;
+      if (generation === this.#generation[modal]) this.#setDependants(modal, null, true);
     }
   }
-  #deleteGeneration = 0;
-  #openDelete(modifier: Modifier): void {
-    this.error = null;
-    this.dependants = null;
-    this.dependantsError = false;
-    this.deleting = modifier;
-    const generation = ++this.#deleteGeneration;
-    void this.#loadDependants(modifier.id, generation);
+  /** The field an authoring refusal names, or `_form` when it names none. Both kinds' refusals
+   * carry it under the same key: `extras.invalid`, `options.invalid` and the two
+   * `*.translation_required` siblings all declare `field` (packages/catalogue/src/errors.ts), and
+   * each form maps that path onto its own inputs. */
+  #fieldOf(error: unknown): string {
+    const params =
+      typeof error === "object" && error !== null && "params" in error ? error.params : null;
+    return params &&
+      typeof params === "object" &&
+      "field" in params &&
+      typeof params.field === "string"
+      ? params.field
+      : "_form";
   }
-  #closeDelete(): void {
-    this.deleting = null;
-    this.dependants = null;
-    this.dependantsError = false;
-    this.error = null;
-    this.#deleteGeneration++;
-  }
-  /** Feeds the delete confirmation's preview. The server refuses a delete only on an open order, so
-   * every other consequence — the products and menu items that lose the modifier — cascades and
-   * cannot be undone; a failed fetch therefore gets its own state rather than an empty stand-in,
-   * which would read as "nothing depends on this" and have a manager confirm the cascade blind.
-   * `generation` guards a reopened dialog against a stale response: comparing `this.deleting?.id`
-   * alone cannot tell a superseded fetch from the current one when the SAME modifier is reopened,
-   * so only a response whose generation still matches is applied. */
-  async #loadDependants(id: string, generation: number): Promise<void> {
-    try {
-      const dependants = await this.api.getModifierDependants(id);
-      if (generation === this.#deleteGeneration) this.dependants = dependants;
-    } catch {
-      if (generation === this.#deleteGeneration) this.dependantsError = true;
-    }
-  }
-  #message(error: unknown): string {
-    const code = codeOf(error);
-    if (
-      code === "modifier.in_use" &&
-      typeof error === "object" &&
-      error !== null &&
-      "params" in error
-    ) {
-      const params = error.params;
-      if (params && typeof params === "object" && "dependency" in params) {
-        const dependency = params.dependency;
-        if (
-          dependency === "product" ||
-          dependency === "menu" ||
-          dependency === "order" ||
-          dependency === "choice"
-        )
-          return t(`modifiers.in_use.${dependency}`);
-      }
-    }
-    return codeMessage(code);
-  }
-  async #save(event: CustomEvent<{ value: ModifierInput }>): Promise<void> {
+  async #save(
+    kind: Kind,
+    event: CustomEvent<{ value: ExtraListInput | OptionListInput }>,
+  ): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
+    const editing = this.editing;
+    if (!editing) return;
     this.busy = true;
     this.fieldErrors = {};
     try {
-      if (this.value) await this.api.updateModifier(this.value.id, event.detail.value);
-      else await this.api.createModifier(event.detail.value);
+      const value = event.detail.value;
+      if (kind === "extras") {
+        const input = value as ExtraListInput;
+        if (editing.value) await this.api.updateExtraList(editing.value.id, input);
+        else await this.api.createExtraList(input);
+      } else {
+        const input = value as OptionListInput;
+        if (editing.value) await this.api.updateOptionList(editing.value.id, input);
+        else await this.api.createOptionList(input);
+      }
     } catch (error) {
-      const message = this.#message(error);
-      const params =
-        typeof error === "object" && error !== null && "params" in error ? error.params : null;
-      const field =
-        params &&
-        typeof params === "object" &&
-        "field" in params &&
-        typeof params.field === "string"
-          ? params.field
-          : "_form";
-      this.fieldErrors = { [field]: message };
+      this.fieldErrors = { [this.#fieldOf(error)]: codeMessage(codeOf(error)) };
       this.busy = false;
       return;
     }
-    this.open = false;
+    // The write succeeded, so the editor closes BEFORE the refresh: a failed refresh is a load
+    // failure, not a failed save, and a retained create form invites a duplicate submission.
+    this.editing = null;
     this.busy = false;
     await this.#load();
   }
   async #delete(): Promise<void> {
-    if (this.busy || !this.deleting) return;
+    const target = this.deleting;
+    if (this.busy || !target) return;
     this.busy = true;
     this.error = null;
     try {
-      await this.api.deleteModifier(this.deleting.id);
+      if (target.kind === "extras") await this.api.deleteExtraList(target.id);
+      else await this.api.deleteOptionList(target.id);
     } catch (error) {
-      this.error = this.#message(error);
+      this.error = codeMessage(codeOf(error));
       this.busy = false;
       return;
     }
-    this.#closeDelete();
+    this.#closeModal("delete");
     this.busy = false;
     await this.#load();
   }
-  #name(modifier: Modifier): string {
-    return resolveEnabledContentText(modifier.name, currentLocale(), currentContentLanguages());
-  }
-  #choiceNames(modifier: Modifier): string {
-    if (modifier.type !== "extras" && modifier.type !== "options") return "";
-    return modifier.choices
-      .map((choice) =>
-        resolveEnabledContentText(choice.name, currentLocale(), currentContentLanguages()),
-      )
+  /** Every loaded product by id, and every extras list's joined product names by list id. The join
+   * is the items column's `cell`, its `searchValue` AND its `sortValue`, so it runs for every row on
+   * every keystroke in the table's search box and again per row when that column sorts. Both indexes
+   * are rebuilt in `willUpdate` when their sources change, never per read. */
+  #productById = new Map<string, Product>();
+  #itemNamesByList = new Map<string, string>();
+  /** An extras list's offered products, by their STAFF names — the name every dashboard surface
+   * shows (docs/developers/products.md). A product the screen no longer holds is skipped rather
+   * than named: the picker inside the editor is where a missing one is reported. */
+  #joinItemNames(list: ExtraList): string {
+    return list.items
+      .map((item) => this.#productById.get(item.productId)?.name)
+      .filter((name): name is string => name !== undefined)
       .join(", ");
   }
-  /** The single Name column behind each delete-preview table, searching and sorting on the staff
-   * name so a product is found by what the dashboard calls it. */
-  #dependantColumns(): DataTableColumn<Dependant>[] {
+  /** Belt and braces: the rows and the index are both built from `extraLists` in the same update,
+   * so nothing today reaches the fallback. It joins on the spot rather than showing a blank cell if
+   * anything ever does. */
+  #itemNames(list: ExtraList): string {
+    return this.#itemNamesByList.get(list.id) ?? this.#joinItemNames(list);
+  }
+  #labelNames(list: OptionList): string {
+    return list.labels.map((label) => label.name).join(", ");
+  }
+  #statusText(kind: Kind, list: ModifierList): string {
+    return list.active ? t(`${kind}.active`) : t(`${kind}.not_in_use`);
+  }
+  #columns(kind: Kind): DataTableColumn<ModifierList>[] {
+    const detail: DataTableColumn<ModifierList> =
+      kind === "extras"
+        ? {
+            key: "items",
+            label: t("extras.items"),
+            searchValue: (list) => this.#itemNames(list as ExtraList),
+            sortValue: (list) => this.#itemNames(list as ExtraList),
+            cell: (list) => this.#itemNames(list as ExtraList),
+          }
+        : {
+            key: "labels",
+            label: t("options.labels"),
+            searchValue: (list) => this.#labelNames(list as OptionList),
+            sortValue: (list) => this.#labelNames(list as OptionList),
+            cell: (list) => this.#labelNames(list as OptionList),
+          };
+    const row = kind === "extras" ? "extra" : "option";
     return [
       {
         key: "name",
         label: t("modifiers.name"),
-        cell: (entry) => entry.name,
-        searchValue: (entry) => entry.name,
-        sortValue: (entry) => entry.name,
+        searchValue: (list) => list.name,
+        sortValue: (list) => list.name,
+        cell: (list) =>
+          html`<wt-button
+            variant="ghost"
+            data-test=${`open-${row}-${list.id}`}
+            @click=${() => this.#openModal("view", kind, list)}
+            >${list.name}</wt-button
+          >`,
+      },
+      detail,
+      {
+        key: "status",
+        label: t(`${kind}.status`),
+        sortValue: (list) => this.#statusText(kind, list),
+        cell: (list) => this.#statusText(kind, list),
+        filter: {
+          label: t(`${kind}.status`),
+          allLabel: t(`${kind}.filter_status_all`),
+          value: (list) => (list.active ? "active" : "inactive"),
+          options: [
+            { value: "active", label: t(`${kind}.active`) },
+            { value: "inactive", label: t(`${kind}.not_in_use`) },
+          ],
+        },
+      },
+      {
+        key: "actions",
+        label: t("modifiers.actions"),
+        cell: (list) =>
+          html`<wt-row-actions label=${`${t("modifiers.actions")}: ${list.name}`}
+            ><wt-button
+              align="start"
+              variant="ghost"
+              data-test=${`edit-${row}-${list.id}`}
+              @click=${() => this.#edit(kind, list)}
+              >${t("action.edit")}</wt-button
+            ><wt-button
+              align="start"
+              variant="ghost"
+              data-test=${`delete-${row}-${list.id}`}
+              @click=${() => this.#openModal("delete", kind, list)}
+              >${t("action.delete")}</wt-button
+            ></wt-row-actions
+          >`,
       },
     ];
   }
+  /** The Name column every dependants table leads with, searching and sorting on the staff name so a
+   * product is found by what the dashboard calls it. */
+  #nameColumn<T extends Dependant>(): DataTableColumn<T> {
+    return {
+      key: "name",
+      label: t("modifiers.name"),
+      cell: (entry) => entry.name,
+      searchValue: (entry) => entry.name,
+      sortValue: (entry) => entry.name,
+    };
+  }
   #usageColumns(): DataTableColumn<UsageDependant>[] {
     return [
-      {
-        key: "name",
-        label: t("modifiers.name"),
-        cell: (entry) => entry.name,
-        searchValue: (entry) => entry.name,
-        sortValue: (entry) => entry.name,
-      },
+      this.#nameColumn<UsageDependant>(),
       {
         key: "type",
         label: t("modifiers.type"),
@@ -284,32 +442,32 @@ export class ModifiersScreen extends LitElement {
       },
     ];
   }
-  /** A read-only table of products or menu items in the delete confirmation's cascade preview. */
-  #dependantsTable(
-    testId: string,
-    label: string,
-    viewKey: string,
-    emptyMessage: string,
-    searchLabel: string,
-    noMatchesMessage: string,
-    rows: Dependant[],
-  ) {
+  /** A read-only table of products or menu items in the delete confirmation's cascade preview. It
+   * carries no `emptyMessage`: both call sites are guarded by `length > 0`, and `wt-data-table`
+   * renders that message only when it has no rows at all. */
+  #dependantsTable(options: {
+    testId: string;
+    label: string;
+    viewKey: string;
+    searchLabel: string;
+    noMatchesMessage: string;
+    rows: Dependant[];
+  }) {
     return html`<wt-data-table
-      data-test=${testId}
-      aria-label=${label}
+      data-test=${options.testId}
+      aria-label=${options.label}
       searchable
-      searchLabel=${searchLabel}
-      noMatchesMessage=${noMatchesMessage}
-      viewKey=${viewKey}
-      .rows=${rows}
-      .columns=${this.#dependantColumns()}
+      searchLabel=${options.searchLabel}
+      noMatchesMessage=${options.noMatchesMessage}
+      viewKey=${options.viewKey}
+      .rows=${options.rows}
+      .columns=${[this.#nameColumn<Dependant>()]}
       .rowKey=${(entry: Dependant) => entry.id}
-      .emptyMessage=${emptyMessage}
     ></wt-data-table>`;
   }
-  /** The usage modal's body: a spinner until `#loadUsage` resolves, then one filterable table for
-   * every product and menu item that uses the modifier. A failed fetch says so instead, because an
-   * empty table would read as "nothing uses this". */
+  /** The detail modal's body: a spinner until `#loadUsage` resolves, then one filterable table of
+   * every product and menu item that carries the list. A failed fetch says so instead, because an
+   * empty table would read as "nothing carries this". */
   #renderUsage() {
     if (this.usageError)
       return html`<p class="error" data-test="usage-error" role="alert">
@@ -322,7 +480,7 @@ export class ModifiersScreen extends LitElement {
       ...usage.menus.map((entry) => ({ ...entry, type: "menu" as const })),
     ];
     return html`<wt-data-table
-      data-test="modifier-usage"
+      data-test="list-usage"
       aria-label=${t("modifiers.products_modal")}
       searchable
       searchLabel=${t("modifiers.search_usage")}
@@ -338,9 +496,8 @@ export class ModifiersScreen extends LitElement {
   }
   /** The single red warning at the top of the delete confirmation: one paragraph naming every
    * cascade consequence, space-joined from the sentences that apply. Only called when there IS
-   * something to lose, so the "cannot be undone" opener always leads it. The open-order case is not
-   * in here — it blocks the delete rather than warning about it, so it gets its own line. */
-  #deleteWarning(dependants: ModifierDependants): string {
+   * something to lose, so the "cannot be undone" opener always leads it. */
+  #deleteWarning(dependants: ListDependants): string {
     const parts = [t("modifiers.delete_warning_intro")];
     if (dependants.products.length > 0)
       parts.push(
@@ -357,10 +514,9 @@ export class ModifiersScreen extends LitElement {
   }
   /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the red
    * warning naming every cascade consequence above the affected-products and affected-menus tables
-   * (each shown only when non-empty), and — when an open order still uses the modifier — a block
-   * saying why the delete is refused. With nothing depending on the modifier there is no warning,
-   * just the buttons. A failed fetch says so instead, because silence here would read as "nothing
-   * to lose". */
+   * (each shown only when non-empty). With nothing depending on the list there is no warning, just
+   * the buttons. A failed fetch says so instead, because silence here would read as "nothing to
+   * lose". */
   #renderDependants() {
     if (this.dependantsError)
       return html`<p class="error" data-test="dependants-error" role="alert">
@@ -377,104 +533,59 @@ export class ModifiersScreen extends LitElement {
         : nothing
     }${
       dependants.products.length > 0
-        ? this.#dependantsTable(
-            "modifier-delete-products",
-            t("modifiers.affected_products"),
-            "waitron.modifiers.delete.products.table",
-            t("modifiers.no_products"),
-            t("modifiers.search_products"),
-            t("modifiers.products_no_matches"),
-            dependants.products,
-          )
+        ? this.#dependantsTable({
+            testId: "list-delete-products",
+            label: t("modifiers.affected_products"),
+            viewKey: "waitron.modifiers.delete.products.table",
+            searchLabel: t("modifiers.search_products"),
+            noMatchesMessage: t("modifiers.products_no_matches"),
+            rows: dependants.products,
+          })
         : nothing
     }${
       dependants.menus.length > 0
-        ? this.#dependantsTable(
-            "modifier-delete-menus",
-            t("modifiers.affected_menus"),
-            "waitron.modifiers.delete.menus.table",
-            t("modifiers.no_menus"),
-            t("modifiers.search_menus"),
-            t("modifiers.menus_no_matches"),
-            dependants.menus,
-          )
-        : nothing
-    }${
-      dependants.orders > 0
-        ? html`<p class="error" data-test="orders-block" role="alert">
-            ${t("modifiers.delete_orders_block")}
-          </p>`
+        ? this.#dependantsTable({
+            testId: "list-delete-menus",
+            label: t("modifiers.affected_menus"),
+            viewKey: "waitron.modifiers.delete.menus.table",
+            searchLabel: t("modifiers.search_menus"),
+            noMatchesMessage: t("modifiers.menus_no_matches"),
+            rows: dependants.menus,
+          })
         : nothing
     }`;
   }
-  override render() {
-    const columns: DataTableColumn<Modifier>[] = [
-      {
-        key: "name",
-        label: t("modifiers.name"),
-        searchValue: (modifier) => this.#name(modifier),
-        sortValue: (modifier) => this.#name(modifier),
-        cell: (modifier) =>
-          html`<wt-button
-            variant="ghost"
-            data-test=${`open-${modifier.id}`}
-            @click=${() => this.#openProducts(modifier)}
-            >${this.#name(modifier)}</wt-button
-          >`,
-      },
-      {
-        key: "type",
-        label: t("modifiers.type"),
-        sortValue: (modifier) => t(`modifiers.${modifier.type}`),
-        cell: (modifier) => t(`modifiers.${modifier.type}`),
-        filter: {
-          label: t("modifiers.type"),
-          allLabel: t("modifiers.filter_type_all"),
-          value: (modifier) => modifier.type,
-          options: (["text", "extras", "options"] as const).map((type) => ({
-            value: type,
-            label: t(`modifiers.${type}`),
-          })),
-        },
-      },
-      {
-        key: "choices",
-        label: t("modifiers.choices"),
-        searchValue: (modifier) => this.#choiceNames(modifier),
-        sortValue: (modifier) => this.#choiceNames(modifier),
-        cell: (modifier) => this.#choiceNames(modifier),
-      },
-      {
-        key: "actions",
-        label: t("modifiers.actions"),
-        cell: (modifier) =>
-          html`<wt-row-actions label=${`${t("modifiers.actions")}: ${this.#name(modifier)}`}
-            ><wt-button
-              align="start"
-              variant="ghost"
-              data-test=${`edit-${modifier.id}`}
-              @click=${() => this.#edit(modifier)}
-              >${t("action.edit")}</wt-button
-            ><wt-button
-              align="start"
-              variant="ghost"
-              data-test=${`delete-${modifier.id}`}
-              @click=${() => this.#openDelete(modifier)}
-              >${t("action.delete")}</wt-button
-            ></wt-row-actions
-          >`,
-      },
-    ];
-    return html`<div class="heading">
-        <h1>${t("modifiers.title")}</h1>
+  /** One tab: its heading and Add button, then its table. Each kind's table carries its OWN
+   * `viewKey`, so a sort chosen on one tab is not restored onto the other. */
+  #renderTab(kind: Kind) {
+    const row = kind === "extras" ? "extra" : "option";
+    return html`<div class="tab-actions">
         <wt-button
-          data-test="create-modifier"
+          data-test=${`add-${row}-list`}
           variant="primary"
           .disabled=${!this.locales}
-          @click=${() => this.#edit(null)}
-          >${t("modifiers.add")}</wt-button
+          @click=${() => this.#edit(kind, null)}
+          >${t(`${kind}.add`)}</wt-button
         >
       </div>
+      <wt-data-table
+        data-test=${`${row}-lists`}
+        aria-label=${t(`${kind}.title`)}
+        searchable
+        searchLabel=${t(`${kind}.search`)}
+        noMatchesMessage=${t(`${kind}.no_matches`)}
+        viewKey=${`waitron.modifiers.${kind}.table`}
+        sortKey="name"
+        sortDirection="ascending"
+        .rows=${this.#lists(kind)}
+        .columns=${this.#columns(kind)}
+        .rowKey=${(list: ModifierList) => list.id}
+        .emptyMessage=${t(`${kind}.empty`)}
+      ></wt-data-table>`;
+  }
+  override render() {
+    const editing = this.editing;
+    return html`<h1>${t("modifiers.title")}</h1>
       ${this.loading ? html`<p role="status">${t("modifiers.loading")}</p>` : nothing}
       ${
         this.loadError
@@ -488,46 +599,64 @@ export class ModifiersScreen extends LitElement {
       }
       ${
         !this.loading && !this.loadError
-          ? html`<wt-data-table
-              aria-label=${t("modifiers.title")}
-              searchable
-              searchLabel=${t("modifiers.search")}
-              noMatchesMessage=${t("modifiers.no_matches")}
-              viewKey="waitron.modifiers.table"
-              sortKey="name"
-              sortDirection="ascending"
-              .rows=${this.modifiers}
-              .columns=${columns}
-              .rowKey=${(modifier: Modifier) => modifier.id}
-              .emptyMessage=${t("modifiers.empty")}
-            ></wt-data-table>`
+          ? html`<wt-tabs
+              label=${t("modifiers.title")}
+              .value=${this.tab}
+              .items=${[
+                { key: "extras", label: t("extras.title") },
+                { key: "options", label: t("options.title") },
+              ]}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                // A panel's content is slotted INTO this element, so any composed `wt-change` a
+                // control inside a tab dispatches passes this listener with the same name. Only the
+                // tab strip's own event — the one whose target is this element — is a tab choice.
+                if (event.target !== event.currentTarget) return;
+                this.tab = event.detail.value === "options" ? "options" : "extras";
+                this.#url.write({ dashboard: "modifiers", view: this.tab });
+              }}
+            >
+              <div slot="extras">${this.#renderTab("extras")}</div>
+              <div slot="options">${this.#renderTab("options")}</div>
+            </wt-tabs>`
           : nothing
       }
-      <dashboard-modifier-form
-        .open=${this.open}
-        .value=${this.value}
+      <dashboard-extra-list-form
+        .open=${editing?.kind === "extras"}
+        .value=${editing?.kind === "extras" ? (editing.value as ExtraList | null) : null}
         .busy=${this.busy}
-        .locales=${this.locales?.languages ?? []}
+        .products=${this.products}
+        .languages=${this.locales ?? { defaultLanguage: "en", languages: ["en"] }}
         .fieldErrors=${this.fieldErrors}
-        @wt-submit=${(event: CustomEvent<{ value: ModifierInput }>) => void this.#save(event)}
+        @wt-submit=${(event: CustomEvent<{ value: ExtraListInput }>) =>
+          void this.#save("extras", event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
-          if (!this.busy) this.open = false;
+          if (!this.busy) this.editing = null;
         }}
-      ></dashboard-modifier-form>
+      ></dashboard-extra-list-form>
+      <dashboard-option-list-form
+        .open=${editing?.kind === "options"}
+        .value=${editing?.kind === "options" ? (editing.value as OptionList | null) : null}
+        .busy=${this.busy}
+        .languages=${this.locales ?? { defaultLanguage: "en", languages: ["en"] }}
+        .fieldErrors=${this.fieldErrors}
+        @wt-submit=${(event: CustomEvent<{ value: OptionListInput }>) =>
+          void this.#save("options", event)}
+        @wt-cancel=${(event: Event) => {
+          event.stopPropagation();
+          if (!this.busy) this.editing = null;
+        }}
+      ></dashboard-option-list-form>
       <wt-modal
         data-test="delete-dialog"
         .open=${this.deleting !== null}
-        heading=${t("modifiers.delete_named").replace(
-          "{name}",
-          this.deleting ? this.#name(this.deleting) : "",
-        )}
+        heading=${t("modifiers.delete_named").replace("{name}", this.deleting?.name ?? "")}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();
         }}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          if (!this.busy) this.#closeDelete();
+          if (!this.busy) this.#closeModal("delete");
         }}
       >
         ${this.deleting ? this.#renderDependants() : nothing}
@@ -537,37 +666,51 @@ export class ModifiersScreen extends LitElement {
             slot="cancel"
             variant="secondary"
             .disabled=${this.busy}
-            @click=${() => this.#closeDelete()}
+            @click=${() => this.#closeModal("delete")}
             >${t("action.cancel")}</wt-button
           ><wt-button
             data-test="confirm-delete"
             variant="danger"
-            .disabled=${this.busy || !this.dependants || this.dependants.orders > 0}
+            .disabled=${this.busy || !this.dependants}
             @click=${() => void this.#delete()}
             >${t("action.delete")}</wt-button
           ></wt-form-actions
         ></wt-modal
       >
       <wt-modal
-        data-test="products-modal"
+        data-test="detail-modal"
         .open=${this.viewing !== null}
-        heading=${
-          this.viewing ? `${this.#name(this.viewing)} · ${t("modifiers.products_modal")}` : ""
-        }
+        heading=${this.viewing ? `${this.viewing.name} · ${t("modifiers.products_modal")}` : ""}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          this.#closeProducts();
+          this.#closeModal("view");
         }}
         >${this.viewing ? this.#renderUsage() : nothing}<wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
-            data-test="close-products"
+            data-test="close-detail"
             variant="secondary"
-            @click=${() => this.#closeProducts()}
+            @click=${() => this.#closeModal("view")}
             >${t("action.close")}</wt-button
+          ><wt-button
+            data-test="detail-edit"
+            variant="primary"
+            .disabled=${!this.locales}
+            @click=${() => this.#editViewed()}
+            >${t("action.edit")}</wt-button
           ></wt-form-actions
         ></wt-modal
       >`;
+  }
+  /** The detail modal's Edit: close the modal and open the same list in its own editor. The list is
+   * re-read from the loaded rows, so an edit started after a background refresh edits what the
+   * screen currently holds rather than the snapshot the modal was opened on. */
+  #editViewed(): void {
+    const viewing = this.viewing;
+    if (!viewing) return;
+    const list = this.#lists(viewing.kind).find((each) => each.id === viewing.id);
+    this.#closeModal("view");
+    if (list) this.#edit(viewing.kind, list);
   }
 }
 declare global {

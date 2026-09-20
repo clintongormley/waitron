@@ -11,8 +11,12 @@ import type {
   CategoryInput,
   CategorySummary,
   DashboardApi,
+  ExtraList,
+  ExtraListInput,
   Modifier,
   ModifierInput,
+  OptionList,
+  OptionListInput,
   Product,
   ProductEditorInput,
   ProductEditorValue,
@@ -32,7 +36,9 @@ import {
 } from "../widgets/product-editor.js";
 import "../widgets/category-form.js";
 import "../widgets/content-languages.js";
+import "../widgets/extra-list-form.js";
 import "../widgets/modifier-form.js";
+import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
 import "../widgets/product-list.js";
 import "../widgets/unit-form.js";
@@ -71,6 +77,8 @@ export class CatalogueScreen extends LitElement {
   @state() private categories: CategorySummary[] = [];
   @state() private units: Unit[] = [];
   @state() private modifiers: Modifier[] = [];
+  @state() private extraLists: ExtraList[] = [];
+  @state() private optionLists: OptionList[] = [];
   @state() private products: Product[] = [];
   @state() private stations: Station[] = [];
   @state() private courses: Course[] = [];
@@ -85,6 +93,13 @@ export class CatalogueScreen extends LitElement {
   /** The modifier the nested form is EDITING, or null when it is creating one. The product editor
    * opens the same form for both, and this is what decides which write its Save performs. */
   @state() private editingModifier: Modifier | null = null;
+  /** The modifier list the nested extras or options form is EDITING, or null while it is creating
+   * one. Same two-way form as {@link editingModifier}, one state for both kinds because only one
+   * nested form is ever open. */
+  @state() private editingList: {
+    kind: "extras" | "options";
+    value: ExtraList | OptionList;
+  } | null = null;
   /** The rejected save's problem, keyed by the editor field that holds it. Empty when the server
    * named no field this screen can point at. */
   @state() private editorFieldErrors: Record<string, string> = {};
@@ -111,6 +126,12 @@ export class CatalogueScreen extends LitElement {
   readonly #child = new ProductChildCreate(this, {
     accept: (kind, value) => {
       if (kind === "modifier") this.editingModifier = null;
+      // A nested form that was EDITING an existing list must not attach it: which lists a product
+      // carries is the editor's own section's business, and the list being edited may belong to a
+      // different product entirely.
+      const edited = this.editingList !== null;
+      this.editingList = null;
+      if (edited && (kind === "extras" || kind === "options")) return;
       this.#editor()?.selectRelated(kind, value.id);
     },
     refresh: (kind) => this.#refreshRelated(kind),
@@ -141,6 +162,12 @@ export class CatalogueScreen extends LitElement {
         }),
         this.#queries.watch("listModifiers", [], (value) => {
           this.modifiers = value;
+        }),
+        this.#queries.watch("listExtraLists", [], (value) => {
+          this.extraLists = value;
+        }),
+        this.#queries.watch("listOptionLists", [], (value) => {
+          this.optionLists = value;
         }),
         this.#queries.watch("listCatalogues", [], (value) => {
           this.catalogues = value;
@@ -182,6 +209,7 @@ export class CatalogueScreen extends LitElement {
   #resetEditorState(): void {
     this.#child.reset();
     this.editingModifier = null;
+    this.editingList = null;
     this.editorFieldErrors = {};
   }
 
@@ -312,10 +340,29 @@ export class CatalogueScreen extends LitElement {
     return {};
   }
 
+  /**
+   * A refused nested list write, keyed by the field path the server named — which is the key both
+   * list forms map onto their own inputs — or `_form` when it names none. The Modifiers screen
+   * reads the same refusals the same way (`#fieldOf`, `modifiers-screen.ts`).
+   *
+   * Empty while nothing has been refused: the create controller clears its error whenever a form
+   * opens or is cancelled, so one form never shows what another one earned. Without this the modal
+   * covers the screen's own banner and a refused create says nothing at all.
+   */
+  #childFieldErrors(): Record<string, string> {
+    const error = this.#child.error;
+    if (error === null || error === undefined) return {};
+    const params = (error as { params?: { field?: unknown } }).params ?? {};
+    const field = typeof params.field === "string" ? params.field : "_form";
+    return { [field]: codeMessage(codeOf(error)) };
+  }
+
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
     if (kind === "unit") this.units = await this.api.background.listUnits();
     if (kind === "category") this.categories = await this.api.background.listCategories();
     if (kind === "modifier") this.modifiers = await this.api.background.listModifiers();
+    if (kind === "extras") this.extraLists = await this.api.background.listExtraLists();
+    if (kind === "options") this.optionLists = await this.api.background.listOptionLists();
   }
 
   #submitUnit(event: CustomEvent<{ value: UnitInput }>): void {
@@ -345,19 +392,65 @@ export class CatalogueScreen extends LitElement {
     });
   }
 
-  /** The product editor asked to edit one of its attached modifiers. The list is already loaded, so
-   * this opens the same nested form the create path uses, seeded with that modifier. */
+  #submitExtraList(event: CustomEvent<{ value: ExtraListInput }>): void {
+    event.stopPropagation();
+    const editing = this.editingList?.kind === "extras" ? this.editingList.value : null;
+    void this.#child.submit(async () =>
+      editing
+        ? await this.api.updateExtraList(editing.id, event.detail.value)
+        : await this.api.createExtraList(event.detail.value),
+    );
+  }
+
+  #submitOptionList(event: CustomEvent<{ value: OptionListInput }>): void {
+    event.stopPropagation();
+    const editing = this.editingList?.kind === "options" ? this.editingList.value : null;
+    void this.#child.submit(async () =>
+      editing
+        ? await this.api.updateOptionList(editing.id, event.detail.value)
+        : await this.api.createOptionList(event.detail.value),
+    );
+  }
+
+  /** The product editor asked to edit one of its attached modifiers or modifier lists. Every one of
+   * them is already loaded, so this opens the same nested form the create path uses, seeded with
+   * the row. */
   #editRelated(event: CustomEvent<{ kind: ProductChildKind; id: string }>): void {
     event.stopPropagation();
-    if (event.detail.kind !== "modifier") return;
-    const modifier = this.modifiers.find(({ id }) => id === event.detail.id);
-    if (!modifier) return;
-    this.editingModifier = modifier;
-    this.#child.open("modifier");
+    const { kind, id } = event.detail;
+    if (kind === "modifier") {
+      const modifier = this.modifiers.find((entry) => entry.id === id);
+      if (!modifier) return;
+      this.editingModifier = modifier;
+      this.#child.open("modifier");
+      return;
+    }
+    if (kind !== "extras" && kind !== "options") return;
+    const lists: (ExtraList | OptionList)[] =
+      kind === "extras" ? this.extraLists : this.optionLists;
+    const value = lists.find((entry) => entry.id === id);
+    if (!value) return;
+    this.editingList = { kind, value };
+    this.#child.open(kind);
+  }
+
+  /**
+   * One list form's Cancel, honoured only while a form of that KIND is the open one. A dismissal
+   * produces a SECOND `wt-cancel` later: the `<dialog>` this screen just closed delivers its native
+   * `close` event a task afterwards, `wt-dialog.ts` turns that into `wt-close`, and the form answers
+   * with another cancel. By then a different form can be open, and an unchecked handler closes that
+   * one. What this check does NOT separate is the same kind reopened inside that one task — for that
+   * it would need a generation counter, as `modifiers-screen.ts` uses for its own reopen case.
+   */
+  #cancelList(kind: "extras" | "options"): void {
+    if (this.#child.kind !== kind) return;
+    this.editingList = null;
+    this.#child.cancel();
   }
 
   override render() {
     const locales = this.contentLanguages?.languages ?? [];
+    const childErrors = this.#childFieldErrors();
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
@@ -388,7 +481,8 @@ export class CatalogueScreen extends LitElement {
           ? html`<dashboard-product-list
               .products=${this.products}
               .categories=${this.categories}
-              .modifiers=${this.modifiers}
+              .extraLists=${this.extraLists}
+              .optionLists=${this.optionLists}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
                 event.stopPropagation();
                 void this.#openProduct(event.detail.productId);
@@ -410,6 +504,8 @@ export class CatalogueScreen extends LitElement {
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
         .categories=${this.categories}
+        .extraLists=${this.extraLists}
+        .optionLists=${this.optionLists}
         .stations=${this.stations}
         .courses=${this.courses}
         .api=${this.api}
@@ -475,6 +571,35 @@ export class CatalogueScreen extends LitElement {
               @wt-submit=${this.#submitCategory}
               @wt-cancel=${() => this.#child.cancel()}
             ></dashboard-category-form>`
+          : nothing
+      }
+      ${
+        // Both list forms carry translated name fields, so like the category form they wait for the
+        // content languages rather than offering a field in a guessed language.
+        this.contentLanguages
+          ? html`<dashboard-extra-list-form
+                .open=${this.#child.kind === "extras"}
+                .busy=${this.#child.busy}
+                .languages=${this.contentLanguages}
+                .value=${this.editingList?.kind === "extras" ? (this.editingList.value as ExtraList) : null}
+                .products=${this.products}
+                .fieldErrors=${childErrors}
+                @wt-submit=${this.#submitExtraList}
+                @wt-cancel=${() => this.#cancelList("extras")}
+              ></dashboard-extra-list-form>
+              <dashboard-option-list-form
+                .open=${this.#child.kind === "options"}
+                .busy=${this.#child.busy}
+                .languages=${this.contentLanguages}
+                .value=${
+                  this.editingList?.kind === "options"
+                    ? (this.editingList.value as OptionList)
+                    : null
+                }
+                .fieldErrors=${childErrors}
+                @wt-submit=${this.#submitOptionList}
+                @wt-cancel=${() => this.#cancelList("options")}
+              ></dashboard-option-list-form>`
           : nothing
       }
       <dashboard-modifier-form

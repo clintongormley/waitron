@@ -198,3 +198,31 @@ it.each(["modifier.invalid", "modifier.not_found", "modifier.in_use"])(
       expect(codeMessage(code, locale)).not.toBe(codeMessage("test.unmapped_code", locale));
   },
 );
+
+it("has a sentence for each options/extras list code the dashboard can be answered with", () => {
+  // The six-routes-per-kind list surface (`mountListSurface`, apps/server/src/catalogue-api.ts:482,
+  // mounted at :641 and :662) can answer a DASHBOARD caller with exactly these: the authoring-body
+  // refusals `options.invalid` / `extras.invalid`, the default-language refusals
+  // `options.translation_required` / `extras.translation_required`, and the two not-founds. The
+  // order-time codes on the same STATUS map — `options.label_required` and `extras.limit_exceeded` —
+  // are NOT here: their only throwers are `validateOptionSelections` / `validateExtraSelections`
+  // (packages/catalogue/src/option-contract.ts:172, extra-contract.ts:285 and :291), reached from the
+  // till's order path, never from a management route. Each language is compared against ITS OWN
+  // generic. Proven by deletion: drop any of these from CODE_MESSAGES and both calls return that
+  // language's generic → red.
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  for (const code of [
+    "options.invalid",
+    "options.not_found",
+    "options.translation_required",
+    "extras.invalid",
+    "extras.not_found",
+    "extras.translation_required",
+  ]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "en")).not.toBe(code);
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+  }
+});
