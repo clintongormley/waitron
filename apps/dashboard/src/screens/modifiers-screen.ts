@@ -1,6 +1,11 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, setContentLanguages, type DataTableColumn } from "@waitron/ui";
+import {
+  UrlStateController,
+  baseStyles,
+  setContentLanguages,
+  type DataTableColumn,
+} from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -20,11 +25,16 @@ import type {
   Product,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { dashboardPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
 /** The two tabs, and the two kinds of modifier list behind them. */
 type Kind = "extras" | "options";
+
+/** Which of the two dependants modals a piece of state belongs to: the read-only detail modal, or
+ * the delete confirmation's cascade preview. */
+type Modal = "view" | "delete";
 
 /** A list of either kind, reduced to what this screen's tables, modals and dialogs read. */
 type ModifierList = ExtraList | OptionList;
@@ -86,6 +96,20 @@ export class ModifiersScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @state() private tab: Kind = "extras";
+  /** The chosen tab lives in the path, as it does on the alerts, printers and venue-operations
+   * screens — profile-screen.ts is the one tabbed screen that keeps its tab in component state — so
+   * a refresh, a back press and a shared link all reopen what the manager was looking at. An unknown
+   * tab falls back to Extras and REPLACES rather than pushes, so Back still leaves the screen. */
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "modifiers") return;
+      const view = this.#url.read("view");
+      this.tab = view === "options" ? "options" : "extras";
+      if (view !== this.tab) this.#url.write({ view: this.tab }, true);
+    },
+    dashboardPath,
+  );
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
   /** Every catalogue's products, deduplicated by id — the rows the extras form offers. */
@@ -118,6 +142,14 @@ export class ModifiersScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+  }
+  protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has("products"))
+      this.#productById = new Map(this.products.map((product) => [product.id, product]));
+    if (changed.has("products") || changed.has("extraLists"))
+      this.#itemNamesByList = new Map(
+        this.extraLists.map((list) => [list.id, this.#joinItemNames(list)]),
+      );
   }
   async #load(): Promise<void> {
     this.loadError = false;
@@ -175,59 +207,48 @@ export class ModifiersScreen extends LitElement {
       ? this.api.getExtraListDependants(id)
       : this.api.getOptionListDependants(id);
   }
-  #viewGeneration = 0;
-  #openDetail(kind: Kind, list: ModifierList): void {
-    this.usage = null;
-    this.usageError = false;
-    this.viewing = { kind, id: list.id, name: list.name };
-    const generation = ++this.#viewGeneration;
-    void this.#loadUsage(kind, list.id, generation);
+  /** How far each modal has been reopened. Only a response minted under the CURRENT count is
+   * applied: comparing the open list's id alone cannot tell a superseded fetch from the current one
+   * when the SAME list is reopened. */
+  #generation: Record<Modal, number> = { view: 0, delete: 0 };
+  #setTarget(modal: Modal, target: Target | null): void {
+    if (modal === "view") this.viewing = target;
+    else this.deleting = target;
   }
-  #closeDetail(): void {
-    this.viewing = null;
-    this.usage = null;
-    this.usageError = false;
-    this.#viewGeneration++;
-  }
-  /** Feeds the detail modal. `generation` guards a reopened modal against a stale response the same
-   * way `#loadDependants` does: only a response whose generation still matches the current open is
-   * applied. A failed fetch gets its own state rather than an empty stand-in, which would read as
-   * "nothing carries this list". */
-  async #loadUsage(kind: Kind, id: string, generation: number): Promise<void> {
-    try {
-      const usage = await this.#dependantsOf(kind, id);
-      if (generation === this.#viewGeneration) this.usage = usage;
-    } catch {
-      if (generation === this.#viewGeneration) this.usageError = true;
+  #setDependants(modal: Modal, rows: ListDependants | null, failed: boolean): void {
+    if (modal === "view") {
+      this.usage = rows;
+      this.usageError = failed;
+    } else {
+      this.dependants = rows;
+      this.dependantsError = failed;
     }
   }
-  #deleteGeneration = 0;
-  #openDelete(kind: Kind, list: ModifierList): void {
-    this.error = null;
-    this.dependants = null;
-    this.dependantsError = false;
-    this.deleting = { kind, id: list.id, name: list.name };
-    const generation = ++this.#deleteGeneration;
-    void this.#loadDependants(kind, list.id, generation);
+  /** Opens one of the two modals on `list` and starts its read. Both show exactly the same two
+   * arrays and differ only in which fields hold them, so the open, the generation guard and the
+   * read are written once. */
+  #openModal(modal: Modal, kind: Kind, list: ModifierList): void {
+    if (modal === "delete") this.error = null;
+    this.#setDependants(modal, null, false);
+    this.#setTarget(modal, { kind, id: list.id, name: list.name });
+    void this.#loadDependants(modal, kind, list.id, ++this.#generation[modal]);
   }
-  #closeDelete(): void {
-    this.deleting = null;
-    this.dependants = null;
-    this.dependantsError = false;
-    this.error = null;
-    this.#deleteGeneration++;
+  #closeModal(modal: Modal): void {
+    if (modal === "delete") this.error = null;
+    this.#setTarget(modal, null);
+    this.#setDependants(modal, null, false);
+    this.#generation[modal]++;
   }
-  /** Feeds the delete confirmation's preview. Every consequence here cascades and cannot be undone,
-   * so a failed fetch gets its own state rather than an empty stand-in, which would read as
-   * "nothing depends on this" and have a manager confirm the cascade blind. `generation` guards a
-   * reopened dialog against a stale response: comparing `this.deleting?.id` alone cannot tell a
-   * superseded fetch from the current one when the SAME list is reopened. */
-  async #loadDependants(kind: Kind, id: string, generation: number): Promise<void> {
+  /** Feeds a modal's body. A failed fetch sets that modal's own error flag rather than an empty
+   * stand-in: for the detail modal an empty table would read as "nothing carries this list", and for
+   * the delete confirmation — where every consequence cascades and cannot be undone — as "nothing
+   * depends on this", which would have a manager confirm the cascade blind. */
+  async #loadDependants(modal: Modal, kind: Kind, id: string, generation: number): Promise<void> {
     try {
-      const dependants = await this.#dependantsOf(kind, id);
-      if (generation === this.#deleteGeneration) this.dependants = dependants;
+      const rows = await this.#dependantsOf(kind, id);
+      if (generation === this.#generation[modal]) this.#setDependants(modal, rows, false);
     } catch {
-      if (generation === this.#deleteGeneration) this.dependantsError = true;
+      if (generation === this.#generation[modal]) this.#setDependants(modal, null, true);
     }
   }
   /** The field an authoring refusal names, or `_form` when it names none. Both kinds' refusals
@@ -289,18 +310,30 @@ export class ModifiersScreen extends LitElement {
       this.busy = false;
       return;
     }
-    this.#closeDelete();
+    this.#closeModal("delete");
     this.busy = false;
     await this.#load();
   }
+  /** Every loaded product by id, and every extras list's joined product names by list id. The join
+   * is the items column's `cell`, its `searchValue` AND its `sortValue`, so it runs for every row on
+   * every keystroke in the table's search box and again per row when that column sorts. Both indexes
+   * are rebuilt in `willUpdate` when their sources change, never per read. */
+  #productById = new Map<string, Product>();
+  #itemNamesByList = new Map<string, string>();
   /** An extras list's offered products, by their STAFF names — the name every dashboard surface
    * shows (docs/developers/products.md). A product the screen no longer holds is skipped rather
    * than named: the picker inside the editor is where a missing one is reported. */
-  #itemNames(list: ExtraList): string {
+  #joinItemNames(list: ExtraList): string {
     return list.items
-      .map((item) => this.products.find((product) => product.id === item.productId)?.name)
+      .map((item) => this.#productById.get(item.productId)?.name)
       .filter((name): name is string => name !== undefined)
       .join(", ");
+  }
+  /** Belt and braces: the rows and the index are both built from `extraLists` in the same update,
+   * so nothing today reaches the fallback. It joins on the spot rather than showing a blank cell if
+   * anything ever does. */
+  #itemNames(list: ExtraList): string {
+    return this.#itemNamesByList.get(list.id) ?? this.#joinItemNames(list);
   }
   #labelNames(list: OptionList): string {
     return list.labels.map((label) => label.name).join(", ");
@@ -336,7 +369,7 @@ export class ModifiersScreen extends LitElement {
           html`<wt-button
             variant="ghost"
             data-test=${`open-${row}-${list.id}`}
-            @click=${() => this.#openDetail(kind, list)}
+            @click=${() => this.#openModal("view", kind, list)}
             >${list.name}</wt-button
           >`,
       },
@@ -371,35 +404,27 @@ export class ModifiersScreen extends LitElement {
               align="start"
               variant="ghost"
               data-test=${`delete-${row}-${list.id}`}
-              @click=${() => this.#openDelete(kind, list)}
+              @click=${() => this.#openModal("delete", kind, list)}
               >${t("action.delete")}</wt-button
             ></wt-row-actions
           >`,
       },
     ];
   }
-  /** The single Name column behind each delete-preview table, searching and sorting on the staff
-   * name so a product is found by what the dashboard calls it. */
-  #dependantColumns(): DataTableColumn<Dependant>[] {
-    return [
-      {
-        key: "name",
-        label: t("modifiers.name"),
-        cell: (entry) => entry.name,
-        searchValue: (entry) => entry.name,
-        sortValue: (entry) => entry.name,
-      },
-    ];
+  /** The Name column every dependants table leads with, searching and sorting on the staff name so a
+   * product is found by what the dashboard calls it. */
+  #nameColumn<T extends Dependant>(): DataTableColumn<T> {
+    return {
+      key: "name",
+      label: t("modifiers.name"),
+      cell: (entry) => entry.name,
+      searchValue: (entry) => entry.name,
+      sortValue: (entry) => entry.name,
+    };
   }
   #usageColumns(): DataTableColumn<UsageDependant>[] {
     return [
-      {
-        key: "name",
-        label: t("modifiers.name"),
-        cell: (entry) => entry.name,
-        searchValue: (entry) => entry.name,
-        sortValue: (entry) => entry.name,
-      },
+      this.#nameColumn<UsageDependant>(),
       {
         key: "type",
         label: t("modifiers.type"),
@@ -417,27 +442,27 @@ export class ModifiersScreen extends LitElement {
       },
     ];
   }
-  /** A read-only table of products or menu items in the delete confirmation's cascade preview. */
-  #dependantsTable(
-    testId: string,
-    label: string,
-    viewKey: string,
-    emptyMessage: string,
-    searchLabel: string,
-    noMatchesMessage: string,
-    rows: Dependant[],
-  ) {
+  /** A read-only table of products or menu items in the delete confirmation's cascade preview. It
+   * carries no `emptyMessage`: both call sites are guarded by `length > 0`, and `wt-data-table`
+   * renders that message only when it has no rows at all. */
+  #dependantsTable(options: {
+    testId: string;
+    label: string;
+    viewKey: string;
+    searchLabel: string;
+    noMatchesMessage: string;
+    rows: Dependant[];
+  }) {
     return html`<wt-data-table
-      data-test=${testId}
-      aria-label=${label}
+      data-test=${options.testId}
+      aria-label=${options.label}
       searchable
-      searchLabel=${searchLabel}
-      noMatchesMessage=${noMatchesMessage}
-      viewKey=${viewKey}
-      .rows=${rows}
-      .columns=${this.#dependantColumns()}
+      searchLabel=${options.searchLabel}
+      noMatchesMessage=${options.noMatchesMessage}
+      viewKey=${options.viewKey}
+      .rows=${options.rows}
+      .columns=${[this.#nameColumn<Dependant>()]}
       .rowKey=${(entry: Dependant) => entry.id}
-      .emptyMessage=${emptyMessage}
     ></wt-data-table>`;
   }
   /** The detail modal's body: a spinner until `#loadUsage` resolves, then one filterable table of
@@ -508,27 +533,25 @@ export class ModifiersScreen extends LitElement {
         : nothing
     }${
       dependants.products.length > 0
-        ? this.#dependantsTable(
-            "list-delete-products",
-            t("modifiers.affected_products"),
-            "waitron.modifiers.delete.products.table",
-            t("modifiers.no_products"),
-            t("modifiers.search_products"),
-            t("modifiers.products_no_matches"),
-            dependants.products,
-          )
+        ? this.#dependantsTable({
+            testId: "list-delete-products",
+            label: t("modifiers.affected_products"),
+            viewKey: "waitron.modifiers.delete.products.table",
+            searchLabel: t("modifiers.search_products"),
+            noMatchesMessage: t("modifiers.products_no_matches"),
+            rows: dependants.products,
+          })
         : nothing
     }${
       dependants.menus.length > 0
-        ? this.#dependantsTable(
-            "list-delete-menus",
-            t("modifiers.affected_menus"),
-            "waitron.modifiers.delete.menus.table",
-            t("modifiers.no_menus"),
-            t("modifiers.search_menus"),
-            t("modifiers.menus_no_matches"),
-            dependants.menus,
-          )
+        ? this.#dependantsTable({
+            testId: "list-delete-menus",
+            label: t("modifiers.affected_menus"),
+            viewKey: "waitron.modifiers.delete.menus.table",
+            searchLabel: t("modifiers.search_menus"),
+            noMatchesMessage: t("modifiers.menus_no_matches"),
+            rows: dependants.menus,
+          })
         : nothing
     }`;
   }
@@ -588,8 +611,8 @@ export class ModifiersScreen extends LitElement {
                 // control inside a tab dispatches passes this listener with the same name. Only the
                 // tab strip's own event — the one whose target is this element — is a tab choice.
                 if (event.target !== event.currentTarget) return;
-                event.stopPropagation();
                 this.tab = event.detail.value === "options" ? "options" : "extras";
+                this.#url.write({ dashboard: "modifiers", view: this.tab });
               }}
             >
               <div slot="extras">${this.#renderTab("extras")}</div>
@@ -633,7 +656,7 @@ export class ModifiersScreen extends LitElement {
         }}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          if (!this.busy) this.#closeDelete();
+          if (!this.busy) this.#closeModal("delete");
         }}
       >
         ${this.deleting ? this.#renderDependants() : nothing}
@@ -643,7 +666,7 @@ export class ModifiersScreen extends LitElement {
             slot="cancel"
             variant="secondary"
             .disabled=${this.busy}
-            @click=${() => this.#closeDelete()}
+            @click=${() => this.#closeModal("delete")}
             >${t("action.cancel")}</wt-button
           ><wt-button
             data-test="confirm-delete"
@@ -660,14 +683,14 @@ export class ModifiersScreen extends LitElement {
         heading=${this.viewing ? `${this.viewing.name} · ${t("modifiers.products_modal")}` : ""}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          this.#closeDetail();
+          this.#closeModal("view");
         }}
         >${this.viewing ? this.#renderUsage() : nothing}<wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
             data-test="close-detail"
             variant="secondary"
-            @click=${() => this.#closeDetail()}
+            @click=${() => this.#closeModal("view")}
             >${t("action.close")}</wt-button
           ><wt-button
             data-test="detail-edit"
@@ -686,7 +709,7 @@ export class ModifiersScreen extends LitElement {
     const viewing = this.viewing;
     if (!viewing) return;
     const list = this.#lists(viewing.kind).find((each) => each.id === viewing.id);
-    this.#closeDetail();
+    this.#closeModal("view");
     if (list) this.#edit(viewing.kind, list);
   }
 }

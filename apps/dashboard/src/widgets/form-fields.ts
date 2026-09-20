@@ -14,9 +14,21 @@ export interface FieldContext {
   error: (key: string) => string;
 }
 
+/**
+ * A whole number written in plain digits, from `minimum` up to the largest an `integer` column
+ * holds, or null when the text is not one. The ceiling is the contract's own
+ * (`MAX_MODIFIER_INTEGER`, packages/catalogue/src/modifier-limits.ts): a larger value passes every
+ * other check and reaches PostgreSQL as `22003`, which carries no field to put a message beside.
+ * One home for that ceiling rule, so a form cannot accept what a sibling refuses.
+ */
+export function wholeWithin(text: string, minimum: number): number | null {
+  if (!/^\d+$/.test(text)) return null;
+  const value = Number(text);
+  return value >= minimum && value <= MAX_MODIFIER_INTEGER ? value : null;
+}
+
 /** A whole number from 1 to the largest quantity a modifier may store, written in plain digits. */
-export const isModifierQuantity = (text: string) =>
-  /^\d+$/.test(text) && Number(text) >= 1 && Number(text) <= MAX_MODIFIER_INTEGER;
+export const isModifierQuantity = (text: string) => wholeWithin(text, 1) !== null;
 
 /** The price field's label, naming the product's pricing unit when there is one. The variants table
  * puts the same text in its price column header, so the two never disagree about the unit. */
@@ -27,6 +39,13 @@ export const priceLabel = (unitLabel: string) =>
 export const nonBlankNames = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 
+/** {@link nonBlankNames} as an optional translated map: null when nothing was entered at all, which
+ * is the shape the catalogue's contracts read an optional customer name as. */
+export function translations(value: Record<string, string>): Record<string, string> | null {
+  const named = nonBlankNames(value);
+  return Object.keys(named).length ? named : null;
+}
+
 export function textField(
   context: FieldContext,
   key: string,
@@ -34,10 +53,12 @@ export function textField(
   value: string,
   change: (value: string) => void,
   required = false,
+  placeholder = "",
 ) {
   return html`<wt-input
     name=${key}
     label=${label}
+    placeholder=${placeholder}
     .value=${value}
     .required=${required}
     .disabled=${context.busy}
@@ -82,6 +103,9 @@ export function nameFields(
  * One OPTIONAL input per content language, named `<key>-<locale>`. Unlike {@link nameFields} no
  * language is required and none is marked with an asterisk: a customer-facing name or a description
  * left blank falls back to the staff name rather than being a missing value.
+ *
+ * `placeholder` is what it falls back TO — the inheritance hint every fallback field carries
+ * (2026-09-18-one-product-model-design.md §9.1), shown rather than stored.
  */
 export function optionalTextFields(
   context: FieldContext,
@@ -89,10 +113,17 @@ export function optionalTextFields(
   label: string,
   value: Record<string, string>,
   change: (value: Record<string, string>) => void,
+  placeholder = "",
 ) {
   return context.locales.map((locale) =>
-    textField(context, `${key}-${locale}`, `${label} (${locale})`, value[locale] ?? "", (text) =>
-      change({ ...value, [locale]: text }),
+    textField(
+      context,
+      `${key}-${locale}`,
+      `${label} (${locale})`,
+      value[locale] ?? "",
+      (text) => change({ ...value, [locale]: text }),
+      false,
+      placeholder,
     ),
   );
 }

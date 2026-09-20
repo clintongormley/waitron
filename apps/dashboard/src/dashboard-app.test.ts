@@ -3248,7 +3248,9 @@ it("opens the reusable modifiers library from its own management destination", a
   await flush(el);
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-modifiers"]')!.click();
   await flush(el);
-  expect(location.pathname).toBe("/manage/modifiers");
+  // The bare destination normalises to the default tab, which is what every other tabbed screen
+  // does: alerts-screen.test.ts:60 opens `/manage/alerts` and :75 expects `/manage/alerts/view/open`.
+  expect(location.pathname).toBe("/manage/modifiers/view/extras");
   expect(el.shadowRoot!.querySelector("dashboard-modifiers-screen")).not.toBeNull();
 });
 

@@ -2,15 +2,16 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
-import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import { nonBlankNames } from "./form-fields.js";
+import { optionalTextFields, translations, wholeWithin, type FieldContext } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
@@ -26,25 +27,6 @@ interface DraftItem {
   maxQuantity: string;
   preselected: boolean;
   price: string;
-}
-
-/** A translated map with its blank languages dropped, or null when nothing was entered — the shape
- * `parseExtraListInput` reads a customer name as (packages/catalogue/src/extra-contract.ts). */
-function translations(value: Record<string, string>): Record<string, string> | null {
-  const named = nonBlankNames(value);
-  return Object.keys(named).length ? named : null;
-}
-
-/**
- * A whole number written in plain digits, from `minimum` up to the largest an `integer` column
- * holds, or null when the text is not one. The ceiling is the contract's own
- * (`MAX_MODIFIER_INTEGER`, packages/catalogue/src/modifier-limits.ts): a larger value passes every
- * other check and reaches PostgreSQL as `22003`, which carries no field to put a message beside.
- */
-function whole(text: string, minimum: number): number | null {
-  if (!/^\d+$/.test(text)) return null;
-  const value = Number(text);
-  return value >= minimum && value <= MAX_MODIFIER_INTEGER ? value : null;
 }
 
 /**
@@ -67,6 +49,7 @@ export class ExtraListForm extends LitElement {
   static override styles = [
     baseStyles,
     ReorderController.styles,
+    ReorderController.tableStyles,
     css`
       :host {
         display: block;
@@ -84,63 +67,24 @@ export class ExtraListForm extends LitElement {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
       }
-      /* The items table is the one element allowed to be wider than the modal; its own scroller
-         keeps the dialog from scrolling sideways at phone width. It is focusable so a keyboard can
-         reach the scroll, which with no items yet is the only way to: the six-column header
-         overflows on its own and there is no row input to tab into. Same shape as
-         packages/ui/src/components/wt-data-table.ts:753. */
-      .items-wrap {
-        overflow-x: auto;
-      }
-      .items-wrap:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      th,
-      td {
-        padding: var(--wt-space-2) var(--wt-space-1);
-        text-align: start;
-        vertical-align: top;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-      td.handle-cell {
-        vertical-align: middle;
-      }
       .item-actions {
         display: flex;
         flex-wrap: wrap;
         align-items: end;
         gap: var(--wt-space-2);
       }
+      /* The picker's trigger fills its own box, and its open panel is sized to that trigger, so a
+         narrow box wraps every product name onto two lines. It takes the row's spare width instead,
+         floored at the same token the translated-name cells use. */
       .picker {
-        display: grid;
-        gap: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
+        flex: 1 1 var(--wt-cell-name-max-width);
       }
-      select {
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-      }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
+      /* A lone input in a cell has no width of its own, so the automatic table layout gives the
+         column what its HEADER needs and nothing more — and "Price" is the shortest word in this
+         table, which cut a two-digit price off mid-number. Same mechanism, token and fix as the
+         options form's own cell-field rule; the table's own scroller absorbs the extra width. */
+      .cell-field {
+        min-width: var(--wt-cell-name-max-width);
       }
     `,
   ];
@@ -188,6 +132,8 @@ export class ExtraListForm extends LitElement {
   } satisfies ReorderModel);
 
   protected override willUpdate(changes: PropertyValues<this>): void {
+    if (changes.has("products"))
+      this.#productById = new Map(this.products.map((product) => [product.id, product]));
     if (
       (changes.has("open") && this.open) ||
       (changes.has("value") &&
@@ -218,19 +164,21 @@ export class ExtraListForm extends LitElement {
     this.validation = {};
   }
 
+  /** Every offered product by id. A Lit form re-renders on every keystroke and three separate
+   * readers below want a product per ROW, so the index is rebuilt only when `products` changes. */
+  #productById = new Map<string, Product>();
+
   /** The product's STAFF name — the dashboard surface's name of the three (products.md). A list
    * can outlive the products the screen handed over, so a row with no product to read names what
    * is missing rather than rendering an empty cell. */
   #productName(productId: string): string {
-    return (
-      this.products.find((product) => product.id === productId)?.name ?? t("extras.unknown_product")
-    );
+    return this.#productById.get(productId)?.name ?? t("extras.unknown_product");
   }
 
   /** The price the item falls back to, shown as the price field's hint. Blank when there is no
    * product row to read one from. */
   #inheritedPrice(productId: string): string {
-    return this.products.find((product) => product.id === productId)?.unitPrice ?? "";
+    return this.#productById.get(productId)?.unitPrice ?? "";
   }
 
   /** The language a refusal naming a whole translated map is shown against: the first input on
@@ -362,10 +310,10 @@ export class ExtraListForm extends LitElement {
     if (!this.name.trim()) validation.name = t("extras.name_required");
     // A blank minimum is the contract's own default of 0 (`row.minPicks === undefined ? 0`), which
     // makes the list optional.
-    const minPicks = whole(this.minPicks.trim() || "0", 0);
+    const minPicks = wholeWithin(this.minPicks.trim() || "0", 0);
     if (minPicks === null) validation["min-picks"] = t("extras.picks_invalid");
     const capped = this.maxPicks.trim() !== "";
-    const maxPicks = capped ? whole(this.maxPicks.trim(), 0) : null;
+    const maxPicks = capped ? wholeWithin(this.maxPicks.trim(), 0) : null;
     if (capped && maxPicks === null) validation["max-picks"] = t("extras.picks_invalid");
     // The cap is what is wrong when the pair cannot both hold, so the message goes there rather
     // than on the minimum — the field `parseExtraListInput` names, and for the reason it states.
@@ -374,7 +322,7 @@ export class ExtraListForm extends LitElement {
 
     const offered = new Set<string>();
     const items = this.items.map((item, index) => {
-      const maxQuantity = whole(item.maxQuantity.trim(), 1);
+      const maxQuantity = wholeWithin(item.maxQuantity.trim(), 1);
       if (maxQuantity === null)
         validation[`item-${index}-max-quantity`] = t("extras.quantity_invalid");
       const price = item.price.trim();
@@ -422,33 +370,14 @@ export class ExtraListForm extends LitElement {
     this.#emit(event, "wt-cancel", {});
   }
 
-  /** One optional translated name, shown with the staff name as its placeholder: blank means it
-   * falls back to that name, which is the inheritance hint the spec asks every fallback field to
-   * carry (2026-09-18-one-product-model-design.md §9.1). */
-  #translatedField(
-    key: string,
-    label: string,
-    value: Record<string, string>,
-    errors: Record<string, string>,
-    fallback: string,
-    change: (value: Record<string, string>) => void,
-  ) {
-    return this.languages.languages.map(
-      (locale) =>
-        html`<wt-input
-          name=${`${key}-${locale}`}
-          label=${`${label} (${locale})`}
-          placeholder=${fallback}
-          .disabled=${this.busy}
-          .value=${value[locale] ?? ""}
-          .error=${errors[`${key}-${locale}`] ?? ""}
-          .invalid=${!!errors[`${key}-${locale}`]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            change({ ...value, [locale]: event.detail.value });
-          }}
-        ></wt-input>`,
-    );
+  /** What the shared field builders read from this form: its busy flag, its content languages and
+   * the messages currently on screen. */
+  #fields(errors: Record<string, string>): FieldContext {
+    return {
+      busy: this.busy,
+      locales: this.languages.languages,
+      error: (key) => errors[key] ?? "",
+    };
   }
 
   #itemRow(item: DraftItem, index: number, errors: Record<string, string>) {
@@ -494,6 +423,7 @@ export class ExtraListForm extends LitElement {
       </td>
       <td>
         <wt-input
+          class="cell-field"
           name=${`item-${index}-price`}
           label=${t("extras.price")}
           placeholder=${this.#inheritedPrice(item.productId)}
@@ -525,7 +455,7 @@ export class ExtraListForm extends LitElement {
 
   #itemsSection(errors: Record<string, string>) {
     return html`${this.#reorder.liveRegion()}
-      <div class="items-wrap" tabindex="0" role="region" aria-label=${t("extras.items")}>
+      <div class="table-wrap" tabindex="0" role="region" aria-label=${t("extras.items")}>
         <table>
           <thead>
             <tr>
@@ -548,25 +478,22 @@ export class ExtraListForm extends LitElement {
       </div>
       ${errors.items ? html`<p class="error" data-test="items-error">${errors.items}</p>` : nothing}
       <div class="item-actions">
-        <label class="picker"
-          >${t("extras.choose_product")}
-          <select
-            name="add-product"
-            data-test="add-product"
-            ?disabled=${this.busy}
-            @change=${(event: Event) => {
-              this.pick = (event.target as HTMLSelectElement).value;
-            }}
-          >
-            <option value="" .selected=${this.pick === ""}>${t("extras.choose_product")}</option>
-            ${this.products.map(
-              (product) =>
-                html`<option value=${product.id} .selected=${product.id === this.pick}>
-                  ${product.name}
-                </option>`,
-            )}
-          </select>
-        </label>
+        <wt-combobox
+          class="picker"
+          name="add-product"
+          data-test="add-product"
+          label=${t("extras.product")}
+          placeholder=${t("extras.choose_product")}
+          searchPlaceholder=${t("extras.search_product")}
+          noResultsLabel=${t("extras.no_products_found")}
+          .disabled=${this.busy}
+          .options=${this.products.map((product) => ({ value: product.id, label: product.name }))}
+          .value=${this.pick}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.pick = event.detail.value;
+          }}
+        ></wt-combobox>
         <wt-button
           variant="secondary"
           data-test="add-item"
@@ -614,13 +541,13 @@ export class ExtraListForm extends LitElement {
               this.#edit(() => (this.name = event.detail.value));
             }}
           ></wt-input>
-          ${this.#translatedField(
+          ${optionalTextFields(
+            this.#fields(errors),
             "customer-name",
             t("extras.customer_name"),
             this.customerName,
-            errors,
-            this.name,
             (customerName) => this.#edit(() => (this.customerName = customerName)),
+            this.name,
           )}
           <wt-input
             name="kitchen-name"

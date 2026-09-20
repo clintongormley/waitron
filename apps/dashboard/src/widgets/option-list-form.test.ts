@@ -359,6 +359,21 @@ it("paints its own error text with the danger token and keeps the row controls t
 });
 
 /**
+ * The preselect control is a native radio, so the user agent draws its CHECKED dot and only
+ * `accent-color` hands that drawing the brand colour — the same declaration
+ * packages/ui/src/components/wt-data-table.ts and apps/dashboard/src/screens/printers-screen.ts give
+ * their own native controls. The UNCHECKED fill is a separate matter settled by `color-scheme`
+ * (packages/ui/src/tokens/colors.test.ts), which this says nothing about.
+ */
+it("hands the preselect radio the brand colour to draw its checked dot with", async () => {
+  const { el, host } = await mount({ value: cooked });
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+
+  const radio = el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="label-0-default"]')!;
+  expect(getComputedStyle(radio).accentColor).toBe("rgb(1, 2, 3)");
+});
+
+/**
  * Found by opening the form and reading it: the two single-input cells carried no minimum width, so
  * the table's automatic layout collapsed each to `wt-input`'s own `--wt-tap-min` floor and a real
  * label's name was cut off mid-word — at 1280px, with unused space to the right of the table.

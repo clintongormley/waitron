@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
@@ -17,6 +17,12 @@ import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
+// Each tab's table remembers its sort and its status filter in sessionStorage under its own
+// `viewKey`, so a filter one test chooses would otherwise be restored into every later mount.
+beforeEach(() => sessionStorage.clear());
+// The screen reads and writes the chosen tab in the path, so every test starts from the screen's own
+// route rather than from wherever the previous file left the browser.
+beforeEach(() => history.replaceState(null, "", "/manage/modifiers"));
 
 const BREAD = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
 const RYE = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
@@ -258,6 +264,40 @@ it("does not change tab when a control inside a panel announces a change", async
       .shadowRoot!.querySelector('[role="tab"][data-key="options"]')!
       .getAttribute("aria-selected"),
   ).toBe("true");
+});
+
+// The chosen tab lives in the path, as it does on three of the four other tabbed screens
+// (alerts-screen.ts, printers-screen.ts, venue-operations-screen.ts; profile-screen.ts keeps its
+// tab in component state). Without it a refresh, a back press and a shared link all land on Extras
+// whatever the manager was looking at.
+it("records the chosen tab in the path and walks back to the previous one", async () => {
+  const el = await mount();
+  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+
+  await selectTab(el, "options");
+  expect(location.pathname).toBe("/manage/modifiers/view/options");
+
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/modifiers/view/extras"));
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras"));
+});
+
+it("opens on the tab the path names", async () => {
+  history.replaceState(null, "", "/manage/modifiers/view/options");
+  const el = await mount();
+  expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("options");
+  expect(table(el, "option-lists").rows).toEqual([optionList]);
+});
+
+// A path naming no tab this screen has falls back to Extras and REPLACES rather than pushes, so the
+// back button still leaves the screen instead of bouncing off a corrected entry.
+it("falls back to Extras for an unknown tab without adding a history entry", async () => {
+  history.replaceState(null, "", "/manage/modifiers/view/bogus");
+  const before = history.length;
+  const el = await mount();
+  expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras");
+  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+  expect(history.length).toBe(before);
 });
 
 it("lists each kind in its own table", async () => {
@@ -665,9 +705,9 @@ it("previews the products and menus a deleted extras list would touch, and NO or
   expect(deleteMenus.noMatchesMessage).toBe(t("modifiers.menus_no_matches"));
   // Neither kind previews an order count, and neither delete is ever blocked by one: options never
   // touch an order, and an extras-list delete leaves an open order's child lines alone (spec
-  // 2026-09-18-one-product-model-design.md §3.5, §9.2).
+  // 2026-09-18-one-product-model-design.md §3.5, §9.2). The sentence that used to say otherwise —
+  // `modifiers.delete_orders_block` — has no reader left and was deleted with this branch.
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
-  expect(dialog.textContent).not.toContain(t("modifiers.delete_orders_block"));
   expect(confirmDelete(el).disabled).toBe(false);
 });
 

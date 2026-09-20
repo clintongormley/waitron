@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
@@ -23,6 +23,10 @@ const EGG_ITEM = "22222222-2222-4222-8222-222222222222";
  * reads — `id`, `name` and `unitPrice`. The two products below are priced DIFFERENTLY on purpose:
  * the inheritance hint (spec 2026-09-18-one-product-model-design.md §9.1) is only checkable when a
  * placeholder taken from the wrong product would read differently from the right one.
+ *
+ * All THREE of a product's names read differently too (CLAUDE.md §3). A blank `kitchenName` would
+ * fall back to the staff name, so a cell reading the kitchen name where the staff name belongs would
+ * pass whichever one it read.
  */
 function product(overrides: Partial<Product> = {}): Product {
   return {
@@ -38,7 +42,7 @@ function product(overrides: Partial<Product> = {}): Product {
     unitId: "unit-each",
     unit: { id: "unit-each", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
     description: null,
-    kitchenName: null,
+    kitchenName: "BCN",
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "1.50",
@@ -56,7 +60,13 @@ function product(overrides: Partial<Product> = {}): Product {
 
 const products: Product[] = [
   product(),
-  product({ id: EGG, name: "Fried egg", customerName: { es: "Huevo frito" }, unitPrice: "0.80" }),
+  product({
+    id: EGG,
+    name: "Fried egg",
+    customerName: { es: "Huevo frito" },
+    kitchenName: "FRIEDEGG",
+    unitPrice: "0.80",
+  }),
 ];
 
 /**
@@ -113,11 +123,24 @@ async function click(el: ExtraListForm, testId: string): Promise<void> {
   await el.updateComplete;
 }
 
-/** Choose a product in the picker and add it as a row, the way the operator does. */
-async function addItem(el: ExtraListForm, productId: string): Promise<void> {
-  const picker = el.shadowRoot!.querySelector<HTMLSelectElement>('[data-test="add-product"]')!;
-  picker.value = productId;
-  picker.dispatchEvent(new Event("change", { bubbles: true }));
+function picker(el: ExtraListForm): HTMLElementTagNameMap["wt-combobox"] {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    '[data-test="add-product"]',
+  )!;
+}
+
+/** Choose a product in the picker and add it as a row, the way the operator does: open the
+ * combobox, click the product's own row, then Add. */
+async function addItem(el: ExtraListForm, name: string): Promise<void> {
+  const combobox = picker(el);
+  await combobox.updateComplete;
+  combobox.shadowRoot!.querySelector<HTMLElement>("button.trigger")!.click();
+  await combobox.updateComplete;
+  const option = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (row) => row.textContent!.trim() === name,
+  );
+  if (option === undefined) throw new Error(`the picker offers no product called ${name}`);
+  option.click();
   await el.updateComplete;
   await click(el, "add-item");
 }
@@ -151,11 +174,11 @@ it("submits a new list once, minting an id for every item it was given", async (
   await type(el, "customer-name-es", "Añádele algo");
   await type(el, "kitchen-name", "ADD");
   await type(el, "max-picks", "2");
-  await addItem(el, BACON);
+  await addItem(el, "Bacon");
   await type(el, "item-0-max-quantity", "3");
   await toggle(el, "item-0-preselected", true);
   await type(el, "item-0-price", "2.00");
-  await addItem(el, EGG);
+  await addItem(el, "Fried egg");
   await click(el, "save");
 
   expect(submitted).toHaveLength(1);
@@ -208,13 +231,15 @@ it("submits an edit under the ids it was given, keeping the fields it did not to
   ]);
 });
 
-it("shows each row's product by its STAFF name, not the customer-facing one", async () => {
+it("shows each row's product by its STAFF name, not the customer-facing or kitchen one", async () => {
   const { el } = await mount({ value: addons });
 
   expect(text(el, "item-0-product")).toBe("Bacon");
   expect(text(el, "item-1-product")).toBe("Fried egg");
   expect(el.shadowRoot!.textContent).not.toContain("Bacon ahumado");
   expect(el.shadowRoot!.textContent).not.toContain("Huevo frito");
+  expect(el.shadowRoot!.textContent).not.toContain("BCN");
+  expect(el.shadowRoot!.textContent).not.toContain("FRIEDEGG");
 });
 
 it("hints an inherited price with the product's own and submits it as null", async () => {
@@ -222,8 +247,8 @@ it("hints an inherited price with the product's own and submits it as null", asy
   const submitted = record(host);
 
   await type(el, "name", "Add-ons");
-  await addItem(el, EGG);
-  await addItem(el, BACON);
+  await addItem(el, "Fried egg");
+  await addItem(el, "Bacon");
 
   // The inheritance hint (spec §9.1): the field is EMPTY while the item inherits, and the price it
   // would fall back to is the placeholder. The two products are priced differently, so a hint read
@@ -238,12 +263,25 @@ it("hints an inherited price with the product's own and submits it as null", asy
   expect(submitted[0]!.items.map((item) => item.price)).toEqual([null, null]);
 });
 
+/**
+ * The number in this column REPLACES the product's own price — `resolveExtraPrice` is
+ * `menuPrice ?? item.price ?? product?.unitPrice` (packages/catalogue/src/extras.ts), and the spec
+ * says the same (2026-09-18-one-product-model-design.md §3.3). The OTHER modifier model's price is
+ * an addition, and `modifiers.price` still labels it that way for the two surfaces that render it
+ * (widgets/modifier-form.ts, widgets/choice-form.ts). The two labels must therefore not read alike:
+ * under an "addition" label a manager typing 1.50 against a 3.00 product believes they set 4.50.
+ */
+it("does not label the overriding price with the adding model's words", () => {
+  for (const locale of ["en", "es"] as const)
+    expect([locale, t("extras.price", locale)]).not.toEqual([locale, t("modifiers.price", locale)]);
+});
+
 it("submits a typed price as a string, even when it is the product's own price", async () => {
   const { el, host } = await mount();
   const submitted = record(host);
 
   await type(el, "name", "Add-ons");
-  await addItem(el, EGG);
+  await addItem(el, "Fried egg");
   await type(el, "item-0-price", "0.80");
   await click(el, "save");
 
@@ -254,7 +292,7 @@ it("refuses a list with no staff name, beside the name field and in the summary"
   const { el, host } = await mount();
   const submitted = record(host);
 
-  await addItem(el, BACON);
+  await addItem(el, "Bacon");
   await click(el, "save");
 
   expect(submitted).toEqual([]);
@@ -329,8 +367,8 @@ it("refuses the same product offered twice, beside the second row and in the sum
   const submitted = record(host);
 
   await type(el, "name", "Add-ons");
-  await addItem(el, BACON);
-  await addItem(el, BACON);
+  await addItem(el, "Bacon");
+  await addItem(el, "Bacon");
   await click(el, "save");
 
   expect(submitted).toEqual([]);
@@ -447,19 +485,24 @@ it("names a product it was given no row for rather than rendering an empty cell"
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").placeholder).toBe("");
 });
 
-it("adds nothing until a product is chosen", async () => {
+it("offers every product it was given, and adds nothing until one is chosen", async () => {
   const { el } = await mount();
+
+  // The picker is the house combobox, so the operator searches a list that is every product of
+  // every catalogue rather than scrolling a native dropdown.
+  expect(picker(el).options).toEqual([
+    { value: BACON, label: "Bacon" },
+    { value: EGG, label: "Fried egg" },
+  ]);
 
   await click(el, "add-item");
   expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(0);
 
-  await addItem(el, BACON);
+  await addItem(el, "Bacon");
   expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1);
-  // The picker returns to its blank entry, so clicking Add again cannot repeat the last product by
+  // The picker returns to nothing chosen, so clicking Add again cannot repeat the last product by
   // accident.
-  expect(el.shadowRoot!.querySelector<HTMLSelectElement>('[data-test="add-product"]')!.value).toBe(
-    "",
-  );
+  expect(picker(el).value).toBe("");
 });
 
 it("emits one wt-cancel, and neither event while it is saving", async () => {
@@ -490,8 +533,8 @@ it("paints its own error text with the danger token and keeps the row controls t
   const error = el.shadowRoot!.querySelector<HTMLElement>('[data-test="items-error"]')!;
   expect(getComputedStyle(error).color).toBe("rgb(13, 14, 15)");
 
-  await addItem(el, BACON);
-  await addItem(el, BACON);
+  await addItem(el, "Bacon");
+  await addItem(el, "Bacon");
   await click(el, "save");
   const duplicate = el.shadowRoot!.querySelector<HTMLElement>(
     '[data-test="item-1-product-error"]',
@@ -505,4 +548,33 @@ it("paints its own error text with the danger token and keeps the row controls t
   )!;
   const { width, height } = handle.getBoundingClientRect();
   expect({ width: width >= 44, height: height >= 44 }).toEqual({ width: true, height: true });
+});
+
+// A lone `wt-input` in a `<td>` has no width of its own, so an automatic table layout gives the
+// column whatever its HEADER needs and nothing more. The price header is the shortest word in the
+// table, which squeezed the field below its own value: at phone width "12.50" rendered as "12.5"
+// with the rest scrolled out of a box the operator cannot widen. Measured, not asserted on text —
+// `.value` reads "12.50" either way, which is why the whole suite passed while the number on screen
+// was wrong. The sibling options form fixes the same mechanism with the same token.
+it("shows a whole price, not a truncated one, at phone width", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mount({
+      value: {
+        ...addons,
+        items: [
+          { id: BACON_ITEM, productId: BACON, maxQuantity: 2, preselected: true, price: "12.50" },
+        ],
+      },
+    });
+    const priceInput = field<HTMLElement>(el, "item-0-price").shadowRoot!.querySelector("input")!;
+    expect({
+      value: priceInput.value,
+      overflowing: priceInput.scrollWidth > priceInput.clientWidth,
+    }).toEqual({ value: "12.50", overflowing: false });
+  } finally {
+    await page.viewport(width, height);
+  }
 });

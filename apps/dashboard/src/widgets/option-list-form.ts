@@ -9,7 +9,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import { nonBlankNames } from "./form-fields.js";
+import { optionalTextFields, translations, type FieldContext } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
@@ -24,13 +24,6 @@ interface DraftLabel {
   customerName: Record<string, string>;
   kitchenName: string;
   available: boolean;
-}
-
-/** A translated map with its blank languages dropped, or null when nothing was entered — the shape
- * `parseOptionListInput` reads a customer name as (packages/catalogue/src/option-contract.ts). */
-function translations(value: Record<string, string>): Record<string, string> | null {
-  const named = nonBlankNames(value);
-  return Object.keys(named).length ? named : null;
 }
 
 /**
@@ -51,6 +44,7 @@ export class OptionListForm extends LitElement {
   static override styles = [
     baseStyles,
     ReorderController.styles,
+    ReorderController.tableStyles,
     css`
       :host {
         display: block;
@@ -66,31 +60,7 @@ export class OptionListForm extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      /* The labels table is the one element allowed to be wider than the modal; its own scroller
-         keeps the dialog from scrolling sideways at phone width. It is focusable so a keyboard can
-         reach the scroll, which with no labels yet is the only way to: the seven-column header
-         overflows on its own and there is no row input to tab into. Same shape as
-         packages/ui/src/components/wt-data-table.ts:753. */
-      .labels-wrap {
-        overflow-x: auto;
-      }
-      .labels-wrap:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      th,
-      td {
-        padding: var(--wt-space-2) var(--wt-space-1);
-        text-align: start;
-        vertical-align: top;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-      td.pick-cell,
-      td.handle-cell {
+      td.pick-cell {
         vertical-align: middle;
       }
       .cell-stack {
@@ -114,21 +84,17 @@ export class OptionListForm extends LitElement {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
       }
+      /* The preselect dot is drawn by the user agent, not by this form, so the brand colour reaches
+         it through accent-color — the declaration wt-data-table and the printers screen give their
+         own native controls. What the UNCHECKED fill looks like is a separate matter, settled by
+         color-scheme (packages/ui/src/tokens/colors.test.ts). */
+      input[type="radio"] {
+        accent-color: var(--wt-color-primary);
+      }
       .label-actions {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
-      }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
       }
     `,
   ];
@@ -346,33 +312,14 @@ export class OptionListForm extends LitElement {
     this.#emit(event, "wt-cancel", {});
   }
 
-  /** One optional translated name, shown with the staff name as its placeholder: blank means it
-   * falls back to that name, which is the inheritance hint the spec asks every fallback field to
-   * carry (2026-09-18-one-product-model-design.md §9.1). */
-  #translatedField(
-    key: string,
-    label: string,
-    value: Record<string, string>,
-    errors: Record<string, string>,
-    fallback: string,
-    change: (value: Record<string, string>) => void,
-  ) {
-    return this.languages.languages.map(
-      (locale) =>
-        html`<wt-input
-          name=${`${key}-${locale}`}
-          label=${`${label} (${locale})`}
-          placeholder=${fallback}
-          .disabled=${this.busy}
-          .value=${value[locale] ?? ""}
-          .error=${errors[`${key}-${locale}`] ?? ""}
-          .invalid=${!!errors[`${key}-${locale}`]}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            change({ ...value, [locale]: event.detail.value });
-          }}
-        ></wt-input>`,
-    );
+  /** What the shared field builders read from this form: its busy flag, its content languages and
+   * the messages currently on screen. */
+  #fields(errors: Record<string, string>): FieldContext {
+    return {
+      busy: this.busy,
+      locales: this.languages.languages,
+      error: (key) => errors[key] ?? "",
+    };
   }
 
   #labelRow(label: DraftLabel, index: number, errors: Record<string, string>) {
@@ -397,13 +344,13 @@ export class OptionListForm extends LitElement {
       </td>
       <td>
         <div class="cell-stack">
-          ${this.#translatedField(
+          ${optionalTextFields(
+            this.#fields(errors),
             `label-${index}-customer-name`,
             t("options.customer_name"),
             label.customerName,
-            errors,
-            label.name,
             (customerName) => this.#editLabel(label.id, { customerName }),
+            label.name,
           )}
         </div>
       </td>
@@ -466,7 +413,7 @@ export class OptionListForm extends LitElement {
 
   #labelsSection(errors: Record<string, string>) {
     return html`${this.#reorder.liveRegion()}
-      <div class="labels-wrap" tabindex="0" role="region" aria-label=${t("options.labels")}>
+      <div class="table-wrap" tabindex="0" role="region" aria-label=${t("options.labels")}>
         <table>
           <thead>
             <tr>
@@ -554,13 +501,13 @@ export class OptionListForm extends LitElement {
               this.#edit(() => (this.name = event.detail.value));
             }}
           ></wt-input>
-          ${this.#translatedField(
+          ${optionalTextFields(
+            this.#fields(errors),
             "customer-name",
             t("options.customer_name"),
             this.customerName,
-            errors,
-            this.name,
             (customerName) => this.#edit(() => (this.customerName = customerName)),
+            this.name,
           )}
           <wt-input
             name="kitchen-name"
