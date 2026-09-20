@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   AppError,
   decimal,
@@ -20,7 +20,7 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 // through the neutral store's `getPaymentByRef` (which returns `state`/`externalRef`/`settledAt`),
 // keeping this adapter package free of a direct `drizzle-orm` dependency.
 
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 // The provider's sync-origin node id. Value is irrelevant to these assertions (this container migrates
 // core+payments only, no sync capture triggers), but the option is required — it is threaded into the

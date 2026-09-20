@@ -3830,9 +3830,9 @@ actually sits:
   the boot: its `testTimeout: 120_000` bounds test bodies, and its `hookTimeout: 180_000` reaches
   only the hooks the helper leaves untimed — its `afterEach` reset and its `afterAll` close
   (`packages/db/src/testing/lifecycle.ts:148` and `:153`) — which is what this package's
-  `hookTimeout` does reach, the boot aside. `packages/payments-stripe/vitest.config.ts:36-39` has the same second
+  `hookTimeout` does reach, the boot aside. `packages/payments-stripe/vitest.config.ts` had the same second
   error, calling the 5s `testTimeout` default "a live risk" for a PGlite boot and a template clone
-  that both sit in hooks. `packages/core`'s three were corrected by that conversion, and two of them
+  that both sit in hooks, until its own conversion corrected it on 2026-09-20. `packages/core`'s three were corrected by that conversion, and two of them
   are in TEST files rather than a config — every other entry in this list is a config or a README.
 
 **A claim stated in a markdown file is invisible to every grep this rollout kept, and #438 is where
@@ -3978,6 +3978,23 @@ in a `beforeAll`, which is not a test body. **`packages/payments-stripe/vitest.c
 word for word and is still standing**, found with `grep -rn "live risk"` over the whole tree with no
 file-type or directory filter. Correcting it needs that package read against its own suites, which
 this branch did not do.
+
+> **2026-09-20 — no longer standing.** The `packages/payments-stripe` conversion read that package
+> against its own suites and corrected the comment. The only live config comment `grep -rn "live
+> risk"` still returns is `packages/db/vitest.config.ts:11`, which nothing tracks; the grep's other
+> hits are this file's own prose — including this sentence — and two historical plans.
+>
+> That one is NOT the same claim, and a conversion should not correct it by copying stripe's fix.
+> Only its first sentence is in question: "every test here boots a WASM PostgreSQL", written above
+> `testTimeout: 30_000`. Three boot classes actually live there, and `testTimeout` reaches one of
+> them — direct `createPgliteDb()` calls inside an `it` body (`packages/db/src/migrate.test.ts`,
+> `client.test.ts` and four other files). The `usePgliteDb` suites boot in a `beforeAll` the helper
+> times itself, bounded by neither setting, and the `describeEachTarget` files boot per test in an
+> untimed `beforeEach` that `hookTimeout` bounds. So the sentence is too wide rather than false, and
+> "nowhere else in the repo" is a second claim nobody has checked. Its `hookTimeout` sentence, by
+> contrast, is TRUE and must not be swept up with it: `client.test.ts:101`, `migrate.test.ts:109`
+> and `testing/networked-postgres.test.ts:12` each start a Testcontainers PostgreSQL in an untimed
+> `beforeAll`. Read, not run — whoever converts `packages/db` owes it the run.
 
 **Second, and this one retires a probe several conversions have leaned on:
 `--hookTimeout` on the command line does NOT reach a project that sets its own.** Measured on this
