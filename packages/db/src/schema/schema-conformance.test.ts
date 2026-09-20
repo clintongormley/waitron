@@ -6,7 +6,7 @@
 // that drifts from its migration — a renamed column, a foreign key pointing at the wrong table, a
 // money column declared as free text — is invisible until a query fails at runtime.
 import { is, sql } from "drizzle-orm";
-import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
+import { getTableConfig, isPgEnum, PgTable, type PgEnum } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -257,6 +257,40 @@ async function fromDatabase(db: Database, name: string): Promise<TableShape> {
     .sort();
   return { name, columns, primaryKey, foreignKeys, uniques, indexes, checks };
 }
+
+const declaredEnums: PgEnum<[string, ...string[]]>[] = Object.values<unknown>(barrel).filter(
+  (value): value is PgEnum<[string, ...string[]]> => isPgEnum(value),
+);
+
+interface EnumRow {
+  label: string;
+}
+
+describe("the drizzle enum declarations match the database the core migrations build", () => {
+  it("declares at least one enum", () => {
+    expect(declaredEnums.length).toBeGreaterThan(0);
+  });
+
+  it.each(declaredEnums.map((declared) => [declared.enumName, declared] as const))(
+    "%s",
+    async (_name, declared) => {
+      // Labels in declaration order, which is the order PostgreSQL stores and sorts them in. A
+      // label that differs, is missing, or has moved is a value the application can write and the
+      // database refuses, or the other way round.
+      const labels = await rows<EnumRow>(
+        suite.db,
+        sql`
+          select e.enumlabel as label
+          from pg_enum e
+          join pg_type t on t.oid = e.enumtypid
+          where t.typname = ${declared.enumName}
+          order by e.enumsortorder
+        `,
+      );
+      expect(labels.map((row) => row.label)).toEqual([...declared.enumValues]);
+    },
+  );
+});
 
 describe("the drizzle schema matches the database the core migrations build", () => {
   it("declares at least every core table", () => {
