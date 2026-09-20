@@ -1,4 +1,4 @@
-import type { ModifierSnapshot } from "@waitron/shared";
+import type { OptionSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
 import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
@@ -211,7 +211,13 @@ export const saleLines = table(
     // Frozen variant kitchen name.
     variantKitchenName: label("variant_kitchen_name"),
     kitchenName: label("kitchen_name"),
-    modifierSnapshots: json<ModifierSnapshot[]>("modifier_snapshots").notNull().default([]),
+    // The diner's answers to this dish's OPTIONS lists, each frozen as the list's three names and
+    // the chosen label's three names, copied by value — no id points back at a list or a label, so a
+    // later catalogue edit cannot rewrite a filed sale. EXTRAS are not in here: an extras pick is
+    // filed as its own child line of the dish, carrying the picked product's frozen names, quantity,
+    // price and VAT and no `product_id` (spec 2026-09-18-one-product-model-design.md §3.4 and
+    // decision 11, which is this table's own "snapshotted values, never catalogue references" rule).
+    optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
     // Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),

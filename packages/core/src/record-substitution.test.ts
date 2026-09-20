@@ -537,27 +537,31 @@ describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => 
   });
 });
 
-it("persists structured modifier snapshots and child links on the issued lines", async () => {
+it("persists the frozen options answers and child links on the issued lines", async () => {
   const backend = new FakeFiscalBackend(suite.db);
   const original = await sellTicket(backend);
-  const modifierSnapshots = [
+  // Three different texts per name, so an assertion cannot pass while the wrong one is read.
+  const optionSnapshots = [
     {
-      modifierId: "milk",
-      name: { en: "Milk" },
-      type: "options" as const,
-      choiceId: "oat",
-      choiceName: { en: "Oat" },
+      listName: { en: "Milk" },
+      listCustomerName: { en: "Which milk?" },
+      listKitchenName: "MILK",
+      labelName: { en: "Oat" },
+      labelCustomerName: { en: "Oat milk" },
+      labelKitchenName: "OAT",
     },
     {
-      modifierId: "ice",
-      name: { en: "Ice" },
-      type: "text" as const,
-      text: "No ice",
+      listName: { en: "Ice" },
+      listCustomerName: { en: "How much ice?" },
+      listKitchenName: "ICE",
+      labelName: { en: "None" },
+      labelCustomerName: { en: "No ice" },
+      labelKitchenName: "NOICE",
     },
   ];
   const lines = substitutionInput([original.saleId]).lines.map((line, index) => ({
     ...line,
-    modifierSnapshots: index === 0 ? modifierSnapshots : [],
+    optionSnapshots: index === 0 ? optionSnapshots : [],
     parentLineNo: index === 0 ? null : 1,
     category: "Drinks",
   }));
@@ -567,7 +571,7 @@ it("persists structured modifier snapshots and child links on the issued lines",
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
-  expect(saved.map((line) => line.modifierSnapshots)).toEqual([modifierSnapshots, []]);
+  expect(saved.map((line) => line.optionSnapshots)).toEqual([optionSnapshots, []]);
   expect(saved[0]!.parentLineId).toBeNull();
   expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
   expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);

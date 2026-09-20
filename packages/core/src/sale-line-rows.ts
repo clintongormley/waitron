@@ -12,7 +12,7 @@ export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
     parentLineId: line.parentLineNo == null ? null : (byLineNo.get(line.parentLineNo) ?? null),
     name: line.name,
     descriptions: line.descriptions,
-    modifierSnapshots: line.modifierSnapshots ?? [],
+    optionSnapshots: line.optionSnapshots ?? [],
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
     quantity: line.quantity,
