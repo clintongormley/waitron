@@ -7,6 +7,7 @@ import {
   cloneTemplate,
   pickTemplate,
   probeRoleStatement,
+  nextCloneName,
   resolveSharedHandle,
   usePgliteDb,
   useRealPostgres,
@@ -176,7 +177,27 @@ describe("resolveSharedHandle", () => {
     // (`src/testing/global-setup.ts`) that path returns a real handle — the seam is the honest way to
     // reach the throw. The default-inject path is exercised for real by describeEachTarget and every
     // converted useTemplateDb suite in this package.
-    expect(() => resolveSharedHandle(() => undefined)).toThrowError(/no shared container in scope/);
+    // The whole message, not a phrase of it: the half that says WHAT TO DO — wire the package's
+    // globalSetup to a file that calls startSharedContainer and provides the handle — is the half
+    // this error exists for, and a phrase match leaves it free to be deleted.
+    expect(() => resolveSharedHandle(() => undefined)).toThrowError(
+      "useTemplateDb: no shared container in scope. Wire the package's vitest `globalSetup` to a " +
+        'file that calls `startSharedContainer` and `provide("sharedPg", handle)`.',
+    );
+  });
+});
+
+/**
+ * The one place `clone_<pid>_<n>` is minted. What it has to guarantee is that no two clones alive at
+ * the same moment share a name; the counter is per module and the pid separates concurrent workers.
+ */
+describe("nextCloneName", () => {
+  it("mints clone_<pid>_<n>, counting up", () => {
+    const first = nextCloneName();
+    const second = nextCloneName();
+    expect(first).toMatch(new RegExp(`^clone_${process.pid}_\\d+$`));
+    const number = (name: string): number => Number(name.slice(`clone_${process.pid}_`.length));
+    expect(number(second)).toBe(number(first) + 1);
   });
 });
 
