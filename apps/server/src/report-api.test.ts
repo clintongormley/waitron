@@ -13,7 +13,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { addDecimal, decimal } from "@waitron/shared";
+import { addDecimal, decimal, decimalToCents } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -80,6 +80,8 @@ const expectedBox27Q1 = packAeatNumeric(
 /** Seeds one sale directly (fixture owner), with a single-rate filed desglose on
  * `sales.vat_breakdown` — the only column the reporting aggregate reads. */
 async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<void> {
+  // `sales.total` stores a count of whole cents; `vat_breakdown` is jsonb, not a money column, and
+  // keeps the decimal literals the aggregate reads.
   await db.insert(sales).values({
     tillId,
     nodeId,
@@ -87,7 +89,7 @@ async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<v
     invoiceNumber: s.invoiceNumber,
     issuedAt: s.issuedAt,
     issuedOffsetMinutes: 0,
-    total: addDecimal(decimal(s.base), decimal(s.tax)),
+    total: decimalToCents(addDecimal(decimal(s.base), decimal(s.tax))),
     vatBreakdown: [{ rate: s.rate, base: s.base, tax: s.tax }],
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -107,15 +109,16 @@ async function seedPurchase(db: Database): Promise<void> {
       supplierInvoiceNumber: "2026/501",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-05",
-      total: "121.00",
+      // `total`, `base` and `tax` all store a count of whole cents; `rate` is not a money column.
+      total: decimalToCents(decimal("121.00")),
       regime: "general",
     })
     .returning({ id: purchaseInvoices.id });
   await db.insert(purchaseInvoiceVat).values({
     purchaseInvoiceId: row!.id,
     rate: "21.00",
-    base: "100.00",
-    tax: "21.00",
+    base: decimalToCents(decimal("100.00")),
+    tax: decimalToCents(decimal("21.00")),
     kind: "ordinary",
   });
 }

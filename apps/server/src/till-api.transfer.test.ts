@@ -238,12 +238,14 @@ describe("POST /api/tabs/:id/transfer", () => {
       line_no: number;
       product_id: string;
       quantity: string;
-      unit_price_gross: string;
+      unit_price_gross: number;
     }>(
-      sql`select line_no, product_id, quantity, unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
+      // unit_price_gross counts whole cents, so 150 is the locked 1.50; ::int hands it back as a
+      // number on any driver.
+      sql`select line_no, product_id, quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
     expect(b.rows).toEqual([
-      { line_no: 1, product_id: cafeId, quantity: "2.000", unit_price_gross: "1.50" },
+      { line_no: 1, product_id: cafeId, quantity: "2.000", unit_price_gross: 150 },
     ]);
   });
 
@@ -261,10 +263,10 @@ describe("POST /api/tabs/:id/transfer", () => {
       sql`select quantity from working_order_lines where working_order_id = ${tabA}`,
     );
     expect(a.rows).toEqual([{ quantity: "2.000" }]); // 3 − 1 = 2 remain on the source
-    const b = await suite.db.execute<{ quantity: string; unit_price_gross: string }>(
-      sql`select quantity, unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
+    const b = await suite.db.execute<{ quantity: string; unit_price_gross: number }>(
+      sql`select quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
-    expect(b.rows).toEqual([{ quantity: "1.000", unit_price_gross: "1.50" }]); // same locked price
+    expect(b.rows).toEqual([{ quantity: "1.000", unit_price_gross: 150 }]); // same locked 1.50
   });
 
   it("400 tab.transfer_self when transferring a tab to itself", async () => {

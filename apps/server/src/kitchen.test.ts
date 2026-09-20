@@ -264,7 +264,7 @@ async function seedProduct(): Promise<string> {
   );
   const { rows } = await db.execute<{ id: string }>(sql`
     insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-    values (${cat.rows[0]!.id}, 'Routed product', 'each', 1.00, 'general')
+    values (${cat.rows[0]!.id}, 'Routed product', 'each', 100, 'general')
     returning id`);
   return rows[0]!.id;
 }

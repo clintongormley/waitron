@@ -222,7 +222,7 @@ describe("configuration transfer database path", () => {
           (id, catalogue_id, name, pricing_unit, unit_price, vat_class)
         values
           ('22222222-aaaa-aaaa-aaaa-222222222222',
-           '11111111-aaaa-aaaa-aaaa-111111111111', 'Café', 'each', 1.50, 'general')`);
+           '11111111-aaaa-aaaa-aaaa-111111111111', 'Café', 'each', 150, 'general')`);
       await tx.execute(
         sql`update products set image = ${uploaded.image.filename} where id = '22222222-aaaa-aaaa-aaaa-222222222222'`,
       );
@@ -250,7 +250,7 @@ describe("configuration transfer database path", () => {
           (id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate)
         values
           ('66666666-aaaa-aaaa-aaaa-666666666666',
-           '33333333-aaaa-aaaa-aaaa-333333333333', 2400, 'permanent', '2026-01-01', 12.50)`);
+           '33333333-aaaa-aaaa-aaaa-333333333333', 2400, 'permanent', '2026-01-01', 1250)`);
       await tx.execute(sql`
         insert into availability
           (id, person_id, weekday, available_from_minute, available_to_minute,
@@ -268,7 +268,7 @@ describe("configuration transfer database path", () => {
         insert into convenio_config (id, location_id)
         values ('99999999-aaaa-aaaa-aaaa-999999999999', ${source.locationId})`);
       await tx.execute(sql`
-        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 50)`);
+        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 5000)`);
       await tx.execute(sql`
         insert into working_orders
           (id, till_id, node_id, order_number, label)
@@ -287,7 +287,7 @@ describe("configuration transfer database path", () => {
         values
           ('cccccccc-bbbb-bbbb-bbbb-cccccccccccc',
            'aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa', ${source.nodeId}, 'simulated',
-           'practice-payment', 1.50, 'captured')`);
+           'practice-payment', 150, 'captured')`);
       await tx.execute(sql`
         insert into bookings
           (id, location_id, booking_date, booking_time, party_size, contact_name,
@@ -317,7 +317,7 @@ describe("configuration transfer database path", () => {
            fiscal_backend, fiscal_state)
         values
           (${source.tillId}, ${source.seriesIds[0]}, ${source.nodeId}, 99,
-           '2026-09-09T10:00:00Z', 0, 1.50, '[]', 'es-ES', array['es-ES'],
+           '2026-09-09T10:00:00Z', 0, 150, '[]', 'es-ES', array['es-ES'],
            'verifactu', 'recorded')`);
     });
     const sourceOperator = await suite.db.execute<{ id: string }>(sql`

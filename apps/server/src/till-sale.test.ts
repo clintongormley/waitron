@@ -290,10 +290,12 @@ describe("recordTillSale", () => {
       variant_kitchen_name: string | null;
       descriptions: Record<string, string>;
       variant_descriptions: Record<string, string> | null;
-      unit_price_gross?: string;
+      unit_price_gross?: number | null;
     }>(sql`
+      -- unit_price_gross counts whole cents; ::int hands it back as a number on any driver, where
+      -- an uncast bigint arrives as a string from node-postgres and as a number from PGlite.
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
-             variant_descriptions, unit_price_gross
+             variant_descriptions, unit_price_gross::int as unit_price_gross
       from working_order_lines
       union all
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
@@ -310,7 +312,7 @@ describe("recordTillSale", () => {
       variant_descriptions: { [LOCALE]: "Doble ración" },
     };
     expect(snapshots.rows).toEqual([
-      { ...names, unit_price_gross: "4.10" },
+      { ...names, unit_price_gross: 410 },
       { ...names, unit_price_gross: null },
     ]);
   });
@@ -1084,12 +1086,13 @@ describe("ordering extras and options — parent + child lines", () => {
       return { wol, sl };
     });
 
-    // Parent burger ×2 unchanged; child Bacon at the COMBINED 6, priced 0.50 × 6 = 3.00 gross.
+    // Parent burger ×2 unchanged; child Bacon at the COMBINED 6, priced 0.50 × 6 = 3.00 gross —
+    // read straight off the column, so 300 is that gross as a count of whole cents.
     expect(wol).toHaveLength(2);
     expect(wol[0]).toMatchObject({ productId: v.burgerId, parentLineId: null, quantity: "2.000" });
     expect(wol[1]!.productId).toBe(v.baconId);
     expect(wol[1]!.quantity).toBe("6.000");
-    expect(wol[1]!.lineTotal).toBe("3.00");
+    expect(wol[1]!.lineTotal).toBe(300);
 
     // The FILED child sale_line carries the same combined quantity (fiscal record).
     expect(sl).toHaveLength(2);
@@ -1212,16 +1215,17 @@ describe("ordering extras and options — parent + child lines", () => {
     // Bacon is offered at 0.50 by the list and is a 3.00 product in its own right, at its OWN reduced
     // rate where the burger is general — so name, quantity, price and VAT each come from the frozen
     // pick rather than from the catalogue row or the dish. 0.50 gross at 10% is 0.45 net per unit,
-    // 0.91 for the two.
+    // 0.91 for the two — read straight off `sale_lines`, so 45 and 91 are those amounts in whole
+    // cents.
     const filed = await filedLinesOf(workingOrderId);
     expect(filed).toHaveLength(2);
     const child = filed.find((line) => line.parentLineId !== null)!;
     expect(child).toMatchObject({
       name: "Bacon staff",
       quantity: "2.000",
-      unitPrice: "0.45",
+      unitPrice: 45,
       vatRate: "10.00",
-      lineTotal: "0.91",
+      lineTotal: 91,
       optionSnapshots: [],
     });
 

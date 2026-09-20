@@ -17,6 +17,7 @@ import type { VenueResult } from "@waitron/provisioning";
 import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
+  centsToDecimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -227,10 +228,13 @@ async function registroCount(workingOrderId: string): Promise<number> {
  * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  const { rows } = await suite.admin.execute<{ total: string }>(sql`
-    select total from sales where working_order_id = ${workingOrderId}
+  // `sales.total` counts whole cents; the helper returns the AMOUNT, so its callers' assertions
+  // read the same decimal literals they always did. The ::int cast hands the count back as a
+  // number on any driver — an uncast bigint arrives as a string from node-postgres.
+  const { rows } = await suite.admin.execute<{ total: number }>(sql`
+    select total::int as total from sales where working_order_id = ${workingOrderId}
   `);
-  return rows[0]!.total;
+  return centsToDecimal(rows[0]!.total);
 }
 
 beforeAll(() => {

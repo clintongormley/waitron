@@ -148,9 +148,11 @@ describe("seedDemoRestaurant", () => {
       const { rows: negroniRows } = await tx.execute<{
         product_id: string;
         menu_name: string;
-        gross_price: string;
+        gross_price: number;
       }>(sql`
-        select mi.product_id, c.name as menu_name, mi.gross_price
+        -- gross_price counts whole cents; ::int hands it back as a number on any driver, where an
+        -- uncast bigint arrives as a string from node-postgres and as a number from PGlite.
+        select mi.product_id, c.name as menu_name, mi.gross_price::int as gross_price
         from menu_items mi
         join products p on p.id = mi.product_id
         join catalogues c on c.id = mi.menu_id
@@ -276,8 +278,8 @@ describe("seedDemoRestaurant", () => {
     ]);
     expect(read.stations).toEqual(["Deli counter", "Downstairs bar", "Kitchen", "Upstairs bar"]);
     expect(read.negroniOffers).toEqual([
-      { product_id: expect.any(String), menu_name: "Menú del Día", gross_price: "9.00" },
-      { product_id: expect.any(String), menu_name: "Casa Delgado", gross_price: "11.00" },
+      { product_id: expect.any(String), menu_name: "Menú del Día", gross_price: 900 },
+      { product_id: expect.any(String), menu_name: "Casa Delgado", gross_price: 1100 },
     ]);
     expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
     expect(read.cocktailRoutes).toEqual([

@@ -11,7 +11,13 @@ import type { VenueResult } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { computeDailyClose } from "@waitron/reporting";
-import { addDecimal, compareDecimal, decimal, nodeId as brandNodeId } from "@waitron/shared";
+import {
+  addDecimal,
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  nodeId as brandNodeId,
+} from "@waitron/shared";
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
@@ -135,15 +141,19 @@ describe("seedSales", () => {
         .select({ entorno: registrosFacturacion.entorno })
         .from(registrosFacturacion);
       const sampled = saleRows[0]!;
+      // Three money columns, all counts of whole cents. `::int` narrows each (and the bigint a
+      // `sum()` widens to) so the value arrives as a number on any driver — a `::text` cast would
+      // hand back the COUNT as a string, and the identity below would hold in cents and read as
+      // euros. `centsToDecimal` at the assertion is the one conversion.
       const { rows: coverage } = await tx.execute<{
-        total: string;
-        tendered: string;
-        tips: string;
+        total: number;
+        tendered: number;
+        tips: number;
       }>(sql`
         select
-          s.total::text as total,
-          coalesce(sum(t.amount), 0)::text as tendered,
-          coalesce(sum(t.tip_amount), 0)::text as tips
+          s.total::int as total,
+          coalesce(sum(t.amount), 0)::int as tendered,
+          coalesce(sum(t.tip_amount), 0)::int as tips
         from sales s
         join tenders t on t.sale_id = s.id
         where s.id = ${sampled.id}
@@ -177,8 +187,11 @@ describe("seedSales", () => {
     }
 
     // (d) Coverage identity for the sampled sale: Σ tender amount = total + Σ tip.
-    const expected = addDecimal(decimal(read.coverage.total), decimal(read.coverage.tips));
-    expect(compareDecimal(decimal(read.coverage.tendered), expected)).toBe(0);
+    const expected = addDecimal(
+      centsToDecimal(read.coverage.total),
+      centsToDecimal(read.coverage.tips),
+    );
+    expect(compareDecimal(centsToDecimal(read.coverage.tendered), expected)).toBe(0);
 
     // (e) The reports are non-blank for a seeded business day: a per-rate VAT summary and a cash-up
     // with real tenders. This is the whole point of the task.

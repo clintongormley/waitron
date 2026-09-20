@@ -76,7 +76,7 @@ async function seedFiscalRegistro(admin: Database): Promise<void> {
     sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion) values (${F.sifId}, ${F.nodeId}, '89890001K', 'W1', 1)`,
   );
   await admin.execute(
-    sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${F.saleId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 4, '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')`,
+    sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${F.saleId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 4, '2026-07-20T19:20:30+01:00', 60, 0, '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')`,
   );
   const registro = await admin.execute<{ id: string }>(sql`
     insert into registros_facturacion (till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,

@@ -177,7 +177,7 @@ describe("unit management routes", () => {
       for (const name of ["A", "B"]) {
         const product = await tx.execute<{ id: string }>(sql`
           insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
+          values (${menu.rows[0]!.id}, ${name}, 'each', 100, 'general')
           returning id`);
         await tx.execute(sql`
           insert into product_units (product_id, unit_id)
@@ -209,7 +209,7 @@ describe("unit management routes", () => {
         insert into catalogues (name) values ('Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
         insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
+        values (${menu.rows[0]!.id}, 'A', 'each', 100, 'general')
         returning id`);
       await tx.execute(sql`
         insert into product_units (product_id, unit_id)
@@ -253,7 +253,7 @@ describe("unit management routes", () => {
         insert into catalogues (name) values ('Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
         insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
+        values (${menu.rows[0]!.id}, 'A', 'each', 100, 'general')
         returning id`);
       await tx.execute(sql`
         insert into product_units (product_id, unit_id)

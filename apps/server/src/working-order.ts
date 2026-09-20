@@ -11,9 +11,12 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
+  centsToDecimal,
   classifyBand,
   compareDecimal,
+  type Decimal,
   decimal,
+  decimalToCents,
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
@@ -614,7 +617,10 @@ async function priceOrderLines(
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
       quantity: line.quantity,
-      unitPrice: line.unitPrice,
+      // This object is the `working_order_lines` insert, so it is where the pricer's decimal amounts
+      // become the count of whole cents the three money columns store. `quantity` and `vatRate` are
+      // not money columns — they keep their own scales and stay decimal strings.
+      unitPrice: decimalToCents(decimal(line.unitPrice)),
       // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
       // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
       // @waitron/catalogue reads this straight back as its `grossUnitPrice`). `unit_price` above is the
@@ -624,7 +630,7 @@ async function priceOrderLines(
       // `line_total ÷ quantity`, which is exact for `each` but DRIFTS for a weighed line. A child
       // option's gross unit is its `price_delta`, re-priced from THIS locked column on retrieve exactly
       // as the dish is. This is a durable lock, not a display cache.
-      unitPriceGross: priced.grossUnitPrices[i]!,
+      unitPriceGross: decimalToCents(priced.grossUnitPrices[i]!),
       vatRate: line.vatRate,
       // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
       // `working_order_lines` is the counter's mutable display, and every other total the operator/
@@ -635,7 +641,7 @@ async function priceOrderLines(
       // `priceLockedLines`, NOT from `priced.lines`; a freshly-created walk-up still files from
       // `priced.lines`. See `working_order_lines.line_total`'s schema comment and the pricer's
       // `grossLineTotals`/`grossUnitPrices`.
-      lineTotal: priced.grossLineTotals[i]!,
+      lineTotal: decimalToCents(priced.grossLineTotals[i]!),
       category: line.category ?? null,
       // KDS-2 ring-time course (§2b): the resolver `<override> ?? product.course_id` was computed into
       // `lineMeta` when the basket was built (data already in hand — the input line's override and the
@@ -735,7 +741,9 @@ export async function readLockedLines(
   // order and this batch is the whole order, so the map is total.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    grossUnitPrice: line.grossUnitPrice,
+    // `unit_price_gross` stores a count of whole cents; this mapping is where it becomes the amount
+    // the pricer and everything above it work in. `quantity` and `vatRate` are not money columns.
+    grossUnitPrice: centsToDecimal(line.grossUnitPrice),
     quantity: line.quantity,
     vatRate: line.vatRate,
     name: line.name,
@@ -1984,7 +1992,8 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
  *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
  *  frozen staff `name` as well as the `productId`: {@link readTabLines} joins the line's product and
  *  variant labels into it, so the screen has no catalogue lookup left to do for a name.
- *  `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
+ *  `quantity` is numeric(_,3) text; `unitPriceGross` is a two-place decimal string, converted from the
+ *  count of cents the column stores by the mapping in {@link readTabLines}. */
 export interface TabLine {
   /** The line's frozen STAFF label — `working_order_lines.name` joined to `variant_name` with " · ".
    * A table tab's line list is what a waiter reads while serving, so it carries the same name the
@@ -2066,9 +2075,11 @@ export async function readTabLines(
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  // The tab shows one label per line, so the line's two frozen staff names are joined into it.
+  // The tab shows one label per line, so the line's two frozen staff names are joined into it, and
+  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads.
   return rows.map(({ variantName, ...row }) => ({
     ...row,
+    unitPriceGross: centsToDecimal(row.unitPriceGross),
     name: staffPresentationName({ name: row.name, variantName }),
   }));
 }
@@ -2325,11 +2336,13 @@ export async function mergeTabs(
  * which is what `priceBasket` writes at add-time and `priceLockedLines` recomputes at file-time. Used by
  * {@link transferLines}' split path so a split line's `working_order_lines.line_total` is byte-identical
  * to an add-time line's — the identical helper composition, over the line's OWN locked
- * `working_order_lines.unit_price_gross`, never a catalogue re-read. Both arguments arrive as
- * `numeric`-as-text (a stored `unit_price_gross`, a transfer or remainder quantity); `decimal()`
- * validates each into the branded-`Decimal` helpers, and accepts an already-branded `Decimal` unchanged.
+ * `working_order_lines.unit_price_gross`, never a catalogue re-read. This works in amounts, not in
+ * the cents the column stores: the caller converts the stored count at the row on the way in, and
+ * converts the result back on the way into the write. `quantity` arrives as `numeric`-as-text (a
+ * transfer or remainder quantity); `decimal()` validates each argument into the branded-`Decimal`
+ * helpers, and accepts an already-branded `Decimal` unchanged.
  */
-function grossLineTotal(grossUnit: string, quantity: string): string {
+function grossLineTotal(grossUnit: string, quantity: string): Decimal {
   return toScale(multiplyDecimal(decimal(grossUnit), decimal(quantity)), MONEY_SCALE);
 }
 
@@ -2417,7 +2430,7 @@ async function carveOffLines(
   // parent↔child structure (FIX 2/4) needs the WHOLE tab to know which named lines are dishes carrying
   // modifiers and which are modifier children. `id` and `parentLineId` come too. The per-unit locked
   // values a split INHERITS also come from here — never a catalogue re-read.
-  const sourceLines = await tx
+  const sourceRows = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
@@ -2442,6 +2455,15 @@ async function carveOffLines(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
+  // The two money columns store a count of whole cents; they become amounts here, at the row, and
+  // the split's insert below converts them back. The round trip is exact — a stored count is an
+  // integer and `centsToDecimal` always renders two places — so a copied-through unit price is
+  // byte-identical to the one add-time locked.
+  const sourceLines = sourceRows.map((l) => ({
+    ...l,
+    unitPrice: centsToDecimal(l.unitPrice),
+    unitPriceGross: centsToDecimal(l.unitPriceGross),
+  }));
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
   // The `line_no`s of each dish's child modifier lines, keyed by the PARENT's `line_no` — so a
   // whole-line move of a dish can cascade its modifiers along (FIX 2), and a partial split can refuse a
@@ -2542,7 +2564,10 @@ async function carveOffLines(
       // Source line: quantity drops, `line_total` recomputed from the SAME locked gross (no re-price).
       await tx
         .update(workingOrderLines)
-        .set({ quantity: remaining, lineTotal: grossLineTotal(line.unitPriceGross, remaining) })
+        .set({
+          quantity: remaining,
+          lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, remaining)),
+        })
         .where(
           and(
             eq(workingOrderLines.workingOrderId, fromTabId),
@@ -2564,10 +2589,10 @@ async function carveOffLines(
         descriptions: line.descriptions,
         optionSnapshots: line.optionSnapshots ?? [],
         quantity,
-        unitPrice: line.unitPrice,
-        unitPriceGross: line.unitPriceGross,
+        unitPrice: decimalToCents(line.unitPrice),
+        unitPriceGross: decimalToCents(line.unitPriceGross),
         vatRate: line.vatRate,
-        lineTotal: grossLineTotal(line.unitPriceGross, quantity),
+        lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, quantity)),
         category: line.category,
         unitName: line.unitName,
         unitPrecision: line.unitPrecision,
@@ -2763,8 +2788,9 @@ export interface HeldOrderSummary {
   /**
    * Sum of the lines' `line_total`, which for a working-order DRAFT is the GROSS (VAT-inclusive)
    * customer-facing total — EQUAL to the basket grand total the operator saw (`priceBasket(...).total`).
-   * A numeric(12,2) as text, the codebase's money shape. (The FILED `sale_lines.line_total` is net;
-   * the draft deliberately diverges — see `working_order_lines.line_total`'s schema comment.)
+   * A two-place decimal string, the codebase's money shape above the storage boundary. (The FILED
+   * `sale_lines.line_total` is net; the draft deliberately diverges — see
+   * `working_order_lines.line_total`'s schema comment.)
    */
   total: string;
   openedAt: string;
@@ -2846,30 +2872,36 @@ export async function listHeldOrders(
   void cfg;
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
-    return (
-      tx
-        .select({
-          id: workingOrders.id,
-          orderNumber: workingOrders.orderNumber,
-          label: workingOrders.label,
-          itemCount: sql<number>`count(${workingOrderLines.id})::int`,
-          total: sql<string>`coalesce(sum(${workingOrderLines.lineTotal}), 0)::numeric(12, 2)::text`,
-          openedAt: workingOrders.openedAt,
-        })
-        .from(workingOrders)
-        .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-        // Venue-wide, not node-scoped (till-reroute design §3.6): under warm standby one node sells at a time,
-        // and a promoted node inherits the venue's open tabs tagged with the dead node's id (swap spec §4.3).
-        // `node_id` is still written at create — the writer's id — and never filtered on here.
-        .where(eq(workingOrders.status, "open"))
-        .groupBy(
-          workingOrders.id,
-          workingOrders.orderNumber,
-          workingOrders.label,
-          workingOrders.openedAt,
-        )
-        .orderBy(workingOrders.orderNumber)
-    );
+    const rows = await tx
+      .select({
+        id: workingOrders.id,
+        orderNumber: workingOrders.orderNumber,
+        label: workingOrders.label,
+        itemCount: sql<number>`count(${workingOrderLines.id})::int`,
+        // `line_total` counts whole cents, so this sums cents and `centsToDecimal` below is the one
+        // conversion to the amount the list shows. It must NOT be cast to `numeric(12, 2)` — that
+        // renders a count of 7734 cents as "7734.00", a plausible string a hundred times the
+        // amount, and nothing fails (measured on PGlite 0.5.8, 2026-09-20). `::int` narrows the
+        // `bigint` `sum()` widens to back to a number on both drivers; a raw `bigint` arrives as a
+        // STRING from node-postgres and as a number from PGlite, which would pass here and fail on
+        // the real thing.
+        total: sql<number>`coalesce(sum(${workingOrderLines.lineTotal}), 0)::int`,
+        openedAt: workingOrders.openedAt,
+      })
+      .from(workingOrders)
+      .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+      // Venue-wide, not node-scoped (till-reroute design §3.6): under warm standby one node sells at a time,
+      // and a promoted node inherits the venue's open tabs tagged with the dead node's id (swap spec §4.3).
+      // `node_id` is still written at create — the writer's id — and never filtered on here.
+      .where(eq(workingOrders.status, "open"))
+      .groupBy(
+        workingOrders.id,
+        workingOrders.orderNumber,
+        workingOrders.label,
+        workingOrders.openedAt,
+      )
+      .orderBy(workingOrders.orderNumber);
+    return rows.map((row) => ({ ...row, total: centsToDecimal(row.total) }));
   });
 }
 
@@ -2899,7 +2931,7 @@ export async function getHeldOrder(
       throw new AppError("working_order.not_found", { workingOrderId: id });
     }
 
-    const lineRows = await tx
+    const storedLines = await tx
       .select({
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
@@ -2920,6 +2952,12 @@ export async function getHeldOrder(
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
+    // `unit_price_gross` stores a count of whole cents; it becomes the amount the retrieved order
+    // carries here, at the row, so nothing below this line handles a count.
+    const lineRows = storedLines.map((line) => ({
+      ...line,
+      unitPriceGross: centsToDecimal(line.unitPriceGross),
+    }));
 
     const contextByLine = new Map(
       (await VENUE_SERVICE.listLineContexts(tx, cfg, id)).map((line) => [
@@ -3061,7 +3099,7 @@ export async function updateHeldOrder(
     // stored parent line explicitly; every line must still name the same product/offer, remain in the
     // same order, and answer its dish's extras and options exactly as the stored line did. Anything
     // else takes the replacement path below and is priced from the current offer.
-    const storedRows = await tx
+    const storedLineRows = await tx
       .select({
         id: workingOrderLines.id,
         optionSnapshots: workingOrderLines.optionSnapshots,
@@ -3074,6 +3112,12 @@ export async function updateHeldOrder(
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
+    // `unit_price_gross` stores a count of whole cents; it becomes the locked amount here, at the
+    // row, and the quantity-only updates below convert each recomputed total back.
+    const storedRows = storedLineRows.map((line) => ({
+      ...line,
+      unitPriceGross: centsToDecimal(line.unitPriceGross),
+    }));
     type StoredLine = (typeof storedRows)[number];
     const storedParents = storedRows.filter((line) => line.parentLineId === null);
     const childrenByParent = new Map<string, typeof storedRows>();
@@ -3187,7 +3231,7 @@ export async function updateHeldOrder(
           .update(workingOrderLines)
           .set({
             quantity: requested.quantity,
-            lineTotal: grossLineTotal(stored.unitPriceGross, requested.quantity),
+            lineTotal: decimalToCents(grossLineTotal(stored.unitPriceGross, requested.quantity)),
           })
           .where(
             and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, stored.id)),
@@ -3204,7 +3248,7 @@ export async function updateHeldOrder(
             .update(workingOrderLines)
             .set({
               quantity: childQuantity,
-              lineTotal: grossLineTotal(child.unitPriceGross, childQuantity),
+              lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, childQuantity)),
             })
             .where(
               and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, child.id)),
@@ -4374,7 +4418,8 @@ export interface TableState {
   hasOpenTab: boolean;
   tabId?: string;
   tabLineCount?: number;
-  /** The open tab's gross draft total (sum of `line_total`), numeric(12,2) as text — present iff a tab. */
+  /** The open tab's gross draft total (sum of `line_total`), a two-place decimal string converted
+   *  from the count of cents the column stores — present iff a tab. */
   tabTotal?: string;
   pendingDeliveries: number;
   /** Count of the open tab's lines STILL to serve (`working_order_lines` with `served_at IS NULL`), for
@@ -4450,7 +4495,7 @@ export async function listTablesWithState(
     capacity: number | null;
     tab_id: string | null;
     tab_line_count: number;
-    tab_total: string | null;
+    tab_total: number | null;
     pending_to_serve: number;
     ready_to_serve: number;
     en_route: number;
@@ -4501,7 +4546,13 @@ export async function listTablesWithState(
              -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
              -- en-camino > listos precedence off the two counts.
              (count(*) filter (where ti.away_at is not null and wol.served_at is null))::int as en_route,
-             coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total,
+             -- line_total counts whole cents, so this sums cents and centsToDecimal in the mapping
+             -- below is the one conversion to an amount. It must NOT be cast to numeric(12, 2) --
+             -- that renders a count of 7734 cents as "7734.00", a plausible string a hundred times
+             -- the amount, and nothing fails. The ::int cast narrows the bigint that sum() widens
+             -- to, and arrives as a number on both drivers; an uncast bigint comes back as a STRING
+             -- from node-postgres and as a number from PGlite.
+             coalesce(sum(wol.line_total), 0)::int as tab_total,
              -- KDS order-timing alerts (design §3/§6): the raw age + thresholds of each unserved, FIRED
              -- (ti.id is not null) line, one JSON object per line -- the age is computed here on the DB
              -- clock (never a band label; §3's "authoritative on the DB clock, classified in JS" split),
@@ -4588,7 +4639,11 @@ export async function listTablesWithState(
       // Merged from the module annotators below; `null` until one contributes a reservation.
       nextReservation: null as { time: string } | null,
       ...(hasOpenTab
-        ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
+        ? {
+            tabId: r.tab_id!,
+            tabLineCount: Number(r.tab_line_count),
+            tabTotal: centsToDecimal(r.tab_total!),
+          }
         : {}),
     };
   });

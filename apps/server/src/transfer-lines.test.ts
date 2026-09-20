@@ -15,6 +15,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
+  centsToDecimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -154,7 +155,7 @@ async function linesOf(tabId: string): Promise<
     unitPrecision: number | null;
   }[]
 > {
-  return db
+  const rows = await db
     .select({
       lineNo: workingOrderLines.lineNo,
       productId: workingOrderLines.productId,
@@ -167,6 +168,13 @@ async function linesOf(tabId: string): Promise<
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
+  // The two money columns store a count of whole cents; the helper hands back the AMOUNTS, so its
+  // callers' assertions read the same decimal literals they always did.
+  return rows.map((row) => ({
+    ...row,
+    unitPriceGross: centsToDecimal(row.unitPriceGross),
+    lineTotal: centsToDecimal(row.lineTotal),
+  }));
 }
 
 /** Open a tab on `tableId` with an initial round, returning its tab id. */
@@ -313,7 +321,7 @@ describe("transferLines — partial split", () => {
 
     // Change the catalogue's café price AFTER the ring, BEFORE the transfer (owner write).
     // If `transferLines` re-consulted the catalogue, the moved/kept line would jump to 9.99.
-    await db.execute(sql`update products set unit_price = '9.99' where id = ${cafeId}`);
+    await db.execute(sql`update products set unit_price = 999 where id = ${cafeId}`);
 
     await asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]));
 
