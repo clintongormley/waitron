@@ -17,6 +17,22 @@ import { fileURLToPath } from "node:url";
  */
 
 /**
+ * Files under `packages/db/src` that this package's own Stryker run cannot score, as `src/`-relative
+ * paths. The shard lists leave them out, so the package's merged score (scripts/mutation-aggregate.mjs)
+ * measures only mutants a test written here could kill.
+ *
+ * `src/english-only.ts` is the whole list today: its suite is `scripts/english-only.test.ts` in the
+ * ROOT vitest project, and nothing under `packages/db` imports it — `grep -rn english-only
+ * packages/db --include="*.ts"` matches that file and comments alone — so `packages/db`'s vitest
+ * config never loads a test that touches it and every one of its mutants survives by construction.
+ * All 119 did in weekly run 34808295788. It is excluded from this package's coverage report for the
+ * same reason, stated in `packages/db/vitest.config.ts`.
+ *
+ * @type {string[]}
+ */
+export const NOT_MUTATED = ["src/english-only.ts"];
+
+/**
  * Splits `path` into `parts` contiguous Stryker mutation ranges (`path:startLine-endLine`) covering
  * lines 1..`lineCount`, as evenly as possible (the first `lineCount % parts` ranges get one extra
  * line). No gaps, no overlaps — every line lands in exactly one range.
@@ -98,6 +114,7 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-shard.mjs")) {
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
         const path = join("src", relative(dbSrc, full));
+        if (NOT_MUTATED.includes(path)) continue;
         const parts = HEAVY_FILES[path];
         if (parts) {
           seenHeavy.add(path);
