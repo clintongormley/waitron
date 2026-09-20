@@ -115,9 +115,15 @@ describe("option list CRUD", () => {
     await fx.db.execute(sql`
       insert into option_lists (id, name, sort) values
         (${third}, 'Third', 1), (${second}, 'Second', 1), (${late}, 'Late', 5)`);
+    // The label ids are given explicitly and in the OPPOSITE order to the labels' `sort`, so this
+    // test's label assertion fails when the `sort` key is dropped. Left to `defaultRandom()` the
+    // two ids land in either order and the assertion passes about half the time — seen doing
+    // exactly that while proving `readOptionListsByIds` below by deletion.
+    const lastLabel = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const firstLabel = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     await fx.db.execute(sql`
-      insert into option_labels (list_id, name, sort) values
-        (${second}, 'Last label', 1), (${second}, 'First label', 0)`);
+      insert into option_labels (id, list_id, name, sort) values
+        (${lastLabel}, ${second}, 'Last label', 1), (${firstLabel}, ${second}, 'First label', 0)`);
 
     const lists = await run((tx) => listOptionLists(tx));
 
