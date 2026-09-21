@@ -312,6 +312,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per word;
   a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`. `apps/*` is out of
   scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review.
+  **A `/*` inside a `//` comment breaks it and blames the wrong lines** — a glob path such as
+  `drizzle/meta/` followed by `*_snapshot.json` opens a block comment as far as its scrubber is
+  concerned, which then blanks everything to the next real `*/` and reports Spanish words in
+  UNRELATED comments hundreds of lines further down. Reword the path; the reported lines are not
+  the offender.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`

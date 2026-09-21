@@ -107,15 +107,24 @@ describe("park & retrieve schema", () => {
     // is the FK biting, not the line being malformed for some other reason.
     await suite.db.execute(
       sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
-         '1.000', 100, 110, '10.00', 100)`,
+         1000, 100, 110, 1000, 100)`,
     );
+    // ... and it is stored at the scale the insert meant: a quantity counts whole thousandths
+    // and a rate whole basis points, so a `1` and a `10` here are accepted and mean a thousandth
+    // of a unit at a hundredth of a percent. Read as text so the assertion does not turn on how
+    // the driver renders each of the two integer widths.
+    const stored = await suite.db.execute<{ quantity: string; vat_rate: string }>(
+      sql`select quantity::text as quantity, vat_rate::text as vat_rate
+            from working_order_lines where working_order_id = ${wo} and line_no = 1`,
+    );
+    expect(stored.rows).toEqual([{ quantity: "1000", vat_rate: "1000" }]);
     // Negative: a product_id with no products row is refused 23503. The BEFORE triggers
     // (require_open_parent, check_locales) pass first — open parent, matching locales — so the row
     // reaches the (product_id) → products FK, which is what rejects it.
     const error = await captureError(() =>
       suite.db.execute(
         sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
-           '1.000', 100, 110, '10.00', 100)`,
+           1000, 100, 110, 1000, 100)`,
       ),
     );
     expect(pgErrorCode(error)).toBe("23503");

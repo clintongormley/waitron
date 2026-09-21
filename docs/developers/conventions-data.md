@@ -579,6 +579,15 @@ table file on the same day it stopped being used in any. The guard now carries a
 the `ALLOWED` list only shrinks. It still cannot cover a builder the vocabulary never imported —
 `bigserial` is the standing example.
 
+**The module set was probed rather than grepped.** `schema-conformance.test.ts` covers the CORE
+set only, and P5's nine stale objects were all found by applying the migrations and reading the
+catalogue back. The one module set this task touches is `workforce-es`. Probed 2026-09-21 by
+applying `CORE_MIGRATIONS` then `WORKFORCE_ES_MIGRATIONS` and querying
+`information_schema.columns` and `pg_get_constraintdef` over `convenio_config`:
+`night_premium_pct` is `integer` with a null default, `split_shift_premium` is `bigint` from P5,
+and not one of the nineteen constraints on the table names either column. So there was nothing to
+re-derive there — established by running it, not by reading the migration.
+
 **What the conversion did NOT touch.** The pricer, `assertQuantityPrecision`, the purchasing
 validators, every receipt and ticket formatter, the HTTP contract, `apps/till` and `apps/dashboard`.
 All of them work in decimal strings and all of them still do. `packages/catalogue`'s precision
