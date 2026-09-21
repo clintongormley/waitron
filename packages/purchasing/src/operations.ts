@@ -2,7 +2,15 @@ import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { isUniqueViolation, purchaseInvoiceVat, purchaseInvoices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, centsToDecimal, compareDecimal, decimal, decimalToCents } from "@waitron/shared";
+import {
+  AppError,
+  basisPointsToDecimal,
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  decimalToBasisPoints,
+  decimalToCents,
+} from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import "./errors.js";
 import type {
@@ -50,9 +58,10 @@ const LINE_SELECT = {
 // `selectLines`' `orderBy(asc(rate), asc(id))` tie-break in JS without a re-read.
 const LINE_RETURNING = { ...LINE_SELECT, id: purchaseInvoiceVat.id };
 
-// The row shapes as the DATABASE hands them over: `total`, `base` and `tax` are money columns, so
-// they arrive as a count of whole cents, while `rate` and `deductible_proportion` are rates and
-// stay decimal literals. `mapHeader`/`mapLine` are the only crossing back to `Decimal`.
+// The row shapes as the DATABASE hands them over — every one of them a whole number, and none of
+// them a decimal literal: `total`, `base` and `tax` are money columns and arrive as a count of
+// whole cents, `rate` and `deductible_proportion` are rate columns and arrive as a count of whole
+// basis points. `mapHeader`/`mapLine` are the only crossing back to `Decimal`.
 interface HeaderRow {
   id: string;
   supplierTaxId: string;
@@ -62,13 +71,13 @@ interface HeaderRow {
   receivedOn: string;
   total: number;
   regime: PurchaseRegime;
-  deductibleProportion: string;
+  deductibleProportion: number;
   note: string | null;
 }
 
 interface LineRow {
   purchaseInvoiceId: string;
-  rate: string;
+  rate: number;
   base: number;
   tax: number;
   kind: PurchaseVatKind;
@@ -88,14 +97,14 @@ function mapHeader(row: HeaderRow): Omit<PurchaseInvoice, "lines"> {
     receivedOn: row.receivedOn,
     total: centsToDecimal(row.total),
     regime: row.regime,
-    deductibleProportion: row.deductibleProportion as Decimal,
+    deductibleProportion: basisPointsToDecimal(row.deductibleProportion),
     note: row.note,
   };
 }
 
 function mapLine(row: LineRow): PurchaseInvoiceLine {
   return {
-    rate: row.rate as Decimal,
+    rate: basisPointsToDecimal(row.rate),
     base: centsToDecimal(row.base),
     tax: centsToDecimal(row.tax),
     kind: row.kind,
@@ -127,9 +136,14 @@ function validateLines(lines: readonly PurchaseInvoiceLineInput[]): void {
 }
 
 /**
- * Insert the VAT lines of one invoice and return the STORED rows via RETURNING, so DB defaults (`kind`
- * omitted → `ordinary`) and numeric-scale normalization ("21" → "21.00") are reflected without a
- * re-read. `kind` omitted falls to the column default. Callers that do not need the rows discard them.
+ * Insert the VAT lines of one invoice and return the STORED rows via RETURNING, so the default an
+ * omitted `kind` falls to (`ordinary`) is reflected without a re-read. Callers that do not need the
+ * rows discard them.
+ *
+ * A rate still reads back at two decimal places, so a caller that wrote "21" gets "21.00". That is
+ * the conversion pair's doing and no longer the column's: a rate column holds a count of basis
+ * points and carries no scale of its own. Pinned by the unscaled-literal case in
+ * `operations.test.ts`.
  */
 async function insertLines(
   tx: Transaction,
@@ -141,7 +155,7 @@ async function insertLines(
     .values(
       lines.map((line) => ({
         purchaseInvoiceId: invoiceId,
-        rate: line.rate,
+        rate: decimalToBasisPoints(line.rate),
         base: decimalToCents(line.base),
         tax: decimalToCents(line.tax),
         kind: line.kind,
@@ -152,12 +166,13 @@ async function insertLines(
 
 /**
  * Order RETURNING'd line rows exactly as `selectLines`' `orderBy(asc(rate), asc(id))` would: by rate
- * ascending (numeric compare, so "10.00" precedes "21.00"), ties broken by `id` — the canonical
- * lowercase UUID string compares the same way PostgreSQL orders the `uuid` type. Sorts in place.
+ * ascending — a stored rate is a count of basis points, so subtracting the two counts is the same
+ * ordering the column's own `asc` gives — ties broken by `id`, the canonical lowercase UUID string
+ * comparing the same way PostgreSQL orders the `uuid` type. Sorts in place.
  */
 function sortLineRows(rows: LineRowWithId[]): LineRowWithId[] {
   return rows.sort((a, b) => {
-    const byRate = compareDecimal(a.rate as Decimal, b.rate as Decimal);
+    const byRate = a.rate - b.rate;
     if (byRate !== 0) return byRate;
     // Branchless id compare (no dependence on random-UUID ordering for coverage): the canonical
     // lowercase UUID string compares the same way PostgreSQL orders the `uuid` type.
@@ -190,8 +205,8 @@ export async function createPurchaseInvoice(
   validateLines(input.lines);
 
   // RETURNING the STORED header + line tuples rather than re-reading them: the DB applies the same
-  // column defaults (`regime` → general, `deductible_proportion` → 100.00, line `kind` → ordinary) and
-  // numeric-scale normalization it would on a SELECT, so the returned shape is identical to the old
+  // column defaults it would on a SELECT (`regime` → general, `deductible_proportion` → 10000 basis
+  // points, line `kind` → ordinary), so the returned shape is identical to the old
   // insert-then-getPurchaseInvoice re-read — two fewer round-trips, mirroring the catalogue/recipes
   // `.values(...).returning(COLUMNS)` house pattern this module follows.
   let header: Omit<PurchaseInvoice, "lines">;
@@ -206,7 +221,11 @@ export async function createPurchaseInvoice(
         receivedOn: input.header.receivedOn,
         total: decimalToCents(input.header.total),
         regime: input.header.regime,
-        deductibleProportion: input.header.deductibleProportion,
+        // Omitted stays omitted, so the column default still decides it.
+        deductibleProportion:
+          input.header.deductibleProportion === undefined
+            ? undefined
+            : decimalToBasisPoints(input.header.deductibleProportion),
         note: input.header.note ?? null,
       })
       .returning(HEADER_SELECT);
@@ -291,14 +310,18 @@ export async function updatePurchaseInvoice(
   }
   if (patch.lines !== undefined) validateLines(patch.lines);
 
-  // `total` is the one money field in the patch, so it crosses to cents here; every other header
-  // field passes through as it stands.
-  const { total, ...header } = patch.header ?? {};
+  // The two patch fields that are stored as a whole number cross here — `total` to cents and
+  // `deductibleProportion` to basis points; every other header field passes through as it stands.
+  // Each is spread in only when supplied, so an absent one leaves the stored value alone.
+  const { total, deductibleProportion, ...header } = patch.header ?? {};
   const updated = await tx
     .update(purchaseInvoices)
     .set({
       ...header,
       ...(total === undefined ? {} : { total: decimalToCents(total) }),
+      ...(deductibleProportion === undefined
+        ? {}
+        : { deductibleProportion: decimalToBasisPoints(deductibleProportion) }),
       updatedAt: sql`now()`,
     })
     .where(eq(purchaseInvoices.id, id))

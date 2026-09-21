@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
-import { AppError, centsToDecimal } from "@waitron/shared";
+import { AppError, basisPointsToDecimal, centsToDecimal } from "@waitron/shared";
 import type { OvertimeModel, WorkTimeRuleset } from "@waitron/workforce";
 import { convenioConfig } from "./schema/convenio-config.js";
 // Side-effect: registers this package's convenio.* code so `new AppError(...)` below type-checks
@@ -14,9 +14,14 @@ const DB_TO_OVERTIME_MODEL: Record<"daily_accrual" | "period_net", OvertimeModel
   period_net: "period-net",
 };
 
-/** A rate column comes back as a string (or null); the ruleset carries it as a number-or-null. */
-function num(value: string | null): number | null {
-  return value === null ? null : Number(value);
+/**
+ * A rate column comes back as a count of basis points; the ruleset carries the same rate as a
+ * PERCENTAGE — 25% is 25, not 0.25 (owner, 2026-09-18) — as a number-or-null. Rendering the
+ * literal first and reading that keeps the rounding in the decimal module, and it keeps the basis-
+ * point form from leaking past this boundary.
+ */
+function rateNum(basisPoints: number | null): number | null {
+  return basisPoints === null ? null : Number(basisPointsToDecimal(basisPoints));
 }
 
 /**
@@ -70,12 +75,12 @@ export async function resolveWorkTimeRuleset(
   // The `.select({...})` above aliases every column to its exact `WorkTimeRuleset` field name and
   // narrows to precisely the ruleset's columns (no id/createdAt), so `...row` supplies all
   // but the three fields that need a transform: the DB enum → the hyphenated `OvertimeModel`, and the
-  // night premium (a rate, still a string) and the split-shift premium (a count of cents) →
+  // night premium (a count of basis points) and the split-shift premium (a count of cents) →
   // number-or-null.
   return {
     ...row,
     overtimeModel: DB_TO_OVERTIME_MODEL[row.overtimeModel],
-    nightPremiumPct: num(row.nightPremiumPct),
+    nightPremiumPct: rateNum(row.nightPremiumPct),
     splitShiftPremium: moneyNum(row.splitShiftPremium),
   };
 }

@@ -50,10 +50,11 @@ describe("resolveWorkTimeRuleset", () => {
     expect(ruleset).toEqual(DEFAULT_RULESET);
   });
 
-  it("resolves a fully-customised row, mapping the period_net enum and the numeric premiums", async () => {
+  it("resolves a fully-customised row, mapping the period_net enum and the scaled premiums", async () => {
     // Every field set to a distinct non-default, so a mapping that dropped or crossed a column shows.
-    // Proves the underscored DB enum maps to the hyphenated generic OvertimeModel and the numeric
-    // premiums come back as numbers, not strings.
+    // Proves the underscored DB enum maps to the hyphenated generic OvertimeModel, and that the two
+    // premium columns, each stored as a scaled count of its own (basis points and cents), reach the
+    // ruleset as the percentage and the amount.
     const locationId = await seedLocation(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (
@@ -63,7 +64,7 @@ describe("resolveWorkTimeRuleset", () => {
         min_break_minutes, weekly_rest_minutes, annual_overtime_cap_hours, night_window_start_minute,
         night_window_end_minute, night_premium_pct, split_shift_premium, breaks_count_as_worked
       ) values (${locationId}, 6, 'period_net', 120, 60, 470, 2100, 780, 500, 300, 20, 2400, 90,
-        1380, 300, 25.00, 1250, true)`);
+        1380, 300, 2500, 1250, true)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
     expect(ruleset).toEqual({
       workingDaysPerWeek: 6,
@@ -84,6 +85,28 @@ describe("resolveWorkTimeRuleset", () => {
       splitShiftPremium: 12.5,
       breaksCountAsWorked: true,
     });
+  });
+
+  // The night premium is a PERCENTAGE (25.00 means 25%, owner 2026-09-18) stored as a count of
+  // whole basis points, so the column and the ruleset field hold numbers a hundredfold apart. These
+  // two insert the STORED count by raw SQL and read the ruleset's percentage back; the half-percent
+  // case is there because it is the one a fraction-versus-percentage mix-up cannot round away.
+  it("reads a whole-percent night premium back as a percentage", async () => {
+    const locationId = await seedLocation(suite.db);
+    await suite.db.execute(sql`
+      insert into convenio_config (location_id, night_premium_pct)
+      values (${locationId}, 2500)`);
+    const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
+    expect(ruleset.nightPremiumPct).toBe(25);
+  });
+
+  it("reads a half-percent night premium back as a percentage", async () => {
+    const locationId = await seedLocation(suite.db);
+    await suite.db.execute(sql`
+      insert into convenio_config (location_id, night_premium_pct)
+      values (${locationId}, 1250)`);
+    const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
+    expect(ruleset.nightPremiumPct).toBe(12.5);
   });
 
   it("throws convenio.not_found when no convenio_config row exists for the location", async () => {

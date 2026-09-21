@@ -95,3 +95,42 @@ export function basisPointsToDecimal(count: number): Decimal {
   }
   return scaledLiteral(count, RATE_SCALE);
 }
+
+// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the exact shape
+// both engines render for an integer, or a scale-0 `numeric`, cast to text, and nothing else. The
+// `numeric` half is not a corner case: a raw read of one of these columns is usually an AGGREGATE,
+// and `sum(...)` over a `bigint` or an `integer` is a `numeric`. The reasoning, the driver
+// measurements and the reason the cast is `::text` and not `::int` are written out once, on
+// `rawCentsToDecimal` in `./cents.ts`; everything there applies here unchanged.
+const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
+
+function rawCount(value: string, scale: number, maxIntegerDigits: number): number {
+  if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
+    throw new AppError("shared.invalid_decimal", { value: String(value) });
+  }
+  const negative = value.startsWith("-");
+  const magnitude = BigInt(negative ? value.slice(1) : value);
+  if (magnitude >= 10n ** BigInt(maxIntegerDigits + scale)) {
+    throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
+  }
+  return Number(negative ? -magnitude : magnitude);
+}
+
+/**
+ * The quantity for a count of thousandths read by RAW SQL, where the count arrives as TEXT.
+ *
+ * The bound is the one the `::numeric(12, 3)` cast this replaced enforced: a sum past nine integer
+ * digits was refused by PostgreSQL with a 22003, and it is refused here instead. The refusal moved
+ * from the engine to the reader; it did not disappear.
+ */
+export function rawThousandthsToDecimal(value: string): Decimal {
+  return scaledLiteral(
+    rawCount(value, QUANTITY_SCALE, MAX_QUANTITY_INTEGER_DIGITS),
+    QUANTITY_SCALE,
+  );
+}
+
+/** The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT. */
+export function rawBasisPointsToDecimal(value: string): Decimal {
+  return scaledLiteral(rawCount(value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS), RATE_SCALE);
+}

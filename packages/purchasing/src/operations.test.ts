@@ -145,8 +145,9 @@ describe("purchase-invoice operations", () => {
 
   it("stores a money amount as a count of whole cents", async () => {
     // Reading the columns raw, because every assertion that goes through a purchasing function
-    // round-trips both conversions and so passes whatever the units are. `rate` is not money and
-    // stays a decimal literal.
+    // round-trips both conversions and so passes whatever the units are. `rate` is read here too,
+    // as the whole number it now is; what it stores is basis points rather than cents, which this
+    // row cannot show — see the case below for what that distinction does and does not pin.
     const rows = await asApp(async (tx) => {
       const c = await createPurchaseInvoice(tx, baseInput());
       const [header] = await tx
@@ -164,7 +165,73 @@ describe("purchase-invoice operations", () => {
       return { header, lines };
     });
     expect(rows.header).toEqual({ total: 24200 });
-    expect(rows.lines).toEqual([{ rate: "21.00", base: 20000, tax: 4200 }]);
+    expect(rows.lines).toEqual([{ rate: 2100, base: 20000, tax: 4200 }]);
+  });
+
+  it("reads a rate and the deductible proportion back as the exact decimal", async () => {
+    // The round trip both rate columns take: a domain decimal in, the same decimal out, through
+    // whatever the column holds. 10.50 is here because a rate that is not a whole percent is the
+    // case a conversion built for whole percents would lose; 50.00 is a proportion the column's own
+    // default, a full 100%, cannot stand in for.
+    const { created, fetched } = await asApp(async (tx) => {
+      const created = await createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, deductibleProportion: d("50.00") },
+        lines: [
+          { rate: d("21.00"), base: d("200.00"), tax: d("42.00") },
+          { rate: d("10.50"), base: d("100.00"), tax: d("10.50"), kind: "capital" },
+        ],
+      });
+      return { created, fetched: await getPurchaseInvoice(tx, created.id) };
+    });
+    // `created` comes from the INSERT's RETURNING, `fetched` from a re-read: two different crossings.
+    expect(created.deductibleProportion).toBe("50.00");
+    expect(created.lines.map((l) => l.rate)).toEqual(["10.50", "21.00"]);
+    expect(fetched?.deductibleProportion).toBe("50.00");
+    expect(fetched?.lines.map((l) => l.rate)).toEqual(["10.50", "21.00"]);
+  });
+
+  it("stores a rate and the deductible proportion as a count of whole basis points", async () => {
+    // Raw column reads, for the reason the money case above gives: an assertion that goes through a
+    // purchasing function round-trips both conversions and so passes whatever the units are.
+    //
+    // What these two numbers pin is that the column holds a whole count at two decimal places, so
+    // 10.50 survives where a whole-percent column would round it away. What they do NOT pin is
+    // WHICH conversion produced the count: a rate and an amount share the scale, so the two agree on
+    // every value below 1000.00 and part only in what they refuse above it. Checked by substitution
+    // — writing both rate columns with `decimalToCents` instead leaves every case in this file
+    // passing — and nothing this package admits reaches the value where they part, because
+    // `validateLines` and `validateProportion` refuse anything above 100 before the insert.
+    const rows = await asApp(async (tx) => {
+      const c = await createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, deductibleProportion: d("50.00") },
+        lines: [{ rate: d("10.50"), base: d("100.00"), tax: d("10.50") }],
+      });
+      const [header] = await tx
+        .select({ deductibleProportion: purchaseInvoices.deductibleProportion })
+        .from(purchaseInvoices)
+        .where(eq(purchaseInvoices.id, c.id));
+      const lines = await tx
+        .select({ rate: purchaseInvoiceVat.rate })
+        .from(purchaseInvoiceVat)
+        .where(eq(purchaseInvoiceVat.purchaseInvoiceId, c.id));
+      return { header, lines };
+    });
+    expect(rows.header).toEqual({ deductibleProportion: 5000 });
+    expect(rows.lines).toEqual([{ rate: 1050 }]);
+  });
+
+  it("reads an unscaled rate literal back at two places", async () => {
+    // The claim `insertLines` makes, checked rather than asserted: "21" in, "21.00" out. It is the
+    // basis-point conversion that does this now — a rate column is an integer and has no scale of
+    // its own — and `created` comes from the INSERT's RETURNING, so nothing re-read it either.
+    const created = await asApp((tx) =>
+      createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, deductibleProportion: d("50") },
+        lines: [{ rate: d("21"), base: d("200.00"), tax: d("42.00") }],
+      }),
+    );
+    expect(created.lines[0]?.rate).toBe("21.00");
+    expect(created.deductibleProportion).toBe("50.00");
   });
 
   it("updates header fields without touching the lines", async () => {

@@ -46,7 +46,8 @@ export interface TopSeller {
   /** The frozen `sale_lines.name`/`variant_name` staff names, joined via `staffPresentationName` —
    * the same label a till button or the dashboard shows for this line. */
   name: string;
-  /** Σ line quantity over the range (numeric(12,3)); corrections net in, so it can fall. */
+  /** Σ line quantity over the range, at three decimal places; corrections net in, so it can
+   * fall. The column counts whole thousandths and the sum is converted once, on the way out. */
   quantity: Decimal;
   /** Σ line_total over the range, as an amount; corrections net in. */
   total: Decimal;

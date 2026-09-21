@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import type { Transaction } from "@waitron/db";
-import { decimal, rawCentsToDecimal } from "@waitron/shared";
+import { rawCentsToDecimal, rawThousandthsToDecimal } from "@waitron/shared";
 import {
   activeSalesClause,
   businessDayRangeClause,
@@ -44,9 +44,11 @@ export async function computeTopSellers(
   }
   const nodeClause = nodeScopeClause(input.nodeId);
   // Deterministic order: quantity desc, then the staff name/variant text as a stable tiebreak for ties.
-  // The total is a count of whole cents read raw, cast `::text` and converted by
-  // `rawCentsToDecimal` — see its doc comment. `quantity` is a `numeric(12, 3)` and keeps its own
-  // text cast: it is not money and did not move to cents.
+  // Both sums are counts read raw, cast `::text` and converted by the reader named after the
+  // scale: the total counts whole cents (`rawCentsToDecimal`) and the quantity counts whole
+  // thousandths (`rawThousandthsToDecimal`). The quantity's own cast used to be
+  // `::numeric(12, 3)::text`, which refused a sum past nine integer digits with a 22003; that
+  // bound is now the reader's and the refusal is an `AppError`.
   const { rows } = await tx.execute<{
     name: string;
     variant_name: string | null;
@@ -56,7 +58,7 @@ export async function computeTopSellers(
     select
       sl.name as name,
       sl.variant_name as variant_name,
-      sum(sl.quantity)::numeric(12, 3)::text as quantity,
+      sum(sl.quantity)::text as quantity,
       sum(sl.line_total)::text as total
     from sale_lines sl
     join sales s on s.id = sl.sale_id
@@ -69,7 +71,7 @@ export async function computeTopSellers(
   `);
   return rows.map((r) => ({
     name: staffPresentationName({ name: r.name, variantName: r.variant_name }),
-    quantity: decimal(r.quantity),
+    quantity: rawThousandthsToDecimal(r.quantity),
     total: rawCentsToDecimal(r.total),
   }));
 }

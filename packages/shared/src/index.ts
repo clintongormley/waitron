@@ -48,6 +48,8 @@ export {
   MAX_RATE_INTEGER_DIGITS,
   QUANTITY_SCALE,
   RATE_SCALE,
+  rawBasisPointsToDecimal,
+  rawThousandthsToDecimal,
   thousandthsToDecimal,
 } from "./scales.js";
 export type { Decimal } from "./money.js";

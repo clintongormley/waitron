@@ -6,7 +6,9 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
   decimal,
+  decimalToBasisPoints,
   decimalToCents,
+  decimalToThousandths,
   percentOf,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
@@ -139,7 +141,8 @@ export async function seedSale(
       variantName?: string;
       /** The frozen VARIANT customer-facing label; absent means the line named no variant. */
       variantDescriptions?: Record<string, string>;
-      /** numeric(12,3) line quantity; defaults to "1.000". May be negative on a rectificativa. */
+      /** The line quantity as a decimal literal, converted at the insert; defaults to "1.000".
+       *  May be negative on a rectificativa. */
       quantity?: string;
     }>;
     correctsSaleId?: SaleId;
@@ -180,9 +183,9 @@ export async function seedSale(
       descriptions: line.descriptions ?? { "es-ES": "Item" },
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
-      quantity: line.quantity ?? "1.000",
+      quantity: decimalToThousandths(decimal(line.quantity ?? "1.000")),
       unitPrice: decimalToCents(decimal(line.lineTotal)),
-      vatRate: line.vatRate,
+      vatRate: decimalToBasisPoints(decimal(line.vatRate)),
       lineTotal: decimalToCents(decimal(line.lineTotal)),
     })),
   );
@@ -246,14 +249,17 @@ export async function seedPurchaseInvoice(
       receivedOn: opts.receivedOn,
       total: decimalToCents(decimal(opts.total)),
       regime: opts.regime,
-      deductibleProportion: opts.deductibleProportion,
+      deductibleProportion:
+        opts.deductibleProportion === undefined
+          ? undefined
+          : decimalToBasisPoints(decimal(opts.deductibleProportion)),
     })
     .returning({ id: purchaseInvoices.id });
   const id = row!.id;
   await db.insert(purchaseInvoiceVat).values(
     opts.lines.map((l) => ({
       purchaseInvoiceId: id,
-      rate: l.rate,
+      rate: decimalToBasisPoints(decimal(l.rate)),
       base: decimalToCents(decimal(l.base)),
       tax: decimalToCents(decimal(l.tax)),
       kind: l.kind,
@@ -322,10 +328,10 @@ export async function seedFiredLine(
       productId: product!.id,
       name: "Item",
       descriptions: { "es-ES": "Item" },
-      quantity: "1.000",
+      quantity: decimalToThousandths(decimal("1.000")),
       unitPrice: decimalToCents(decimal("1.00")),
       unitPriceGross: decimalToCents(decimal("1.00")),
-      vatRate: "10.00",
+      vatRate: decimalToBasisPoints(decimal("10.00")),
       lineTotal: decimalToCents(decimal("1.00")),
       servedAt: opts.served ? sql`now()` : null,
     })

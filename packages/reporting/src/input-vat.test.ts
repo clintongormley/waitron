@@ -154,11 +154,13 @@ describe("computeInputVat", () => {
     ]);
   });
 
-  it("reads base and tax as counts of whole cents, summed then converted once", async () => {
-    // Written straight to the tables as INTEGERS, past `seedPurchaseInvoice`'s own decimalToCents,
-    // so this pins what the columns hold rather than what the fixture does with them. Two lines of
-    // 2099 cents sum to 4198 = 41.98 at a full 100% proportion; a query that read the columns as
-    // euros — which a `::numeric(12, 2)::text` cast does without error — would report "4198.00".
+  it("reads base, tax and the rate as whole counts, summed then converted once", async () => {
+    // Written straight to the tables as INTEGERS, past `seedPurchaseInvoice`'s own converters, so
+    // this pins what the columns hold rather than what the fixture does with them. Two lines of
+    // 2099 cents sum to 4198 = 41.98 at a full proportion; a query that read the columns as euros
+    // — which a `::numeric(12, 2)::text` cast does without error — would report "4198.00". The
+    // rate is 2100 basis points and must be reported as "21.00": read as a decimal it would say
+    // "2100.00", and read with the old `::numeric(5, 2)` cast it would not fit at all.
     const [invoice] = (
       await suite.db.execute<{ id: string }>(sql`
         insert into purchase_invoices
@@ -168,8 +170,8 @@ describe("computeInputVat", () => {
     ).rows;
     await suite.db.execute(sql`
       insert into purchase_invoice_vat (purchase_invoice_id, rate, base, tax, kind) values
-        (${invoice!.id}, '21.00', 10000, 2099, 'ordinary'),
-        (${invoice!.id}, '21.00', 10000, 2099, 'ordinary')`);
+        (${invoice!.id}, 2100, 10000, 2099, 'ordinary'),
+        (${invoice!.id}, 2100, 10000, 2099, 'ordinary')`);
     const ret = await run({ year: 2026, month: 8 });
     expect(ret.byRate).toEqual([{ rate: "21.00", base: "200.00", tax: "41.98", kind: "ordinary" }]);
     expect(ret).toMatchObject({ baseTotal: "200.00", taxTotal: "41.98" });

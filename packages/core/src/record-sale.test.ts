@@ -281,6 +281,50 @@ describe("recordSale — the happy path", () => {
     expect(tender?.tipAmount).toBe(190);
   });
 
+  it("stores a line's quantity in whole thousandths and its VAT rate in whole basis points", async () => {
+    // The two columns that are neither money nor a decimal: a quantity counts whole thousandths
+    // and a rate whole basis points, converted at the row exactly as an amount is.
+    //
+    // Line 2 weighs five grams, which is the reason a quantity does not share the money scale:
+    // read at two places it is 0.01, read at three it is 0.005, and only 5 here shows the third
+    // place survived the write. The four expected numbers are all different from each other and
+    // from the amounts on the same rows, so a conversion that used the wrong scale for either
+    // column cannot produce this set.
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      // base 30.00 + 10.00, tax 6.30 (21% of 30.00) + 1.05 (10.5% of 10.00).
+      total: "47.35",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Jamón",
+          descriptions: { "es-ES": "Jamón" },
+          quantity: "1.5",
+          unitPrice: "20.00",
+          vatRate: "21.00",
+          lineTotal: "30.00",
+        },
+        {
+          lineNo: 2,
+          name: "Azafrán",
+          descriptions: { "es-ES": "Azafrán" },
+          quantity: "0.005",
+          unitPrice: "2000.00",
+          vatRate: "10.50",
+          lineTotal: "10.00",
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+
+    const lines = await suite.db
+      .select()
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+    expect(lines.map((line) => line.quantity)).toEqual([1500, 5]);
+    expect(lines.map((line) => line.vatRate)).toEqual([2100, 1050]);
+  });
+
   it("snapshots the locale list as at issuance", async () => {
     // A receipt reprinted a year later must read identically to the one the customer took, so
     // the list is copied onto the sale rather than read back from configuration at print time.

@@ -21,7 +21,7 @@ declare module "@waitron/shared" {
     "modifier.in_use": { modifierId: string; dependency: string };
     /** A unit precision must be a whole number from zero through three. */
     "unit.precision_invalid": Record<string, never>;
-    /** A quantity is malformed, non-positive, too precise, or outside numeric(12,3). */
+    /** A quantity is malformed, non-positive, too precise, or past nine integer digits. */
     "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
     /** A unit id names no unit. */
     "unit.not_found": { unitId: string };

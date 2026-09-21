@@ -5,6 +5,8 @@ import {
   basisPointsToDecimal,
   decimalToBasisPoints,
   decimalToThousandths,
+  rawBasisPointsToDecimal,
+  rawThousandthsToDecimal,
   thousandthsToDecimal,
 } from "./scales.js";
 
@@ -120,5 +122,54 @@ describe("the two scales do not share a conversion", () => {
     // no shared "toInteger" that would take a quantity and a rate and give the same answer.
     expect(decimalToThousandths(decimal("21.00"))).toBe(21000);
     expect(decimalToBasisPoints(decimal("21.00"))).toBe(2100);
+  });
+});
+
+describe("rawThousandthsToDecimal", () => {
+  it("reads the plain integer text a cast raw SQL read returns", () => {
+    expect(rawThousandthsToDecimal("1500")).toBe("1.500");
+    expect(rawThousandthsToDecimal("0")).toBe("0.000");
+  });
+
+  it("refuses text carrying a decimal point", () => {
+    // What a missing `::text` cast, or a cast to a scaled numeric, would hand over: a plausible
+    // string a thousand times the quantity. Refusing is the only safe answer.
+    expect(() => rawThousandthsToDecimal("1.500")).toThrow(AppError);
+  });
+
+  it("refuses a value that is not text at all", () => {
+    expect(() => rawThousandthsToDecimal(1500 as unknown as string)).toThrow(AppError);
+  });
+
+  it("keeps a negative sum negative", () => {
+    // A rectificativa files a negative quantity — `sale_lines_quantity_ck` forbids only zero — so a
+    // sum over a range that contains one can come back below zero.
+    expect(rawThousandthsToDecimal("-1500")).toBe("-1.500");
+  });
+
+  it("refuses a sum wider than a quantity's nine integer digits", () => {
+    // The `::numeric(12, 3)` cast this replaced refused the same sum with a 22003.
+    expect(() => rawThousandthsToDecimal("1000000000000")).toThrow(AppError);
+    expect(rawThousandthsToDecimal("999999999999")).toBe("999999999.999");
+  });
+});
+
+describe("rawBasisPointsToDecimal", () => {
+  it("reads the plain integer text a cast raw SQL read returns", () => {
+    expect(rawBasisPointsToDecimal("2100")).toBe("21.00");
+    expect(rawBasisPointsToDecimal("0")).toBe("0.00");
+  });
+
+  it("refuses text carrying a decimal point", () => {
+    expect(() => rawBasisPointsToDecimal("21.00")).toThrow(AppError);
+  });
+
+  it("keeps a negative rate negative", () => {
+    expect(rawBasisPointsToDecimal("-2100")).toBe("-21.00");
+  });
+
+  it("refuses a rate wider than three integer digits", () => {
+    expect(() => rawBasisPointsToDecimal("100000")).toThrow(AppError);
+    expect(rawBasisPointsToDecimal("99999")).toBe("999.99");
   });
 });

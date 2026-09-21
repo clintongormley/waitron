@@ -792,7 +792,8 @@ export interface StationQueueItem {
    * and reads it identically to the printed ticket.
    */
   name: string;
-  /** The line's quantity (numeric(12,3) as text, e.g. "2.000"), shown as "qty× dish" on the display. */
+  /** The line's quantity, as a three-place decimal string, e.g. "2.000" — shown as "qty× dish"
+   * on the display. The column behind it counts whole thousandths; the wire does not. */
   quantity: string;
   /** Unit values frozen with the line. Absent/null only on older payloads. */
   unitName?: Record<string, string> | null;
