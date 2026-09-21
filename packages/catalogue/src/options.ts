@@ -169,10 +169,9 @@ function listValues(input: OptionListInput) {
  * That refusal is decided BEFORE the delete below, on a plain `select`, which takes no row locks.
  * The ordering is the point: two saves that each name the other list's label both read, both see the
  * other's label still there, and both refuse. Deciding it later instead — at the insert's
- * primary-key conflict, which is where `writeChoices` decides the same thing about a stolen choice
- * id (modifiers.ts) — left each save waiting on the other's uncommitted delete, and PostgreSQL ended
- * one of them with `40P01 deadlock detected` in place of a domain refusal. Receipt in the branch's
- * review thread.
+ * primary-key conflict — left each save waiting on the other's uncommitted delete, and PostgreSQL
+ * ended one of them with `40P01 deadlock detected` in place of a domain refusal. Receipt in the
+ * branch's review thread.
  */
 async function writeLabels(
   tx: Transaction,
@@ -234,15 +233,12 @@ async function writeLabels(
 }
 
 /**
- * Nothing here takes a lock of its own on the list or its labels. The modifier path this replaces
- * does, and not per row: `createModifier`/`updateModifier`/`deleteModifier` (modifiers.ts) call
- * `lockModifierDefinitions` (modifier-lock.ts), which is one advisory lock on a constant key
- * covering every modifier definition at once. `setProductVariants` (variants.ts) takes no advisory
- * lock either — its `lockProduct` is a `select … for update` on the product row. Going without is a
- * decision, not an omission: the plan's Task 2 Step 6 says "No advisory lock, no order check", and
- * spec §7 bars advisory locks from new code because the SQLite switch's single write queue makes
- * them redundant. The content-language lock `validateNames` reaches through is the existing shared
- * one.
+ * Nothing here takes a lock of its own on the list or its labels, and that is a decision rather
+ * than an omission: the plan's Task 2 Step 6 says "No advisory lock, no order check", and spec §7
+ * bars advisory locks from new code because the SQLite switch's single write queue makes them
+ * redundant. `setProductVariants` (variants.ts) takes no advisory lock either — its `lockProduct`
+ * is a `select … for update` on the product row. The content-language lock `validateNames` reaches
+ * through is the existing shared one.
  */
 export async function createOptionList(
   tx: Transaction,
@@ -282,7 +278,7 @@ export async function updateOptionList(
 export async function deleteOptionList(tx: Transaction, optionListId: string): Promise<void> {
   await assertOptionList(tx, optionListId);
   // The labels go with it through `option_labels_list_fk` ... ON DELETE CASCADE
-  // (drizzle/0002_option_lists.sql:21). There is no open-order check: an order line carries the
+  // (drizzle/0000_catalogue_baseline.sql). There is no open-order check: an order line carries the
   // chosen names as text and points at nothing here (spec §2.3).
   await tx.delete(optionLists).where(eq(optionLists.id, optionListId));
 }
@@ -294,7 +290,7 @@ export type { OptionListDependants } from "./modifier-list-types.js";
 /**
  * What deleting this list would touch — the preview a delete confirmation reads. Both sides are
  * detached by the delete rather than blocking it: `product_modifiers_option_list_fk` is
- * ON DELETE CASCADE (drizzle/0010_product_modifiers.sql:12), and an order line carries the chosen
+ * ON DELETE CASCADE (drizzle/0000_catalogue_baseline.sql), and an order line carries the chosen
  * names as text and points at nothing here (spec
  * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3).
  *
@@ -313,8 +309,8 @@ export type { OptionListDependants } from "./modifier-list-types.js";
  *
  * Receipt for "no other table points at an options list", over the generated migrations:
  * `grep -rn 'REFERENCES "public"."option_l' --include='*.sql' packages apps` returns two lines,
- * `option_labels`' own key into `option_lists` (drizzle/0002_option_lists.sql:21) and
- * `product_modifiers`' (drizzle/0010_product_modifiers.sql:12).
+ * `option_labels`' own key into `option_lists` and `product_modifiers`' own, both in
+ * drizzle/0000_catalogue_baseline.sql.
  *
  * The products come back alphabetical by staff name with the id breaking a tie, so a confirmation
  * dialog reads in a fixed order whichever ids were minted; the menus in offer-id order, as the

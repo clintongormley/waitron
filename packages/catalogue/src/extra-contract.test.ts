@@ -263,6 +263,41 @@ describe("extra list authoring contract", () => {
     );
   });
 
+  // A default is taken when a field is ABSENT and never when it is present and null — the rule
+  // `CLAUDE.md` §3 states as "default optional request fields only when absent". `value ?? default`
+  // is the shape that breaks it, and it breaks silently: an explicit null would be defaulted rather
+  // than refused, so a client clearing a field would look like a client that never sent it. The
+  // suite that used to hold this pair went with the old modifier contract in Task 13 of
+  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`; these two are its heirs.
+  // Proven by mutation, not by passing: with `bool`'s `value === undefined` widened to
+  // `value == null` and `whole`'s guard likewise, each expectation below fails and the rest of the
+  // file stays green.
+  it("refuses an explicit null where a default is only taken on absence", () => {
+    expect(() => parseExtraListInput({ ...breadsBody, active: null })).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "active" } }),
+    );
+    expect(() => parseExtraListInput({ ...breadsBody, minPicks: null })).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "minPicks" } }),
+    );
+    expect(() =>
+      parseExtraListInput({ ...breadsBody, items: [{ ...sourdough, preselected: null }] }),
+    ).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "items.0.preselected" } }),
+    );
+    expect(() =>
+      parseExtraListInput({ ...breadsBody, items: [{ ...sourdough, maxQuantity: null }] }),
+    ).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "items.0.maxQuantity" } }),
+    );
+  });
+
+  // `maxPicks` is the deliberate exception and is pinned here so the rule above is not read as
+  // covering it: null MEANS uncapped, a value rather than a missing one
+  // (`extra-contract.ts`, `row.maxPicks == null ? null : …`).
+  it("keeps an explicit null maxPicks, because there null is the value", () => {
+    expect(parseExtraListInput({ ...breadsBody, maxPicks: null }).maxPicks).toBeNull();
+  });
+
   it("refuses a duplicate item id", () => {
     expect(() =>
       parseExtraListInput({ ...breadsBody, items: [sourdough, { ...rye, id: sourdoughItemId }] }),

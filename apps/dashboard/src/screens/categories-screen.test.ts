@@ -39,7 +39,6 @@ const product: Product = {
   image: null,
   id: "p",
   modifiers: [],
-  modifierIds: [],
   name: "Toast",
   customerName: { en: "Buttered toast" },
   unitId: "u1",

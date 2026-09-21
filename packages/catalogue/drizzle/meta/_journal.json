@@ -5,92 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1789558988811,
+      "when": 1789963420352,
       "tag": "0000_catalogue_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1789558989320,
+      "when": 1789963421665,
       "tag": "0001_catalogue_baseline_sql",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1789811664369,
-      "tag": "0002_option_lists",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1789811675411,
-      "tag": "0003_option_lists_grants_sql",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1789839967097,
-      "tag": "0004_extra_lists",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1789839967606,
-      "tag": "0005_extra_lists_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1789840353305,
-      "tag": "0006_extra_list_items_one_offer_per_product",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1789841694737,
-      "tag": "0007_extra_list_items_price_not_negative",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1789847612320,
-      "tag": "0008_menu_extra_publication",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1789847616725,
-      "tag": "0009_menu_extra_publication_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1789853424894,
-      "tag": "0010_product_modifiers",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1789853428948,
-      "tag": "0011_product_modifiers_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1789930577744,
-      "tag": "0012_money_in_cents",
       "breakpoints": true
     }
   ]

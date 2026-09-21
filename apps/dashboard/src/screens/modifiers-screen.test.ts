@@ -36,7 +36,6 @@ function product(overrides: Partial<Product> = {}): Product {
   return {
     id: BREAD,
     modifiers: [],
-    modifierIds: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
     categoryIds: ["category-1"],

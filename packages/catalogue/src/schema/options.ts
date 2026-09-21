@@ -24,12 +24,10 @@ export const optionLists = table("option_lists", {
   // the database says so: a key here and option_labels.list_id below would point at each other, so
   // a create would have to write one side null and come back to it. `parseOptionListInput` in
   // packages/catalogue/src/option-contract.ts is what refuses an id naming no label of the list.
-  // Same shape as the option-group model it replaces: `option_groups.default_choice_id` is a plain
-  // uuid column with no key (packages/db/drizzle/0021_product_modifiers.sql:5), checked in
-  // packages/catalogue/src/modifier-contract.ts:152.
   defaultLabelId: id("default_label_id"),
-  // `sort`, not the `display_order` the rest of this package's schema uses: these tables keep the
-  // column name of the core modifier tables they replace (`packages/db/src/schema/catalogue.ts`).
+  // `sort`, not the `display_order` the rest of this package's schema uses: an options list and an
+  // extras list are ordered by the same column name, and `product_modifiers.sort` (schema/extras.ts)
+  // orders the two kinds together.
   sort: count("sort").notNull().default(0),
   active: flag("active").notNull().default(true),
 });

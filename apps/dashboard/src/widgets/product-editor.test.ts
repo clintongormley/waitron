@@ -719,9 +719,8 @@ it("returns focus to the Modifiers control after every nested form it can open",
     optionLists,
   });
   const combobox = addModifier(el);
-  // "modifier" is the legacy option group, which no control of this editor opens; the catalogue
-  // screen still calls back with it, and the Modifiers section is what replaced option groups.
-  for (const kind of ["extras", "options", "modifier"] as const) {
+  // Both kinds of modifier list are added from the ONE combobox, so both return focus to it.
+  for (const kind of ["extras", "options"] as const) {
     (el.shadowRoot!.activeElement as HTMLElement | null)?.blur();
     expect(el.shadowRoot!.activeElement).toBeNull();
     el.returnRelatedFocus(kind);

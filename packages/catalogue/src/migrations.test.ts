@@ -22,8 +22,6 @@ const TABLES = [
   "content_languages",
   "menu_sections",
   "menu_items",
-  "menu_item_option_groups",
-  "menu_item_options",
   "category_details",
   "product_categories",
   "units",
@@ -91,16 +89,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_item_extra_lists_list_fk:
         "FOREIGN KEY (list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
       menu_item_extra_lists_pk: "PRIMARY KEY (menu_item_id, list_id)",
-      menu_item_option_groups_group_fk:
-        "FOREIGN KEY (group_id) REFERENCES option_groups(id) ON DELETE CASCADE",
-      menu_item_option_groups_item_fk:
-        "FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE",
-      menu_item_option_groups_pk: "PRIMARY KEY (menu_item_id, group_id)",
-      menu_item_options_group_fk:
-        "FOREIGN KEY (menu_item_id, group_id) REFERENCES menu_item_option_groups(menu_item_id, group_id) ON DELETE CASCADE",
-      menu_item_options_option_fk:
-        "FOREIGN KEY (option_id) REFERENCES option_group_items(id) ON DELETE CASCADE",
-      menu_item_options_pk: "PRIMARY KEY (menu_item_id, option_id)",
       menu_item_variants_offer_fk:
         "FOREIGN KEY (menu_item_id, product_id) REFERENCES menu_items(id, product_id) ON DELETE CASCADE",
       menu_item_variants_pk: "PRIMARY KEY (menu_item_id, variant_id)",
@@ -235,12 +223,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const categoryId = await one(
       sql`insert into categories (name) values ('{"en":"Food"}') returning id`,
     );
-    const groupId = await one(
-      sql`insert into option_groups (name) values ('{"en":"Size"}') returning id`,
-    );
-    const optionId = await one(
-      sql`insert into option_group_items (group_id, name) values (${groupId}, '{"en":"Large"}') returning id`,
-    );
     const unitId = await one(sql`insert into units (seed_key, name, abbreviation, precision)
       values ('each', '{"en":"each"}', '{"en":"ea"}', 0) returning id`);
     const sectionId = await one(sql`insert into menu_sections (menu_id, name)
@@ -250,8 +232,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const menuItemId =
       await one(sql`insert into menu_items (menu_id, product_id, section_id, gross_price)
       values (${menuId}, ${productId}, ${sectionId}, 3) returning id`);
-    await db.execute(sql`insert into menu_item_option_groups (menu_item_id, group_id)
-      values (${menuItemId}, ${groupId})`);
     const variantId = await one(sql`insert into product_variants (product_id, name, unit_price)
       values (${productId}, '{"en":"Bowl"}', 4) returning id`);
     const otherVariantId = await one(sql`insert into product_variants (product_id, name, unit_price)
@@ -262,8 +242,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       productId,
       otherProductId,
       categoryId,
-      groupId,
-      optionId,
       unitId,
       sectionId,
       otherSectionId,
@@ -316,28 +294,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       sql`insert into menu_items (menu_id, product_id, section_id, gross_price)
         values (${c.menuId}, ${c.otherProductId}, ${c.otherSectionId}, 1)`,
       "menu_items_section_fk",
-    );
-  });
-
-  it("refuses offered modifiers whose offer, group or choice does not exist", async () => {
-    const c = await catalogue();
-    await refusal(
-      sql`insert into menu_item_option_groups (menu_item_id, group_id) values (${missing}, ${c.groupId})`,
-      "menu_item_option_groups_item_fk",
-    );
-    await refusal(
-      sql`insert into menu_item_option_groups (menu_item_id, group_id) values (${c.menuItemId}, ${missing})`,
-      "menu_item_option_groups_group_fk",
-    );
-    await refusal(
-      sql`insert into menu_item_options (menu_item_id, group_id, option_id)
-        values (${c.menuItemId}, ${missing}, ${c.optionId})`,
-      "menu_item_options_group_fk",
-    );
-    await refusal(
-      sql`insert into menu_item_options (menu_item_id, group_id, option_id)
-        values (${c.menuItemId}, ${c.groupId}, ${missing})`,
-      "menu_item_options_option_fk",
     );
   });
 

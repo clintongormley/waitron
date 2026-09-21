@@ -1,1 +1,0 @@
-ALTER TABLE "extra_list_items" ADD CONSTRAINT "extra_list_items_price_ck" CHECK ("extra_list_items"."price" >= 0);

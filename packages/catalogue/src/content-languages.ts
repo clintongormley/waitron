@@ -59,10 +59,10 @@ export async function listContentTranslationGaps(
   // `product`, `variant`, `option_list`, `option_label` and `extra_list` are the kinds whose
   // customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
   // them: absent is not a gap, only a partly filled map is. The kinds it emits unfiltered —
-  // `category`, `unit`, `section`, `option_group` and `option` — have no optional customer name;
+  // `category`, `unit` and `section` — have no optional customer name;
   // their name is the only text they have and stays required. `extra_list_items` is in neither
   // group because it holds no name at all: its columns are id, list_id, product_id, sort,
-  // max_quantity, preselected and price (drizzle/0004_extra_lists.sql), so there is no map here for
+  // max_quantity, preselected and price (drizzle/0000_catalogue_baseline.sql), so there is no map here for
   // this report to read.
   const result = await tx.execute<{
     kind: string;
@@ -76,8 +76,6 @@ export async function listContentTranslationGaps(
     union all select 'variant' as kind, id, customer_name as translations from product_variants
       where customer_name is not null and customer_name <> '{}'::jsonb
     union all select 'section' as kind, id, name as translations from menu_sections
-    union all select 'option_group' as kind, id, name as translations from option_groups
-    union all select 'option' as kind, id, name as translations from option_group_items
     union all select 'option_list' as kind, id, customer_name as translations from option_lists
       where customer_name is not null and customer_name <> '{}'::jsonb
     union all select 'option_label' as kind, id, customer_name as translations from option_labels

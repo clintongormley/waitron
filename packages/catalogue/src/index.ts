@@ -16,16 +16,13 @@ export { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
 export * from "./categories.js";
 export * from "./schema/categories.js";
 
-export * from "./modifier-contract.js";
 export * from "./option-contract.js";
-export * from "./modifiers.js";
 export * from "./options.js";
 export * from "./extra-contract.js";
 export * from "./extras.js";
 export * from "./extra-projection.js";
 export * from "./product-modifiers.js";
 export * from "./offered-modifiers.js";
-export { lockModifierDefinitions } from "./modifier-lock.js";
 
 export * from "./variants.js";
 export * from "./dietary-declarations.js";

@@ -90,119 +90,11 @@ export interface SeedCatalogue {
   categories: SeedCategory[];
 }
 
-// ── Ordering modifiers (Phase 4, Task 13) ──────────────────────────────────────────────────────────
-// Demo `option_groups`/`option_group_items` content, authored bare-locale like everything else in this
-// file. Attached (by `seed-options.ts`, via `seedCatalogues`' image→productId map) to exactly two
-// products below: "Café" (image `cafe-solo.png`) and "Solomillo"
-// (image `solomillo.png`), the closest analogues on this Spanish menu to a size/milk coffee order and a
-// cooked-to-order dish with extras. `vatClass: null` on every item below means INHERIT the dish's own
-// rate — a milk splash or a steak topping follows the same VAT treatment as the dish it rides on.
-
-/** One selectable choice within a demo option group — both-locale name, its GROSS price delta added to
- * the dish's own price, and its VAT class override (`null` = inherit the dish's rate). */
-export interface SeedOptionItem {
-  name: Record<SeedLocale, string>;
-  priceDelta: string;
-  vatClass: VatClass | null;
-}
-
-/** A demo option group: both-locale name, its select bounds, and its items — the same shape
- * `createOptionGroup`/`createOptionGroupItem` (`@waitron/catalogue`) take, narrowed to one locale at
- * creation time exactly as `seedCatalogues` narrows `SeedProduct.customerName`. */
-export interface SeedOptionGroup {
-  name: Record<SeedLocale, string>;
-  minSelect: number;
-  maxSelect: number;
-  required: boolean;
-  items: SeedOptionItem[];
-}
-
-/** One product's attached option groups, keyed by the SAME unique `image` basename every product in
- * this file carries — `seedOptions` resolves it through `seedCatalogues`'s `productsByImage` map, the
- * same join key `seedMedia` uses. */
-export interface SeedProductOptions {
-  productImage: string;
-  groups: SeedOptionGroup[];
-}
-
-export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
-  {
-    productImage: "cafe-solo.png",
-    groups: [
-      {
-        name: { en: "Size", es: "Tamaño" },
-        minSelect: 1,
-        maxSelect: 1,
-        required: true,
-        items: [
-          { name: { en: "Small", es: "Pequeño" }, priceDelta: "0.00", vatClass: null },
-          { name: { en: "Large", es: "Grande" }, priceDelta: "0.50", vatClass: null },
-        ],
-      },
-      {
-        name: { en: "Milk", es: "Leche" },
-        minSelect: 1,
-        maxSelect: 1,
-        required: true,
-        items: [
-          { name: { en: "Whole milk", es: "Leche entera" }, priceDelta: "0.00", vatClass: null },
-          { name: { en: "Oat milk", es: "Leche de avena" }, priceDelta: "0.40", vatClass: null },
-          {
-            name: { en: "Semi-skimmed milk", es: "Leche semidesnatada" },
-            priceDelta: "0.00",
-            vatClass: null,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    productImage: "solomillo.png",
-    groups: [
-      {
-        name: { en: "Extras", es: "Extras" },
-        minSelect: 0,
-        maxSelect: 3,
-        required: false,
-        items: [
-          { name: { en: "Fried egg", es: "Huevo frito" }, priceDelta: "1.00", vatClass: null },
-          { name: { en: "Bacon", es: "Bacon" }, priceDelta: "1.50", vatClass: null },
-          {
-            name: { en: "Blue cheese sauce", es: "Salsa de queso azul" },
-            priceDelta: "1.00",
-            vatClass: null,
-          },
-        ],
-      },
-      {
-        // This dish carries a TWIN cooking question in the DATA: `PRODUCT_OPTION_LISTS` below
-        // attaches the new options list to the same steak. The operator is asked it once, because
-        // the till's picker draws `offeredModifiers` and never `optionGroups` — the reasoning and
-        // the check are in `seed-option-lists.ts`. This group goes with its tables in Task 13 of
-        // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
-        name: { en: "Cooking", es: "Punto de la carne" },
-        minSelect: 1,
-        maxSelect: 1,
-        required: true,
-        items: [
-          { name: { en: "Rare", es: "Poco hecho" }, priceDelta: "0.00", vatClass: null },
-          { name: { en: "Medium", es: "Al punto" }, priceDelta: "0.00", vatClass: null },
-          { name: { en: "Well done", es: "Muy hecho" }, priceDelta: "0.00", vatClass: null },
-        ],
-      },
-    ],
-  },
-];
-
-// ── Options lists — the generic mechanism, seeded beside the legacy groups above ─────────────────
+// ── Options lists ────────────────────────────────────────────────────────────────────────────────
 // A reusable list of labels the diner picks exactly one of. It is what a venue uses to ask "how do
-// you want it cooked?" now that the product model carries no built-in doneness field. Unlike an
-// option group, a list owns no price, VAT or allergens (`OptionList`, option-contract.ts), so there
-// is no `priceDelta` or `vatClass` here.
-//
-// Seeded by `seed-option-lists.ts`, deliberately NOT by `seed-options.ts`: that file seeds the
-// LEGACY option groups, whose tables Task 13 of
-// `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes.
+// you want it cooked?" now that the product model carries no built-in doneness field. A list owns
+// no price, VAT or allergens (`OptionList`, option-contract.ts), so there is no `priceDelta` or
+// `vatClass` here. Seeded by `seed-option-lists.ts`.
 //
 // Staff `name`, `customerName` and `kitchenName` are DIFFERENT text on the list and on every label,
 // so a surface reading the wrong one of the three shows the wrong words rather than the right ones
@@ -227,8 +119,9 @@ export interface SeedOptionList {
   labels: SeedOptionLabel[];
 }
 
-/** One product's attached options lists, keyed by the SAME unique `image` basename
- * `PRODUCT_OPTION_GROUPS` joins on. */
+/** One product's attached options lists, keyed by the same unique `image` basename every product in
+ * this file carries — `seedOptionLists` resolves it through `seedCatalogues`'s `productsByImage`
+ * map, the same join key `seedMedia` uses. */
 export interface SeedProductOptionLists {
   productImage: string;
   lists: SeedOptionList[];

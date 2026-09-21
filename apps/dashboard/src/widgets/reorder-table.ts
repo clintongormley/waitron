@@ -33,8 +33,8 @@ export interface ReorderModel {
 }
 
 /**
- * The shared drag-and-keyboard reorder table, extracted from the modifier form so the product
- * editor's variants table reuses one implementation. It is a Lit reactive controller, not a mixin:
+ * The shared drag-and-keyboard reorder table, so every reorderable table reuses one implementation.
+ * It is a Lit reactive controller, not a mixin:
  * the reorder state (the live drag, row geometry, refocus and the live region) is self-contained and
  * composes with a host's existing `@state`, whereas a mixin would force every reorderable table onto
  * a shared base class. The pure array math stays in `reorder.js`; the host applies it in `move`.

@@ -386,10 +386,9 @@ export async function updateExtraList(
 export async function deleteExtraList(tx: Transaction, extraListId: string): Promise<void> {
   await lockExtraList(tx, extraListId);
   // Three sets of rows go with it, all by ON DELETE CASCADE: the list's items through
-  // `extra_list_items_list_fk` (drizzle/0004_extra_lists.sql:24), every menu offer's publication of
-  // it through `menu_item_extra_lists_list_fk` (drizzle/0008_menu_extra_publication.sql:21) and,
-  // under those, each offer's per-item overrides through `menu_item_extra_items_list_fk`
-  // (drizzle/0008_menu_extra_publication.sql:18). Run
+  // `extra_list_items_list_fk`, every menu offer's publication of it through
+  // `menu_item_extra_lists_list_fk` and, under those, each offer's per-item overrides through
+  // `menu_item_extra_items_list_fk` — all three declared in drizzle/0000_catalogue_baseline.sql. Run
   // rather than read off the clauses, by "takes the publication and its overrides with it when the
   // list is deleted" (extra-projection.test.ts). There is no open-order check, because the design
   // has an open order's child line carry the product rather than the list (spec §3.5, §3.4), and
@@ -453,14 +452,11 @@ async function lockPublishedLists(
 }
 
 /**
- * Every list the body publishes is one the dish's PRODUCT carries in `product_modifiers` — ONE of
- * the two checks `setMenuItemOptionGroups` (operations.ts) makes against `product_option_groups`,
- * the one it refuses as `options.group_invalid` with `reason: "not_attached"`. Its OTHER check has
- * no twin here: that one refuses a body which LEAVES OUT a group the product marks required
- * (`reason: "required_group_missing"`), and nothing on the extras side refuses an offer that
- * publishes none of the lists its product carries. Whether it should is open, not decided here —
- * an extras list has no `required` flag to read (the spec makes "required" `min_picks >= 1`, §3.1),
- * and §3.2 says only which lists an offer publishes, never that a required one must be among them.
+ * Every list the body publishes is one the dish's PRODUCT carries in `product_modifiers`; a list it
+ * does not carry is refused. There is NO check the other way round: nothing refuses an offer that
+ * publishes none of the lists its product carries. Whether there should be is open, not decided
+ * here — an extras list has no `required` flag to read (the spec makes "required" `min_picks >= 1`,
+ * §3.1), and §3.2 says only which lists an offer publishes, never that any of them must be there.
  *
  * A menu offer narrows and reprices what the product already offers (spec
  * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.2), so publishing a list the
@@ -538,15 +534,12 @@ async function assertProductsOffered(
  *
  * **An item row is an OVERRIDE, not a publication.** A list item with no row here is offered on this
  * menu at its own resolved price; a row replaces that price when it carries one, and withdraws the
- * item when `available` is false. That is the opposite of `menu_item_options`, where a choice is
- * offered only if a row exists (`projectModifier`, modifier-projection.ts). Two reasons it differs:
- * the row carries an explicit `available` flag, which `menu_item_options` has no column for, so
- * narrowing has its own place and row presence does not have to carry it; and §3.2 says a menu offer
- * MAY narrow and reprice, so an offer that narrows nothing offers the whole list.
+ * item when `available` is false. Row presence does not have to carry narrowing, because the row
+ * has an explicit `available` flag for it; and §3.2 says a menu offer MAY narrow and reprice, so an
+ * offer that narrows nothing offers the whole list.
  *
- * **A list the dish's product does not carry is refused** ({@link assertProductCarries}) — the
- * `not_attached` half of what `setMenuItemOptionGroups` (operations.ts) checks against
- * `product_option_groups`. Its `required_group_missing` half has no twin here, for the reason
+ * **A list the dish's product does not carry is refused** ({@link assertProductCarries}). Nothing
+ * refuses an offer that publishes none of the product's lists, for the reason
  * {@link assertProductCarries} gives.
  *
  * The existence read takes the menu offer's ROW LOCK, so two saves of the SAME offer run one after
@@ -588,7 +581,7 @@ export async function setMenuItemExtraLists(
   await assertProductsOffered(tx, publications);
 
   // The offer's item rows go with its list rows, through `menu_item_extra_items_list_fk`
-  // (drizzle/0008_menu_extra_publication.sql:18), so this one delete clears both tables for this
+  // (drizzle/0000_catalogue_baseline.sql), so this one delete clears both tables for this
   // offer and no row the body keeps can collide with a row it is replacing.
   await tx.delete(menuItemExtraLists).where(eq(menuItemExtraLists.menuItemId, offerId));
   if (publications.length === 0) return;
@@ -624,7 +617,7 @@ export type { ExtraListDependants } from "./modifier-list-types.js";
  * The two sides are not the same kind of thing. A MENU publishes the list in its own right, through
  * `menu_item_extra_lists` (§3.2) — unlike an options list, which has no per-menu row at all. A
  * publication has no name of its own, so it is identified by the menu ITEM's id and the staff name
- * of the product that dish is, exactly as `modifierDependants` (modifiers.ts) identifies one.
+ * of the product that dish is.
  *
  * A PRODUCT carries the list in its own right too, through `product_modifiers` (spec §5). The two
  * sides are two separate reads rather than one reached through the other, because neither follows

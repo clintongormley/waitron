@@ -1,13 +1,16 @@
-import { randomUUID } from "node:crypto";
 import {
   createCatalogue,
+  createExtraList,
   createMenuItem,
   createMenuSection,
-  createModifier,
+  createOptionList,
   createProduct,
+  listExtraLists,
   listMenuOffers,
-  listModifiers,
-  setProductOptionGroups,
+  listOptionLists,
+  setMenuItemExtraLists,
+  updateOptionList,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import { sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
@@ -525,7 +528,7 @@ describe("configuration transfer database path", () => {
   });
 });
 
-it("transfers every modifier type, remaps default choice ids and preserves menu prices", async () => {
+it("transfers the extras and options lists, remaps their ids and preserves menu prices", async () => {
   const source = await applyVenue(planVenue(venue("B11223344"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -545,52 +548,85 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
       unitPrice: "2.00",
       vatClass: "reduced",
     });
-    const choiceId = randomUUID();
-    const extraId = randomUUID();
-    const definitions = [
-      await createModifier(tx, { type: "text", name: { es: "Mensaje" } }, "es"),
-      await createModifier(
-        tx,
-        {
-          type: "options",
-          name: { es: "Leche" },
-          choices: [{ id: choiceId, name: { es: "Avena" } }],
-          defaultChoiceId: choiceId,
-        },
-        "es",
-      ),
-      await createModifier(
-        tx,
-        {
-          type: "extras",
-          name: { es: "Extras" },
-          maxTotalQuantity: null,
-          choices: [
-            {
-              id: extraId,
-              name: { es: "Café extra" },
-              priceDelta: "1.50",
-              maxQuantity: 3,
-              preselected: true,
-              vatClass: "general",
-            },
-          ],
-        },
-        "es",
-      ),
-    ];
-    await setProductOptionGroups(
+    // The extra is a product in its own right, and not sold on its own.
+    const shot = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Café extra",
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+      soldAlone: false,
+    });
+    const optionList = await createOptionList(
       tx,
-      product.id,
-      definitions.map((definition) => definition.id),
+      {
+        name: "Leche",
+        customerName: null,
+        kitchenName: null,
+        defaultLabelId: null,
+        active: true,
+        labels: [
+          { name: "Entera", customerName: null, kitchenName: null, available: true },
+          { name: "Avena", customerName: null, kitchenName: null, available: true },
+        ],
+      },
+      "es",
     );
-    await createMenuItem(tx, {
+    // The default names a label of the same list, so the import has to remap BOTH and keep them
+    // pointing at each other — the property the old option-group round trip checked with
+    // `defaultChoiceId`.
+    const withDefault = await updateOptionList(
+      tx,
+      optionList.id,
+      {
+        name: "Leche",
+        customerName: null,
+        kitchenName: null,
+        defaultLabelId: optionList.labels[1]!.id,
+        active: true,
+        labels: optionList.labels.map((label) => ({
+          id: label.id,
+          name: label.name,
+          customerName: null,
+          kitchenName: null,
+          available: true,
+        })),
+      },
+      "es",
+    );
+    const extraList = await createExtraList(
+      tx,
+      {
+        name: "Extras",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 2,
+        active: true,
+        items: [{ productId: shot.id, maxQuantity: 3, preselected: true, price: "1.50" }],
+      },
+      "es",
+    );
+    // Ordered: extras first, then options. The order is the product's own and the transfer has to
+    // bring it across.
+    await writeProductModifiers(tx, product.id, [
+      { kind: "extras", id: extraList.id },
+      { kind: "options", id: withDefault.id },
+    ]);
+    const offer = await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
       grossPrice: "2.75",
     });
-    return { choiceId, extraId, definitions };
+    // An extras list reaches a menu offer only when the offer PUBLISHES it (`readMenuExtras`,
+    // packages/catalogue/src/offered-modifiers.ts), and this offer republishes the shot at its own
+    // price rather than the list's 1.50.
+    await setMenuItemExtraLists(tx, offer.id, [
+      { listId: extraList.id, items: [{ productId: shot.id, price: "0.90", available: true }] },
+    ]);
+    return { optionList: withDefault, extraList, shotId: shot.id };
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -600,8 +636,13 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     new Date("2026-09-12T12:00:00Z"),
     versions,
   );
-  expect(transferred.tables.option_groups).toHaveLength(3);
-  expect(transferred.tables.option_group_items).toHaveLength(2);
+  expect(transferred.tables.option_lists).toHaveLength(1);
+  expect(transferred.tables.option_labels).toHaveLength(2);
+  expect(transferred.tables.extra_lists).toHaveLength(1);
+  expect(transferred.tables.extra_list_items).toHaveLength(1);
+  expect(transferred.tables.product_modifiers).toHaveLength(2);
+  expect(transferred.tables.menu_item_extra_lists).toHaveLength(1);
+  expect(transferred.tables.menu_item_extra_items).toHaveLength(1);
   await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -610,34 +651,42 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
   });
   await withTransaction(targetSuite.db, async (tx) => {
     await asAppUser(tx);
-    const definitions = await listModifiers(tx);
-    expect(definitions).toHaveLength(3);
-    expect(
-      definitions.every((definition) =>
-        original.definitions.every((source) => source.id !== definition.id),
-      ),
-    ).toBe(true);
-    const options = definitions.find((definition) => definition.type === "options")!;
-    if (options.type !== "options") throw new Error("missing options modifier");
-    expect(options.defaultChoiceId).toBe(options.choices[0]!.id);
-    expect(options.defaultChoiceId).not.toBe(original.choiceId);
-    const extras = definitions.find((definition) => definition.type === "extras")!;
-    expect(extras).toMatchObject({
-      maxTotalQuantity: null,
-      choices: [{ priceDelta: "1.50", maxQuantity: 3, preselected: true, vatClass: "general" }],
+    const optionLists = await listOptionLists(tx);
+    expect(optionLists).toHaveLength(1);
+    const imported = optionLists[0]!;
+    // Every id is minted fresh on import, and the default still names a label of its OWN list.
+    expect(imported.id).not.toBe(original.optionList.id);
+    expect(imported.labels.map((label) => label.id)).not.toContain(
+      original.optionList.labels[1]!.id,
+    );
+    expect(imported.defaultLabelId).toBe(
+      imported.labels.find((label) => label.name === "Avena")!.id,
+    );
+
+    const extraLists = await listExtraLists(tx);
+    expect(extraLists).toHaveLength(1);
+    expect(extraLists[0]!.id).not.toBe(original.extraList.id);
+    expect(extraLists[0]!.items).toHaveLength(1);
+    expect(extraLists[0]!.items[0]).toMatchObject({
+      maxQuantity: 3,
+      preselected: true,
+      price: "1.50",
     });
+    expect(extraLists[0]!.items[0]!.productId).not.toBe(original.shotId);
+
     const menus = await tx.execute<{ id: string }>(
       sql`select id from catalogues where name = 'Modifier menu'`,
     );
     const offers = await listMenuOffers(tx, [menus.rows[0]!.id]);
-    expect(offers[0]!.grossPrice).toBe("2.75");
-    expect(offers[0]!.modifiers.map((modifier) => modifier.type)).toEqual([
-      "text",
-      "options",
-      "extras",
+    const coffee = offers.find((offer) => offer.name === "Café")!;
+    expect(coffee.grossPrice).toBe("2.75");
+    // The product's own attachment ORDER, and the offer's republished price on the extra.
+    expect(coffee.offeredModifiers.map((entry) => [entry.kind, entry.name])).toEqual([
+      ["extras", "Extras"],
+      ["options", "Leche"],
     ]);
-    expect(offers[0]!.modifiers[2]).toMatchObject({
-      choices: [{ priceDelta: "1.50", preselected: true, vatClass: "general" }],
-    });
+    const extras = coffee.offeredModifiers[0]!;
+    if (extras.kind !== "extras") throw new Error("expected the extras list first");
+    expect(extras.items.map((item) => item.price)).toEqual(["0.90"]);
   });
 });

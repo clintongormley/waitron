@@ -4,9 +4,9 @@ import { DashboardApi, type ExtraListInput, type OptionListInput } from "./clien
 /**
  * The twelve `/management-api/modifiers/{options,extras}` methods: each unwraps the server's
  * envelope key (`optionLists`/`optionList`, `extraLists`/`extraList`, `dependants`), and each sends
- * the URL, verb and body the route expects. The sibling of `modifiers.test.ts`, same shape: one
- * queued `fetch` stub, then one `toEqual` over the whole call table so a wrong URL, a wrong verb or
- * a dropped body field fails here rather than at runtime in a screen.
+ * the URL, verb and body the route expects. One queued `fetch` stub, then one `toEqual` over the
+ * whole call table, so a wrong URL, a wrong verb or a dropped body field fails here rather than at
+ * runtime in a screen.
  */
 it("unwraps the option- and extras-list envelopes and sends the authoring bodies", async () => {
   const optionInput: OptionListInput = {

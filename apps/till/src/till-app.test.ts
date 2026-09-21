@@ -318,10 +318,6 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       // The ordered attachment list a dish exposes, carried straight through from the source
       // `TillProduct` so a fixture that offers a list reaches the grid and the picker.
       offeredModifiers: product.offeredModifiers ?? [],
-      // `MenuOffer` still declares the two superseded projections, so the fixture satisfies the type
-      // with empty ones; nothing in the till reads either any more (Task 13 deletes them).
-      modifiers: [],
-      optionGroups: [],
       variants: (product.variants ?? []) as ZoneOfferCatalogue["offers"][number]["variants"],
       courseId: product.courseId ?? null,
     })),
@@ -680,7 +676,6 @@ describe("till-app", () => {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
-          optionGroups: [],
         },
         {
           id: "offer-happy-hour",
@@ -701,7 +696,6 @@ describe("till-app", () => {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
-          optionGroups: [],
         },
       ],
     });

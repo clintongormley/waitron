@@ -66,7 +66,6 @@ function product(overrides: Partial<Product> = {}): Product {
   return {
     id: "prod-1",
     modifiers: [],
-    modifierIds: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
     categoryIds: ["category-1"],
@@ -162,10 +161,11 @@ describe("product-list", () => {
     expect(rows[1]!.textContent).toContain("4.00–7.50");
   });
 
-  // The Modifiers column names the lists a manager attached through `Product.modifiers`. The product
-  // also still carries the OLD flat `modifierIds`, holding a DIFFERENT list id here: reading that
-  // field instead would print "Punto", and resolving an `extras` ref against the options lists would
-  // print it too, so either mistake fails on the text rather than passing on an empty cell.
+  // The Modifiers column names the lists a manager attached through `Product.modifiers`. Two things
+  // are set up to fail on the TEXT rather than pass on an empty cell: `opt-2` ("Punto") is a loaded
+  // options list this product does NOT hold, so a column printing the loaded set instead of the
+  // attachments names it; and the cell is asserted whole with `toBe`, so resolving the `extras` ref
+  // against the options lists — which also reaches "Punto" — loses "Salsas".
   it("shows reporting and other categories, attached modifier list names, and no VAT column", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -176,7 +176,6 @@ describe("product-list", () => {
             { kind: "extras", id: "ex-1" },
             { kind: "options", id: "opt-1" },
           ],
-          modifierIds: ["opt-2"],
         }),
       ],
       categories: [

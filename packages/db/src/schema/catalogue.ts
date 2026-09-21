@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey } from "drizzle-orm/pg-core";
-import { bigCount, count, flag, id, json, label, money, table, ts } from "./columns.js";
+import { check, index } from "drizzle-orm/pg-core";
+import { bigCount, flag, id, json, label, money, table, ts } from "./columns.js";
 
 /**
  * The db-layer copy of the allergen-declaration shape: a per-code presence map with an optional
@@ -122,106 +122,5 @@ export const products = table(
       "products_vat_class_ck",
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
     ),
-  ],
-);
-
-/** A reusable, named group of choices ("Size", "Extras") that attaches to many products via
- * `product_option_groups`. `min_select`/`max_select` bound how many items a diner may pick;
- * `required` forces at least one. `name` is a locale→string map. Deactivate via `active`, never
- * delete a group that historical order/sale-line snapshots may reference by copied value. */
-export const optionGroups = table(
-  "option_groups",
-  {
-    id: id("id").primaryKey().defaultRandom(),
-    name: json<Record<string, string>>("name").notNull(),
-    type: label("type").$type<"text" | "extras" | "options">().notNull().default("extras"),
-    maxTotalQuantity: count("max_total_quantity"),
-    defaultChoiceId: id("default_choice_id"),
-    minSelect: count("min_select").notNull().default(0),
-    maxSelect: count("max_select").notNull().default(1),
-    required: flag("required").notNull().default(false),
-    sort: count("sort").notNull().default(0),
-    active: flag("active").notNull().default(true),
-  },
-  (t) => [
-    check("option_groups_type_ck", sql`${t.type} in ('text','extras','options')`),
-    check(
-      "option_groups_total_ck",
-      sql`${t.maxTotalQuantity} is null or ${t.maxTotalQuantity} >= 1`,
-    ),
-    // Target for the foreign keys the children (option_group_items, product_option_groups) carry.
-    // `id` alone is already unique (it is the PK); this adds the composite so the FK is
-    // rather than merely referential.
-    // min_select >= 0 and max_select >= min_select. Design §3 invariant, enforced in the DB.
-    check("option_groups_select_ck", sql`${t.maxSelect} >= ${t.minSelect} and ${t.minSelect} >= 0`),
-    // required implies at least one selection. Design §3 invariant.
-    check("option_groups_required_ck", sql`${t.required} = false or ${t.minSelect} >= 1`),
-  ],
-);
-
-/** The individual choices within an `option_groups` row. `price_delta` is GROSS (VAT-inclusive) and
- * added to the parent dish's price when the item is chosen. `vat_class` NULL means "inherit the
- * parent dish's rate at add time"; a non-null value matches `products.vat_class`. Deactivate via
- * `active`. The `group_id` FK cascades on group delete. */
-export const optionGroupItems = table(
-  "option_group_items",
-  {
-    id: id("id").primaryKey().defaultRandom(),
-    groupId: id("group_id").notNull(),
-    name: json<Record<string, string>>("name").notNull(),
-    priceDelta: money("price_delta").notNull().default(0),
-    vatClass: label("vat_class"),
-    // The AUTHORED cap on how many of THIS option a diner may take on one dish (per-option quantity).
-    // `1` (the default) means "no per-option quantity" — the option behaves exactly as before this
-    // column existed, its child line counted at the dish quantity alone. A value of N lets a diner
-    // take the option up to ×N per dish; the pricer multiplies the dish quantity by the chosen count.
-    maxQuantity: count("max_quantity").notNull().default(1),
-    preselected: flag("preselected").notNull().default(false),
-    addAllergens: json<AllergenMap>("add_allergens"),
-    // The choice's POSITIVE dietary suitability (a subset of vegan/vegetarian/halal/kosher). Replaces
-    // the retired negative `dietary_effect = { invalidates }`; shown per item, never folded.
-    dietarySuitability: json<string[]>("dietary_suitability"),
-    sort: count("sort").notNull().default(0),
-    active: flag("active").notNull().default(true),
-  },
-  (t) => [
-    index("option_group_items_group_idx").on(t.groupId),
-    // A per-option cap is meaningless below 1: an option a diner can take zero times is just an
-    // inactive option. Enforced in the DB so no authoring path can persist a nonsensical cap.
-    check("option_group_items_qty_ck", sql`${t.maxQuantity} >= 1`),
-    // Cascades so
-    // deleting a group removes its items. NULL vat_class = inherit; a non-null must match products'.
-    foreignKey({
-      columns: [t.groupId],
-      foreignColumns: [optionGroups.id],
-      name: "option_group_items_group_fk",
-    }).onDelete("cascade"),
-  ],
-);
-
-/** The many-to-many attaching reusable `option_groups` to `products` — one group serves many dishes.
- * `sort` orders the groups within a product's modifier UI. Both FKs cascade,
- * so detaching happens by deleting the link row (never by deleting the shared group). */
-export const productOptionGroups = table(
-  "product_option_groups",
-  {
-    productId: id("product_id").notNull(),
-    groupId: id("group_id").notNull(),
-    sort: count("sort").notNull().default(0),
-  },
-  (t) => [
-    // `(product_id, group_id)` IS the identity, as in the other join tables (station_printers,
-    // location_catalogues): a product names a group at most once.
-    primaryKey({ columns: [t.productId, t.groupId], name: "product_option_groups_pk" }),
-    foreignKey({
-      columns: [t.productId],
-      foreignColumns: [products.id],
-      name: "product_option_groups_product_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.groupId],
-      foreignColumns: [optionGroups.id],
-      name: "product_option_groups_group_fk",
-    }).onDelete("cascade"),
   ],
 );

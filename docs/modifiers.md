@@ -7,8 +7,8 @@ each order keeps its own answers.
 ## Two kinds of list, one per tab
 
 **Modifiers** has two tabs, **Extras** and **Options**, each with its own table and its own button
-for adding a list. There is no third kind and no **Type** to choose: the old Text modifier, and the
-type field that went with it, are not on this page any more.
+for adding a list. There is no third kind and nothing to choose between: which tab you are on is
+what decides the kind.
 
 Use **Extras** for things a diner adds to a dish. Each entry on an extras list names a product you
 have already created, and takes that product's names, tax treatment, allergens, dietary labels and

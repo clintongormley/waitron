@@ -10,7 +10,7 @@ import { setLocale } from "../i18n/t.js";
 afterEach(cleanupWidgets);
 
 /** A minimal host exercising the controller over a plain id/label list — the reusable contract, free
- * of the modifier form's own concerns. */
+ * of any one host's own concerns. */
 @customElement("test-reorder-host")
 class TestReorderHost extends LitElement {
   static override styles = [ReorderController.styles];

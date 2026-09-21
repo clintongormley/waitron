@@ -350,8 +350,9 @@ docker exec waitron-db-1 psql -U postgres -Atc "select 2147483648::integer"
 As cents that is a ceiling of 21,474,836.47, while the bound the rest of the system states is
 twelve integer digits (`MAX_MONEY_INTEGER_DIGITS`, enforced by `assertMoney` and by
 `packages/catalogue`'s price validators) — 99999999999999 cents. A four-byte column leaves a band of amounts the converters
-accept and the column refuses with a bare `22003`, which is what turned
-`packages/catalogue/src/modifier-projection.test.ts` red. 99999999999999 is well inside the
+accept and the column refuses with a bare `22003`. That band is what turned a catalogue projection
+test red while money was being moved into whole cents (#475); the test itself went with the old
+modifier model in Task 13, so the receipt here is the two `psql` lines above rather than a file. 99999999999999 is well inside the
 9007199254740991 a JavaScript number counts exactly, so nothing in range loses a cent to the
 number type. Under SQLite an INTEGER is 64-bit, so the flip is unaffected.
 
@@ -1016,8 +1017,21 @@ in [the image-library plan](../superpowers/plans/2026-09-12-image-library.md).
 The modifier contract tests rejected explicit null for availability, required, Boolean defaults,
 price and preselection. `value ?? default` initially accepted those nulls, and comparing
 `String(vatClass)` accepted an array such as `["general"]`. Defaults now use `undefined` explicitly,
-and enum comparison follows a string type check. Receipt:
-`packages/catalogue/src/modifier-contract.test.ts` (the adversarial cases failed before the fix).
+and enum comparison follows a string type check.
+
+That suite went with the old modifier model in Task 13, and the assertion was carried across rather
+than dropped with it: `refuses an explicit null where a default is only taken on absence` exists in
+both `packages/catalogue/src/extra-contract.test.ts` and
+`packages/catalogue/src/option-contract.test.ts`. Neither is a test that merely passes — each was
+proven by mutating the code it covers, widening `bool`/`flag`'s `value === undefined` to
+`value == null` (and, in the extras file, the two `=== undefined ?` defaults beside it) and watching
+exactly that case go red while the rest of the file stayed green.
+
+**One field is deliberately outside the rule**, and a reader who takes the rule as universal will
+get it wrong: an extras list's `maxPicks` accepts an explicit null, because there null is the VALUE
+— it means uncapped — rather than a missing field (`row.maxPicks == null ? null : …`,
+`packages/catalogue/src/extra-contract.ts`). That is pinned by its own case, `keeps an explicit null
+maxPicks, because there null is the value`, so the exception cannot quietly spread.
 
 ## Order new unique targets before their foreign keys
 

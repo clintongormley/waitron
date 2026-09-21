@@ -30,7 +30,6 @@ const INGREDIENTS: Ingredient[] = [
 const PRODUCT: Product = {
   id: "prod-1",
   modifiers: [],
-  modifierIds: [],
   catalogueId: "cat-1",
   categoryId: null,
   categoryIds: [],

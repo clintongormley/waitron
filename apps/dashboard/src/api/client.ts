@@ -205,13 +205,11 @@ export type DietaryOrigin =
 
 /**
  * The dietary-origin taxonomy in DISPLAY order — the runtime companion of {@link DietaryOrigin}, the
- * single dashboard-local source both the ingredient-form origin picker and the option-group manager's
- * per-item origin overlay render from (the way `i18n/domain.ts`'s `ALLERGEN_CODES` is shared by the
- * allergen picker and the same manager). Kept LOCAL, not imported from `@waitron/catalogue`, so its
- * barrel — and through it `@waitron/db` and Node builtins — stays out of the browser bundle (the #70
- * rule). The raw tokens stay the WIRE VALUES (emitted `origin` and `<option>` values); each renders
- * its localised label at the render edge through `t("origin.<token>")`, so this stays `as const` to
- * keep the literal keys.
+ * single dashboard-local source every origin picker renders from. Kept LOCAL, not imported from
+ * `@waitron/catalogue`, so its barrel — and through it `@waitron/db` and Node builtins — stays out
+ * of the browser bundle (the #70 rule). The raw tokens stay the WIRE VALUES (emitted `origin` and
+ * `<option>` values); each renders its localised label at the render edge through
+ * `t("origin.<token>")`, so this stays `as const` to keep the literal keys.
  */
 export const DIETARY_ORIGINS = [
   "plant",
@@ -301,13 +299,6 @@ export interface CategoryDependants {
   parentId: string | null;
   routes: { id: string; station: string | null; zone: string | null }[];
 }
-/** `GET /management-api/modifiers/:id/dependants` — what a delete confirmation must show. */
-export interface ModifierDependants {
-  products: { id: string; name: string }[];
-  /** A menu entry has no name of its own — it is identified by the staff name of the product it is. */
-  menus: { id: string; name: string }[];
-  orders: number;
-}
 export interface ProductCategories {
   categoryIds: string[];
   primaryCategoryId: string | null;
@@ -346,135 +337,6 @@ export interface ProductUsingUnit {
   id: string;
   name: string;
   available: boolean;
-}
-
-// ── Option groups (reusable modifiers) + product attach (Task 11/12) ─────────────────────────────
-// LOCAL copies of the server's option-group authoring JSON shapes (the `catalogue-api.ts` routes
-// wrapping `@waitron/catalogue`'s option-group ops), deliberately NOT imported from
-// `@waitron/catalogue`/`@waitron/db` — a runtime import would drag their barrels + Node builtins into
-// the browser bundle (the #70 rule the shapes above follow). These are the CONTRACT the option-group
-// manager + the product form's attach section build on; if the server shapes change these follow, and
-// a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
-
-/** A reusable `option_groups` row for the authoring editor — mirrors catalogue's `OptionGroup`. The
- * whole row (active AND inactive), unlike the sale-time resolved shape the till reads. */
-export interface OptionGroup {
-  id: string;
-  name: Record<string, string>;
-  minSelect: number;
-  maxSelect: number;
-  required: boolean;
-  sort: number;
-  active: boolean;
-}
-
-/** Browser-local canonical modifier definition; each choice states its own allergens and its positive
- * dietary suitability (a subset of vegan/vegetarian/halal/kosher). */
-export interface ModifierEffects {
-  addAllergens?: AllergenDeclaration;
-  suitableFor?: string[] | null;
-}
-export interface ModifierChoice extends ModifierEffects {
-  id: string;
-  name: Record<string, string>;
-  available: boolean;
-}
-export interface ModifierExtraChoice extends ModifierChoice {
-  priceDelta: string;
-  maxQuantity: number;
-  preselected: boolean;
-  vatClass?: VatClass | null;
-}
-type ModifierCommon = { name: Record<string, string>; available: boolean };
-export type ModifierInput = ModifierCommon &
-  (
-    | { type: "text" }
-    | {
-        type: "extras";
-        required: boolean;
-        maxTotalQuantity: number | null;
-        choices: ModifierExtraChoice[];
-      }
-    | { type: "options"; defaultChoiceId: string | null; choices: ModifierChoice[] }
-  );
-export type Modifier = ModifierInput & { id: string };
-
-/** One `option_group_items` row for the authoring editor — mirrors catalogue's `OptionGroupItem`.
- * `priceDelta` is a GROSS two-place decimal string (like `unitPrice`) — the column stores the
- * amount as a count of whole cents and the read converts it; `vatClass` is null
- * when the item INHERITS the parent dish's rate. */
-export interface OptionGroupItem {
-  id: string;
-  groupId: string;
-  name: Record<string, string>;
-  priceDelta: string;
-  vatClass: VatClass | null;
-  sort: number;
-  active: boolean;
-  /** The most of this option a diner may take (`max_quantity`); 1 = no per-option quantity. */
-  maxQuantity: number;
-  /** The option's OWN allergens (the three-state declaration — `null` here means "declares none", the
-   * picker's PENDING state being inert for a declaration). Non-optional on the read row to match the
-   * server shape. */
-  addAllergens: AllergenDeclaration;
-}
-
-/** The `POST /management-api/option-groups` body — mirrors catalogue's `CreateOptionGroupInput`.
- * Every field but `name` is optional; the server defaults mirror the column defaults (min 0, max 1,
- * required false, sort 0, active true). An invalid combination (`max < min`, or `required` with
- * `minSelect < 1`) rejects `options.group_invalid`. */
-export interface OptionGroupInput {
-  name: Record<string, string>;
-  minSelect?: number;
-  maxSelect?: number;
-  required?: boolean;
-  sort?: number;
-  active?: boolean;
-}
-
-/** The `PATCH /management-api/option-groups/:id` body — mirrors catalogue's `UpdateOptionGroupInput`.
- * Every key is optional (absent = unchanged); the select-bound invariant is checked against the MERGE
- * of this patch onto the stored row, so a partial patch that would violate it still rejects
- * `options.group_invalid`. */
-export interface OptionGroupPatch {
-  name?: Record<string, string>;
-  minSelect?: number;
-  maxSelect?: number;
-  required?: boolean;
-  sort?: number;
-  active?: boolean;
-}
-
-/** The `POST /management-api/option-groups/:id/items` body — mirrors catalogue's
- * `CreateOptionGroupItemInput`. `vatClass` omitted (or `null`) inherits the parent dish's rate; the
- * other fields default to the column defaults (priceDelta "0", sort 0, active true, maxQuantity 1). A
- * `maxQuantity` below 1 (or non-integer) rejects `options.item_invalid`. */
-export interface OptionGroupItemInput {
-  name: Record<string, string>;
-  priceDelta?: string;
-  vatClass?: VatClass | null;
-  sort?: number;
-  active?: boolean;
-  /** The per-option quantity cap; omitted defaults to 1 (no per-option quantity). An integer >= 1. */
-  maxQuantity?: number;
-  /** The option's OWN allergens (see {@link OptionGroupItem}); omitted (or `null`) declares none. */
-  addAllergens?: AllergenDeclaration;
-}
-
-/** The `PATCH /management-api/option-groups/:groupId/items/:itemId` body — mirrors catalogue's
- * `UpdateOptionGroupItemInput`. Every key is optional (absent = unchanged); `vatClass: null` reverts
- * the item to inheriting the parent dish's rate. A present `maxQuantity` is re-validated (>= 1). */
-export interface OptionGroupItemPatch {
-  name?: Record<string, string>;
-  priceDelta?: string;
-  vatClass?: VatClass | null;
-  sort?: number;
-  active?: boolean;
-  /** Absent leaves the stored value unchanged; a present value is re-validated as an integer >= 1. */
-  maxQuantity?: number;
-  /** The option's OWN allergens (see {@link OptionGroupItem}); absent leaves it unchanged, `null`
-   * clears it. */
-  addAllergens?: AllergenDeclaration;
 }
 
 // ── Ingredient & product-recipe types ─────────────────────────────────────────────────────────────
@@ -2000,50 +1862,12 @@ export class DashboardApi {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
   }
 
-  /** `GET /management-api/products/:id/option-groups` — the option groups attached to a product, as
-   * ordered ids (per-attachment `sort` order) — the read-back the product form uses to seed its attach
-   * section's picked-and-ordered list on open. */
-  listProductOptionGroupIds(productId: string): Promise<string[]> {
-    return this.#request<string[]>(`/management-api/products/${productId}/option-groups`, "GET");
-  }
-
-  async listModifiers(): Promise<Modifier[]> {
-    return (await this.#request<{ modifiers: Modifier[] }>("/management-api/modifiers", "GET"))
-      .modifiers;
-  }
-  async getModifier(id: string): Promise<Modifier> {
-    return (await this.#request<{ modifier: Modifier }>(`/management-api/modifiers/${id}`, "GET"))
-      .modifier;
-  }
-  async createModifier(input: ModifierInput): Promise<Modifier> {
-    return (await this.#request<{ modifier: Modifier }>("/management-api/modifiers", "POST", input))
-      .modifier;
-  }
-  async updateModifier(id: string, input: ModifierInput): Promise<Modifier> {
-    return (
-      await this.#request<{ modifier: Modifier }>(`/management-api/modifiers/${id}`, "PATCH", input)
-    ).modifier;
-  }
-  deleteModifier(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/modifiers/${id}`, "DELETE");
-  }
-  /** `GET /management-api/modifiers/:id/dependants` — products, menus and open orders a delete would affect. */
-  async getModifierDependants(id: string): Promise<ModifierDependants> {
-    return (
-      await this.#request<{ dependants: ModifierDependants }>(
-        `/management-api/modifiers/${id}/dependants`,
-        "GET",
-      )
-    ).dependants;
-  }
-
   // ── Options lists and extras lists (`/management-api/modifiers/{options,extras}`) ───────────────
   // The twelve routes `mountListSurface` mounts (apps/server/src/catalogue-api.ts), six per kind and
   // identical apart from the path segment and the envelope key. Every answer arrives wrapped —
   // `{ optionLists }` / `{ optionList }`, `{ extraLists }` / `{ extraList }`, `{ dependants }` — and
-  // each method below unwraps it, the shape the `listModifiers` block above already uses. DELETE
-  // answers `{ ok: true }` rather than an empty 204, so those two swallow the envelope and resolve
-  // to nothing.
+  // each method below unwraps it. DELETE answers `{ ok: true }` rather than an empty 204, so those
+  // two swallow the envelope and resolve to nothing.
 
   async listOptionLists(): Promise<OptionList[]> {
     return (
@@ -2130,64 +1954,6 @@ export class DashboardApi {
         "GET",
       )
     ).dependants;
-  }
-
-  // ── Option groups (reusable modifiers) + their items (Task 11/12) ────────────────────────────────
-  // The CRUD the option-group manager drives (the catalogue-api.ts routes wrapping
-  // `@waitron/catalogue`'s option-group ops, `person.manage`-gated like the rest of this section).
-  // Groups/items are per-item POST/PATCH (a reload after each, the station/course idiom); create
-  // returns the created row at 201, patch answers an empty 204.
-
-  /** `GET /management-api/option-groups` — every option group (active AND inactive), by `sort` then
-   * id — the authoring editor's list and the product form's attach picker. */
-  listOptionGroups(): Promise<OptionGroup[]> {
-    return this.#request<OptionGroup[]>("/management-api/option-groups", "GET");
-  }
-
-  /** `POST /management-api/option-groups` — create an option group; returns the created row (201). An
-   * invalid select-bound configuration rejects `{ code: "options.group_invalid" }`. */
-  createOptionGroup(input: OptionGroupInput): Promise<OptionGroup> {
-    return this.#request<OptionGroup>("/management-api/option-groups", "POST", input);
-  }
-
-  /** `PATCH /management-api/option-groups/:id` — patch a group's mutable slice (name, min/max select,
-   * required, sort, active). Answers an empty 204; an invalid select-bound configuration rejects
-   * `{ code: "options.group_invalid" }`. */
-  updateOptionGroup(id: string, patch: OptionGroupPatch): Promise<void> {
-    return this.#request<void>(`/management-api/option-groups/${id}`, "PATCH", patch);
-  }
-
-  /** `GET /management-api/option-groups/:id/items` — a group's choices (active AND inactive), by
-   * `sort` then id. */
-  listOptionGroupItems(groupId: string): Promise<OptionGroupItem[]> {
-    return this.#request<OptionGroupItem[]>(
-      `/management-api/option-groups/${groupId}/items`,
-      "GET",
-    );
-  }
-
-  /** `POST /management-api/option-groups/:id/items` — create a choice within a group; returns the
-   * created row (201). */
-  createOptionGroupItem(groupId: string, input: OptionGroupItemInput): Promise<OptionGroupItem> {
-    return this.#request<OptionGroupItem>(
-      `/management-api/option-groups/${groupId}/items`,
-      "POST",
-      input,
-    );
-  }
-
-  /** `PATCH /management-api/option-groups/:groupId/items/:itemId` — patch an item's mutable slice
-   * (name, price delta, VAT override, sort, active). Answers an empty 204. */
-  updateOptionGroupItem(
-    groupId: string,
-    itemId: string,
-    patch: OptionGroupItemPatch,
-  ): Promise<void> {
-    return this.#request<void>(
-      `/management-api/option-groups/${groupId}/items/${itemId}`,
-      "PATCH",
-      patch,
-    );
   }
 
   get imageLibraryRequest(): DashboardRequest {

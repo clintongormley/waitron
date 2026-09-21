@@ -5,23 +5,11 @@
 // other staff-facing name in `menu.ts` is, and a staff name is one plain string that is never
 // translated at read time, so an English one would show in English on the Spanish demo.
 //
-// The till DOES offer this list to an operator, as of 2026-09-21. `listAvailableProducts` and
-// `listMenuOffers` carry the `product_modifiers` rows this file writes, resolved and in the
-// product's own order, in an `offeredModifiers` field beside the legacy `optionGroups`
-// (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`, pinned by
-// "listAvailableProducts carries the product-side walk" in its test file), and the till's picker
-// draws that field. Two earlier paragraphs here claimed the opposite in turn; both are retired.
-//
-// The demo steak therefore carries the cooking question TWICE in the data — this `Punto` list and
-// the legacy "Cooking" option group that `seed-options.ts` writes — and is asked it ONCE, because
-// the picker reads `offeredModifiers` and never `optionGroups`
-// (`git grep -l -i optiongroup HEAD -- apps/till/src` matches no source file; the same command on
-// `main` matches eight).
-//
-// A file of its own, not part of `seed-options.ts`, on purpose: that file seeds the LEGACY option
-// groups, whose tables Task 13 of
-// `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes — and this must not go
-// with them.
+// The till DOES offer this list to an operator. `listAvailableProducts` and `listMenuOffers` carry
+// the `product_modifiers` rows this file writes, resolved and in the product's own order, in an
+// `offeredModifiers` field (`readOfferedModifiers`,
+// `packages/catalogue/src/offered-modifiers.ts`, pinned by "listAvailableProducts carries the
+// product-side walk" in its test file), and the till's picker draws that field.
 //
 // `seedOptionLists` runs inside the CALLER's transaction, under the app_user role the caller
 // selected with `withTransaction`/`asAppUser` — the posture `seedCatalogues` and `seedOptions` use

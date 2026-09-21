@@ -9,11 +9,7 @@ export type OptionSelection = { listId: string; labelId: string };
  * The staff names widen on the way in: `OptionList.name` and `OptionLabel.name` are a plain
  * `string`, while `listName` and `labelName` here are locale → text maps. The map is the shape the
  * design's sample line shows (`"listName": { "en": "Cooked" }`,
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3), and the field shape the
- * snapshot this replaces already used (`ModifierSnapshot.name` and `choiceName`,
- * `packages/shared/src/modifier-snapshots.ts`) — though there it was a straight copy, the old
- * model's single name being a map column itself (`option_groups.name`,
- * `packages/db/src/schema/catalogue.ts:129`). TWO places widen, each under one content language, so
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3). TWO places widen, each under one content language, so
  * each of these maps holds exactly one entry whichever built it — found by grepping every non-test
  * `listName:` under `apps/` and `packages/`:
  *

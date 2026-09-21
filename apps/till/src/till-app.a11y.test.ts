@@ -61,7 +61,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
-          optionGroups: [],
         },
       ],
     }),

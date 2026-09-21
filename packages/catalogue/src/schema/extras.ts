@@ -29,8 +29,9 @@ export const extraLists = table(
     minPicks: count("min_picks").notNull().default(0),
     // Total picks allowed; null is uncapped.
     maxPicks: count("max_picks"),
-    // `sort`, not the `display_order` the rest of this package's schema uses: these tables keep the
-    // column name of the core modifier tables they replace (`packages/db/src/schema/catalogue.ts`).
+    // `sort`, not the `display_order` the rest of this package's schema uses: an extras list and an
+    // options list (schema/options.ts) are ordered by the same column name, and
+    // `product_modifiers.sort` below orders the two kinds together.
     sort: count("sort").notNull().default(0),
     active: flag("active").notNull().default(true),
   },
@@ -87,16 +88,13 @@ export const extraListItems = table(
   ],
 );
 
-/** An extras list published on one menu offer, the `menu_item_option_groups` shape (schema/menu.ts)
- * keyed by list rather than by option group. The row says only "this offer publishes this list, in
- * this position"; what the list offers is the list's own rows, narrowed and repriced below.
+/** An extras list published on one menu offer. The row says only "this offer publishes this list,
+ * in this position"; what the list offers is the list's own rows, narrowed and repriced below.
  *
  * A row is written only for a list the dish's PRODUCT carries in `product_modifiers` (below in this
- * file): `setMenuItemExtraLists` (packages/catalogue/src/extras.ts) refuses the rest — the
- * `not_attached` half of what its option-group sibling `setMenuItemOptionGroups`
- * (packages/catalogue/src/operations.ts) checks against `product_option_groups`. That sibling's
- * other half, which refuses a body leaving out a group the product marks required, has no extras
- * twin; `assertProductCarries` (packages/catalogue/src/extras.ts) says why.
+ * file): `setMenuItemExtraLists` (packages/catalogue/src/extras.ts) refuses the rest. Nothing
+ * refuses an offer that publishes NONE of the lists its product carries; `assertProductCarries`
+ * (packages/catalogue/src/extras.ts) says why.
  *
  * Nothing HOLDS the attachment afterwards — there is no key between the two
  * tables, and detaching the list from the product leaves this row where it is. Read over the tree
@@ -184,8 +182,7 @@ export const menuItemExtraItems = table(
 
 /** The ONE ordered list a product exposes at the till: each row attaches exactly one extras list or
  * one options list, and `sort` is the position the till draws it in (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §5). It replaces
- * `product_option_groups`, which could only ever hold option groups.
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §5).
  *
  * The key is a surrogate `id` rather than the natural pair, because a composite primary key cannot
  * span columns that are allowed to be null and both references here are — each row leaves one of

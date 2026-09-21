@@ -114,7 +114,6 @@ export function parseOptionListInput(value: unknown): OptionListInput {
   // An active list is asked on every order of a dish carrying it, and `validateOptionSelections`
   // below answers it from the available labels alone — so an active list with none is unanswerable
   // and is refused here. An inactive list is never asked, so it may have none.
-  // `parseModifierInput` refuses the same shape (modifier-contract.ts:147-148).
   if (list.active && !labels.some((label) => label.available)) invalid("labels");
   const defaultLabelId =
     row.defaultLabelId == null ? null : id(row.defaultLabelId, "defaultLabelId");
@@ -122,8 +121,7 @@ export function parseOptionListInput(value: unknown): OptionListInput {
   return {
     ...list,
     // A default naming a label that is not on offer is dropped rather than refused, so withdrawing a
-    // label does not make every later save of its list fail — the same handling
-    // `parseModifierInput` gives `defaultChoiceId` (modifier-contract.ts).
+    // label does not make every later save of its list fail.
     defaultLabelId: labels.some((label) => label.id === defaultLabelId && label.available)
       ? defaultLabelId
       : null,

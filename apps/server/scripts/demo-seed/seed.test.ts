@@ -201,22 +201,20 @@ describe("seedDemoRestaurant", () => {
       };
     });
 
-    // The coffee keeps the retained Size + Milk groups and demonstrates the three current modifier
-    // modes (text, extras, options); the steak carries Extras + Cooking. The back-dated sales generator
-    // rings at least one selection so the demo also contains persisted modifier sub-lines.
+    // What the till is offered: the steak asks the cooking question and nothing else does. The
+    // seed writes one options list and no extras list at all, so this is the whole of the demo's
+    // ordering-modifier content.
     const coffee = read.products.find((p) => p.name === "Café");
     const steak = read.products.find((p) => p.name === "Solomillo");
     expect(coffee).toBeDefined();
     expect(steak).toBeDefined();
-    expect(coffee!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual([
-      "Demo add-ons",
-      "Demo cup",
-      "Demo preparation note",
-      "Milk",
-      "Size",
+    expect(coffee!.offeredModifiers).toEqual([]);
+    expect(steak!.offeredModifiers.map((entry) => [entry.kind, entry.name])).toEqual([
+      ["options", "Punto"],
     ]);
-    expect(steak!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual(["Cooking", "Extras"]);
-    expect(read.modifierLines).toBeGreaterThan(0);
+    // A sale line expands into child rows only for an EXTRAS pick, and the demo seeds no extras
+    // list, so the back-dated generator writes one row per dish and nothing below it.
+    expect(read.modifierLines).toBe(0);
 
     expect(read.menus.map((m) => m.name).sort()).toEqual([
       "Casa Delgado",
@@ -287,8 +285,8 @@ describe("seedDemoRestaurant", () => {
       { zone_name: "Upstairs bar", station_name: "Upstairs bar" },
     ]);
 
-    // seedOptionLists ran: the steak carries the cooking list through the NEW `product_modifiers`
-    // rows, which the `optionGroups` assertions above cannot see — they read the legacy attachments.
+    // seedOptionLists ran: the cooking list as it is STORED — the rows behind the `offeredModifiers`
+    // read above, down to each label's own name and the default the list points at.
     expect(read.optionLists).toEqual([
       {
         product_name: "Solomillo",

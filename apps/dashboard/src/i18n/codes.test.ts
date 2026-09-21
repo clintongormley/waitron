@@ -179,8 +179,8 @@ it("has a sentence for a missing catalogue", () => {
   expect(codeMessage("catalogue.not_found", "en")).not.toBe(GENERIC_EN);
 });
 
-it("has a sentence for the option-group per-option allergen codes (modifier↔allergen association, Task 9)", () => {
-  // The option-group manager's per-option allergen editor (apps/server/src/catalogue-api.ts →
+it("has a sentence for the allergen declaration codes", () => {
+  // The allergen picker's declaration (apps/server/src/catalogue-api.ts →
   // packages/catalogue/src/allergens.ts) rejects with `allergen.invalid_code` for an unknown EU-14
   // code (400). It must map to real copy, never the raw wire code and never the GENERIC fallback.
   // Proven by deletion: drop it from CODE_MESSAGES and codeMessage returns GENERIC_ES → the

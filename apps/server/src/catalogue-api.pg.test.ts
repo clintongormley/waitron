@@ -4,12 +4,7 @@ import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
-import {
-  assignCatalogueToLocation,
-  createOptionList,
-  listAvailableProducts,
-  setProductOptionGroups,
-} from "@waitron/catalogue";
+import { createOptionList } from "@waitron/catalogue";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -19,8 +14,8 @@ import { ALL_MODULES } from "./modules.js";
 // Real Postgres, not PGlite: the route mechanics (body/id screens) are already proven
 // in-process on PGlite (`catalogue-api.test.ts`); what needs the real cluster is the write group run
 // as the non-superuser `app_user` — its table grants are enforced here and held unconditionally by
-// PGlite's superuser (CLAUDE.md §4) — and the by-id FK on the option-group
-// attach. The `person.manage` gate is proven by deletion on the block below.
+// PGlite's superuser (CLAUDE.md §4). The `person.manage` gate is proven by deletion on the block
+// below.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -323,96 +318,16 @@ describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", (
     );
   });
 
-  it("authors a group + items, attaches it to a product, and the till read reflects it (design §3)", async () => {
-    // Pinned test 1 (till-read half): the modifier-authoring routes create a group with two items and
-    // attach it to a product, then the OPERATOR till read (`listAvailableProducts`, location-scoped)
-    // surfaces the same group + active items — the authoring surface and the sale surface agree. Runs
-    // on real Postgres because `listAvailableProducts` reads the location's accessible catalogue, which
-    // provisioning set up here; the assign is via `assignCatalogueToLocation` under withTransaction+asAppUser.
-    const v = await setupVenue();
-    const app = mountApp();
-
-    const catId = await createCatalogue(app, v.managerCookie, "Menú de la casa");
-    const groupRes = await send(app, "POST", "/management-api/option-groups", v.managerCookie, {
-      name: { [LOCALE]: "Punto" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-    });
-    expect(groupRes.status).toBe(201);
-    const groupId = ((await groupRes.json()) as { id: string }).id;
-    const itemIds: string[] = [];
-    // Explicit ascending `sort` so the till read's item order is deterministic (equal sort tiebreaks
-    // on the random uuid).
-    for (const [sort, name] of [
-      [0, "Poco hecho"],
-      [1, "Al punto"],
-    ] as const) {
-      const r = await send(
-        app,
-        "POST",
-        `/management-api/option-groups/${groupId}/items`,
-        v.managerCookie,
-        { name: { [LOCALE]: name }, sort },
-      );
-      expect(r.status).toBe(201);
-      itemIds.push(((await r.json()) as { id: string }).id);
-    }
-
-    const prodRes = await send(app, "POST", "/management-api/products", v.managerCookie, {
-      catalogueId: catId,
-      categoryId: null,
-      name: "Entrecot",
-      pricingUnit: "each",
-      unitPrice: "18.00",
-      vatClass: "general",
-    });
-    expect(prodRes.status).toBe(201);
-    const productId = ((await prodRes.json()) as { id: string }).id;
-    // No request body attaches an option GROUP any more — the product body carries the ordered
-    // `modifiers` list and writes `product_modifiers` — so the attach this till read is about goes in
-    // directly, with the session assuming `app_user` so the table grants still apply.
-    // `product_option_groups`, the till read of it, and this test go in Task 13 of
-    // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
-    await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      await setProductOptionGroups(tx, productId, [groupId]);
-    });
-
-    // Read the attach back through the authoring route.
-    const attached = await send(
-      app,
-      "GET",
-      `/management-api/products/${productId}/option-groups`,
-      v.managerCookie,
-    );
-    expect(attached.status).toBe(200);
-    expect((await attached.json()) as string[]).toEqual([groupId]);
-
-    // Make the catalogue sellable at the location, then the OPERATOR till read reflects the group.
-    const tillView = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      await assignCatalogueToLocation(tx, v.locationId, catId);
-      return listAvailableProducts(tx, v.locationId);
-    });
-    const sold = tillView.products.find((p) => p.id === productId)!;
-    expect(sold.optionGroups).toHaveLength(1);
-    expect(sold.optionGroups[0]).toMatchObject({
-      id: groupId,
-      name: { [LOCALE]: "Punto" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-    });
-    expect(sold.optionGroups[0]!.items.map((i) => i.id)).toEqual(itemIds);
-  });
-
-  it("refuses every option-group write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // Pinned test 3: the `person.manage` gate covers the new authoring routes, proved the same way the
-    // catalogue-write test above proves it — by DELETION. A `staff` session holds no `person.manage`,
-    // so `authorizeManager` inside `gated` throws before any option-group op runs. Dropping that
-    // `authorizeManager` from `catalogue-api.ts`'s `gated` helper flips each `toBe(403)` green→red (the
-    // same guard-by-deletion receipt the catalogue-write block records).
+  it("refuses every modifier-list write route to a staff-role session — 403 authorization.not_permitted", async () => {
+    // Pinned test 3: the `person.manage` gate covers the modifier-list authoring routes, proved the
+    // same way the catalogue-write test above proves it — by DELETION. A `staff` session holds no
+    // `person.manage`, so `authorizeManager` inside `gated` throws before any list op runs. MEASURED
+    // on these routes, not inherited from the block they replaced: with the `authorizeManager` call
+    // in `catalogue-api.ts`'s `gated` helper replaced by `void sessionId`, this case goes red with
+    // `expected 400 to be 403` — the ungated request reaching the body parser instead.
+    //
+    // Both segments, both kinds of write: `mountListSurface` registers one set of handlers per kind
+    // and each closes over its own `surface`, so one kind passing says nothing about the other.
     const { staffCookie } = await setupVenue();
     const app = mountApp();
     const dummy = "00000000-0000-0000-0000-000000000000";
@@ -424,111 +339,27 @@ describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", (
       });
     };
 
-    await expect403(
-      await send(app, "POST", "/management-api/option-groups", staffCookie, {
-        name: { [LOCALE]: "Refused" },
-      }),
-    );
-    await expect403(
-      await send(app, "PATCH", `/management-api/option-groups/${dummy}`, staffCookie, { sort: 1 }),
-    );
-    await expect403(
-      await send(app, "POST", `/management-api/option-groups/${dummy}/items`, staffCookie, {
-        name: { [LOCALE]: "Refused" },
-      }),
-    );
-    await expect403(
-      await send(
-        app,
-        "PATCH",
-        `/management-api/option-groups/${dummy}/items/${dummy}`,
-        staffCookie,
-        { sort: 1 },
-      ),
-    );
-  });
-});
-
-describe("canonical modifier routes", () => {
-  it("saves and reads each type canonically, and keeps a failed multi-choice save atomic", async () => {
-    const venue = await setupVenue();
-    const app = mountApp();
-    const name = { es: "Personalización" };
-    const choiceId = crypto.randomUUID();
-    const bodies = [
-      { type: "text", name },
-      {
-        type: "extras",
-        name,
-        choices: [{ id: choiceId, name, priceDelta: "1.20", maxQuantity: 2, preselected: true }],
-      },
-      { type: "options", name, choices: [{ id: crypto.randomUUID(), name }] },
-    ];
-    const saved: unknown[] = [];
-    for (const body of bodies) {
-      const response = await send(
-        app,
-        "POST",
-        "/management-api/modifiers",
-        venue.managerCookie,
-        body,
+    for (const segment of ["options", "extras"]) {
+      const collection = `/management-api/modifiers/${segment}`;
+      await expect403(
+        await send(app, "POST", collection, staffCookie, { name: "Refused", labels: [] }),
       );
-      expect(response.status).toBe(201);
-      const { modifier } = (await response.json()) as {
-        modifier: { id: string; type: string };
-      };
-      expect(modifier).toMatchObject({ ...body, available: true });
-      const read = await send(
-        app,
-        "GET",
-        `/management-api/modifiers/${modifier.id}`,
-        venue.managerCookie,
+      await expect403(
+        await send(app, "PATCH", `${collection}/${dummy}`, staffCookie, {
+          name: "Refused",
+          labels: [],
+        }),
       );
-      expect(await read.json()).toEqual({ modifier });
-      saved.push(modifier);
+      await expect403(await send(app, "DELETE", `${collection}/${dummy}`, staffCookie));
+      await expect403(await send(app, "GET", collection, staffCookie));
+      await expect403(await send(app, "GET", `${collection}/${dummy}/dependants`, staffCookie));
     }
-    const failed = await send(app, "POST", "/management-api/modifiers", venue.managerCookie, {
-      type: "extras",
-      name,
-      choices: [
-        { id: crypto.randomUUID(), name },
-        { id: choiceId, name },
-      ],
-    });
-    expect(failed.status).toBe(400);
-    const list = await send(app, "GET", "/management-api/modifiers", venue.managerCookie);
-    expect(((await list.json()) as { modifiers: unknown[] }).modifiers).toEqual(
-      expect.arrayContaining(saved),
-    );
-    expect(
-      (
-        (await send(app, "GET", "/management-api/modifiers", venue.managerCookie).then((r) =>
-          r.json(),
-        )) as { modifiers: unknown[] }
-      ).modifiers,
-    ).toHaveLength(3);
-  });
-  it("refuses a staff-role session", async () => {
-    const venue = await setupVenue();
-    const app = mountApp();
-    expect((await send(app, "GET", "/management-api/modifiers", venue.staffCookie)).status).toBe(
-      403,
-    );
-    expect(
-      (
-        await send(app, "POST", "/management-api/modifiers", venue.staffCookie, {
-          type: "text",
-          name: { es: "Nota" },
-        })
-      ).status,
-    ).toBe(403);
   });
 });
 
 it("accepts an ordered modifiers list in the product contract and reads it back", async () => {
-  // The same round trip the flat `modifierIds` had, re-aimed at the ordered `modifiers` list. Two
-  // OPTIONS lists rather than two text modifiers. The product write goes through the ROUTE, which
-  // opens its own `app_user` transaction, so `product_modifiers`' grants are what carry it.
+  // The product write goes through the ROUTE, which opens its own `app_user` transaction, so
+  // `product_modifiers`' grants are what carry it.
   const venue = await setupVenue();
   const app = mountApp();
   const cookie = venue.managerCookie;

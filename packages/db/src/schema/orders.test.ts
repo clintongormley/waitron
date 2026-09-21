@@ -22,8 +22,6 @@ afterEach(async () => {
     await tx.execute(sql`set local session_replication_role = 'replica'`);
     await tx.execute(sql`delete from working_order_lines`);
     await tx.execute(sql`delete from working_orders`);
-    await tx.execute(sql`delete from option_group_items`);
-    await tx.execute(sql`delete from option_groups`);
     await tx.execute(sql`delete from products`);
     await tx.execute(sql`delete from catalogues`);
     await tx.execute(sql`delete from nodes`);

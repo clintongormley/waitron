@@ -43,7 +43,6 @@ const PRODUCTS: Product[] = [
   {
     id: "p1",
     modifiers: [],
-    modifierIds: [],
     catalogueId: "cat-a",
     categoryId: null,
     categoryIds: [],

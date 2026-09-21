@@ -106,14 +106,8 @@ prices and modifier answers. Later catalogue edits apply to new selections. The 
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with two categories, a Reporting Category, a custom unit,
-two variants, a separate kitchen name and direct dietary declarations. Its menu variant and extra
-prices deliberately differ from the product definitions, so you can see which price wins at the
-till. The demo sirloin carries a seeded options list, **Punto**, asking how the steak should be
-cooked.
+two variants, a separate kitchen name and direct dietary declarations. Its menu variant prices
+deliberately differ from the product definitions, so you can see which price wins at the till. The
+demo sirloin carries a seeded options list, **Punto**, asking how the steak should be cooked. The
+demo venue seeds no extras list, so nothing in it shows an extra being added to a dish.
 
-The coffee also still carries three of the older modifiers — one of each of the retired text, extras
-and options types — because the demo seed has not been rewritten
-(`apps/server/scripts/demo-seed/seed-options.ts`). They are in the database, but no dashboard screen
-shows them any more, so they will not appear on the coffee's **Modifiers** section, and since
-2026-09-21 the till does not offer them either: it builds a dish's questions from that dish's extras
-and options lists alone.

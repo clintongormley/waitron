@@ -416,7 +416,6 @@ describe("TillApi", () => {
           pricingUnit: "each" as const,
           vatClass: "general" as const,
           category: "Cocktails",
-          optionGroups: [],
         },
       ],
     };
@@ -2117,8 +2116,6 @@ describe("menuOfferToTillProduct", () => {
       dietOverride: null,
       dietaryDeclarations: [],
       courseId: null,
-      optionGroups: [],
-      modifiers: [],
       offeredModifiers: [extras, options],
       variants: [],
     };

@@ -75,12 +75,6 @@ export interface Product {
   id: string;
   /** The ordered extras and options lists attached to this product. */
   modifiers: ProductModifierRef[];
-  /** The OLD flat attachment list, read from `product_option_groups`. Nothing writes it any more —
-   * the product body carries the ordered `modifiers` list — and no consumer reads the property off
-   * a `Product`: `operations.ts` fills it in on the way out and it is dropped on the floor. It goes
-   * with the old tables in Task 13 of
-   * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. */
-  modifierIds: string[];
   catalogueId: string;
   categoryId: string | null;
   categoryIds: string[];

@@ -32,7 +32,6 @@ function product(overrides: Partial<Product> = {}): Product {
   return {
     id: BACON,
     modifiers: [],
-    modifierIds: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
     categoryIds: ["category-1"],
@@ -266,9 +265,8 @@ it("hints an inherited price with the product's own and submits it as null", asy
 /**
  * The number in this column REPLACES the product's own price — `resolveExtraPrice` is
  * `menuPrice ?? item.price ?? product?.unitPrice` (packages/catalogue/src/extras.ts), and the spec
- * says the same (2026-09-18-one-product-model-design.md §3.3). The OTHER modifier model's price is
- * an addition, and `modifiers.price` still labels it that way for the two surfaces that render it
- * (widgets/modifier-form.ts, widgets/choice-form.ts). The two labels must therefore not read alike:
+ * says the same (2026-09-18-one-product-model-design.md §3.3). `modifiers.price` is the wording for
+ * a price that ADDS to the product's own; no screen renders it today. The two must not read alike:
  * under an "addition" label a manager typing 1.50 against a 3.00 product believes they set 4.50.
  */
 it("does not label the overriding price with the adding model's words", () => {
