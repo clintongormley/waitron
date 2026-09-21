@@ -2,9 +2,9 @@ import { nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
   catalogueExists,
@@ -319,14 +319,14 @@ async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Pro
 }
 
 /**
- * Screen an OPTIONAL integer request field — the menu-offer routes' `displayOrder` today — returning
- * it. Absent stays `undefined` (a no-op: the create route defaults it, the patch route leaves it
- * untouched); a PRESENT value must be an integer NUMBER in int4 range, else `management.request_invalid`
- * naming the FIELD (never the value). The `typeof` screen is first so a non-number is REJECTED rather
+ * Screen the menu-offer routes' optional `displayOrder` body field, returning it. Absent stays
+ * `undefined` (a no-op: the create route defaults it, the patch route leaves it untouched); a
+ * PRESENT value must be an integer NUMBER in int4 range, else `management.request_invalid` naming
+ * `displayOrder` (never the value). The `typeof` screen is first so a non-number is REJECTED rather
  * than coerced, and the int4 bound keeps an out-of-range value off the `integer` column (a `22003`
  * opaque 500).
  */
-function parseOptionalInteger(value: unknown, field: string): number | undefined {
+function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
   if (
     typeof value !== "number" ||
@@ -334,7 +334,7 @@ function parseOptionalInteger(value: unknown, field: string): number | undefined
     value < -2_147_483_648 ||
     value > 2_147_483_647
   ) {
-    throw new AppError("management.request_invalid", { field });
+    throw new AppError("management.request_invalid", { field: "displayOrder" });
   }
   return value;
 }
@@ -394,6 +394,12 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
  * naming the field the caller sent so it knows which of its own fields went away. Ignoring it would
  * save a product with NO attachments and answer 201/204, the one outcome a caller on the old
  * contract could not tell from having worked.
+ *
+ * Nothing in this repository sends either field any more — no first-party client can trip this. It
+ * stays as a tripwire for a client that PREDATES the change: a dashboard tab left open across the
+ * deploy still holds the old body shape, and its save must be refused rather than silently stripped.
+ * `parseProductEditorInput` (packages/catalogue/src/product-editor-input.ts) holds the same tripwire
+ * on the editor body, for the same reason.
  */
 function refuseLegacyAttachFields(body: Record<string, unknown>): void {
   for (const legacy of ["modifierIds", "optionGroupIds"])
@@ -579,11 +585,16 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     return readProductEditor(tx, saved.id);
   };
 
-  const assertOwned = async (tx: Transaction, table: "products", id: string): Promise<void> => {
-    const result = await tx.execute(sql`
-      select 1 from ${sql.identifier(table)} where id = ${id}
-    `);
-    if (result.rows.length === 0) {
+  /**
+   * Refuse a product patch naming no stored product. This read is what makes an unknown id a
+   * refusal at all and cannot be folded into the write that follows it: `updateProduct`
+   * (packages/catalogue/src/operations.ts) runs a bare `update products … where id = $1` and
+   * reports nothing when no row matches. Measured by removing the call and re-running the file —
+   * the unknown-id case answers 204 having written nothing, instead of 403.
+   */
+  const assertOwned = async (tx: Transaction, id: string): Promise<void> => {
+    const [row] = await tx.select({ id: products.id }).from(products).where(eq(products.id, id));
+    if (row === undefined) {
       throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
     }
   };
@@ -727,7 +738,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (!isPlainObject(body.name)) {
         throw new AppError("management.request_invalid", { field: "name" });
       }
-      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const displayOrder = parseDisplayOrder(body.displayOrder);
       const created = await gated(sessionId, async (tx) => {
         await validateContentTranslations(
           tx,
@@ -777,7 +788,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       const productId = requireUuidParam(body.productId, "ProductId");
       const sectionId = requireUuidParam(body.sectionId, "MenuSectionId");
-      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const displayOrder = parseDisplayOrder(body.displayOrder);
       const created = await gated(sessionId, (tx) =>
         createMenuItem(tx, {
           menuId,
@@ -800,7 +811,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.grossPrice !== undefined && typeof body.grossPrice !== "string") {
         throw new AppError("management.request_invalid", { field: "grossPrice" });
       }
-      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const displayOrder = parseDisplayOrder(body.displayOrder);
       await gated(sessionId, (tx) =>
         updateMenuItem(tx, menuId, menuItemId, {
           ...(body.grossPrice === undefined ? {} : { grossPrice: body.grossPrice as string }),
@@ -1295,7 +1306,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       refuseLegacyAttachFields(body);
       const modifiers = parseProductModifiers(body.modifiers);
       await gated(sessionId, async (tx) => {
-        await assertOwned(tx, "products", productId);
+        await assertOwned(tx, productId);
         // A customer-facing name is optional: absent or wholly blank, the staff name is what a
         // receipt shows, so there is nothing to hold to the enabled languages. A PARTIAL one is a
         // translation gap and is refused.

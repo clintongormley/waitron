@@ -86,9 +86,13 @@ The allergen and dietary sections show only declarations you selected. Choose **
 **Add dietary declaration** to find another entry. An empty reviewed allergen list means you checked
 the product and declared none; a pending declaration means it has not been reviewed.
 
-Each product and each modifier choice states its own dietary suitability — a positive `suitableFor`
-list over vegan, vegetarian, halal and kosher — and its own allergens. The till and kitchen show each
-item's own list and no longer compute a combined "as-served" figure across the dish and its extras.
+Each product states its own dietary suitability — a positive `suitableFor` list over vegan,
+vegetarian, halal and kosher — and its own allergens. An extra you can add to a dish is itself a
+product, so it brings its own declarations with it. A choice on an options list does not: a label
+such as _rare_ or _well done_ carries no allergens and no dietary suitability of its own, because it
+is a way of asking for the same dish rather than something extra to eat. The till and kitchen show
+each item's own list and no longer compute a combined "as-served" figure across the dish and its
+extras.
 
 Recipes and ingredient origins no longer author product declarations in the supported dashboard
 workflow. Existing purchasing data and recorded order facts remain available, but you maintain live

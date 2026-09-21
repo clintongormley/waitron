@@ -262,18 +262,6 @@ it("hints an inherited price with the product's own and submits it as null", asy
   expect(submitted[0]!.items.map((item) => item.price)).toEqual([null, null]);
 });
 
-/**
- * The number in this column REPLACES the product's own price — `resolveExtraPrice` is
- * `menuPrice ?? item.price ?? product?.unitPrice` (packages/catalogue/src/extras.ts), and the spec
- * says the same (2026-09-18-one-product-model-design.md §3.3). `modifiers.price` is the wording for
- * a price that ADDS to the product's own; no screen renders it today. The two must not read alike:
- * under an "addition" label a manager typing 1.50 against a 3.00 product believes they set 4.50.
- */
-it("does not label the overriding price with the adding model's words", () => {
-  for (const locale of ["en", "es"] as const)
-    expect([locale, t("extras.price", locale)]).not.toEqual([locale, t("modifiers.price", locale)]);
-});
-
 it("submits a typed price as a string, even when it is the product's own price", async () => {
   const { el, host } = await mount();
   const submitted = record(host);

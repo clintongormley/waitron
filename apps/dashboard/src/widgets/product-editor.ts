@@ -517,7 +517,7 @@ export class ProductEditor extends LitElement {
     }
     this.change("variants", variants);
   }
-  private related(event: Event, kind: "unit" | "category" | "extras" | "options") {
+  private related(event: Event, kind: ProductChildKind) {
     event.stopPropagation();
     if (this.suspended) return;
     this.dispatchEvent(

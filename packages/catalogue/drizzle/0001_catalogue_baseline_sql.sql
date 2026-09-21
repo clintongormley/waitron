@@ -7,6 +7,17 @@
 -- per feature that added tables. They came back together when the set was regenerated to stop the
 -- baseline creating `menu_item_option_groups` and `menu_item_options`, whose foreign keys pointed at
 -- core tables this change drops.
+--
+-- Each group of statements below is carried over from the migration it came from, minus the two
+-- deleted tables, which is why some groups open with a REVOKE and others do not. Each of the five
+-- originals DID open with one; the disagreement is inside the first of them, which revoked for its
+-- first pair of tables and then granted three more times without one — and those three groups
+-- (`category_details`/`product_categories`, `categories`, `product_variants`/`menu_item_variants`)
+-- are exactly the REVOKE-less ones here. Whether a REVOKE makes a difference is not asserted either
+-- way: what the app role ends up holding on each of these tables is read back out of the catalog by
+-- `packages/fiscal-verifactu/src/privileges.test.ts`, which is what a mere exit code cannot tell you,
+-- because a partial GRANT warns and exits 0. That suite answers at TABLE level (`has_table_privilege`);
+-- the column grants are guarded by the second `describe` in the same file.
 REVOKE ALL ON "menu_sections", "menu_items" FROM app_user;
 --> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "menu_sections", "menu_items" TO app_user;

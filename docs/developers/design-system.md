@@ -147,9 +147,14 @@ and the product editor's attached-lists table (`apps/dashboard/src/widgets/produ
 name is the one cell whose text can be long, so capping it makes the text wrap and keeps the
 controls after it (a switch, a row menu) on screen at phone width instead of pushing the row into a
 sideways scroll. There was a third, the old modifier form's choices table, until Task 13 of the
-extras-and-options plan deleted that form. Two of the three spelled the same literal `140px` out for
-themselves until this token existed; the no-hardcoded-chrome guard would not have caught either,
-because it scans `packages/ui` and neither table lives there.
+extras-and-options plan deleted that form. That deleted table was the ONLY one that ever spelled the
+literal out for itself: `git log -S140px --oneline --all -- apps packages` returns two commits, and
+between them the only files they write the number into are `modifier-form.ts` (added, then removed
+by the change that created this token) and `packages/ui/src/tokens/structure.css` (the token's own
+value). So neither the variants table nor the attached-lists table has ever carried the number. The
+no-hardcoded-chrome guard (`packages/ui/src/no-hardcoded-chrome.test.ts`) would not have caught the
+literal in `modifier-form.ts` either way, because it scans the primitives under
+`packages/ui/src/components/` and that file did not live there.
 
 As a **flex basis** it sizes the extras list form's product picker, which is a combobox rather
 than a table cell and sizes its open panel to its trigger.

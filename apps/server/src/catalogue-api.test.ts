@@ -1377,6 +1377,23 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
+  it("PATCH /management-api/products/:id naming no stored product → authorization.not_permitted 403", async () => {
+    // Pins the route's existing refusal, which is the pre-read's alone: `updateProduct`
+    // (packages/catalogue/src/operations.ts) runs a bare `update products … where id = $1` and
+    // reports nothing when no row matches, so without the pre-read this body would answer 204
+    // having written nothing.
+    const res = await send(
+      mountApp(),
+      "PATCH",
+      `/management-api/products/11111111-1111-4111-8111-111111111111`,
+      { body: { unitPrice: "1.00" } },
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+  });
+
   it("PATCH /management-api/products/:id with a bad allergen map → allergen.* 400", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Patch-allergen catalogue");

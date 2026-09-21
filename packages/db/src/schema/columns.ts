@@ -152,12 +152,14 @@ export const rate = (name: string) => integer(name);
  * the substitution was never available there, and those columns carry no comment:
  * `payments.card_last4` and `persons`'s length-checked columns are the shape.
  *
- * For the columns in THIS package it is measured. `enumCheck` joins its values with `", "`, so on a
- * constraint written WITHOUT those spaces the substitution changes the DDL: measured 2026-09-17 on
- * a third such column since removed with its table, where the schema probe produced a migration
- * dropping and re-adding that column's check with the spaced value list for the unspaced one, and
- * nothing else. `products.pricing_unit` and `products.vat_class` (`schema/catalogue.ts`) are the
- * two written without the spaces today.
+ * For THIS package the reason is measured, but on NEITHER of the columns that carry it today. The
+ * measurement was taken 2026-09-17 on a third such column, since removed with its table:
+ * `enumCheck` joins its values with `", "`, and on that column's constraint — written WITHOUT those
+ * spaces — the schema probe produced a migration dropping and re-adding the check with the spaced
+ * value list for the unspaced one, and nothing else. `products.pricing_unit` and
+ * `products.vat_class` (`schema/catalogue.ts`) are the two written without the spaces today; that
+ * they are in the same shape is READ OFF `products_pricing_unit_ck` and `products_vat_class_ck`,
+ * never probed.
  *
  * For five others here — `deployment.mode`, `deployment.singleton_role`, `incidents.severity`,
  * `print_jobs.kind` and `invoice_series.purpose` — that reason does not apply at all: their

@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Contract: the extras-and-options machinery is written so the SQLite storage switch does not have
- * to rewrite it. Three PostgreSQL-only constructs are the ones that switch removes, so none of them
- * may appear in the files listed below: an advisory lock, the JSON containment operators, and a
- * `pgEnum` declaration.
+ * Contract: the extras-and-options machinery writes no PostgreSQL-only construct OF ITS OWN for the
+ * SQLite storage switch to rewrite. Three such constructs are the ones that switch removes, so none
+ * of them may appear in the files listed below: an advisory lock, the JSON containment operators,
+ * and a `pgEnum` declaration. What the feature reaches through a helper in a file this list does
+ * not name is outside the contract as well as outside the scan — see 4 below, which is live today.
  *
  * READS TEXT, so it is weaker than "proves engine neutrality" in every way that matters to a
  * reader:
@@ -15,12 +16,27 @@ import { describe, expect, it } from "vitest";
  *    as loudly as one that runs. That direction is safe — it over-reports — but it means a failure
  *    here is not by itself evidence that anything reaches a database.
  * 2. It reads a HAND-WRITTEN list of files. A new file added to the extras/options feature is
- *    outside the scan until somebody names it here, and nothing notices. `scans every file it
- *    names` below is the only thing standing between this suite and a list gone stale by rename —
- *    it fails when a listed path no longer exists, not when an unlisted file appears.
+ *    outside the scan until somebody names it here, and nothing notices. A RENAME is noticed —
+ *    `read` throws `ENOENT`, so every check over the missing path fails — and `scans every file it
+ *    names` below is there to report that path BY NAME ahead of those throws, not to be the only
+ *    thing that catches it. Nothing fires when an unlisted file appears.
  * 3. PostgreSQL-only spellings beyond these three are not covered at all. `::regclass`, `distinct
  *    on`, an array operator and `for update skip locked` are all engine-specific and all pass here.
  *    The three checked are the three the SQLite plan's §7 names.
+ * 4. A construct the feature REACHES THROUGH A HELPER in an unlisted file is invisible here, and
+ *    that is the live case rather than a theoretical one: `createOptionList`/`updateOptionList`
+ *    (options.ts) and `createExtraList`/`updateExtraList` (extras.ts) each call their file's
+ *    `validateNames`, which calls `findContentTranslationGap` in
+ *    `packages/catalogue/src/content-languages.ts`, whose first statement is
+ *    `select pg_advisory_xact_lock(hashtextextended('content-languages', 0))`. So every list save
+ *    carrying a customer-facing name DOES take an advisory lock; what `takes no advisory lock of
+ *    its own` below asserts is that the files listed below do not contain one. That lock came in
+ *    with #339 on 2026-09-12, before this track started. The extras and options savers reach it
+ *    through `findContentTranslationGap` directly, as traced above; the OTHER savers — categories,
+ *    units, variants, product names and image names among them — reach the same lock through the
+ *    same file's `validateContentTranslations`, which calls `findContentTranslationGap` itself.
+ *    That is why `content-languages.ts` is not in the list: the SQLite switch owns that lock, not
+ *    this feature.
  *
  * Why `pgEnum` is checked in the catalogue files and NOT in the order/sale path files: the two
  * order/sale schema files already declare enums that predate this feature by two months —
@@ -86,16 +102,17 @@ function offenders(files: readonly string[], pattern: RegExp): string[] {
 }
 
 describe("the extras and options machinery stays engine-neutral", () => {
-  it("scans every file it names — a renamed file would empty this suite in silence", () => {
-    // Every check below asserts an absence, and an absence over a file that is not there passes
-    // just as well as one over a clean file. This is what separates the suite from a typo.
+  it("scans every file it names — a path that is gone fails by name, not as a throw", () => {
+    // `read` calls `readFileSync`, so a listed path that is gone does not pass quietly: every check
+    // over it throws instead. What this assertion buys is the ONE failure that names the path,
+    // ahead of those throws — a stale list reads as a stale list rather than as a broken checkout.
     const missing = [...CATALOGUE_FILES, ...ORDER_PATH_FILES].filter(
       (file) => !existsSync(join(repoRoot, file)),
     );
     expect(missing).toEqual([]);
   });
 
-  it("takes no advisory lock", () => {
+  it("takes no advisory lock of its own", () => {
     expect(offenders([...CATALOGUE_FILES, ...ORDER_PATH_FILES], ADVISORY_LOCK)).toEqual([]);
   });
 

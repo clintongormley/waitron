@@ -352,9 +352,10 @@ twelve integer digits (`MAX_MONEY_INTEGER_DIGITS`, enforced by `assertMoney` and
 `packages/catalogue`'s price validators) — 99999999999999 cents. A four-byte column leaves a band of amounts the converters
 accept and the column refuses with a bare `22003`. That band is what turned a catalogue projection
 test red while money was being moved into whole cents (#475); the test itself went with the old
-modifier model in Task 13, so the receipt here is the two `psql` lines above rather than a file. 99999999999999 is well inside the
-9007199254740991 a JavaScript number counts exactly, so nothing in range loses a cent to the
-number type. Under SQLite an INTEGER is 64-bit, so the flip is unaffected.
+modifier model in Task 13, so the receipt here is the two `psql` lines above rather than a file.
+99999999999999 is well inside the 9007199254740991 a JavaScript number counts exactly, so nothing
+in range loses a cent to the number type. Under SQLite an INTEGER is 64-bit, so the flip is
+unaffected.
 
 **An uncast `bigint` COLUMN reads differently on the two test targets; cast `::text` and they
 agree.** Re-measured 2026-09-20 over a table `probe(amount bigint not null, dec numeric(12, 2) not

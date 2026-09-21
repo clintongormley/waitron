@@ -62,8 +62,8 @@ export async function listContentTranslationGaps(
   // `category`, `unit` and `section` — have no optional customer name;
   // their name is the only text they have and stays required. `extra_list_items` is in neither
   // group because it holds no name at all: its columns are id, list_id, product_id, sort,
-  // max_quantity, preselected and price (drizzle/0000_catalogue_baseline.sql), so there is no map here for
-  // this report to read.
+  // max_quantity, preselected and price (drizzle/0000_catalogue_baseline.sql), so there is no map
+  // here for this report to read.
   const result = await tx.execute<{
     kind: string;
     id: string;

@@ -380,8 +380,31 @@ An extras pick's child line is the record on both sides: on an OPEN order it nam
 is, and on a FILED sale it carries the frozen names with no `product_id` at all, because `sale_lines`
 has no such column. That difference is deliberate and is what _On the filed sale_ above describes.
 
-Nothing here takes an advisory lock and nothing asks a JSON containment question, so the SQLite
-storage switch has nothing engine-specific to rewrite in this feature. That is a guard rather than a
-convention: `scripts/catalogue-engine-neutral.test.ts` reads these files for
-`pg_advisory_*_lock`, `@>` / `<@` and `pgEnum(`, and it reads them as TEXT, so it cannot tell code
-from a comment and it only covers the files it names.
+This feature takes no advisory lock OF ITS OWN and asks no JSON containment question, but it does
+reach an advisory lock through a shared helper, and that lock is what the SQLite storage switch has
+to deal with here. `createOptionList` and `updateOptionList` (`packages/catalogue/src/options.ts`)
+and `createExtraList` and `updateExtraList` (`packages/catalogue/src/extras.ts`) each call their own
+file's `validateNames`, which calls `findContentTranslationGap`
+(`packages/catalogue/src/content-languages.ts`), whose first statement is `lockContentLanguages` —
+`select pg_advisory_xact_lock(hashtextextended('content-languages', 0))`. Both `validateNames`
+return before touching the database when the body carries no customer-facing name map at all (an
+options list has one map of its own plus one per label; an extras list has only its own), so a save
+carrying none of them reaches no lock. The lock is not this feature's to remove:
+`writeContentLanguages` in the same file takes it, and so does every save that goes through that
+file's `validateContentTranslations` — categories, units, variants, product names and image names
+among them.
+
+The serialisation these files DO take of their own is a row lock, and `extras.ts` takes two:
+`lockExtraList` is a `select … for update` on the list row, and `setMenuItemExtraLists` opens with
+a `select … for update` on the menu OFFER's `menu_items` row before it locks any list — the first
+of the three locks whose deliberate order that file's own comment sets out. `lockList`
+(`product-modifiers.ts`) takes a `select … for key share` on each list a product attaches, and
+`options.ts` takes no lock of its own at all.
+
+`scripts/catalogue-engine-neutral.test.ts` guards the narrow half of this: the feature's own files
+carry none of `pg_advisory_*_lock` or `@>` / `<@`, and the catalogue files among them carry no
+`pgEnum(` either. That last check is deliberately scoped to the catalogue files: the order and
+sale-path files declare three enums that predate this feature by two months, and the guard's header
+is the receipt for leaving them alone. It is weaker than that sounds. It reads the files as TEXT, so
+it cannot tell code from a comment; it covers only the files it names; and `content-languages.ts` is
+not one of them, which is how the lock traced above sits outside it.

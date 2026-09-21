@@ -9,9 +9,9 @@ export type OptionSelection = { listId: string; labelId: string };
  * The staff names widen on the way in: `OptionList.name` and `OptionLabel.name` are a plain
  * `string`, while `listName` and `labelName` here are locale → text maps. The map is the shape the
  * design's sample line shows (`"listName": { "en": "Cooked" }`,
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3). TWO places widen, each under one content language, so
- * each of these maps holds exactly one entry whichever built it — found by grepping every non-test
- * `listName:` under `apps/` and `packages/`:
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3). TWO places widen, each
+ * under one content language, so each of these maps holds exactly one entry whichever built it —
+ * found by grepping every non-test `listName:` under `apps/` and `packages/`:
  *
  *  - `buildLineExtras` (`apps/server/src/modifier-selection.ts`) on the ORDER PATH, under the
  *    venue's default content language. Its output is what is stored and filed.
