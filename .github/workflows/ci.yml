@@ -123,7 +123,6 @@ jobs:
       payments_sumup: ${{ steps.gates.outputs.payments_sumup }}
       light_a: ${{ steps.gates.outputs.light_a }}
       light_b: ${{ steps.gates.outputs.light_b }}
-      verifactu: ${{ steps.gates.outputs.verifactu }}
       shared: ${{ steps.gates.outputs.shared }}
     steps:
       # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
@@ -782,8 +781,7 @@ jobs:
   # scripts/changed-scope.mjs.
   #
   # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the other real-Postgres shards: it clones from
-  # @waitron/db's shared container. NOT the mutation-verifactu job — that is the separate
-  # packages/verifactu.
+  # @waitron/db's shared container.
   test-fiscal-verifactu:
     timeout-minutes: 15
     needs: changes
@@ -1365,7 +1363,6 @@ jobs:
           set -- "$@" --filter "!@waitron/printing"
           set -- "$@" --filter "!@waitron/print-agent"
           set -- "$@" --filter "!@waitron/print-agent-app"
-          set -- "$@" --filter "!@waitron/verifactu"
           set -- "$@" --filter "!@waitron/bench-pglite"
           set -- "$@" --filter "!@waitron/bench-sqlite-failover"
           set -- "$@" --filter "!@waitron/diagnostics"
@@ -1449,66 +1446,17 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage
 
-  # Mutation testing for packages/verifactu only. Unlike packages/ui — whose
-  # mutation run is weekly in mutation.yml because each mutant reruns the full
-  # real-Chromium suite — this package is pure Node with no browser, so a run
-  # is cheap enough to gate every PR. It is also the package where a hollow
-  # test means an unverifiable hash chain rather than a misaligned button,
-  # which is why its hard threshold (break: 90) is checked on a pull request
-  # whose resolved scope contains it (see the paragraph below), rather than
-  # only weekly. packages/ui carries the same threshold, but nothing here
-  # checks it — only the weekly mutation.yml run does.
-  #
-  # "Cheap enough to gate every PR" was true of the job in isolation and false of the workflow.
-  # Read off this branch's first scoped run with
-  # `gh run view 30650089655 --json createdAt,updatedAt,jobs` (head 4926cf5): the run spanned 4m8s,
-  # THIS JOB ran 17:10:35→17:14:01 of it (3m26s), and every other job was finished by 17:11:40 —
-  # 1m39s in, with test-heavy skipped outright. Gated on `code` alone it ran on any code change at
-  # all, so it set the floor for every pull request in the repository, including the ones nowhere
-  # near packages/verifactu.
-  #
-  # So it now gates on membership of the resolved scope, exactly as test-heavy does, and for the
-  # same reason a filter on the job cannot express it (see gateOutputs in
-  # scripts/changed-scope.mjs). On main the scope is `global` and this always runs.
-  mutation-verifactu:
-    needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.verifactu == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 9.15.0
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: ".nvmrc"
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm --filter @waitron/verifactu mutation
-
-      - name: Upload mutation report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mutation-report-verifactu
-          path: packages/verifactu/reports/mutation/
-          retention-days: 30
-
   # packages/shared is pure functions over strings and BigInt: no browser, no database, no
-  # async. That makes it the cheapest mutation target in the repo — cheaper than
-  # packages/verifactu — so its break: 90 is checked on a pull request whose resolved scope contains
-  # it (the paragraph below), rather than only on a weekly run the way packages/ui's identical
-  # threshold is. Contrast packages/db, where every test boots PGlite, whose cost puts it on the same
-  # weekly footing as packages/ui — and whose bar of 90 is not in its own stryker config at all,
-  # because its run is split into ten shards; it is checked once on the merged score, by the
-  # mutation-db-aggregate job in mutation.yml.
+  # async. That makes it the cheapest mutation target in the repo, so its break: 90 is checked on a
+  # pull request whose resolved scope contains it (the paragraph below), rather than only on a weekly
+  # run the way packages/ui's identical threshold is. Contrast packages/db, where every test boots
+  # PGlite, whose cost puts it on the same weekly footing as packages/ui — and whose bar of 90 is not
+  # in its own stryker config at all, because its run is split into ten shards; it is checked once on
+  # the merged score, by the mutation-db-aggregate job in mutation.yml.
   #
   # It gated every pull request until this gate was added; it now gates the ones whose resolved
-  # scope contains packages/shared, by the same membership mechanism as mutation-verifactu above.
+  # scope contains packages/shared, by the same scope-membership mechanism as the scoped test shards
+  # above (see gateOutputs in scripts/changed-scope.mjs).
   # Cheapness is not on its own a reason to run: this job took 55s on run 30650089655 (17:10:36 →
   # 17:11:31) and was nowhere near that run's critical path — but a job the diff could not have
   # affected has nothing to say about it, whatever it costs, and scoping only the expensive one of a
@@ -1569,7 +1517,6 @@ jobs:
       - test-payments-sumup
       - test-light-a
       - test-light-b
-      - mutation-verifactu
       - mutation-shared
     runs-on: ubuntu-latest
     steps:
