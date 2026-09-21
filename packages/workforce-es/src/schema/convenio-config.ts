@@ -37,8 +37,10 @@ export const overtimeModel = enumType(["daily_accrual", "period_net"]);
  * never an invented number), and the guardrail limits default to the ET statute, which a convenio
  * may only tighten.
  *
- * MUTABLE, with `GRANT SELECT, INSERT, UPDATE` to app_user. This is configuration an admin edits,
- * not the immutable registro — it carries no append-only trigger and no chain.
+ * MUTABLE: this is configuration an admin edits, not the immutable registro — it carries no
+ * append-only trigger and no chain. It used to say which privileges `app_user` held on it; SQLite
+ * has no roles and no grants, and this package's generated SQL contains no `GRANT` (checked with
+ * `grep -i grant drizzle/*.sql`), so what may write here is decided above the database.
  */
 export const convenioConfig = table(
   "convenio_config",

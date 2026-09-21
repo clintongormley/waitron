@@ -1,8 +1,8 @@
-import { asAppUser, captureError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -10,28 +10,33 @@ import { describe, expect, it } from "vitest";
 import type { ThemeOverride } from "./canvas.js";
 import { getTenantTheme, putTenantTheme } from "./theme-store.js";
 
-// Real Postgres, not PGlite: every store call below runs as a non-superuser member of `app_user`
-// (`withTransaction` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
-// holding every grant, so a missing GRANT on `tenant_themes` — or on the
-// `persons`/`management_sessions` reads `authorizeManager` performs — is invisible there (CLAUDE.md
-// §4). The suite retains these app-role grant checks. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
-// migrations so authorizeManager's tables and `tenant_themes` both exist.
+// One real migrated SQLite database, carrying the core and identity sets in that order: the core
+// set creates `tenant_themes`, and the identity set creates the `persons`/`management_sessions`
+// tables `authorizeManager` reads.
+//
+// The header this replaces said the suite needed real PostgreSQL so that every call ran as a
+// non-superuser member of `app_user`. There are no roles and no grants on this engine — one process
+// opens one file — so that justification is gone, and with it the `asAppUser` wrapper. What the
+// suite asserts is the store's own behaviour, which the engine change does not touch, so every
+// assertion is kept.
 
-const suite = useTemplateDb({ template: "core_identity" });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
-function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    return fn(tx);
-  });
+/** Run `fn` in one transaction — the shape the management routes wrap every store call in. */
+function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  return withTransaction(suite.db, fn);
 }
 
+/** Through drizzle rather than raw SQL: `persons.id` and `created_at` take their value from the
+ * table's `$defaultFn`, which is not a SQL DEFAULT, so a raw insert naming neither is refused
+ * `NOT NULL constraint failed: persons.id`. */
 async function seedSession(role: PersonRoleValue): Promise<string> {
-  const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (display_name, pin_hash, role)
-    values ('Operator', 'seed-pin-hash', ${role}) returning id`);
-  const session = await withTransaction(suite.admin, (tx) =>
-    startManagementSession(tx, { personId: person.rows[0]!.id }),
+  const [person] = await suite.db
+    .insert(persons)
+    .values({ displayName: "Operator", pinHash: "seed-pin-hash", role })
+    .returning({ id: persons.id });
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { personId: person!.id }),
   );
   return session.id;
 }
@@ -41,41 +46,40 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
+/** No `::int` cast: SQLite's `count(*)` already arrives as a number. */
 async function rowCount(): Promise<number> {
-  const rows = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from tenant_themes`,
-  );
+  const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from tenant_themes`);
   return rows.rows[0]!.n;
 }
 
-describe("tenant theme store on real Postgres, as the app role", () => {
+describe("tenant theme store against a real migrated database", () => {
   it("returns undefined for a tenant that has never authored a theme", async () => {
-    await seedTenant(suite.admin);
-    expect(await asApp((tx) => getTenantTheme(tx))).toBeUndefined();
+    await seedTenant(suite.db);
+    expect(await inTx((tx) => getTenantTheme(tx))).toBeUndefined();
   });
 
   it("round-trips a manager-authored theme through put → get", async () => {
-    await seedTenant(suite.admin);
+    await seedTenant(suite.db);
     const managerSession = await seedSession("manager");
     const theme: ThemeOverride = { tokens: { "--wt-color-primary": "#ff0000" } };
-    await asApp((tx) => putTenantTheme(tx, { managementSessionId: managerSession, theme }));
-    expect(await asApp((tx) => getTenantTheme(tx))).toEqual(theme);
+    await inTx((tx) => putTenantTheme(tx, { managementSessionId: managerSession, theme }));
+    expect(await inTx((tx) => getTenantTheme(tx))).toEqual(theme);
   });
 
   it("upserts the single per-tenant row on a second put — no duplicate", async () => {
-    await seedTenant(suite.admin);
+    await seedTenant(suite.db);
     const session = await seedSession("manager");
-    await asApp((tx) =>
+    await inTx((tx) =>
       putTenantTheme(tx, {
         managementSessionId: session,
         theme: { tokens: { "--wt-color-primary": "#111111" } },
       }),
     );
     const next: ThemeOverride = { tokens: { "--wt-color-surface": "#222222" } };
-    await asApp((tx) => putTenantTheme(tx, { managementSessionId: session, theme: next }));
+    await inTx((tx) => putTenantTheme(tx, { managementSessionId: session, theme: next }));
     // ON CONFLICT (id) DO UPDATE — the second write replaces the row, never adds one.
     expect(await rowCount()).toBe(1);
-    expect(await asApp((tx) => getTenantTheme(tx))).toEqual(next);
+    expect(await inTx((tx) => getTenantTheme(tx))).toEqual(next);
   });
 
   it("refuses a put from a staff-role session — the authorizeManager gate (differential)", async () => {
@@ -83,10 +87,10 @@ describe("tenant theme store on real Postgres, as the app role", () => {
     // authorization.not_permitted BEFORE any write. Deleting the authorizeManager call from
     // putTenantTheme makes this succeed → codeOf returns "did not throw…" and a row lands, failing both
     // assertions.
-    await seedTenant(suite.admin);
+    await seedTenant(suite.db);
     const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
-      asApp((tx) =>
+      inTx((tx) =>
         putTenantTheme(tx, {
           managementSessionId: staffSession,
           theme: { tokens: { "--wt-color-primary": "#000000" } },
@@ -98,12 +102,12 @@ describe("tenant theme store on real Postgres, as the app role", () => {
   });
 
   it("rejects an invalid theme with theme.invalid before any INSERT", async () => {
-    await seedTenant(suite.admin);
+    await seedTenant(suite.db);
     const session = await seedSession("manager");
     // authorize FIRST (manager is permitted), THEN validate — so an invalid theme from an AUTHORISED
     // actor proves validate runs before the write. An un-allowlisted token fails validateThemeOverride.
     const code = await codeOf(() =>
-      asApp((tx) =>
+      inTx((tx) =>
         putTenantTheme(tx, {
           managementSessionId: session,
           theme: { tokens: { "--evil": "red" } },

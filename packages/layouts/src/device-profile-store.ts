@@ -4,14 +4,15 @@ import {
   RESTRICT_VIOLATION,
   constraintTarget,
   deviceProfiles,
+  isPgError,
   isUniqueViolation,
-  refusalOn,
+  nowIso,
   sameTarget,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { CapabilityFlag, FormFactor } from "./canvas.js";
 import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
 
@@ -20,22 +21,19 @@ import { validateCapabilities, validateInactivityTimeout } from "./device-profil
  * keyed by `id`, with distinct names. The twin of `canvas-store.ts`, sharing its
  * shape exactly — read that file's header for the (tx, …)-is-caller-scoped convention.
  *
- * Every function takes the caller's transaction, opened with
- * `withTransaction(deps.db, …)` + `asAppUser(tx)`. Exercised in
- * `device-profile-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite
- * holds every grant, CLAUDE.md §4).
+ * Every function takes the caller's transaction, opened with `withTransaction(deps.db, …)`.
+ * Exercised against a real migrated database in `device-profile-store.db.test.ts`.
  *
  * The writers run, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCapabilities` — fail-closed on an
  * unknown capability flag (throws `device_profile.invalid` {reason: "bad_capabilities"} before the
  * write, since capabilities drive the /api/pay + /api/drawer firewall); (3) the drizzle write, whose
- * 23505 on the name unique becomes `device_profile.name_taken` and whose 23503 on
- * `device_profiles_canvas_fk` becomes `device_profile.invalid`
+ * unique violation on the name key becomes `device_profile.name_taken` and whose foreign-key
+ * refusal on `device_profiles_canvas_fk` becomes `device_profile.invalid`
  * {reason: "bad_canvas_ref"} (see `translateWriteError`). `deleteDeviceProfile` authorises but has no
- * capabilities to validate. Reads return `capabilities` as PARSED jsonb (an array) — no `::text[]`
- * cast: it is a jsonb column, not PG `name[]` (the `name[]` cast note is in
- * `docs/developers/testing-guide.md`). The `as`
- * cast re-attaches the `CapabilityFlag[]` shape the plain-jsonb column drops (it carries no
+ * capabilities to validate. Reads return `capabilities` as a PARSED JSON array, which is the column's own read mapping
+ * (`json` in `packages/db/src/schema/columns.ts`) rather than anything this file does. The `as`
+ * cast re-attaches the `CapabilityFlag[]` shape the plain-JSON column drops (it carries no
  * `@waitron/layouts` type, to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
  * `packages/db/src/schema/device-profiles.ts`).
  */
@@ -63,7 +61,7 @@ const PROFILE_COLUMNS = {
   inactivityTimeoutSeconds: deviceProfiles.inactivityTimeoutSeconds,
 } as const;
 
-/** Re-attach the `CapabilityFlag[]` shape the plain-jsonb `capabilities` column drops (see header). */
+/** Re-attach the `CapabilityFlag[]` shape the plain-JSON `capabilities` column drops (see header). */
 function toRow(row: {
   id: string;
   name: string;
@@ -82,50 +80,40 @@ function toRow(row: {
   };
 }
 
-/** `device_profiles_tenant_name_key`: UNIQUE (name) on device_profiles,
- * migration `0033` line 230, in `packages/db/drizzle/`. */
+/** The unique index `device_profiles_tenant_name_key` over (name), declared in
+ * `packages/db/drizzle/0000_baseline.sql`. A unique violation is one of the few classes SQLite
+ * reports a table and columns for, so this is the key a duplicate name names. */
 const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["name"] };
-
-/** What a `canvas_id` naming no canvas reports — the referencing column of
- * `device_profiles_canvas_fk`, migration `0034` line 36, in `packages/db/drizzle/`. It is the
- * only foreign key a client value can trip on these writes. */
-const PROFILE_CANVAS_REF: ConstraintTarget = {
-  table: "device_profiles",
-  columns: ["canvas_id"],
-};
-
-/** What a delete refused by `devices_device_profile_fk` reports — devices.device_profile_id →
- * device_profiles.id ON DELETE RESTRICT, migration `0034` line 32, in `packages/db/drizzle/`;
- * driven in `device-profile-store.pg.test.ts`. The referencing/referenced split is
- * `constraintTarget`'s (`packages/db/src/constraint-target.ts`).
- * It does NOT single out that foreign key, where the constraint name it replaced did: every ON
- * DELETE RESTRICT key out of `devices` references its parent's `id` — `devices_till_fk` and
- * `devices_receipt_printer_fk` (same migration, lines 24 and 28) and the declared `location_id` one
- * as well — so a refused till, printer or location delete reports this identical pair. Measured
- * 2026-09-21 on a PGlite reproduction of those four keys: each delete answers `23001`,
- * `table: devices`, `Key (id)=(…)`, and only `constraint` differs. CALL SCOPE is what keeps this
- * branch right: nothing outside this file calls `translateWriteError`, so the only
- * restrict_violation reaching it is a profile delete's — and `devices` is still the only table that
- * references a profile. */
-const PROFILE_REFERENCED_BY_DEVICE: ConstraintTarget = { table: "devices", columns: ["id"] };
 
 /**
  * Translate the driver refusals the profile write/delete paths care about into their domain codes,
  * and re-throw anything else untouched:
- *   - a duplicate profile name (SQLSTATE 23505 on {@link PROFILE_NAME}) → `device_profile.name_taken`
- *     — the `translateWriteError` twin from `canvas-store.ts`, with the same two edges: a 23505 on
- *     any other key of `device_profiles` is re-thrown untouched, and a 23505 that named no key at
- *     all is translated anyway (the name key is the only unique these writes can trip on an
- *     author-supplied value);
- *   - a `canvas_id` that names no canvas (SQLSTATE 23503 on {@link PROFILE_CANVAS_REF}) →
- *     `device_profile.invalid` {reason: "bad_canvas_ref"};
- *   - a delete refused because a live device still references the profile (SQLSTATE 23001 on
- *     {@link PROFILE_REFERENCED_BY_DEVICE}) → `device_profile.in_use`, a clean 409 rather than a raw
- *     500. A restrict_violation from any other foreign key is re-thrown untouched.
- * The 23505 branch stays on `constraintTarget`/`sameTarget` because it also translates a refusal
- * whose key could not be identified, which `refusalOn` cannot express. The two 23503/23001 targets of
- * `device_profiles_canvas_fk` differ — a bad reference names `canvas_id`, a refused canvas delete
- * names `id` — so only the profile's own refusal reaches the `bad_canvas_ref` branch.
+ *   - a duplicate profile name (a unique violation on {@link PROFILE_NAME}) →
+ *     `device_profile.name_taken` — the `translateWriteError` twin from `canvas-store.ts`, with the
+ *     same two edges: a unique violation on any other key of `device_profiles` is re-thrown
+ *     untouched, and one that named no key at all is translated anyway (the name key is the only
+ *     unique these writes can trip on an author-supplied value);
+ *   - a `canvas_id` that names no canvas → `device_profile.invalid` {reason: "bad_canvas_ref"};
+ *   - a delete refused because a live device still references the profile →
+ *     `device_profile.in_use`, a clean 409 rather than a raw 500.
+ *
+ * The unique branch stays on `constraintTarget`/`sameTarget` because it also translates a refusal
+ * whose key could not be identified, which `refusalOn` cannot express.
+ *
+ * **Why the two foreign-key branches ask only the CLASS.** SQLite reports every foreign-key
+ * refusal as `FOREIGN KEY constraint failed` and nothing else — no table, no column, no constraint
+ * name (measured on node:sqlite, Node v26.7.0; the codes are driven in
+ * `packages/db/src/constraint-target.sqlite.test.ts`). The one thing it does separate is the
+ * DIRECTION, and that is exactly the separation these two branches need: 787 for a written value
+ * naming no parent, 1811 for a delete refused by an `ON DELETE RESTRICT` key. CALL SCOPE supplies
+ * the rest: nothing outside this file calls `translateWriteError`; `canvas_id` is the only foreign
+ * key `device_profiles` declares, so a 787 raised by these writes can only be a canvas reference
+ * that names no row; and `devices.device_profile_id` is the only key referencing a profile, so an
+ * 1811 can only be a profile a device still binds (`packages/db/drizzle/0000_baseline.sql`). What
+ * that costs, stated because a reader would otherwise assume the old guarantee: a refusal of
+ * either direction raised inside these functions by some unrelated key would now be translated
+ * rather than re-thrown.
+ *
  * Exported for the crafted-error unit test (`device-profile-store.test.ts`), NOT from the package
  * barrel — the same shape as `canvas-store.ts`'s `translateWriteError`.
  */
@@ -136,10 +124,10 @@ export function translateWriteError(err: unknown): never {
       throw new AppError("device_profile.name_taken", {});
     }
   }
-  if (refusalOn(err, FOREIGN_KEY_VIOLATION, PROFILE_CANVAS_REF)) {
+  if (isPgError(err, FOREIGN_KEY_VIOLATION)) {
     throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
   }
-  if (refusalOn(err, RESTRICT_VIOLATION, PROFILE_REFERENCED_BY_DEVICE)) {
+  if (isPgError(err, RESTRICT_VIOLATION)) {
     throw new AppError("device_profile.in_use", {});
   }
   throw err;
@@ -253,7 +241,7 @@ export async function updateDeviceProfile(
         canvasId: input.canvasId ?? null,
         capabilities,
         inactivityTimeoutSeconds,
-        updatedAt: sql`now()`,
+        updatedAt: nowIso(),
       })
       .where(eq(deviceProfiles.id, input.id))
       .returning(PROFILE_COLUMNS);
@@ -272,7 +260,7 @@ export async function updateDeviceProfile(
  * `device_profile.not_found`, read back via `.returning({ id })` — the same
  * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
  * a silent success. A device still referencing the profile (the FK, ON DELETE RESTRICT)
- * trips a 23001 restrict_violation, which `translateWriteError`
+ * trips a restrict refusal, which `translateWriteError`
  * turns into `device_profile.in_use` (a clean 409) rather than letting the raw DB error propagate to a
  * 500 — the twin of `deleteCanvas`.
  */
