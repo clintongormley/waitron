@@ -30,39 +30,45 @@ import { customerPresentationText } from "@waitron/catalogue/src/product-present
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import { sumDecimals } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
-import type { TillProduct, ModifierSelection, ModifierSnapshot } from "../api/client.js";
-import type { OptionSnapshot } from "@waitron/shared";
+import type { TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
- * One modifier the operator selected on a basket line (ordering modifiers, Task 9) — the client half
- * of the server's `options: [{ optionGroupItemId }]` wire contract. The WIRE sends only
- * `optionGroupItemId`; the server re-resolves the option's price, VAT and name.
- * The extra `name`/`priceDelta` are carried for
- * the CLIENT alone: `name` so the basket can render the modifier under its dish (Task 8) without a
- * re-lookup, `priceDelta` so {@link lineGross} can add it to the DISPLAY-ONLY running line price. They
- * are snapshotted at pick time and never reach a fiscal figure — the server prices from the id.
+ * One extras pick the operator made on a basket line: which list offered it, which PRODUCT was
+ * picked, and how many of that product this dish takes. The wire sends the first three fields alone
+ * (`ExtraSelection`, `@waitron/shared`) — `name` and `price` are the client's copy of what the offer
+ * resolved, so the basket can draw the pick's own row without a second lookup.
+ *
+ * `price` is DISPLAY-ONLY: the server re-resolves it from the offer and files the child line at its
+ * own figure. `quantity` is always present and at least 1 — a pick of none is no pick.
  */
-export interface SelectedLineOption {
-  /** The chosen `option_group_items.id` — the ONLY field the wire (`SaleLine.options`) sends. */
-  optionGroupItemId: string;
-  /** locale -> text, snapshotted at pick time; the child modifier row the basket renders (Task 8). */
-  name: Record<string, string>;
-  /** GROSS (VAT-inclusive) price change this option adds, a two-place decimal string ("0.50", "0.00"
-   * for a free option) — the `option_group_items.price_delta` column stores the amount as a count of
-   * whole cents and the read converts it. DISPLAY-ONLY: {@link lineGross} adds
-   * `priceDelta × quantity`; the server re-prices. */
-  priceDelta: string;
-  /**
-   * How many times THIS option is taken per dish (per-option quantity), or ABSENT for the common case
-   * of once — kept absent (never `1`) so a plain modifier stays byte-identical to before. DISPLAY-ONLY:
-   * {@link lineGross}/{@link optionGross} multiply the option's `priceDelta` by `dishQuantity ×
-   * (quantity ?? 1)`; the server re-prices and re-validates the count against the option's authored
-   * `max_quantity`. A small positive integer when present.
-   */
-  quantity?: number;
+export interface SelectedExtra {
+  /** The extras list the pick came off — the id the wire names, and the reason a retrieved line has
+   * to re-derive one (`deriveExtraSelections`, `./held-extras.ts`). */
+  listId: string;
+  /** The picked product. An extra IS a product: a pick never names an `extra_list_items` row. */
+  productId: string;
+  /** The picked product's STAFF name — what the basket shows under its dish. */
+  name: string;
+  /** GROSS (VAT-inclusive) resolved unit price, a `numeric(12,2)` literal ("0.50", "0.00" for a free
+   * pick). {@link lineGross} prices it at `price × (dishQuantity × quantity)`. */
+  price: string;
+  /** How many of this product the dish takes, per dish. The server multiplies by the dish count. */
+  quantity: number;
+}
+
+/**
+ * What a picker confirm puts on a line: the answers the wire sends, plus the frozen wording the
+ * basket reads. `optionSnapshots` carries the six names an answered options list freezes — built
+ * locally here, exactly as the server builds it on the order path — so one renderer serves both a
+ * line the operator just answered and a line read back from a held order.
+ */
+export interface LineSelection {
+  extras?: SelectedExtra[];
+  options?: OptionSelection[];
+  optionSnapshots?: OptionSnapshot[];
 }
 
 /** One rung-up basket line: a product and its decimal-string quantity. */
@@ -73,20 +79,22 @@ export interface OrderLine {
   /** A decimal string accepted by the product unit's precision. */
   quantity: string;
   /**
-   * The modifiers selected on this line (ordering modifiers, Task 9), or ABSENT for a plain line — the
-   * common case, kept absent (never `[]`) so a no-modifier add stays byte-identical to before. Each
-   * carries the `optionGroupItemId` the wire sends plus the display fields {@link lineGross} and the
-   * basket read. The DISH `quantity` above applies to every option too (a modifier is priced per dish,
-   * never counted independently), matching the server's `priceBasketWithOptions`.
+   * The extras picked on this line, or ABSENT for a dish that took none — kept absent (never `[]`)
+   * so a plain add stays byte-identical to before. The DISH `quantity` above applies to every pick
+   * (a child is priced at `dishQuantity × pickQuantity`, matching the server's
+   * `priceBasketWithOptions`).
    */
-  options?: SelectedLineOption[];
-  modifierSelections?: ModifierSelection[];
-  modifierSnapshots?: ModifierSnapshot[];
+  extras?: SelectedExtra[];
   /**
-   * The answers the SERVER froze onto this line, carried back when a held order is retrieved
-   * (`HeldOrder.lines`, `../api/client.ts`). READ-ONLY here: nothing on the send path writes or
-   * returns it, so it never travels back up the wire — the basket renders it, and the picker's own
-   * draft ({@link modifierSnapshots}) takes precedence on a line the operator has answered.
+   * The line's answers to its dish's options lists, as the wire names them — one entry per answered
+   * list. ABSENT when the dish answered none, and absent on a RETRIEVED line: what comes back from a
+   * held order is the frozen wording below, which carries no ids to re-send.
+   */
+  options?: OptionSelection[];
+  /**
+   * The six names each answered options list froze — the list's three and the chosen label's three.
+   * Two writers, one shape: the picker builds it at confirm time, and a retrieved held order carries
+   * the server's own (`HeldOrder.lines`, `../api/client.ts`). It never travels back up the wire.
    */
   optionSnapshots?: OptionSnapshot[];
   /**
@@ -137,6 +145,17 @@ function toPriceable(line: OrderLine): BasketItem {
   };
 }
 
+/**
+ * Copy a selection's non-empty parts onto a line. An empty list is not an answer, so it leaves no
+ * key: a line the operator answered and then cleared reads the same as one never answered, which is
+ * what every `toEqual` on a plain line pins.
+ */
+function applySelection(line: OrderLine, selection: LineSelection | undefined): void {
+  if (selection?.extras?.length) line.extras = selection.extras;
+  if (selection?.options?.length) line.options = selection.options;
+  if (selection?.optionSnapshots?.length) line.optionSnapshots = selection.optionSnapshots;
+}
+
 export class WorkingOrderStore {
   readonly #lines: OrderLine[] = [];
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
@@ -161,11 +180,11 @@ export class WorkingOrderStore {
    */
   #priced: Priced | null = null;
   /**
-   * The memoised options-aware grand total, or `null` when a mutation invalidated it. Held SEPARATELY
-   * from {@link #priced} because `priceBasket` ignores selected modifier options (ordering modifiers) —
-   * so the grand total (and the cash-tender sufficiency gate + the readout that both read {@link total})
-   * is summed from the per-line {@link lineGross}, which DOES add each option's delta. Cleared in every
-   * mutation beside {@link #priced} and recomputed lazily.
+   * The memoised extras-aware grand total, or `null` when a mutation invalidated it. Held SEPARATELY
+   * from {@link #priced} because `priceBasket` prices the dishes alone — so the grand total (and the
+   * cash-tender sufficiency gate + the readout that both read {@link total}) is summed from the
+   * per-line {@link lineGross}, which DOES add each extras pick. Cleared in every mutation beside
+   * {@link #priced} and recomputed lazily.
    */
   #total: Decimal | null = null;
   /**
@@ -248,13 +267,14 @@ export class WorkingOrderStore {
   }
 
   /**
-   * The previewed grand total (VAT-inclusive), OPTIONS-AWARE: the sum of every line's `lineGross`,
-   * which adds each selected modifier option's `priceDelta × quantity` on top of the dish. This is what
-   * the tender-pay sufficiency gate and the on-screen readout consume, so it must include the option
-   * deltas — `priceBasket` (which prices `vatBreakdown` below) ignores options and would under-report
-   * the total the customer owes once modifiers are picked. Summing the same rounded per-line grosses the
-   * receipt lists keeps this equal to the server's `priceBasketWithOptions` total to the céntimo (the
-   * server re-prices authoritatively from the option ids at pay time). Memoised in {@link #total}.
+   * The previewed grand total (VAT-inclusive), EXTRAS-AWARE: the sum of every line's `lineGross`,
+   * which adds each extras pick at `price × (dishQuantity × pickQuantity)` on top of the dish. This
+   * is what the tender-pay sufficiency gate and the on-screen readout consume, so it must include
+   * the picks — `priceBasket` (which prices `vatBreakdown` below) sees only the dishes and would
+   * under-report what the customer owes. An options answer adds nothing: it is a kitchen
+   * instruction, never a price. Summing the same rounded per-line grosses the receipt lists keeps
+   * this equal to the server's `priceBasketWithOptions` total to the céntimo (the server re-prices
+   * authoritatively at pay time). Memoised in {@link #total}.
    */
   get total(): Decimal {
     if (this.#total === null) {
@@ -265,12 +285,13 @@ export class WorkingOrderStore {
 
   /**
    * The previewed VAT bands (one per rate present in the basket), priced by the server's `priceBasket`.
-   * DISH-ONLY: `priceBasket` does not see selected options, so these bands cover the dishes' bases/cuotas
-   * and NOT the option deltas. That is deliberate and currently invisible — no basket surface renders
-   * this preview (the only VAT breakdown shown to the customer is the FILED desglose on `till-ticket-view`,
-   * read back from the fiscal record). If a client-side VAT preview is ever added over a basket that can
-   * carry modifiers, this must move to `priceBasketWithOptions` (which needs each option's `vatClass`,
-   * not carried on `SelectedLineOption` today) so the bands reconcile with {@link total}.
+   * DISH-ONLY: `priceBasket` does not see the extras picked on a line, so these bands cover the
+   * dishes' bases/cuotas and NOT the picks. That is deliberate and currently invisible — no basket
+   * surface renders this preview (the only VAT breakdown shown to the customer is the FILED desglose
+   * on `till-ticket-view`, read back from the fiscal record). If a client-side VAT preview is ever
+   * added over a basket that can carry extras, this must move to `priceBasketWithOptions` (which
+   * needs each pick's own `vatClass`, not carried on {@link SelectedExtra} today) so the bands
+   * reconcile with {@link total}.
    */
   get vatBreakdown(): Priced["vatBreakdown"] {
     return this.#pricedOrder.vatBreakdown;
@@ -285,55 +306,43 @@ export class WorkingOrderStore {
 
   /**
    * Append a line and notify. The server revalidates `quantity` against the selected unit.
-   * `options` (ordering modifiers, Task 9) are the modifiers selected on the line; OMITTED — the common
-   * tap, and the vast majority — the line carries no `options` key at all, so a no-modifier add is
-   * byte-identical to before (the picker, Task 10, is the only caller that passes them).
+   * `selection` holds the picker's answers; each of its keys attaches ONLY when it names something,
+   * so the common one-tap add carries no answer keys at all and stays byte-identical to before.
    *
-   * `extras` (order-line customisation) carry the per-line `note` the picker collected. Each key
-   * attaches ONLY when present — the same omission pattern as `options` above — so a plain add
-   * (`extras` absent, or an empty `{}`) leaves the line byte-identical to before. The picker already
-   * trims a whitespace-only note to nothing before calling.
+   * `extras` here is the order-line customisation — the per-line `note` — and not an extras pick;
+   * the two words collide and the picker's picks arrive in `selection`. The picker already trims a
+   * whitespace-only note to nothing before calling.
    */
   addProduct(
     product: TillProduct,
     quantity: string,
-    options?: SelectedLineOption[],
-    extras?: {
-      note?: string;
-      modifierSelections?: ModifierSelection[];
-      modifierSnapshots?: ModifierSnapshot[];
-    },
+    selection?: LineSelection,
+    extras?: { note?: string },
   ): void {
     assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
     const line: OrderLine = { product, quantity };
-    if (options !== undefined) {
-      line.options = options;
-    }
+    applySelection(line, selection);
     if (extras?.note !== undefined) {
       line.note = extras.note;
     }
-    if (extras?.modifierSelections !== undefined)
-      line.modifierSelections = extras.modifierSelections;
-    if (extras?.modifierSnapshots !== undefined) line.modifierSnapshots = extras.modifierSnapshots;
     this.#lines.push(line);
     this.#invalidatePricing();
     this.#dirty = true;
     this.emit("changed");
   }
 
-  setLineModifiers(
-    index: number,
-    selection: {
-      options: SelectedLineOption[];
-      modifierSelections?: ModifierSelection[];
-      modifierSnapshots?: ModifierSnapshot[];
-    },
-  ): void {
+  /**
+   * Replace the answers on the line at `index` — the basket's re-open-the-picker path. The whole
+   * selection is replaced, so an answer the operator cleared leaves no key behind. Out-of-range
+   * indices are a no-op, like {@link removeLine}.
+   */
+  setLineModifiers(index: number, selection: LineSelection): void {
     const line = this.#lines[index];
     if (!line) return;
-    line.options = selection.options;
-    line.modifierSelections = selection.modifierSelections;
-    line.modifierSnapshots = selection.modifierSnapshots;
+    delete line.extras;
+    delete line.options;
+    delete line.optionSnapshots;
+    applySelection(line, selection);
     this.#invalidatePricing();
     this.#dirty = true;
     this.emit("changed");

@@ -22,12 +22,11 @@ import type { ContentLanguages } from "@waitron/shared";
  * drift these two once had: the till's DECLARED offer shape can no longer diverge from catalogue's
  * declared `MenuOffer`, and removing or retyping a field the till reads is now a compile break here
  * rather than a silent runtime shape error (an added field the till ignores is not — the shared type
- * checks the declared shape, not the server's exact serialized keys). The other sell-side types the
- * till consumes — `TillProduct` and its `TillOptionGroup`/`TillOptionItem` sub-shapes — are NOT aliased
- * and stay LOCAL: `TillProduct` is the till's own display model (built by {@link menuOfferToTillProduct}
- * from an offer and by `getHeldOrder` from a retrieved line, never received as one wire shape), and the
- * option sub-shapes remain hand-mirrored for now (they could be aliased to catalogue's resolved-option
- * types the same way, a follow-up this change did not take).
+ * checks the declared shape, not the server's exact serialized keys). `OfferedModifier` — the extras
+ * and options lists a dish puts in front of a diner — is taken from that same type leaf for the same
+ * reason: the picker draws exactly what the order path will accept an answer from. `TillProduct`
+ * itself stays LOCAL: it is the till's own display model, built by {@link menuOfferToTillProduct}
+ * from an offer and by `getHeldOrder` from a retrieved line, never received as one wire shape.
  */
 
 // The till's LOCAL canvas/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
@@ -38,10 +37,30 @@ import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
 // (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
 // primitives.
-import type { OptionSnapshot, StationThresholds, TimingBand } from "@waitron/shared";
+import type {
+  ExtraSelection,
+  OptionSelection,
+  OptionSnapshot,
+  StationThresholds,
+  TimingBand,
+} from "@waitron/shared";
 // The offer/menu shapes, type-only from catalogue's browser-safe leaf — see the file header for why
 // this pulls no runtime. `MenuOffer` is the body `GET /api/service-zones/:zoneId/offers` returns.
-import type { AccessibleCatalogue, MenuOffer } from "@waitron/catalogue/src/menu-types.js";
+import type {
+  AccessibleCatalogue,
+  MenuOffer,
+  OfferedModifier,
+} from "@waitron/catalogue/src/menu-types.js";
+
+/** The till's one door to the offered-list shapes, so a widget imports them where it imports every
+ * other wire type. Re-exported, never re-declared — the picker draws exactly what the order path
+ * accepts an answer from. */
+export type {
+  OfferedExtraItem,
+  OfferedExtrasList,
+  OfferedModifier,
+  OfferedOptionsList,
+} from "@waitron/catalogue/src/menu-types.js";
 
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
@@ -283,95 +302,6 @@ export interface DietProfile {
 }
 
 /**
- * One selectable choice inside a {@link TillOptionGroup} (ordering modifiers, Task 3). A LOCAL mirror
- * of catalogue's `ResolvedOptionItem`, deliberately NOT imported from `@waitron/catalogue` — same
- * bundle-decoupling rationale as every other type in this file. `priceDelta` is a GROSS
- * (VAT-inclusive) two-place decimal string, like {@link TillProduct.unitPrice} — the column stores
- * the amount as a count of whole cents and the read converts it; the modifier
- * picker adds the selected deltas to its display-only running price. `vatClass` is null when the item
- * INHERITS the parent dish's rate (a non-null value overrides it) — carried for shape-fidelity; the
- * client never prices from it (the server re-prices authoritatively from the id).
- */
-export interface TillOptionItem {
-  id: string;
-  name: Record<string, string>;
-  priceDelta: string;
-  vatClass: "general" | "reduced" | "super_reduced" | "zero" | null;
-  /**
-   * The AUTHORED cap on how many times this option may be taken per dish (catalogue's
-   * `option_group_items.max_quantity`, per-option quantity). `1` = a plain single choice (no
-   * stepper); `> 1` lets the modifier picker offer a `− N +` stepper (bounded also by the group's
-   * `maxSelect`). Always sent by `GET /api/products` — the resolved product shape carries it. The
-   * client uses it only to bound the stepper UX; the server re-validates the count authoritatively.
-   */
-  maxQuantity: number;
-  /**
-   * The option's OWN allergens, carried so the extra's own list can be shown beside the dish — the dish
-   * and its extras are not combined into one figure. `addAllergens`: the codes this option declares
-   * ("extra cheese" → milk), keyed by allergen code, null when it declares none. A LOCAL redefinition of
-   * catalogue's `ResolvedOptionItem`, deliberately NOT imported from `@waitron/catalogue` — same
-   * bundle-decoupling rationale as every other type in this file. `GET /api/products` sends it (a
-   * straight passthrough of catalogue's `listAvailableProducts`, which projects it onto each item).
-   */
-  addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
-  /** The option's OWN positive dietary suitability (a subset of vegan/vegetarian/halal/kosher), shown
-   *  beside the dish's own on the basket — never folded. */
-  suitableFor?: string[] | null;
-}
-
-/**
- * One active option group attached to a product (ordering modifiers, Task 3) — its active `items` in
- * sort order (`[]` when every item is inactive), plus the selection bounds the modifier picker enforces
- * CLIENT-side as UX (the server re-validates authoritatively): `minSelect`/`maxSelect` bound how many
- * items a diner may pick and `required` forces at least one. A LOCAL mirror of catalogue's
- * `ResolvedOptionGroup`, NOT imported — same bundle-decoupling rationale as every other type in this file.
- */
-export interface TillOptionGroup {
-  id: string;
-  name: Record<string, string>;
-  minSelect: number;
-  maxSelect: number;
-  required: boolean;
-  items: TillOptionItem[];
-}
-
-export type Modifier = { id: string; name: Record<string, string>; available: boolean } & (
-  | { type: "text" }
-  | {
-      type: "extras";
-      required: boolean;
-      maxTotalQuantity: number | null;
-      choices: (Pick<TillOptionItem, "id" | "name" | "priceDelta" | "maxQuantity"> &
-        Partial<Omit<TillOptionItem, "id" | "name" | "priceDelta" | "maxQuantity">> & {
-          available: boolean;
-          preselected: boolean;
-        })[];
-    }
-  | {
-      type: "options";
-      defaultChoiceId: string | null;
-      choices: (Pick<TillOptionItem, "id" | "name"> &
-        Partial<Pick<TillOptionItem, "addAllergens" | "suitableFor">> & {
-          available: boolean;
-        })[];
-    }
-);
-
-export type ModifierSelection =
-  | { modifierId: string; type: "text"; text: string }
-  | { modifierId: string; type: "extras"; choices: { choiceId: string; quantity: number }[] }
-  | { modifierId: string; type: "options"; choiceId: string };
-
-export type ModifierSnapshot = { modifierId: string; name: Record<string, string> } & (
-  | { type: "text"; text: string }
-  | {
-      type: "extras";
-      choices: { choiceId: string; name: Record<string, string>; quantity: number }[];
-    }
-  | { type: "options"; choiceId: string; choiceName: Record<string, string> }
-);
-
-/**
  * One sellable product as the till's widgets consume it. It is built from exactly two payloads:
  * {@link menuOfferToTillProduct} adapts a zone offer (`GET /api/service-zones/:zoneId/offers`), and
  * `getHeldOrder` synthesises one per line of a retrieved order. It is NOT the shape of
@@ -448,10 +378,16 @@ export interface TillProduct {
    * carried for completeness — the switcher renders `TillMenu.name`, not this. OPTIONAL for the same
    * fixture reason as {@link catalogueId}. */
   catalogueName?: string;
-  /** Legacy group projection while the combined product manager is still in use. */
-  optionGroups?: TillOptionGroup[];
-  /** Published modifier definitions; an absent field identifies the older group payload. */
-  modifiers?: Modifier[];
+  /**
+   * The ordered extras and options lists this dish offers, in the product's own attachment order —
+   * catalogue's `OfferedModifier`, carried through from the zone offer unchanged. The picker walks
+   * it; the basket resolves a pick's own allergens and dietary labels off it BY PRODUCT ID.
+   *
+   * Absent on a product the till synthesised rather than read from an offer — a retrieved held
+   * line's stored snapshot carries none, so a surface reading this treats absent as "offers
+   * nothing" rather than "not loaded yet".
+   */
+  offeredModifiers?: OfferedModifier[];
   /**
    * The product's PUBLISHED diet profile (dietary-classification, Task 6) — catalogue's `products.diet`,
    * the derivation folded with any staff override. The menu diet filter (`filterProductsByDiet`) reads
@@ -540,19 +476,13 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     courseId: offer.courseId,
     catalogueId: offer.menuId,
     catalogueName: offer.menuName,
-    // `variants`, `modifiers` and `dietaryDeclarations` are always present on a `MenuOffer` (the server
-    // sends them for every offer), so they are assigned directly rather than spread-when-present.
+    // `variants`, `offeredModifiers` and `dietaryDeclarations` are always present on a `MenuOffer`
+    // (the server sends them for every offer), so they are assigned directly rather than
+    // spread-when-present. The offered lists are passed through in the order they arrive: that is
+    // the product's own attachment order, which nothing on the till re-sorts.
     variants: offer.variants,
-    modifiers: offer.modifiers,
+    offeredModifiers: offer.offeredModifiers,
     dietaryDeclarations: offer.dietaryDeclarations,
-    optionGroups: offer.optionGroups.map((group) => ({
-      id: group.id,
-      name: group.name,
-      minSelect: group.minSelect,
-      maxSelect: group.maxSelect,
-      required: group.required,
-      items: group.options,
-    })),
     diet: offer.diet,
     dietDerivation: offer.dietDerivation,
     dietOverride: offer.dietOverride,
@@ -561,15 +491,18 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
 
 /**
  * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.
- * `options` (ordering modifiers) are the selected modifiers on the line, each naming an
- * `optionGroupItemId` the server resolves AUTHORITATIVELY (price, VAT, name) and files as a child line
- * under this dish, plus an OPTIONAL `quantity` — how many times that option is taken per dish
- * (per-option quantity). `quantity` is ABSENT when it is 1, so a plain modifier's wire is
- * byte-identical to before; when present it is a small positive integer the server re-prices and
- * re-validates against the option's authored `max_quantity`. `options` itself is ABSENT for a plain
- * line — never `[]` — so a no-modifier sale is byte-identical to before. The server (`POST /api/sales`,
- * `addTabRound`) validates the modifier quantities separately from the product quantity. The
- * client sends only the id (and the count when > 1): the running line price is DISPLAY-ONLY.
+ *
+ * `options` answers the dish's options lists, one entry per list, naming the list and the chosen
+ * label; `extras` answers its extras lists, one entry per list, naming the PRODUCTS picked off it
+ * and how many of each this dish takes. Both are the shared wire shapes (`@waitron/shared`), and the
+ * server resolves everything else: an options answer freezes six names onto the dish line and an
+ * extras pick becomes a priced child line carrying the picked product's own VAT class. Each key is
+ * ABSENT on a line that answered nothing of that kind — never `[]`.
+ *
+ * Every ACTIVE options list a dish attaches must be answered, so a line that omits one is refused
+ * `options.label_required` rather than ignored (`validateOptionSelections`,
+ * `packages/catalogue/src/option-contract.ts`; probed 2026-09-21 against a one-list fixture: `[]`
+ * threw that code while a `{ listId, labelId }` answer resolved).
  *
  * `note` (a free-text kitchen instruction, capped at 200 chars server-side) is the per-line
  * customisation (order-line customisation, spec §2/§3), NON-FISCAL: the server trims/validates it and
@@ -583,8 +516,8 @@ export interface SaleLine {
   menuItemId?: string;
   variantId?: string;
   quantity: string;
-  options?: { optionGroupItemId: string; quantity?: number }[];
-  modifierSelections?: ModifierSelection[];
+  extras?: ExtraSelection[];
+  options?: OptionSelection[];
   note?: string;
 }
 
@@ -703,6 +636,20 @@ export interface HeldOrderSummary {
 }
 
 /**
+ * One CHILD line of a retrieved held order's dish: the picked product, its three frozen names, the
+ * price it was sold at, and how many of it this dish takes. See {@link HeldOrder}'s `extras` for why
+ * this is values rather than a selection.
+ */
+export interface HeldExtra {
+  productId: string | null;
+  name: string;
+  descriptions: Record<string, string>;
+  kitchenName: string | null;
+  price: string;
+  quantity: number;
+}
+
+/**
  * `GET /api/working-orders/:id` — a retrieved parked order: enough to name it in the UI plus the
  * stored inputs and commercial snapshots needed to rebuild its basket. Mirrors the server's
  * `HeldOrder`; contextual lines can be restored even when their live offer is no longer available.
@@ -712,16 +659,24 @@ export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
-  lines: (Omit<SaleLine, "options"> & {
-    options?: {
-      optionGroupItemId: string;
-      name: Record<string, string>;
-      priceDelta: string;
-      quantity?: number;
-    }[];
+  lines: (Omit<SaleLine, "extras" | "options"> & {
+    /**
+     * What each CHILD line of this dish froze: the picked product, its three names, the price it
+     * was sold at, and how many of it this dish takes (the child's stored quantity divided by the
+     * dish's). These are VALUES, not a re-sendable selection — a child holds no list id to name, so
+     * an edit re-derives one from the dish's live offer
+     * (`deriveExtraSelections`, `../state/held-extras.ts`).
+     */
+    extras?: HeldExtra[];
     product?: TillProduct;
-    /** The dish's frozen answers to its options lists; absent on a line that answered none and on
-     *  every child line. The six names per answer are the server's, copied by value. */
+    /**
+     * The dish's frozen answers to its options lists; absent on a line that answered none and on
+     * every child line. The six names per answer are the server's, copied by value.
+     *
+     * `options` is deliberately NOT here: the sendable answer names a list and a label by ID, and a
+     * frozen answer carries neither (spec §2.3). A retrieved line therefore has answers to SHOW and
+     * none to re-send.
+     */
     optionSnapshots?: OptionSnapshot[];
   })[];
 }

@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   dishGross,
+  extraGross,
   lineGross,
-  optionGross,
   quantityLabel,
   toWireLineExtras,
-  toWireOption,
   toWireModifiers,
 } from "./order-line.js";
-import type { OrderLine, SelectedLineOption } from "./working-order.js";
+import type { OrderLine, SelectedExtra } from "./working-order.js";
 import type { TillProduct } from "../api/client.js";
 
 // A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
@@ -47,11 +46,13 @@ const jamon: TillProduct = {
   allergens: null,
 };
 
-// A +0.50 gross modifier.
-const shot: SelectedLineOption = {
-  optionGroupItemId: "opt-shot",
-  name: { es: "Café extra" },
-  priceDelta: "0.50",
+// One pick off an extras list: the product picked, at the price the offer resolved.
+const shot: SelectedExtra = {
+  listId: "list-extras",
+  productId: "p-shot",
+  name: "Café extra",
+  price: "0.50",
+  quantity: 1,
 };
 
 describe("order-line pricing", () => {
@@ -66,55 +67,52 @@ describe("order-line pricing", () => {
       expect(lineGross(line)).toBe("3.20");
     });
 
-    it("adds each option's delta at the dish quantity", () => {
-      const line: OrderLine = { product: cafe, quantity: "2", options: [shot] };
+    it("adds each extras pick at the dish quantity", () => {
+      const line: OrderLine = { product: cafe, quantity: "2", extras: [shot] };
       // (1.50 + 0.50) × 2 = 4.00
       expect(lineGross(line)).toBe("4.00");
     });
 
-    describe("per-option quantity", () => {
-      it("an option with quantity 2 on a dish-quantity-3 line contributes priceDelta × 6", () => {
+    it("an options answer costs nothing", () => {
+      const line: OrderLine = {
+        product: cafe,
+        quantity: "2",
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
+      };
+      expect(lineGross(line)).toBe("3.00");
+    });
+
+    describe("per-pick quantity", () => {
+      it("a pick of 2 on a dish-quantity-3 line contributes its price × 6", () => {
         const line: OrderLine = {
           product: cafe,
           quantity: "3",
-          options: [{ ...shot, quantity: 2 }],
+          extras: [{ ...shot, quantity: 2 }],
         };
-        // dish 1.50 × 3 = 4.50; option 0.50 × (3 × 2) = 3.00; total 7.50
+        // dish 1.50 × 3 = 4.50; extra 0.50 × (3 × 2) = 3.00; total 7.50
         expect(lineGross(line)).toBe("7.50");
-      });
-
-      it("an option with quantity omitted is byte-identical to quantity 1", () => {
-        const line: OrderLine = { product: cafe, quantity: "3", options: [shot] };
-        const withOne: OrderLine = {
-          product: cafe,
-          quantity: "3",
-          options: [{ ...shot, quantity: 1 }],
-        };
-        expect(lineGross(line)).toBe(lineGross(withOne));
-        // dish 1.50 × 3 = 4.50; option 0.50 × 3 = 1.50; total 6.00
-        expect(lineGross(line)).toBe("6.00");
       });
     });
   });
 
   describe("dishGross", () => {
-    it("prices only the dish, ignoring options", () => {
-      const line: OrderLine = { product: cafe, quantity: "2", options: [shot] };
+    it("prices only the dish, ignoring its extras", () => {
+      const line: OrderLine = { product: cafe, quantity: "2", extras: [shot] };
       expect(dishGross(line)).toBe("3.00");
     });
   });
 
-  describe("optionGross", () => {
-    it("prices an option at priceDelta × dish quantity when quantity omitted", () => {
-      const line: OrderLine = { product: cafe, quantity: "2", options: [shot] };
-      expect(optionGross(line, shot)).toBe("1.00");
+  describe("extraGross", () => {
+    it("prices a pick at its price × dish quantity when it is taken once", () => {
+      const line: OrderLine = { product: cafe, quantity: "2", extras: [shot] };
+      expect(extraGross(line, shot)).toBe("1.00");
     });
 
-    it("an option with quantity 2 on a dish-quantity-3 line returns priceDelta × 6", () => {
-      const option: SelectedLineOption = { ...shot, quantity: 2 };
-      const line: OrderLine = { product: cafe, quantity: "3", options: [option] };
+    it("a pick of 2 on a dish-quantity-3 line returns its price × 6", () => {
+      const extra: SelectedExtra = { ...shot, quantity: 2 };
+      const line: OrderLine = { product: cafe, quantity: "3", extras: [extra] };
       // 0.50 × (3 × 2) = 3.00
-      expect(optionGross(line, option)).toBe("3.00");
+      expect(extraGross(line, extra)).toBe("3.00");
     });
   });
 
@@ -122,23 +120,6 @@ describe("order-line pricing", () => {
     it("labels every line with its selected unit", () => {
       expect(quantityLabel({ product: jamon, quantity: "0.320" })).toBe("0.320 kg");
       expect(quantityLabel({ product: cafe, quantity: "2" })).toBe("2 ea");
-    });
-  });
-
-  describe("toWireOption", () => {
-    it("includes quantity when it exceeds 1", () => {
-      expect(toWireOption({ ...shot, quantity: 2 })).toEqual({
-        optionGroupItemId: "opt-shot",
-        quantity: 2,
-      });
-    });
-
-    it("omits quantity when it is exactly 1", () => {
-      expect(toWireOption({ ...shot, quantity: 1 })).toEqual({ optionGroupItemId: "opt-shot" });
-    });
-
-    it("omits quantity when it is absent", () => {
-      expect(toWireOption(shot)).toEqual({ optionGroupItemId: "opt-shot" });
     });
   });
 
@@ -153,22 +134,53 @@ describe("order-line pricing", () => {
       expect(toWireLineExtras(plain)).toEqual({});
     });
   });
+
+  describe("toWireModifiers", () => {
+    it("sends one entry per answered list, picks grouped under their own list", () => {
+      const line: OrderLine = {
+        product: cafe,
+        quantity: "1",
+        extras: [
+          shot,
+          { ...shot, productId: "p-syrup", name: "Sirope", price: "0.40", quantity: 2 },
+          { ...shot, listId: "list-milk", productId: "p-oat", name: "Avena", price: "0.30" },
+        ],
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
+      };
+      expect(toWireModifiers(line)).toEqual({
+        extras: [
+          {
+            listId: "list-extras",
+            picks: [
+              { productId: "p-shot", quantity: 1 },
+              { productId: "p-syrup", quantity: 2 },
+            ],
+          },
+          { listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] },
+        ],
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
+      });
+    });
+
+    it("omits both keys on a line that answered nothing", () => {
+      const plain: OrderLine = { product: cafe, quantity: "1" };
+      expect(toWireModifiers(plain)).toEqual({});
+    });
+
+    it("never sends a display value — a pick names its product and count alone", () => {
+      const line: OrderLine = { product: cafe, quantity: "1", extras: [shot] };
+      const wire = toWireModifiers(line);
+      expect(wire.extras![0]!.picks[0]).toEqual({ productId: "p-shot", quantity: 1 });
+    });
+  });
 });
 
-it("prices repeated extras per fractional product unit and sends only canonical identities", () => {
-  const modifierSelections = [
-    {
-      modifierId: "extras",
-      type: "extras" as const,
-      choices: [{ choiceId: "opt-shot", quantity: 2 }],
-    },
-  ];
+it("rounds each extras pick before summing, so a fractional dish quantity matches the server", () => {
   const line: OrderLine = {
     product: jamon,
     quantity: "0.125",
-    options: [{ ...shot, quantity: 2 }],
-    modifierSelections,
+    extras: [{ ...shot, quantity: 2 }],
   };
+  // dish 10.00 × 0.125 = 1.25; extra 0.50 × (0.125 × 2) = 0.125 → 0.13 rounded on its own row.
   expect(lineGross(line)).toBe("1.38");
-  expect(toWireModifiers(line)).toEqual({ modifierSelections });
 });

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   TillApi,
   isNetworkFailure,
+  menuOfferToTillProduct,
+  type OfferedModifier,
   type FloorZone,
   type MyAbsence,
   type MyShift,
@@ -2041,5 +2043,79 @@ describe("isNetworkFailure", () => {
     expect(isNetworkFailure(new DOMException("aborted", "AbortError"))).toBe(true);
     expect(isNetworkFailure({ code: "sale.empty_basket" })).toBe(false);
     expect(isNetworkFailure(new Error("x"))).toBe(false);
+  });
+});
+
+describe("menuOfferToTillProduct", () => {
+  it("carries the offer's ordered lists through, in the order they arrive", () => {
+    // The till re-sorts nothing: the order IS the product's own attachment order (spec §5), and the
+    // picker draws it as given. Three different texts per name, so a reader of the wrong one fails.
+    const extras: OfferedModifier = {
+      kind: "extras",
+      id: "list-extras",
+      name: "Extras",
+      customerName: { es: "Extras carta" },
+      kitchenName: "Extras KDS",
+      minPicks: 0,
+      maxPicks: 2,
+      items: [
+        {
+          productId: "p-bacon",
+          name: "Bacon",
+          customerName: { es: "Bacon carta" },
+          kitchenName: "Bacon KDS",
+          price: "1.50",
+          vatClass: "general",
+          maxQuantity: 1,
+          preselected: false,
+          addAllergens: null,
+          suitableFor: [],
+        },
+      ],
+    };
+    const options: OfferedModifier = {
+      kind: "options",
+      id: "list-cooked",
+      name: "Punto",
+      customerName: { es: "Punto carta" },
+      kitchenName: "Punto KDS",
+      defaultLabelId: null,
+      labels: [],
+    };
+    const offer = {
+      id: "offer-burger",
+      menuId: "menu-1",
+      productId: "burger",
+      sectionId: "section-1",
+      grossPrice: "8.00",
+      displayOrder: 0,
+      active: true,
+      menuName: "Carta",
+      sectionName: { es: "Platos" },
+      name: "Burger",
+      customerName: { es: "Burger carta" },
+      kitchenName: "Burger KDS",
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general" as const,
+      category: "Platos",
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      optionGroups: [],
+      modifiers: [],
+      offeredModifiers: [extras, options],
+      variants: [],
+    };
+
+    expect(menuOfferToTillProduct(offer).offeredModifiers).toEqual([extras, options]);
   });
 });
