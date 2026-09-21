@@ -54,7 +54,7 @@ forbids, in every generic package, a base list of generic Spanish plus every mod
 `vocabulary` seat; an owner's own package (derived from `migrations.from`) is never scanned. One
 declaring home per word: a fiscal term goes in `FISCAL_VOCABULARY` (`packages/fiscal-verifactu`), a
 labour term in `WORKFORCE_ES_VOCABULARY` (`packages/workforce-es`), never the base list — the suite
-fails on a clash. `packages/verifactu` is an unlisted library (in no list, never scanned); `apps/*`
+fails on a clash. `apps/*`
 is out of scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught only by
 review. Design: `docs/superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md`.
 
@@ -973,21 +973,10 @@ this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` refere
 Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still reads
 it — an `applyTo: "**"` instructions file would be picked up there.
 
-## `packages/verifactu` must never import another workspace package, `@waitron/ui` included
-
-`packages/verifactu` (Spain's Veri\*Factu invoicing-compliance library — landed in `7938e1b`, see
-`docs/superpowers/specs/2026-07-18-pos-architecture-design.md` §8) must never import from any other
-`packages/*` or `apps/*` workspace package, including `@waitron/ui`. It exists to be
-certified/audited in isolation; a dependency on another internal package would pull unrelated,
-non-audited code inside that boundary. This is already enforced by an `import-x/no-restricted-paths`
-zone in `eslint.config.js` scoped to `packages/verifactu/**/*.ts` — if a PR touching that package
-needs to loosen or work around that rule, treat it as a design question to raise, not a lint config
-nit to wave through.
-
 ## Two more packages are Spanish by design, and one guard runs on a different axis
 
 `packages/reporting` (the modelo-303 form, Spain's VAT return) is Spanish by design, alongside
-`packages/verifactu`, `packages/fiscal-verifactu` and `packages/workforce-es`. Since 2026-09-07 the
+`packages/fiscal-verifactu` and `packages/workforce-es`. Since 2026-09-07 the
 English-only guard (`scripts/english-only.test.ts`) scans comment prose as well as identifiers in
 the generic packages, leaving only `«…»` quotes and backtick citations exempt.
 `packages/fiscal/src/no-regime-vocabulary.test.ts` enforces a different axis — a domain's vocabulary
