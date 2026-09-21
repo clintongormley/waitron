@@ -14,7 +14,7 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import { createFakeAeat } from "@waitron/verifactu/testing";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
 

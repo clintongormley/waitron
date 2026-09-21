@@ -1,7 +1,7 @@
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
-import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
