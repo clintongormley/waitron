@@ -7,6 +7,7 @@ import "./errors.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
+import { now } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
 import { contadoresInstalacion, registroSif } from "./schema/sif.js";
@@ -141,7 +142,10 @@ function resetChainHead(tx: Transaction, nodeId: NodeId): Promise<unknown> {
     .values({ nodeId })
     .onConflictDoUpdate({
       target: [cadenas.nodeId],
-      set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: sql`now()` },
+      // A JavaScript `Date`, the way every other converted writer stamps a `ts` column:
+      // `sql`now()`` is a PostgreSQL function this engine does not have, and the statement was
+      // refused at PREPARE with `no such function: now` before any row was touched.
+      set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: now() },
     });
 }
 
@@ -221,7 +225,8 @@ export async function registerSif(
   // generated them.
   await tx
     .update(registroSif)
-    .set({ revocadoEn: sql`now()` })
+    // `now()` from the column vocabulary, not `sql`now()``: see resetChainHead above.
+    .set({ revocadoEn: now() })
     .where(and(eq(registroSif.nodeId, params.nodeId), isNull(registroSif.revocadoEn)));
 
   const numeroInstalacion = await mintNumeroInstalacion(

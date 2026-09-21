@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { AckState } from "@waitron/fiscal";
 
@@ -117,10 +117,17 @@ export async function pendingAcks(db: Database): Promise<Ack[]> {
   });
 }
 
-/** Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTransaction`. */
+/**
+ * Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTransaction`.
+ *
+ * The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does not
+ * have, and the statement was refused at PREPARE with `no such function: now` before any row was
+ * touched. `nowIso` rather than `now` because raw SQL never reaches the column's own write mapping,
+ * which is what turns a `Date` into the ISO string a `ts` column stores.
+ */
 export async function markDelivered(db: Database, recordId: string): Promise<void> {
   await withTransaction(db, (tx) =>
-    tx.execute(sql`update acks set delivered_at = now() where registro_id = ${recordId}`),
+    tx.execute(sql`update acks set delivered_at = ${nowIso()} where registro_id = ${recordId}`),
   );
 }
 
