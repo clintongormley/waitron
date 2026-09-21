@@ -476,7 +476,7 @@ async function nifOf(db: Database = suite.admin): Promise<string> {
  * fresh installation number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (`@waitron/fiscal-verifactu`,
  * the id the fiscal seed registers under; inlined so the literal reads beside the tuple it keys), and
  * NONE of the SIF identity (IdSistemaInformatico / NumeroInstalacion) enters `computeHuella`
- * (huella.ts:45-58 hashes eight invoice fields only), so the installation number does not move the
+ * (`@waitron/verifactu` hashes eight invoice fields only), so the installation number does not move the
  * huella. The re-registration is proven by deletion: remove it and this venue keeps `setupVenue`'s
  * own-nif SIF, so its filing carries a DIFFERENT `IDEmisorFactura` and the two huellas diverge — it is
  * the shared NIF, not any tenant identity, that the matching huella depends on.

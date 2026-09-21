@@ -64,8 +64,8 @@ export interface RegistroRowContext {
 }
 
 /**
- * `@waitron/verifactu`'s own `isAlta` (types.ts) is not part of that package's value exports — its
- * barrel re-exports types.ts's types only, wildcard, type-only, which strips the runtime function
+ * `@waitron/verifactu`'s own `isAlta` is not part of that package's value exports — its
+ * barrel re-exports the package's types only, wildcard, type-only, which strips the runtime function
  * and keeps just its type. Reimplemented here with the identical discriminator (`RegistroAnulacion`
  * carries no `TipoFactura` at all) rather than widening that package's public surface for one
  * internal call site.
@@ -109,8 +109,8 @@ export function toAeatDate(isoDate: string): string {
  *
  * The four `anterior_*` columns use the ALTA-style field names (`IDEmisorFactura`, not
  * `IDEmisorFacturaAnulada`) regardless of which record type is doing the pointing:
- * `RegistroAnterior`'s sub-elements are named that way in BOTH record types (@waitron/verifactu's
- * types.ts), so one set of columns serves both directions without a second, anulación-flavoured
+ * `RegistroAnterior`'s sub-elements are named that way in BOTH record types (@waitron/verifactu),
+ * so one set of columns serves both directions without a second, anulación-flavoured
  * copy of the same four fields.
  */
 export function toRegistroRow(
@@ -161,7 +161,7 @@ export function toRegistroRow(
       // The recipient, stored as-built so the drainer re-serialises the mandatory Destinatarios
       // (fromRegistroRow reads it back). Same `?? null` / not-a-huella-input treatment as the four
       // rectificativa fields above — an absent recipient is a NULL column, and storing it here does
-      // not affect this record's huella (huella.ts hashes 8 named fields, none of them the
+      // not affect this record's huella (`@waitron/verifactu` hashes 8 named fields, none of them the
       // recipient). NULL on a simplified F2 alta; set on an F3 canje and on an F1 full invoice.
       destinatarios: record.Destinatarios ?? null,
       descripcionOperacion: record.DescripcionOperacion,
@@ -177,7 +177,7 @@ export function toRegistroRow(
     idEmisorFactura: record.IDFactura.IDEmisorFacturaAnulada,
     numSerieFactura: record.IDFactura.NumSerieFacturaAnulada,
     fechaExpedicionFactura: toIsoDate(record.IDFactura.FechaExpedicionFacturaAnulada),
-    // RegistroAnulacion carries no NombreRazonEmisor of its own (@waitron/verifactu's types.ts) —
+    // RegistroAnulacion carries no NombreRazonEmisor of its own (@waitron/verifactu) —
     // this column is NOT NULL regardless of tipo_registro, purely for this package's own querying
     // convenience, so it falls back to the one emisor name every record DOES carry.
     nombreRazonEmisor: record.SistemaInformatico.NombreRazon,
@@ -257,7 +257,7 @@ export type RegistroRow = {
   // The four AEAT rectificativa fields (jsonb comes back parsed, per this type's own doc comment
   // above). All NULL on an ordinary alta and on an anulación; set on a rectificativa alta so the
   // drainer can re-serialise them — without which AEAT rejects the filing missing its mandatory
-  // TipoRectificativa (error 1114). None is a huella input (huella.ts hashes 8 named fields, none
+  // TipoRectificativa (error 1114). None is a huella input (`@waitron/verifactu` hashes 8 named fields, none
   // of these), so rehydrating them cannot change a recomputed huella.
   tipo_rectificativa: string | null;
   facturas_rectificadas: RegistroAlta["FacturasRectificadas"] | null;
@@ -267,7 +267,7 @@ export type RegistroRow = {
   // simplified F2 alta and on an anulación; set on an F3 canje and on an F1 full invoice so the
   // drainer can re-serialise it — without which AEAT rejects a record missing its mandatory
   // recipient. Not a
-  // huella input (huella.ts hashes 8 named fields, the recipient not among them), so rehydrating it
+  // huella input (`@waitron/verifactu` hashes 8 named fields, the recipient not among them), so rehydrating it
   // cannot change a recomputed huella.
   destinatarios: RegistroAlta["Destinatarios"] | null;
   descripcion_operacion: string | null;
@@ -310,7 +310,7 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
   // runs when `row.primer_registro` is false, and `registros_encadenamiento_ck`
   // (./schema/registros.ts) guarantees all four are NOT NULL together whenever that is the case —
   // a real database invariant, not merely an assumption. Of the four, only `.Huella` is ever
-  // actually read for hashing purposes: `@waitron/verifactu`'s own `huellaAnteriorOf` (huella.ts)
+  // actually read for hashing purposes: `@waitron/verifactu`'s own `huellaAnteriorOf`
   // extracts nothing else off `RegistroAnterior`, so `IDEmisorFactura`/`NumSerieFactura`/
   // `FechaExpedicionFactura` here are dead data for recomputation regardless of their value.
   const encadenamiento: Encadenamiento = row.primer_registro
@@ -360,7 +360,7 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     // buildAltaRecord's own conditional-spread shape (in `@waitron/verifactu`),
     // so an absent field is OMITTED, never set to null. A `TipoRectificativa: null` would make this
     // rebuilt record deep-unequal to one built without the field, and — more to the point — would
-    // serialise a spurious empty element. None is a huella input (huella.ts hashes 8 named fields,
+    // serialise a spurious empty element. None is a huella input (`@waitron/verifactu` hashes 8 named fields,
     // none of them), so adding them here cannot change the recomputed huella verify.ts checks; they
     // exist so the drainer files a complete rectificativa (its mandatory TipoRectificativa, AEAT
     // rule 1114). The `!== null` casts mirror the `anterior_*`/`cuota_total` casts above: the value
@@ -387,12 +387,12 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     ...(row.destinatarios !== null && {
       Destinatarios: row.destinatarios,
     }),
-    // DescripcionOperacion and Desglose are not huella inputs at all — huella.ts's
+    // DescripcionOperacion and Desglose are not huella inputs at all — `@waitron/verifactu`'s
     // buildCadenaAlta hashes exactly eight named fields and neither is among them — so a plain
     // cast is enough; their actual value cannot affect recomputation either way.
     DescripcionOperacion: row.descripcion_operacion as string,
     Desglose: row.desglose as RegistroAlta["Desglose"],
-    // CuotaTotal/ImporteTotal ARE huella inputs, but huella.ts's own `trimValue` (invoked on every
+    // CuotaTotal/ImporteTotal ARE huella inputs, but `@waitron/verifactu`'s own `trimValue` (invoked on every
     // field by `joinCampos`, these two included) already maps `null`/`undefined` to `""` — so even
     // in the hypothetical case either were stored null, recomputing through the cast below goes
     // through the exact same "no value" path AEAT's own hashing already defines, and a `?? ""`

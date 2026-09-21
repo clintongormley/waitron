@@ -116,7 +116,7 @@ export interface DrainDeps {
   /**
    * The batch cap — the most registros claimed, submitted, and counted as a full envío per chunk.
    * OPTIONAL, defaulting to `MAX_REGISTROS_POR_ENVIO` (`@waitron/verifactu`), the real XSD limit
-   * AEAT enforces (`serialize.ts`'s `maxOccurs="1000"` guard, which throws error 4113/4114 above
+   * AEAT enforces (`@waitron/verifactu`'s `maxOccurs="1000"` guard, which throws error 4113/4114 above
    * it). EVERY production caller omits it — `apps/server`'s `boot.ts` builds `DrainDeps` without
    * this field — so the default reproduces AEAT's own 1000-row cap exactly; nothing about a real
    * submission changes.
@@ -162,7 +162,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   // plain-`number` input, and each out-of-range value fails a fiscal invariant silently rather than
   // loudly if it reaches the SQL: `0` claims nothing, leaving due work stuck `pendiente` forever;
   // a NEGATIVE value becomes Postgres `LIMIT -1`, i.e. NO limit, so a claim could pull >1000 rows
-  // and build an envío that `serializeEnvio` (serialize.ts:286) then rejects for exceeding the XSD
+  // and build an envío that `serializeEnvio` (`@waitron/verifactu`) then rejects for exceeding the XSD
   // `MAX_REGISTROS_POR_ENVIO` — a failure discovered only at submission, not at the input; a
   // non-integer is nonsense to `limit`. Capping the upper bound at `MAX_REGISTROS_POR_ENVIO` (not
   // merely `>= 1`) is what makes it impossible to inject a cap that could ever build an envío the

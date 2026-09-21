@@ -58,7 +58,7 @@ export const registrosFacturacion = table(
     tipoFactura: label("tipo_factura"),
     // The four AEAT rectificativa fields (migration 0010). All NULL on an ordinary alta and on an
     // anulación; set on a registro de alta whose TipoFactura is R1–R5. See the module-level jsonb
-    // note above: these are NOT huella inputs (huella.ts hashes 8 named fields, none of them),
+    // note above: these are NOT huella inputs (`@waitron/verifactu` hashes 8 named fields, none of them),
     // only ever re-serialised into XML, so jsonb's key-reordering is harmless — identical to
     // `desglose`/`sistema_informatico`. A field that WERE hashed would need `text`.
     //   - tipo_rectificativa: 'S' | 'I', mirroring RegistroAlta["TipoRectificativa"].
@@ -76,8 +76,8 @@ export const registrosFacturacion = table(
     // simplified F2 alta and on an anulación; set on any record that names a recipient — an F3
     // canje and an F1 full invoice alike.
     // `jsonb`, not `text`, for the same reason as the four rectificativa fields above and the
-    // module-level note: it is NOT a huella input (huella.ts hashes 8 named fields, the recipient is
-    // not among them — see `@waitron/verifactu`), only ever re-serialised into XML, so jsonb
+    // module-level note: it is NOT a huella input (`@waitron/verifactu` hashes 8 named fields, the recipient is
+    // not among them), only ever re-serialised into XML, so jsonb
     // key-reordering is harmless. NULLABLE with no backfill (pre-production).
     destinatarios: json("destinatarios"),
     descripcionOperacion: label("descripcion_operacion"),

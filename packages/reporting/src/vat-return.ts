@@ -35,7 +35,7 @@ export async function computeVatReturn(tx: Transaction, input: VatReturnInput): 
   validatePeriod(input.year, input.period);
 
   // The filed fecha de expedición = shift(issued_at, issued_offset_minutes) then read the civil date —
-  // byte-identical to verifactu/format.ts's formatDate (spec §4). `at time zone 'UTC'` yields the UTC
+  // byte-identical to `@waitron/verifactu`'s formatDate (spec §4). `at time zone 'UTC'` yields the UTC
   // wall-clock timestamp of the stored timestamptz; adding the snapshot offset reproduces the filed
   // local calendar date without re-deriving any zone.
   const filedDate = sql`((s.issued_at at time zone 'UTC') + make_interval(mins => s.issued_offset_minutes))::date`;

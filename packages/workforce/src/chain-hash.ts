@@ -81,7 +81,7 @@ export type ChainVerification =
 
 /**
  * Joins ordered name/value pairs into the canonical hash input — `name=value` pairs `&`-joined, no
- * trailing separator (the `joinCampos` shape from `huella.ts`). The key is never omitted; an absent
+ * trailing separator (the `joinCampos` shape from `@waitron/verifactu`). The key is never omitted; an absent
  * value contributes `Name=` and still consumes its separator, so the separator count is fixed.
  */
 function joinFields(fields: ReadonlyArray<readonly [string, string]>): string {
@@ -124,7 +124,7 @@ function canonicalString(input: EntryHashInput): string {
   ]);
 }
 
-/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from `huella.ts`. */
+/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from `@waitron/verifactu`. */
 export function computeEntryHash(input: EntryHashInput): string {
   return createHash("sha256").update(canonicalString(input), "utf8").digest("hex").toUpperCase();
 }

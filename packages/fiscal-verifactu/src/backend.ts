@@ -426,7 +426,7 @@ export class VerifactuBackend implements FiscalBackend {
       // this task does not make would be needed to carry a second, independent offset through.
       //
       // The fix instead cancels the shift algebraically, which needs no second offset at all:
-      // `shift(anchor, o).getTime() === anchor.getTime() + o * 60_000` (./format.ts), so anchoring
+      // `shift(anchor, o).getTime() === anchor.getTime() + o * 60_000` (`@waitron/verifactu`), so anchoring
       // at midnight UTC on the stored day MINUS that same product makes the shift land EXACTLY on
       // midnight of that day again, regardless of `o`'s sign or magnitude (within `formatDate`'s
       // own ±14:00 domain). This replaces "safe within ±12h" with "exact for any offset

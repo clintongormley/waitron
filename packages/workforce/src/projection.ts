@@ -336,7 +336,7 @@ export function dailyContractedTargetMinutes(
   // this helper is on the public barrel, so a caller reaching it another way must not silently get
   // Infinity/NaN — a 0, negative, or NaN denominator would corrupt the overtime target. `> 0` rejects
   // all three at once (NaN > 0 is false). A plain Error, not a registered code: this is a
-  // programmer-error invariant, never a till-facing domain condition (cf. verifactu/src/format.ts).
+  // programmer-error invariant, never a till-facing domain condition (cf. `@waitron/verifactu`).
   if (!(workingDaysPerWeek > 0)) {
     throw new Error(
       `dailyContractedTargetMinutes: workingDaysPerWeek must be positive, received ${workingDaysPerWeek}`,
