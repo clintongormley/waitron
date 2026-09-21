@@ -10,6 +10,13 @@
 
 **Spec:** the parent design `docs/superpowers/specs/2026-09-05-device-profile-design.md` §14 (deferred follow-ons); this plan is the design for the three.
 
+> **Dated pointer, 2026-09-21.** This plan tells its reader to key a translation on the NAME of the
+> violated constraint, through `@waitron/db`'s `pgErrorConstraint` / `uniqueViolationConstraint`.
+> Task P10 of the SQLite storage switch deleted both helpers: SQLite reports no constraint name, only
+> the table and the column, so a write path now asks `constraintTarget(error)` and compares with
+> `sameTarget`. The shipped code is `packages/db/src/constraint-target.ts`. Everything below is left
+> as it was written.
+
 ## Global Constraints
 
 - **Error codes name the domain concept, never renamed once shipped** (CLAUDE.md §3). New codes `device_profile.in_use` / `canvas.in_use` live in `packages/layouts/src/errors.ts` beside their families; no-param (`Record<string, never>`) — the fact of the reference is the whole message, never echo which device/profile references it (the param convention at `errors.ts:26-36`). Every throwing file does `import "./errors.js"`.

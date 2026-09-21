@@ -3741,8 +3741,11 @@ Write paths translate a database refusal into a domain error by matching the **n
 - Create: `packages/db/src/constraint-target.ts`
 - Create: `packages/db/src/constraint-target.test.ts`
 - Modify: `packages/db/src/unique-violation.ts`
-- Modify: the 23 non-test files that call the four helpers
+- Modify: the non-test files that call the four helpers
 - Modify: `packages/fiscal-verifactu/src/chain.ts` and `packages/workforce/src/chain.ts` (each carries its own copy of the cause-chain walk)
+- Modify: `packages/reporting/src/record-daily-close.ts` (`isBusinessDayConflict`) and `apps/server/src/tables.ts` (`isZoneFkViolation`)
+
+**Corrected in place, 2026-09-21, while running this task.** The two files on the line above were missing from this list, because the list was derived from a grep for the four `@waitron/db` helpers and neither of them calls one — each carries its own hand-written copy of the walk and compares `.constraint` itself. A grep for the helpers cannot see a caller that rolls its own. `grep -rn "constraint?: unknown" --include='*.ts' packages apps` is the one that finds them.
 
 **Interfaces:**
 
@@ -3754,6 +3757,8 @@ Write paths translate a database refusal into a domain error by matching the **n
 - [ ] **Step 1: Write the failing test**
 
 Create `packages/db/src/constraint-target.test.ts`. Drive it through a real refusal, not a hand-built error object — a fake error proves only that the parser reads the fake.
+
+**Corrected in place, 2026-09-21, while running this task.** The sketch below reaches for `useVenueDb`, which is PGlite alone. The fields this parser reads are populated by the DRIVER, and PGlite is not node-postgres, so a claim about what "PostgreSQL reports" taken on one of them is `CLAUDE.md` §1's measurement taken where both answers look alike. The shipped suite uses `describeEachTarget` and runs every parse case against both. The crafted-error cases it keeps are the two no database can produce: a cause chain deeper than the walk's bound, and a self-referential one.
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3814,7 +3819,9 @@ Expected: FAIL — `Cannot find module './constraint-target.js'`.
 
 - [ ] **Step 3: Write it against what PostgreSQL reports today**
 
-PostgreSQL gives the constraint name on `.constraint` and the columns in `.detail`, as `Key (email)=(a@x) already exists.` Parse the columns from `detail`; fall back to looking the constraint name up if `detail` is absent, which PGlite sometimes makes it.
+PostgreSQL gives the constraint name on `.constraint` and the columns in `.detail`, as `Key (email)=(a@x) already exists.` Parse the columns from `detail`.
+
+**Corrected in place, 2026-09-21, while running this task.** This step used to end "fall back to looking the constraint name up if `detail` is absent, which PGlite sometimes makes it". Not reproduced: run against PGlite 0.5.8 and a real PostgreSQL container through `describeEachTarget`, both reported `code`, `constraint`, `table` AND `detail`, on every class probed — single-column unique, multi-column unique, an expression index, a quoted identifier, a primary key, a foreign key, a RESTRICT and a CHECK. The shipped helper has no such fallback and needs none. Three shapes worth knowing, all from the same run and all pinned as cases in `packages/db/src/constraint-target.test.ts`: an index over an EXPRESSION reports the expression (`Key (lower(btrim(display_name)))=(ann) …`), a `23503` and a `23001` both report the REFERENCING table on `.table` — with the `23001` naming the REFERENCED table's key columns, so its two halves come from opposite ends of the foreign key — and a CHECK violation reports `Failing row contains (…)`, which names no key at all.
 
 ```ts
 /**
