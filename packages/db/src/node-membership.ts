@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import type { Database, Transaction } from "./client.js";
+import { now } from "./schema/columns.js";
 import { nodeMembership } from "./schema/node-membership.js";
 
 /**
@@ -12,9 +13,10 @@ import { nodeMembership } from "./schema/node-membership.js";
  * Returns the document WHOLE and unverified — the caller re-runs `verifyMembershipDocument` /
  * `acceptMembershipDocument` (@waitron/membership) against it; this layer is storage, not the fence.
  *
- * Uses `to_regclass` rather than catching an undefined-table error, exactly as `readMirrorConfig`/
- * `readDeploymentMode` do: a failed statement aborts the enclosing transaction in PostgreSQL, so
- * probing by failure would poison a transaction the caller may still need.
+ * The table's existence is read off `sqlite_master` rather than discovered by running the select and
+ * catching the refusal, exactly as `readMirrorConfig`/`readDeploymentMode` do — the reason for that
+ * shape, and for the catalogue rather than a pragma, is on `deploymentTableExists` in
+ * `./deployment.js`.
  *
  * Accepts a `Database` OR a `Transaction` (the explicit union `client.ts` blesses for a reader that
  * must work on whatever handle it is given): R3b's promote reads the held term through its OWN owner
@@ -23,19 +25,20 @@ import { nodeMembership } from "./schema/node-membership.js";
 export async function readNodeMembership(
   db: Database | Transaction,
 ): Promise<SignedMembershipDocument | null> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.node_membership') is not null as exists`,
+  const present = await db.execute<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name = ${"node_membership"}`,
   );
-  if (present.rows[0]?.exists !== true) return null;
+  if (present.rows.length === 0) return null;
 
-  const rows = await db.execute<{ document: SignedMembershipDocument }>(
-    sql`select document from node_membership where id = 1`,
-  );
-  const row = rows.rows[0];
-  if (row === undefined) return null;
-  // `document` is a jsonb column, so the driver hands it back already parsed. Structural validity is
-  // the caller's verify step, not ours.
-  return row.document;
+  // Through the table object, not raw SQL: `document` is stored as JSON TEXT, and it is the column's
+  // own read mapping (`json` in ./schema/columns.js) that parses it. A raw select returns the text
+  // unchanged, so the caller would be handed a string where the signature says a document.
+  // Structural validity is still the caller's verify step, not ours.
+  const [row] = await db
+    .select({ document: nodeMembership.document })
+    .from(nodeMembership)
+    .where(eq(nodeMembership.id, 1));
+  return row?.document ?? null;
 }
 
 /**
@@ -80,7 +83,7 @@ export async function writeNodeMembershipTx(
     .values({ id: 1, term, document })
     .onConflictDoUpdate({
       target: nodeMembership.id,
-      set: { term, document, updatedAt: sql`now()` },
+      set: { term, document, updatedAt: now() },
     });
 }
 
@@ -123,7 +126,7 @@ export async function persistNodeMembershipIfNewerTx(
     .values({ id: 1, term, document })
     .onConflictDoUpdate({
       target: nodeMembership.id,
-      set: { term, document, updatedAt: sql`now()` },
+      set: { term, document, updatedAt: now() },
       setWhere: sql`${nodeMembership.term} < ${term}`,
     })
     .returning({ id: nodeMembership.id });

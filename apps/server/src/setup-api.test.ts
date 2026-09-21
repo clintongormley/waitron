@@ -115,9 +115,6 @@ function makeVenueResult(): VenueResult {
   };
 }
 
-const DATABASE_URL = "postgres://waitron_app:pw@localhost/waitron";
-const MIGRATIONS_DATABASE_URL = "postgres://waitron_migrator:pw@localhost/waitron";
-
 /** A well-formed provision body with PLAINTEXT admin secrets (the shape the wizard POSTs). */
 function demoBody(): Record<string, unknown> {
   return {
@@ -231,8 +228,6 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     ring,
     persistTrading,
     requestRestart,
-    databaseUrl: DATABASE_URL,
-    migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
     runFiscalTest,
     assertFiscalReady,
     ...overrides,
@@ -467,8 +462,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       nodeId: NODE_ID,
       seriesId: SERIES_ID_0,
       locationId: LOCATION_ID,
-      databaseUrl: DATABASE_URL,
-      migrationsDatabaseUrl: MIGRATIONS_DATABASE_URL,
       environment: "preproduction",
       onboardingIntent: "demo",
     });
@@ -1214,8 +1207,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ["ring"],
     ["persistTrading"],
     ["requestRestart"],
-    ["databaseUrl"],
-    ["migrationsDatabaseUrl"],
   ] as const)("answers 503 setup.not_ready when %s alone is unwired", async (missing) => {
     const app = new Hono();
     const { deps } = makeDeps({ [missing]: undefined });

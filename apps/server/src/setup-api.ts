@@ -95,10 +95,6 @@ export interface SetupDeps {
   /** `writeTradingEnv(stateDir, …)` bound in boot: persists `<stateDir>/trading.env` so the next boot
    * enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
-  /** The app/target DB connection string persisted into `trading.env`'s `DATABASE_URL`. */
-  databaseUrl?: string;
-  /** The migrator DB connection string persisted into `trading.env`'s `WAITRON_MIGRATIONS_DATABASE_URL`. */
-  migrationsDatabaseUrl?: string;
   /** The restart trigger (default at boot: SIGTERM → graceful shutdown → supervisor restart). Called
    * on the next tick AFTER the 200 flushes, so the wizard sees success before the box goes down. */
   requestRestart?: () => void;
@@ -640,8 +636,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     const ring = deps.ring;
     const persistTrading = deps.persistTrading;
     const requestRestart = deps.requestRestart;
-    const databaseUrl = deps.databaseUrl;
-    const migrationsDatabaseUrl = deps.migrationsDatabaseUrl;
     if (
       provision === undefined ||
       (deps.operations !== undefined && recoverProvision === undefined) ||
@@ -651,9 +645,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       db === undefined ||
       ring === undefined ||
       persistTrading === undefined ||
-      requestRestart === undefined ||
-      databaseUrl === undefined ||
-      migrationsDatabaseUrl === undefined
+      requestRestart === undefined
     ) {
       return directError(c, log, "setup.not_ready", 503);
     }
@@ -754,8 +746,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             nodeId: result.nodeId,
             seriesId: result.seriesIds[0],
             locationId: result.locationId,
-            databaseUrl,
-            migrationsDatabaseUrl,
             environment,
             ...(deps.devMode === true ? { developmentMode: true } : {}),
             onboardingIntent: mode,

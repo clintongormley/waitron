@@ -19,8 +19,6 @@ const cfg: TradingConfig = {
   nodeId: "node-3",
   seriesId: "series-4",
   locationId: "location-5",
-  databaseUrl: "postgres://app@localhost/waitron",
-  migrationsDatabaseUrl: "postgres://mig@localhost/waitron",
   environment: "production",
   onboardingIntent: "live",
   accountKey: Buffer.alloc(32, 8).toString("base64"),
@@ -35,19 +33,18 @@ describe("writeTradingEnv", () => {
 
   it("writes the onboarding intent separately from the fiscal environment", async () => {
     const d = await newDir();
-    // Exact-equality on the whole file is the strongest check: it pins the eight names, their values,
-    // the order the supervisor sources them in, and the trailing LF, all at once. The five
-    // WAITRON_TILL_*_ID + DATABASE_URL(+migrations) + WAITRON_ENV are what the next boot reads to enter
-    // TRADING mode. No sync-pool env is written — a mirror takes in no rows at all today, so it needs
-    // no second connection of its own — and the exact-equality below pins that absence.
+    // Exact-equality on the whole file is the strongest check: it pins the names, their values, the
+    // order the supervisor sources them in, and the trailing LF, all at once. The four
+    // WAITRON_TILL_*_ID + WAITRON_ENV are what the next boot reads to enter TRADING mode. Nothing
+    // here names a database: the venue directory is derived from the state root the supervisor sets
+    // for both modes (`config.ts`'s `venueDir`), so it is not a value setup has to hand forward —
+    // and the exact-equality below pins that absence.
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
       "WAITRON_TILL_TILL_ID=till-2\n" +
         "WAITRON_TILL_NODE_ID=node-3\n" +
         "WAITRON_TILL_SERIES_ID=series-4\n" +
         "WAITRON_TILL_LOCATION_ID=location-5\n" +
-        "DATABASE_URL=postgres://app@localhost/waitron\n" +
-        "WAITRON_MIGRATIONS_DATABASE_URL=postgres://mig@localhost/waitron\n" +
         "WAITRON_ENV=production\n" +
         "WAITRON_ONBOARDING_INTENT=live\n" +
         "WAITRON_ACCOUNT_KEY=" +

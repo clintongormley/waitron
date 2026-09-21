@@ -66,10 +66,6 @@ export interface AdoptDeps {
    * itself. `runFinishAdoption` retries that step on every boot and cannot complete it today:
    * `finish-adoption.ts`'s `PendingAdoption` header is the one place that says why. */
   stateDir: string;
-  /** The app-pool connection string, written into `trading.env` as `DATABASE_URL`. */
-  databaseUrl: string;
-  /** The owner connection string, written into `trading.env` as `WAITRON_MIGRATIONS_DATABASE_URL`. */
-  migrationsDatabaseUrl: string;
   /** The NAME of the mirror's own database, echoed by `provisioning.foreign_tenant` when a bundle for
    * a DIFFERENT tenant is adopted into a database that already holds one. */
   database: string;
@@ -172,8 +168,6 @@ export async function adoptFromPrimary(
     // reserved series at R3b.
     nodeId: standby.nodeId,
     seriesId: designated.seriesId,
-    databaseUrl: deps.databaseUrl,
-    migrationsDatabaseUrl: deps.migrationsDatabaseUrl,
     environment: bundle.environment,
     accountKey: bundle.accountKey,
   });

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "./client.js";
+import { now } from "./schema/columns.js";
 import { mirrorConfig } from "./schema/mirror-config.js";
 
 /**
@@ -25,15 +26,16 @@ export interface MirrorConnection {
  * database. `null` covers BOTH "the table does not exist yet" and "the table is empty", and callers
  * must not tell them apart: both mean nothing has adopted this database as a mirror.
  *
- * Uses `to_regclass` rather than catching an undefined-table error, exactly as
- * `readDeploymentMode`/`readDeploymentEnvironment` do: in PostgreSQL a failed statement aborts the
- * enclosing transaction, so probing by failure would poison a transaction the caller may still need.
+ * The table's existence is read off `sqlite_master` rather than discovered by running the select and
+ * catching the refusal, exactly as `readDeploymentMode`/`readDeploymentEnvironment` do — the reason
+ * for that shape, and for the catalogue rather than a pragma, is on `deploymentTableExists` in
+ * `./deployment.js`.
  */
 export async function readMirrorConfig(db: Database): Promise<MirrorConnection | null> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.mirror_config') is not null as exists`,
+  const present = await db.execute<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name = ${"mirror_config"}`,
   );
-  if (present.rows[0]?.exists !== true) return null;
+  if (present.rows.length === 0) return null;
 
   const rows = await db.execute<{
     relay_url: string;
@@ -63,7 +65,8 @@ export async function readMirrorConfig(db: Database): Promise<MirrorConnection |
 export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Promise<void> {
   // Uses the Drizzle table object (not raw SQL) — the same split `deployment.ts` uses, where
   // `stampDeployment` writes via `db.insert(deployment)`. `now()` on the update refreshes
-  // `adopted_at` each re-adoption; the read side keeps its raw `to_regclass` probe.
+  // `adopted_at` each re-adoption; it is the generator the column's own default already uses
+  // (`./schema/columns.js`), because the clock is the server's here and not the engine's.
   await db
     .insert(mirrorConfig)
     .values({
@@ -80,7 +83,7 @@ export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Pr
         boxHostname: cfg.boxHostname,
         boxCaPem: cfg.boxCaPem,
         originNodeId: cfg.originNodeId,
-        adoptedAt: sql`now()`,
+        adoptedAt: now(),
       },
     });
 }

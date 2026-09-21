@@ -121,8 +121,6 @@ function deps(
     persistTrading: extra.persistTrading ?? (async () => {}),
     persistModuleConfig: extra.persistModuleConfig ?? (async () => {}),
     stateDir,
-    databaseUrl: "postgres://app@mirror/db",
-    migrationsDatabaseUrl: "postgres://owner@mirror/db",
     database: "mirror_db",
   };
 }

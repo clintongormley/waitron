@@ -2,7 +2,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SignedMembershipDocument } from "@waitron/membership";
-import { createPgliteDb } from "./client.js";
 import {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,
@@ -33,19 +32,23 @@ function doc(term: number): SignedMembershipDocument {
   };
 }
 
+// A database with NO migration set applied, so `node_membership` does not exist — the state of a
+// node before the set that creates the table has run. Its own `useVenueDb` rather than the migrated
+// one the accessors' round-trip uses: the helper applies its sets in `beforeAll`, so one handle
+// cannot be both migrated and unmigrated.
+describe("before any migration set has run", () => {
+  const bare = useVenueDb({ migrations: [] });
+
+  it("reads null when the table itself is absent", async () => {
+    expect(await readNodeMembership(bare.db)).toBeNull();
+  });
+});
+
 describe("node_membership accessors", () => {
   const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before any write (a node that has never adopted a document)", async () => {
     expect(await readNodeMembership(pg.db)).toBeNull();
-  });
-
-  it("reads null when the table itself is absent (a pre-migration handle)", async () => {
-    // A bare, unmigrated PGlite: node_membership does not exist yet, so the `to_regclass` probe must
-    // answer "absent" rather than throw — the exact state of a node that never ran 0096.
-    const bare = await createPgliteDb();
-    expect(await readNodeMembership(bare)).toBeNull();
-    await bare.close();
   });
 
   it("upserts the singleton and reads back the whole document", async () => {
@@ -66,7 +69,7 @@ describe("node_membership accessors", () => {
     await writeNodeMembership(pg.db, doc(1));
     await writeNodeMembership(pg.db, doc(2));
     const count = await pg.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from node_membership`,
+      sql`select count(*) as n from node_membership`,
     );
     expect(count.rows[0]?.n).toBe(1);
     expect((await readNodeMembership(pg.db))?.body.term).toBe(2);

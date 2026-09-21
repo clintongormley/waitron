@@ -14,6 +14,7 @@ import {
   readMembershipTrustSet,
   readNodeMembership,
   readStandardSeriesId,
+  withTransaction,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
@@ -48,10 +49,8 @@ const RING: KeyRing = loadKeyRing({
 });
 
 // PGlite is sufficient for the promote LOGIC (fence, idempotency, mirror-guard, the holder flip,
-// and now the mint): none of these has a privilege / concurrency dependency, and the reads/writes
-// all succeed as the PGlite superuser (CLAUDE.md §4 — pick the lighter target when the heavier
-// one's justification does not apply). `appDb` and `ownerDb` are the same handle here; the
-// owner-vs-app distinction is exercised for real only against Postgres. Setup now also runs
+// and now the mint): none of these has a concurrency dependency (CLAUDE.md §4 — pick the lighter
+// target when the heavier one's justification does not apply). Setup now also runs
 // CREDENTIALS_MIGRATIONS and establishes a node identity so the mint has a key to sign with — the
 // fence/mirror/already-primary paths return before any mint, so the established identity is
 // harmless to them.
@@ -75,7 +74,7 @@ async function localSecondary(): Promise<{
   return {
     db,
     nodeId,
-    deps: (log) => ({ appDb: db, ownerDb: db, holders, log, ring: RING, nodeId }),
+    deps: (log) => ({ db, holders, log, ring: RING, nodeId }),
   };
 }
 
@@ -298,7 +297,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(
         // The mirror guard returns before any identity read, so placeholder ring/ids are harmless here.
-        { appDb: db, ownerDb: db, holders, log: noopLog, ring: RING, nodeId: "n" },
+        { db, holders, log: noopLog, ring: RING, nodeId: "n" },
         { oldNodeNeutralised: true },
       ),
     );
@@ -385,8 +384,7 @@ async function mirror(): Promise<{
     standardSeriesId,
     endorsement,
     deps: (log, persistTradingEnv = async () => {}) => ({
-      appDb: db,
-      ownerDb: db,
+      db,
       holders,
       log,
       ring: RING,
@@ -511,7 +509,7 @@ describe("promoteMirrorToPrimary", () => {
     await writeNodeMembership(db, docAtTerm(5, nodeId));
 
     const err = await captureError(() =>
-      db.transaction((tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
+      withTransaction(db, (tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
     );
     expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
     // The whole PONR rolled back: the held term is untouched and the node is still a mirror — the flip

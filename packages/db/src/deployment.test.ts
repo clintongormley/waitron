@@ -1,8 +1,8 @@
 // Real PostgreSQL: checks app_user SELECT and withheld write privileges on deployment.
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { createPgliteDb, type Database } from "./client.js";
+import type { Database } from "./client.js";
 import {
   readDeploymentAxes,
   readDeploymentEnvironment,
@@ -16,29 +16,31 @@ import {
 } from "./deployment.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
 import { describeEachTarget } from "./testing/harness.js";
+import { useVenueDb } from "./testing/venue-db.js";
 
-// Deliberately outside describeEachTarget: every target's create() (testing/harness.ts)
-// migrates before handing back a database, so a suite built on it can never observe a
-// database the table-creating migration has not reached yet — the exact state of a
-// first-ever boot, and the state Task 3's boot-time guard must handle without throwing.
-// migrate.test.ts's own top-level "fails loudly when a module folder is migrated before
-// the core folder" test uses the same bare createPgliteDb() (no target, no
-// runMigrations(..., CORE_MIGRATIONS)) for the identical reason: a pre-migration handle
-// is a fixture describeEachTarget's contract cannot produce.
-it("reads as unstamped when the table has not been created yet", async () => {
-  const bare = await createPgliteDb();
-  expect(await readDeploymentEnvironment(bare)).toBeNull();
-  // Same pre-migration handle: readDeploymentMode's `to_regclass` probe must see the table as
-  // absent and answer "primary" (an unstamped database is a primary) rather than throw, the exact
-  // state of a first-ever boot before the table-creating migration has run.
-  expect(await readDeploymentMode(bare)).toBe("primary");
-  // Same pre-migration handle: readSingletonRole must see the table as absent and answer "primary"
-  // (an unstamped database is a sole primary) rather than throw.
-  expect(await readSingletonRole(bare)).toBe("primary");
-  // readDeploymentAxes answers for both axes at once, so an unstamped database must read primary on
-  // both rather than throwing halfway.
-  expect(await readDeploymentAxes(bare)).toEqual({ mode: "primary", singletonRole: "primary" });
-  await bare.close();
+// A database with NO migration set applied, so `deployment` does not exist — the state of a
+// first-ever boot, before the set that creates the table has run, and the state the boot-time
+// readers must answer without throwing. It needs its own handle: `useVenueDb` applies the sets it
+// is given in `beforeAll`, and every other fixture in this file hands back an already-migrated
+// database, so no suite built on one of those can observe this state.
+describe("before any migration set has run", () => {
+  const bare = useVenueDb({ migrations: [] });
+
+  it("reads as unstamped when the table has not been created yet", async () => {
+    expect(await readDeploymentEnvironment(bare.db)).toBeNull();
+    // Same pre-migration handle: readDeploymentMode must see the table as absent and answer
+    // "primary" (an unstamped database is a primary) rather than throw.
+    expect(await readDeploymentMode(bare.db)).toBe("primary");
+    // Same pre-migration handle: readSingletonRole must see the table as absent and answer
+    // "primary" (an unstamped database is a sole primary) rather than throw.
+    expect(await readSingletonRole(bare.db)).toBe("primary");
+    // readDeploymentAxes answers for both axes at once, so an unstamped database must read primary
+    // on both rather than throwing halfway.
+    expect(await readDeploymentAxes(bare.db)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+  });
 });
 
 describeEachTarget("the deployment stamp", (target) => {

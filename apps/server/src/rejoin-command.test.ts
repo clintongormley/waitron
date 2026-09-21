@@ -28,12 +28,14 @@ const base: Record<string, string | undefined> = {
   WAITRON_TILL_LOCATION_ID: LOCATION,
 };
 
-// A minimal fake `Database`: `readNodeMembership` runs a `to_regclass` existence probe then a value
-// read. By default the probe returns `{ exists: false }` → no held document (the common test path).
-// `close` is a spy so pool-close can be asserted.
+// A minimal fake `Database`: `readNodeMembership` asks the catalogue whether `node_membership`
+// exists and only then reads the value. Returning NO rows is the catalogue's answer for a table that
+// is not there, which is this suite's common path — no held document — and it is also why the fake
+// needs no query builder: the value read is never reached. `close` is a spy so the close can be
+// asserted.
 function fakeDb(execute?: Database["execute"]): Database {
   return {
-    execute: execute ?? (vi.fn(async () => ({ rows: [{ exists: false }] })) as never),
+    execute: execute ?? (vi.fn(async () => ({ rows: [] })) as never),
     close: vi.fn(async () => {}),
   } as unknown as Database;
 }
