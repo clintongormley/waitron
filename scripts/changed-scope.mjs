@@ -308,6 +308,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/shared",
   "@waitron/server-kit",
   "@waitron/dashboard-modules",
+  "@waitron/store",
 ];
 
 export const LIGHT_B_PACKAGES = [
