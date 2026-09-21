@@ -4623,6 +4623,72 @@ table or states how the drain crosses the two files. Check one thing first, beca
 the question outright — SQLite may not allow a trigger body to write a table in another attached
 database. Nobody has verified that either way; it is a question, not a fact.
 
+**Task P6 — a quantity counts thousandths and a rate counts basis points — LANDED as #479 on
+2026-09-21** (main `280d7c88`). Seven more columns left `numeric` for whole numbers, but at two
+scales that are not money's: `working_order_lines.quantity` and `sale_lines.quantity` count whole
+thousandths in `bigint`, and five rate columns — `vat_rate` twice,
+`purchase_invoices.deductible_proportion`, `purchase_invoice_vat.rate` and
+`convenio_config.night_premium_pct` — count whole basis points in `integer`. The crossing is at the
+row, as P5's is, in `packages/shared/src/scales.ts` beside `cents.ts`. Nothing above the row
+changed: the wire still carries a three-place quantity and a two-place rate, and the fiscal
+literals are byte-identical (the huella test from P5 re-run, twice, once by the Codex seat).
+
+**The one fact this task had to get right, and got wrong five times first.** Every version of the
+argument for separate scales said that reading 0.005 kg at the money scale "leaves nothing". It does
+not: `decimalToCents(decimal("0.005"))` returns **1**, because the money conversion rounds that
+third place rather than dropping it. So a blanket conversion would refuse nothing, empty nothing,
+and return a number five times too small — the quieter failure, not the louder one. The sentence
+was in `CLAUDE.md`, `conventions-data.md`, `scales.ts`, `columns.ts` and the plan, and all five now
+agree. Found by the Codex run-it seat, by running it.
+
+**What the migration does to a development database, which P5's entry said and this one had to be
+made to say.** There is no scaling `USING` expression and there may not be one (§no
+backwards-compatibility code before production). Measured on PostgreSQL 18.6 against populated
+old-type tables: **any quantity below half a unit rounds to 0 and trips `quantity <> 0` with a
+`23514`** — on both `working_order_lines_quantity_ck` and `sale_lines_quantity_ck`, so 320 grams is
+enough — and the whole `ALTER` then fails, leaving the database un-migrated. Without such a row it
+succeeds quietly and a 1.500 quantity reads back as 0.002 units, a 21.00 rate as 0.21%, both inside
+the rebuilt checks. `dev:setup`'s own seed writes only whole quantities; `demo:till`,
+`demo:park-retrieve` and `demo:catalogue` write the small ones. Either way,
+`wa-wt reset demo <name>`.
+
+**A rate's CHECK constraint does not follow its column, and a quantity's does.** Four checks
+compared a rate against 100 and were re-derived against 10000; changing their SQL text made drizzle
+generate the DROP/ADD. The two quantity checks read the same in either scale, so drizzle generated
+nothing and PostgreSQL kept the cast form — P5's case exactly, rebuilt by hand in
+`0048_scaled_integers_sql.sql`. `schema-conformance.test.ts` named both, for the CORE set only.
+
+**Three ways a raw-SQL write of these columns can be wrong, and only one is loud** — now in
+[conventions-data.md](developers/conventions-data.md): a quoted fractional literal fails with
+`22P02`; an unquoted one takes PostgreSQL's assignment cast and stores a hundredfold error with
+nothing red; and a whole-number text means a thousandth of what the author meant. The second was
+found in a test that PASSED before the fix, because its reader was unconverted too and the two
+errors cancelled.
+
+**The lesson that outlives the task: each correction round needs a reader that reads ONLY that
+round's corrections.** Three rounds ran on this branch and each one created new false claims while
+fixing the last. Round 1 corrected four copies of the 0.005 sentence and left the copy in
+`CLAUDE.md` — which this branch had written. Round 2 then asserted that `0.005` was the only loud
+migration case (any sub-half quantity is), that 10^14 is above `Number.MAX_SAFE_INTEGER` (it is
+about ninety times below it, which reverses the entry's own conclusion), and left a heading
+asserting a likelihood its corrected body denied. Round 3, reading round 2 alone, caught those and
+three more — including "a rate literal renders back to the same string after a trip through a
+double", which is false for a tenth of all rate values and for every one this column holds
+(`25.00` becomes `25`, `12.50` becomes `12.5`); the example the sentence chose, `999.99`, is in the
+90% that DO round-trip, which is CLAUDE.md §1's class-representative rule exactly.
+
+**Left open by #479, each with its next action.** Both are in _Track C — smaller items_ above, in
+full: a blank amount posted at `/management-api/purchase-invoices` is stored as a zero on the
+deductible side of modelo 303 (next action: `decimal(...)` in place of each `as Decimal` cast in
+`purchasing-api.ts`, failing test first; `catalogue-api.ts`'s `unitPrice` takes the same posture),
+and `bench/pglite-throughput` calls itself a faithful shape match while three landed storage
+decisions behind. Two more are in _B9_: the english-only guard blaming the wrong lines when a
+comment holds a glob path, and the absence of a schema-conformance guard for any MODULE migration
+set. Not taken, with the reason recorded: merging the private codecs of `cents.ts` and `scales.ts`
+(it embeds a decision — the digit-count bound is tighter than `Number.isSafeInteger`, so the merge
+would tighten money's raw bound), a shared constant for the six `10000` literals (four are SQL
+check constraints), and unifying the two optional-conversion shapes in `purchasing/operations.ts`.
+
 **Task P5 — money becomes whole cents — LANDED as #475 on 2026-09-21** (main `16f24070`). Every
 money column stopped being a two-place decimal and became an eight-byte whole number of cents. The
 boundary is the database and only the database: a read turns the stored count into the exact decimal
