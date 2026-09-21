@@ -267,7 +267,7 @@ package in this repo; `@waitron/printing` depends on IT, never the reverse. An e
 block is not the guard — `main` points at TS source with no build step, so
 `../../db/src/index.js` resolves and runs while the manifest still reads dependency-free (measured:
 with the zone removed that import lints clean). The guard is the `import-x/no-restricted-paths` zone
-in `eslint.config.js`, alongside `packages/verifactu`'s and `packages/shared`'s. Design:
+in `eslint.config.js`, alongside `packages/shared`'s. Design:
 `docs/superpowers/specs/2026-09-08-print-agent-process-design.md` §2.1.
 
 ## A container that must reach a hot-plugged USB printer mounts `/dev:/dev:ro`, not `/dev/usb`

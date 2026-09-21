@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import { createFakeAeat } from "@waitron/verifactu/testing";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { AckState } from "@waitron/fiscal";

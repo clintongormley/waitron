@@ -29,55 +29,6 @@ export default tseslint.config(
   wcPlugin.configs["flat/recommended"],
 
   {
-    // packages/verifactu (docs/superpowers/specs/2026-07-18-pos-architecture-design.md §8) does
-    // not exist yet, but the constraint it will carry is written down there verbatim:
-    //
-    //   "Zero dependencies on any other package in this repo. Enforced by lint rule, not
-    //   discipline. If it imports packages/core, it is no longer a library."
-    //
-    // This zone fires the moment any file under packages/verifactu imports anything that
-    // resolves outside packages/verifactu — a workspace package via its `@waitron/*` specifier
-    // or a relative path that escapes the package directory. Imports that resolve to a sibling
-    // *node_modules* dependency (e.g. `lit`) are unaffected: only paths that resolve inside this
-    // repo's own `packages/*` or `apps/*` trees are restricted.
-    files: ["packages/verifactu/**/*.ts"],
-    plugins: { "import-x": importX },
-    settings: {
-      "import-x/resolver": { typescript: true },
-    },
-    rules: {
-      "import-x/no-restricted-paths": [
-        "error",
-        {
-          // Resolved from this config file's own location, not `process.cwd()` — the rule must
-          // fire the same way whether ESLint is invoked from the repo root or from inside a
-          // package (e.g. a future `pnpm --filter @waitron/verifactu lint`).
-          basePath: import.meta.dirname,
-          zones: [
-            {
-              target: "./packages/verifactu/**/*",
-              from: ["./packages/**", "./apps/**"],
-              // Rooted at this config's own directory rather than a leading `**/` — `minimatch`
-              // globstars refuse to cross a dot-prefixed path segment (e.g. a checkout under
-              // `.claude/worktrees/...`), which silently broke a `**/packages/verifactu/**`
-              // exception under exactly that kind of path and let same-package relative imports
-              // false-positive as boundary violations. An absolute, literal-prefixed glob has no
-              // such crossing to do.
-              except: [`${import.meta.dirname}/packages/verifactu/**`],
-              message:
-                "packages/verifactu is a standalone, publishable library and must have zero " +
-                "dependencies on any other package in this repo (see " +
-                "docs/superpowers/specs/2026-07-18-pos-architecture-design.md §8). If it needs " +
-                "something from another package, that thing belongs in packages/verifactu " +
-                "itself or verifactu should not depend on it.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-
-  {
     // packages/shared is the leaf of the dependency graph: every other package depends on it,
     // so anything it depends on becomes a transitive dependency of the entire repo. A missing
     // `dependencies` block in its package.json does NOT enforce this — `main` points at TS
@@ -100,8 +51,8 @@ export default tseslint.config(
               from: ["./packages/**", "./apps/**"],
               // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars
               // refuse to cross a dot-prefixed path segment (e.g. a checkout under
-              // `.claude/worktrees/...`), which silently broke the equivalent exception on the
-              // verifactu zone and let same-package relative imports false-positive as
+              // `.claude/worktrees/...`), which silently broke the equivalent exception on an
+              // earlier zone and let same-package relative imports false-positive as
               // boundary violations.
               except: [`${import.meta.dirname}/packages/shared/**`],
               message:
@@ -140,7 +91,7 @@ export default tseslint.config(
               from: ["./packages/**", "./apps/**"],
               // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars refuse to
               // cross a dot-prefixed path segment (e.g. a checkout under `.claude/worktrees/...`),
-              // which silently broke the equivalent exception on the verifactu zone and let
+              // which silently broke the equivalent exception on an earlier zone and let
               // same-package relative imports false-positive as boundary violations.
               except: [`${import.meta.dirname}/packages/print-agent/**`],
               message:
@@ -179,11 +130,28 @@ export default tseslint.config(
           zones: [
             {
               target: ["./packages/db/**/*", "./packages/core/**/*", "./packages/fiscal/**/*"],
-              from: ["./packages/verifactu/**", "./packages/fiscal-verifactu/**"],
+              from: ["./packages/fiscal-verifactu/**"],
               message:
                 "The generic layer must not depend on a fiscal module (spec §2). Only the " +
                 "FiscalBackend interface crosses that boundary — if this needs something " +
                 "from the Veri*Factu module, it belongs behind the interface.",
+            },
+          ],
+        },
+      ],
+      // @waitron/verifactu is now an external package, so no-restricted-paths (which matches
+      // in-repo paths) can no longer fence it out; a name-based rule does. Same boundary as the
+      // zone above: the generic layer must not depend on the Veri*Factu regime.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waitron/verifactu", "@waitron/verifactu/*"],
+              message:
+                "The generic layer must not depend on the Veri*Factu regime (spec §2). Only the " +
+                "FiscalBackend interface crosses that boundary — if this needs something from the " +
+                "Veri*Factu module, it belongs behind the interface.",
             },
           ],
         },
@@ -224,13 +192,31 @@ export default tseslint.config(
                 "./packages/payments/**",
                 "./packages/fiscal/**",
                 "./packages/fiscal-verifactu/**",
-                "./packages/verifactu/**",
               ],
               message:
                 "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
                 "package (see docs/superpowers/specs/" +
                 "2026-07-25-recurring-work-scheduler-design.md §3). Duties are injected and " +
                 "typed structurally — if the runner needs something from payments or fiscal, it " +
+                "belongs on the PeriodDuty seam, not in an import.",
+            },
+          ],
+        },
+      ],
+      // @waitron/verifactu is now an external package, so no-restricted-paths can no longer fence
+      // it out; a name-based rule does. Same boundary: the duty-neutral runner must not import a
+      // duty's own package.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waitron/verifactu", "@waitron/verifactu/*"],
+              message:
+                "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
+                "package (see docs/superpowers/specs/" +
+                "2026-07-25-recurring-work-scheduler-design.md §3). Duties are injected and " +
+                "typed structurally — if the runner needs something from the Veri*Factu duty, it " +
                 "belongs on the PeriodDuty seam, not in an import.",
             },
           ],
@@ -271,7 +257,6 @@ export default tseslint.config(
                 "./packages/payments-sumup/**",
                 "./packages/fiscal/**",
                 "./packages/fiscal-verifactu/**",
-                "./packages/verifactu/**",
                 "./packages/core/**",
               ],
               message:
@@ -280,6 +265,25 @@ export default tseslint.config(
                 "2026-07-26-tenant-credential-vault-design.md §3). A purpose's field list is " +
                 "string DATA, never an import — if this needs something from payments or fiscal, " +
                 "it belongs behind the purpose registry, not in an import.",
+            },
+          ],
+        },
+      ],
+      // @waitron/verifactu is now an external package, so no-restricted-paths can no longer fence
+      // it out; a name-based rule does. Same boundary: the credentials leaf must stay free of any
+      // regime or provider knowledge.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waitron/verifactu", "@waitron/verifactu/*"],
+              message:
+                "packages/credentials must stay a leaf with zero knowledge of any provider or " +
+                "regime package (see docs/superpowers/specs/" +
+                "2026-07-26-tenant-credential-vault-design.md §3). A purpose's field list is " +
+                "string DATA, never an import — if this needs something from the Veri*Factu " +
+                "regime, it belongs behind the purpose registry, not in an import.",
             },
           ],
         },

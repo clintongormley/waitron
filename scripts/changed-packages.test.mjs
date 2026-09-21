@@ -308,7 +308,7 @@ describe("scopeForPaths", () => {
     expect(classify(docsOnly).code).toBe(false);
     expect(scopeForPaths(docsOnly, workspace()).kind).toBe("documentation");
 
-    const code = [...docsOnly, "packages/verifactu/schemas/README.md"];
+    const code = [...docsOnly, "packages/provisioning/README.md"];
     expect(classify(code).code).toBe(true);
     expect(scopeForPaths(code, workspace()).kind).toBe("global");
   });

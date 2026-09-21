@@ -143,7 +143,7 @@ export type NodeDb = {
 };
 
 /**
- * The model's hash. It is NOT `computeHuella` (packages/verifactu/src/huella.ts:99), which hashes a
+ * The model's hash. It is NOT `computeHuella` (from `@waitron/verifactu`), which hashes a
  * field-ordered AEAT record, not an opaque string. Nothing computed here is evidence about the real
  * chain: what the scenarios use it for is that a chain link is checkable, not that it is AEAT's.
  */

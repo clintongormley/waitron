@@ -7,8 +7,8 @@ export const PACKAGES_ROOT = join(import.meta.dirname, "..", "..");
 /**
  * English throughout — identifiers, table/column names AND comments alike (spec §2). A package
  * neither listed here nor owning a module's declared `vocabulary` (`@waitron/module`'s
- * `vocabularyOwners`, read by the root suite) is never scanned — `packages/verifactu` (the AEAT
- * wire library, no descriptor of its own) and `reporting` (the Spanish modelo-303 form) among them.
+ * `vocabularyOwners`, read by the root suite) is never scanned — `reporting` (the Spanish
+ * modelo-303 form) among them.
  * `apps/*` is out of scope by the composition-root decision recorded below.
  */
 export const GENERIC_PACKAGES = [

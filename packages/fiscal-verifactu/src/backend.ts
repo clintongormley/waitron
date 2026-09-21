@@ -420,13 +420,13 @@ export class VerifactuBackend implements FiscalBackend {
       //
       // Carrying the ORIGINAL alta's own stored `offset_minutos` through instead (Task 16's own
       // suggested fix) is not available here: `AnulacionInput.offsetMinutes`
-      // (`RecordInputBase`, packages/verifactu/src/types.ts) is a SINGLE field shared with
+      // (`RecordInputBase` in `@waitron/verifactu`) is a SINGLE field shared with
       // `FechaHoraHusoGenRegistro`'s own generation instant a few lines down, and it must be
-      // `now.offsetMinutes` for THAT field to be correct — a `packages/verifactu` type change
+      // `now.offsetMinutes` for THAT field to be correct — a `@waitron/verifactu` type change
       // this task does not make would be needed to carry a second, independent offset through.
       //
       // The fix instead cancels the shift algebraically, which needs no second offset at all:
-      // `shift(anchor, o).getTime() === anchor.getTime() + o * 60_000` (./format.ts), so anchoring
+      // `shift(anchor, o).getTime() === anchor.getTime() + o * 60_000` (`@waitron/verifactu`), so anchoring
       // at midnight UTC on the stored day MINUS that same product makes the shift land EXACTLY on
       // midnight of that day again, regardless of `o`'s sign or magnitude (within `formatDate`'s
       // own ±14:00 domain). This replaces "safe within ±12h" with "exact for any offset
@@ -779,8 +779,8 @@ export class VerifactuBackend implements FiscalBackend {
    * `fiscal.foreign_recipient_unsupported`, a DELIBERATE refusal rather than a dead branch, because
    * `registros_facturacion` is append-only and hash-chained (CLAUDE.md §5) — a guessed IDType would
    * be filed and could never be unfiled. The vocabulary itself is not restated here: the XSD
-   * enumerates it (`PersonaFisicaJuridicaIDTypeType`,
-   * `packages/verifactu/schemas/SuministroInformacion.xsd:894-927`) and which values AEAT admits,
+   * enumerates it (`PersonaFisicaJuridicaIDTypeType` in `@waitron/verifactu`'s AEAT XSD,
+   * `SuministroInformacion.xsd`) and which values AEAT admits,
    * and when it demands a specific one, is an open question with the asesor
    * (`docs/compliance/asesor-questions.md`, Q17(a), which quotes it in the source's own words).
    *

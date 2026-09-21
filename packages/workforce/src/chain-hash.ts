@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
  * on PGlite through the append path), never against a real-role Postgres (CLAUDE.md §4). The DB side
  * — the row-locked head, the retry — lives in ./chain.ts.
  *
- * Mirrors `packages/verifactu/src/huella.ts` (the proven fiscal precedent): an ORDERED array of
+ * Mirrors `@waitron/verifactu`'s fiscal hash chain (the proven precedent): an ORDERED array of
  * name/value pairs joined into a canonical string, SHA-256, uppercase hex. English field names
  * throughout — this chain is generic (`entry_hash`/`prev_entry_hash`/`sequence_no`), unlike the
  * fiscal chain whose vocabulary is a regime concept.
@@ -81,7 +81,7 @@ export type ChainVerification =
 
 /**
  * Joins ordered name/value pairs into the canonical hash input — `name=value` pairs `&`-joined, no
- * trailing separator (the `joinCampos` shape from `huella.ts`). The key is never omitted; an absent
+ * trailing separator (the `joinCampos` shape from `@waitron/verifactu`). The key is never omitted; an absent
  * value contributes `Name=` and still consumes its separator, so the separator count is fixed.
  */
 function joinFields(fields: ReadonlyArray<readonly [string, string]>): string {
@@ -124,7 +124,7 @@ function canonicalString(input: EntryHashInput): string {
   ]);
 }
 
-/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from `huella.ts`. */
+/** SHA-256 over the UTF-8 canonical string, uppercase hex — the `computeHuella` shape from `@waitron/verifactu`. */
 export function computeEntryHash(input: EntryHashInput): string {
   return createHash("sha256").update(canonicalString(input), "utf8").digest("hex").toUpperCase();
 }

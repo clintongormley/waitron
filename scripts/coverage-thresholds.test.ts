@@ -40,7 +40,6 @@ const HIGH_BAR = { statements: 98, lines: 98, functions: 98, branches: 95 };
 const FLOOR = { statements: 90, lines: 90, functions: 85, branches: 85 };
 
 const HIGH_BAR_PACKAGES = [
-  "@waitron/verifactu",
   "@waitron/fiscal-verifactu",
   "@waitron/core",
   "@waitron/db",

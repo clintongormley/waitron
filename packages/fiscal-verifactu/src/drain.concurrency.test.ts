@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import { createFakeAeat } from "@waitron/verifactu/testing";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";

@@ -53,7 +53,7 @@ export interface SeededDrain {
   legalName: string;
   /** `registros_facturacion.id` per seeded row — the RefExterna `drain` is expected to stamp. */
   registroIds: string[];
-  /** `keyOf(record)` per row (`@waitron/verifactu/src/testing/fake-aeat.js`), for `aeat.reject`/
+  /** `keyOf(record)` per row (from `@waitron/verifactu`'s fake AEAT), for `aeat.reject`/
    * `aeat.dropRegistroDuplicadoDetail` in Tasks 9-10. */
   facturaKeys: string[];
   clock: TrustedClock;
@@ -117,7 +117,7 @@ export async function insertPendingAlta(
   // row), a row seeded here is fed to the REAL `serializeEnvio` via `client.submit` — `drain.ts`
   // rebuilds it with `fromRegistroRow` and hands it to AEAT. `tipo_factura`/`descripcion_operacion`/
   // `desglose`/`cuota_total`/`importe_total` are therefore populated with a genuine, well-formed
-  // "F2" line, not left NULL: `registroAlta` (packages/verifactu/src/xml/serialize.ts) reads
+  // "F2" line, not left NULL: `registroAlta` (in `@waitron/verifactu`) reads
   // `DescripcionOperacion`/`TipoFactura` as required strings and `.map`s over `Desglose`
   // unconditionally, so a NULL here throws inside `escapeXml`/crashes on `null.map` — confirmed
   // live while implementing this task.

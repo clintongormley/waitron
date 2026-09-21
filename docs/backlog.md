@@ -1929,7 +1929,7 @@ What it left open:
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
-`packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
+`@waitron/verifactu`'s validation holds AEAT's rules and no production file called it, confirmed by
 experiment (a series code of `Serie A` reached `registros_facturacion` as `Serie A/1`, which AEAT
 would reject). What landed: a record AEAT could not accept is refused at the chain seam, before
 anything is written; one whose totals disagree with its own VAT lines is written, filed and flagged as
@@ -1987,8 +1987,8 @@ treatment as above — one pass, not a sweep.
 
 `recordSale` now names a Spanish recipient on a full invoice. A non-Spanish one is refused by name
 (`fiscal.foreign_recipient_unsupported`), deliberately: AEAT's `IDOtro` needs an `IDType` — NIF-IVA,
-passport, residence certificate and so on, enumerated at
-`packages/verifactu/schemas/SuministroInformacion.xsd:894-927` — and choosing wrongly files a record
+passport, residence certificate and so on, enumerated in
+`@waitron/verifactu`'s AEAT XSD (`SuministroInformacion.xsd`) — and choosing wrongly files a record
 into an append-only table that can never be unfiled. Whoever wires up business-customer sales makes
 that call. No HTTP route supplies a counterparty today — core's `recordSale` hardcodes `null` and
 nothing calls `recordSubstitution` from a route — but `packages/core`'s substitution path types it as
@@ -2012,7 +2012,7 @@ rule the issuer's does (`sf:NIFType` is the identical XSD type). Regression at t
 Each was judged and deliberately left; none blocks the merge.
 
 - **The audited AEAT package's own shared record fixture is still a full invoice naming no
-  recipient.** `packages/verifactu/test/fixtures.ts`'s `ALTA_INPUT` is the exact shape A1 corrected
+  recipient.** `@waitron/verifactu`'s test fixtures (`ALTA_INPUT`) are the exact shape A1 corrected
   everywhere else. Not free to fix: it reproduces AEAT's own vector-1 hash, and the exact-XML
   expectations in `xml/serialize.test.ts` would all move. Whoever touches it does so with those two
   facts in hand.
@@ -3204,8 +3204,9 @@ image constraints under *Detail → Box image*.
   receipt is a pointer in [testing-guide.md](developers/testing-guide.md). The deletion changes
   nothing about vitest itself — `projects` and `--shard` are as incompatible as they were.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
-  together with N at or below the file count; `mutation-verifactu` is the next critical-path
-  candidate; rebalance `LIGHT_A/B_PACKAGES` when one light shard dominates.
+  together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
+  dominates. (`mutation-verifactu` used to be named here as the next critical-path candidate; that
+  job was removed when `@waitron/verifactu` was extracted to its own repository.)
 - **Dependency loop removed — LANDED #348 (2026-09-13).** `pnpm install` no longer warns about
   cyclic workspace dependencies; `scripts/workspace-cycles.test.ts` fails if a loop returns. Of the
   four things the review raised and that PR did not take, two are now done on
@@ -3451,19 +3452,21 @@ deliberately did not settle.
   carries `"thresholds": { "high": 95, "low": 90, "break": 90 }`. The 9.6.1 side of the ui
   comparison the bump wanted is still unmeasured and would have to come from an earlier weekly run's
   artifact.
-- **`packages/verifactu` and `packages/db` mutate their `src/testing/` tree, against the practice the
+- **`@waitron/verifactu` and `packages/db` mutate their `src/testing/` tree, against the practice the
   sales-spine plan set.** `docs/superpowers/plans/2026-07-20-sales-spine-data-model.md` records the
   reason under `packages/fiscal`: a surviving mutant in a fake proves only that the fake has
   behaviour nobody asserted, which is a property of fakes, not a defect. That plan writes the
   `"!src/testing/**"` exclusion into the `packages/db` config it specifies, and states the rule again
   for `packages/fiscal-verifactu`; the shipped db config carries no such exclusion. It never
-  addresses `packages/verifactu`'s own config, which predates it, so the case for excluding the fake
+  addresses `@waitron/verifactu`'s own config, which predates it, so the case for excluding the fake
   there is the plan's stated reason rather than an instruction it gave. The
   cost is not small and not new: in verifactu, `src/testing/fake-aeat.ts` holds **43 of the package's
   60 surviving mutants**, and recomputing that same report without the file's mutants gives 98.76%
-  against the 96.18% it scores as configured. That score gates
-  merges — `mutation-verifactu` is one of `ci`'s `needs`, and `ci` is the required check — so the
-  exclusion is a real decision, which is why the bump left it alone.
+  against the 96.18% it scores as configured. That score gated
+  merges — `mutation-verifactu` was one of `ci`'s `needs`, and `ci` is the required check — so the
+  exclusion was a real decision, which is why the bump left it alone. (Since removed — the
+  `mutation-verifactu` job and the in-repo `packages/verifactu` both went with the extraction of
+  `@waitron/verifactu` to its own repository, so this whole entry is now historical.)
 - **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** Vitest 5 was
   abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
   `packages/shared` 8.14% (stryker-js#6210; fix PR #6214 was open and unreleased). Stryker 10.0.0's
@@ -3688,7 +3691,7 @@ The upgrade shipped WITHOUT compensating for it. Every parsed AEAT value that ge
 one of ours is a value WE minted and AEAT echoed: `RefExterna`, which is our
 `registros_facturacion.id`, a UUID (`drain.ts` in `persistResponse`, and `reconcile.ts` building its
 authority map); `NumSerieFactura`, which we only ever emit from the `A-Za-z0-9/_.-` charset
-`NUMSERIE_PATTERN` in `packages/verifactu/src/validate.ts` holds the outgoing record to; and
+`NUMSERIE_PATTERN` in `@waitron/verifactu` holds the outgoing record to; and
 `Huella`, which is hex. No character in any of those sets is ever entity-encoded. Everything else
 parsed is either compared against a constant (the status and error-code enums) or stored and
 displayed and compared against nothing, such as `DescripcionErrorRegistro` → `envios.mensaje_error`.
@@ -3733,9 +3736,9 @@ comparison could see a difference. Three things it leaves open:
   matrix accessor as well. It would make a failure name what changed instead of only that something
   did.
 - **Read it as a self-baselined pin, which is weaker than the pins already here.** Pinned output is
-  not new — `conformance.test.ts` in `packages/verifactu` pins a SHA-256 against a literal, and
+  not new — `conformance.test.ts` in `@waitron/verifactu` pins a SHA-256 against a literal, and
   `xml/serialize.test.ts` pins whole XML documents. But `conformance.test.ts`'s expected values are
-  AEAT's own published huella vectors (`packages/verifactu/test/vectors.ts`, "Huella spec v0.1.2"),
+  AEAT's own published huella vectors (`@waitron/verifactu`'s huella test vectors, "Huella spec v0.1.2"),
   so that pin compares the code against an authority. This one compares the code against itself on
   the day it was written. (What `serialize.test.ts` compares against was not checked here.) There is also no
   `toMatchSnapshot`/`toMatchFileSnapshot`/`__snapshots__` anywhere in the repository, so a byte pin
@@ -6569,7 +6572,7 @@ open is under *A2* in Track A, not here.
 - *What a code may contain.* The database takes any non-empty text, unique per node. On the wire it
   is joined as `<code>/<number>` (`formatInvoiceNumber`, `packages/core/src/record-sale.ts`) and the
   whole string must be 1–60 characters from `A-Z a-z 0-9 / _ . -` — our own deliberately narrow charset
-  (`packages/verifactu/src/validate.ts`). The practical ceiling on the code alone is 38
+  (in `@waitron/verifactu`). The practical ceiling on the code alone is 38
   (`MAX_BASE_CODE_LENGTH`, `packages/fiscal-verifactu/src/reserved-series.ts`), because a cold restore
   appends `-<installation number>`.
 - *What to default them to.* Avoid a trailing `-<digits>`: `stripOwnSuffixes` removes a trailing

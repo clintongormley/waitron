@@ -179,7 +179,7 @@ describe("recordVoid", () => {
     expect(anulacion?.idEmisorFactura).toBe(alta?.idEmisorFactura);
     expect(anulacion?.numSerieFactura).toBe("A/1");
     expect(anulacion?.secuencia).toBe(2);
-    // `buildCadenaAnulacion` (`packages/verifactu/src/huella.ts`) hashes exactly 5 fields, none of
+    // `buildCadenaAnulacion` (in `@waitron/verifactu`) hashes exactly 5 fields, none of
     // them an amount — so the stored row must carry NULL here, not "0.00": a `RegistroAnulacion`
     // has no `CuotaTotal`/`ImporteTotal` to begin with, and a schema or row-mapping regression that
     // started writing a zero-string amount would silently misrepresent the anulación as having a

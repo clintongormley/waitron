@@ -326,7 +326,7 @@ unconditionally. When the caller supplies its own — which the till's filing ro
 verbatim, but it too was grouped per rate over the priced lines a moment earlier
 (`packages/catalogue/src/pricing.ts`). Either way an extras child line's base and its own VAT rate
 reach the record's `CuotaTotal`, and `CuotaTotal` is one of the fields `computeHuella` hashes
-(`packages/verifactu/src/huella.ts`).
+(`@waitron/verifactu`'s `computeHuella`).
 
 One figure the fiscal backend does not derive: `ImporteTotal` is `sale.total` copied straight
 through (`packages/fiscal-verifactu/src/backend.ts`), an explicit field of what the caller handed

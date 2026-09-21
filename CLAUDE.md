@@ -103,16 +103,16 @@ formatting; machinery-only changes stop after root guards; deletion-only pushes 
 Unknown ranges keep the full local gate, including workspace typechecking. See
 [ci-and-gates.md](docs/developers/ci-and-gates.md) for commands and scope details.
 
-**Coverage thresholds** are split (owner decision 2026-09-05): `98/98/98/95` in `verifactu`,
+**Coverage thresholds** are split (owner decision 2026-09-05): `98/98/98/95` in
 `fiscal-verifactu`, `core`, `db` and `payments`; the `90/90/85/85` floor everywhere else,
 browser packages included. Which package holds which bar is pinned by
 `scripts/coverage-thresholds.test.ts`.
 
-**A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `verifactu`,
-`shared`, `fiscal` and `db`** (`verifactu` and `shared` since July 2026; `fiscal`, `ui` and `db`
+**A mutation floor of 90 breaks the run in every mutation-tested package — `ui`,
+`shared`, `fiscal` and `db`** (`shared` since July 2026; `fiscal`, `ui` and `db`
 under the owner's 90-everywhere decision of 2026-09-19). WHERE it bites differs:
-`verifactu` and `shared` fail a pull request whose resolved scope contains them (on `main` the scope
-is `global`, so both always run); `ui` and `db` fail only the weekly
+`shared` fails a pull request whose resolved scope contains it (on `main` the scope
+is `global`, so it always runs); `ui` and `db` fail only the weekly
 `.github/workflows/mutation.yml` run, so thinning one of their tests goes green and reddens on
 Monday; and `fiscal` has no CI job at all, so only a local `pnpm --filter @waitron/fiscal mutation`
 sees it — and its `mutate` list covers two named files, not the package. **`db`'s bar is not in its

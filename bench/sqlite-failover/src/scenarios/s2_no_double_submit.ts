@@ -75,7 +75,7 @@ function submissionKey(nodeId: string, secuencia: number): string {
  * still made S2 fail. The repeat is read off `filed` afterwards instead.
  *
  * It also ACCEPTS the repeat, which the real endpoint does not: AEAT answers error 3000 on a record
- * it already holds, and `resolveEstadoEfectivo` (`packages/verifactu/src/xml/parse-suministro.ts`)
+ * it already holds, and `resolveEstadoEfectivo` (in `@waitron/verifactu`)
  * reads that as filed. So a repeat this stub records is a second SUBMISSION, not a second FILING:
  * against a real AEAT a same-identity repeat is refused. A stub that instead REFUSED a repeat would
  * measure nothing HERE: idempotent by construction, its double COUNTER can only ever read zero. The

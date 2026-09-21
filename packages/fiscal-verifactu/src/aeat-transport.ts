@@ -104,7 +104,7 @@ export interface TenantTransport {
 /**
  * A `fetch` carrying the venue's client certificate, and the `Agent` it is bound to. One `Agent`
  * per call — its TLS material is client-certificate config, an `Agent`-level setting, not a
- * per-request one — so the caller owns its lifetime via the returned `close`. `packages/verifactu`
+ * per-request one — so the caller owns its lifetime via the returned `close`. `@waitron/verifactu`
  * injects `fetch` for exactly this reason — mTLS configuration is a deployment concern and the
  * library keeps none of it.
  *

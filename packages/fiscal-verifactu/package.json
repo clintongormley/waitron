@@ -21,7 +21,7 @@
     "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "@waitron/verifactu": "workspace:*",
+    "@waitron/verifactu": "^0.1.0",
     "drizzle-orm": "^0.45.2",
     "undici": "^8.10.2"
   },

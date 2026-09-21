@@ -5,7 +5,7 @@ import { invoiceSeries, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { registroSif } from "./schema/sif.js";
 
-/** `NumSerieFactura` (`<code>/<counter>`) is capped at 60 characters (packages/verifactu validate). A
+/** `NumSerieFactura` (`<code>/<counter>`) is capped at 60 characters (`@waitron/verifactu`'s validate). A
  * base must leave room for one `-<installation number>` suffix and the counter, each at most ten
  * digits (`integer`), so it may be at most 38 characters. */
 const NUM_SERIE_MAX = 60;

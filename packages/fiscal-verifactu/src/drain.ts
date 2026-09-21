@@ -21,8 +21,8 @@ import { fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
 /**
- * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`,
- * `@waitron/verifactu/src/testing/fake-aeat.ts`) — the wait a database with no `envio_flujo` row
+ * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`, from
+ * `@waitron/verifactu`) — the wait a database with no `envio_flujo` row
  * yet (never sent, so `readFlujo` reports `tiempoEsperaSeg: 0`) should assume before its first
  * envío. `drainDue`'s own `let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG` is the
  * one call site — kept as a named constant, not a bare literal, so this file's one guess at "what
@@ -116,7 +116,7 @@ export interface DrainDeps {
   /**
    * The batch cap — the most registros claimed, submitted, and counted as a full envío per chunk.
    * OPTIONAL, defaulting to `MAX_REGISTROS_POR_ENVIO` (`@waitron/verifactu`), the real XSD limit
-   * AEAT enforces (`serialize.ts`'s `maxOccurs="1000"` guard, which throws error 4113/4114 above
+   * AEAT enforces (`@waitron/verifactu`'s `maxOccurs="1000"` guard, which throws error 4113/4114 above
    * it). EVERY production caller omits it — `apps/server`'s `boot.ts` builds `DrainDeps` without
    * this field — so the default reproduces AEAT's own 1000-row cap exactly; nothing about a real
    * submission changes.
@@ -162,7 +162,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   // plain-`number` input, and each out-of-range value fails a fiscal invariant silently rather than
   // loudly if it reaches the SQL: `0` claims nothing, leaving due work stuck `pendiente` forever;
   // a NEGATIVE value becomes Postgres `LIMIT -1`, i.e. NO limit, so a claim could pull >1000 rows
-  // and build an envío that `serializeEnvio` (serialize.ts:286) then rejects for exceeding the XSD
+  // and build an envío that `serializeEnvio` (`@waitron/verifactu`) then rejects for exceeding the XSD
   // `MAX_REGISTROS_POR_ENVIO` — a failure discovered only at submission, not at the input; a
   // non-integer is nonsense to `limit`. Capping the upper bound at `MAX_REGISTROS_POR_ENVIO` (not
   // merely `>= 1`) is what makes it impossible to inject a cap that could ever build an envío the
@@ -791,7 +791,7 @@ async function persistResponse(
   result.batchesSent += 1;
   result.recordsSubmitted += batch.length;
   // `respuesta.CSV` is only ever undefined for a wholesale-rejected envío (`RespuestaSuministro`'s
-  // own doc comment, packages/verifactu/src/xml/parse-suministro.ts) — not reachable through this
+  // own doc comment in `@waitron/verifactu`) — not reachable through this
   // package's own fake AEAT (`createFakeAeat` always returns a CSV, per-line rejections included;
   // see its own `handleEnvio` doc comment), so the `?? null` fallback stays unexercised by this
   // task's tests too, same as Task 6's original note here.
@@ -899,7 +899,7 @@ async function applyOutcome(
  * accepted-with-errors/rejected, and Task 10's Route A/B) has the envío's own CSV in hand — even a
  * duplicate LINE's envío still returns one (AEAT's CSV is per-submission, not per-line), and Route
  * B's own `routeB` never needs to read one off its consulta response (which carries none at all —
- * `RegistroConsultado`'s own doc comment, @waitron/verifactu/src/xml/parse-consulta.ts) because it
+ * `RegistroConsultado`'s own doc comment in `@waitron/verifactu`) because it
  * reuses the SAME outer envío CSV every other branch already has. An earlier draft of this
  * function made `csv` optional and `coalesce`d it against the existing column, anticipating a
  * hypothetical future caller with no CSV to report at all — no such caller exists as of this
@@ -1014,7 +1014,7 @@ async function raiseIncident(
  * holds (`resolveEstadoEfectivo`'s own doc comment on the "3000 inverts" rule) — a targeted
  * consulta for exactly this one record is how the ambiguity resolves. Comparing AEAT's stored
  * `Huella` against ours is deliberately the ONLY field compared: `RegistroConsultado`'s own doc
- * comment (@waitron/verifactu/src/xml/parse-consulta.ts) — "a single-field check equivalent to
+ * comment (in `@waitron/verifactu`) — "a single-field check equivalent to
  * diffing every hashed field" — the huella already IS the summary of every hashed field on the
  * record, so nothing else `DatosRegistroFacturacion` carries needs comparing.
  *

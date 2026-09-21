@@ -14,13 +14,11 @@
  *     }
  *   }
  *
- * `packages/fiscal-verifactu` is the example above deliberately, not `packages/verifactu`:
- * `packages/verifactu` is a standalone, publishable library with an enforced
- * zero-in-repo-dependency boundary (see its zone in `eslint.config.js`) and cannot add
- * `@waitron/shared` as a dependency — the lint rule rejects it — so it can never declare-merge
- * into this interface. `packages/fiscal-verifactu` depends on both `packages/verifactu` and
- * `@waitron/shared`, which is what lets it translate a library-level condition into a structured
- * `AppError` at all.
+ * `packages/fiscal-verifactu` is the example above deliberately, not `@waitron/verifactu`:
+ * `@waitron/verifactu` is an external, published npm package, not a workspace package in this
+ * repo at all, so it can never declare-merge into this interface. `packages/fiscal-verifactu`
+ * depends on both `@waitron/verifactu` and `@waitron/shared`, which is what lets it translate a
+ * library-level condition into a structured `AppError` at all.
  *
  * Nothing here enumerates a dependent package's codes on its behalf, and it must not:
  * `packages/core`, `packages/fiscal` and `packages/fiscal-verifactu` do not exist yet in this

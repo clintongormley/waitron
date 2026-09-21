@@ -178,6 +178,36 @@ the leaf during boot. Read the local public CA for dev trust; the unprivileged l
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
 
+## Iterating against a local checkout of `@waitron/verifactu`
+
+`@waitron/verifactu` is no longer a package in this workspace — it was extracted into its own
+repository and Waitron now installs the published release from the npm registry, the same as any
+other outside dependency. When you need to change the library and the change together, point Waitron
+at a local checkout instead of publishing a release for every edit.
+
+Use a root **`pnpm.overrides`** entry. A `pnpm.overrides` entry in the workspace root `package.json`
+applies across the whole workspace, the nested packages included — and every consumer of this
+library here (`apps/server`, `packages/fiscal-verifactu`, `packages/provisioning`) is a nested
+workspace package, so this is the method that actually reaches them. Add
+`"@waitron/verifactu": "file:../../repos/verifactu"` (a path to your checkout) under
+`pnpm.overrides` in the root `package.json` and run `pnpm install`; remove it again before you
+commit.
+
+Verified on 2026-09-21 in a throwaway install of this branch: before the override, resolving the
+package from the nested `@waitron/fiscal-verifactu` returned the published
+`@waitron+verifactu@0.1.0`; after the override plus `pnpm install`, the same command
+(`pnpm --filter @waitron/fiscal-verifactu exec node -e "console.log(require.resolve('@waitron/verifactu'))"`)
+returned the local checkout under `.../repos/verifactu`.
+
+Do NOT use a root-level `pnpm link --global @waitron/verifactu` here. At the workspace root it exits
+0 but does NOT redirect the workspace-nested consumers — `apps/server`, `packages/fiscal-verifactu`
+and `packages/provisioning` go on resolving the published `0.1.0` — so it looks applied while
+changing nothing that matters. (This was proven by the extraction branch's run-it reviewer.)
+
+Keep the override out of the commit: the manifests that land always reference the published version,
+and CI installs that version, so an override left in a diff would make CI and the box build a version
+they cannot fetch.
+
 ## Model selection
 
 This paragraph is copied verbatim from the source `CLAUDE.md`. It summarises a rule that is defined
