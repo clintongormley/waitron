@@ -4,32 +4,29 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { isPgError, printers } from "@waitron/db";
+import { CHECK_VIOLATION, UNIQUE_VIOLATION, isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { CharacterSet } from "./charset.js";
 import type { PaperWidth, Resolution } from "./layout.js";
 
-/** The pg SQLSTATEs a printer write may raise once the app-layer required-field pre-check passes, so a
- * driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
- * `printers_transport_fields_ck` CHECK (a transport whose required fields are absent — the DB backstop
- * behind `REQUIRED_FIELDS`); `23505` is the partial UNIQUE `printers_local_key_key` on
- * `(location_id, local_key)` (a create/re-key whose device id already names a printer in
- * this venue). Both are matched down the cause chain by `@waitron/db`'s shared `isPgError` (Drizzle
- * wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined — the SQLSTATE lives
- * on `.cause.code` under node-postgres, or one level deeper under PGlite). */
-const CHECK_VIOLATION = "23514";
-const UNIQUE_VIOLATION = "23505";
-
 /**
  * Translate a printer write's driver error into a friendly domain code, or rethrow. A unique violation
  * on `printers_local_key_key` (the device id in this write already names a printer in this venue)
- * becomes `printer.already_registered`; the transport-fields CHECK violation becomes
- * `printer.invalid_config`. Anything else propagates unchanged (the route boundary opaques it to a
- * 500). `localKey` is echoed on `printer.already_registered` so the dashboard can point at the existing
- * registration; a CHECK violation carries the stable `transport_fields` reason (the specific missing
- * field is unknowable from the SQLSTATE alone — `createPrinter`'s pre-check names it precisely on the
- * common path).
+ * becomes `printer.already_registered`; a violation of the `printers_transport_fields_ck` CHECK (the
+ * database backstop behind `REQUIRED_FIELDS`) becomes `printer.invalid_config`. Anything else
+ * propagates unchanged (the route boundary opaques it to a 500). `localKey` is echoed on
+ * `printer.already_registered` so the dashboard can point at the existing registration; a CHECK
+ * violation carries the stable `transport_fields` reason (the specific missing field is unknowable
+ * from the SQLSTATE alone — `createPrinter`'s pre-check names it precisely on the common path).
+ *
+ * `isPgError` asks which CLASS of refusal this is and never WHICH key, which is wider than the two
+ * constraints named above. It matters on the CHECK side: `printers` also carries
+ * `printers_character_table_ck` (migration `0037`, in `packages/db/drizzle/`): measured 2026-09-21
+ * on PGlite, a `characterTable` of 300 through `createPrinter` comes back as
+ * `printer.invalid_config` wearing the `transport_fields` reason, while 16 is accepted. On the
+ * unique side the only other key is the `id` primary key, which neither write here supplies. Telling two keys of one class apart means asking for the SQLSTATE and the key together,
+ * which is `refusalOn` (`@waitron/db`).
  */
 function translatePrinterWriteError(error: unknown, localKey: string | undefined): never {
   if (localKey !== undefined && isPgError(error, UNIQUE_VIOLATION)) {

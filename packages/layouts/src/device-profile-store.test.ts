@@ -7,10 +7,14 @@ import { translateWriteError } from "./device-profile-store.js";
 // crafted errors — no DB — so every branch (incl. the two re-throw paths and BOTH referencing
 // constraints) is covered deterministically. `translateWriteError` is exported from
 // device-profile-store.ts for exactly this, not from the package barrel. Mirrors canvas-store.test.ts.
+//
+// Each crafted error carries the `table` + `detail` pair `constraintTarget` reads, copied from what
+// PostgreSQL reported for the same refusal on 2026-09-21 (the real ones are driven in
+// device-profile-store.pg.test.ts).
 describe("translateWriteError", () => {
-  it("translates a 23505 with no constraint name to device_profile.name_taken", () => {
-    // PGlite omits the constraint name, so a bare 23505 falls back to translating (the only NON-PK
-    // unique an insert/update can trip is the name key).
+  it("translates a 23505 that named no key to device_profile.name_taken", () => {
+    // The fallback branch: a 23505 whose target cannot be identified still translates, because the
+    // name key is the only unique an insert/update can trip on an author-supplied value.
     let thrown: unknown;
     try {
       translateWriteError({ cause: { code: "23505" } });
@@ -21,11 +25,15 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  it("translates a 23505 whose constraint is device_profiles_tenant_name_key", () => {
+  it("translates a 23505 on device_profiles (name)", () => {
     let thrown: unknown;
     try {
       translateWriteError({
-        cause: { code: "23505", constraint: "device_profiles_tenant_name_key" },
+        cause: {
+          code: "23505",
+          table: "device_profiles",
+          detail: "Key (name)=(Twin) already exists.",
+        },
       });
     } catch (e) {
       thrown = e;
@@ -33,10 +41,16 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.code).toBe("device_profile.name_taken");
   });
 
-  // A 23505 on a DIFFERENT constraint (the primary key, or any added later) must NOT be
-  // mislabelled name_taken — it is re-thrown untouched. Proof-by-deletion: drop the constraint gate.
-  it("re-throws a 23505 whose constraint is not the name key", () => {
-    const original = { cause: { code: "23505", constraint: "device_profiles_pkey" } };
+  // A 23505 on a DIFFERENT key (the primary key, or any unique added later) must NOT be
+  // mislabelled name_taken — it is re-thrown untouched. Proof-by-deletion: drop the target gate.
+  it("re-throws a 23505 on device_profiles whose key is not (name)", () => {
+    const original = {
+      cause: {
+        code: "23505",
+        table: "device_profiles",
+        detail: "Key (id)=(2053a761-bbc0-4007-a2f4-be0ff9f220a5) already exists.",
+      },
+    };
     let thrown: unknown;
     try {
       translateWriteError(original);
@@ -46,10 +60,17 @@ describe("translateWriteError", () => {
     expect(thrown).toBe(original);
   });
 
-  it("translates a 23503 on device_profiles_canvas_fk to device_profile.invalid {bad_canvas_ref}", () => {
+  it("translates a 23503 on device_profiles (canvas_id) to device_profile.invalid {bad_canvas_ref}", () => {
     let thrown: unknown;
     try {
-      translateWriteError({ cause: { code: "23503", constraint: "device_profiles_canvas_fk" } });
+      translateWriteError({
+        cause: {
+          code: "23503",
+          table: "device_profiles",
+          detail:
+            'Key (canvas_id)=(00000000-0000-4000-8000-000000000000) is not present in table "canvases".',
+        },
+      });
     } catch (e) {
       thrown = e;
     }
@@ -57,12 +78,21 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({ reason: "bad_canvas_ref" });
   });
 
-  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. It is the only FK
-  // that references a profile, so it is the only constraint name this branch has to recognise.
-  it("translates a 23001 on devices_device_profile_fk to device_profile.in_use", () => {
+  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. The target is
+  // `{devices, [id]}`, which every RESTRICT key out of `devices` reports — a refused till or printer
+  // delete included — so what keeps those out of this branch is call scope, not this assertion. See
+  // `PROFILE_REFERENCED_BY_DEVICE` in the store.
+  it("translates a 23001 reported against devices (id) to device_profile.in_use", () => {
     let thrown: unknown;
     try {
-      translateWriteError({ cause: { code: "23001", constraint: "devices_device_profile_fk" } });
+      translateWriteError({
+        cause: {
+          code: "23001",
+          table: "devices",
+          detail:
+            'Key (id)=(2053a761-bbc0-4007-a2f4-be0ff9f220a5) is referenced from table "devices".',
+        },
+      });
     } catch (e) {
       thrown = e;
     }
@@ -70,9 +100,17 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  // A 23001 on an unrelated constraint must NOT be mislabelled in_use — re-thrown untouched.
-  it("re-throws a 23001 whose constraint is not a profile-referencing FK", () => {
-    const original = { cause: { code: "23001", constraint: "some_other_fk" } };
+  // A 23001 from a foreign key that does not reference a profile must NOT be mislabelled in_use —
+  // re-thrown untouched. This one is the device_profiles → canvases RESTRICT.
+  it("re-throws a 23001 from a foreign key that does not reference device_profiles", () => {
+    const original = {
+      cause: {
+        code: "23001",
+        table: "device_profiles",
+        detail:
+          'Key (id)=(6a9cebbb-d0d5-4411-8209-71a202afcb47) is referenced from table "device_profiles".',
+      },
+    };
     let thrown: unknown;
     try {
       translateWriteError(original);

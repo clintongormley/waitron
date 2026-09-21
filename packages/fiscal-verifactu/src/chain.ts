@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, TillId } from "@waitron/shared";
-import type { Transaction } from "@waitron/db";
+import { isUniqueViolation, type Transaction } from "@waitron/db";
 import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
 import { buildAltaRecord, buildAnulacionRecord, validate } from "@waitron/verifactu";
 import { currentSif } from "./registro-sif.js";
@@ -17,8 +17,6 @@ import { pointerTo, toRegistroRow } from "./registro-row.js";
 import type { Entorno } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { registrosFacturacion } from "./schema/registros.js";
-
-const UNIQUE_VIOLATION = "23505";
 
 /**
  * Three, not one and not ten. One is not a retry. Ten converts a genuine duplicate — a real bug,
@@ -72,34 +70,6 @@ export interface ChainHead {
   secuencia: number;
   ultimoRegistroId: string | null;
   ultimaHuella: string | null;
-}
-
-/**
- * Is this (or anything it wraps) a unique-constraint violation?
- *
- * Walks the cause chain because Drizzle wraps every failed query in a `DrizzleQueryError` whose
- * own `.code` is undefined — the real SQLSTATE lives on `.cause.code` (mirrors
- * `packages/db/src/testing/errors.ts`'s `pgErrorCode` unwrapping, reimplemented as a boolean
- * predicate here rather than imported, because this file needs a yes/no answer to decide whether
- * to retry, not the code string itself). Stops at a fixed depth so a self-referential `cause`
- * cannot spin forever. Checking only the top level would silently stop retrying and start
- * reporting the wrong error whenever a real unique violation arrives wrapped.
- */
-export function isUniqueViolation(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      "code" in current &&
-      (current as { code?: unknown }).code === UNIQUE_VIOLATION
-    ) {
-      return true;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return false;
-    current = next;
-  }
-  return false;
 }
 
 async function selectHeadForUpdate(

@@ -93,8 +93,8 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
  * name key. The one exception is two CONCURRENT `createStation({isDefault:true})` in the same venue:
  * each clears then inserts `is_default=true`, and the second to commit trips the default partial-unique,
  * which this catch would ALSO surface as `station.name_taken` (a mislabel). Cosmetic — a gated admin
- * verb, a remote race, still a 4xx — so the catch is left undiscriminated rather than splitting on the
- * constraint name (the receipt discipline CLAUDE.md §1/§3 asks for).
+ * verb, a remote race, still a 4xx — so the catch is left undiscriminated rather than splitting on
+ * which key the refusal named (the receipt discipline CLAUDE.md §1/§3 asks for).
  */
 export async function createStation(
   tx: Transaction,

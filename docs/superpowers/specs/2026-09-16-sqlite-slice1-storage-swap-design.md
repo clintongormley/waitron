@@ -2,6 +2,37 @@
 
 **Status:** design approved by the owner 2026-09-16; plan not yet written.
 
+> **Dated pointer, 2026-09-21.** Task P10 has been built, and two things this document says are no
+> longer true of the code.
+>
+> **The two helpers it names no longer exist.** `pgErrorConstraint` and `uniqueViolationConstraint`
+> were deleted from `packages/db/src/unique-violation.ts`, which keeps only `isPgError` and
+> `isUniqueViolation` — the two that answer which CLASS of refusal this is. A write path that has to
+> identify ONE refusal now asks `refusalOn(error, sqlstate, { table, columns })`, or
+> `constraintTarget(error)` with `sameTarget`, from `packages/db/src/constraint-target.ts`; the
+> SQLSTATE literals it is given live in `packages/db/src/sqlstate.ts`. §6.4 below still names
+> `uniqueViolationConstraint` as the helper to change, and the P10 row in §9's table still lists the
+> work as ahead.
+>
+> **The Provenance row "92 error-helper call sites in 23 non-test files" is wrong, and so is the
+> command that produced it.** A grep for those four helpers cannot see a caller that walks the cause
+> chain itself, and FIVE did: `packages/reporting/src/record-daily-close.ts`,
+> `apps/server/src/tables.ts`, `packages/core/src/settle-sale.ts`,
+> `packages/fiscal-verifactu/src/chain.ts` and `packages/workforce/src/chain.ts`. The last two were
+> already on the task's Files list for another reason, which is why an earlier version of this
+> pointer counted three. Two greps are needed, not one.
+> `grep -rn "constraint?: unknown" --include='*.ts' packages apps` finds a hand-rolled walk that goes
+> on to read the constraint NAME, which is two of the five; the other three read a SQLSTATE and stop,
+> so only `grep -rn 'cause?: unknown' --include='*.ts' packages apps` reaches them — at the
+> cost of also returning walks that translate no refusal at all, so its output is read rather than
+> counted. Treat the row's number as unverified rather than as a size.
+>
+> **What SQLite reports is unchanged**, and so is the reasoning in §6.4 that the question had to
+> change. What the task built, the callers it moved, and the measurements taken on both of today's
+> drivers are in task P10 of
+> [2026-09-16-sqlite-slice1-storage-swap.md](../plans/2026-09-16-sqlite-slice1-storage-swap.md).
+> Everything below is left as it was written.
+
 This is slice 1 of the build order in
 [2026-09-16-sqlite-litestream-topology-design.md](2026-09-16-sqlite-litestream-topology-design.md)
 §11. That document decides *what* Waitron's storage and failover become; this one decides *how the

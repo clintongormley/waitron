@@ -1,5 +1,14 @@
 # Device Profile Implementation Plan
 
+> **Dated pointer, 2026-09-21.** This plan tells its reader to key a translation on the NAME of the
+> violated constraint, in two places: `@waitron/db`'s `uniqueViolationConstraint`, in the store task's
+> "Consumes" list; and `BINDING_FK_FIELD` in `apps/server/src/device.ts`, the map whose keys were
+> constraint names, which two later tasks add entries to and remove entries from. Task P10 of the
+> SQLite storage switch deleted that helper — SQLite reports no constraint name, only the table and
+> the column — so a write path now asks `constraintTarget(error)` and compares with `sameTarget`
+> (`packages/db/src/constraint-target.ts`), and the map is `BINDING_FK_FIELDS`, each entry holding a
+> table and a column list instead of a name. Everything below is left as it was written.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Insert a first-class, tenant-wide **device profile** between a device and its canvas — a device carries `device_profile_id`, the profile carries a `canvas_id` reference plus the **capabilities** set relocated off the canvas record — so the chain is device → device profile → canvas.

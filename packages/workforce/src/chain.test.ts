@@ -7,7 +7,6 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   appendToChain,
-  isUniqueViolation,
   lockChainHead,
   readChain,
   type ChainKey,
@@ -373,28 +372,5 @@ describe("lockChainHead", () => {
       select count(*)::int as count from workforce_chains
       where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
-  });
-});
-
-describe("isUniqueViolation", () => {
-  it("recognises a bare driver error", () => {
-    expect(isUniqueViolation(Object.assign(new Error("dup"), { code: "23505" }))).toBe(true);
-  });
-
-  it("recognises a violation wrapped in a cause chain", () => {
-    const inner = Object.assign(new Error("dup"), { code: "23505" });
-    expect(
-      isUniqueViolation(new Error("outer", { cause: new Error("mid", { cause: inner }) })),
-    ).toBe(true);
-  });
-
-  it("does not treat a foreign-key violation as a chain collision", () => {
-    expect(isUniqueViolation(Object.assign(new Error("fk"), { code: "23503" }))).toBe(false);
-  });
-
-  it("terminates on a self-referential cause chain", () => {
-    const looped: Error & { cause?: unknown } = new Error("loop");
-    looped.cause = looped;
-    expect(isUniqueViolation(looped)).toBe(false);
   });
 });

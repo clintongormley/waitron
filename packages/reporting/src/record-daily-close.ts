@@ -7,8 +7,8 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type { Decimal, NodeId, TillId } from "@waitron/shared";
-import type { Transaction } from "@waitron/db";
-import { dailyCloseChain, dailyCloses } from "@waitron/db";
+import type { ConstraintTarget, Transaction } from "@waitron/db";
+import { UNIQUE_VIOLATION, dailyCloseChain, dailyCloses, refusalOn } from "@waitron/db";
 import { computeDailyClose } from "./daily-close.js";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
 import type {
@@ -110,8 +110,17 @@ export async function recordDailyClose(
   };
 }
 
-const UNIQUE_VIOLATION = "23505";
-const BUSINESS_DAY_KEY = "daily_closes_business_day_key";
+/**
+ * The table and columns a second close of the same day collides on: `daily_closes_business_day_key`,
+ * declared `UNIQUE("node_id","business_day")` in migration `0033` line 236, in `packages/db/drizzle/`
+ * (the baseline's three-column version, which carried the retired tenant column, was dropped
+ * at line 17 of the same file).
+ * Its sibling `daily_closes_sequence_key` differs in the second column alone.
+ */
+const BUSINESS_DAY_KEY: ConstraintTarget = {
+  table: "daily_closes",
+  columns: ["node_id", "business_day"],
+};
 
 const ZERO = decimal("0.00");
 
@@ -308,28 +317,17 @@ async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
 }
 
 /**
- * Is this (or anything it wraps) a unique violation on `daily_closes_business_day_key` — a second
- * close of the same (node, business day)? Walks the cause chain because Drizzle wraps every
- * failed query in a `DrizzleQueryError` whose own `.code` is undefined; the real SQLSTATE and the
- * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite. Stops at a
- * fixed depth so a self-referential `cause` cannot spin forever. Reads the CONSTRAINT NAME, not just
- * the 23505 code, so a `daily_closes_sequence_key` collision is deliberately NOT matched. Mirrors
- * `@waitron/db`'s `isUniqueViolation` shape (extended with the constraint check) rather than reaching
- * for the test-only `pgErrorCode`. Exported for the crafted-error unit tests, not from the barrel.
+ * Is this (or anything it wraps) a unique violation on the business-day key — a second close of the
+ * same (node, business day)?
+ *
+ * Why the question needs both the SQLSTATE and the key is `refusalOn`'s own doc
+ * (`packages/db/src/constraint-target.ts`). What is specific to this caller: the sibling the
+ * SQLSTATE alone would let through is `daily_closes_sequence_key`, and a sequence collision is
+ * impossible under the single-writer lock, so reporting one as "already closed" would hide a
+ * single-writer bug for a day that is NOT closed.
+ *
+ * Exported for the crafted-error unit tests, not from the barrel.
  */
 export function isBusinessDayConflict(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      (current as { code?: unknown }).code === UNIQUE_VIOLATION &&
-      (current as { constraint?: unknown }).constraint === BUSINESS_DAY_KEY
-    ) {
-      return true;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return false;
-    current = next;
-  }
-  return false;
+  return refusalOn(error, UNIQUE_VIOLATION, BUSINESS_DAY_KEY);
 }

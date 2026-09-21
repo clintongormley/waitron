@@ -10,7 +10,6 @@ import {
   envios,
   esPrimerRegistro,
   fromRegistroRow,
-  isUniqueViolation,
   lockChainHead,
   registerSif,
   registroSif,
@@ -46,13 +45,12 @@ describe("package public surface (./index.js)", () => {
     expect(typeof esPrimerRegistro).toBe("function");
   });
 
-  it("re-exports the chain-append surface (appendToChain, lockChainHead, isUniqueViolation, toRegistroRow) from the package root", () => {
+  it("re-exports the chain-append surface (appendToChain, lockChainHead, toRegistroRow) from the package root", () => {
     // Task 14's addition. Type-only exports (ChainHead, PendingRegistro, RegistroRowContext,
     // RegistroRowInsert) have no runtime existence to assert on here — errors.reachability.test.ts
     // and this package's own `pnpm typecheck` are what would catch either going missing.
     expect(typeof appendToChain).toBe("function");
     expect(typeof lockChainHead).toBe("function");
-    expect(typeof isUniqueViolation).toBe("function");
     expect(typeof toRegistroRow).toBe("function");
   });
 

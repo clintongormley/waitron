@@ -10,6 +10,16 @@
 
 **Spec:** the parent design `docs/superpowers/specs/2026-09-05-device-profile-design.md` §14 (deferred follow-ons); this plan is the design for the three.
 
+> **Dated pointer, 2026-09-21.** This plan tells its reader to key a translation on the NAME of the
+> violated constraint, through `@waitron/db`'s `pgErrorConstraint` — Task 1 (d)'s Step 3 says so in
+> as many words, "Match on the constraint NAME (not a bare 23001)". Task P10 of the SQLite storage switch
+> deleted that helper: SQLite reports no constraint name, only the table and the column, so a write
+> path now asks `refusalOn(error, RESTRICT_VIOLATION, { table, columns })`, or `constraintTarget(error)`
+> with `sameTarget` where it must also translate a refusal it could not identify. The shipped code is
+> `packages/db/src/constraint-target.ts`; the two deletes this plan describes are re-keyed that way in
+> `packages/layouts/src/device-profile-store.ts` and `packages/layouts/src/canvas-store.ts`. Everything
+> below is left as it was written.
+
 ## Global Constraints
 
 - **Error codes name the domain concept, never renamed once shipped** (CLAUDE.md §3). New codes `device_profile.in_use` / `canvas.in_use` live in `packages/layouts/src/errors.ts` beside their families; no-param (`Record<string, never>`) — the fact of the reference is the whole message, never echo which device/profile references it (the param convention at `errors.ts:26-36`). Every throwing file does `import "./errors.js"`.

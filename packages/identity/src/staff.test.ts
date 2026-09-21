@@ -238,11 +238,12 @@ describe("setEmail", () => {
 });
 
 // The duplicate-email → person.email_taken translation, proven end to end against the DB unique
-// index in staff.email.test.ts (real Postgres). Here we pin the translator's two branches directly
-// with crafted errors — no DB — so the re-throw branch is covered deterministically. asEmailTaken is
+// index in staff.email.test.ts (real Postgres) and against the reported table and columns in
+// persons.constraint-target.pg.test.ts. Here we pin the translator's two branches directly with
+// crafted errors — no DB — so the re-throw branch is covered deterministically. asEmailTaken is
 // exported from staff.ts for exactly this, not from the package barrel.
 describe("asEmailTaken", () => {
-  it("re-throws a wrapped unique violation when the driver omits the constraint name", () => {
+  it("re-throws a wrapped unique violation that names no key", () => {
     const original = { cause: { code: "23505" } };
     let thrown: unknown;
     try {
@@ -253,21 +254,55 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  it("translates a 23505 whose constraint is persons_tenant_email_uq", () => {
+  it("translates a 23505 on persons (lower(email))", () => {
     let thrown: unknown;
     try {
-      asEmailTaken({ cause: { code: "23505", constraint: "persons_tenant_email_uq" } }, "o@x.com");
+      asEmailTaken(
+        {
+          cause: {
+            code: "23505",
+            table: "persons",
+            detail: "Key (lower(email))=(o@x.com) already exists.",
+          },
+        },
+        "o@x.com",
+      );
     } catch (e) {
       thrown = e;
     }
     expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
   });
 
-  // A 23505 on a DIFFERENT persons constraint (the id PK, or any added later) must NOT be mislabelled
-  // person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the constraint gate in
+  // A 23505 on a DIFFERENT persons key (the id PK, or any index added later) must NOT be mislabelled
+  // person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the target gate in
   // asEmailTaken and this fails (the error becomes person.email_taken). (Copilot, PR #172.)
-  it("re-throws a 23505 whose constraint is not the email index", () => {
-    const original = { cause: { code: "23505", constraint: "persons_pkey" } };
+  it("re-throws a 23505 on a persons key that is not the email index", () => {
+    const original = {
+      cause: {
+        code: "23505",
+        table: "persons",
+        detail: "Key (id)=(1a1e2e3c-0000-4000-8000-000000000000) already exists.",
+      },
+    };
+    let thrown: unknown;
+    try {
+      asEmailTaken(original, "owner@x.com");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBe(original);
+  });
+
+  // The same columns on a DIFFERENT table. `sameTarget` compares both halves, so a `lower(email)`
+  // collision somewhere other than `persons` is not this refusal.
+  it("re-throws a 23505 on lower(email) of another table", () => {
+    const original = {
+      cause: {
+        code: "23505",
+        table: "invitees",
+        detail: "Key (lower(email))=(owner@x.com) already exists.",
+      },
+    };
     let thrown: unknown;
     try {
       asEmailTaken(original, "owner@x.com");

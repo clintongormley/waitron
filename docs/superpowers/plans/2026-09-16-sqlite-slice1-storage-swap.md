@@ -3741,8 +3741,14 @@ Write paths translate a database refusal into a domain error by matching the **n
 - Create: `packages/db/src/constraint-target.ts`
 - Create: `packages/db/src/constraint-target.test.ts`
 - Modify: `packages/db/src/unique-violation.ts`
-- Modify: the 23 non-test files that call the four helpers
+- Modify: the non-test files that call the four helpers
 - Modify: `packages/fiscal-verifactu/src/chain.ts` and `packages/workforce/src/chain.ts` (each carries its own copy of the cause-chain walk)
+- Modify: `packages/reporting/src/record-daily-close.ts` (`isBusinessDayConflict`) and `apps/server/src/tables.ts` (`isZoneFkViolation`)
+- Modify: `packages/core/src/settle-sale.ts` (`isPostSettlementViolation`)
+
+**Corrected in place, 2026-09-21, while running this task.** The three files on the two lines above were missing from this list, because the list was derived from a grep for the four `@waitron/db` helpers and none of them calls one — each carries its own hand-written copy of the cause-chain walk. A grep for the helpers cannot see a caller that rolls its own.
+
+Two greps are needed, and knowing which is which matters, because the first one alone is what put this correction one file short when it was first written. `grep -rn "constraint?: unknown" --include='*.ts' packages apps` finds a walk that goes on to read the CONSTRAINT NAME: at `387274fbbf81` that was `packages/reporting/src/record-daily-close.ts` and `apps/server/src/tables.ts` (plus `unique-violation.ts` itself and one test fixture). It is silent about a walk that reads the SQLSTATE and stops — `packages/core/src/settle-sale.ts`'s `isPostSettlementViolation` never touches `.constraint`, because the refusal it translates is the `tenders_reject_post_settlement` trigger's custom `WT002` and there is no name to read. `grep -rn 'cause?: unknown' --include='*.ts' packages apps` is the one that catches both shapes, since every hand-rolled copy steps through `.cause` — at the cost of also returning the walks that are not translating a refusal at all, `packages/shared/src/cause-chain.ts` (the shared owner) and `apps/server/src/node-entry.ts`'s diagnostic renderer among them, so its output is read rather than counted. `settle-sale.ts` is in this task's scope for the walk, not for a re-key: it moves onto `isPgError`, which already takes the SQLSTATE as an argument, and the question it asks does not change.
 
 **Interfaces:**
 
@@ -3754,6 +3760,10 @@ Write paths translate a database refusal into a domain error by matching the **n
 - [ ] **Step 1: Write the failing test**
 
 Create `packages/db/src/constraint-target.test.ts`. Drive it through a real refusal, not a hand-built error object — a fake error proves only that the parser reads the fake.
+
+**Corrected in place, 2026-09-21, while running this task.** The sketch below reaches for `useVenueDb`, which is PGlite alone. The fields this parser reads are populated by the DRIVER, and PGlite is not node-postgres, so a claim about what "PostgreSQL reports" taken on one of them is `CLAUDE.md` §1's measurement taken where both answers look alike. The shipped suite uses `describeEachTarget` and runs its parse cases against both, with one exception it marks `it.runIf(target.name === "postgres")`: the case that asks for the refusal in Spanish, because PGlite has no session locale to set. The crafted-error cases it keeps are three no database can produce — a cause chain deeper than the walk's bound, a self-referential one, and a chain carrying the SQLSTATE on one layer and the key on another, which is the one shape that separates `refusalOn`'s same-layer rule from asking the two questions separately — and three the suite crafts rather than drives: a value that is not an error at all, a layer carrying a `table` and no `detail`, and a `detail` that names no key. Only the last of those three is also driven from a real refusal, by the CHECK case.
+
+**Re-checked, 2026-09-21, against the shipped suite.** The paragraph above used to say the suite "runs every parse case against both" and that the crafted cases it keeps are "the two no database can produce". Neither was read off `packages/db/src/constraint-target.test.ts`, and both were wider than it: the Spanish-locale case is on one target, and four crafted cases went unmentioned. Read the file rather than this paragraph — the shape of the suite is what it says, and a list of its cases goes stale the next time one is added.
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3814,7 +3824,11 @@ Expected: FAIL — `Cannot find module './constraint-target.js'`.
 
 - [ ] **Step 3: Write it against what PostgreSQL reports today**
 
-PostgreSQL gives the constraint name on `.constraint` and the columns in `.detail`, as `Key (email)=(a@x) already exists.` Parse the columns from `detail`; fall back to looking the constraint name up if `detail` is absent, which PGlite sometimes makes it.
+PostgreSQL gives the constraint name on `.constraint` and the columns in `.detail`, as `Key (email)=(a@x) already exists.` Parse the columns from `detail`.
+
+**Corrected in place, 2026-09-21, while running this task.** This step used to end "fall back to looking the constraint name up if `detail` is absent, which PGlite sometimes makes it". Not reproduced: run against PGlite 0.5.8 and a real PostgreSQL container through `describeEachTarget`, both reported `code`, `constraint`, `table` AND `detail`, on every class probed — single-column unique, multi-column unique, an expression index, a quoted identifier, a primary key, a foreign key, a RESTRICT and a CHECK. The shipped helper has no such fallback and needs none. Three shapes worth knowing, all from the same run and all pinned as cases in `packages/db/src/constraint-target.test.ts`: an index over an EXPRESSION reports the expression (`Key (lower(btrim(display_name)))=(ann) …`), a `23503` and a `23001` both report the REFERENCING table on `.table` — with the `23001` naming the REFERENCED table's key columns, so its two halves come from opposite ends of the foreign key — and a CHECK violation reports `Failing row contains (…)`, which names no key at all.
+
+**Re-checked, 2026-09-21.** The field claim above holds, reproduced away from the suite that first made it: the same eight classes driven straight through `@electric-sql/pglite` 0.5.8 and through `pg` against a `postgres:18-alpine` container, printing `code`, `constraint`, `table` and `detail` for each. All four came back on all eight, on both, and PGlite's `detail` strings were character-for-character PostgreSQL's. What the SUITE pins is narrower than that sentence in two places, and a reader going there for the receipt should know which: there is no primary-key case (the primary key in `probe_people` is incidental — the refusal that case drives is the unique one), and nothing asserts that `constraint` is reported at all, because the shipped helper stopped reading it. The CHECK case is the one where the two answers look alike: it asserts `constraintTarget` returns `undefined`, which is what a `Failing row contains (…)` and a missing `detail` would BOTH produce, so it pins the outcome and not the wording. The wording is pinned by a crafted case instead ("ignores a layer whose detail names no key").
 
 ```ts
 /**
@@ -3850,7 +3864,9 @@ Each caller that matched a constraint name now matches a table and column list. 
 grep -rln "uniqueViolationConstraint(\|pgErrorConstraint(" packages apps --include='*.ts' | grep -v node_modules
 ```
 
-The two chain retries — `packages/fiscal-verifactu/src/chain.ts` and `packages/workforce/src/chain.ts` — each carry their own copy of the cause-chain walk. Consolidate them onto the shared helper here, which is the follow-up `unique-violation.ts`'s own comment names.
+The two chain retries — `packages/fiscal-verifactu/src/chain.ts` and `packages/workforce/src/chain.ts` — each carry their own copy of the cause-chain walk. Both decide the same yes/no question — was this a `23505`? — so consolidate them onto `@waitron/db`'s `isUniqueViolation`, which this task keeps.
+
+**Corrected in place, 2026-09-21, while running this task.** This step used to end "Consolidate them onto the shared helper here, which is the follow-up `unique-violation.ts`'s own comment names." It sends a reader to a comment this task deletes: the paragraph naming that follow-up was the last one of `isPgError`'s doc block in `packages/db/src/unique-violation.ts`, and this task rewrote that block, so `git show 387274fbbf81:packages/db/src/unique-violation.ts` is now the only place to read it. That comment was also narrower than the line above it — it named `packages/fiscal-verifactu/src/chain.ts` alone, never `packages/workforce/src/chain.ts`, so half of this step never had the receipt the sentence claimed for it.
 
 - [ ] **Step 6: Run every affected package**
 

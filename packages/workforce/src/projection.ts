@@ -163,7 +163,7 @@ function localDate(eventAt: string, offsetMinutes: number): string {
  *
  * Deliberately MIRRORS the fiscal `formatDateTime` (`@waitron/verifactu/src/format.ts`) — same
  * `YYYY-MM-DDThh:mm:ss±hh:mm` shape — without importing it: `@waitron/workforce` must not depend on
- * the fiscal domain (the same not-imported reason `isUniqueViolation` carries in chain.ts). Also
+ * the fiscal domain. Also
  * mirrors its file-local sibling `localDate`, which renders the date half of the same instant.
  */
 export function localWallClock(instant: string, offsetMinutes: number): string {

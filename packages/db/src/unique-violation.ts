@@ -1,88 +1,35 @@
-const UNIQUE_VIOLATION = "23505";
+import { firstCodeInCauseChain } from "@waitron/shared";
+import { UNIQUE_VIOLATION } from "./sql-state.js";
 
 /**
  * Is this error (or anything it wraps) the given pg SQLSTATE?
  *
- * Walks the cause chain because Drizzle wraps every failed query in a `DrizzleQueryError` whose
- * own `.code` is undefined — the real SQLSTATE lives on `.cause.code` (node-postgres), or nested
- * one level deeper still under PGlite. Stops at a fixed depth so a self-referential `cause` cannot
- * spin forever. Checking only the top level would silently misreport a genuine violation that
- * arrived wrapped as some other kind of failure.
+ * The code is not on the error a write path catches — Drizzle wraps the driver's error rather than
+ * re-exposing its fields — so this is a predicate over `@waitron/shared`'s `firstCodeInCauseChain`,
+ * which owns the walk, its bound and the argument for both. Checking only the top level would
+ * silently misreport a genuine violation that arrived wrapped.
  *
  * A production-layer predicate, not a test helper — unlike `./testing/errors.ts`'s
- * `pgErrorCode`/`pgErrorMessage` (which exist to make a TEST's assertion readable), this function
- * is meant to be called from a write path deciding whether to translate a driver error into a
- * domain `AppError`. `isUniqueViolation` below is the `23505` specialisation; `@waitron/printing`'s
- * `printers.ts` uses it for the `23503` FK and the `23514` transport CHECK. It is therefore
- * exported from this package's own public surface (`./index.ts`), not from `./testing/`.
+ * `pgErrorCode`/`pgErrorMessage` (which exist to make a TEST's assertion readable), this is meant to
+ * be called from a write path deciding whether to translate a driver error into a domain `AppError`.
+ * `isUniqueViolation` below is the `23505` specialisation; `@waitron/printing`'s `printers.ts` calls
+ * it directly for the `23514` transport CHECK.
  *
- * `packages/fiscal-verifactu/src/chain.ts` carries its own, independently-written copy of this
- * exact walk (predating this file) for deciding whether a chain-append race is worth retrying. That
- * copy is left as is here — consolidating it is a reasonable follow-up, not a change this file's own
- * introduction should make to already-shipped, reviewed code in another package.
+ * It answers WHICH CLASS of refusal this is, and nothing about which key was refused. A write path
+ * translating ONE specific refusal wants both, which is `./constraint-target.ts`'s `refusalOn`; this
+ * is for a path that translates a whole class, or one that also translates a refusal it could not
+ * identify.
  */
 export function isPgError(error: unknown, sqlstate: string): boolean {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      "code" in current &&
-      (current as { code?: unknown }).code === sqlstate
-    ) {
-      return true;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return false;
-    current = next;
-  }
-  return false;
+  return firstCodeInCauseChain(error, (code) => code === sqlstate) !== null;
 }
 
 /**
- * Is this (or anything it wraps) a unique-constraint violation (`23505`)? The `isPgError` cause-chain
- * walk fixed to the one SQLSTATE the write paths that translate a duplicate into a domain `AppError`
- * care about (e.g. `packages/core`'s `recordVoid` mapping a duplicate `sale_voids.sale_id` to
+ * Is this (or anything it wraps) a unique-constraint violation (`23505`)? The `isPgError` walk fixed
+ * to the one SQLSTATE the write paths that translate a duplicate into a domain `AppError` care about
+ * (e.g. `packages/core`'s `recordVoid` mapping a duplicate `sale_voids.sale_id` to
  * `sale.already_voided`).
  */
 export function isUniqueViolation(error: unknown): boolean {
   return isPgError(error, UNIQUE_VIOLATION);
-}
-
-/**
- * The NAME of the violated constraint from an error (or anything it wraps) whose SQLSTATE is
- * `sqlstate`, or `undefined` when no wrapped layer carries that SQLSTATE or the driver reported no
- * constraint name. Walks the same cause chain as {@link isPgError}: node-postgres puts the
- * constraint on the matching layer's `.constraint`; PGlite may omit it, so `undefined` means
- * "unknown", NOT "no violation".
- *
- * The constraint-returning twin of {@link isPgError}, parameterised on the SQLSTATE so a write path
- * can key on the constraint name for whichever class it translates: `23505` (unique) via
- * {@link uniqueViolationConstraint}, or `23503` (foreign key) as `apps/server`'s `bindingFkField`
- * does to map a device-binding FK to its input field.
- */
-export function pgErrorConstraint(error: unknown, sqlstate: string): string | undefined {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (typeof current === "object" && (current as { code?: unknown }).code === sqlstate) {
-      const constraint = (current as { constraint?: unknown }).constraint;
-      return typeof constraint === "string" ? constraint : undefined;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return undefined;
-    current = next;
-  }
-  return undefined;
-}
-
-/**
- * The NAME of the violated unique constraint from a `23505` error (or anything it wraps), or
- * `undefined` when the SQLSTATE is not `23505` or the driver reported no constraint name. The
- * {@link pgErrorConstraint} walk fixed to `23505`.
- *
- * A write path that maps a duplicate to a domain error uses this to translate ONLY its own
- * constraint and re-throw a different `23505` (a PK, or a constraint added later) rather than
- * mislabelling every unique violation. `@waitron/identity`'s `asEmailTaken` is the first caller.
- */
-export function uniqueViolationConstraint(error: unknown): string | undefined {
-  return pgErrorConstraint(error, UNIQUE_VIOLATION);
 }

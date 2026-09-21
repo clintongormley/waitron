@@ -1,11 +1,14 @@
 import "./errors.js";
 import {
+  FOREIGN_KEY_VIOLATION,
+  RESTRICT_VIOLATION,
+  constraintTarget,
   deviceProfiles,
   isUniqueViolation,
-  pgErrorConstraint,
-  uniqueViolationConstraint,
+  refusalOn,
+  sameTarget,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { asc, eq, sql } from "drizzle-orm";
@@ -79,45 +82,64 @@ function toRow(row: {
   };
 }
 
-const FOREIGN_KEY_VIOLATION = "23503";
-const RESTRICT_VIOLATION = "23001";
+/** `device_profiles_tenant_name_key`: UNIQUE (name) on device_profiles,
+ * migration `0033` line 230, in `packages/db/drizzle/`. */
+const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["name"] };
 
-/** The FK a device holds on a profile, ON DELETE RESTRICT (Task 5's
- * `devices_device_profile_fk`). A delete that trips it is a "still in use" conflict; matched on the
- * constraint NAME so an unrelated RESTRICT can never be mislabelled `device_profile.in_use`. `devices`
- * is the ONLY table that references a profile. */
-const DEVICE_PROFILE_FK = "devices_device_profile_fk";
+/** What a `canvas_id` naming no canvas reports — the referencing column of
+ * `device_profiles_canvas_fk`, migration `0034` line 36, in `packages/db/drizzle/`. It is the
+ * only foreign key a client value can trip on these writes. */
+const PROFILE_CANVAS_REF: ConstraintTarget = {
+  table: "device_profiles",
+  columns: ["canvas_id"],
+};
+
+/** What a delete refused by `devices_device_profile_fk` reports — devices.device_profile_id →
+ * device_profiles.id ON DELETE RESTRICT, migration `0034` line 32, in `packages/db/drizzle/`;
+ * driven in `device-profile-store.pg.test.ts`. The referencing/referenced split is
+ * `constraintTarget`'s (`packages/db/src/constraint-target.ts`).
+ * It does NOT single out that foreign key, where the constraint name it replaced did: every ON
+ * DELETE RESTRICT key out of `devices` references its parent's `id` — `devices_till_fk` and
+ * `devices_receipt_printer_fk` (same migration, lines 24 and 28) and the declared `location_id` one
+ * as well — so a refused till, printer or location delete reports this identical pair. Measured
+ * 2026-09-21 on a PGlite reproduction of those four keys: each delete answers `23001`,
+ * `table: devices`, `Key (id)=(…)`, and only `constraint` differs. CALL SCOPE is what keeps this
+ * branch right: nothing outside this file calls `translateWriteError`, so the only
+ * restrict_violation reaching it is a profile delete's — and `devices` is still the only table that
+ * references a profile. */
+const PROFILE_REFERENCED_BY_DEVICE: ConstraintTarget = { table: "devices", columns: ["id"] };
 
 /**
- * Translate the driver errors the profile write/delete paths care about into their domain codes, and
- * re-throw anything else untouched:
- *   - a `device_profiles_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
- *     `device_profile.name_taken` — the `translateWriteError` twin from `canvas-store.ts`, matched on
- *     the CONSTRAINT NAME so a 23505 on any other constraint is re-thrown untouched, with the same
- *     "no constraint name reported ⇒ translate" fallback for PGlite;
- *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that names no canvas, SQLSTATE 23503) →
- *     `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the constraint name, and it is
- *     the only 23503 a client value can trip here;
- *   - a `devices_device_profile_fk` violation (a delete of a profile a live device still references, ON
- *     DELETE RESTRICT, SQLSTATE 23001) → `device_profile.in_use` — a clean 409 rather than a raw 500.
- *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
- * The 23503/23001 detection uses `@waitron/db`'s `pgErrorConstraint` (a cause-chain walk), the same
- * mechanism `@waitron/printing`'s `printers.ts` uses, not a top-level `.code` read. Exported for the
- * crafted-error unit test (`device-profile-store.test.ts`), NOT from the package barrel — the same
- * shape as `canvas-store.ts`'s `translateWriteError`.
+ * Translate the driver refusals the profile write/delete paths care about into their domain codes,
+ * and re-throw anything else untouched:
+ *   - a duplicate profile name (SQLSTATE 23505 on {@link PROFILE_NAME}) → `device_profile.name_taken`
+ *     — the `translateWriteError` twin from `canvas-store.ts`, with the same two edges: a 23505 on
+ *     any other key of `device_profiles` is re-thrown untouched, and a 23505 that named no key at
+ *     all is translated anyway (the name key is the only unique these writes can trip on an
+ *     author-supplied value);
+ *   - a `canvas_id` that names no canvas (SQLSTATE 23503 on {@link PROFILE_CANVAS_REF}) →
+ *     `device_profile.invalid` {reason: "bad_canvas_ref"};
+ *   - a delete refused because a live device still references the profile (SQLSTATE 23001 on
+ *     {@link PROFILE_REFERENCED_BY_DEVICE}) → `device_profile.in_use`, a clean 409 rather than a raw
+ *     500. A restrict_violation from any other foreign key is re-thrown untouched.
+ * The 23505 branch stays on `constraintTarget`/`sameTarget` because it also translates a refusal
+ * whose key could not be identified, which `refusalOn` cannot express. The two 23503/23001 targets of
+ * `device_profiles_canvas_fk` differ — a bad reference names `canvas_id`, a refused canvas delete
+ * names `id` — so only the profile's own refusal reaches the `bad_canvas_ref` branch.
+ * Exported for the crafted-error unit test (`device-profile-store.test.ts`), NOT from the package
+ * barrel — the same shape as `canvas-store.ts`'s `translateWriteError`.
  */
 export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
-    const constraint = uniqueViolationConstraint(err);
-    if (constraint === undefined || constraint === "device_profiles_tenant_name_key") {
+    const target = constraintTarget(err);
+    if (target === undefined || sameTarget(target, PROFILE_NAME)) {
       throw new AppError("device_profile.name_taken", {});
     }
   }
-  if (pgErrorConstraint(err, FOREIGN_KEY_VIOLATION) === "device_profiles_canvas_fk") {
+  if (refusalOn(err, FOREIGN_KEY_VIOLATION, PROFILE_CANVAS_REF)) {
     throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
   }
-  const restrictConstraint = pgErrorConstraint(err, RESTRICT_VIOLATION);
-  if (restrictConstraint === DEVICE_PROFILE_FK) {
+  if (refusalOn(err, RESTRICT_VIOLATION, PROFILE_REFERENCED_BY_DEVICE)) {
     throw new AppError("device_profile.in_use", {});
   }
   throw err;

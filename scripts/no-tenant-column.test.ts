@@ -217,6 +217,12 @@ describe("no tenant column", () => {
     // `sql` template naming the column reaches a database without ever spelling the field, and the
     // typechecker cannot see into it either. No allowlist, deliberately: nothing under `packages/`
     // or `apps/` has a reason to name one.
+    //
+    // It reads TEXT, so it also refuses a COMMENT that happens to contain the spelling, and the
+    // one that comes up is a citation: two migration files are called `0033_drop_tenant…` and
+    // `0034_drop_tenant…`, so quoting either path is an offence. Cite those two by number instead
+    // — "migration `0033` line 236, in `packages/db/drizzle/`" — rather than reaching for an
+    // allowlist.
     const offenders = nonTestSources().filter((file) => {
       const source = readFileSync(join(repoRoot, file), "utf8");
       return TS_IDENTIFIER.test(source) || SQL_COLUMN.test(source);

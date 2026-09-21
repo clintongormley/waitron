@@ -205,6 +205,30 @@ describe("device-profile store on real Postgres, as the app role", () => {
     });
   });
 
+  it("translates a canvasId naming no canvas to device_profile.invalid {bad_canvas_ref} (23503)", async () => {
+    // The real `device_profiles_canvas_fk` refusal: a well-formed uuid that names no canvas row.
+    // createDeviceProfile catches the driver's 23503 and re-throws the domain code, so the
+    // management surface answers a clean 4xx rather than a raw 500. Proof-by-deletion: remove the
+    // 23503 branch from translateWriteError and this fails with the raw driver error.
+    await seedTenant(suite.admin);
+    const session = await seedSession("manager");
+    const error = await errorOf(() =>
+      asApp((tx) =>
+        createDeviceProfile(tx, {
+          managementSessionId: session,
+          name: "Ghost reference",
+          formFactor: "till",
+          canvasId: "00000000-0000-4000-8000-000000000000",
+          capabilities: [],
+        }),
+      ),
+    );
+    expect(typeof error).not.toBe("string"); // it threw an AppError, not a raw 23503
+    expect((error as AppError).code).toBe("device_profile.invalid");
+    expect((error as AppError).params).toEqual({ reason: "bad_canvas_ref" });
+    expect(await rowCount()).toBe(0); // the refused insert left nothing behind
+  });
+
   it("lists a tenant's device profiles by name", async () => {
     await seedTenant(suite.admin);
     const session = await seedSession("manager");

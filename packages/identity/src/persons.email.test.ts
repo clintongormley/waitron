@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { constraintTarget, withTransaction } from "@waitron/db";
 import { pgErrorCode } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { hashPin } from "./verify-pin.js";
+import { PERSONS_EMAIL } from "./person-constraints.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 // Real PostgreSQL checks INSERT and unique-index behavior through an app_user member login.
@@ -35,17 +36,16 @@ describe("persons.email unique index (persons_tenant_email_uq)", () => {
       await insertPerson(probe, "A", "Owner@x.com");
       // The differing case (Owner@x.com vs owner@x.com) is the point: lower(email) collides. drizzle
       // wraps the pg error, so its .message is a generic "Failed query…" — the unique-violation code
-      // and the constraint name live on the underlying pg error, which `pgErrorCode` reaches by
-      // walking `.cause`. 23505 = unique_violation.
+      // and the key that collided live on the underlying pg error, which `pgErrorCode` and
+      // `constraintTarget` both reach by walking `.cause`. 23505 = unique_violation.
       const error = await insertPerson(probe, "B", "owner@x.com")
         .then(() => undefined)
         .catch((e: unknown) => e);
       expect(pgErrorCode(error)).toBe("23505");
-      // Prove it is THIS index that fired, not some other unique constraint (id, say). The pg error
-      // — with .constraint — is the DrizzleQueryError's cause, not the wrapper itself.
-      expect((error as { cause?: { constraint?: string } }).cause?.constraint).toBe(
-        "persons_tenant_email_uq",
-      );
+      // Prove it is THIS index that fired, not some other unique constraint (id, say). Asked as the
+      // table and key PostgreSQL reports, which is the identity `asEmailTaken` compares on, rather
+      // than as the constraint NAME this branch retired.
+      expect(constraintTarget(error)).toEqual(PERSONS_EMAIL);
     } finally {
       await probe.close();
     }
