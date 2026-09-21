@@ -105,7 +105,7 @@ client, and the types), **plus** the new `@waitron/verifactu/testing` entry expo
 
 The library owns its gates now (they leave Waitron — see §4):
 
-- Test + coverage at the same bars it holds today: **98/98/98/95** statements/branches/functions/lines.
+- Test + coverage at the same bars it holds today — **statements 98, functions 98, lines 98, branches 95** (the 95 is on branches; do not reorder).
 - Mutation at the **90** floor (`stryker`), as a real gate in the library's CI.
 - Lint, typecheck, `prettier --check`, and a **build smoke test**: pack the tarball, install it in a
   throwaway project, import the root and `./testing`, and confirm the `exports` resolve against the

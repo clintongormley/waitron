@@ -17,7 +17,7 @@
 - **Version:** first publish is `0.1.0`.
 - **Fresh git history** in the library repo — no monorepo commits carried across.
 - **No internal or AI-workflow material in the public repo** — no `CLAUDE.md`, `AGENTS.md`, `.claude/`, `.codex/`, `docs/superpowers|handoffs|compliance`, and no in-source references to them. A CI guard enforces this (Task A4).
-- **Coverage bars in the library repo:** `98/98/98/95` (statements/branches/functions/lines). **Mutation floor:** `90`.
+- **Coverage bars in the library repo (exact — the copied `vitest.config.ts` already holds these):** `statements: 98, functions: 98, lines: 98, branches: 95`. The 95 is on **branches**; do not reorder or edit. **Mutation floor:** `90`.
 - **The only new public API the extraction adds is the `./testing` subpath export** (for `createFakeAeat`). Every other consumer import is the existing root surface.
 - **No behavioural change to any verifactu code.** This is a move, a build, and a rewire.
 - **Runtime dependencies of the library stay at exactly one: `fast-xml-parser`.** The `./testing` and (future) ergonomics layers must not add a runtime dependency to the root entry.
@@ -192,6 +192,8 @@ Expected: one commit; working tree clean.
   "exclude": ["src/**/*.test.ts", "test"]
 }
 ```
+
+> Note (verify, do not assume): this minimal config drops the monorepo base's `lib: [DOM…]` and `types: [vitest/globals…]`. The source uses `node:crypto` (a module import, not a global), no DOM APIs, and the tests import `{ describe, expect, it }` from `vitest` explicitly (no ambient globals), and not setting `types` lets all installed `@types/*` (including `@types/node`) resolve — so it should typecheck. Step 5 confirms it. If typecheck complains about a missing global, add the specific `lib`/`types` entry it names rather than copying the whole monorepo base.
 
 - [ ] **Step 3: Install and build**
 
@@ -410,13 +412,13 @@ jobs:
       - run: npm run mutation
 ```
 
-- [ ] **Step 2: Confirm the coverage bars are 98/98/98/95 in `vitest.config.ts`**
+- [ ] **Step 2: Confirm the coverage thresholds are UNCHANGED from the copied config**
 
-Read `vitest.config.ts`; ensure `coverage.thresholds` is `{ statements: 98, branches: 98, functions: 98, lines: 95 }` and `coverage.include` names `src`. If the monorepo config referenced a shared base, inline the needed values so the config is self-contained.
+Read `vitest.config.ts` (copied verbatim in A1). Confirm `coverage.thresholds` reads exactly `{ statements: 98, lines: 98, functions: 98, branches: 95 }` — the 95 is on **branches**, not lines. Do NOT reorder or edit these; the copied config already holds the correct gate, and changing the metric a number sits on would silently move the gate. Confirm `coverage.include` names `src`. (The config is already standalone — it does not extend a monorepo base.)
 
-- [ ] **Step 3: Confirm the mutation floor is 90 in `stryker.config.json`**
+- [ ] **Step 3: Confirm the mutation config is UNCHANGED from the copied config**
 
-Read `stryker.config.json`; ensure `thresholds.break` is `90` and the `mutate` globs cover `src` (the monorepo mutated a named subset — widen to `src/**/*.ts` excluding tests, or keep the same set if deliberate; note the choice in the commit).
+Read `stryker.config.json` (copied in A1). Confirm `thresholds.break` is `90` and `mutate` is already package-wide — `["src/**/*.ts", "!src/**/*.test.ts"]`. No widening is needed (the named-subset caveat in CLAUDE.md is about `packages/fiscal`, not verifactu). Leave it as copied.
 
 - [ ] **Step 4: Run the whole CI sequence locally**
 
@@ -573,13 +575,13 @@ with:
 import { createFakeAeat } from "@waitron/verifactu/testing";
 ```
 
-Verify none remain:
+Verify no deep **import** remains (narrow to the import form — a broad `@waitron/verifactu/src/` grep also hits doc-comment cross-references in `fiscal-verifactu/src/drain.ts`, `fiscal-verifactu/test/drain-fixtures.ts` and `workforce/src/projection.ts`, which are NOT being changed here):
 
 ```bash
-grep -rn '@waitron/verifactu/src/' packages apps | grep '\.ts:' | grep -v node_modules
+grep -rn 'from "@waitron/verifactu/src/' packages apps | grep -v node_modules
 ```
 
-Expected: no results (comment cross-references in `drain.ts`/`projection.ts` may be thinned when next touched, but do not block here).
+Expected: no results. (The remaining comment cross-references are fine; thin them only when next touching those files.)
 
 - [ ] **Step 2: Repoint the three manifests and delete the package**
 
@@ -619,7 +621,7 @@ and packages/verifactu is deleted. No behavioural change."
 
 ---
 
-### Task B2: Clean up `ci.yml`
+### Task B2: Clean up `ci.yml` (job, gate, filter, and the stale receipts)
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`
@@ -631,13 +633,18 @@ and packages/verifactu is deleted. No behavioural change."
 - [ ] **Step 1: Remove the verifactu pieces from `ci.yml`**
 
 Delete, in `.github/workflows/ci.yml`:
-- the `mutation-verifactu` job (its whole `mutation-verifactu:` block) and its entry in the `ci` job's `needs:` list;
-- the `verifactu` output of the `changes`/`gates` job and the step logic that computes it;
-- the `--filter "!@waitron/verifactu"` argument from the coverage-run step.
+- the `mutation-verifactu` job (its whole block, ~lines 1473-1499, including the `mutation-report-verifactu` artifact upload) and its entry in the `ci` job's `needs:` list (~line 1572);
+- the `verifactu` output of the `changes`/`gates` job (~line 126) and the step logic that computes it;
+- the `--filter "!@waitron/verifactu"` argument from the coverage-run step (~line 1368).
 
 Leave every `fiscal-verifactu` reference untouched — that package stays.
 
-- [ ] **Step 2: Run the workflow text-guards**
+- [ ] **Step 2: Sweep the stale comment receipts the removal leaves** (editing a file is not auditing it — CLAUDE.md §1)
+
+- The `mutation-shared` job header (~lines 1501-1515) calls its target "cheaper than `packages/verifactu`" and gated "by the same membership mechanism as **mutation-verifactu above**". Remove the "cheaper than packages/verifactu" clause and reword the "as mutation-verifactu above" reference — that job no longer exists — so the comment stands on its own.
+- The changed-scope worked example (~lines 87-88) prints `verifactu=false`. It is explicitly a *historical* snapshot (disclaimed at ~lines 90-91, "spelled as it was on `main` at the time"), so leaving it is defensible; if you touch it, drop only the `verifactu=false` token. Low priority.
+
+- [ ] **Step 3: Run the workflow text-guards**
 
 ```bash
 pnpm exec vitest run scripts/ci-workflow.test.mjs scripts/main-tag-guard.test.mjs
@@ -645,64 +652,158 @@ pnpm exec vitest run scripts/ci-workflow.test.mjs scripts/main-tag-guard.test.mj
 
 Expected: PASS. If either pins a job count or the `needs` list, update the guard's expectation to match the removed job, then re-run.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/ci.yml scripts/ci-workflow.test.mjs scripts/main-tag-guard.test.mjs
 git commit -s -m "Drop verifactu's CI job, change-gate and coverage filter
 
 The package no longer lives here, so its dedicated mutation job, its change
-detection gate, and the coverage-run filter that excluded it are removed."
+detection gate, and the coverage-run filter that excluded it are removed —
+along with the stale comment receipts on the mutation-shared job that pointed
+at the removed job."
 ```
 
 ---
 
-### Task B3: Clean up the package-list guards
+### Task B3: Guard SOURCE and config cleanup (mechanical removals)
 
 **Files:**
-- Modify: `scripts/coverage-thresholds.test.ts` (drop `@waitron/verifactu` from the 98-bar set)
-- Modify: `scripts/changed-packages.mjs`, `scripts/changed-scope.mjs` (+ their `*.test.mjs`) — remove the verifactu enumeration and the stale schema-SHA comment
-- Modify: `scripts/english-only.test.ts` (prune the dead `verifactu` entry from the negative-check list)
+- Modify: `scripts/coverage-thresholds.test.ts`
+- Modify: `scripts/changed-scope.mjs`
+- Modify: `scripts/english-only.test.ts`
+- Modify: `eslint.config.js`
 
 **Interfaces:**
-- Produces: a root guard suite green with verifactu gone from the workspace.
+- Produces: the guard/config source with no reference to verifactu as a workspace member. The guard TESTS (`changed-scope.test.mjs`, `changed-packages.test.mjs`) are rewritten in B4 and stay RED until then.
 
-- [ ] **Step 1: Edit each guard**
+- [ ] **Step 1: `scripts/coverage-thresholds.test.ts`** — remove the `"@waitron/verifactu",` entry from `HIGH_BAR_PACKAGES` (~line 43). Keep `@waitron/fiscal-verifactu`.
 
-- `scripts/coverage-thresholds.test.ts`: remove the `"@waitron/verifactu",` line from the array of packages that must hold the 98 bar (keep `@waitron/fiscal-verifactu`).
-- `scripts/changed-packages.mjs` / `scripts/changed-scope.mjs`: remove any list entry or branch naming `verifactu` (not `fiscal-verifactu`); delete the `changed-scope.mjs` comment describing `packages/verifactu/schemas/README.md` SHA pinning (that file left the repo). Update `changed-packages.test.mjs` / `changed-scope.test.mjs` expectations to match.
-- `scripts/english-only.test.ts`: in the negative-assertion list (`for (const domainSpecific of [...])`), remove `"verifactu"`, leaving `"country-es"`, `"country-gb"`, `"reporting"`.
+- [ ] **Step 2: `scripts/changed-scope.mjs`** — two functional removals plus a comment sweep:
+  - remove `"@waitron/verifactu",` from `LIGHT_B_PACKAGES` (~line 328) — verifactu ran its tests in the `test-light-b` shard;
+  - remove the `{ output: "verifactu", covers: membership("@waitron/verifactu") },` entry from `SCOPE_GATES` (~line 421) — the `mutation-verifactu` gate;
+  - comments: the path-allowlist rationale (~lines 12-16) uses `packages/verifactu/schemas/README.md` as its example — reword it to state the principle (an allowlist of paths, not an extension match, because a package-nested README can be a test fixture) without naming the deleted file; the `FISCAL_VERIFACTU_PACKAGE` comment's last sentence (~line 254, "NOT to be confused with the `verifactu` gate…") — delete it; the `SCOPE_GATES` mutation-measurement comment (~lines 375-379) — repoint the example from `mutation-verifactu` to `mutation-shared`, which remains; the `gateOutputs` dependents example (~lines 499-504) — drop the `@waitron/verifactu...` half, keeping the `@waitron/shared...` one.
 
-- [ ] **Step 2: Run the affected guards**
+- [ ] **Step 3: `scripts/english-only.test.ts`** — in the negative-check loop (`for (const domainSpecific of [...])`, ~line 141) remove `"verifactu"`, leaving `"country-es"`, `"country-gb"`, `"reporting"`; trim the "verifactu (the AEAT wire library)" phrase from the comment above it (~lines 137-138).
+
+- [ ] **Step 4: `eslint.config.js`** — remove the ENTIRE first `import-x/no-restricted-paths` config object, the one whose single zone `target`s `./packages/verifactu/**/*` (~lines 44-78: its `files`/`plugins`/`settings`/`rules`). That rule forbade repo packages from importing verifactu's internals; with verifactu external it targets a directory that no longer exists. **Leave the `packages/shared` no-restricted-paths object (from ~line 80) untouched.** Read the surrounding lines to find the object's exact `{`…`}` boundaries before deleting.
+
+- [ ] **Step 5: Run the affected guards and lint**
 
 ```bash
-pnpm exec vitest run scripts/coverage-thresholds.test.ts scripts/changed-packages.test.mjs scripts/changed-scope.test.mjs scripts/english-only.test.ts scripts/module-seams.test.ts
+pnpm exec vitest run scripts/coverage-thresholds.test.ts scripts/english-only.test.ts scripts/module-seams.test.ts
+pnpm --filter @waitron/fiscal-verifactu lint
 ```
 
-Expected: PASS. `module-seams.test.ts` should pass **unchanged** — it keys on the package name `@waitron/verifactu`, which still exists as an external dependency, and the boundary it enforces (a generic host must not import the AEAT protocol library in production) is unchanged.
+Expected: the three guards PASS. `module-seams.test.ts` passes **unchanged** — it keys on the package name `@waitron/verifactu`, still an external dependency, and the host-must-not-import-in-production boundary is unchanged. Lint passes with the verifactu eslint zone gone. (The `changed-scope`/`changed-packages` guard tests are still RED here — B4 rewrites them.)
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/
-git commit -s -m "Remove verifactu from the workspace package-list guards
+git add scripts/coverage-thresholds.test.ts scripts/changed-scope.mjs scripts/english-only.test.ts eslint.config.js
+git commit -s -m "Remove verifactu from the workspace guards and the eslint boundary
 
-Coverage thresholds, the changed-package/scope enumerations, and the
-english-only negative list no longer name verifactu now that it is an external
-dependency. module-seams needs no change — it keys on the package name, which
-still exists."
+Coverage thresholds, the changed-scope light bin and mutation gate, the
+english-only exemption, and the eslint no-restricted-paths zone that fenced
+packages/verifactu all named a package that has left the workspace. The stale
+comment receipts pointing at the removed gate go in the same change.
+module-seams needs no change — it keys on the package name, which still exists."
 ```
 
 ---
 
-### Task B4: Documentation sweep
+### Task B4: Rewrite the guard TESTS that were built around verifactu
+
+The two `changed-*` guard tests are STRUCTURALLY built on verifactu — one exemplar package that switches two gates, and one primary-source README fixture. `@waitron/shared` has the identical dual-gate shape (it is in `LIGHT_A_PACKAGES` **and** has its own `shared` mutation gate), so it replaces the exemplar; an existing package README replaces the fixture.
 
 **Files:**
-- Modify: `CLAUDE.md`, `docs/developers/ci-and-gates.md`, `docs/developers/testing-guide.md` (statements the extraction makes false)
+- Modify: `scripts/changed-scope.test.mjs`
+- Modify: `scripts/changed-packages.test.mjs`
+
+**Interfaces:**
+- Consumes: `changed-scope.mjs`'s `SCOPE_GATES` with the `verifactu` gate removed (B3).
+- Produces: both `.test.mjs` files green.
+
+- [ ] **Step 1: Delete the verifactu-specific mutation-gate test**
+
+In `scripts/changed-scope.test.mjs`, delete the test `"runs mutation-verifactu only when @waitron/verifactu is in the resolved scope"` (~lines 436-439). The analogous `"runs mutation-shared only when @waitron/shared is in the resolved scope"` test (~lines 441-444) stays and covers the membership-gate pattern.
+
+- [ ] **Step 2: Rewrite the "gates independent" test against `@waitron/shared`**
+
+Replace the `"keeps the gates independent of each other"` test (~lines 446-475) with:
+
+```javascript
+  // A package in scope must not switch on a gate belonging to a different package.
+  // @waitron/fiscal-verifactu has its own shard, so it switches `fiscal_verifactu` and neither
+  // light gate; @waitron/shared is in bin A, so it switches light_a AND the `shared` mutation
+  // gate (one package can legitimately switch on both); @waitron/server switches only `server`.
+  it("keeps the gates independent of each other", () => {
+    const scope = packagesInScope(
+      ls("@waitron/shared", "@waitron/fiscal-verifactu", "@waitron/server"),
+    );
+    expect(gates(scope)).toEqual({
+      heavy: "false",
+      ui: "false",
+      till: "false",
+      dashboard: "false",
+      setup: "false",
+      venue_service: "false",
+      server: "true",
+      fiscal_verifactu: "true",
+      bookings: "false",
+      media: "false",
+      payments_stripe: "false",
+      payments_sumup: "false",
+      light_a: "true",
+      light_b: "false",
+      shared: "true",
+    });
+  });
+```
+
+- [ ] **Step 3: Remove verifactu from the remaining gate baselines**
+
+In `scripts/changed-scope.test.mjs`:
+- in the per-gate baseline object of the "switches only its own gate" test (~line 429), remove the `verifactu: "false",` line (keep `shared: "false",`);
+- in the hardcoded gate-name list (~line 548), remove the `"verifactu",` entry (keep `"shared",`).
+
+If either is derived from `SCOPE_GATES` rather than hardcoded, B3 already dropped it — check, and only edit the hardcoded copies.
+
+- [ ] **Step 4: Replace the schemas-README classification fixture**
+
+- In `scripts/changed-scope.test.mjs`, delete the test `"treats packages/verifactu/schemas/README.md as code, not documentation"` and its comment (~lines 49-55). The general case `packages/db/README.md` (~line 59) already asserts a package-nested README classifies as code, and the deleted test's rationale (a primary-source fixture) no longer has a file in this repo.
+- In `scripts/changed-packages.test.mjs`, in the "treats exactly the paths classify() calls documentation" test (~lines 306-314), replace `"packages/verifactu/schemas/README.md"` (~line 311) with `"packages/db/README.md"` — an existing non-docs package README that `classify()` also treats as code.
+
+- [ ] **Step 5: Run both files to green**
+
+```bash
+pnpm exec vitest run scripts/changed-scope.test.mjs scripts/changed-packages.test.mjs
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/changed-scope.test.mjs scripts/changed-packages.test.mjs
+git commit -s -m "Rewrite the changed-scope guard tests around @waitron/shared
+
+Two tests were built on verifactu: one exemplar that switches two gates, and a
+primary-source README fixture. @waitron/shared has the same dual-gate shape (a
+light bin plus its own mutation gate), so it replaces the exemplar, and an
+existing package README replaces the fixture. The gate logic is unchanged."
+```
+
+---
+
+### Task B5: Documentation sweep (and the local-override note)
+
+**Files:**
+- Modify: `CLAUDE.md`, `docs/developers/ci-and-gates.md`, `docs/developers/testing-guide.md`, `docs/developers/workflow-guide.md`
 - Verify: `scripts/claude-md-pointers.test.ts`
 
 **Interfaces:**
-- Produces: docs with no false claim about verifactu being a workspace package, and the pointer guard green.
+- Produces: docs with no false claim about verifactu being a workspace package, plus the §3.3 local-override note.
 
 - [ ] **Step 1: Find and fix the false statements**
 
@@ -710,9 +811,13 @@ still exists."
 grep -rn "verifactu" CLAUDE.md docs/developers/ci-and-gates.md docs/developers/testing-guide.md | grep -v fiscal-verifactu
 ```
 
-For each hit, decide: is it still true with verifactu external? Fix only the ones the extraction falsifies — e.g. the `mutation-verifactu` CI job (gone), the 98-bar coverage set membership (verifactu removed), and any "workspace package" framing. Leave statements that remain true. Do not sweep unrelated lines.
+For each hit, decide: is it still true with verifactu external? Fix only the ones the extraction falsifies — the `mutation-verifactu` CI job (gone), the 98-bar coverage set membership (verifactu removed), the `test-light-b` bin membership, and any "workspace package" framing. Leave statements that remain true. Do not sweep unrelated lines.
 
-- [ ] **Step 2: Run the pointer guard and confirm no dangling links**
+- [ ] **Step 2: Add the local-override note (spec §3.3)**
+
+In `docs/developers/workflow-guide.md`, document how to point Waitron at a local checkout of the library for iterating without publishing — a `pnpm link --global` from `~/workspace/repos/verifactu` plus `pnpm link --global @waitron/verifactu` in the consumer, or a `pnpm.overrides` entry mapping `@waitron/verifactu` to a `file:` path — and note that the committed manifests always reference the published version.
+
+- [ ] **Step 3: Run the pointer guard and confirm no dangling links**
 
 ```bash
 pnpm exec vitest run scripts/claude-md-pointers.test.ts
@@ -720,20 +825,21 @@ pnpm exec vitest run scripts/claude-md-pointers.test.ts
 
 Expected: PASS (no `packages/verifactu/...` backticked path remains in `CLAUDE.md` or its topic files that the guard checks).
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add CLAUDE.md docs/developers/ci-and-gates.md docs/developers/testing-guide.md
-git commit -s -m "Update the docs the extraction made false
+git add CLAUDE.md docs/developers/ci-and-gates.md docs/developers/testing-guide.md docs/developers/workflow-guide.md
+git commit -s -m "Update the docs the extraction made false, and document the local override
 
-verifactu is no longer a workspace package: its dedicated mutation job is gone,
-it has left the 98-bar coverage set here, and it is an external dependency now.
-Fix the statements that said otherwise; leave the ones still true."
+verifactu is no longer a workspace package: its mutation job is gone, it has
+left the 98-bar coverage set and the light-b test bin, and it is an external
+dependency now. Fix the statements that said otherwise, and record how to point
+Waitron at a local checkout of the library while iterating."
 ```
 
 ---
 
-### Task B5: Full verification and open the PR
+### Task B6: Full verification and open the PR
 
 **Files:** none (verification + PR).
 
@@ -780,15 +886,21 @@ State plainly that the branch is validated and ready for `finish-branch` / the o
 - §2.6 library CI → A5; release/provenance → A6. ✓
 - §2.7 no internal artifacts → A4 (scrub + guard). ✓
 - §2.8/§2.9/§2.10 (differential tests, facade, QR renderer) → **deliberately deferred to a follow-up plan** (off critical path, spike-gated). Stated at the top. ✓
-- §3 consumption (registry dep, deep-import fix, local override) → B1. ✓ (local-override doc is part of B4's workflow-guide touch; add if missing.)
-- §4 gate cleanup → B2 (ci.yml), B3 (guards), B4 (docs); §4.3 module-seams no-change → asserted in B3 Step 2. ✓
-- §5 testing → A3 (build smoke), A5 (coverage/mutation), B1/B5 (consumer + guard suites). ✓
-- §6 sequencing → Part A before Part B; B5 Step 4 notes the publish dependency. ✓
+- §3 consumption (registry dep, deep-import fix, local override) → B1 (dep + imports), B5 Step 2 (local-override doc). ✓
+- §4 gate cleanup → B2 (ci.yml + stale receipts), B3 (guard source + eslint zone), B4 (guard-test rewrites), B5 (docs); §4.3 module-seams no-change → asserted in B3 Step 5. ✓
+- §5 testing → A3 (build smoke), A5 (coverage/mutation), B1/B6 (consumer + guard suites). ✓
+- §6 sequencing → Part A before Part B; B6 Step 4 notes the publish dependency. ✓
 - §7 two-repo cost → inherent; noted in the spec. ✓
 
-**Placeholder scan:** the `eslint`/`prettier` version notes in A2 and the TS-7-emit fallback in A2 Step 4 are explicit verify-and-pin steps, not vague TODOs. No "add error handling"/"write tests for the above" placeholders.
+**Applied from the fresh-context plan review (2026-09-21):**
+- Coverage bars corrected to `statements 98, functions 98, lines 98, branches 95` (the 95 is on branches) in Global Constraints and A5 Step 2 — the earlier "98/98/98/95 statements/branches/functions/lines" would have moved the gate. Same fix in spec §2.6.
+- Part B split: B3 is now the mechanical guard/config source removals (adding the `changed-scope.mjs` light-bin + gate, the stale-comment sweep, and the `eslint.config.js` no-restricted-paths zone the first draft missed entirely); B4 is the design-laden guard-TEST rewrites against `@waitron/shared` (the package with verifactu's dual-gate shape), with the schemas-README fixture repointed to `packages/db/README.md`.
+- B1's deep-import verification narrowed to the `from "@waitron/verifactu/src/` form so doc-comment cross-references don't read as failures.
+- A5 Step 3 corrected (verifactu's stryker `mutate` is already package-wide).
 
-**Type consistency:** the `./testing` export path (`@waitron/verifactu/testing`) is used identically in A2 (exports map), A3 (smoke), and B1 (the six rewrites). `createFakeAeat` is the imported name throughout. Coverage bars `98/98/98/95` and mutation `90` are stated consistently in Global Constraints and A5.
+**Placeholder scan:** the `eslint`/`prettier` version notes and the TS-7-emit fallback (A2) are explicit verify-and-pin steps, not vague TODOs. B4's rewritten test is shown in full. No "add error handling"/"write tests for the above" placeholders.
+
+**Type consistency:** the `./testing` export path (`@waitron/verifactu/testing`) is used identically in A2 (exports map), A3 (smoke), and B1 (the six rewrites); `createFakeAeat` throughout. `@waitron/shared` is the replacement exemplar in B4, consistent with its `LIGHT_A`+`shared`-gate membership in `changed-scope.mjs`. Mutation `90` and the corrected coverage bars are stated consistently.
 
 ---
 
