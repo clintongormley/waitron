@@ -148,7 +148,7 @@ export {
   FOREIGN_KEY_VIOLATION,
   RESTRICT_VIOLATION,
   UNIQUE_VIOLATION,
-} from "./sqlstate.js";
+} from "./sql-state.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**

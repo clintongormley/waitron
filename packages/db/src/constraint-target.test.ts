@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import type { Database } from "./client.js";
 import { constraintTarget, refusalOn, sameTarget } from "./constraint-target.js";
-import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "./sqlstate.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "./sql-state.js";
 import { describeEachTarget } from "./testing/harness.js";
 
 /**
@@ -12,7 +12,7 @@ import { describeEachTarget } from "./testing/harness.js";
  * and the whole point of this helper is what each of them reports. The crafted-error cases at the
  * bottom are the exception, for shapes no database can be made to produce — a cause chain deeper
  * than the walk's bound, a self-referential one, and a SQLSTATE and a key arriving on two different
- * layers. The rest of that block crafts because its subject is the walk, not the parse.
+ * layers. The rest of that block crafts for a second reason: a `detail` a server would not write.
  */
 describeEachTarget("constraintTarget", (target) => {
   let db: Database;
@@ -106,6 +106,17 @@ describeEachTarget("constraintTarget", (target) => {
       table: "probe_boundary",
       columns: ['"a)=(b"'],
     });
+  });
+
+  // The module's doc groups the primary key with the unique constraint. It is the same `23505` and
+  // the same detail shape, but "same" is what this case is here to show rather than assume.
+  it("names the key of a primary-key collision", async () => {
+    const error = await violate([
+      `create table probe_pk (id int primary key)`,
+      `insert into probe_pk values (1)`,
+      `insert into probe_pk values (1)`,
+    ]);
+    expect(constraintTarget(error)).toEqual({ table: "probe_pk", columns: ["id"] });
   });
 
   it("names the referencing table and column of a foreign-key violation", async () => {
@@ -248,6 +259,15 @@ describe("constraintTarget's cause walk", () => {
 
   it("ignores a layer that reports a table but no detail", () => {
     expect(constraintTarget(Object.assign(new Error("dup"), { table: "people" }))).toBeUndefined();
+  });
+
+  // PostgreSQL cannot write this, so it has to be crafted: an empty key is not a key.
+  it("treats an empty key as no key at all", () => {
+    expect(
+      constraintTarget(
+        Object.assign(new Error("dup"), { table: "people", detail: "Key ()=() already exists." }),
+      ),
+    ).toBeUndefined();
   });
 
   it("ignores a layer whose detail names no key", () => {

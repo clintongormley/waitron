@@ -1,5 +1,5 @@
 import { firstCodeInCauseChain } from "@waitron/shared";
-import { UNIQUE_VIOLATION } from "./sqlstate.js";
+import { UNIQUE_VIOLATION } from "./sql-state.js";
 
 /**
  * Is this error (or anything it wraps) the given pg SQLSTATE?
@@ -12,8 +12,8 @@ import { UNIQUE_VIOLATION } from "./sqlstate.js";
  * A production-layer predicate, not a test helper — unlike `./testing/errors.ts`'s
  * `pgErrorCode`/`pgErrorMessage` (which exist to make a TEST's assertion readable), this is meant to
  * be called from a write path deciding whether to translate a driver error into a domain `AppError`.
- * `isUniqueViolation` below is the `23505` specialisation; `@waitron/printing`'s `printers.ts` uses
- * it for the `23503` FK and the `23514` transport CHECK.
+ * `isUniqueViolation` below is the `23505` specialisation; `@waitron/printing`'s `printers.ts` calls
+ * it directly for the `23514` transport CHECK.
  *
  * It answers WHICH CLASS of refusal this is, and nothing about which key was refused. A write path
  * translating ONE specific refusal wants both, which is `./constraint-target.ts`'s `refusalOn`; this

@@ -71,6 +71,30 @@ export default defineConfig({
     // once here and once through `pnpm -r`. Two extensions rather than one glob with a brace:
     // `.mjs` is the classifiers, `.ts` is the guards.
     include: ["scripts/**/*.test.mjs", "scripts/**/*.test.ts"],
+    // Above the longest a HEALTHY case here can take, not above the time one takes on an idle
+    // machine. Most suites in this project shell out — `node scripts/<cli>`, `git`, the hook — so a
+    // case's cost is a child process, and a loaded machine stretches the child rather than this
+    // process's own work. At Vitest's 5000ms default that failed healthy runs: measured 2026-09-21
+    // in this worktree, a full `npx vitest run` (51 files in parallel) with a package coverage run
+    // alongside it failed `mutation-shard`, `changed-packages` and `changed-scope` with
+    // "Test timed out in 5000ms" — the assertions never ran — while each file on its own finishes
+    // in under a second per case and the same full run passes on a quiet machine. Fixing two of
+    // them file by file surfaced the third, which is why the bound is here rather than in three
+    // files: the shape belongs to the project, not to a suite. `CLAUDE.md` §4 states the cost — a
+    // bound that fires under load produces a suite people rerun, and a suite people rerun no longer
+    // gates. Thirty seconds is what the root guards that already declare one use.
+    //
+    // What thirty seconds does NOT buy, stated so nobody reads it as a guarantee: at a load average
+    // near 48 on this machine — four subagents' suites, a coverage run and the other campaign lane
+    // all at once — `scripts/ci-workflow.test.mjs` still timed out, and it declares SIXTY seconds of
+    // its own. No bound survives an oversubscribed machine. This raises the floor from a default
+    // that a normal parallel run trips to one it does not; deciding test concurrency from measured
+    // headroom (`CLAUDE.md` §2) is the other half and this cannot replace it.
+    //
+    // `scripts/spawn-timeout-budget.test.ts` does NOT read this: for a suite under `scripts/` it
+    // reads that file's own text and falls back to Vitest's default, so it still asks a suite
+    // declaring a long WAIT to declare its own bound. That is stricter than reality, not looser.
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],

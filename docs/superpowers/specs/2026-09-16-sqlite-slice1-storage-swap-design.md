@@ -16,11 +16,14 @@
 >
 > **The Provenance row "92 error-helper call sites in 23 non-test files" is wrong, and so is the
 > command that produced it.** A grep for those four helpers cannot see a caller that walks the cause
-> chain itself, and three did: `packages/reporting/src/record-daily-close.ts`,
-> `apps/server/src/tables.ts` and `packages/core/src/settle-sale.ts`. Two greps are needed, not one.
+> chain itself, and FIVE did: `packages/reporting/src/record-daily-close.ts`,
+> `apps/server/src/tables.ts`, `packages/core/src/settle-sale.ts`,
+> `packages/fiscal-verifactu/src/chain.ts` and `packages/workforce/src/chain.ts`. The last two were
+> already on the task's Files list for another reason, which is why an earlier version of this
+> pointer counted three. Two greps are needed, not one.
 > `grep -rn "constraint?: unknown" --include='*.ts' packages apps` finds a hand-rolled walk that goes
-> on to read the constraint NAME, which is the first two of those three; the third reads a SQLSTATE
-> and stops, so only `grep -rn 'cause?: unknown' --include='*.ts' packages apps` reaches it — at the
+> on to read the constraint NAME, which is two of the five; the other three read a SQLSTATE and stop,
+> so only `grep -rn 'cause?: unknown' --include='*.ts' packages apps` reaches them — at the
 > cost of also returning walks that translate no refusal at all, so its output is read rather than
 > counted. Treat the row's number as unverified rather than as a size.
 >

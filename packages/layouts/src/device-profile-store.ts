@@ -100,7 +100,7 @@ const PROFILE_CANVAS_REF: ConstraintTarget = {
  * `constraintTarget`'s (`packages/db/src/constraint-target.ts`).
  * It does NOT single out that foreign key, where the constraint name it replaced did: every ON
  * DELETE RESTRICT key out of `devices` references its parent's `id` — `devices_till_fk` and
- * `devices_receipt_printer_fk` (same migration, lines 25 and 29) and the declared `location_id` one
+ * `devices_receipt_printer_fk` (same migration, lines 24 and 28) and the declared `location_id` one
  * as well — so a refused till, printer or location delete reports this identical pair. Measured
  * 2026-09-21 on a PGlite reproduction of those four keys: each delete answers `23001`,
  * `table: devices`, `Key (id)=(…)`, and only `constraint` differs. CALL SCOPE is what keeps this

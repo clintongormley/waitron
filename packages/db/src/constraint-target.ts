@@ -17,9 +17,10 @@ export interface ConstraintTarget {
  *
  * The walk exists because the fields below are not on the error a caller catches: Drizzle wraps the
  * driver's error rather than re-exposing them. It cannot be a predicate over `@waitron/shared`'s
- * `firstCodeInCauseChain`, which stops at the first `code` and returns only that string, where this
- * file needs three fields off one layer. It takes that module's BOUND rather than its own, which is
- * the convention `apps/server`'s `failureDetail` follows for the same reason.
+ * `firstCodeInCauseChain`, which hands its predicate a `code` and returns only that string, where
+ * this file needs `table` and `detail` off a layer as well — and {@link refusalOn} needs all three
+ * off the SAME layer. It takes that module's BOUND rather than its own, which is the convention
+ * `apps/server`'s `failureDetail` follows for the same reason.
  */
 function* causeLayers(error: unknown): Generator<Record<string, unknown>> {
   let current: unknown = error;
@@ -73,7 +74,10 @@ function keyColumns(detail: string): string[] | undefined {
       if (depth === 0) {
         if (!detail.startsWith("=(", i + 1)) return undefined;
         columns.push(current);
-        return columns;
+        // `Key ()=()` parses to one empty entry. PostgreSQL cannot write it, and every caller would
+        // answer `false` to it anyway, but returning it would have this function claim a key was
+        // named when none was.
+        return columns.some((column) => column === "") ? undefined : columns;
       }
     }
     if (char === "," && depth === 1) {
@@ -113,7 +117,8 @@ function keyColumns(detail: string): string[] | undefined {
  *
  * **It reads a MESSAGE, and a message has a language.** `.constraint`, which this replaced, was a
  * structured field; `detail` is rendered in the server's `lc_messages`, and the prefix this parser
- * anchors on is the English one. Nothing in this repository sets `lc_messages`, and on the image
+ * anchors on is the English one. No production or deployment code sets `lc_messages` — only the
+ * guard below does — and on the image
  * `deploy/compose.yml` runs the setting makes no difference: asked for a Spanish locale, the server
  * accepts the request and still answers in English. That is a property of the IMAGE, not of
  * PostgreSQL, so it is guarded rather than asserted — `constraint-target.test.ts` drives a refusal

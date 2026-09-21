@@ -68,7 +68,7 @@ const CANVAS_REFERENCED_BY_PROFILE: ConstraintTarget = {
  *     restrict_violation from any other foreign key is re-thrown untouched.
  * The 23505 branch stays on `constraintTarget`/`sameTarget` because it also translates a refusal
  * whose key could not be identified, which `refusalOn` cannot express.
- * Nothing outside this file calls it — exported for the unit test, NOT from the package barrel — so
+ * No other PRODUCTION file calls it — exported for the unit test, NOT from the package barrel — so
  * the only refusals it ever sees are the ones this store's own statements raise.
  * Pinned by crafted-error unit tests in `canvas-store.test.ts` and end to end in
  * `canvas-store.pg.test.ts`.
