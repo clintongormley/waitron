@@ -3251,6 +3251,21 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
+**The verifactu extraction left stale references in two compliance docs — Small.** PR #486
+(2026-09-21) extracted `@waitron/verifactu` to its own repository and repointed every live code and
+developer-doc reference to the external package, but deliberately left two compliance records for a
+separate change: `docs/compliance/implementation-provenance.md` (around lines 3, 56, 106, 126, 134)
+still names the in-repo `packages/verifactu` when it states the provenance rules, and
+`docs/compliance/first-aeat-contact.md:35` records a past AEAT-contact event through
+`packages/verifactu`'s serializer. The provenance file is a living policy record and should read
+`@waitron/verifactu`; first-aeat-contact is a dated historical event and can stay as written (it was
+true then) — decide per file. Lightweight docs change, no PR ceremony. Separately, the library's own
+follow-ups live on the OSS repo, not here: the differential-test spike against `inoguerols/verifactu`,
+the convenience facade, the optional QR-image package (the `qrcode` renderer drags `yargs` in, so it
+stays a separate optional subpath), and porting NIF/NIE/CIF check-digit validation into `validate()`
+(our `validate()` only length-checks today) — spec §2.8–2.11 of
+`docs/superpowers/specs/2026-09-21-verifactu-extraction-design.md`.
+
 **A blank amount posted at the purchase-invoice routes was stored as a zero — FIXED on #485
 (2026-09-21).** `apps/server/src/purchasing-api.ts` took each amount through `requireString`, which
 checks `typeof` and nothing else, and then cast it `as Decimal`. Measured in `packages/shared` on
