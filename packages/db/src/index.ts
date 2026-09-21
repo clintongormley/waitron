@@ -142,6 +142,7 @@ export {
   pgErrorConstraint,
   uniqueViolationConstraint,
 } from "./unique-violation.js";
+export { constraintTarget, sameTarget, type ConstraintTarget } from "./constraint-target.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**
