@@ -281,7 +281,7 @@ async function finishClaimedAction(
   if (updated.length !== 1) throw new AppError("account_action.invalid", {});
   await tx
     .update(managementSessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso })
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
   return {
     personId,

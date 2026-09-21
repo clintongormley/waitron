@@ -4,6 +4,7 @@ import {
   UNIQUE_VIOLATION,
   constraintTarget,
   isUniqueViolation,
+  nowIso,
   refusalOn,
   sameTarget,
 } from "@waitron/db";
@@ -124,15 +125,15 @@ export async function assertEmailAvailable(
 async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(sessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(sessions.personId, personId), isNull(sessions.endedAt)));
   await tx
     .update(managementSessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
   await tx
     .update(managementAccountActions)
-    .set({ usedAt: sql`now()` })
+    .set({ usedAt: nowIso() })
     .where(
       and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
     );
@@ -268,7 +269,7 @@ export async function clearPersonPin(
   if (updated.length !== 1) throw new AppError("person.not_found", { personId: input.personId });
   await tx
     .update(sessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(sessions.personId, input.personId), isNull(sessions.endedAt)));
 }
 

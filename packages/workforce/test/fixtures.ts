@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { locations } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { hashPin } from "@waitron/identity";
 import { appendToChain } from "../src/chain.js";
@@ -41,12 +42,18 @@ export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeR
  * package's vocabulary is English regardless.
  */
 
-/** A location (centro de trabajo) for the tenant. Returns its id. */
+/** A location (centro de trabajo) for the tenant. Returns its id.
+ *
+ * Inserted through the `locations` table definition rather than as raw SQL: `id` is a JavaScript
+ * generator (`$defaultFn(newId)`), not a database DEFAULT, so a raw INSERT that omits the column
+ * writes nothing there; and `invoice_locales` is a JSON array in a text column, which the
+ * `labelList` helper serialises from the plain array passed here. */
 export async function seedLocation(db: Database): Promise<string> {
-  const result = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en'], 'Sale on premises')
-    returning id`);
-  return result.rows[0]!.id;
+  const [row] = await db
+    .insert(locations)
+    .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Sale on premises" })
+    .returning({ id: locations.id });
+  return row!.id;
 }
 
 /** A person, PIN '1234'. Returns its id. */
@@ -121,9 +128,12 @@ export async function insertDraftShift(
 }
 
 /** An `absences` row for the person. Defaults to a 5–8 Jan holiday, status `requested`, no
- * note. `createdAt` defaults to the DB's `now()`; pass it to control ordering (the listPending suites
- * seed OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable).
- * Returns its id. */
+ * note. `createdAt` has NO database default: `absences.created_at` is `tsString(...).$defaultFn(nowIso)`,
+ * a JavaScript generator drizzle runs per insert, and `drizzle/0000_baseline.sql` declares the column
+ * `text NOT NULL` with no DEFAULT — so the raw insert below cannot reach it (node:sqlite refuses the
+ * `default` keyword inside a VALUES list: `near "default": syntax error`, measured on Node v26.7.0).
+ * Pass `createdAt` to control ordering (the listPending suites seed OUT-OF-INSERT-ORDER timestamps to
+ * prove `order by created_at`). Planning data (mutable). Returns its id. */
 export async function insertAbsence(
   db: Database | Transaction,
   params: {
@@ -196,10 +206,12 @@ export async function insertShiftTemplate(
   return result.rows[0]!.id;
 }
 
-/** A `shift_swaps` row. Status defaults to `requested`, `to_shift_id` null. `createdAt`
- * defaults to the DB's `now()`; pass it to control ordering (the listPending suites seed
- * OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable). Returns its
- * id. */
+/** A `shift_swaps` row. Status defaults to `requested`, `to_shift_id` null. `createdAt` has NO
+ * database default, exactly as on {@link insertAbsence}: `shift_swaps.created_at` is
+ * `tsString(...).$defaultFn(nowIso)`, a JavaScript generator, and the generated DDL declares the
+ * column `text NOT NULL` with no DEFAULT. Pass it to control ordering (the listPending suites seed
+ * OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable). Returns
+ * its id. */
 export async function insertShiftSwap(
   db: Database | Transaction,
   params: {

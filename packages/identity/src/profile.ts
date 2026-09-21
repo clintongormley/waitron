@@ -1,6 +1,7 @@
 import "./errors.js";
+import { nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { managementSessions } from "./schema/management-sessions.js";
@@ -172,7 +173,7 @@ export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credential
 async function invalidateLinks(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(managementAccountActions)
-    .set({ usedAt: sql`now()` })
+    .set({ usedAt: nowIso() })
     .where(
       and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
     );
@@ -290,7 +291,7 @@ export async function changeOwnPin(
     .where(eq(persons.id, person.id));
   await tx
     .update(sessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(sessions.personId, person.id), isNull(sessions.endedAt)));
 }
 
@@ -308,7 +309,7 @@ export async function changeOwnPassword(
   await invalidateLinks(tx, person.id);
   await tx
     .update(managementSessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(
       and(
         eq(managementSessions.personId, person.id),
