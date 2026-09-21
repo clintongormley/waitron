@@ -11,11 +11,19 @@ import type { ConstraintTarget } from "@waitron/db";
  *
  * **None of the three can match on SQLite**, and the reason is the engine's, not this file's: all
  * three indexes are over an EXPRESSION, and SQLite's refusal for one of those names the INDEX and
- * no columns at all — `UNIQUE constraint failed: index 'persons_tenant_email_uq'`, driven on
- * node:sqlite (Node v26.7.0), probe /tmp/f1-ddl-probe/persons-uniques.mjs. `constraintTarget` in
- * `packages/db/src/constraint-target.ts` returns `undefined` for such a message, so every caller
- * comparing against these three sees no match. Whoever moves the callers to a mechanism SQLite can
- * answer owns replacing these values; the storage swap's plan records the work.
+ * no columns at all. Driven on node:sqlite (Node v26.7.0) against the three index statements
+ * `drizzle/0000_baseline.sql` generates, one real collision each (probe
+ * /tmp/f1-persons-uq-probe.mjs, re-run 2026-09-21): every one answered errcode 2067 and
+ * `UNIQUE constraint failed: index '<the index's name>'`. The control in the other direction, on
+ * the same table in the same probe, is the PRIMARY KEY — a plain column, not an expression — which
+ * answered errcode 1555 and `UNIQUE constraint failed: persons.id`, the shape that DOES carry a
+ * key. `constraintTarget` in `packages/db/src/constraint-target.ts` returns `undefined` for the
+ * expression form, so every caller comparing against these three sees no match.
+ *
+ * The values below therefore keep the spelling PostgreSQL used, `btrim` included. Restating them in
+ * SQLite's words would change nothing an engine can answer and would read like a repair: a matcher
+ * nothing can ever equal is not made reachable by rewording it. Whoever moves the callers to a
+ * mechanism SQLite can answer owns replacing them; the storage swap's plan records the work.
  */
 
 /** `persons_tenant_email_uq`: UNIQUE (lower(email)) WHERE email IS NOT NULL — one login address
@@ -25,9 +33,9 @@ export const PERSONS_EMAIL: ConstraintTarget = {
   columns: ["lower(email)"],
 };
 
-/** `persons_tenant_live_display_name_uq`: UNIQUE (lower(btrim(display_name))) WHERE status <>
+/** `persons_tenant_live_display_name_uq`: UNIQUE (lower(trim(display_name))) WHERE status <>
  * 'suspended' — one live display name, case- and whitespace-insensitively. Declared in
- * `schema/persons.ts`, where SQLite spells `btrim` as `trim`. */
+ * `schema/persons.ts:82`; the value below keeps PostgreSQL's `btrim`, for the reason above. */
 export const PERSONS_LIVE_DISPLAY_NAME: ConstraintTarget = {
   table: "persons",
   columns: ["lower(btrim(display_name))"],

@@ -6,7 +6,7 @@ import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
@@ -52,11 +52,15 @@ async function nineToFive(name: string): Promise<{ personId: string; outEntryId:
   return { personId, outEntryId: rows.rows[0]!.id };
 }
 
+/** Through the `persons` table definition, not raw SQL: `persons.id` and `persons.created_at` are
+ * `$defaultFn` generators, which only the insert BUILDER runs — the same reason
+ * `../test/fixtures.ts`'s `seedPerson` inserts that way. */
 async function supervisor(name: string): Promise<string> {
-  const rows = await suite.db.execute<{ id: string }>(sql`
-    insert into persons (display_name, pin_hash, role)
-    values (${name}, 'scrypt$00$00', 'supervisor') returning id`);
-  return rows.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(persons)
+    .values({ displayName: name, pinHash: "scrypt$00$00", role: "supervisor" })
+    .returning({ id: persons.id });
+  return row!.id;
 }
 
 /**

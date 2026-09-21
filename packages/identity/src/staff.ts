@@ -87,6 +87,10 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
+/** The predicate must spell the trim the way `persons_tenant_live_display_name_uq` does
+ * (`./schema/persons.ts:83`), or this pre-check and the index disagree about which names collide.
+ * SQLite has no `btrim`: `select btrim('  Ada  ')` throws `no such function: btrim` where
+ * `trim('  Ada  ')` returns `Ada`, driven on node:sqlite (Node v26.7.0). */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,
@@ -97,7 +101,7 @@ export async function assertDisplayNameAvailable(
     .from(persons)
     .where(
       and(
-        eq(sql`lower(btrim(${persons.displayName}))`, displayName.toLocaleLowerCase()),
+        eq(sql`lower(trim(${persons.displayName}))`, displayName.toLocaleLowerCase()),
         ne(persons.status, "suspended"),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
       ),
