@@ -86,6 +86,9 @@ Each extra picked becomes its own indented line under the dish in the basket, wi
 and its own allergens and dietary labels — never folded into the dish's. An options answer costs
 nothing and rides along as wording on the dish's line.
 
-One thing an operator cannot do yet: reopen a saved order and change the answers on a line that
-already has them. An order stores the wording that was chosen and not a link back to the list, so
-there is nothing to reopen the question with. The till asks for the answers again instead.
+An order stores the wording that was chosen and not a link back to the list, so when a parked order
+is fetched back the till matches that wording against the dish's lists to work out what was picked.
+It is the STAFF name it matches on, so changing a customer-facing or kitchen name while an order is
+parked costs nothing. Change the staff name of a list or a label, or turn a label off, and the match
+fails: the till will not guess, and asks the operator to open that line and choose again before the
+order can be sent.

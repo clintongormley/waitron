@@ -186,7 +186,9 @@ Reading them back, four wire types carry `optionSnapshots` — the field these f
 `modifierSnapshots` before this change: `TabLine`, `HeldOrder.lines`, `StationQueueItem` and
 `ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
 `extras` array holding what each CHILD line froze. Those are VALUES, not a re-sendable selection:
-the child line holds no list id to name.
+the child line holds no list id to name. The till rebuilds one from them against the dish's live
+offer (`deriveExtraSelections` and `deriveOptionSelections`, `apps/till/src/state/`) — see the end
+of this section.
 
 A quantity-only edit of a held order sends the same answers with a new quantity. `updateHeldOrder`
 rebuilds what those answers would freeze NOW and compares the result with what the stored line
@@ -257,9 +259,15 @@ The till is on this wire as of 2026-09-21. It sends one `options` entry per answ
 five mirrors it keeps (`apps/till/src/api/client.ts`), and tells a child extras row from a dish by
 `parentLineNo` rather than by a null product. The old `modifierSelections`/`modifierSnapshots`
 shapes and the `{ optionGroupItemId }` answer are gone from it, its mirror of the settled ticket
-included. What one of those surfaces can NOT do is re-send a retrieved line's options answers: a
-frozen answer carries six names and no ids by design, so there is nothing to put on the wire, and
-the server refuses the edit until the operator re-answers through the picker.
+included. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
+six names and no ids: `deriveOptionSelections` (`apps/till/src/state/held-options.ts`) matches each
+answer's STAFF names back against the dish's live offer and rebuilds the `{ listId, labelId }` pair,
+which it has to, because leaving out an answer for an ACTIVE list refuses the whole edit with
+`options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
+the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
+the server re-prices the line as it does for any other changed wording. What it will not do is
+guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till tells
+the operator to open the line and choose again rather than substituting the list's own default.
 
 ## What a till is offered
 

@@ -912,10 +912,13 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
 - **The per-line kitchen NOTE was not touched**, despite living in a file called
   `line-extras-editor.ts`. It was never part of this feature; the file name is now misleading and
   nobody has renamed it.
-- **A retrieved line's options answers cannot be re-sent.** A frozen answer carries six names and no
-  ids by design (spec §2.3), so there is nothing to put back on the wire; the server refuses the
-  edit until the operator re-answers through the picker, and the till's types say so. Not a gap to
-  close without putting an id on the line, which the spec rules out.
+- **A retrieved line's options answers are re-sent by matching their WORDING**, because a frozen
+  answer carries six names and no ids (spec §2.3). `deriveOptionSelections`
+  (`apps/till/src/state/held-options.ts`) matches each answer's staff names against the dish's live
+  offer — the STAFF name of each side only, so a moved customer or kitchen name still re-sends and
+  the server re-prices. A staff-name rename or a withdrawn label matches nothing, and the till
+  surfaces `held.options_changed` rather than substituting the list's default. Landed inside Task 12
+  after the first cut of the picker refused every such edit with `options.label_required`.
 - **A child extras row still renders FLAT in the tab drawer**, as its own row beside the dishes, with
   its own name, quantity and price — where the basket and the settled ticket both nest a child under
   its dish. It is now correctly skipped by the per-line action, the course picker and the split and
@@ -944,11 +947,13 @@ What the order path (the plan's Task 7) left behind:
   spec §2.3 rules out and what makes editing or deleting a list unable to change a saved order. With
   no id on either side there is nothing but the wording to compare, so a rename is indistinguishable
   from a different answer. **The reachability line above is out of date as of 2026-09-21:** the till
-  does send `extras`/`options` now, so this IS reachable from a real basket. What the till will not
-  do is re-send a RETRIEVED line's options answers at all — a frozen answer carries six names and no
-  ids, so there is nothing to put on the wire, and the server refuses the edit until the operator
-  re-answers through the picker. That narrows the exposure to an order answered and edited inside one
-  session, rather than closing it.
+  does send `extras`/`options` now, so this IS reachable from a real basket. The till re-derives a
+  retrieved line's answers from their WORDING (`deriveOptionSelections`,
+  `apps/till/src/state/held-options.ts`), which is the same evidence the server's own comparison
+  uses. A STAFF-name rename between the two sends therefore does not match: the till asks the
+  operator to choose again, and the re-answered line takes the replacement path described here. A
+  customer- or kitchen-name rename still re-sends and still lands on that path, at the server's own
+  by-value comparison.
 - **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
   order path refuses an extras pick on a dish that is not priced `each`
   (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in
