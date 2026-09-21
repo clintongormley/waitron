@@ -43,14 +43,11 @@ function blankLine(): LineDraft {
 /**
  * A well-formed non-negative decimal literal: one or more digits, an optional fractional part, and a
  * leading-dot form (`.5`) allowed. Browser-local by design — the dashboard never imports `@waitron/shared`
- * at runtime. Deliberately looser than `@waitron/shared`'s `decimal()` (it also accepts leading zeros),
- * whose refusal these routes never get: `purchasing-api.ts` casts each amount `as Decimal` without
- * screening it, and the op converts it at the row (`packages/purchasing/src/operations.ts:158`). So
- * what this pattern rejects is what the server mishandles, measured in `packages/shared` on the
- * conversion helpers themselves: `121,00` and letters throw a bare `SyntaxError` ("Cannot convert
- * 121,00 to a BigInt") out of `compareDecimal`/`decimalToCents`/`decimalToBasisPoints`, which `run`
- * answers as an opaque 500; an empty or whitespace value throws nothing at all — all three helpers
- * read it as ZERO, so the invoice would be STORED with a zero amount.
+ * at runtime. Deliberately looser than `@waitron/shared`'s `decimal()` (it also accepts leading zeros
+ * and a leading dot), which is what `purchasing-api.ts` now screens every amount through, so a value
+ * this pattern accepts and `decimal()` does not is refused by the server as `shared.invalid_decimal`
+ * -> 400 rather than mishandled. This check is a UX mirror: it names the bad amount here instead of
+ * making the operator wait for the round trip.
  */
 const DECIMAL = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
 
@@ -87,10 +84,9 @@ function inRange(value: string, min: number, max: number): boolean {
  * (`purchase.lines_required`), and every amount — each line's base/tax, its rate, the gross total and
  * the deductible proportion — must be a well-formed non-negative decimal (base/tax ≥ 0, rate 0–100,
  * proportion 0–100), rejecting a blank, whitespace or comma-decimal value (`purchase.amounts_invalid`).
- * That last check is the only thing standing between a blank desglose line and a stored zero, and
- * between a Spanish `121,00` and an opaque 500 — see `DECIMAL` above for what each one does on the
- * server, and why no server-side format check catches either today. A failing check blocks confirm
- * and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
+ * The server screens the same shapes through `decimal()` and answers `shared.invalid_decimal` -> 400,
+ * so this check earns its keep on latency and wording, not on correctness. A failing check blocks
+ * confirm and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
  * round-trips) makes confirm a no-op — the create/update are not server-idempotent.
  */
 @customElement("dashboard-purchase-form")

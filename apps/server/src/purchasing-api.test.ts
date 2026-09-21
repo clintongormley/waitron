@@ -286,6 +286,52 @@ describe("mountPurchasingApi — create request-shape screens", () => {
       (await res.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "header" } } });
   });
+
+  // The amount screens. Every money and rate field arrives as a STRING, and `requireString` checks
+  // only its type: before these, a blank or a Spanish comma-decimal walked past the boundary. A
+  // blank then compared equal to zero in `validateLines` and was STORED as zero on the deductible
+  // (IVA soportado) side of modelo 303 — a wrong return with nothing red — while "121,00" threw a
+  // bare SyntaxError out of `BigInt` and became an opaque 500.
+  it("POST with a blank base stores NO row", async () => {
+    const app = mountApp();
+    const res = await send(app, "POST", "/management-api/purchase-invoices", {
+      body: {
+        header: { ...goodHeader(), supplierInvoiceNumber: "BLANKBASE-1" },
+        lines: [{ rate: "21.00", base: "", tax: "21.00" }],
+      },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_decimal" },
+    });
+
+    const list = await send(app, "GET", "/management-api/purchase-invoices");
+    const rows = (await list.json()) as { supplierInvoiceNumber: string }[];
+    expect(rows.map((r) => r.supplierInvoiceNumber)).not.toContain("BLANKBASE-1");
+  });
+
+  it.each([
+    ["a blank total", { total: "" }, undefined],
+    ["a whitespace total", { total: "   " }, undefined],
+    ["a comma-decimal total", { total: "121,00" }, undefined],
+    ["a blank deductibleProportion", { deductibleProportion: "" }, undefined],
+    ["a comma-decimal deductibleProportion", { deductibleProportion: "100,00" }, undefined],
+    ["a blank rate", {}, { rate: "", base: "1.00", tax: "0.21" }],
+    ["a whitespace base", {}, { rate: "21.00", base: "  ", tax: "0.21" }],
+    ["a letters tax", {}, { rate: "21.00", base: "1.00", tax: "abc" }],
+  ])("POST rejects %s → shared.invalid_decimal 400", async (label, headerOverride, line) => {
+    // A supplier invoice number unique to this case: a repeated one would answer 409 from the
+    // duplicate index, which is also not a 201 and would stand in for a screen that never ran.
+    const body = {
+      header: { ...goodHeader(), ...headerOverride, supplierInvoiceNumber: `DEC-${label}` },
+      lines: [line ?? { rate: "21.00", base: "100.00", tax: "21.00" }],
+    };
+    const res = await send(mountApp(), "POST", "/management-api/purchase-invoices", { body });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_decimal" },
+    });
+  });
 });
 
 describe("mountPurchasingApi — list", () => {
@@ -487,6 +533,24 @@ describe("mountPurchasingApi — update", () => {
       ).toMatchObject({ error: { code: "management.request_invalid", params: { field } } });
     },
   );
+
+  // A PATCH touches only the fields it names, so each amount is screened only when present — and a
+  // malformed one is refused before any write rather than landing on the stored row.
+  it.each([
+    ["total", { header: { total: "" } }],
+    ["deductibleProportion", { header: { deductibleProportion: "50,00" } }],
+    ["base", { lines: [{ rate: "21.00", base: "", tax: "0.21" }] }],
+  ])("PATCH rejects a malformed %s → shared.invalid_decimal 400", async (field, body) => {
+    const app = mountApp();
+    const created = await createVia(app, { supplierInvoiceNumber: `PATCHDEC-${field}` });
+    const res = await send(app, "PATCH", `/management-api/purchase-invoices/${created.id}`, {
+      body,
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_decimal" },
+    });
+  });
 });
 
 describe("mountPurchasingApi — delete", () => {
