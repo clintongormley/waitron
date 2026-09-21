@@ -3250,8 +3250,8 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**A blank amount posted at the purchase-invoice routes was stored as a zero — FIXED 2026-09-21 (PR
-pending).** `apps/server/src/purchasing-api.ts` took each amount through `requireString`, which
+**A blank amount posted at the purchase-invoice routes was stored as a zero — FIXED on #485
+(2026-09-21).** `apps/server/src/purchasing-api.ts` took each amount through `requireString`, which
 checks `typeof` and nothing else, and then cast it `as Decimal`. Measured in `packages/shared` on
 2026-09-21: `compareDecimal`, `decimalToCents` and `decimalToBasisPoints` all returned **0** for
 `""` and for `"  "`, and all three threw a bare `SyntaxError` ("Cannot convert 121,00 to a BigInt")
