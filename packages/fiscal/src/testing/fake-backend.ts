@@ -60,12 +60,35 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   constructor(private readonly db: Database) {}
 
+  /**
+   * Creates this fake's two bookkeeping tables, and nothing else — no grants, because the engine
+   * has no roles to grant to (`packages/db/src/testing/roles.ts`).
+   *
+   * The DDL stays hand-written rather than moving to `@waitron/db`'s column vocabulary. These are
+   * not product tables: they belong to no migration set, carry no `ledger`/`state`/`local`
+   * classification, and stand in for a remote service's own storage — so declaring them with the
+   * helpers every product table uses would make them read as schema they are not.
+   *
+   * **Nothing checks that this DDL stays in the engine's dialect**, and a collecting suite is not
+   * that check either. `scripts/column-vocabulary.test.ts` reads IMPORT lines and this file names
+   * no column builder. Of the PostgreSQL spellings that were here, only `default now()` was
+   * REFUSED (`near "(": syntax error`, which stopped this package's suite and
+   * `packages/catalogue/src/integration.test.ts` from collecting at all); `timestamptz`,
+   * `numeric(12, 2)` and `jsonb` were each accepted as type names and silently given an affinity —
+   * see the `total` column below for what that cost.
+   */
   static async install(db: Database): Promise<void> {
     await db.execute(sql`
       create table if not exists fake_node_registrations (
         node_id text primary key,
         registration_id text not null,
-        registered_at timestamptz not null default now()
+        -- Nothing reads this column; it exists so a registration carries when it was made. An
+        -- expression DEFAULT rather than a generator, because the insert below is raw SQL and
+        -- $defaultFn is run by drizzle's insert builder only. This spelling emits the same
+        -- ISO-8601 shape nowIso() does -- measured on node:sqlite (Node v26.7.0):
+        -- 2026-09-21T19:09:06.727Z, against "default current_timestamp" as the control, which
+        -- gives 2026-09-21 19:09:06.
+        registered_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       );
     `);
     await db.execute(sql`
@@ -76,54 +99,38 @@ export class FakeFiscalBackend implements FiscalBackend {
         sequence integer not null,
         kind text not null,
         invoice_number integer not null,
-        -- A two-place decimal on purpose, which reads like a miss now that every money column in
-        -- the database counts whole cents. It is not one of those columns: this fake's own
-        -- bookkeeping table stores exactly what the backend interface hands it, and that is already
-        -- a decimal amount (total: Decimal, packages/fiscal/src/backend.ts:72), above the storage
-        -- boundary rather than under it.
-        total numeric(12, 2) not null,
+        -- Text, because this table stores the decimal STRING the backend interface handed it and
+        -- recordsFor hands it back digit for digit. Not a money column: money counts whole cents
+        -- at the row, and what arrives here is already a decimal amount (total: Decimal,
+        -- packages/fiscal/src/backend.ts:72), above that boundary rather than under it.
+        --
+        -- numeric(12, 2) is the trap this replaced, and it is a trap because the engine ACCEPTS
+        -- the type name: it gives the column numeric affinity, so the stored '12.10' comes back as
+        -- the number 12.1 (measured on node:sqlite, Node v26.7.0, against a text column as the
+        -- control, which returns '12.10'). What no spelling here restores is the refusal the
+        -- PostgreSQL column made: neither type rejects 'abc', so recordSale's own DECIMAL_PATTERN
+        -- is the whole check, and recordCorrection/recordSubstitution -- which do not run it --
+        -- now store whatever string they are handed.
+        total text not null,
         state text not null,
         -- The filed VAT breakdown, stored so filedReceiptFor can hand back the EXACT figures the
         -- replay path reprints (Task 14). NULL for a void, which files no breakdown of its own; set
-        -- for a sale, the only kind the replay read-back reads.
-        vat_breakdown jsonb,
+        -- for a sale, the only kind the replay read-back reads. JSON in a text column: the engine
+        -- has no jsonb, and nothing below filedReceiptFor parses it.
+        vat_breakdown text,
         unique (node_id, sequence)
       );
     `);
-    // Grants `app_user` access to this fake's own bookkeeping tables, if that role exists.
-    //
-    // Added by packages/core's write-path task (Task 16), not present when this file was first
-    // committed (Task 11): every one of THIS package's own tests exercises the fake as the
-    // connection owner (`db.transaction(...)`, never `asAppUser(tx)` first — see
-    // `fake-backend.test.ts`), and PostgreSQL grants a freshly created table's privileges to its
-    // owner only, nobody else, by default. `packages/core`'s own write-path test is the first
-    // caller to exercise this fake through a transaction that has already switched to the
-    // non-owner `app_user` role — deliberately, per that suite's own doc comment: an owner-run
-    // write-path test would prove the code runs, not that the application role is permitted to
-    // run it. Without this grant, every insert this fake makes on `app_user`'s behalf fails with
-    // "permission denied for table fake_node_registrations" — caught live in that task's own red
-    // phase.
-    //
-    // Conditional on the role actually existing, and not a bare `GRANT ... TO app_user`: this
-    // package's OWN test database (`fake-backend.test.ts`) never runs `@waitron/db`'s migrations
-    // at all, so `app_user` does not exist there, and an unconditional GRANT would break that
-    // already-passing suite outright — verified live. A database that HAS run those migrations
-    // (every real deployment, and `packages/core`'s own suite) already created the role, and this
-    // becomes a normal, idempotent grant.
-    await db.execute(sql`
-      do $$
-      begin
-        if exists (select 1 from pg_roles where rolname = 'app_user') then
-          grant select, insert, update on fake_node_registrations, fake_fiscal_records
-            to app_user;
-        end if;
-      end
-      $$;
-    `);
   }
 
+  /**
+   * Empties both tables. `delete from`, one statement each: measured on node:sqlite (Node
+   * v26.7.0), this engine refuses `truncate` (`near "truncate": syntax error`) and refuses naming
+   * two tables in one `delete` (`near ",": syntax error`).
+   */
   static async truncate(db: Database): Promise<void> {
-    await db.execute(sql`truncate fake_fiscal_records, fake_node_registrations`);
+    await db.execute(sql`delete from fake_fiscal_records`);
+    await db.execute(sql`delete from fake_node_registrations`);
   }
 
   async registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
@@ -165,7 +172,7 @@ export class FakeFiscalBackend implements FiscalBackend {
    * and handed back verbatim, so the read-back round-trips the exact filed figures.
    */
   async filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined> {
-    const rows = await tx.execute<{ record_id: string; vat_breakdown: VatBreakdownLine[] }>(sql`
+    const rows = await tx.execute<{ record_id: string; vat_breakdown: string }>(sql`
       select record_id, vat_breakdown
       from fake_fiscal_records
       where sale_id = ${saleId} and kind = 'sale'
@@ -176,12 +183,14 @@ export class FakeFiscalBackend implements FiscalBackend {
       return undefined;
     }
     // A `kind = 'sale'` row always carries a non-null `vat_breakdown` — `recordSale` always supplies
-    // it (see `append`), so no null branch is reachable here. The host is a regime-NEUTRAL stand-in
-    // (this package names no regime — its own no-regime-vocabulary guard scans this file), not any
-    // real verification service.
+    // it (see `append`), so no null branch is reachable here. The parse belongs here because the
+    // driver hands this column back as a string — measured on node:sqlite (Node v26.7.0), for a
+    // column declared `text` and for one declared `jsonb` alike, so the type NAME does not move it.
+    // The host is a regime-NEUTRAL stand-in (this package names no regime — its own
+    // no-regime-vocabulary guard scans this file), not any real verification service.
     return {
       verificationUrl: `https://fiscal-receipt.example/fake/${row.record_id}`,
-      vatBreakdown: row.vat_breakdown,
+      vatBreakdown: JSON.parse(row.vat_breakdown) as VatBreakdownLine[],
     };
   }
 
@@ -287,7 +296,7 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   async checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
     const rows = await tx.execute<{ count: string }>(sql`
-      select count(*)::text as count from fake_fiscal_records
+      select cast(count(*) as text) as count from fake_fiscal_records
       where node_id = ${nodeId}
     `);
     const checked = Number(rows.rows[0].count);
@@ -297,7 +306,7 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   async pendingCount(nodeId: NodeId): Promise<number> {
     const rows = await this.db.execute<{ count: string }>(sql`
-      select count(*)::text as count
+      select cast(count(*) as text) as count
       from fake_fiscal_records
       where node_id = ${nodeId} and state = 'pending'
     `);
@@ -370,8 +379,9 @@ export class FakeFiscalBackend implements FiscalBackend {
       where node_id = ${entry.nodeId}
     `);
     const sequence = next.rows[0].sequence;
-    // `null::jsonb` when no breakdown was filed (a void), the serialised array otherwise — stored so
-    // `filedReceiptFor` returns the EXACT filed figures rather than a recompute.
+    // `null` when no breakdown was filed (a void), the serialised array otherwise — stored so
+    // `filedReceiptFor` returns the EXACT filed figures rather than a recompute. Bound as-is, with
+    // no cast: the column is text and this engine has no `::` operator.
     const vatBreakdown =
       entry.vatBreakdown === undefined ? null : JSON.stringify(entry.vatBreakdown);
     // UNIQUE (node_id, sequence) is the backstop, mirroring the real one. A fake that assigned
@@ -382,7 +392,7 @@ export class FakeFiscalBackend implements FiscalBackend {
          vat_breakdown)
       values
         (${recordId}, ${entry.nodeId}, ${entry.saleId}, ${sequence},
-         ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending', ${vatBreakdown}::jsonb)
+         ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending', ${vatBreakdown})
     `);
     return {
       backend: this.id,
