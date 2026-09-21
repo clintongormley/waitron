@@ -51,8 +51,8 @@ export default tseslint.config(
               from: ["./packages/**", "./apps/**"],
               // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars
               // refuse to cross a dot-prefixed path segment (e.g. a checkout under
-              // `.claude/worktrees/...`), which silently broke the equivalent exception on the
-              // verifactu zone and let same-package relative imports false-positive as
+              // `.claude/worktrees/...`), which silently broke the equivalent exception on an
+              // earlier zone and let same-package relative imports false-positive as
               // boundary violations.
               except: [`${import.meta.dirname}/packages/shared/**`],
               message:
@@ -91,7 +91,7 @@ export default tseslint.config(
               from: ["./packages/**", "./apps/**"],
               // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars refuse to
               // cross a dot-prefixed path segment (e.g. a checkout under `.claude/worktrees/...`),
-              // which silently broke the equivalent exception on the verifactu zone and let
+              // which silently broke the equivalent exception on an earlier zone and let
               // same-package relative imports false-positive as boundary violations.
               except: [`${import.meta.dirname}/packages/print-agent/**`],
               message:
@@ -130,11 +130,28 @@ export default tseslint.config(
           zones: [
             {
               target: ["./packages/db/**/*", "./packages/core/**/*", "./packages/fiscal/**/*"],
-              from: ["./packages/verifactu/**", "./packages/fiscal-verifactu/**"],
+              from: ["./packages/fiscal-verifactu/**"],
               message:
                 "The generic layer must not depend on a fiscal module (spec §2). Only the " +
                 "FiscalBackend interface crosses that boundary — if this needs something " +
                 "from the Veri*Factu module, it belongs behind the interface.",
+            },
+          ],
+        },
+      ],
+      // @waitron/verifactu is now an external package, so no-restricted-paths (which matches
+      // in-repo paths) can no longer fence it out; a name-based rule does. Same boundary as the
+      // zone above: the generic layer must not depend on the Veri*Factu regime.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waitron/verifactu", "@waitron/verifactu/*"],
+              message:
+                "The generic layer must not depend on the Veri*Factu regime (spec §2). Only the " +
+                "FiscalBackend interface crosses that boundary — if this needs something from the " +
+                "Veri*Factu module, it belongs behind the interface.",
             },
           ],
         },
@@ -175,13 +192,31 @@ export default tseslint.config(
                 "./packages/payments/**",
                 "./packages/fiscal/**",
                 "./packages/fiscal-verifactu/**",
-                "./packages/verifactu/**",
               ],
               message:
                 "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
                 "package (see docs/superpowers/specs/" +
                 "2026-07-25-recurring-work-scheduler-design.md §3). Duties are injected and " +
                 "typed structurally — if the runner needs something from payments or fiscal, it " +
+                "belongs on the PeriodDuty seam, not in an import.",
+            },
+          ],
+        },
+      ],
+      // @waitron/verifactu is now an external package, so no-restricted-paths can no longer fence
+      // it out; a name-based rule does. Same boundary: the duty-neutral runner must not import a
+      // duty's own package.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waitron/verifactu", "@waitron/verifactu/*"],
+              message:
+                "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
+                "package (see docs/superpowers/specs/" +
+                "2026-07-25-recurring-work-scheduler-design.md §3). Duties are injected and " +
+                "typed structurally — if the runner needs something from the Veri*Factu duty, it " +
                 "belongs on the PeriodDuty seam, not in an import.",
             },
           ],
@@ -222,7 +257,6 @@ export default tseslint.config(
                 "./packages/payments-sumup/**",
                 "./packages/fiscal/**",
                 "./packages/fiscal-verifactu/**",
-                "./packages/verifactu/**",
                 "./packages/core/**",
               ],
               message:
@@ -231,6 +265,25 @@ export default tseslint.config(
                 "2026-07-26-tenant-credential-vault-design.md §3). A purpose's field list is " +
                 "string DATA, never an import — if this needs something from payments or fiscal, " +
                 "it belongs behind the purpose registry, not in an import.",
+            },
+          ],
+        },
+      ],
+      // @waitron/verifactu is now an external package, so no-restricted-paths can no longer fence
+      // it out; a name-based rule does. Same boundary: the credentials leaf must stay free of any
+      // regime or provider knowledge.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@waitron/verifactu", "@waitron/verifactu/*"],
+              message:
+                "packages/credentials must stay a leaf with zero knowledge of any provider or " +
+                "regime package (see docs/superpowers/specs/" +
+                "2026-07-26-tenant-credential-vault-design.md §3). A purpose's field list is " +
+                "string DATA, never an import — if this needs something from the Veri*Factu " +
+                "regime, it belongs behind the purpose registry, not in an import.",
             },
           ],
         },
