@@ -3,13 +3,11 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { Database, Transaction } from "@waitron/db";
+import { isUniqueViolation, type Database, type Transaction } from "@waitron/db";
 import { computeEntryHash, type VerifiableEntry } from "./chain-hash.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { workforceChains } from "./schema/workforce-chains.js";
 import type { WorkforceEntryKind } from "./projection.js";
-
-const UNIQUE_VIOLATION = "23505";
 
 /**
  * Three, not one and not ten (fiscal chain.ts's reasoning, applied to the workforce chain). One is
@@ -52,31 +50,6 @@ export interface ChainHead {
   /** The high-water mark that keeps `recorded_at` monotonic per chain (spec §4.1) — null exactly when
    * the pointer is. */
   lastRecordedAt: string | null;
-}
-
-/**
- * Is this (or anything it wraps) a unique-constraint violation? Walks the cause chain because
- * Drizzle wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined — the
- * real SQLSTATE lives on `.cause.code` — and a savepoint rollback can wrap it again. Stops at a
- * fixed depth so a self-referential `cause` cannot spin forever. Checking only the top level would
- * silently stop retrying and start reporting the wrong error. Mirrors fiscal chain.ts's own copy
- * (not imported — `@waitron/workforce` cannot depend on `@waitron/fiscal-verifactu`).
- */
-export function isUniqueViolation(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      "code" in current &&
-      (current as { code?: unknown }).code === UNIQUE_VIOLATION
-    ) {
-      return true;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return false;
-    current = next;
-  }
-  return false;
 }
 
 async function selectHeadForUpdate(tx: Transaction, key: ChainKey): Promise<ChainHead | undefined> {

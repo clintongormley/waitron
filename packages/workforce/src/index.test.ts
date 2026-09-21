@@ -36,7 +36,6 @@ describe("the public surface", () => {
         "listSwapsForPerson",
         "listAbsencesForPerson",
         "appendToChain",
-        "isUniqueViolation",
         "lockChainHead",
         "readChain",
         "computeEntryHash",

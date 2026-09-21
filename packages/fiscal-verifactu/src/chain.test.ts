@@ -5,7 +5,7 @@ import { captureError, pgErrorCode } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
-import { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
+import { appendToChain, lockChainHead } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
@@ -356,32 +356,5 @@ describe("lockChainHead", () => {
       sql`select count(*)::int as count from cadenas where node_id = ${till.nodeId}`,
     );
     expect(rows[0]?.count).toBe(1);
-  });
-});
-
-describe("isUniqueViolation", () => {
-  it("recognises a bare driver error", () => {
-    expect(isUniqueViolation(Object.assign(new Error("dup"), { code: "23505" }))).toBe(true);
-  });
-
-  it("recognises a violation wrapped in a cause chain", () => {
-    // Drizzle wraps some driver errors; a guard that only inspects the top level silently stops
-    // retrying and starts throwing the wrong error.
-    const inner = Object.assign(new Error("dup"), { code: "23505" });
-    expect(
-      isUniqueViolation(new Error("outer", { cause: new Error("mid", { cause: inner }) })),
-    ).toBe(true);
-  });
-
-  it("does not treat a foreign-key violation as a chain collision", () => {
-    // 23503, not 23505. Retrying an FK violation loops pointlessly and then reports contention
-    // that never happened.
-    expect(isUniqueViolation(Object.assign(new Error("fk"), { code: "23503" }))).toBe(false);
-  });
-
-  it("terminates on a self-referential cause chain", () => {
-    const looped: Error & { cause?: unknown } = new Error("loop");
-    looped.cause = looped;
-    expect(isUniqueViolation(looped)).toBe(false);
   });
 });

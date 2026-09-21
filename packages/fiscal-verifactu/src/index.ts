@@ -33,7 +33,7 @@ export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
 // never touches.
 export { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 export type { DrainDeps } from "./drain.js";
-export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
+export { appendToChain, lockChainHead } from "./chain.js";
 export type { ChainHead, PendingRegistro } from "./chain.js";
 export { fromRegistroRow, pointerTo, toRegistroRow } from "./registro-row.js";
 export type {
