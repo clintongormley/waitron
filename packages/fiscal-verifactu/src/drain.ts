@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { claimLockedRows, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
@@ -457,7 +457,8 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * from, and `intentos` (returned already incremented) is what `backoffBatch` computes THIS
  * attempt's wait from if the submit below fails.
  *
- * `FOR UPDATE OF e SKIP LOCKED`: two concurrent drainers race
+ * `FOR UPDATE OF e SKIP LOCKED` — spelled by `claimRows`' lock-only sibling `claimLockedRows`
+ * (@waitron/db), not here: two concurrent drainers race
  * over the same rows — e.g. two scheduler instances, or a retried call overlapping a slow one. Without row locking here, both transactions' plain `SELECT` would each see the same
  * `pendiente` rows (READ COMMITTED takes a fresh per-statement snapshot, but neither SELECT blocks
  * on the other), and both would go on to submit the SAME batch to AEAT — a genuine duplicate
@@ -548,18 +549,25 @@ async function claimBatch(
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
-  const rows = await tx.execute<DueRow>(sql`
-    select r.*, e.intentos from envios e
-    join registros_facturacion r on r.id = e.registro_id
-    where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
-      ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
-    order by r.sif_id, r.secuencia
-    limit ${maxPorEnvio}
-    for update of e skip locked
-  `);
+  // `of: "e"` locks the envío rows alone, and it is not a preference. `app_user` is revoked from
+  // `registros_facturacion` and re-granted `select, insert` only
+  // (drizzle/0001_fiscal_baseline_sql.sql:4 and :6), and PostgreSQL wants an update-shaped
+  // privilege on every table a `FOR UPDATE` locks. Measured 2026-09-21 against the real migrated
+  // schema, as `app_user`, over THIS join: `for update skip locked` came back `42501`, and
+  // `for update of e skip locked` succeeded.
+  const rows = await claimLockedRows<DueRow>(tx, {
+    selection: sql`
+      select r.*, e.intentos from envios e
+      join registros_facturacion r on r.id = e.registro_id
+      where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
+        ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
+      order by r.sif_id, r.secuencia
+      limit ${maxPorEnvio}`,
+    of: "e",
+  });
 
   const sendable: DueRow[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     // A successor of a refusal this SAME call already found (the SQL exclusion above only screens
     // out chains blocked in an EARLIER call this pass) — dropped with no incident of its own.
     if (blockedSifIds.has(row.sif_id)) continue;
@@ -609,12 +617,12 @@ async function claimBatch(
   // never part of that UPDATE, so its own `intentos` was never touched either, and it is never
   // returned from here for a caller to see a bumped value that was never actually persisted.
   //
-  // `rawCount` (this call's `rows.rows.length`, BEFORE partitioning) is what `drainDue`'s retry
+  // `rawCount` (this call's `rows.length`, BEFORE partitioning) is what `drainDue`'s retry
   // loop uses to tell "everything in this window was refused/blocked, try again past it" apart
   // from "genuinely nothing left" — `sendable.length` alone cannot distinguish the two.
   return {
     sendable: sendable.map((r) => ({ ...r, intentos: r.intentos + 1 })),
-    rawCount: rows.rows.length,
+    rawCount: rows.length,
   };
 }
 

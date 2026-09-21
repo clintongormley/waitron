@@ -3,10 +3,10 @@ export { createPgliteDb, createPostgresDb } from "./client.js";
 export type { Database, Driver, Schema, Transaction } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
-// The two shapes a job claim takes, and the one file holding the engine-specific SQL they rest
+// The three shapes a job claim takes, and the one file holding the engine-specific SQL they rest
 // on (`job-claim.ts`).
-export { claimLock, claimRows } from "./job-claim.js";
-export type { ClaimSpec } from "./job-claim.js";
+export { claimLock, claimLockedRows, claimRows } from "./job-claim.js";
+export type { ClaimSpec, LockedClaimSpec } from "./job-claim.js";
 // The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and
 // its names are listed by hand rather than starred. Guards: `schema/columns.test.ts` for what each
 // helper emits, `scripts/column-vocabulary.test.ts` for nobody else naming the engine's types.

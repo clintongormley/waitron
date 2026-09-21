@@ -60,9 +60,9 @@ export interface ClaimSpec {
  * leaving the conditional update as the whole mechanism — under the write queue one transaction
  * writes at a time, so there are no locked rows to skip
  * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 16). Keeping the clause
- * here means that step edits one function. It is not the only place in the tree that spells the
- * clause: `packages/fiscal-verifactu/src/drain.ts` still carries its own until task P4b moves it,
- * and a suite that has to HOLD a row against the claim under test spells it too.
+ * here means that step edits this module rather than each caller. What still spells the clause
+ * outside it, after task P4b moved the fiscal drain onto {@link claimLockedRows}, is a suite that
+ * has to HOLD a row against the claim under test.
  */
 export async function claimRows<Row extends Record<string, unknown>>(
   tx: Transaction,
@@ -85,6 +85,55 @@ export async function claimRows<Row extends Record<string, unknown>>(
   `);
   // `tx.execute` hands back `Assume<Row, Record<string, unknown>>[]`, which the constraint above
   // already makes the same type — but TypeScript will not reduce that while `Row` is a parameter.
+  return claimed.rows as Row[];
+}
+
+export interface LockedClaimSpec {
+  /** The rows to claim: a complete SELECT, carrying its own joins, ordering and limit. */
+  readonly selection: SQL;
+  /**
+   * Which one of the tables the selection names is locked, by the alias the selection gave it.
+   * Quoted and escaped by `sql.identifier`, like {@link ClaimSpec.table}.
+   */
+  readonly of: string;
+}
+
+/**
+ * Claims rows by LOCKING them and stamping nothing, for a caller whose selection is raw SQL and
+ * which may lock only ONE of the tables that selection joins. {@link claimLock} is the same claim
+ * for a caller holding a drizzle query it may lock whole.
+ *
+ * The narrowing is not a preference. Measured 2026-09-21 on real PostgreSQL as `app_user`, over a
+ * join between a table that role may write and one it holds only `select, insert` on: an
+ * unnarrowed `for update` is refused `42501`, and `for update of <the writable one>` succeeds. The
+ * case is `job-claim.pg.test.ts`'s "locks only the table `of` names", whose control runs the
+ * refused form first — on that file's own probe tables, so what it holds is the SHAPE, not a
+ * privilege missing on a real table (its header says the same). The caller this exists for is
+ * `packages/fiscal-verifactu/src/drain.ts`, which joins the immutable `registros_facturacion`;
+ * `app_user` is revoked from that table and re-granted `select, insert` alone
+ * (`packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql:4` and `:6`), and the same two
+ * forms were run over the drain's own join against the real migrated schema, with the same two
+ * answers.
+ *
+ * Why the drain cannot use {@link claimRows}: a claim there locks a window and then stamps only
+ * the rows it decides are sendable, having read each one's own environment — the rest stay
+ * `pendiente` and untouched, which `drain.test.ts`'s "halts a chain behind a refused predecessor"
+ * case reads as `intentos` still 0 on all three rows. `claimRows` stamps its whole window, so
+ * moving the drain onto it would stamp rows the drain is about to refuse.
+ *
+ * Like {@link claimLock}, what task F1 leaves of this is an ordinary ordered SELECT with no claim
+ * in it, sound because the write queue admits one writer at a time
+ * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 16). That is this
+ * comment's reading of the plan rather than a line in it.
+ */
+export async function claimLockedRows<Row extends Record<string, unknown>>(
+  tx: Transaction,
+  spec: LockedClaimSpec,
+): Promise<Row[]> {
+  const claimed = await tx.execute<Row>(
+    sql`${spec.selection} for update of ${sql.identifier(spec.of)} skip locked`,
+  );
+  // Same reduction TypeScript will not make for `claimRows` above, for the same reason.
   return claimed.rows as Row[];
 }
 
