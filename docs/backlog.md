@@ -889,8 +889,10 @@ What extras lists left open, and what #449 found on the way:
   id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
   worth knowing if extras lists turn out to be much longer.
 
-Task 12 has landed (2026-09-21), which is the till side, and the plan's last code task before
-Task 13's deletions. The picker walks a dish's `offeredModifiers` in the order the offer gives them
+Task 12 has landed as **#478** (main `9fbdc8ba`, with its own completed green CI run), which is
+the till side, and the plan's last code task before Task 13's deletions. It landed BEHIND with
+`--admin`, which the owner's 2026-09-05 rule allows: main had gained #477 and the only file both
+touched is this one. The picker walks a dish's `offeredModifiers` in the order the offer gives them
 and draws one widget per entry: an extras list offers its products at the resolved price, each with
 a checkbox or a stepper where the dish may take more than one, held inside two bounds (the
 product's own maximum and what is left of the list's allowance); an options list offers its labels
@@ -903,6 +905,20 @@ and its paper twin cannot drift apart. The tab screen tells a child extras row f
 `TabLine.parentLineNo`. The legacy `Modifier`/`ModifierSelection`/`ModifierSnapshot`/`TillOptionGroup`
 declarations, the free-text `text` modifier and the `optionGroups` field on a till product are gone
 from the app.
+
+
+Two things its review wave is worth carrying past this task, because neither is about extras:
+
+- **A name-filtered test run does not load an e2e suite that pins a wire body with `toEqual`.**
+  This branch added a field to `/api/products` and read green off targeted runs for a whole
+  firing; the full package suite failed on `apps/server/src/till-api.test.ts` the first time it
+  was asked. CLAUDE.md §2 states the rule — this is the instance that cost a checkpoint.
+- **Splitting a fix wave across agents who cannot see each other breeds false sentences, and the
+  count is now measured twice.** Task 11 had four of six that way; here a three-agent wave gave
+  fourteen corrections in round two, of which four were one agent falsifying another's sentence,
+  and a single-writer round three still found six more inside round two. The working rule: use
+  ONE writer for a correction round, and budget a third reading round rather than hoping two
+  settle it.
 
 What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
 
