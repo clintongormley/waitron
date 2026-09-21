@@ -316,6 +316,9 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       dietaryDeclarations: (product.dietaryDeclarations ??
         []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
       modifiers: product.modifiers ?? [],
+      // The new ordered attachment list a dish exposes. Empty here: no case in this file picks an
+      // extra or answers an options list, and the picker is driven from the source `TillProduct`.
+      offeredModifiers: [],
       variants: (product.variants ?? []) as ZoneOfferCatalogue["offers"][number]["variants"],
       courseId: product.courseId ?? null,
       optionGroups: (product.optionGroups ?? []).map((group) => ({
