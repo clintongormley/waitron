@@ -485,8 +485,8 @@ What it left open:
   kitchen-rendering evidence comes from the build's own focused tests plus CI's package suites, not
   from a second pair of eyes. Worth knowing before anyone treats those paths as double-checked.
 
-**Modifiers become Extras and Options — the thirteenth and last pull request.** The single "modifier"
-idea is being split into two: Extras (reusable lists of products, each pick becoming its own sale
+**Modifiers become Extras and Options — DONE, all thirteen pull requests landed (2026-09-21).** The
+single "modifier" idea was split into two: Extras (reusable lists of products, each pick becoming its own sale
 line) and Options (reusable lists of labels, saved as a note on the dish line). A product composes
 both through one ordered attachment list. Design:
 [one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
@@ -536,7 +536,8 @@ built the dashboard's Extras and Options tabs (below). **Both of those dev-till 
 closed by Task 12 (2026-09-21):** the till sends the new `extras`/`options` shapes, and it tells a
 child line by `TabLine.parentLineNo` instead of by a null product.
 
-Task 13 is the last, and it deletes what the twelve replaced: the five tables `option_groups`,
+Task 13 LANDED as #480 (2026-09-21), the last of the thirteen. It deletes what the twelve replaced:
+the five tables `option_groups`,
 `option_group_items`, `product_option_groups`, `menu_item_option_groups` and `menu_item_options`,
 the operations and HTTP routes over them, the three dashboard widgets that authored them
 (`modifier-form`, `choice-form`, `option-group-manager`), the legacy `optionGroups` and `modifiers`
@@ -889,15 +890,15 @@ What option lists left open, none of it taken in #436 or #445:
   kind name, the two JSON keys, and the six catalogue functions). What is left is the old
   `/management-api/modifiers` block, which the spec retires and which still spells its own six
   handlers out; the entry below is the one that covers it.
-- **Nothing schedules the deletion of the old `/management-api/modifiers` routes.** Spec §11 says the
-  options and extras routes replace them, but no task in the plan lists `apps/server/src/catalogue-api.ts`
-  as a file it deletes from — Task 13's file list does not name it. Until that is fixed, the old
-  routes survive the plan, and so does the ordering requirement #445 had to comment on: BOTH the
-  option-list block and the extras-list block must be registered ahead of
-  `/management-api/modifiers/:id`, or `:id` swallows the literal word `options` or `extras` and the
-  collection read answers 400 instead of 200. `mountListSurface` states the hazard once and each of
-  its two call sites carries its own measurement of it, both re-run after the helper was extracted.
-  **Next action:** add the route removal to Task 13, or state that the old routes stay.
+- **The old `/management-api/modifiers` routes are gone — DONE, closed by Task 13 (#480).** The
+  worry recorded here was that the plan's file list for Task 13 did not name
+  `apps/server/src/catalogue-api.ts`, so the legacy option-group handlers would survive the plan.
+  They did not: the six handlers went with their tables. With them went the ordering requirement
+  #445 had to comment on — the option-list and extras-list blocks no longer have to be registered
+  ahead of anything, because nothing registers a `/management-api/modifiers/:id` route to swallow
+  the literal word `options` or `extras`. That is measured rather than read off the router: with
+  both mount calls moved to the END of `mountCatalogueApi`, the suite still passes, and the comment
+  at `apps/server/src/catalogue-api.ts` states the control it ran. **No next action.**
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
   bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
@@ -998,6 +999,31 @@ Two things its review wave is worth carrying past this task, because neither is 
   and a single-writer round three still found six more inside round two. The working rule: use
   ONE writer for a correction round, and budget a third reading round rather than hoping two
   settle it.
+
+Three things Task 13's own review wave is worth carrying, because none is about extras:
+
+- **A guard that says "nothing here takes an advisory lock" can be false while every file it scans
+  is clean.** `docs/developers/modifiers.md` and the new
+  `scripts/catalogue-engine-neutral.test.ts` both said the extras-and-options machinery takes no
+  advisory lock. It does: a list save carrying a customer-facing name map reaches
+  `pg_advisory_xact_lock` through `packages/catalogue/src/content-languages.ts`, a shared helper in
+  a file the guard does not scan. The feature takes no advisory lock OF ITS OWN, which is a
+  different sentence, and the guard's header now carries that fourth hedge. This is `CLAUDE.md` §1's
+  "a sentence about what ANOTHER part of the system does is checked by following the call chain",
+  with a text-reading guard standing in for the reading.
+- **A generated `DROP TABLE … CASCADE` is a decision, not a default.** Drizzle emitted the three
+  drops in an order that needs `CASCADE`; both sibling drop migrations in the same directory carry
+  the opposite instruction verbatim, because `CASCADE` turns a dependency the drop did not expect
+  into a silent success. Reordering the statements removes the need entirely. Measured with a
+  control: put the parent back second without `CASCADE` and the virgin migrate fails `2BP01`
+  naming the constraint. **Worth looking for in any generated drop.**
+- **Round three of a correction wave is not optional, and the driver's own sentences are in
+  scope.** Task 12 measured this once (six false sentences inside round two). Here three review
+  seats gave twenty-one findings, a four-agent fix wave produced TEN more inside the corrections,
+  and two of those ten were in a sentence the session driving the work had written itself. One
+  round-three agent then refused a finding with evidence rather than complying, which is the
+  behaviour to keep. The rule stands as Task 12 wrote it: one writer per correction round, and
+  budget the third reading round.
 
 What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
 
