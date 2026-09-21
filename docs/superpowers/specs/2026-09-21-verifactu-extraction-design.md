@@ -172,6 +172,17 @@ divergence ever shows **ours** is wrong, that is a defect to fix.
   and the other lacks — their compliance lint, our SOAP client and validation rules — are out of the
   differential surface and stay covered by our own vector tests).
 
+> **Correction (2026-09-21, from the npm-landscape review — verified against `inoguerols/verifactu`
+> source at tag 1.5.3):** the parenthetical just above is wrong to place the SOAP client, the consulta
+> query and response parsing on our side of the "one has, the other lacks" line. inoguerols has had all
+> three since its v1.0 (2026-06-25). What is genuinely ours alone is the XML **request** parser and the
+> structured, typed response/effective-state model; inoguerols's response/consulta parsing is looser
+> (it strips namespaces, flattens both response shapes into one, and leaves consulta pagination out of
+> scope). So the overlapping — and therefore differential — surface is **wider** than stated: it can
+> include envío serialisation and response/consulta parsing, not just huella/QR/record-XML. The rule is
+> unchanged: AEAT is the sole tiebreaker, never inoguerols-equality. The spike's first job is to map
+> this wider overlap.
+
 ### 2.9 An optional high-level convenience facade (ergonomics for external users)
 
 Our public surface is a **granular, stateless protocol kernel** — it hands the caller the pieces
@@ -229,8 +240,34 @@ one call.
 - **Library choice is a spike item** (criteria: permissive licence, SVG and matrix output, level M, no
   native/canvas requirement). `qrcode` — already used in `apps/server` — is the natural candidate.
 
+> **Dependency-weight note (2026-09-21):** `qrcode@1.5.4` (135 KB) pulls in `yargs` (a full CLI-arg
+> framework), `pngjs` and `dijkstrajs` transitively — `yargs` only because `qrcode` ships a CLI bin we
+> would never use. That reinforces the "keep it off the core `.` entry" decision above, and adds a
+> criterion to the spike: prefer a renderer with a lean transitive tree (e.g. `qrcode-generator`, which
+> emits SVG without a CLI dependency), or bring `qrcode` strictly as an **optional/peer** dependency
+> behind the `./qr-image` subpath. Either way the base install stays single-dependency. This is a
+> **separate optional package/subpath, like the facade (§2.9)** — the owner confirmed that shape on
+> 2026-09-21.
+
 Like the facade (§2.9), this is additive ergonomics off the critical path, and can land in `0.1.0` or a
 fast-follow.
+
+### 2.11 NIF/NIE/CIF check-digit validation (a small pure rule)
+
+Confirmed 2026-09-21 (owner agreed to add it): our `validate()` only length-checks the taxpayer id —
+the `NIF_LENGTH` rule asserts exactly 9 characters (`src/validate.ts`), and `src/qr.ts`'s own comment
+already records that "validate() only length-checks it". It does **not** validate the check character
+(the DNI mod-23 letter, the NIE prefix forms, or the CIF control character including the K/L/M special
+cases), which `inoguerols/verifactu` does (`validarNif`). Port an equivalent **pure** check into
+`validate()` behind a new issue code — **no new runtime dependency**, it is arithmetic on the string.
+
+- **Value-add, not a correctness fix.** AEAT rejects a bad check-digit at submission anyway, so this
+  catches the error earlier (at `validate()` time) rather than at the wire; it augments the XSD-derived
+  length rule, never replaces it.
+- **Covered by the library's own tests**, with representative vectors per class (valid/invalid DNI, NIE
+  and CIF, including a K/L/M CIF), under the coverage/mutation bars.
+
+Additive ergonomics off the critical path, like §2.9 and §2.10.
 
 ## 3. How Waitron consumes it
 
