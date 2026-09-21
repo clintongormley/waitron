@@ -210,11 +210,21 @@ const STATE_AFTER: Record<LiveEntryKind, ShiftState> = {
  * Every method reads the worker's current shift state and refuses an illegal transition
  * (`attendance.*`) BEFORE appending — the state machine is `out →in→ working →break_start→ on_break
  * →break_end→ working →out→ out`, which keeps the live stream well-formed for the projection.
+ *
+ * Each of the four clock methods used to open with a `lockPerson` call — `select id from persons
+ * … for no key update` — so that the state read and the append could not be interleaved by a
+ * second operation for the same person, which would let both observe the same state and both
+ * append (a double-`in`, which the projection then undercounts). One write transaction runs on the
+ * venue file at a time, so nothing can land between this read and this append, for any person;
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`) carries the mechanism, the
+ * measurement and the control. The lock MODE that note argued for — `for no key update` rather
+ * than `for update`, to avoid an ABBA cycle against the `for key share` locks a `time_entries`
+ * insert took on its referenced `persons` rows — has no counterpart here at all: SQLite takes no
+ * row locks of either kind, and there is only one writer.
  */
 export class WorkforceBackend {
   /** out → working. */
   async clockIn(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.personId);
     const state = await this.currentState(tx, input.personId);
     if (state !== "out") throw this.alreadyOpen(input);
     await this.append(tx, input, "in");
@@ -222,7 +232,6 @@ export class WorkforceBackend {
 
   /** working → out. */
   async clockOut(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.personId);
     const state = await this.currentState(tx, input.personId);
     if (state !== "working") throw this.noOpenEntry(input);
     await this.append(tx, input, "out");
@@ -230,7 +239,6 @@ export class WorkforceBackend {
 
   /** working → on_break. */
   async breakStart(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.personId);
     const state = await this.currentState(tx, input.personId);
     if (state === "on_break") throw this.alreadyOpen(input);
     if (state !== "working") throw this.noOpenEntry(input);
@@ -239,7 +247,6 @@ export class WorkforceBackend {
 
   /** on_break → working. */
   async breakEnd(tx: Transaction, input: ClockEventInput): Promise<void> {
-    await this.lockPerson(tx, input.personId);
     const state = await this.currentState(tx, input.personId);
     if (state !== "on_break") throw this.noOpenEntry(input);
     await this.append(tx, input, "break_end");
@@ -472,49 +479,6 @@ export class WorkforceBackend {
       status: "approved",
       tillId: null,
     });
-  }
-
-  /**
-   * Serialises every clock operation for ONE person by taking a row lock on that person's `persons`
-   * row, held to the end of the caller's transaction. Each of the four clock methods calls this
-   * BEFORE reading `currentState`, which makes the read-state-then-append sequence atomic per person:
-   * a second concurrent operation for the same person BLOCKS here until the first commits, then reads
-   * the UPDATED state and is correctly refused by the state-machine guard (`attendance.already_open` /
-   * `attendance.no_open_entry`). Without it (proven by deletion in clocking.concurrency.test.ts) two
-   * same-person operations both observe the same state and both append — a double-`in` the projection
-   * then undercounts (projection.ts:287 `case "in": open = { start: e }`), corrupting a LEGAL
-   * working-time record.
-   *
-   * `SELECT … FOR NO KEY UPDATE` on the actual person row, NOT `pg_advisory_xact_lock`: it is
-   * collision-free (no key hashing). The app role holds UPDATE
-   * on `persons` (@waitron/identity's drizzle/0001_identity_baseline_sql.sql; `persons: "SIU"` in
-   * packages/fiscal-verifactu's privileges.expected.ts pins that grant), which is the
-   * privilege the `FOR …` row-lock clauses require, so it is permitted for the non-superuser
-   * deployment role (exercised as that role in clocking.concurrency.test.ts). A person id that does
-   * not exist locks nothing, which is harmless: `currentState` then reports `out` exactly as before
-   * this lock existed, and `time_entries`' foreign key remains the backstop.
-   *
-   * WHY `FOR NO KEY UPDATE` AND NOT `FOR UPDATE` — the lock modes are NOT interchangeable here, and
-   * `FOR UPDATE` reintroduces a deadlock this exact clause was added to avoid. The lock ORDER is not
-   * uniform across the write paths: this clock path takes the `persons` lock BEFORE `appendToChain`'s
-   * per-(node, location) `workforce_chains` head lock, but the CORRECTION paths (`requestCorrection` /
-   * `approveCorrection` → `appendCorrection` → `appendToChain`) do NOT call this — they lock the chain
-   * head FIRST and then, on the `time_entries` INSERT, implicitly take `FOR KEY SHARE` on the
-   * referenced `persons` rows via the FKs (`time_entries_person_fk`, `_recorded_by_person_fk`,
-   * `_correction_actor_fk`) — the OPPOSITE order (chain → persons). Per PostgreSQL's row-lock conflict
-   * matrix, `FOR UPDATE` conflicts with `FOR KEY SHARE`, so a same-person clock-in racing a correction
-   * of that person at the same location is an ABBA cycle → `deadlock detected` (40P01), which
-   * `appendToChain` does not retry (it retries only 23505). Reproduced deterministically on
-   * postgres:18 (clocking.concurrency.test.ts's clock-vs-correction case, RED under `FOR UPDATE`).
-   * `FOR NO KEY UPDATE` does NOT conflict with `FOR KEY SHARE`, so the clock path's `persons` lock and
-   * the correction INSERT's FK lock never block each other → no ABBA; and it DOES self-conflict, so
-   * two same-person clock-ins still serialise and the read→append TOCTOU stays closed (the
-   * clock-vs-clock case). `pg_advisory_xact_lock` would also dodge the ABBA (it is disjoint from the
-   * FK locks), but at the cost of a hashed key space and a lock nobody reading the row can see.
-   */
-  private async lockPerson(tx: Transaction, personId: string): Promise<void> {
-    await tx.execute(sql`
-      select id from persons where id = ${personId} for no key update`);
   }
 
   /**
@@ -790,18 +754,22 @@ export class WorkforceBackend {
     }));
   }
 
-  /** A roster version's `status`, or `roster.not_found` if there is no such version. `publishRoster` reads the publish guard off this. The row is locked `for update`, so the
-   * check-then-publish is race-free: a second concurrent publish blocks on this SELECT until the
-   * first commits, then reads `published` and is refused. Without the lock both could observe `draft`
-   * and the later would silently re-stamp `published_at`/`published_by_person_id` (the guard is a
-   * separate statement from the UPDATE, so a bare read cannot serialise them). The lock rides the
-   * caller's transaction, which `publishRoster` always supplies. */
+  /**
+   * A roster version's `status`, or `roster.not_found` if there is no such version. `publishRoster`
+   * reads the publish guard off this.
+   *
+   * The read took `for update`, so that a second publish of the same draft could not observe
+   * `draft` between this statement and the UPDATE that follows it (the guard is a separate
+   * statement, so a bare read could not serialise them). One write transaction runs on the venue
+   * file at a time, so there is no second publish to interleave with — the pattern is stated once,
+   * with its measurement and its control, on `assertExtraListForWrite`
+   * (`packages/catalogue/src/extras.ts`).
+   */
   private async rosterVersionStatus(tx: Transaction, versionId: string): Promise<string> {
     const { rows } = await tx.execute<{ status: string }>(sql`
       select status from roster_versions
       where id = ${versionId}
-      limit 1
-      for update`);
+      limit 1`);
     const version = rows[0];
     if (version === undefined) {
       throw new AppError("roster.not_found", { rosterVersionId: versionId });
@@ -814,17 +782,13 @@ export class WorkforceBackend {
    * about to be published, so at most one published version survives per period (design §2.1, the
    * mutable + supersede model — OWNER DECISION).
    *
-   * Locks the incumbent published rows `for update` FIRST (`for update of prior`, so only the
-   * incumbents — not this version's own already-locked row — are locked): this serialises concurrent
-   * publishes of the same period against a common row, so the second blocks until the first commits
-   * rather than racing it. It is NOT, however, what guarantees the invariant — a concurrent
-   * FIRST publish of two different drafts for a period with no incumbent has no row to lock, and even
-   * with an incumbent the loser's READ COMMITTED snapshot cannot see the winner's freshly-published
-   * row (it was demoted, not the one this saw). The `roster_versions_published_period_uq` partial
-   * unique index is the actual guarantee: it raises 23505 whenever a publish would leave a second
-   * published row, which `publishRoster` translates to `roster.period_already_published`. This lock
-   * makes the common (sequential, lightly-contended) supersede orderly and cuts index-abort churn;
-   * the index makes it CORRECT. Verified against real Postgres in scheduling.concurrency.test.ts.
+   * The incumbent rows were read `for update of prior`, which made the common supersede orderly.
+   * That was never what guaranteed the invariant, and the note it replaced said so: the
+   * `roster_versions_published_period_uq` partial unique index is, and it still is. The index
+   * refuses any publish that would leave a second published row for the period, which
+   * `publishRoster` translates to `roster.period_already_published`. The lock is gone because one
+   * write transaction runs on the venue file at a time (`assertExtraListForWrite`,
+   * `packages/catalogue/src/extras.ts`); the index is untouched.
    *
    * The self-join reads the target's location/period straight off its row (no value round-trips
    * through TypeScript), the same pattern the shift-attach UPDATE in `publishRoster` uses. `prior.id
@@ -840,8 +804,7 @@ export class WorkforceBackend {
         and prior.period_start = target.period_start
         and prior.period_end = target.period_end
         and prior.status = 'published'
-        and prior.id <> ${versionId}
-      for update of prior`);
+        and prior.id <> ${versionId}`);
     if (rows.length === 0) return;
     await tx.execute(sql`
       update roster_versions prior
@@ -873,9 +836,10 @@ export class WorkforceBackend {
     input: ClockEventInput,
     entryKind: WorkforceEntryKind,
   ): Promise<void> {
-    // Every clock event is appended to its (node, location) tamper-evidence chain (Slice 4) under a
-    // row lock on the chain head — the single-writer path (design §5). The hash, chain position and
-    // recorded_at are computed there, never supplied here.
+    // Every clock event is appended to its (node, location) tamper-evidence chain (Slice 4) — the
+    // single-writer path (design §5). The hash, chain position and recorded_at are computed there,
+    // never supplied here; `selectHead` (../chain.ts) says what keeps one append out of another's
+    // way now that the head row is not locked.
     await appendToChain(
       tx,
       { nodeId: input.nodeId, locationId: input.locationId },

@@ -161,8 +161,7 @@ export async function confirmEmailChangeByCode(
       ),
     )
     .orderBy(sql`${managementAccountActions.createdAt} desc`)
-    .limit(1)
-    .for("update");
+    .limit(1);
   if (action?.codeHash === null || action?.targetEmail === null || action === undefined)
     return null;
   const supplied = Buffer.from(
@@ -258,8 +257,7 @@ async function finishClaimedAction(
   const [person] = await tx
     .select({ status: persons.status })
     .from(persons)
-    .where(eq(persons.id, personId))
-    .for("update");
+    .where(eq(persons.id, personId));
   if (
     person === undefined ||
     (input.purpose === "invitation" ? person.status !== "pending" : person.status !== "active")
@@ -289,7 +287,18 @@ async function finishClaimedAction(
   };
 }
 
-/** Lock the account before replacing its setup or reset action; unavailable accounts remain silent. */
+/**
+ * Resolve the account before replacing its setup or reset action; unavailable accounts remain
+ * silent.
+ *
+ * The read took `for update`, so that two recovery requests for one account could not each issue an
+ * action and leave two live tokens. One write transaction runs on the venue file at a time, so the
+ * second request cannot start until the first has committed and superseded the earlier action —
+ * the pattern is stated once on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The two
+ * other reads in this file that dropped the same clause are `confirmEmailChangeByCode`'s (which
+ * read the live action before bumping its attempt counter) and `finishClaimedAction`'s (which read
+ * the person's status before writing it).
+ */
 export async function requestAccountRecoveryAction(
   tx: Transaction,
   input: { email: string; now?: Date },
@@ -301,8 +310,7 @@ export async function requestAccountRecoveryAction(
     .from(persons)
     .where(
       and(eq(sql`lower(${persons.email})`, email), inArray(persons.status, ["active", "pending"])),
-    )
-    .for("update");
+    );
   if (person === undefined) return null;
   return issueAccountAction(tx, {
     personId: person.id,

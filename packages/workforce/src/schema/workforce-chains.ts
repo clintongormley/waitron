@@ -7,8 +7,8 @@ import { timeEntries } from "./time-entries.js";
  * The tamper-evidence chain head — MUTABLE, unlike the `time_entries` it points at. One row per
  * (node, location): a location's chain is written by ONE node at a time, but across a
  * promotion by two nodes in succession (the box, then a promoted cloud, then the box again), so
- * `node_id` joins the key to give each writer its own chain (spec §2.1). Row-locked with
- * `FOR UPDATE` during an append, as fiscal's `cadenas` is per node.
+ * `node_id` joins the key to give each writer its own chain (spec §2.1). An append used to hold
+ * this row `FOR UPDATE`; `selectHead` (../chain.ts) says what replaced that.
  *
  * `sequence_no` is monotonic and NEVER reset — the chain position `time_entries.sequence_no` advances
  * from. `last_entry_id`/`last_entry_hash` are the predecessor an append reads to compute the next

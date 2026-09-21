@@ -1,4 +1,11 @@
-import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  UNIQUE_VIOLATION,
+  captureError,
+  pgErrorCode,
+  pgErrorMessage,
+  refusalOn,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -7,7 +14,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   appendToChain,
-  lockChainHead,
+  readChainHead,
   readChain,
   type ChainKey,
   type TimeEntryAppend,
@@ -15,6 +22,7 @@ import {
 import { verifyChain } from "./chain-hash.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { timeEntries } from "./schema/time-entries.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 // PGlite, not real Postgres: this suite is about appendToChain's OWN logic — ordering, the genesis
@@ -216,19 +224,61 @@ describe("appendToChain", () => {
     expect(pgErrorMessage(error)).toContain("time_entries_recorded_at_second_ck");
   });
 
+  /**
+   * `time_entries_chain_position_uq` on (node_id, location_id, sequence_no) — the thing that makes
+   * a fork of the working-time chain impossible (CLAUDE.md §5). It is checked here from OUTSIDE
+   * `appendToChain`, because what it has to hold against is a writer that never went through this
+   * file at all: a survivor's row out of a restored backup.
+   *
+   * It is checked against the index BY NAME, with a control that inserts the same row at the next
+   * free position and succeeds. The reason the name matters: this engine reports a primary key, a
+   * unique index, a NOT NULL and a CHECK all under one `code` (`ERR_SQLITE_ERROR`), so asserting
+   * the code alone passes for a row refused for a completely different reason — which is what the
+   * PostgreSQL-era assertion (`23505`) turned into here. The row is written through the table
+   * definition so its `id` comes from `$defaultFn`; the raw insert this replaced omitted `id` and
+   * was refused NOT NULL, under that same code, before the index was ever reached.
+   *
+   * Proven by deletion, 2026-09-21, Node v26.7.0: with `drop index time_entries_chain_position_uq`
+   * run on the open file first, the fork below is ACCEPTED — `captureError` reports "expected the
+   * operation to be rejected, but it succeeded". With the index in place the refusal reads
+   * `UNIQUE constraint failed: time_entries.node_id, time_entries.location_id,
+   * time_entries.sequence_no`. Note what this engine names: the COLUMNS, not the index, so a test
+   * looking for the string `time_entries_chain_position_uq` in the message finds nothing.
+   */
   it("rejects a second entry claiming an occupied chain position", async () => {
     await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
-    // Bypasses appendToChain: the unique index is the backstop and must hold against a writer that
-    // never took the head lock. Position 1 is already occupied on this (node, location).
+    const fork = {
+      personId,
+      locationId,
+      nodeId,
+      entryKind: "out" as const,
+      // Whole seconds with the fractional field present, and a predecessor hash beside
+      // `isFirstEntry: false` — the two CHECKs (`time_entries_event_at_second_ck`,
+      // `time_entries_chaining_ck`) that a fork has to clear before the index is even consulted.
+      // Both refused this row first while it was being written, under the SAME `code` the index
+      // raises.
+      eventAt: "2026-01-05T18:00:00.000Z",
+      eventOffsetMinutes: 0,
+      recordedByPersonId: personId,
+      recordedAt: "2026-01-05T18:00:00.000Z",
+      entryHash: "0".repeat(64),
+      prevEntryHash: "1".repeat(64),
+      isFirstEntry: false,
+    };
     const error = await captureError(() =>
-      pg.db.execute(sql`
-        insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
-          ${personId}, '2026-01-05T18:00:00Z', ${"0".repeat(64)}, 1, true)`),
+      pg.db.insert(timeEntries).values({ ...fork, sequenceNo: 1 }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "time_entries",
+        columns: ["node_id", "location_id", "sequence_no"],
+      }),
+    ).toBe(true);
+    // The control, in the other direction: the same row at the next free position is accepted, so
+    // the refusal above is the POSITION and not something else about the row.
+    await expect(
+      pg.db.insert(timeEntries).values({ ...fork, sequenceNo: 2 }),
+    ).resolves.toBeDefined();
   });
 
   it("retries inside a savepoint, then surfaces exhaustion as attendance.append_contention", async () => {
@@ -346,9 +396,9 @@ describe("appendToChain commits the correction and capture content to the hash",
   });
 });
 
-describe("lockChainHead", () => {
+describe("readChainHead", () => {
   it("creates the chain head row from scratch when a (node, location) has none yet", async () => {
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, key()));
+    const head = await pg.db.transaction((tx) => readChainHead(tx, key()));
     expect(head).toEqual({
       sequenceNo: 0,
       lastEntryId: null,
@@ -361,9 +411,9 @@ describe("lockChainHead", () => {
     expect(rows[0]?.count).toBe(1);
   });
 
-  it("locks the existing head rather than creating a second one", async () => {
+  it("reads the existing head rather than creating a second one", async () => {
     await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, key()));
+    const head = await pg.db.transaction((tx) => readChainHead(tx, key()));
     expect(head.sequenceNo).toBe(1);
     expect(head.lastEntryId).not.toBeNull();
     expect(head.lastEntryHash).not.toBeNull();

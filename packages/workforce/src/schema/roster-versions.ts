@@ -85,11 +85,12 @@ export const rosterVersions = table(
     index("roster_versions_location_idx").on(t.locationId),
     // At most one PUBLISHED version per (location, exact period). Partial (WHERE status =
     // 'published'), so drafts and superseded rows accumulate freely — only the live published row is
-    // unique. This is the invariant backstop for `publishRoster`'s supersede-on-republish: the
-    // FOR UPDATE lock it takes on the incumbent published row serialises the common case, but a
-    // concurrent first-publish of two DIFFERENT drafts has no row to lock, so THIS index is what
-    // guarantees the second cannot also leave a published row — it raises 23505, which publishRoster
-    // translates to roster.period_already_published. Like `registro_sif_activo_uq` (fiscal-verifactu),
+    // unique. This is the invariant backstop for `publishRoster`'s supersede-on-republish, and it
+    // always was the whole guarantee: the `for update of prior` that used to sit beside it only made
+    // the common case orderly and could not cover a first publish, which has no incumbent row to
+    // lock. That clause is gone (clocking.ts's `supersedePriorPublished`); THIS index still refuses
+    // any second published row for a period, which publishRoster translates to
+    // roster.period_already_published. Like `registro_sif_activo_uq` (fiscal-verifactu),
     // it binds across the whole table.
     uniqueIndex("roster_versions_published_period_uq")
       .on(t.locationId, t.periodStart, t.periodEnd)

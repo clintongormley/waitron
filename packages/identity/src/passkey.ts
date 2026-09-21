@@ -105,11 +105,18 @@ function parseTransports(stored: string | null): string[] | undefined {
  * statement, enforcing single-use — under concurrency, not just sequentially. Returns the challenge
  * STRING both finish ceremonies pass to the verifier as `expectedChallenge`.
  *
- * The DELETE row-locks the challenge, so two finishes racing on the SAME handle serialise: the second
- * blocks on the first's lock, then — once the first commits — matches ZERO rows. Zero rows (already
- * consumed, or a handle that never existed) → `passkey.verification_failed`; a row older than
- * `CHALLENGE_TTL_MS` → `passkey.challenge_expired`. A plain read-then-delete let both racers read the
- * live challenge and proceed, which is the single-use hole this closes.
+ * The DELETE-and-return is one statement, which is what makes single use hold: a second finish on
+ * the SAME handle matches ZERO rows. Zero rows (already consumed, or a handle that never existed) →
+ * `passkey.verification_failed`; a row older than `CHALLENGE_TTL_MS` → `passkey.challenge_expired`.
+ * A plain read-then-delete let both racers read the live challenge and proceed, which is the
+ * single-use hole this closes.
+ *
+ * On PostgreSQL the DELETE also took a row lock, and the note here reasoned about a second finish
+ * BLOCKING on it. That is not how the two are kept apart now: `withTransaction`
+ * (`packages/db/src/tenancy.ts`) runs its body inside the venue file's write queue, which admits
+ * one write transaction on the file at a time, so the second finish does not start until the first
+ * has committed — wider than any row lock. The mechanism, the measurement and the control are
+ * stated once on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
  *
  * Consume-on-SUCCESS is preserved by the enclosing `withTransaction` transaction: on a verify failure, a
  * `verified:false` return, or a TTL throw, the WHOLE transaction rolls back and this DELETE is undone,
@@ -183,12 +190,12 @@ export async function beginPasskeyRegistration(
 }
 
 /**
- * Finish registering a passkey: CONSUME the stored challenge (a locking DELETE that rejects it if
- * unknown or older than `CHALLENGE_TTL_MS`), verify the signed response with `@simplewebauthn/server`,
+ * Finish registering a passkey: CONSUME the stored challenge (a DELETE that rejects it if unknown
+ * or older than `CHALLENGE_TTL_MS`), verify the signed response with `@simplewebauthn/server`,
  * and persist the credential — all in the SAME transaction, so consume + insert commit together or not
- * at all. Consuming BEFORE verify is the single-use guarantee: the DELETE row-locks the handle, so a
- * concurrent finish on the same handle blocks then finds zero rows, and a challenge produces at most
- * one credential even under contention.
+ * at all. Consuming BEFORE verify is the single-use guarantee: a concurrent finish on the same
+ * handle cannot run until this transaction has committed, and then finds zero rows, so a challenge
+ * produces at most one credential ({@link consumeChallenge} carries the mechanism).
  *
  * A failed or expired ceremony throws, which rolls the caller's transaction (`withTransaction`) back —
  * undoing the consume-DELETE with it, so the challenge is NOT lost on those paths. It instead survives
@@ -216,7 +223,7 @@ export async function finishPasskeyRegistration(
     throw new AppError("profile.invalid", { field: "passkeyName" });
   }
   const name = typeof input.name === "string" ? input.name.trim() || null : null;
-  // Consume the challenge up front: a locking DELETE that also enforces single-use (see
+  // Consume the challenge up front: one DELETE that also enforces single-use (see
   // `consumeChallenge`). A verify failure below rolls the whole transaction back, undoing this delete.
   const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched response (a
@@ -299,16 +306,17 @@ export async function beginPasskeyAuthentication(
 
 /**
  * Finish authenticating with a passkey — the passkey branch of the verifier seam. CONSUME the stored
- * challenge (a locking DELETE that rejects it if unknown or older than `CHALLENGE_TTL_MS`), resolve
+ * challenge (a DELETE that rejects it if unknown or older than `CHALLENGE_TTL_MS`), resolve
  * the credential by the id the authenticator returned, verify the signed assertion with
  * `@simplewebauthn/server`, bump the stored signature counter, and open a management session for the
  * credential's owner. Like `loginManager`, a successful ceremony ends in `startManagementSession`; the
  * consume-DELETE, the counter bump and the session insert all run in the caller's SINGLE transaction,
  * so they commit together or not at all.
  *
- * Consuming BEFORE verify is the single-use guarantee under concurrency: the DELETE row-locks the
- * handle, so two finishes racing on the same handle serialise and only one proceeds — the other blocks,
- * then finds zero rows → `passkey.verification_failed`. A failed or expired ceremony throws, rolling
+ * Consuming BEFORE verify is the single-use guarantee under concurrency: two finishes on the same
+ * handle run one after the other and only one proceeds — the other finds zero rows →
+ * `passkey.verification_failed` ({@link consumeChallenge} says what keeps them apart, which is no
+ * longer a row lock). A failed or expired ceremony throws, rolling
  * the transaction back and undoing the consume-DELETE, so the challenge survives to lapse by its TTL
  * instead (consume-on-success, exactly as in `finishPasskeyRegistration`). An unknown challenge and an
  * unrecognised credential both short-circuit before the verifier is reached.
@@ -328,7 +336,7 @@ export async function finishPasskeyAuthentication(
     origin: string;
   },
 ): Promise<ManagementSession> {
-  // Consume the challenge up front: a locking DELETE that also enforces single-use (see
+  // Consume the challenge up front: one DELETE that also enforces single-use (see
   // `consumeChallenge`). Any throw below rolls the whole transaction back, undoing this delete.
   const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
   // The credential id the authenticator returned is untrusted request input: typed `string`, but the

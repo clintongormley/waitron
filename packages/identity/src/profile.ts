@@ -51,12 +51,11 @@ async function ownPerson(tx: Transaction, input: Owner) {
     .from(managementSessions)
     .where(eq(managementSessions.id, input.managementSessionId));
   if (session === undefined) throw new AppError("management_session.required", {});
-  // Serialize profile changes before touching session rows: a password change also ends other sessions.
-  const [person] = await tx
-    .select()
-    .from(persons)
-    .where(eq(persons.id, session.personId))
-    .for("update");
+  // A plain read of the signed-in person. It took `for update`, so that two profile changes for
+  // one person could not interleave — a password change also ends that person's other sessions.
+  // One write transaction runs on the venue file at a time, so there is no second change to
+  // interleave with; the pattern is stated once on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+  const [person] = await tx.select().from(persons).where(eq(persons.id, session.personId));
   if (person === undefined) throw new AppError("management_session.required", {});
   await resolveManagementSession(tx, input.managementSessionId);
   return person;
@@ -121,6 +120,8 @@ export async function finishOwnTotpEnrollment(
   input: Owner & { enrollmentId: string; code: string; keyRing: TotpKeyRing },
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
+  // This read took `for update` too, so that the enrollment could not be consumed twice; the same
+  // answer applies ({@link ownPerson}).
   const [enrollment] = await tx
     .select({ encryptedSecret: totpEnrollments.encryptedSecret })
     .from(totpEnrollments)
@@ -130,8 +131,7 @@ export async function finishOwnTotpEnrollment(
         eq(totpEnrollments.personId, person.id),
         gt(totpEnrollments.expiresAt, new Date().toISOString()),
       ),
-    )
-    .for("update");
+    );
   const secret =
     enrollment === undefined ? null : decryptTotpSecret(enrollment.encryptedSecret, input.keyRing);
   if (secret === null || !verifyTotp(input.code, secret.secret))

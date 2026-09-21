@@ -11,15 +11,23 @@ import type { WorkforceEntryKind } from "./projection.js";
 
 /**
  * Three, not one and not ten (fiscal chain.ts's reasoning, applied to the workforce chain). One is
- * not a retry. Ten converts a genuine duplicate — a real bug — into ten pointless round trips. The
- * retry exists only for the narrow window in which two writers race to CREATE a chain head that does
- * not yet exist and therefore cannot be locked; once the head row exists, `FOR UPDATE` serialises
- * everything, so a further collision means something retrying will not fix.
+ * not a retry. Ten converts a genuine duplicate — a real bug — into ten pointless round trips.
+ *
+ * The window this retry was written for was two writers racing to CREATE a head row that did not
+ * yet exist and so could not be locked. There is no such race left: one write transaction runs on
+ * the venue file at a time ({@link selectHead}), so nothing this code writes can lose that race any
+ * more.
+ *
+ * The retry and its savepoint stay because the refusal they were built to survive is still
+ * possible: `time_entries_chain_position_uq` refuses a chain position whatever occupies it, and a
+ * position can be occupied by a row this code did not write. Whether any such path exists today is
+ * NOT established here — I did not run one — so treat the retry as the shape that confines such a
+ * refusal to one attempt, not as evidence that something reaches it.
  */
 const MAX_APPEND_ATTEMPTS = 3;
 
 /** The chain key — one chain per (node, location) (spec §2.1). Passed to `appendToChain`,
- * `lockChainHead` and `readChain` rather than positional strings, so a caller cannot transpose the
+ * `readChainHead` and `readChain` rather than positional strings, so a caller cannot transpose the
  * node and location. */
 export interface ChainKey {
   nodeId: string;
@@ -27,7 +35,7 @@ export interface ChainKey {
 }
 
 /** One entry's content, MINUS the chain fields — `sequence_no`/`entry_hash`/`prev_entry_hash`/
- * `is_first_entry` cannot exist before the head is locked, so they are computed inside `appendToChain`
+ * `is_first_entry` are derived from the chain head, so they are computed inside `appendToChain`
  * and never supplied by the caller. `node_id`/`location_id` travel in the `ChainKey`, and
  * `recorded_at` is stamped by the append from its clock — none of them are supplied here. */
 export interface TimeEntryAppend {
@@ -52,7 +60,22 @@ export interface ChainHead {
   lastRecordedAt: string | null;
 }
 
-async function selectHeadForUpdate(tx: Transaction, key: ChainKey): Promise<ChainHead | undefined> {
+/**
+ * The chain head for this (node, location), or `undefined` when it has none yet.
+ *
+ * This was `selectHeadForUpdate`, and it took `for update` on the head row: the sequence number
+ * read here is used to compute the NEXT one several statements later, so a second append reading
+ * the same head would compute the same position. One write transaction runs on the venue file at a
+ * time, so there is no second append to overlap with — the pattern is stated once, with its
+ * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * Renamed with the clause: a function named for a lock it does not take is a false claim.
+ *
+ * What the lock never was is the chain's safety. `time_entries_chain_position_uq` on
+ * `(node_id, location_id, sequence_no)` is, and it refuses a forked position whatever wrote it —
+ * measured on this engine by the `rejects a second entry claiming an occupied chain position` case
+ * in `chain.test.ts`, which inserts the fork WITHOUT going through this file.
+ */
+async function selectHead(tx: Transaction, key: ChainKey): Promise<ChainHead | undefined> {
   const [row] = await tx
     .select({
       sequenceNo: workforceChains.sequenceNo,
@@ -63,23 +86,23 @@ async function selectHeadForUpdate(tx: Transaction, key: ChainKey): Promise<Chai
     .from(workforceChains)
     .where(
       and(eq(workforceChains.nodeId, key.nodeId), eq(workforceChains.locationId, key.locationId)),
-    )
-    .for("update");
+    );
   return row;
 }
 
 /**
- * Takes the chain-head row lock, creating the head if this (node, location) has none yet.
+ * The chain head for this (node, location), creating it if there is none yet.
  *
- * `insert ... on conflict do nothing` then a re-select, not an upsert-returning: when a concurrent
- * transaction has inserted the head but not committed, Postgres makes THIS transaction's speculative
- * insert wait on it and then do nothing on the conflict, so the re-select observes the COMMITTED row
- * rather than one that might still roll back. Exported separately from `appendToChain` because it is
- * the seam a future chain verifier reads the head under the same lock. Same shape as fiscal
- * `lockChainHead`, keyed by (node, location).
+ * `insert ... on conflict do nothing` then a re-select, not an upsert-returning. On PostgreSQL that
+ * shape was about a concurrent uncommitted insert; here it is the plain read-back of whichever row
+ * exists. Exported separately from `appendToChain` because it is the seam a future chain verifier
+ * reads the head through.
+ *
+ * This was `lockChainHead` and it took no lock of its own — {@link selectHead} did, and that clause
+ * is gone for the reason stated there. Renamed with it.
  */
-export async function lockChainHead(tx: Transaction, key: ChainKey): Promise<ChainHead> {
-  const existing = await selectHeadForUpdate(tx, key);
+export async function readChainHead(tx: Transaction, key: ChainKey): Promise<ChainHead> {
+  const existing = await selectHead(tx, key);
   if (existing !== undefined) return existing;
 
   await tx
@@ -87,7 +110,7 @@ export async function lockChainHead(tx: Transaction, key: ChainKey): Promise<Cha
     .values({ nodeId: key.nodeId, locationId: key.locationId })
     .onConflictDoNothing({ target: [workforceChains.nodeId, workforceChains.locationId] });
 
-  const created = await selectHeadForUpdate(tx, key);
+  const created = await selectHead(tx, key);
   /* v8 ignore start */
   if (created === undefined) {
     // Unreachable in practice: the insert above commits a fresh row or a concurrent transaction's
@@ -130,7 +153,7 @@ async function attemptAppend(
   entry: TimeEntryAppend,
   clock: () => Date,
 ): Promise<{ id: string; sequenceNo: number; entryHash: string }> {
-  const head = await lockChainHead(tx, key);
+  const head = await readChainHead(tx, key);
   const sequenceNo = head.sequenceNo + 1;
   const isFirstEntry = head.lastEntryId === null;
   const prevEntryHash = head.lastEntryHash;
@@ -138,10 +161,11 @@ async function attemptAppend(
   // ONE truncation each, feeding BOTH the hash and the stored column, so clock events and corrections
   // are all covered here and the three representations can never diverge (whole-branch review fix).
   const eventAt = truncateToWholeSecond(entry.eventAt);
-  // `recorded_at` is clamped to the chain's high-water mark under the head-row lock this transaction
-  // already holds: a wall clock that steps backward (NTP, an operator edit) still yields a
-  // non-decreasing `recorded_at` per chain, so the cross-node precedence order reduces to today's
-  // `sequence_no` order within one chain (spec §4.1).
+  // `recorded_at` is clamped to the chain's high-water mark, read from the head above: a wall clock
+  // that steps backward (NTP, an operator edit) still yields a non-decreasing `recorded_at` per
+  // chain, so the cross-node precedence order reduces to today's `sequence_no` order within one
+  // chain (spec §4.1). What keeps the head read and this write from being interleaved is no longer
+  // a row lock on the head — see `selectHead`.
   const nowMs = clock().getTime();
   const clampedMs =
     head.lastRecordedAt === null ? nowMs : Math.max(nowMs, Date.parse(head.lastRecordedAt));

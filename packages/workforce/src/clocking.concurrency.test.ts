@@ -1,3 +1,23 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the per-person `for no key update` on `persons` that each clock method took is gone (clocking.ts's `lockPerson`, deleted with it).
+ *
+ * The clause this suite was built around is deleted, not translated: SQLite has no row locks and
+ * drizzle's SQLite query builder has no `.for()`. What serialises the writers instead is the venue
+ * file's write queue — one write transaction on the file at a time — stated once, with its
+ * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ *
+ * The old proof-by-deletion recorded below cannot be re-run to say whether it still discriminates,
+ * because this suite does not COLLECT: `useTemplateDb` throws
+ * `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a file
+ * that calls startSharedContainer and provide("sharedPg", handle).` — the real-PostgreSQL harness
+ * this branch removed. Measured 2026-09-21 on the whole package run. It is left in place rather
+ * than deleted because its behavioural subject — that two same-person clock-ins cannot both observe `out` and both
+ * append an `in` — still has to hold. Note what does NOT carry over: the clock-vs-correction case
+ * exists to pin a lock MODE (`for no key update` rather than `for update`, to avoid an ABBA cycle
+ * with the `for key share` locks a `time_entries` insert took on its referenced `persons` rows).
+ * There is no SQLite version of that question: the engine takes neither lock, and there is one
+ * writer. That case is retired by the engine, not moved.
+ */
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { pgErrorCode, withTransaction } from "@waitron/db";

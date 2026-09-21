@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
  * The generic, regime-neutral tamper-evidence chain over `time_entries` (design §5, Slice 4). Pure
  * and DB-free on purpose — hashing and verification are LOGIC, so they are unit-tested directly (and
  * on PGlite through the append path), never against a real-role Postgres (CLAUDE.md §4). The DB side
- * — the row-locked head, the retry — lives in ./chain.ts.
+ * — reading the head, the retry — lives in ./chain.ts.
  *
  * Mirrors `@waitron/verifactu`'s fiscal hash chain (the proven precedent): an ORDERED array of
  * name/value pairs joined into a canonical string, SHA-256, uppercase hex. English field names

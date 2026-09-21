@@ -143,7 +143,17 @@ async function revokePersonAccess(tx: Transaction, personId: string): Promise<vo
     );
 }
 
-/** Saves one complete administrative edit after serializing the active-admin invariant. */
+/**
+ * Saves one complete administrative edit.
+ *
+ * The last-admin refusal below counts the active admins and then writes, and on PostgreSQL both
+ * reads took `for update` so that a second edit could not land between the count and the write and
+ * leave the venue with no admin at all. One write transaction runs on the venue file at a time, so
+ * the count is still true when the update runs — the pattern is stated once, with its measurement
+ * and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The same
+ * applies to {@link deactivatePerson}, {@link resetPersonLogin} and
+ * {@link reactivatePersonForInvitation}, which each dropped the same clauses.
+ */
 export async function updatePersonDetails(
   tx: Transaction,
   input: {
@@ -166,13 +176,8 @@ export async function updatePersonDetails(
     .select({ id: persons.id })
     .from(persons)
     .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id)
-    .for("update");
-  const [person] = await tx
-    .select()
-    .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .orderBy(persons.id);
+  const [person] = await tx.select().from(persons).where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (input.status === "suspended" && authorizedBy === input.personId.toLowerCase()) {
     throw new AppError("person.self_deactivation", {});
@@ -237,13 +242,11 @@ export async function deactivatePerson(
     .select({ id: persons.id })
     .from(persons)
     .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id)
-    .for("update");
+    .orderBy(persons.id);
   const [person] = await tx
     .select({ id: persons.id, role: persons.role, status: persons.status })
     .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (authorizedBy === input.personId.toLowerCase()) {
     throw new AppError("person.self_deactivation", {});
@@ -290,8 +293,7 @@ export async function resetPersonLogin(
     .select({ id: persons.id })
     .from(persons)
     .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id)
-    .for("update");
+    .orderBy(persons.id);
   const [person] = await tx
     .select({
       id: persons.id,
@@ -300,8 +302,7 @@ export async function resetPersonLogin(
       status: persons.status,
     })
     .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
   if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
@@ -337,8 +338,7 @@ export async function reactivatePersonForInvitation(
   const [person] = await tx
     .select({ id: persons.id, displayName: persons.displayName, status: persons.status })
     .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
   await assertDisplayNameAvailable(tx, person.displayName, person.id);

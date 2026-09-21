@@ -89,8 +89,10 @@ export const timeEntries = table(
      * base event. */
     correctionActorId: id("correction_actor_id"),
     // Slice 4 — the tamper-evidence hash chain (design §5). Assigned by `appendToChain`
-    // (../chain.ts) under a row lock on `workforce_chains`, never by the device: one chain per
-    // (node, location), one active writer per chain. IMMUTABLE like the rest of the row — the existing
+    // (../chain.ts), never by the device: one chain per (node, location), one active writer per
+    // chain. `time_entries_chain_position_uq` below is what refuses a forked position, measured on
+    // this engine by chain.test.ts's `rejects a second entry claiming an occupied chain position`.
+    // IMMUTABLE like the rest of the row — the existing
     // REVOKE + `reject_mutation` trigger (drizzle/0001_workforce_baseline_sql.sql) already covers these
     // new columns, since they are written once at INSERT and the app holds no UPDATE.
     /** This entry's own hash — `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */

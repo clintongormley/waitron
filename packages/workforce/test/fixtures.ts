@@ -274,9 +274,10 @@ export async function insertShiftSwap(
 /** Appends one clock event THROUGH the Slice-4 chain, so seeded rows are chained exactly as the
  * write path produces them (`recorded_by_person_id` defaults to the subject — self-service).
  *
- * Wrapped in `.transaction()` because `appendToChain` needs a Transaction for its savepoint retry
- * and its `FOR UPDATE` head lock; both a `Database` (BEGIN) and a `Transaction` (SAVEPOINT) expose
- * `.transaction()`, so this fixture works whether a suite hands it a pool or a live tx. */
+ * Wrapped in `.transaction()` because `appendToChain` needs a Transaction for its savepoint retry;
+ * both a `Database` (BEGIN) and a `Transaction` (SAVEPOINT) expose `.transaction()`, so this
+ * fixture works whether a suite hands it a connection or a live tx. The head lock this note also
+ * named is gone — `selectHead` (src/chain.ts) says why. */
 export async function insertTimeEntry(
   tx: Database | Transaction,
   params: {

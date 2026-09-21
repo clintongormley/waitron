@@ -1,3 +1,22 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the `for update` in `rosterVersionStatus` and the `for update of prior` in `supersedePriorPublished` are both gone.
+ *
+ * The clause this suite was built around is deleted, not translated: SQLite has no row locks and
+ * drizzle's SQLite query builder has no `.for()`. What serialises the writers instead is the venue
+ * file's write queue — one write transaction on the file at a time — stated once, with its
+ * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ *
+ * The old proof-by-deletion recorded below cannot be re-run to say whether it still discriminates,
+ * because this suite does not COLLECT: `useTemplateDb` throws
+ * `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a file
+ * that calls startSharedContainer and provide("sharedPg", handle).` — the real-PostgreSQL harness
+ * this branch removed. Measured 2026-09-21 on the whole package run. It is left in place rather
+ * than deleted because its behavioural subjects — exactly one publisher of a draft wins, and exactly one published
+ * row survives per period — still have to hold. The second of those never rested on the lock:
+ * `roster_versions_published_period_uq` is the guarantee, and that index is untouched. A SQLite
+ * version cannot be written yet either — `publishRoster` itself is still red on `near "at": syntax
+ * error` (an `at time zone`), which is a different conversion class.
+ */
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
@@ -52,7 +71,9 @@ describe("publishRoster under real contention", () => {
     // other, waking on the released lock, re-reads `published` and is refused — no double-publish,
     // no lost update. Prove the lock matters by DELETION: drop `for update` from rosterVersionStatus
     // and two or more publishers observe `draft` at once and each flip it, so the fulfilled count
-    // climbs above one and both assertions below fail.
+    // climbs above one and both assertions below fail. THAT DELETION HAS NOW HAPPENED, for the
+    // reason the file header gives, and the control could not be re-run against it — the suite does
+    // not collect. Treat the paragraph above as a record of what was true on PostgreSQL.
     const versionId = await insertRosterVersion(suite.admin, { locationId });
     // A distinct publisher person per call, so the surviving `published_by` identifies the ONE winner
     // and proves no refused publisher overwrote it.
@@ -114,6 +135,8 @@ describe("publishRoster under real contention", () => {
     // migration 0009 and simultaneous publishers all commit, so the published count climbs above one.
     // Prove the LOCK is NOT the guarantee: remove `for update of prior` (or the whole supersede) and
     // the published count is STILL one — the index alone holds it (see the report's deletion matrix).
+    // `for update of prior` has now been removed, and this half of the matrix is the reason that was
+    // safe: the index, not the lock, is what this case turns on, and the index is untouched.
     const period = { periodStart: "2026-06-01", periodEnd: "2026-06-07" };
     const versions = await Promise.all(
       Array.from({ length: PUBLISHERS }, () =>

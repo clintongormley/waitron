@@ -37,6 +37,17 @@ function inputAt(at: string): TimeEntryAppend {
 }
 
 /**
+ * RED ON THIS BRANCH. Its subject is a property of PGlite — that every query lands on one backend,
+ * so `FOR UPDATE` never blocks and a contention suite on it is a false pass. Neither half of that
+ * comparison exists here: the package's target is SQLite (one connection, no row locks, one write
+ * transaction on the file at a time — `assertExtraListForWrite`, `packages/catalogue/src/extras.ts`),
+ * and the `FOR UPDATE` this file names has been deleted from `chain.ts`. It fails on
+ * `no such function: pg_backend_pid`. Left in place rather than deleted because whether the
+ * replacement warning is worth keeping, and in what words, belongs with the decision that retires
+ * the PGlite target in this package — not with the row-lock sweep. This banner exists so nobody
+ * reads the paragraphs below as current.
+ */
+/**
  * A permanent, executable demonstration that the workforce chain's concurrency suite
  * (./chain.concurrency.test.ts) CANNOT live on PGlite. It is not a duplicate of that suite; it is the
  * counter-example that stops someone "simplifying" the Testcontainers dependency away later.

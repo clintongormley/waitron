@@ -45,8 +45,9 @@ export const webauthnCredentials = table(
 
 /**
  * A short-lived WebAuthn challenge issued at the start of a registration or authentication ceremony
- * and consumed (deleted) at the START of finish, BEFORE verification — a locking DELETE, so the row
- * lock enforces single-use even when two finishes race on the same handle. `person_id` is null for a
+ * and consumed (deleted) at the START of finish, BEFORE verification — one DELETE-and-return, which
+ * is what enforces single-use when two finishes arrive for the same handle (`../passkey.ts`'s
+ * `consumeChallenge`; the row lock that note used to name is gone). `person_id` is null for a
  * login (discoverable-credential) ceremony, where the person is not yet known. Ephemeral rather than
  * an audit trail — app_user holds SELECT, INSERT, UPDATE, DELETE (DELETE because a challenge is
  * deleted the moment it is consumed; the consume-DELETE is undone if the finish transaction then rolls

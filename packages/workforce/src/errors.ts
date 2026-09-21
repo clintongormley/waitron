@@ -31,9 +31,11 @@ declare module "@waitron/shared" {
     "attendance.no_open_entry": { personId: string };
     /** A clock event or correction could not be appended to its (node, location)
      * tamper-evidence chain: `appendToChain` (../chain.ts) exhausted `MAX_APPEND_ATTEMPTS` savepoint
-     * retries, each losing the race to CREATE the chain head (SQLSTATE 23505 on
-     * `time_entries_chain_position_uq`) — several tills at one location racing the very first append,
-     * the one window the head-row lock cannot cover. `attendance.*`, NOT `chain.*`: `chain.*` is owned
+     * retries, each refused by `time_entries_chain_position_uq`. The race this was written for —
+     * several tills at one location creating the very first chain head at once, the one window the
+     * head-row lock could not cover — cannot happen now that one write transaction runs on the
+     * venue file at a time (`selectHead`, ../chain.ts). Whether anything still reaches this code is
+     * not established: the retry's own reasoning is on `MAX_APPEND_ATTEMPTS` (../chain.ts). `attendance.*`, NOT `chain.*`: `chain.*` is owned
      * by packages/fiscal-verifactu for the fiscal chaining (grepped — never renamed once shipped), and
      * from the caller's side this is a fact about an attendance append that could not complete, not
      * about the fiscal chain. Keyed by the chain key (`nodeId` names the node) with the retry count,

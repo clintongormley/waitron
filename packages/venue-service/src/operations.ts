@@ -76,6 +76,20 @@ export async function listDepartmentHours(
     .orderBy(departmentHours.weekday, departmentHours.opensAt, departmentHours.id);
 }
 
+/**
+ * Replaces one department's whole opening-hours set.
+ *
+ * The existence read below took `for update` on the department row, and this is the site in this
+ * file where that mattered most: the delete-then-insert here REPLACES the set, which is the shape
+ * CLAUDE.md §3 records ("Rewriting rows one at a time inside a transaction can break a unique index
+ * the FINAL state satisfies") — the second of two overlapping saves deletes nothing it can see and
+ * then collides on `department_hours_interval_key`. I did not reproduce that on PostgreSQL; what is
+ * measured is the replacement: one write transaction runs on the venue file at a time, so there is
+ * no second save to overlap with. The pattern, with its measurement and its control, is stated once
+ * on
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The same clause went from
+ * {@link deactivateDepartment} and {@link allowMenuInZone}, where it only ordered two saves.
+ */
 export async function replaceDepartmentHours(
   tx: Transaction,
   cfg: VenueScope,
@@ -85,8 +99,7 @@ export async function replaceDepartmentHours(
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
-    .for("update");
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
   await tx.delete(departmentHours).where(eq(departmentHours.departmentId, departmentId));
   if (hours.length > 0) {
@@ -195,8 +208,7 @@ export async function deactivateDepartment(
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
-    .for("update");
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
 
   const [activeZone] = await tx
@@ -382,8 +394,7 @@ export async function allowMenuInZone(
         eq(zoneServicePolicies.locationId, cfg.locationId),
         eq(zoneServicePolicies.zoneId, zoneId),
       ),
-    )
-    .for("update");
+    );
   if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
   await tx
     .insert(zoneMenus)
