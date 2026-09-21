@@ -2805,6 +2805,28 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
+  (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
+  pattern that looks for a slash-star opener anywhere in the raw text, so a glob path written
+  inside an ordinary LINE comment opens one as far as the scrubber is concerned. It then blanks
+  everything up to the next real block-comment terminator — measured at about 390 lines in
+  `packages/db/src/schema/sales.test.ts` — and pairs backtick-citation blanking across that whole
+  span, which made it report three pre-existing, untouched Spanish words as fresh violations. The
+  reported lines are not the offender, which is the expensive part: the author looks where the
+  guard points. Worked around on that branch by rewording the path. Fixing it properly needs a
+  scanner that knows a comment opener inside a string or a line comment is not a comment opener,
+  which is the same care `scripts/column-vocabulary.test.ts` already documents for its own
+  comment handling. Until then the hedge is in `CLAUDE.md` §3.
+
+- **No guard holds a MODULE migration set to its declared schema — still OPEN
+  (restated 2026-09-21, task P6).** `packages/db/src/schema/schema-conformance.test.ts` builds a
+  database from the CORE migrations and compares every check expression with the drizzle schema's;
+  it named both of P6's stale quantity checks immediately. The module sets have nothing equivalent,
+  which is why #475 had to find nine instances by hand. P6 got away with a one-off probe —
+  `workforce-es`'s only scaled column has no default and appears in none of its table's
+  constraints, established by applying the migrations and reading `pg_get_constraintdef` back — but
+  a probe is not a guard and the next type change will need the same by hand.
+
 - **The spawn-timeout guard now covers `packages/` and `apps/` — LANDED (2026-09-18).** It read only
   `scripts/` when it arrived in #407, which was recorded at the time as a real gap rather than a
   reasoned exemption: 22 of the 48 main Vitest configs under `packages/` and `apps/` (three more are suffixed) set no `testTimeout`
