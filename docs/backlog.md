@@ -2029,6 +2029,60 @@ targets for 30 seconds and each agent works out the remaining time against its o
   the existing floor editor and transfer operations before deciding what needs changing, and retain
   order and kitchen progress when moving items (see A9's KDS correction). This operational floor
   editor is distinct from the general screen-layout canvas editor under reconsideration.
+- **Five measured till layout defects and one seen in a screenshot, all of them older than the
+  extras-and-options work.** Found by looking at the real screens on branch
+  `feat/modifiers-till-surfaces` (B1 Task 12), then each checked against `main` rather than assumed
+  older: extracted rule by rule, `.line`, `.option`, `.option-total` and `.remove` in the basket and
+  `.option`, `.option-name` and `.group-name` in the picker are character-for-character what `main`
+  has, product-grid's single `css` block is identical, and the picker's legend — in a file this
+  branch rewrote whole — still appends its required marker after a plain space exactly as `main`
+  does. So none of them arrived with that branch. Three siblings from the same pass WERE fixed on
+  it — the tab screen's child extras row painted exactly like a dish, the picker's Add button below the fold at phone width, and the
+  picker's counter and refusals rendering as ordinary body copy. **Next action:** take these six as
+  one till layout pass over `apps/till`, at 390 and at 1024, measuring rectangles rather than
+  reading rules — and set the width with `page.viewport(w, h)`, never `commands.setViewportSize`,
+  which resizes the outer page and leaves the components' own iframe alone
+  ([testing-guide.md](developers/testing-guide.md)).
+  - **Within one extras list, prices are not a column and names are not a column**
+    (`apps/till/src/widgets/modifier-picker.ts`). A checkbox row and a stepper row put their price
+    right edges 136.0px apart and their names 28.0px apart, at both 1024 and 390. `.option` is
+    `display: flex` with `.option-name { flex: 1 }`: the stepper row has a third child taking the
+    right-hand space, while the checkbox row's leading `<input>` shifts its name right.
+  - **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's
+    own top border.** Measured at 390: the legend is 36.0px tall (two lines) against a
+    `border-top-width` of 2px, both starting at y=99.0. The required marker is appended as a plain
+    space, so the line can break before it and leave a lone `*` sitting on the border rule.
+  - **Nothing says WHY Add is disabled when a list's minimum is unmet.** With `Selected: 0 / 3` on a
+    list whose `minPicks` is 1, the only cues are a `*` on the legend and a dimmed Add — and that
+    `*` is also the only thing telling `minPicks: 1` from `minPicks: 2`. Neighbour of the refusal
+    styling the branch fixed, but a bigger change: a sentence beside the list, and the minimum
+    stated in words.
+  - **A long dish name pushes that line's remove control outside the basket at phone width**
+    (`apps/till/src/widgets/basket.ts`). Measured at 390: the line's `scrollWidth` is 425 against a
+    `clientWidth` of 390, and its `.remove` button's right edge is at 424.8 — 34.8px past the host;
+    a short-named line's is at 390.0, inside. `.line` is
+    `grid-template-columns: 1fr auto auto auto auto`, and the `1fr` bottoms out at the longest word.
+  - **A pick's money column sits 101.6px right of the dish total it belongs under**, and further
+    right than the dish row's own remove button. Measured at 390: the dish's `.line-total` right
+    edge is 288.4 and the pick's `.option-total` right edges are 390.0. `.line` is
+    `1fr auto auto auto auto` while `.option` is `1fr auto`.
+  - **Product-grid tiles: a long name starts left of its own card border, and a unit price crosses
+    the card's right border.** SEEN in a screenshot, NOT measured with rects.
+    `git diff main...HEAD -- apps/till/src/widgets/product-grid.ts` changes no CSS.
+- **Two modifier-picker states, and how far each is actually out of reach** — a fact worth having
+  before anyone writes a test claiming to cover them, and one half of it is NOT what the looking
+  pass first wrote down. An options label marked unavailable never reaches the picker at all: the
+  sell-side read filters withdrawn labels out and nulls a `defaultLabelId` that names one
+  (`packages/catalogue/src/offered-modifiers.ts`, the `labels` filter and the `defaultLabelId`
+  ternary beside it) — traced through the code, not run. An over-cap count is different. Stepping
+  cannot produce one, because `#step` clamps against both the item's own cap and what is left of the
+  list's allowance; but a REOPENED line is seeded straight from `initialSelections` with no clamp at
+  all, so `#allSatisfied`'s `total <= entry.maxPicks` arm is reachable after all. Run in the till's
+  browser harness on 2026-09-21: a picker seeded with 5 of one product on a list whose `maxPicks` is
+  2 renders a count of 5 and a disabled Add, and that arm is the only one of the five that a fixture
+  with `minPicks: 0` and `maxQuantity: 9` can be failing. The real-world shape is a parked line
+  whose list had its cap reduced under it, the same family as the "list lost the product between the
+  park and the edit" escape recorded under Task 8.
 - **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
   appear live on it. A till-app fix.
 - **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.
