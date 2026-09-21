@@ -653,7 +653,7 @@ export interface HeldExtra {
  * `GET /api/working-orders/:id` — a retrieved parked order: enough to name it in the UI plus the
  * stored inputs and commercial snapshots needed to rebuild its basket. Mirrors the server's
  * `HeldOrder`; contextual lines can be restored even when their live offer is no longer available.
- * The server sends `quantity` at numeric(_,3) scale ("2.000"), passed through here as sent.
+ * The server sends `quantity` as a three-place decimal string ("2.000"), passed through here as sent.
  */
 export interface HeldOrder {
   id: string;

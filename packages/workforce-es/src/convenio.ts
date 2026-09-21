@@ -16,9 +16,14 @@ const DB_TO_OVERTIME_MODEL: Record<"daily_accrual" | "period_net", OvertimeModel
 
 /**
  * A rate column comes back as a count of basis points; the ruleset carries the same rate as a
- * PERCENTAGE — 25% is 25, not 0.25 (owner, 2026-09-18) — as a number-or-null. Rendering the
- * literal first and reading that keeps the rounding in the decimal module, and it keeps the basis-
- * point form from leaking past this boundary.
+ * PERCENTAGE — 25% is 25, not 0.25 (owner, 2026-09-18) — as a number-or-null. Rendering the literal
+ * first and reading that keeps the divide-by-a-hundred in one place, `basisPointsToDecimal`, rather
+ * than spelling it here, and it keeps the basis-point form from leaking past this boundary.
+ * `basisPointsToDecimal` discards no digit — the literal is an exact render of the integer. `Number`
+ * then takes the nearest double, and two different things happen there: a rate with a nonzero
+ * hundredths digit is not held exactly (999.99 is 999.99000000000000909…), and one ending in a
+ * zero IS held exactly but no longer renders with it (25.00 becomes 25, and 12.50 becomes 12.5).
+ * Neither belongs to this conversion; both belong to the ruleset's `number` type.
  */
 function rateNum(basisPoints: number | null): number | null {
   return basisPoints === null ? null : Number(basisPointsToDecimal(basisPoints));

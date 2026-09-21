@@ -3340,7 +3340,9 @@ describe("quantity and rate keep their own scales", () => {
   it("holds three decimal places of quantity without loss", () => {
     expect(toThousandths("0.005")).toBe(5);
     expect(fromThousandths(5)).toBe("0.005");
-    // The failure a cents-shaped conversion produces: 0.005 truncated to 0.00.
+    // The failure a cents-shaped conversion produces — corrected 2026-09-21, having been written
+    // here as "0.005 truncated to 0.00": the money conversion ROUNDS the third place, so 0.005 kg
+    // reads as 1 cent, not as nothing. Five times too small, and it refuses nothing on the way.
     expect(toThousandths("0.005")).not.toBe(0);
   });
 
@@ -3415,10 +3417,11 @@ pnpm --filter @waitron/workforce-es db:generate --name scaled_integers
 ```bash
 git commit -s -m "Hold quantities in thousandths and rates in basis points
 
-Quantities carry three decimal places and rates carry two, so neither can
-become cents: a blanket conversion would turn 0.005 kg into nothing. Each keeps
-its own scale as a whole number, with conversions named after the scale so a
-caller cannot mix them up.
+Quantities carry three decimal places, so a quantity cannot become cents: a
+blanket conversion does not empty 0.005 kg, it misreads it as 1 cent, which is
+five times too small and refuses nothing. (Corrected 2026-09-21: this paragraph
+said "turn 0.005 kg into nothing".) Each scale keeps its own whole number, with
+conversions named after the scale so a caller cannot mix them up.
 
 One rate feeds the tax record, so the byte-identical fixture test from the money
 change is re-run here and passes against the same recorded values."

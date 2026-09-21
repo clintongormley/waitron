@@ -110,8 +110,8 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
 /**
- * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
- * quantity at numeric(_,3) scale, so a precision-zero unit's whole count arrives as "2.000" — which
+ * The quantity string to DISPLAY for a retrieved parked line. The server returns every quantity as a
+ * three-place decimal string, so a precision-zero unit's whole count arrives as "2.000" — which
  * the basket would otherwise render verbatim. Trim the trailing zeros (and a bare trailing dot) so it
  * reads "2", not "2.000"; fractional units keep their decimals ("0.320"). Only the DISPLAY
  * string is cleaned — re-pricing is untouched, because `priceBasket` parses the decimal either way
@@ -1666,7 +1666,7 @@ export class TillApp extends LitElement {
    * surfaces `held.options_changed`: the operator has to choose again, and the list's own default is
    * never substituted for what the diner asked for.
    *
-   * Each `quantity` arrives at numeric(_,3) scale ("2.000"); {@link displayQuantity} cleans a
+   * Each `quantity` arrives as a three-place decimal string ("2.000"); {@link displayQuantity} cleans a
    * precision-zero count's trailing zeros without touching re-pricing.
    *
    * CROSS-TILL STALE-LIST RACE. The held list has no live push (by design — replication is future

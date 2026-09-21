@@ -575,7 +575,7 @@ export class TillTableOrderScreen extends LitElement {
     return product ? productName(product) : productId;
   }
 
-  /** Trim a numeric(_,3) quantity's trailing zeros for display ("2.000" → "2", "0.320" → "0.32") —
+  /** Trim a three-place quantity's trailing zeros for display ("2.000" → "2", "0.320" → "0.32") —
    * the shared {@link trimQuantity} the kitchen queue uses too. */
   #displayQty(quantity: string): string {
     return trimQuantity(quantity);

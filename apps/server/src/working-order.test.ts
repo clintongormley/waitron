@@ -5975,6 +5975,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(after).toHaveLength(1);
-    expect(after[0]).toMatchObject({ id: before[0]!.id, quantity: "2.000" });
+    // Two units, as a count of thousandths off the column.
+    expect(after[0]).toMatchObject({ id: before[0]!.id, quantity: 2000 });
   });
 });

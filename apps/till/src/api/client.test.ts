@@ -552,7 +552,7 @@ describe("TillApi", () => {
   });
 
   it("retrieveWorkingOrder GETs the addressed order and returns its label + rebuild lines", async () => {
-    // The server sends `quantity` at numeric(_,3) scale ("2.000"); the client passes it through as
+    // The server sends `quantity` as a three-place decimal string ("2.000"); the client passes it through as
     // sent — the basket-display normalisation is a later task's concern, not the client's.
     const order = {
       id: "wo1",

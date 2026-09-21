@@ -427,8 +427,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   [conventions-data.md](docs/developers/conventions-data.md).
 - **A quantity column counts whole thousandths and a rate column whole basis points; neither is the
   money scale** (`packages/shared/src/scales.ts`, beside `cents.ts`, with the same two raw-SQL
-  readers and the same `::text` rule). A blanket "every numeric becomes cents" turns 0.005 kg into
-  nothing. A quantity is `bigint` and a rate `integer`, because the decimal columns they replace
+  readers and the same `::text` rule). A blanket "every numeric becomes cents" does not EMPTY a
+  quantity, it misreads one — `decimalToCents` rounds the third place rather than dropping it, so
+  0.005 kg is the count 5 at the quantity scale and the count 1 at the money scale.
+  A quantity is `bigint` and a rate `integer`, because the decimal columns they replace
   differed in width. The bound each of those enforced — nine integer digits for a quantity, three
   for a rate — moved into the converters, since an integer column takes silently what `numeric`
   refused with a `22003`. The money rule's two guards and both its hedges apply unchanged, and

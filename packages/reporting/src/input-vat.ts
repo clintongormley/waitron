@@ -32,10 +32,11 @@ const KIND_ORDER: Record<PurchaseVatKind, number> = { ordinary: 0, capital: 1 };
  * (rate, kind).
  *
  * `base` is summed in full; the deductible `tax` (cuota) is `Σ round(filed cuota ×
- * deductible_proportion/100)` — rounded PER invoice line, then summed, never re-rounded on the monthly
- * base. That is the same "sum the filed per-invoice cuotas, never `round(Σ base × rate)`" exactness
- * rule the output side follows (#76/#66); with the default proportion 100 it collapses to `Σ` of the
- * filed cuotas verbatim. It spans every node in the database: one tenant per database, so no tenant
+ * deductible_proportion/10000)` — the divisor is ten thousand because the column counts whole BASIS
+ * POINTS, so a full proportion is 10000 — rounded PER invoice line, then summed, never re-rounded on
+ * the monthly base. That is the same "sum the filed per-invoice cuotas, never `round(Σ base × rate)`"
+ * exactness rule the output side follows (#76/#66); with the default full proportion it collapses to
+ * `Σ` of the filed cuotas verbatim. It spans every node in the database: one tenant per database, so no tenant
  * predicate is needed (mirrors `aggregateVatByRate`).
  *
  * The result carries every (rate, kind) line UNFILTERED — the casilla 28/29 (corrientes) vs 30/31

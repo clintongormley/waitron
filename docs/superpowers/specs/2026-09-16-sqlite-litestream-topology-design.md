@@ -633,8 +633,8 @@ no-tenant-column guard.
     (`vat_rate`, `deductible_proportion`, `night_premium_pct`, `rate`) keep their scale — integer
     thousandths for quantity, integer basis-points or an exact decimal string for rates. The plan reads
     the scale off each column; "everything numeric becomes cents" would silently truncate them.
-    *(2026-09-21, task P6: of the two alternatives offered for a rate, basis points was taken — all
-    four rate columns are `integer`. A quantity is `bigint`, not `integer`: `numeric(12, 3)` admitted
+    *(2026-09-21, task P6: of the two alternatives offered for a rate, basis points was taken — every
+    rate column is `integer`. A quantity is `bigint`, not `integer`: `numeric(12, 3)` admitted
     999999999999 thousandths, past what four bytes hold. `packages/shared/src/scales.ts`.)*
 
 ---

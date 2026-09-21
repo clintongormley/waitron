@@ -67,8 +67,9 @@ export interface VatReturnInput {
 export type PurchaseVatKind = "ordinary" | "capital";
 
 /** One deducible line, grouped by (rate, kind). `tax` is the deductible cuota (Σ of the filed
- * per-invoice cuotas × deductible_proportion/100, rounded per invoice line), never re-rounded on the
- * monthly base — the same exactness rule the output side follows. */
+ * per-invoice cuotas × deductible_proportion/10000 — the column counts whole basis points — rounded
+ * per invoice line), never re-rounded on the monthly base — the same exactness rule the output side
+ * follows. */
 export interface InputVatRateLine {
   rate: Decimal;
   base: Decimal;
