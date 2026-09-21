@@ -674,8 +674,11 @@ export interface HeldOrder {
      * every child line. The six names per answer are the server's, copied by value.
      *
      * `options` is deliberately NOT here: the sendable answer names a list and a label by ID, and a
-     * frozen answer carries neither (spec §2.3). A retrieved line therefore has answers to SHOW and
-     * none to re-send.
+     * frozen answer carries neither (spec §2.3). The till re-derives the two ids by matching these
+     * names against the dish's live offered lists (`deriveOptionSelections`,
+     * `../state/held-options.ts`), which is why an edit can be re-sent at all. The match is on the
+     * STAFF name alone, so a list or label whose staff wording has changed matches nothing and the
+     * operator is asked to answer it again.
      */
     optionSnapshots?: OptionSnapshot[];
   })[];
